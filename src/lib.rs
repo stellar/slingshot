@@ -1,3 +1,6 @@
+
+extern crate bulletproofs;
+
 #[cfg(test)]
 mod tests {
     #[test]

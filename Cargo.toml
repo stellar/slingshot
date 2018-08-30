@@ -4,3 +4,4 @@ version = "0.1.0"
 authors = ["Henry de Valence <hdevalence@hdevalence.ca>", "Cathie Yun <cathieyun@gmail.com>", "Oleg Andreev <oleganza@gmail.com>"]
 
 [dependencies]
+bulletproofs = { git = "https://github.com/dalek-cryptography/bulletproofs", branch = "circuit" }
