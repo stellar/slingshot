@@ -1,11 +1,10 @@
-
 extern crate bulletproofs;
 extern crate curve25519_dalek;
-extern crate rand;
 extern crate merlin;
+extern crate rand;
 
-mod gadgets;
 mod assignment_holder;
+mod gadgets;
 
 #[cfg(test)]
 mod tests {
