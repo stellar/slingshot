@@ -7,6 +7,7 @@ pub fn missing() -> Assignment {
     Err(R1CSError::MissingAssignment)
 }
 
+#[derive(Clone)]
 pub struct AssignmentHolder(pub Assignment);
 
 impl AssignmentHolder {
