@@ -1,5 +1,6 @@
-use super::assignment_holder::AssignmentHolder;
+use bulletproofs::circuit_proof::assignment::Assignment;
 use bulletproofs::circuit_proof::r1cs::{ConstraintSystem, LinearCombination};
+use bulletproofs::transcript::TranscriptProtocol;
 // use bulletproofs::Generators;
 // use curve25519_dalek::ristretto::RistrettoPoint;
 use curve25519_dalek::scalar::Scalar;
@@ -23,43 +24,41 @@ impl Shuffle {
         //     transcript.commit_bytes(b"v", V_i.compress().as_bytes());
         // }
 
-        let mut buf = [0u8; 64];
-        transcript.challenge_bytes(b"shuffle", &mut buf);
-        let r = Scalar::from_bytes_mod_order_wide(&buf);
+        let r = transcript.challenge_scalar(b"shuffle challenge");
 
         Shuffle::fill_cs(
             cs,
             r,
-            AssignmentHolder::new(in_0),
-            AssignmentHolder::new(in_1),
-            AssignmentHolder::new(out_0),
-            AssignmentHolder::new(out_1),
+            Assignment::new(in_0),
+            Assignment::new(in_1),
+            Assignment::new(out_0),
+            Assignment::new(out_1),
         );
     }
 
     fn fill_cs(
         cs: &mut ConstraintSystem,
         r: Scalar,
-        in_0: AssignmentHolder,
-        in_1: AssignmentHolder,
-        out_0: AssignmentHolder,
-        out_1: AssignmentHolder,
+        in_0: Assignment,
+        in_1: Assignment,
+        out_0: Assignment,
+        out_1: Assignment,
     ) {
         let one = Scalar::one();
         let zer = Scalar::zero();
 
-        let (in_0_var, in_1_var) = cs.assign_uncommitted(in_0.clone().0, in_1.clone().0);
-        let (out_0_var, out_1_var) = cs.assign_uncommitted(out_0.clone().0, out_1.clone().0);
+        let (in_0_var, in_1_var) = cs.assign_uncommitted(in_0, in_1);
+        let (out_0_var, out_1_var) = cs.assign_uncommitted(out_0, out_1);
 
         let (mul1_left, mul1_right, mul1_out) = cs.assign_multiplier(
-            (in_0.clone() - r).0,
-            (in_1.clone() - r).0,
-            ((in_0.clone() - r) * (in_1.clone() - r)).0,
+            in_0.clone() - r,
+            in_1.clone() - r,
+            (in_0.clone() - r) * (in_1.clone() - r),
         );
         let (mul2_left, mul2_right, mul2_out) = cs.assign_multiplier(
-            (out_0.clone() - r).0,
-            (out_1.clone() - r).0,
-            ((out_0.clone() - r) * (out_1.clone() - r)).0,
+            out_0.clone() - r,
+            out_1.clone() - r,
+            (out_0.clone() - r) * (out_1.clone() - r),
         );
 
         // mul1_left = in_0_var - r
