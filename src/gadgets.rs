@@ -4,12 +4,11 @@ use bulletproofs::circuit_proof::r1cs::{ConstraintSystem, LinearCombination};
 // use curve25519_dalek::ristretto::RistrettoPoint;
 use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
-use rand::{CryptoRng, Rng};
 
 pub struct Shuffle {}
 
 impl Shuffle {
-    pub fn fill_prover_cs<R: Rng + CryptoRng>(
+    pub fn fill_prover_cs(
         transcript: &mut Transcript,
         cs: &mut ConstraintSystem,
         in_0: Scalar,
