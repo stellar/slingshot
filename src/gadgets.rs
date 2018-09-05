@@ -10,8 +10,6 @@ pub struct Shuffle {}
 
 impl Shuffle {
     pub fn fill_prover_cs<R: Rng + CryptoRng>(
-        // gen: &Generators,
-        // rng: &mut R,
         transcript: &mut Transcript,
         cs: &mut ConstraintSystem,
         in_0: Scalar,
@@ -54,10 +52,16 @@ impl Shuffle {
         let (in_0_var, in_1_var) = cs.assign_uncommitted(in_0.clone().0, in_1.clone().0);
         let (out_0_var, out_1_var) = cs.assign_uncommitted(out_0.clone().0, out_1.clone().0);
 
-        let (mul1_left, mul1_right, mul1_out) =
-            cs.assign_multiplier((in_0.clone() - r).0, (in_1.clone() - r).0, ((in_0.clone() - r) * (in_1.clone() - r)).0);
-        let (mul2_left, mul2_right, mul2_out) =
-            cs.assign_multiplier((out_0.clone() - r).0, (out_1.clone() - r).0, ((out_0.clone() - r) * (out_1.clone() - r)).0);
+        let (mul1_left, mul1_right, mul1_out) = cs.assign_multiplier(
+            (in_0.clone() - r).0,
+            (in_1.clone() - r).0,
+            ((in_0.clone() - r) * (in_1.clone() - r)).0,
+        );
+        let (mul2_left, mul2_right, mul2_out) = cs.assign_multiplier(
+            (out_0.clone() - r).0,
+            (out_1.clone() - r).0,
+            ((out_0.clone() - r) * (out_1.clone() - r)).0,
+        );
 
         // mul1_left = in_0_var - r
         cs.add_constraint(LinearCombination::new(
@@ -93,8 +97,6 @@ mod tests {
 
     #[test]
     fn it_works() {
-        // let r1cs_1 = ConstraintSystem::new();
-        let r1cs_2 = ConstraintSystem::new();
         assert_eq!(2 + 2, 4);
     }
 }

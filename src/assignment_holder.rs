@@ -3,10 +3,6 @@ use bulletproofs::R1CSError;
 use curve25519_dalek::scalar::Scalar;
 use std::ops::{Add, Mul, Sub};
 
-pub fn missing() -> Assignment {
-    Err(R1CSError::MissingAssignment)
-}
-
 #[derive(Clone)]
 pub struct AssignmentHolder(pub Assignment);
 
