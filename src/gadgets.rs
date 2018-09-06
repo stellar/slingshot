@@ -50,16 +50,10 @@ impl Shuffle {
         let (in_0_var, in_1_var) = cs.assign_uncommitted(in_0, in_1);
         let (out_0_var, out_1_var) = cs.assign_uncommitted(out_0, out_1);
 
-        let (mul1_left, mul1_right, mul1_out) = cs.assign_multiplier(
-            in_0.clone() - r,
-            in_1.clone() - r,
-            (in_0.clone() - r) * (in_1.clone() - r),
-        );
-        let (mul2_left, mul2_right, mul2_out) = cs.assign_multiplier(
-            out_0.clone() - r,
-            out_1.clone() - r,
-            (out_0.clone() - r) * (out_1.clone() - r),
-        );
+        let (mul1_left, mul1_right, mul1_out) =
+            cs.assign_multiplier(in_0 - r, in_1 - r, (in_0 - r) * (in_1 - r));
+        let (mul2_left, mul2_right, mul2_out) =
+            cs.assign_multiplier(out_0 - r, out_1 - r, (out_0 - r) * (out_1 - r));
 
         // mul1_left = in_0_var - r
         cs.add_constraint(LinearCombination::new(
