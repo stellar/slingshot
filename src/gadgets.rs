@@ -29,10 +29,10 @@ impl Shuffle {
         Shuffle::fill_cs(
             cs,
             r,
-            Assignment::new(in_0),
-            Assignment::new(in_1),
-            Assignment::new(out_0),
-            Assignment::new(out_1),
+            Assignment::from(in_0),
+            Assignment::from(in_1),
+            Assignment::from(out_0),
+            Assignment::from(out_1),
         );
     }
 
