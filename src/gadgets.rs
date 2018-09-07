@@ -57,12 +57,14 @@ mod tests {
     use super::*;
     use bulletproofs::R1CSError;
     use bulletproofs::{Generators, PedersenGenerators};
-    use curve25519_dalek::ristretto::RistrettoPoint;
     use rand::rngs::OsRng;
 
     #[test]
     fn shuffle_circuit() {
         assert!(shuffle_circuit_helper(3, 6, 3, 6).is_ok());
+        assert!(shuffle_circuit_helper(3, 6, 6, 3).is_ok());
+        assert!(shuffle_circuit_helper(6, 6, 6, 6).is_ok());
+        assert!(shuffle_circuit_helper(3, 3, 6, 3).is_err());
     }
 
     fn shuffle_circuit_helper(
