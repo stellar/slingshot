@@ -19,12 +19,6 @@ impl Shuffle {
         let zer = Scalar::zero();
         let r = transcript.challenge_scalar(b"shuffle challenge");
 
-        // Don't do variable creation (for non-intermediate variables) inside gadget.
-        /*
-        let (in_0_var, in_1_var) = cs.assign_uncommitted(in_0, in_1);
-        let (out_0_var, out_1_var) = cs.assign_uncommitted(out_0, out_1);
-        */
-
         let (mul1_left, mul1_right, mul1_out) =
             cs.assign_multiplier(in_0.1 - r, in_1.1 - r, (in_0.1 - r) * (in_1.1 - r));
         let (mul2_left, mul2_right, mul2_out) =
@@ -32,27 +26,27 @@ impl Shuffle {
 
         // mul1_left = in_0_var - r
         cs.add_constraint(LinearCombination::new(
-            vec![(in_0.0, one), (mul1_left, one)],
+            vec![(in_0.0, one), (mul1_left, -one)],
             -r,
         ));
         // mul1_right = in_1_var - r
         cs.add_constraint(LinearCombination::new(
-            vec![(in_1.0, one), (mul1_right, one)],
+            vec![(in_1.0, one), (mul1_right, -one)],
             -r,
         ));
         // mul2_left = out_0_var - r
         cs.add_constraint(LinearCombination::new(
-            vec![(out_0.0, one), (mul2_left, one)],
+            vec![(out_0.0, one), (mul2_left, -one)],
             -r,
         ));
         // mul2_right = out_1_var - r
         cs.add_constraint(LinearCombination::new(
-            vec![(out_1.0, one), (mul2_right, one)],
+            vec![(out_1.0, one), (mul2_right, -one)],
             -r,
         ));
         // mul1_out = mul2_out
         cs.add_constraint(LinearCombination::new(
-            vec![(mul1_out, one), (mul2_out, one)],
+            vec![(mul1_out, one), (mul2_out, -one)],
             zer,
         ));
     }
@@ -119,6 +113,7 @@ mod tests {
         let mut transcript = Transcript::new(b"ShuffleTest");
         let (in_0_var, in_1_var) = cs.assign_uncommitted(in_0, in_1);
         let (out_0_var, out_1_var) = cs.assign_uncommitted(out_0, out_1);
+
         Shuffle::fill_cs(
             &mut cs,
             &mut transcript,
