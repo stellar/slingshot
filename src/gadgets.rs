@@ -19,27 +19,29 @@ impl Shuffle {
         let zer = Scalar::zero();
         let r = transcript.challenge_scalar(b"shuffle challenge");
 
+        // create variables for multiplication 1
         let (mul1_left, mul1_right, mul1_out) =
             cs.assign_multiplier(in_0.1 - r, in_1.1 - r, (in_0.1 - r) * (in_1.1 - r));
-        let (mul2_left, mul2_right, mul2_out) =
-            cs.assign_multiplier(out_0.1 - r, out_1.1 - r, (out_0.1 - r) * (out_1.1 - r));
-
-        // mul1_left = in_0_var - r
+        // mul1_left = in_0 - r
         cs.add_constraint(LinearCombination::new(
             vec![(in_0.0, one), (mul1_left, -one)],
             -r,
         ));
-        // mul1_right = in_1_var - r
+        // mul1_right = in_1 - r
         cs.add_constraint(LinearCombination::new(
             vec![(in_1.0, one), (mul1_right, -one)],
             -r,
         ));
-        // mul2_left = out_0_var - r
+
+        // create variables for multiplication 2
+        let (mul2_left, mul2_right, mul2_out) =
+            cs.assign_multiplier(out_0.1 - r, out_1.1 - r, (out_0.1 - r) * (out_1.1 - r));
+        // mul2_left = out_0 - r
         cs.add_constraint(LinearCombination::new(
             vec![(out_0.0, one), (mul2_left, -one)],
             -r,
         ));
-        // mul2_right = out_1_var - r
+        // mul2_right = out_1 - r
         cs.add_constraint(LinearCombination::new(
             vec![(out_1.0, one), (mul2_right, -one)],
             -r,
@@ -49,6 +51,58 @@ impl Shuffle {
             vec![(mul1_out, one), (mul2_out, -one)],
             zer,
         ));
+    }
+}
+
+pub struct Merge {}
+
+impl Merge {
+    fn fill_cs(
+        cs: &mut ConstraintSystem,
+        transcript: &mut Transcript,
+        in_0: (Variable, Assignment),
+        in_1: (Variable, Assignment),
+        out_0: (Variable, Assignment),
+        out_1: (Variable, Assignment),
+        type_0: (Variable, Assignment),
+        type_1: (Variable, Assignment),
+    ) {
+        let one = Scalar::one();
+        let zer = Scalar::zero();
+        let r = transcript.challenge_scalar(b"merge challenge");
+
+        // create variables for multiplication
+        let (mul_left, mul_right, mul_out) = cs.assign_multiplier(
+            in_0.1 * (-one) + in_1.1 * (-r) + out_0.1 + out_1.1 * (r),
+            in_0.1 + in_1.1 + out_1.1 * (-one) + out_0.1 * (r) + type_0.1 * (-r * r) + type_1.1 * (r * r),
+            Assignment::zero(),
+        );
+        // mul_left = in_0 * (-1) + in_1 * (-r) + out_0 + out_1 * (r)
+        cs.add_constraint(LinearCombination::new(
+            vec![
+                (in_0.0.clone(), -one),
+                (in_1.0.clone(), -r),
+                (out_0.0.clone(), one),
+                (out_1.0.clone(), r),
+                (mul_left, -one),
+            ],
+            zer,
+        ));
+        // mul_right = in_0 + in_1 + out_1 * (-1) + out_0 * (r) + type_0 * (-r*r) + type_1 * (r*r)
+        cs.add_constraint(LinearCombination::new(
+            vec![
+                (in_0.0, one),
+                (in_1.0, one),
+                (out_1.0, -one),
+                (out_0.0, r),
+                (type_0.0, -r * r),
+                (type_1.0, r * r),
+                (mul_right, -one),
+            ],
+            zer,
+        ));
+        // mul_out = 0
+        cs.add_constraint(LinearCombination::new(vec![(mul_out, -one)], zer));
     }
 }
 
