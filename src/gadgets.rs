@@ -114,14 +114,14 @@ mod tests {
     use rand::rngs::OsRng;
 
     #[test]
-    fn shuffle_circuit() {
-        assert!(shuffle_circuit_helper(3, 6, 3, 6).is_ok());
-        assert!(shuffle_circuit_helper(3, 6, 6, 3).is_ok());
-        assert!(shuffle_circuit_helper(6, 6, 6, 6).is_ok());
-        assert!(shuffle_circuit_helper(3, 3, 6, 3).is_err());
+    fn shuffle_gadget() {
+        assert!(shuffle_helper(3, 6, 3, 6).is_ok());
+        assert!(shuffle_helper(3, 6, 6, 3).is_ok());
+        assert!(shuffle_helper(6, 6, 6, 6).is_ok());
+        assert!(shuffle_helper(3, 3, 6, 3).is_err());
     }
 
-    fn shuffle_circuit_helper(
+    fn shuffle_helper(
         in_0: u64,
         in_1: u64,
         out_0: u64,
@@ -130,7 +130,7 @@ mod tests {
         let mut rng = OsRng::new().unwrap();
 
         // Prover makes a `ConstraintSystem` instance representing a shuffle gadget
-        let (prover_cs, mut prover_transcript, prover_gens) = shuffle_circuit_cs(
+        let (prover_cs, mut prover_transcript, prover_gens) = shuffle_cs(
             Assignment::from(in_0),
             Assignment::from(in_1),
             Assignment::from(out_0),
@@ -144,7 +144,7 @@ mod tests {
             prover_cs.prove(&v_blinding, &prover_gens, &mut prover_transcript, &mut rng)?;
 
         // Verifier makes a `ConstraintSystem` instance representing a shuffle gadget
-        let (verifier_cs, mut verifier_transcript, verifier_gens) = shuffle_circuit_cs(
+        let (verifier_cs, mut verifier_transcript, verifier_gens) = shuffle_cs(
             Assignment::Missing(),
             Assignment::Missing(),
             Assignment::Missing(),
@@ -159,7 +159,7 @@ mod tests {
         )?)
     }
 
-    fn shuffle_circuit_cs(
+    fn shuffle_cs(
         in_0: Assignment,
         in_1: Assignment,
         out_0: Assignment,
@@ -182,5 +182,99 @@ mod tests {
             Generators::new(PedersenGenerators::default(), cs.multiplications_count(), 1);
 
         (cs, transcript, generators)
+    }
+
+    #[test]
+    fn merge_gadget() {
+        let dollar = 77;
+        let yuan = 88;
+        // no merge, different asset types
+        assert!(merge_helper(3, 6, 3, 6, dollar, yuan).is_ok());
+        // merge, same asset types
+        assert!(merge_helper(3, 6, 0, 9, dollar, dollar).is_ok());
+        // no merge, same asset types
+        assert!(merge_helper(6, 6, 6, 6, dollar, yuan).is_ok());
+        // error when merging different asset types
+        assert!(merge_helper(3, 3, 0, 6, dollar, yuan).is_err());
+        // error when creating more value (same asset types)
+        assert!(merge_helper(3, 3, 3, 6, dollar, dollar).is_err());
+        // error when creating more value (different asset types)
+        assert!(merge_helper(3, 3, 3, 6, dollar, yuan).is_err());
+        // error when not merging same asset types
+        // assert!(merge_helper(3, 3, 3, 3, dollar, dollar).is_err());    
+    }
+
+    fn merge_helper(
+        in_0: u64,
+        in_1: u64,
+        out_0: u64,
+        out_1: u64,
+        type_0: u64, 
+        type_1: u64,
+    ) -> Result<(), R1CSError> {
+        let mut rng = OsRng::new().unwrap();
+
+        // Prover makes a `ConstraintSystem` instance representing a merge gadget
+        let (prover_cs, mut prover_transcript, prover_gens) = merge_cs(
+            Assignment::from(in_0),
+            Assignment::from(in_1),
+            Assignment::from(out_0),
+            Assignment::from(out_1),
+            Assignment::from(type_0),
+            Assignment::from(type_1),
+        );
+        // Prover makes a proof using prover_cs
+        let v_blinding: Vec<Scalar> = (0..prover_cs.commitments_count())
+            .map(|_| Scalar::random(&mut rng))
+            .collect();
+        let (proof, verifier_input) =
+            prover_cs.prove(&v_blinding, &prover_gens, &mut prover_transcript, &mut rng)?;
+
+        // Verifier makes a `ConstraintSystem` instance representing a merge gadget
+        let (verifier_cs, mut verifier_transcript, verifier_gens) = merge_cs(
+            Assignment::Missing(),
+            Assignment::Missing(),
+            Assignment::Missing(),
+            Assignment::Missing(),
+            Assignment::Missing(),
+            Assignment::Missing(),
+        );
+        Ok(verifier_cs.verify(
+            &proof,
+            &verifier_input,
+            &verifier_gens,
+            &mut verifier_transcript,
+            &mut rng,
+        )?)
+    }
+
+    fn merge_cs(
+        in_0: Assignment,
+        in_1: Assignment,
+        out_0: Assignment,
+        out_1: Assignment,
+        type_0: Assignment,
+        type_1: Assignment,
+    ) -> (ConstraintSystem, Transcript, Generators) {
+        let mut cs = ConstraintSystem::new();
+        let mut transcript = Transcript::new(b"MergeTest");
+        let (in_0_var, in_1_var) = cs.assign_uncommitted(in_0, in_1);
+        let (out_0_var, out_1_var) = cs.assign_uncommitted(out_0, out_1);
+        let (type_0_var, type_1_var) = cs.assign_uncommitted(type_0, type_1);
+
+        Merge::fill_cs(
+            &mut cs,
+            &mut transcript,
+            (in_0_var, in_0),
+            (in_1_var, in_1),
+            (out_0_var, out_0),
+            (out_1_var, out_1),
+            (type_0_var, type_0),
+            (type_1_var, type_1),
+        ); 
+        let generators =
+            Generators::new(PedersenGenerators::default(), cs.multiplications_count(), 1);
+
+        (cs, transcript, generators)        
     }
 }
