@@ -1,6 +1,9 @@
+#![allow(non_snake_case)]
+
 use bulletproofs::circuit_proof::assignment::Assignment;
 use bulletproofs::circuit_proof::r1cs::{ConstraintSystem, LinearCombination, Variable};
 use curve25519_dalek::scalar::Scalar;
+use util::Value;
 
 pub struct Shuffle {}
 
@@ -14,34 +17,34 @@ impl Shuffle {
     ) {
         let one = Scalar::one();
         let zer = Scalar::zero();
-        let r = cs.challenge_scalar(b"shuffle challenge");
+        let w = cs.challenge_scalar(b"shuffle challenge");
 
         // create variables for multiplication 1
         let (mul1_left, mul1_right, mul1_out) =
-            cs.assign_multiplier(in_0.1 - r, in_1.1 - r, (in_0.1 - r) * (in_1.1 - r));
-        // mul1_left = in_0 - r
+            cs.assign_multiplier(in_0.1 - w, in_1.1 - w, (in_0.1 - w) * (in_1.1 - w));
+        // mul1_left = in_0 - w
         cs.add_constraint(LinearCombination::new(
-            vec![(in_0.0, one), (mul1_left, -one)],
-            -r,
+            vec![(mul1_left, -one), (in_0.0, one)],
+            -w,
         ));
-        // mul1_right = in_1 - r
+        // mul1_right = in_1 - w
         cs.add_constraint(LinearCombination::new(
-            vec![(in_1.0, one), (mul1_right, -one)],
-            -r,
+            vec![(mul1_right, -one), (in_1.0, one)],
+            -w,
         ));
 
         // create variables for multiplication 2
         let (mul2_left, mul2_right, mul2_out) =
-            cs.assign_multiplier(out_0.1 - r, out_1.1 - r, (out_0.1 - r) * (out_1.1 - r));
-        // mul2_left = out_0 - r
+            cs.assign_multiplier(out_0.1 - w, out_1.1 - w, (out_0.1 - w) * (out_1.1 - w));
+        // mul2_left = out_0 - w
         cs.add_constraint(LinearCombination::new(
-            vec![(out_0.0, one), (mul2_left, -one)],
-            -r,
+            vec![(mul2_left, -one), (out_0.0, one)],
+            -w,
         ));
-        // mul2_right = out_1 - r
+        // mul2_right = out_1 - w
         cs.add_constraint(LinearCombination::new(
-            vec![(out_1.0, one), (mul2_right, -one)],
-            -r,
+            vec![(mul2_right, -one), (out_1.0, one)],
+            -w,
         ));
         // mul1_out = mul2_out
         cs.add_constraint(LinearCombination::new(
@@ -54,55 +57,79 @@ impl Shuffle {
 pub struct Merge {}
 
 impl Merge {
-    fn fill_cs(
-        cs: &mut ConstraintSystem,
-        in_0: (Variable, Assignment),
-        in_1: (Variable, Assignment),
-        out_0: (Variable, Assignment),
-        out_1: (Variable, Assignment),
-        type_0: (Variable, Assignment),
-        type_1: (Variable, Assignment),
-    ) {
+    fn fill_cs(cs: &mut ConstraintSystem, A: Value, B: Value, C: Value, D: Value) {
         let one = Scalar::one();
         let zer = Scalar::zero();
-        let r = cs.challenge_scalar(b"merge challenge");
+        let w = cs.challenge_scalar(b"merge challenge");
 
         // create variables for multiplication
         let (mul_left, mul_right, mul_out) = cs.assign_multiplier(
-            in_0.1 * (-one) + in_1.1 * (-r) + out_0.1 + out_1.1 * (r),
-            in_0.1
-                + in_1.1
-                + out_1.1 * (-one)
-                + out_0.1 * (r)
-                + type_0.1 * (-r * r)
-                + type_1.1 * (r * r),
+            // left gate to multiplier
+            (A.q.1 - C.q.1)
+                + (A.a.1 - C.a.1) * w
+                + (A.t.1 - C.t.1) * w * w
+                + (B.q.1 - D.q.1) * w * w * w
+                + (B.a.1 - D.a.1) * w * w * w * w
+                + (B.t.1 - D.t.1) * w * w * w * w * w,
+            // right gate to multiplier
+            C.q.1
+                + (A.a.1 - B.a.1) * w
+                + (A.t.1 - B.t.1) * w * w
+                + (D.q.1 - A.q.1 + B.q.1) * w * w * w
+                + (D.a.1 - A.a.1) * w * w * w * w
+                + (D.t.1 - A.t.1) * w * w * w * w * w,
+            // out gate to multiplier
             Assignment::zero(),
         );
-        // mul_left = in_0 * (-1) + in_1 * (-r) + out_0 + out_1 * (r)
+        // mul_left  = (A.q - C.q) +
+        //             (A.a - C.a) * w +
+        //             (A.t - C.t) * w^2 +
+        //             (B.q - D.q) * w^3 +
+        //             (B.a - D.a) * w^4 +
+        //             (B.t - D.t) * w^5
         cs.add_constraint(LinearCombination::new(
             vec![
-                (in_0.0.clone(), -one),
-                (in_1.0.clone(), -r),
-                (out_0.0.clone(), one),
-                (out_1.0.clone(), r),
                 (mul_left, -one),
+                (A.q.0, one),
+                (C.q.0, -one),
+                (A.a.0, w),
+                (C.a.0, -w),
+                (A.t.0, w * w),
+                (C.t.0, -w * w),
+                (B.q.0, w * w * w),
+                (D.q.0, -w * w * w),
+                (B.a.0, w * w * w * w),
+                (D.a.0, -w * w * w * w),
+                (B.t.0, w * w * w * w * w),
+                (D.t.0, -w * w * w * w * w),
             ],
             zer,
         ));
-        // mul_right = in_0 + in_1 + out_1 * (-1) + out_0 * (r) + type_0 * (-r*r) + type_1 * (r*r)
+        // mul_right = (C.q - 0) +
+        //             (A.a - B.a) * w +
+        //             (A.t - B.t) * w^2 +
+        //             (D.q - A.q + B.q) * w^3 +
+        //             (D.a - A.a) * w^4
+        //             (D.t - A.t) * w^5
         cs.add_constraint(LinearCombination::new(
             vec![
-                (in_0.0, one),
-                (in_1.0, one),
-                (out_1.0, -one),
-                (out_0.0, r),
-                (type_0.0, -r * r),
-                (type_1.0, r * r),
                 (mul_right, -one),
+                (C.q.0, one),
+                (A.a.0, w),
+                (B.a.0, -w),
+                (A.t.0, w * w),
+                (B.t.0, -w * w),
+                (D.q.0, w * w * w),
+                (A.q.0, -w * w * w),
+                (B.q.0, w * w * w),
+                (D.a.0, w * w * w * w),
+                (A.a.0, -w * w * w * w),
+                (D.t.0, w * w * w * w * w),
+                (A.t.0, -w * w * w * w * w),
             ],
             zer,
         ));
-        // mul_out = 0
+        // mul_out   = 0
         cs.add_constraint(LinearCombination::new(vec![(mul_out, -one)], zer));
     }
 }
@@ -222,12 +249,10 @@ mod tests {
     }
 
     fn merge_helper(
-        in_0: u64,
-        in_1: u64,
-        out_0: u64,
-        out_1: u64,
-        type_0: u64,
-        type_1: u64,
+        A: (u64, u64, u64),
+        B: (u64, u64, u64),
+        C: (u64, u64, u64),
+        D: (u64, u64, u64),
     ) -> Result<(), R1CSError> {
         let mut rng = OsRng::new().unwrap();
 
