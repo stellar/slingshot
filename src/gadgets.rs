@@ -141,11 +141,6 @@ mod tests {
     use bulletproofs::{Generators, PedersenGenerators, Transcript};
     use rand::rngs::OsRng;
 
-    fn blinding_helper(len: usize) -> Vec<Scalar> {
-        let mut rng = OsRng::new().unwrap();
-        (0..len).map(|_| Scalar::random(&mut rng)).collect()
-    }
-
     #[test]
     fn shuffle_gadget() {
         assert!(shuffle_helper(3, 6, 3, 6).is_ok());
@@ -158,13 +153,9 @@ mod tests {
         let mut rng = OsRng::new().unwrap();
 
         // Prover makes a `ConstraintSystem` instance representing a shuffle gadget
-        let v = vec![
-            Scalar::from(in_0),
-            Scalar::from(in_1),
-            Scalar::from(out_0),
-            Scalar::from(out_1),
-        ];
-        let v_blinding = blinding_helper(v.len());
+        // v and v_blinding emptpy because we are only testing low-level variable constraints
+        let v = vec![];
+        let v_blinding = vec![];
         let mut prover_transcript = Transcript::new(b"ShuffleTest");
         let (mut prover_cs, _committed_variables, commitments) = ConstraintSystem::prover_new(
             &mut prover_transcript,
@@ -230,22 +221,83 @@ mod tests {
 
     #[test]
     fn merge_gadget() {
-        let dollar = 77;
+        let peso = 66;
+        let peso_tag = 77;
         let yuan = 88;
+        let yuan_tag = 99;
+
         // no merge, different asset types
-        assert!(merge_helper(3, 6, 3, 6, dollar, yuan).is_ok());
+        assert!(
+            merge_helper(
+                (3, peso, peso_tag),
+                (6, yuan, yuan_tag),
+                (3, peso, peso_tag),
+                (6, yuan, yuan_tag),
+            ).is_ok()
+        );
         // merge, same asset types
-        assert!(merge_helper(3, 6, 0, 9, dollar, dollar).is_ok());
+        assert!(
+            merge_helper(
+                (3, peso, peso_tag),
+                (6, peso, peso_tag),
+                (0, peso, peso_tag),
+                (9, peso, peso_tag),
+            ).is_ok()
+        );
+        // merge, zero value is different asset type
+        assert!(
+            merge_helper(
+                (3, peso, peso_tag),
+                (6, peso, peso_tag),
+                (0, yuan, yuan_tag),
+                (9, peso, peso_tag),
+            ).is_ok()
+        );
         // no merge, same asset types
-        assert!(merge_helper(6, 6, 6, 6, dollar, yuan).is_ok());
+        assert!(
+            merge_helper(
+                (6, peso, peso_tag),
+                (6, peso, peso_tag),
+                (6, peso, peso_tag),
+                (6, peso, peso_tag),
+            ).is_ok()
+        );
         // error when merging different asset types
-        assert!(merge_helper(3, 3, 0, 6, dollar, yuan).is_err());
+        assert!(
+            merge_helper(
+                (3, peso, peso_tag),
+                (3, yuan, yuan_tag),
+                (0, peso, peso_tag),
+                (6, yuan, yuan_tag),
+            ).is_err()
+        );
+        // error when not merging, but asset type changes
+        assert!(
+            merge_helper(
+                (3, peso, peso_tag),
+                (3, yuan, yuan_tag),
+                (3, peso, peso_tag),
+                (3, peso, peso_tag),
+            ).is_err()
+        );
         // error when creating more value (same asset types)
-        assert!(merge_helper(3, 3, 3, 6, dollar, dollar).is_err());
+        assert!(
+            merge_helper(
+                (3, peso, peso_tag),
+                (3, peso, peso_tag),
+                (3, peso, peso_tag),
+                (6, peso, peso_tag),
+            ).is_err()
+        );
         // error when creating more value (different asset types)
-        assert!(merge_helper(3, 3, 3, 6, dollar, yuan).is_err());
-        // error when not merging same asset types - is this desired behavior?
-        // assert!(merge_helper(3, 3, 3, 3, dollar, dollar).is_err());
+        assert!(
+            merge_helper(
+                (3, peso, peso_tag),
+                (3, yuan, yuan_tag),
+                (3, peso, peso_tag),
+                (6, yuan, yuan_tag),
+            ).is_err()
+        );
     }
 
     fn merge_helper(
@@ -257,13 +309,9 @@ mod tests {
         let mut rng = OsRng::new().unwrap();
 
         // Prover makes a `ConstraintSystem` instance representing a merge gadget
-        let v = vec![
-            Scalar::from(in_0),
-            Scalar::from(in_1),
-            Scalar::from(out_0),
-            Scalar::from(out_1),
-        ];
-        let v_blinding = blinding_helper(v.len());
+        // v and v_blinding emptpy because we are only testing low-level variable constraints
+        let v = vec![];
+        let v_blinding = vec![];
         let mut prover_transcript = Transcript::new(b"MergeTest");
         let (mut prover_cs, _committed_variables, commitments) = ConstraintSystem::prover_new(
             &mut prover_transcript,
@@ -272,15 +320,33 @@ mod tests {
             PedersenGenerators::default(),
         );
         // Prover allocates variables and adds constraints to the constraint system
-        merge_cs(
-            &mut prover_cs,
-            Assignment::from(in_0),
-            Assignment::from(in_1),
-            Assignment::from(out_0),
-            Assignment::from(out_1),
-            Assignment::from(type_0),
-            Assignment::from(type_1),
-        );
+        let (A_q, B_q) = prover_cs.assign_uncommitted(Assignment::from(A.0), Assignment::from(B.0));
+        let (C_q, D_q) = prover_cs.assign_uncommitted(Assignment::from(C.0), Assignment::from(D.0));
+        let (A_a, B_a) = prover_cs.assign_uncommitted(Assignment::from(A.1), Assignment::from(B.1));
+        let (C_a, D_a) = prover_cs.assign_uncommitted(Assignment::from(C.1), Assignment::from(D.1));
+        let (A_t, B_t) = prover_cs.assign_uncommitted(Assignment::from(A.2), Assignment::from(B.2));
+        let (C_t, D_t) = prover_cs.assign_uncommitted(Assignment::from(C.2), Assignment::from(D.2));
+        let A = Value {
+            q: (A_q, Assignment::from(A.0)),
+            a: (A_a, Assignment::from(A.1)),
+            t: (A_t, Assignment::from(A.2)),
+        };
+        let B = Value {
+            q: (B_q, Assignment::from(B.0)),
+            a: (B_a, Assignment::from(B.1)),
+            t: (B_t, Assignment::from(B.2)),
+        };
+        let C = Value {
+            q: (C_q, Assignment::from(C.0)),
+            a: (C_a, Assignment::from(C.1)),
+            t: (C_t, Assignment::from(C.2)),
+        };
+        let D = Value {
+            q: (D_q, Assignment::from(D.0)),
+            a: (D_a, Assignment::from(D.1)),
+            t: (D_t, Assignment::from(D.2)),
+        };
+        Merge::fill_cs(&mut prover_cs, A, B, C, D);
         // Prover makes a proof using prover_cs
         let prover_gens = Generators::new(
             PedersenGenerators::default(),
@@ -294,15 +360,39 @@ mod tests {
         let (mut verifier_cs, _committed_variables) =
             ConstraintSystem::verifier_new(&mut verifier_transcript, commitments);
         // Verifier allocates variables and adds constraints to the constraint system
-        merge_cs(
-            &mut verifier_cs,
-            Assignment::Missing(),
-            Assignment::Missing(),
-            Assignment::Missing(),
-            Assignment::Missing(),
-            Assignment::Missing(),
-            Assignment::Missing(),
-        );
+        let (A_q, B_q) =
+            verifier_cs.assign_uncommitted(Assignment::Missing(), Assignment::Missing());
+        let (C_q, D_q) =
+            verifier_cs.assign_uncommitted(Assignment::Missing(), Assignment::Missing());
+        let (A_a, B_a) =
+            verifier_cs.assign_uncommitted(Assignment::Missing(), Assignment::Missing());
+        let (C_a, D_a) =
+            verifier_cs.assign_uncommitted(Assignment::Missing(), Assignment::Missing());
+        let (A_t, B_t) =
+            verifier_cs.assign_uncommitted(Assignment::Missing(), Assignment::Missing());
+        let (C_t, D_t) =
+            verifier_cs.assign_uncommitted(Assignment::Missing(), Assignment::Missing());
+        let A = Value {
+            q: (A_q, Assignment::Missing()),
+            a: (A_a, Assignment::Missing()),
+            t: (A_t, Assignment::Missing()),
+        };
+        let B = Value {
+            q: (B_q, Assignment::Missing()),
+            a: (B_a, Assignment::Missing()),
+            t: (B_t, Assignment::Missing()),
+        };
+        let C = Value {
+            q: (C_q, Assignment::Missing()),
+            a: (C_a, Assignment::Missing()),
+            t: (C_t, Assignment::Missing()),
+        };
+        let D = Value {
+            q: (D_q, Assignment::Missing()),
+            a: (D_a, Assignment::Missing()),
+            t: (D_t, Assignment::Missing()),
+        };
+        Merge::fill_cs(&mut verifier_cs, A, B, C, D);
         // Verifier verifies proof
         let verifier_gens = Generators::new(
             PedersenGenerators::default(),
@@ -310,29 +400,5 @@ mod tests {
             1,
         );
         Ok(verifier_cs.verify(&proof, &verifier_input, &verifier_gens, &mut rng)?)
-    }
-
-    fn merge_cs(
-        cs: &mut ConstraintSystem,
-        in_0: Assignment,
-        in_1: Assignment,
-        out_0: Assignment,
-        out_1: Assignment,
-        type_0: Assignment,
-        type_1: Assignment,
-    ) {
-        let (in_0_var, in_1_var) = cs.assign_uncommitted(in_0, in_1);
-        let (out_0_var, out_1_var) = cs.assign_uncommitted(out_0, out_1);
-        let (type_0_var, type_1_var) = cs.assign_uncommitted(type_0, type_1);
-
-        Merge::fill_cs(
-            cs,
-            (in_0_var, in_0),
-            (in_1_var, in_1),
-            (out_0_var, out_0),
-            (out_1_var, out_1),
-            (type_0_var, type_0),
-            (type_1_var, type_1),
-        );
     }
 }
