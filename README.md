@@ -1,2 +1,3 @@
-# zkvm
-ZkVM — a TxVM with cloaked assets and ZK smart contracts 
+# ZkVM
+
+An evolution of TxVM with **cloaked assets** and **zero-knowledge smart contracts**.
