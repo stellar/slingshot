@@ -6,9 +6,9 @@ use bulletproofs::R1CSError;
 use curve25519_dalek::scalar::Scalar;
 use util::Value;
 
-pub struct Shuffle {}
+pub struct ShuffleGadget {}
 
-impl Shuffle {
+impl ShuffleGadget {
     fn fill_cs<CS: ConstraintSystem>(
         cs: &mut CS,
         in_0: (Variable, Assignment),
@@ -58,9 +58,23 @@ impl Shuffle {
     }
 }
 
-pub struct Merge {}
+pub struct kShuffleGadget {
+    k: usize,
+}
 
-impl Merge {
+impl kShuffleGadget {
+    fn fill_cs<CS: ConstraintSystem>(
+        cs: &mut CS,
+        inputs: Vec<(Variable, Assignment)>,
+        outputs: Vec<(Variable, Assignment)>,
+    ) -> Result<(), R1CSError> {
+        unimplemented!();
+    }
+}
+
+pub struct MergeGadget {}
+
+impl MergeGadget {
     fn fill_cs<CS: ConstraintSystem>(
         cs: &mut CS,
         A: Value,
@@ -118,7 +132,7 @@ impl Merge {
         // mul_right = (C.q - 0) +
         //             (A.a - B.a) * w +
         //             (A.t - B.t) * w^2 +
-        //             (D.q - A.q + B.q) * w^3 +
+        //             (D.q - A.q - B.q) * w^3 +
         //             (D.a - A.a) * w^4
         //             (D.t - A.t) * w^5
         cs.add_constraint(
@@ -147,9 +161,9 @@ impl Merge {
     }
 }
 
-pub struct Split {}
+pub struct SplitGadget {}
 
-impl Split {
+impl SplitGadget {
     fn fill_cs<CS: ConstraintSystem>(
         cs: &mut CS,
         A: Value,
@@ -157,9 +171,10 @@ impl Split {
         C: Value,
         D: Value,
     ) -> Result<(), R1CSError> {
-        Merge::fill_cs(cs, C, D, B, A)
+        MergeGadget::fill_cs(cs, D, C, B, A)
     }
 }
+// TODO: write split tests
 
 #[cfg(test)]
 mod tests {
@@ -231,7 +246,7 @@ mod tests {
         let (in_0_var, in_1_var) = cs.assign_uncommitted(in_0, in_1)?;
         let (out_0_var, out_1_var) = cs.assign_uncommitted(out_0, out_1)?;
 
-        Shuffle::fill_cs(
+        ShuffleGadget::fill_cs(
             cs,
             (in_0_var, in_0),
             (in_1_var, in_1),
@@ -373,7 +388,7 @@ mod tests {
                 a: (D_a, Assignment::from(D.1)),
                 t: (D_t, Assignment::from(D.2)),
             };
-            Merge::fill_cs(&mut prover_cs, A, B, C, D);
+            MergeGadget::fill_cs(&mut prover_cs, A, B, C, D);
 
             let proof = prover_cs.prove()?;
 
@@ -417,7 +432,7 @@ mod tests {
             a: (D_a, Assignment::Missing()),
             t: (D_t, Assignment::Missing()),
         };
-        Merge::fill_cs(&mut verifier_cs, A, B, C, D);
+        MergeGadget::fill_cs(&mut verifier_cs, A, B, C, D);
 
         verifier_cs.verify(&proof)
     }
