@@ -84,7 +84,7 @@ impl Merge {
             C.q.1
                 + (A.a.1 - B.a.1) * w
                 + (A.t.1 - B.t.1) * w * w
-                + (D.q.1 - A.q.1 + B.q.1) * w * w * w
+                + (D.q.1 - A.q.1 - B.q.1) * w * w * w
                 + (D.a.1 - A.a.1) * w * w * w * w
                 + (D.t.1 - A.t.1) * w * w * w * w * w,
             // out gate to multiplier
@@ -131,7 +131,7 @@ impl Merge {
                 (B.t.0, -w * w),
                 (D.q.0, w * w * w),
                 (A.q.0, -w * w * w),
-                (B.q.0, w * w * w),
+                (B.q.0, -w * w * w),
                 (D.a.0, w * w * w * w),
                 (A.a.0, -w * w * w * w),
                 (D.t.0, w * w * w * w * w),
@@ -233,6 +233,15 @@ mod tests {
         let yuan = 88;
         let yuan_tag = 99;
 
+        // no merge, same asset types
+        assert!(
+            merge_helper(
+                (6, peso, peso_tag),
+                (6, peso, peso_tag),
+                (6, peso, peso_tag),
+                (6, peso, peso_tag),
+            ).is_ok()
+        );
         // no merge, different asset types
         assert!(
             merge_helper(
@@ -258,15 +267,6 @@ mod tests {
                 (6, peso, peso_tag),
                 (0, yuan, yuan_tag),
                 (9, peso, peso_tag),
-            ).is_ok()
-        );
-        // no merge, same asset types
-        assert!(
-            merge_helper(
-                (6, peso, peso_tag),
-                (6, peso, peso_tag),
-                (6, peso, peso_tag),
-                (6, peso, peso_tag),
             ).is_ok()
         );
         // error when merging different asset types
