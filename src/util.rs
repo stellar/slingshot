@@ -1,5 +1,5 @@
 use bulletproofs::circuit_proof::assignment::Assignment;
-use bulletproofs::circuit_proof::r1cs::Variable;
+use bulletproofs::circuit_proof::Variable;
 
 pub struct Value {
     pub q: (Variable, Assignment), // quantity
