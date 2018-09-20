@@ -147,6 +147,20 @@ impl Merge {
     }
 }
 
+pub struct Split {}
+
+impl Split {
+    fn fill_cs<CS: ConstraintSystem>(
+        cs: &mut CS,
+        A: Value,
+        B: Value,
+        C: Value,
+        D: Value,
+    ) -> Result<(), R1CSError> {
+        Merge::fill_cs(cs, C, D, B, A)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
