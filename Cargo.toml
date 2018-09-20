@@ -1,5 +1,5 @@
 [package]
-name = "cryptonumia"
+name = "spacesuit"
 version = "0.1.0"
 authors = ["Henry de Valence <hdevalence@hdevalence.ca>", "Cathie Yun <cathieyun@gmail.com>", "Oleg Andreev <oleganza@gmail.com>"]
 
