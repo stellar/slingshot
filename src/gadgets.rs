@@ -225,7 +225,7 @@ mod tests {
             (out_1_var, out_1),
         )
     }
-    /*
+
     #[test]
     fn merge_gadget() {
         let peso = 66;
@@ -313,72 +313,76 @@ mod tests {
         C: (u64, u64, u64),
         D: (u64, u64, u64),
     ) -> Result<(), R1CSError> {
-        let mut rng = OsRng::new().unwrap();
+        // Common
+        let gens = Generators::new(PedersenGenerators::default(), 128, 1);
 
-        // Prover makes a `ConstraintSystem` instance representing a merge gadget
-        // v and v_blinding emptpy because we are only testing low-level variable constraints
-        let v = vec![];
-        let v_blinding = vec![];
-        let mut prover_transcript = Transcript::new(b"MergeTest");
-        let (mut prover_cs, _committed_variables, commitments) = ConstraintSystem::prover_new(
-            &mut prover_transcript,
-            v,
-            v_blinding.clone(),
-            PedersenGenerators::default(),
-        );
-        // Prover allocates variables and adds constraints to the constraint system
-        let (A_q, B_q) = prover_cs.assign_uncommitted(Assignment::from(A.0), Assignment::from(B.0));
-        let (C_q, D_q) = prover_cs.assign_uncommitted(Assignment::from(C.0), Assignment::from(D.0));
-        let (A_a, B_a) = prover_cs.assign_uncommitted(Assignment::from(A.1), Assignment::from(B.1));
-        let (C_a, D_a) = prover_cs.assign_uncommitted(Assignment::from(C.1), Assignment::from(D.1));
-        let (A_t, B_t) = prover_cs.assign_uncommitted(Assignment::from(A.2), Assignment::from(B.2));
-        let (C_t, D_t) = prover_cs.assign_uncommitted(Assignment::from(C.2), Assignment::from(D.2));
-        let A = Value {
-            q: (A_q, Assignment::from(A.0)),
-            a: (A_a, Assignment::from(A.1)),
-            t: (A_t, Assignment::from(A.2)),
+        // Prover's scope
+        let (proof, commitments) = {
+            // Prover makes a `ConstraintSystem` instance representing a merge gadget
+            // v and v_blinding emptpy because we are only testing low-level variable constraints
+            let v = vec![];
+            let v_blinding = vec![];
+            let mut prover_transcript = Transcript::new(b"MergeTest");
+            let (mut prover_cs, _variables, commitments) =
+                prover::ProverCS::new(&mut prover_transcript, &gens, v, v_blinding.clone());
+
+            // Prover allocates variables and adds constraints to the constraint system
+            let (A_q, B_q) =
+                prover_cs.assign_uncommitted(Assignment::from(A.0), Assignment::from(B.0))?;
+            let (C_q, D_q) =
+                prover_cs.assign_uncommitted(Assignment::from(C.0), Assignment::from(D.0))?;
+            let (A_a, B_a) =
+                prover_cs.assign_uncommitted(Assignment::from(A.1), Assignment::from(B.1))?;
+            let (C_a, D_a) =
+                prover_cs.assign_uncommitted(Assignment::from(C.1), Assignment::from(D.1))?;
+            let (A_t, B_t) =
+                prover_cs.assign_uncommitted(Assignment::from(A.2), Assignment::from(B.2))?;
+            let (C_t, D_t) =
+                prover_cs.assign_uncommitted(Assignment::from(C.2), Assignment::from(D.2))?;
+            let A = Value {
+                q: (A_q, Assignment::from(A.0)),
+                a: (A_a, Assignment::from(A.1)),
+                t: (A_t, Assignment::from(A.2)),
+            };
+            let B = Value {
+                q: (B_q, Assignment::from(B.0)),
+                a: (B_a, Assignment::from(B.1)),
+                t: (B_t, Assignment::from(B.2)),
+            };
+            let C = Value {
+                q: (C_q, Assignment::from(C.0)),
+                a: (C_a, Assignment::from(C.1)),
+                t: (C_t, Assignment::from(C.2)),
+            };
+            let D = Value {
+                q: (D_q, Assignment::from(D.0)),
+                a: (D_a, Assignment::from(D.1)),
+                t: (D_t, Assignment::from(D.2)),
+            };
+            Merge::fill_cs(&mut prover_cs, A, B, C, D);
+
+            let proof = prover_cs.prove()?;
+
+            (proof, commitments)
         };
-        let B = Value {
-            q: (B_q, Assignment::from(B.0)),
-            a: (B_a, Assignment::from(B.1)),
-            t: (B_t, Assignment::from(B.2)),
-        };
-        let C = Value {
-            q: (C_q, Assignment::from(C.0)),
-            a: (C_a, Assignment::from(C.1)),
-            t: (C_t, Assignment::from(C.2)),
-        };
-        let D = Value {
-            q: (D_q, Assignment::from(D.0)),
-            a: (D_a, Assignment::from(D.1)),
-            t: (D_t, Assignment::from(D.2)),
-        };
-        Merge::fill_cs(&mut prover_cs, A, B, C, D);
-        // Prover makes a proof using prover_cs
-        let prover_gens = Generators::new(
-            PedersenGenerators::default(),
-            prover_cs.multiplications_count(),
-            1,
-        );
-        let (proof, verifier_input) = prover_cs.prove(&v_blinding, &prover_gens, &mut rng)?;
 
         // Verifier makes a `ConstraintSystem` instance representing a merge gadget
         let mut verifier_transcript = Transcript::new(b"MergeTest");
-        let (mut verifier_cs, _committed_variables) =
-            ConstraintSystem::verifier_new(&mut verifier_transcript, commitments);
+        let (mut verifier_cs, _variables) =
+            verifier::VerifierCS::new(&mut verifier_transcript, &gens, commitments);
         // Verifier allocates variables and adds constraints to the constraint system
         let (A_q, B_q) =
-            verifier_cs.assign_uncommitted(Assignment::Missing(), Assignment::Missing());
+            verifier_cs.assign_uncommitted(Assignment::Missing(), Assignment::Missing())?;
         let (C_q, D_q) =
-            verifier_cs.assign_uncommitted(Assignment::Missing(), Assignment::Missing());
+            verifier_cs.assign_uncommitted(Assignment::Missing(), Assignment::Missing())?;
         let (A_a, B_a) =
-            verifier_cs.assign_uncommitted(Assignment::Missing(), Assignment::Missing());
+            verifier_cs.assign_uncommitted(Assignment::Missing(), Assignment::Missing())?;
         let (C_a, D_a) =
-            verifier_cs.assign_uncommitted(Assignment::Missing(), Assignment::Missing());
+            verifier_cs.assign_uncommitted(Assignment::Missing(), Assignment::Missing())?;
         let (A_t, B_t) =
-            verifier_cs.assign_uncommitted(Assignment::Missing(), Assignment::Missing());
+            verifier_cs.assign_uncommitted(Assignment::Missing(), Assignment::Missing())?;
         let (C_t, D_t) =
-            verifier_cs.assign_uncommitted(Assignment::Missing(), Assignment::Missing());
+            verifier_cs.assign_uncommitted(Assignment::Missing(), Assignment::Missing())?;
         let A = Value {
             q: (A_q, Assignment::Missing()),
             a: (A_a, Assignment::Missing()),
@@ -400,13 +404,7 @@ mod tests {
             t: (D_t, Assignment::Missing()),
         };
         Merge::fill_cs(&mut verifier_cs, A, B, C, D);
-        // Verifier verifies proof
-        let verifier_gens = Generators::new(
-            PedersenGenerators::default(),
-            verifier_cs.multiplications_count(),
-            1,
-        );
-        Ok(verifier_cs.verify(&proof, &verifier_input, &verifier_gens, &mut rng)?)
+
+        verifier_cs.verify(&proof)
     }
-*/
 }
