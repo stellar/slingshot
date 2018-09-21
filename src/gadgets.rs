@@ -6,58 +6,6 @@ use bulletproofs::R1CSError;
 use curve25519_dalek::scalar::Scalar;
 use util::Value;
 
-pub struct ShuffleGadget {}
-
-impl ShuffleGadget {
-    fn fill_cs<CS: ConstraintSystem>(
-        cs: &mut CS,
-        in_0: (Variable, Assignment),
-        in_1: (Variable, Assignment),
-        out_0: (Variable, Assignment),
-        out_1: (Variable, Assignment),
-    ) -> Result<(), R1CSError> {
-        let one = Scalar::one();
-        let var_one = Variable::One();
-        let w = cs.challenge_scalar(b"shuffle challenge");
-
-        // create variables for multiplication 1
-        let (mul1_left, mul1_right, mul1_out) =
-            cs.assign_multiplier(in_0.1 - w, in_1.1 - w, (in_0.1 - w) * (in_1.1 - w))?;
-        // mul1_left = in_0 - w
-        cs.add_constraint(
-            [(mul1_left, -one), (in_0.0, one), (var_one, -w)]
-                .iter()
-                .collect(),
-        );
-        // mul1_right = in_1 - w
-        cs.add_constraint(
-            [(mul1_right, -one), (in_1.0, one), (var_one, -w)]
-                .iter()
-                .collect(),
-        );
-
-        // create variables for multiplication 2
-        let (mul2_left, mul2_right, mul2_out) =
-            cs.assign_multiplier(out_0.1 - w, out_1.1 - w, (out_0.1 - w) * (out_1.1 - w))?;
-        // mul2_left = out_0 - w
-        cs.add_constraint(
-            [(mul2_left, -one), (out_0.0, one), (var_one, -w)]
-                .iter()
-                .collect(),
-        );
-        // mul2_right = out_1 - w
-        cs.add_constraint(
-            [(mul2_right, -one), (out_1.0, one), (var_one, -w)]
-                .iter()
-                .collect(),
-        );
-        // mul1_out = mul2_out
-        cs.add_constraint([(mul1_out, one), (mul2_out, -one)].iter().collect());
-
-        Ok(())
-    }
-}
-
 pub struct KShuffleGadget {}
 
 impl KShuffleGadget {
@@ -80,7 +28,7 @@ impl KShuffleGadget {
             return Ok(());
         }
 
-        // Make last x multiplier
+        // Make last x multiplier for i = k-1 and k-2
         let mut mulx_left = x[k - 1].1 + neg_z;
         let mut mulx_right = x[k - 2].1 + neg_z;
         let mut mulx_out = mulx_left * mulx_right;
@@ -98,7 +46,7 @@ impl KShuffleGadget {
         );
         let mut mulx_out_var_prev = mulx_out_var;
 
-        // Make multipliers for x from i == [0, k-2]
+        // Make multipliers for x from i == [0, k-3]
         for i in (0..k - 2).rev() {
             mulx_left = mulx_out;
             mulx_right = x[i].1 + neg_z;
@@ -120,7 +68,7 @@ impl KShuffleGadget {
             mulx_out_var_prev = mulx_out_var;
         }
 
-        // Make last y multiplier
+        // Make last y multiplier for i = k-1 and k-2
         let mut muly_left = y[k - 1].1 - z;
         let mut muly_right = y[k - 2].1 - z;
         let mut muly_out = muly_left * muly_right;
@@ -138,7 +86,7 @@ impl KShuffleGadget {
         );
         let mut muly_out_var_prev = muly_out_var;
 
-        // Make multipliers for y from i == [0, k-2]
+        // Make multipliers for y from i == [0, k-3]
         for i in (0..k - 2).rev() {
             muly_left = muly_out;
             muly_right = y[i].1 + neg_z;
@@ -367,23 +315,24 @@ mod tests {
         let k = input.len();
 
         // Allocate pairs of low-level variables and their assignments
-        for i in (0..k / 2) {
-            let (in_var_left, in_var_right) =
-                cs.assign_uncommitted(input[i * 2], input[i * 2 + 1])?;
-            in_pairs.push((in_var_left, input[i * 2]));
-            in_pairs.push((in_var_right, input[i * 2 + 1]));
+        for i in 0..k / 2 {
+            let idx_l = i * 2;
+            let idx_r = idx_l + 1;
+            let (in_var_left, in_var_right) = cs.assign_uncommitted(input[idx_l], input[idx_r])?;
+            in_pairs.push((in_var_left, input[idx_l]));
+            in_pairs.push((in_var_right, input[idx_r]));
 
             let (out_var_left, out_var_right) =
-                cs.assign_uncommitted(output[i * 2], output[i * 2 + 1])?;
-            out_pairs.push((out_var_left, output[i * 2]));
-            out_pairs.push((out_var_right, output[i * 2 + 1]));
+                cs.assign_uncommitted(output[idx_l], output[idx_r])?;
+            out_pairs.push((out_var_left, output[idx_l]));
+            out_pairs.push((out_var_right, output[idx_r]));
         }
-
         if k % 2 == 1 {
-            let (in_var_left, _) = cs.assign_uncommitted(input[k - 1], Assignment::zero())?;
-            in_pairs.push((in_var_left, input[k - 1]));
-            let (out_var_left, _) = cs.assign_uncommitted(output[k - 1], Assignment::zero())?;
-            out_pairs.push((out_var_left, output[k - 1]));
+            let idx = k - 1;
+            let (in_var_left, _) = cs.assign_uncommitted(input[idx], Assignment::zero())?;
+            in_pairs.push((in_var_left, input[idx]));
+            let (out_var_left, _) = cs.assign_uncommitted(output[idx], Assignment::zero())?;
+            out_pairs.push((out_var_left, output[idx]));
         }
 
         KShuffleGadget::fill_cs(cs, in_pairs, out_pairs)
