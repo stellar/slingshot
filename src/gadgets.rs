@@ -75,17 +75,16 @@ impl KShuffleGadget {
             return Err(R1CSError::InvalidR1CSConstruction);
         }
         let k = x.len();
+        if k == 1 {
+            cs.add_constraint([(x[0].0, -one), (y[0].0, one)].iter().collect());
+        }
 
-        let mut mulx_left = vec![Assignment::zero(); k - 1];
-        let mut mulx_right = vec![Assignment::zero(); k - 1];
-        let mut mulx_out = vec![Assignment::zero(); k - 1];
-
-        mulx_left[k - 2] = x[k - 1].1 + neg_z;
-        mulx_right[k - 2] = x[k - 2].1 + neg_z;
-        mulx_out[k - 2] = mulx_left[k - 2] * mulx_right[k - 2];
-
+        // Make last x multiplier
+        let mut mulx_left = x[k - 1].1 + neg_z;
+        let mut mulx_right = x[k - 2].1 + neg_z;
+        let mut mulx_out = mulx_left * mulx_right;
         let (mulx_left_var, mulx_right_var, mulx_out_var) =
-            cs.assign_multiplier(mulx_left[k - 2], mulx_right[k - 2], mulx_out[k - 2])?;
+            cs.assign_multiplier(mulx_left, mulx_right, mulx_out)?;
         cs.add_constraint(
             [(mulx_left_var, -one), (var_one, neg_z), (x[k - 1].0, one)]
                 .iter()
@@ -96,17 +95,36 @@ impl KShuffleGadget {
                 .iter()
                 .collect(),
         );
+        let mut mulx_out_var_prev = mulx_out_var;
 
-        let mut muly_left = vec![Assignment::zero(); k - 1];
-        let mut muly_right = vec![Assignment::zero(); k - 1];
-        let mut muly_out = vec![Assignment::zero(); k - 1];
+        // Make multipliers for x from i == [0, k-2]
+        for i in (0..k - 2).rev() {
+            mulx_left = mulx_out;
+            mulx_right = x[i].1 + neg_z;
+            mulx_out = mulx_left * mulx_right;
 
-        muly_left[k - 2] = y[k - 1].1 - z;
-        muly_right[k - 2] = y[k - 2].1 - z;
-        muly_out[k - 2] = muly_left[k - 2] * muly_right[k - 2];
+            let (mulx_left_var, mulx_right_var, mulx_out_var) =
+                cs.assign_multiplier(mulx_left, mulx_right, mulx_out)?;
+            cs.add_constraint(
+                [(mulx_left_var, -one), (mulx_out_var_prev, one)]
+                    .iter()
+                    .collect(),
+            );
+            cs.add_constraint(
+                [(mulx_right_var, -one), (var_one, neg_z), (x[i].0, one)]
+                    .iter()
+                    .collect(),
+            );
 
+            mulx_out_var_prev = mulx_out_var;
+        }
+
+        // Make last y multiplier
+        let mut muly_left = y[k - 1].1 - z;
+        let mut muly_right = y[k - 2].1 - z;
+        let mut muly_out = muly_left * muly_right;
         let (muly_left_var, muly_right_var, muly_out_var) =
-            cs.assign_multiplier(muly_left[k - 2], muly_right[k - 2], muly_out[k - 2])?;
+            cs.assign_multiplier(muly_left, muly_right, muly_out)?;
         cs.add_constraint(
             [(muly_left_var, -one), (var_one, neg_z), (y[k - 1].0, one)]
                 .iter()
@@ -117,7 +135,31 @@ impl KShuffleGadget {
                 .iter()
                 .collect(),
         );
+        let mut muly_out_var_prev = muly_out_var;
 
+        // Make multipliers for y from i == [0, k-2]
+        for i in (0..k - 2).rev() {
+            muly_left = muly_out;
+            muly_right = y[i].1 + neg_z;
+            muly_out = muly_left * muly_right;
+
+            let (muly_left_var, muly_right_var, muly_out_var) =
+                cs.assign_multiplier(muly_left, muly_right, muly_out)?;
+            cs.add_constraint(
+                [(muly_left_var, -one), (muly_out_var_prev, one)]
+                    .iter()
+                    .collect(),
+            );
+            cs.add_constraint(
+                [(muly_right_var, -one), (var_one, neg_z), (y[i].0, one)]
+                    .iter()
+                    .collect(),
+            );
+
+            muly_out_var_prev = muly_out_var;
+        }
+
+        // Check equality between last x mul output and last y mul output
         cs.add_constraint([(muly_out_var, -one), (mulx_out_var, one)].iter().collect());
 
         Ok(())
@@ -237,13 +279,13 @@ mod tests {
 
     #[test]
     fn shuffle_gadget() {
-        assert!(shuffle_helper(3, 6, 3, 6).is_ok());
-        assert!(shuffle_helper(3, 6, 6, 3).is_ok());
-        assert!(shuffle_helper(6, 6, 6, 6).is_ok());
-        assert!(shuffle_helper(3, 3, 6, 3).is_err());
+        assert!(shuffle_helper(vec![3, 6], vec![3, 6]).is_ok());
+        assert!(shuffle_helper(vec![3, 6], vec![6, 3]).is_ok());
+        assert!(shuffle_helper(vec![6, 6], vec![6, 6]).is_ok());
+        assert!(shuffle_helper(vec![3, 3], vec![6, 3]).is_err());
     }
 
-    fn shuffle_helper(in_0: u64, in_1: u64, out_0: u64, out_1: u64) -> Result<(), R1CSError> {
+    fn shuffle_helper(input: Vec<u64>, output: Vec<u64>) -> Result<(), R1CSError> {
         // Common
         let gens = Generators::new(PedersenGenerators::default(), 128, 1);
 
@@ -258,13 +300,15 @@ mod tests {
                 prover::ProverCS::new(&mut prover_transcript, &gens, v, v_blinding.clone());
 
             // Prover allocates variables and adds constraints to the constraint system
-            shuffle_cs(
-                &mut prover_cs,
-                Assignment::from(in_0),
-                Assignment::from(in_1),
-                Assignment::from(out_0),
-                Assignment::from(out_1),
-            )?;
+            let in_assignments = input
+                .iter()
+                .map(|in_i| Assignment::from(in_i.clone()))
+                .collect();
+            let out_assignments = output
+                .iter()
+                .map(|out_i| Assignment::from(out_i.clone()))
+                .collect();
+            shuffle_cs(&mut prover_cs, in_assignments, out_assignments)?;
             let proof = prover_cs.prove()?;
 
             (proof, commitments)
@@ -274,43 +318,42 @@ mod tests {
         let mut verifier_transcript = Transcript::new(b"ShuffleTest");
         let (mut verifier_cs, _variables) =
             verifier::VerifierCS::new(&mut verifier_transcript, &gens, commitments);
+
         // Verifier allocates variables and adds constraints to the constraint system
-        assert!(
-            shuffle_cs(
-                &mut verifier_cs,
-                Assignment::Missing(),
-                Assignment::Missing(),
-                Assignment::Missing(),
-                Assignment::Missing(),
-            ).is_ok()
-        );
+        let in_assignments = input.iter().map(|_| Assignment::Missing()).collect();
+        let out_assignments = output.iter().map(|_| Assignment::Missing()).collect();
+        assert!(shuffle_cs(&mut verifier_cs, in_assignments, out_assignments,).is_ok());
         // Verifier verifies proof
         Ok(verifier_cs.verify(&proof)?)
     }
 
     fn shuffle_cs<CS: ConstraintSystem>(
         cs: &mut CS,
-        in_0: Assignment,
-        in_1: Assignment,
-        out_0: Assignment,
-        out_1: Assignment,
+        input: Vec<Assignment>,
+        output: Vec<Assignment>,
     ) -> Result<(), R1CSError> {
-        let (in_0_var, in_1_var) = cs.assign_uncommitted(in_0, in_1)?;
-        let (out_0_var, out_1_var) = cs.assign_uncommitted(out_0, out_1)?;
+        let mut in_pairs = vec![];
+        let mut out_pairs = vec![];
+        let k = input.len();
 
-        // ShuffleGadget::fill_cs(
-        //     cs,
-        //     (in_0_var, in_0),
-        //     (in_1_var, in_1),
-        //     (out_0_var, out_0),
-        //     (out_1_var, out_1),
-        // )
+        for i in (0..k).step_by(2) {
+            let (in_var_left, in_var_right) = cs.assign_uncommitted(input[i], input[i + 1])?;
+            in_pairs.push((in_var_left, input[i]));
+            in_pairs.push((in_var_right, input[i + 1]));
 
-        KShuffleGadget::fill_cs(
-            cs,
-            vec![(in_0_var, in_0), (in_1_var, in_1)],
-            vec![(out_0_var, out_0), (out_1_var, out_1)],
-        )
+            let (out_var_left, out_var_right) = cs.assign_uncommitted(output[i], output[i + 1])?;
+            out_pairs.push((out_var_left, output[i]));
+            out_pairs.push((out_var_right, output[i + 1]));
+        }
+
+        if k % 2 == 1 {
+            let (in_var_left, _) = cs.assign_uncommitted(input[k], Assignment::zero())?;
+            in_pairs.push((in_var_left, input[k]));
+            let (out_var_left, _) = cs.assign_uncommitted(output[k], Assignment::zero())?;
+            out_pairs.push((out_var_left, output[k]));
+        }
+
+        KShuffleGadget::fill_cs(cs, in_pairs, out_pairs)
     }
 
     #[test]
