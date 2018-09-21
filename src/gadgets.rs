@@ -77,6 +77,7 @@ impl KShuffleGadget {
         let k = x.len();
         if k == 1 {
             cs.add_constraint([(x[0].0, -one), (y[0].0, one)].iter().collect());
+            return Ok(());
         }
 
         // Make last x multiplier
@@ -279,6 +280,11 @@ mod tests {
 
     #[test]
     fn shuffle_gadget() {
+        // k=1
+        assert!(shuffle_helper(vec![3], vec![3]).is_ok());
+        assert!(shuffle_helper(vec![6], vec![6]).is_ok());
+        assert!(shuffle_helper(vec![3], vec![6]).is_err());
+        // k=2
         assert!(shuffle_helper(vec![3, 6], vec![3, 6]).is_ok());
         assert!(shuffle_helper(vec![3, 6], vec![6, 3]).is_ok());
         assert!(shuffle_helper(vec![6, 6], vec![6, 6]).is_ok());
@@ -336,21 +342,24 @@ mod tests {
         let mut out_pairs = vec![];
         let k = input.len();
 
-        for i in (0..k).step_by(2) {
-            let (in_var_left, in_var_right) = cs.assign_uncommitted(input[i], input[i + 1])?;
-            in_pairs.push((in_var_left, input[i]));
-            in_pairs.push((in_var_right, input[i + 1]));
+        // Allocate pairs of low-level variables and their assignments
+        for i in (0..k / 2) {
+            let (in_var_left, in_var_right) =
+                cs.assign_uncommitted(input[i * 2], input[i * 2 + 1])?;
+            in_pairs.push((in_var_left, input[i * 2]));
+            in_pairs.push((in_var_right, input[i * 2 + 1]));
 
-            let (out_var_left, out_var_right) = cs.assign_uncommitted(output[i], output[i + 1])?;
-            out_pairs.push((out_var_left, output[i]));
-            out_pairs.push((out_var_right, output[i + 1]));
+            let (out_var_left, out_var_right) =
+                cs.assign_uncommitted(output[i * 2], output[i * 2 + 1])?;
+            out_pairs.push((out_var_left, output[i * 2]));
+            out_pairs.push((out_var_right, output[i * 2 + 1]));
         }
 
         if k % 2 == 1 {
-            let (in_var_left, _) = cs.assign_uncommitted(input[k], Assignment::zero())?;
-            in_pairs.push((in_var_left, input[k]));
-            let (out_var_left, _) = cs.assign_uncommitted(output[k], Assignment::zero())?;
-            out_pairs.push((out_var_left, output[k]));
+            let (in_var_left, _) = cs.assign_uncommitted(input[k - 1], Assignment::zero())?;
+            in_pairs.push((in_var_left, input[k - 1]));
+            let (out_var_left, _) = cs.assign_uncommitted(output[k - 1], Assignment::zero())?;
+            out_pairs.push((out_var_left, output[k - 1]));
         }
 
         KShuffleGadget::fill_cs(cs, in_pairs, out_pairs)
