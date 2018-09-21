@@ -161,7 +161,11 @@ impl KShuffleGadget {
         }
 
         // Check equality between last x mul output and last y mul output
-        cs.add_constraint([(muly_out_var, -one), (mulx_out_var, one)].iter().collect());
+        cs.add_constraint(
+            [(muly_out_var_prev, -one), (mulx_out_var_prev, one)]
+                .iter()
+                .collect(),
+        );
 
         Ok(())
     }
@@ -284,11 +288,31 @@ mod tests {
         assert!(shuffle_helper(vec![3], vec![3]).is_ok());
         assert!(shuffle_helper(vec![6], vec![6]).is_ok());
         assert!(shuffle_helper(vec![3], vec![6]).is_err());
+        assert!(shuffle_helper(vec![3], vec![3, 6]).is_ok());
         // k=2
         assert!(shuffle_helper(vec![3, 6], vec![3, 6]).is_ok());
         assert!(shuffle_helper(vec![3, 6], vec![6, 3]).is_ok());
         assert!(shuffle_helper(vec![6, 6], vec![6, 6]).is_ok());
         assert!(shuffle_helper(vec![3, 3], vec![6, 3]).is_err());
+        assert!(shuffle_helper(vec![3, 6], vec![3, 6, 10]).is_ok());
+        // k=3
+        assert!(shuffle_helper(vec![3, 6, 10], vec![3, 6, 10]).is_ok());
+        assert!(shuffle_helper(vec![3, 6, 10], vec![3, 10, 6]).is_ok());
+        assert!(shuffle_helper(vec![3, 6, 10], vec![6, 3, 10]).is_ok());
+        assert!(shuffle_helper(vec![3, 6, 10], vec![6, 10, 3]).is_ok());
+        assert!(shuffle_helper(vec![3, 6, 10], vec![10, 3, 6]).is_ok());
+        assert!(shuffle_helper(vec![3, 6, 10], vec![10, 6, 3]).is_ok());
+        assert!(shuffle_helper(vec![3, 6, 10], vec![30, 6, 10]).is_err());
+        assert!(shuffle_helper(vec![3, 6, 10], vec![3, 60, 10]).is_err());
+        assert!(shuffle_helper(vec![3, 6, 10], vec![3, 6, 100]).is_err());
+        // k=4
+        assert!(shuffle_helper(vec![3, 6, 10, 15], vec![3, 6, 10, 15]).is_ok());
+        assert!(shuffle_helper(vec![3, 6, 10, 15], vec![15, 6, 10, 3]).is_ok());
+        assert!(shuffle_helper(vec![3, 6, 10, 15], vec![3, 6, 10, 3]).is_err());
+        // k=5
+        assert!(shuffle_helper(vec![3, 6, 10, 15, 17], vec![3, 6, 10, 15, 17]).is_ok());
+        assert!(shuffle_helper(vec![3, 6, 10, 15, 17], vec![10, 17, 3, 15, 6]).is_ok());
+        assert!(shuffle_helper(vec![3, 6, 10, 15, 17], vec![3, 6, 10, 15, 3]).is_err());
     }
 
     fn shuffle_helper(input: Vec<u64>, output: Vec<u64>) -> Result<(), R1CSError> {
@@ -498,7 +522,7 @@ mod tests {
                 a: (D_a, Assignment::from(D.1)),
                 t: (D_t, Assignment::from(D.2)),
             };
-            MergeGadget::fill_cs(&mut prover_cs, A, B, C, D);
+            assert!(MergeGadget::fill_cs(&mut prover_cs, A, B, C, D).is_ok());
 
             let proof = prover_cs.prove()?;
 
@@ -542,7 +566,7 @@ mod tests {
             a: (D_a, Assignment::Missing()),
             t: (D_t, Assignment::Missing()),
         };
-        MergeGadget::fill_cs(&mut verifier_cs, A, B, C, D);
+        assert!(MergeGadget::fill_cs(&mut verifier_cs, A, B, C, D).is_ok());
 
         verifier_cs.verify(&proof)
     }
