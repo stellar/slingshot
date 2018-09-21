@@ -17,8 +17,8 @@ impl ShuffleGadget {
         out_1: (Variable, Assignment),
     ) -> Result<(), R1CSError> {
         let one = Scalar::one();
-        let w = cs.challenge_scalar(b"shuffle challenge");
         let var_one = Variable::One();
+        let w = cs.challenge_scalar(b"shuffle challenge");
 
         // create variables for multiplication 1
         let (mul1_left, mul1_right, mul1_out) =
@@ -58,17 +58,69 @@ impl ShuffleGadget {
     }
 }
 
-pub struct kShuffleGadget {
-    k: usize,
-}
+pub struct KShuffleGadget {}
 
-impl kShuffleGadget {
+impl KShuffleGadget {
     fn fill_cs<CS: ConstraintSystem>(
         cs: &mut CS,
-        inputs: Vec<(Variable, Assignment)>,
-        outputs: Vec<(Variable, Assignment)>,
+        x: Vec<(Variable, Assignment)>,
+        y: Vec<(Variable, Assignment)>,
     ) -> Result<(), R1CSError> {
-        unimplemented!();
+        let one = Scalar::one();
+        let var_one = Variable::One();
+        let z = cs.challenge_scalar(b"k-shuffle challenge");
+        let neg_z = -z;
+
+        if x.len() != y.len() {
+            return Err(R1CSError::InvalidR1CSConstruction);
+        }
+        let k = x.len();
+
+        let mut mulx_left = vec![Assignment::zero(); k - 1];
+        let mut mulx_right = vec![Assignment::zero(); k - 1];
+        let mut mulx_out = vec![Assignment::zero(); k - 1];
+
+        mulx_left[k - 2] = x[k - 1].1 + neg_z;
+        mulx_right[k - 2] = x[k - 2].1 + neg_z;
+        mulx_out[k - 2] = mulx_left[k - 2] * mulx_right[k - 2];
+
+        let (mulx_left_var, mulx_right_var, mulx_out_var) =
+            cs.assign_multiplier(mulx_left[k - 2], mulx_right[k - 2], mulx_out[k - 2])?;
+        cs.add_constraint(
+            [(mulx_left_var, -one), (var_one, neg_z), (x[k - 1].0, one)]
+                .iter()
+                .collect(),
+        );
+        cs.add_constraint(
+            [(mulx_right_var, -one), (var_one, neg_z), (x[k - 2].0, one)]
+                .iter()
+                .collect(),
+        );
+
+        let mut muly_left = vec![Assignment::zero(); k - 1];
+        let mut muly_right = vec![Assignment::zero(); k - 1];
+        let mut muly_out = vec![Assignment::zero(); k - 1];
+
+        muly_left[k - 2] = y[k - 1].1 - z;
+        muly_right[k - 2] = y[k - 2].1 - z;
+        muly_out[k - 2] = muly_left[k - 2] * muly_right[k - 2];
+
+        let (muly_left_var, muly_right_var, muly_out_var) =
+            cs.assign_multiplier(muly_left[k - 2], muly_right[k - 2], muly_out[k - 2])?;
+        cs.add_constraint(
+            [(muly_left_var, -one), (var_one, neg_z), (y[k - 1].0, one)]
+                .iter()
+                .collect(),
+        );
+        cs.add_constraint(
+            [(muly_right_var, -one), (var_one, neg_z), (y[k - 2].0, one)]
+                .iter()
+                .collect(),
+        );
+
+        cs.add_constraint([(muly_out_var, -one), (mulx_out_var, one)].iter().collect());
+
+        Ok(())
     }
 }
 
@@ -246,12 +298,18 @@ mod tests {
         let (in_0_var, in_1_var) = cs.assign_uncommitted(in_0, in_1)?;
         let (out_0_var, out_1_var) = cs.assign_uncommitted(out_0, out_1)?;
 
-        ShuffleGadget::fill_cs(
+        // ShuffleGadget::fill_cs(
+        //     cs,
+        //     (in_0_var, in_0),
+        //     (in_1_var, in_1),
+        //     (out_0_var, out_0),
+        //     (out_1_var, out_1),
+        // )
+
+        KShuffleGadget::fill_cs(
             cs,
-            (in_0_var, in_0),
-            (in_1_var, in_1),
-            (out_0_var, out_0),
-            (out_1_var, out_1),
+            vec![(in_0_var, in_0), (in_1_var, in_1)],
+            vec![(out_0_var, out_0), (out_1_var, out_1)],
         )
     }
 
