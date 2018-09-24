@@ -119,9 +119,9 @@ impl KShuffleGadget {
     }
 }
 
-pub struct MergeGadget {}
+struct MixGadget {}
 
-impl MergeGadget {
+impl MixGadget {
     fn fill_cs<CS: ConstraintSystem>(
         cs: &mut CS,
         A: Value,
@@ -130,7 +130,7 @@ impl MergeGadget {
         D: Value,
     ) -> Result<(), R1CSError> {
         let one = Scalar::one();
-        let w = cs.challenge_scalar(b"merge challenge");
+        let w = cs.challenge_scalar(b"mix challenge");
 
         // create variables for multiplication
         let (mul_left, mul_right, mul_out) = cs.assign_multiplier(
@@ -208,6 +208,20 @@ impl MergeGadget {
     }
 }
 
+pub struct MergeGadget {}
+
+impl MergeGadget {
+    fn fill_cs<CS: ConstraintSystem>(
+        cs: &mut CS,
+        A: Value,
+        B: Value,
+        C: Value,
+        D: Value,
+    ) -> Result<(), R1CSError> {
+        MixGadget::fill_cs(cs, A, B, C, D)
+    }
+}
+
 pub struct SplitGadget {}
 
 impl SplitGadget {
@@ -218,10 +232,23 @@ impl SplitGadget {
         C: Value,
         D: Value,
     ) -> Result<(), R1CSError> {
-        MergeGadget::fill_cs(cs, D, C, B, A)
+        MixGadget::fill_cs(cs, D, C, B, A)
     }
 }
 // TODO: write split tests
+
+pub struct RangeProofGadget {}
+
+impl RangeProofGadget {
+    fn fill_cs<CS: ConstraintSystem>(
+        cs: &mut CS,
+        v: (Variable, Assignment),
+    ) -> Result<(), R1CSError> {
+        let one = Scalar::one();
+        let var_one = Variable::One();
+        unimplemented!();
+    }
+}
 
 #[cfg(test)]
 mod tests {
