@@ -208,7 +208,7 @@ impl MixGadget {
     }
 }
 
-pub struct MergeGadget {}
+struct MergeGadget {}
 
 impl MergeGadget {
     fn fill_cs<CS: ConstraintSystem>(
@@ -222,7 +222,50 @@ impl MergeGadget {
     }
 }
 
-pub struct SplitGadget {}
+pub struct KMergeGadget {}
+
+impl KMergeGadget {
+    fn fill_cs<CS: ConstraintSystem>(
+        cs: &mut CS,
+        inputs: Vec<Value>,
+        outputs: Vec<Value>,
+    ) -> Result<(), R1CSError> {
+        let one = Scalar::one();
+
+        if inputs.len() == 1 {
+            cs.add_constraint(
+                [(inputs[0].q.0, -one), (outputs[0].q.0, one)]
+                    .iter()
+                    .collect(),
+            );
+            cs.add_constraint(
+                [(inputs[0].a.0, -one), (outputs[0].a.0, one)]
+                    .iter()
+                    .collect(),
+            );
+            cs.add_constraint(
+                [(inputs[0].t.0, -one), (outputs[0].t.0, one)]
+                    .iter()
+                    .collect(),
+            );
+            return Ok(());
+        }
+
+        let mut A = inputs[0].clone();
+        let mut B = inputs[1].clone();
+        let mut C = outputs[0].clone();
+        let mut D = B.clone(); // placeholder, will be overwritten
+
+        for i in 0..inputs.len() - 2 {
+            if A.assignments() == C.assignments() {}
+        }
+
+        D = outputs[outputs.len() - 1].clone();
+        MergeGadget::fill_cs(cs, A, B, C, D)
+    }
+}
+
+struct SplitGadget {}
 
 impl SplitGadget {
     fn fill_cs<CS: ConstraintSystem>(
@@ -366,7 +409,7 @@ mod tests {
     }
 
     #[test]
-    fn merge_gadget() {
+    fn mix_gadget() {
         let peso = 66;
         let peso_tag = 77;
         let yuan = 88;
@@ -374,7 +417,7 @@ mod tests {
 
         // no merge, same asset types
         assert!(
-            merge_helper(
+            mix_helper(
                 (6, peso, peso_tag),
                 (6, peso, peso_tag),
                 (6, peso, peso_tag),
@@ -383,7 +426,7 @@ mod tests {
         );
         // no merge, different asset types
         assert!(
-            merge_helper(
+            mix_helper(
                 (3, peso, peso_tag),
                 (6, yuan, yuan_tag),
                 (3, peso, peso_tag),
@@ -392,7 +435,7 @@ mod tests {
         );
         // merge, same asset types
         assert!(
-            merge_helper(
+            mix_helper(
                 (3, peso, peso_tag),
                 (6, peso, peso_tag),
                 (0, peso, peso_tag),
@@ -401,7 +444,7 @@ mod tests {
         );
         // merge, zero value is different asset type
         assert!(
-            merge_helper(
+            mix_helper(
                 (3, peso, peso_tag),
                 (6, peso, peso_tag),
                 (0, yuan, yuan_tag),
@@ -410,7 +453,7 @@ mod tests {
         );
         // error when merging different asset types
         assert!(
-            merge_helper(
+            mix_helper(
                 (3, peso, peso_tag),
                 (3, yuan, yuan_tag),
                 (0, peso, peso_tag),
@@ -419,7 +462,7 @@ mod tests {
         );
         // error when not merging, but asset type changes
         assert!(
-            merge_helper(
+            mix_helper(
                 (3, peso, peso_tag),
                 (3, yuan, yuan_tag),
                 (3, peso, peso_tag),
@@ -428,7 +471,7 @@ mod tests {
         );
         // error when creating more value (same asset types)
         assert!(
-            merge_helper(
+            mix_helper(
                 (3, peso, peso_tag),
                 (3, peso, peso_tag),
                 (3, peso, peso_tag),
@@ -437,7 +480,7 @@ mod tests {
         );
         // error when creating more value (different asset types)
         assert!(
-            merge_helper(
+            mix_helper(
                 (3, peso, peso_tag),
                 (3, yuan, yuan_tag),
                 (3, peso, peso_tag),
@@ -446,7 +489,7 @@ mod tests {
         );
     }
 
-    fn merge_helper(
+    fn mix_helper(
         A: (u64, u64, u64),
         B: (u64, u64, u64),
         C: (u64, u64, u64),
@@ -461,7 +504,7 @@ mod tests {
             // v and v_blinding emptpy because we are only testing low-level variable constraints
             let v = vec![];
             let v_blinding = vec![];
-            let mut prover_transcript = Transcript::new(b"MergeTest");
+            let mut prover_transcript = Transcript::new(b"MixTest");
             let (mut prover_cs, _variables, commitments) =
                 prover::ProverCS::new(&mut prover_transcript, &gens, v, v_blinding.clone());
 
@@ -498,7 +541,7 @@ mod tests {
                 a: (D_a, Assignment::from(D.1)),
                 t: (D_t, Assignment::from(D.2)),
             };
-            assert!(MergeGadget::fill_cs(&mut prover_cs, A, B, C, D).is_ok());
+            assert!(MixGadget::fill_cs(&mut prover_cs, A, B, C, D).is_ok());
 
             let proof = prover_cs.prove()?;
 
@@ -506,7 +549,7 @@ mod tests {
         };
 
         // Verifier makes a `ConstraintSystem` instance representing a merge gadget
-        let mut verifier_transcript = Transcript::new(b"MergeTest");
+        let mut verifier_transcript = Transcript::new(b"MixTest");
         let (mut verifier_cs, _variables) =
             verifier::VerifierCS::new(&mut verifier_transcript, &gens, commitments);
         // Verifier allocates variables and adds constraints to the constraint system
@@ -542,7 +585,130 @@ mod tests {
             a: (D_a, Assignment::Missing()),
             t: (D_t, Assignment::Missing()),
         };
-        assert!(MergeGadget::fill_cs(&mut verifier_cs, A, B, C, D).is_ok());
+        assert!(MixGadget::fill_cs(&mut verifier_cs, A, B, C, D).is_ok());
+
+        verifier_cs.verify(&proof)
+    }
+
+    #[test]
+    fn merge_gadget() {
+        let peso = 66;
+        let peso_tag = 77;
+        let yuan = 88;
+        let yuan_tag = 99;
+
+        // k=1
+        // no merge, same asset types
+        assert!(merge_helper(vec![(6, peso, peso_tag)], vec![(6, peso, peso_tag)]).is_ok());
+        // error when merging different asset types
+        assert!(merge_helper(vec![(3, peso, peso_tag)], vec![(3, yuan, yuan_tag)]).is_err());
+
+        // k=2 ... more extensive k=2 tests are in the MixGadget tests
+        // no merge, different asset types
+        assert!(
+            merge_helper(
+                vec![(3, peso, peso_tag), (6, yuan, yuan_tag)],
+                vec![(3, peso, peso_tag), (6, yuan, yuan_tag)],
+            ).is_ok()
+        );
+        // merge, same asset types
+        assert!(
+            merge_helper(
+                vec![(3, peso, peso_tag), (6, peso, peso_tag)],
+                vec![(0, peso, peso_tag), (9, peso, peso_tag)],
+            ).is_ok()
+        );
+        // error when merging different asset types
+        assert!(
+            merge_helper(
+                vec![(3, peso, peso_tag), (3, yuan, yuan_tag)],
+                vec![(0, peso, peso_tag), (6, yuan, yuan_tag)],
+            ).is_err()
+        );
+
+        // k=3
+    }
+
+    fn merge_helper(
+        inputs: Vec<(u64, u64, u64)>,
+        outputs: Vec<(u64, u64, u64)>,
+    ) -> Result<(), R1CSError> {
+        // Common
+        let gens = Generators::new(PedersenGenerators::default(), 128, 1);
+
+        // Prover's scope
+        let (proof, commitments) = {
+            // Prover makes a `ConstraintSystem` instance representing a merge gadget
+            // v and v_blinding emptpy because we are only testing low-level variable constraints
+            let v = vec![];
+            let v_blinding = vec![];
+            let mut prover_transcript = Transcript::new(b"MergeTest");
+            let (mut prover_cs, _variables, commitments) =
+                prover::ProverCS::new(&mut prover_transcript, &gens, v, v_blinding.clone());
+
+            // Prover allocates variables and adds constraints to the constraint system
+            let mut input_vals = vec![];
+            let mut output_vals = vec![];
+            for i in 0..inputs.len() {
+                let (in_q, out_q) = prover_cs.assign_uncommitted(
+                    Assignment::from(inputs[i].0),
+                    Assignment::from(outputs[i].0),
+                )?;
+                let (in_a, out_a) = prover_cs.assign_uncommitted(
+                    Assignment::from(inputs[i].1),
+                    Assignment::from(outputs[i].1),
+                )?;
+                let (in_t, out_t) = prover_cs.assign_uncommitted(
+                    Assignment::from(inputs[i].2),
+                    Assignment::from(outputs[i].2),
+                )?;
+                input_vals.push(Value {
+                    q: (in_q, Assignment::from(inputs[i].0)),
+                    a: (in_a, Assignment::from(inputs[i].1)),
+                    t: (in_t, Assignment::from(inputs[i].2)),
+                });
+                output_vals.push(Value {
+                    q: (out_q, Assignment::from(outputs[i].0)),
+                    a: (out_a, Assignment::from(outputs[i].1)),
+                    t: (out_t, Assignment::from(outputs[i].2)),
+                });
+            }
+
+            assert!(KMergeGadget::fill_cs(&mut prover_cs, input_vals, output_vals).is_ok());
+
+            let proof = prover_cs.prove()?;
+
+            (proof, commitments)
+        };
+
+        // Verifier makes a `ConstraintSystem` instance representing a merge gadget
+        let mut verifier_transcript = Transcript::new(b"MergeTest");
+        let (mut verifier_cs, _variables) =
+            verifier::VerifierCS::new(&mut verifier_transcript, &gens, commitments);
+
+        // Verifier allocates variables and adds constraints to the constraint system
+        let mut input_vals = vec![];
+        let mut output_vals = vec![];
+        for i in 0..inputs.len() {
+            let (in_q, out_q) =
+                verifier_cs.assign_uncommitted(Assignment::Missing(), Assignment::Missing())?;
+            let (in_a, out_a) =
+                verifier_cs.assign_uncommitted(Assignment::Missing(), Assignment::Missing())?;
+            let (in_t, out_t) =
+                verifier_cs.assign_uncommitted(Assignment::Missing(), Assignment::Missing())?;
+            input_vals.push(Value {
+                q: (in_q, Assignment::Missing()),
+                a: (in_a, Assignment::Missing()),
+                t: (in_t, Assignment::Missing()),
+            });
+            output_vals.push(Value {
+                q: (out_q, Assignment::Missing()),
+                a: (out_a, Assignment::Missing()),
+                t: (out_t, Assignment::Missing()),
+            });
+        }
+
+        assert!(KMergeGadget::fill_cs(&mut verifier_cs, input_vals, output_vals).is_ok());
 
         verifier_cs.verify(&proof)
     }
