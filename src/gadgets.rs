@@ -119,6 +119,18 @@ impl KShuffleGadget {
     }
 }
 
+struct KValueShuffleGadget {}
+
+impl KValueShuffleGadget {
+    fn fill_cs<CS: ConstraintSystem>(
+        cs: &mut CS,
+        x: Vec<Value>,
+        y: Vec<Value>,
+    ) -> Result<(), R1CSError> {
+        unimplemented!();
+    }
+}
+
 struct MixGadget {}
 
 impl MixGadget {
@@ -244,17 +256,15 @@ impl KMergeGadget {
 
         for i in 0..inputs.len() - 2 {
             // update assignment for D.quantity
-            if A.assignments() != C.assignments() {
-                // "merge" operation, so D.quantity = A.quantity + B.quantity
-                if A.flavor() == B.flavor() {
-                    D.q.1 = A.q.1 + B.q.1;
-                    D.a.1 = A.a.1;
-                    D.t.1 = A.t.1;
-                } else {
-                    return Err(R1CSError::InvalidR1CSConstruction);
-                }
-            } else {
+            if A.assignments() == C.assignments() {
                 // "move" operation, so D.quantity = B.quantity, so we don't change anything
+            } else if A.flavor() == B.flavor() {
+                // "merge" operation, so D.quantity = A.quantity + B.quantity
+                D.q.1 = A.q.1 + B.q.1;
+                D.a.1 = A.a.1;
+                D.t.1 = A.t.1;
+            } else {
+                return Err(R1CSError::InvalidR1CSConstruction);
             }
             // make new variables for D
             let (D_q_var, _) = cs.assign_uncommitted(D.q.1, Assignment::zero())?;
@@ -338,6 +348,22 @@ impl RangeProofGadget {
         // Enforce that v = Sum(b_i * 2^i, i = 0..n-1)
         cs.add_constraint(constraint.iter().collect());
 
+        Ok(())
+    }
+}
+
+pub struct PadGadget {}
+
+impl PadGadget {
+    // Enforces that all variables are equal to zero.
+    fn fill_cs<CS: ConstraintSystem>(cs: &mut CS, vars: Vec<Variable>) -> Result<(), R1CSError> {
+        for var in vars {
+            cs.add_constraint(
+                [(var, Scalar::one()), (Variable::One(), Scalar::zero())]
+                    .iter()
+                    .collect(),
+            );
+        }
         Ok(())
     }
 }
@@ -912,6 +938,76 @@ mod tests {
         assert!(
             RangeProofGadget::fill_cs(&mut verifier_cs, (v_var, Assignment::Missing()), n).is_ok()
         );
+
+        verifier_cs.verify(&proof)
+    }
+
+    #[test]
+    fn pad_gadget() {
+        assert!(pad_helper(vec![0]).is_ok());
+        assert!(pad_helper(vec![0; 5]).is_ok());
+        assert!(pad_helper(vec![0; 10]).is_ok());
+        assert!(pad_helper(vec![1]).is_err());
+        assert!(pad_helper(vec![0, 2, 0, 0, 0]).is_err());
+    }
+
+    fn pad_helper(vals: Vec<u64>) -> Result<(), R1CSError> {
+        // Common
+        let gens = Generators::new(PedersenGenerators::default(), 128, 1);
+
+        // Prover's scope
+        let (proof, commitments) = {
+            // Prover makes a `ConstraintSystem` instance representing a merge gadget
+            // v and v_blinding emptpy because we are only testing low-level variable constraints
+            let v = vec![];
+            let v_blinding = vec![];
+            let mut prover_transcript = Transcript::new(b"PadTest");
+            let (mut prover_cs, _variables, commitments) =
+                prover::ProverCS::new(&mut prover_transcript, &gens, v, v_blinding.clone());
+
+            // Prover allocates variables and adds constraints to the constraint system
+            let mut vars = vec![];
+            for i in 0..vals.len() / 2 {
+                let (var_a, var_b) = prover_cs
+                    .assign_uncommitted(Assignment::from(vals[i]), Assignment::from(vals[i + 1]))?;
+                vars.push(var_a);
+                vars.push(var_b);
+            }
+            if vals.len() % 2 == 1 {
+                let (var, _) = prover_cs.assign_uncommitted(
+                    Assignment::from(vals[vals.len() - 1]),
+                    Assignment::zero(),
+                )?;
+                vars.push(var);
+            }
+
+            PadGadget::fill_cs(&mut prover_cs, vars)?;
+
+            let proof = prover_cs.prove()?;
+
+            (proof, commitments)
+        };
+
+        // Verifier makes a `ConstraintSystem` instance representing a merge gadget
+        let mut verifier_transcript = Transcript::new(b"PadTest");
+        let (mut verifier_cs, _variables) =
+            verifier::VerifierCS::new(&mut verifier_transcript, &gens, commitments);
+
+        // Verifier allocates variables and adds constraints to the constraint system
+        let mut vars = vec![];
+        for i in 0..vals.len() / 2 {
+            let (var_a, var_b) =
+                verifier_cs.assign_uncommitted(Assignment::Missing(), Assignment::Missing())?;
+            vars.push(var_a);
+            vars.push(var_b);
+        }
+        if vals.len() % 2 == 1 {
+            let (var, _) =
+                verifier_cs.assign_uncommitted(Assignment::Missing(), Assignment::zero())?;
+            vars.push(var);
+        }
+
+        assert!(PadGadget::fill_cs(&mut verifier_cs, vars).is_ok());
 
         verifier_cs.verify(&proof)
     }
