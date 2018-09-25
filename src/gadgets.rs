@@ -294,18 +294,17 @@ impl KSplitGadget {
 pub struct RangeProofGadget {}
 
 impl RangeProofGadget {
-    // Enforce that the value v is in the range [0, 2^n)
+    // Enforce that the quantity of v is in the range [0, 2^n)
     fn fill_cs<CS: ConstraintSystem>(
         cs: &mut CS,
         v: (Variable, Assignment),
         n: usize,
     ) -> Result<(), R1CSError> {
-        let one = Scalar::one();
-
-        let mut constraint = vec![(v.0, -one)];
+        // Create low-level variables and add them to constraints
+        let mut constraint = vec![(v.0, -Scalar::one())];
         match v.1 {
             Assignment::Value(v_val) => {
-                let mut exp_2 = one;
+                let mut exp_2 = Scalar::one();
                 for i in 0..n {
                     // b_i = ith bit of v_val
                     let b_i = (v_val[i / 8] >> (i % 8)) & 1;
@@ -323,7 +322,7 @@ impl RangeProofGadget {
                 }
             }
             Assignment::Missing() => {
-                let mut exp_2 = one;
+                let mut exp_2 = Scalar::one();
                 for _ in 0..n {
                     let (_, b_i_var, _) = cs.assign_multiplier(
                         Assignment::Missing(),
@@ -860,14 +859,20 @@ mod tests {
 
     #[test]
     fn range_proof_gadget() {
-        assert!(range_proof_helper(0, 2).is_ok());
-        assert!(range_proof_helper(1, 2).is_ok());
-        assert!(range_proof_helper(3, 2).is_ok());
-        assert!(range_proof_helper(4, 2).is_err());
-        assert!(range_proof_helper(0, 10).is_ok());
-        assert!(range_proof_helper(1, 10).is_ok());
-        assert!(range_proof_helper(1023, 10).is_ok());
-        assert!(range_proof_helper(1024, 10).is_err());
+        use rand::rngs::OsRng;
+        use rand::Rng;
+
+        let mut rng = OsRng::new().unwrap();
+        let m = 3; // number of values to test per `n`
+
+        for n in [2, 10, 32, 63].iter() {
+            let (min, max) = (0u64, ((1u128 << n) - 1) as u64);
+            let values: Vec<u64> = (0..m).map(|_| rng.gen_range(min, max)).collect();
+            for v in values {
+                assert!(range_proof_helper(v, *n).is_ok());
+            }
+            assert!(range_proof_helper(max + 1, *n).is_err());
+        }
     }
 
     fn range_proof_helper(v_val: u64, n: usize) -> Result<(), R1CSError> {
