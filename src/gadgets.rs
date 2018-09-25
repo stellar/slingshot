@@ -254,10 +254,34 @@ impl KMergeGadget {
         let mut A = inputs[0].clone();
         let mut B = inputs[1].clone();
         let mut C = outputs[0].clone();
-        let mut D = B.clone(); // placeholder, will be overwritten
+        let mut D = B.clone(); // assumes "move", will be overwritten if "merge".
 
         for i in 0..inputs.len() - 2 {
-            if A.assignments() == C.assignments() {}
+            if A.assignments() != C.assignments() {
+                // "merge" operation, so D.quantity = A.quantity + B.quantity
+                if A.flavor() == B.flavor() {
+                    D.q.1 = A.q.1 + B.q.1;
+                    D.a.1 = A.a.1;
+                    D.t.1 = A.t.1;
+                } else {
+                    return Err(R1CSError::InvalidR1CSConstruction);
+                }
+            } else {
+                // "move" operation, so we don't do anything
+            }
+            // make new variables for D
+            let (D_q_var, D_a_var) = cs.assign_uncommitted(D.q.1, D.a.1)?;
+            let (D_t_var, _) = cs.assign_uncommitted(D.t.1, Assignment::zero())?;
+            D.q.0 = D_q_var;
+            D.a.0 = D_a_var;
+            D.t.0 = D_t_var;
+
+            MergeGadget::fill_cs(cs, A, B, C, D.clone())?;
+
+            A = D;
+            B = inputs[i + 2].clone();
+            C = outputs[i + 1].clone();
+            D = B.clone();
         }
 
         D = outputs[outputs.len() - 1].clone();
@@ -593,40 +617,83 @@ mod tests {
     #[test]
     fn merge_gadget() {
         let peso = 66;
-        let peso_tag = 77;
+        let ptag = 77;
         let yuan = 88;
-        let yuan_tag = 99;
+        let ytag = 99;
+        let zero = 0;
 
         // k=1
         // no merge, same asset types
-        assert!(merge_helper(vec![(6, peso, peso_tag)], vec![(6, peso, peso_tag)]).is_ok());
+        assert!(merge_helper(vec![(6, peso, ptag)], vec![(6, peso, ptag)]).is_ok());
         // error when merging different asset types
-        assert!(merge_helper(vec![(3, peso, peso_tag)], vec![(3, yuan, yuan_tag)]).is_err());
+        assert!(merge_helper(vec![(3, peso, ptag)], vec![(3, yuan, ytag)]).is_err());
 
         // k=2 ... more extensive k=2 tests are in the MixGadget tests
         // no merge, different asset types
         assert!(
             merge_helper(
-                vec![(3, peso, peso_tag), (6, yuan, yuan_tag)],
-                vec![(3, peso, peso_tag), (6, yuan, yuan_tag)],
+                vec![(3, peso, ptag), (6, yuan, ytag)],
+                vec![(3, peso, ptag), (6, yuan, ytag)],
             ).is_ok()
         );
         // merge, same asset types
         assert!(
             merge_helper(
-                vec![(3, peso, peso_tag), (6, peso, peso_tag)],
-                vec![(0, peso, peso_tag), (9, peso, peso_tag)],
+                vec![(3, peso, ptag), (6, peso, ptag)],
+                vec![(0, peso, ptag), (9, peso, ptag)],
             ).is_ok()
         );
         // error when merging different asset types
         assert!(
             merge_helper(
-                vec![(3, peso, peso_tag), (3, yuan, yuan_tag)],
-                vec![(0, peso, peso_tag), (6, yuan, yuan_tag)],
+                vec![(3, peso, ptag), (3, yuan, ytag)],
+                vec![(0, peso, ptag), (6, yuan, ytag)],
             ).is_err()
         );
 
         // k=3
+        // no merge, same asset types
+        assert!(
+            merge_helper(
+                vec![(3, peso, ptag), (6, peso, ptag), (6, peso, ptag)],
+                vec![(3, peso, ptag), (6, peso, ptag), (6, peso, ptag)],
+            ).is_ok()
+        );
+        // no merge, different asset types
+        assert!(
+            merge_helper(
+                vec![(3, peso, ptag), (6, yuan, ytag), (6, peso, ptag)],
+                vec![(3, peso, ptag), (6, yuan, ytag), (6, peso, ptag)],
+            ).is_ok()
+        );
+        // merge first two
+        assert!(
+            merge_helper(
+                vec![(3, peso, ptag), (6, peso, ptag), (1, yuan, ytag)],
+                vec![(0, peso, ptag), (9, peso, ptag), (1, yuan, ytag)],
+            ).is_ok()
+        );
+        // merge last two
+        assert!(
+            merge_helper(
+                vec![(1, yuan, ytag), (3, peso, ptag), (6, peso, ptag)],
+                vec![(1, yuan, ytag), (0, peso, ptag), (9, peso, ptag)],
+            ).is_ok()
+        );
+        // merge all, same asset types, zero value is different asset type
+        assert!(
+            merge_helper(
+                vec![(3, peso, ptag), (6, peso, ptag), (1, peso, ptag)],
+                vec![(0, zero, zero), (0, zero, zero), (10, peso, ptag)],
+            ).is_ok()
+        );
+        // error when merging with different asset types
+        assert!(
+            merge_helper(
+                vec![(3, peso, ptag), (6, yuan, ytag), (1, peso, ptag)],
+                vec![(0, zero, zero), (0, zero, zero), (10, peso, ptag)],
+            ).is_err()
+        );
     }
 
     fn merge_helper(
@@ -674,7 +741,7 @@ mod tests {
                 });
             }
 
-            assert!(KMergeGadget::fill_cs(&mut prover_cs, input_vals, output_vals).is_ok());
+            KMergeGadget::fill_cs(&mut prover_cs, input_vals, output_vals)?;
 
             let proof = prover_cs.prove()?;
 
@@ -689,7 +756,7 @@ mod tests {
         // Verifier allocates variables and adds constraints to the constraint system
         let mut input_vals = vec![];
         let mut output_vals = vec![];
-        for i in 0..inputs.len() {
+        for _ in 0..inputs.len() {
             let (in_q, out_q) =
                 verifier_cs.assign_uncommitted(Assignment::Missing(), Assignment::Missing())?;
             let (in_a, out_a) =
