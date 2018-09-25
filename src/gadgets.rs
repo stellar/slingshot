@@ -208,20 +208,6 @@ impl MixGadget {
     }
 }
 
-struct MergeGadget {}
-
-impl MergeGadget {
-    fn fill_cs<CS: ConstraintSystem>(
-        cs: &mut CS,
-        A: Value,
-        B: Value,
-        C: Value,
-        D: Value,
-    ) -> Result<(), R1CSError> {
-        MixGadget::fill_cs(cs, A, B, C, D)
-    }
-}
-
 pub struct KMergeGadget {}
 
 impl KMergeGadget {
@@ -257,6 +243,7 @@ impl KMergeGadget {
         let mut D = B.clone(); // assumes "move", will be overwritten if "merge".
 
         for i in 0..inputs.len() - 2 {
+            // update assignment for D.quantity
             if A.assignments() != C.assignments() {
                 // "merge" operation, so D.quantity = A.quantity + B.quantity
                 if A.flavor() == B.flavor() {
@@ -267,16 +254,16 @@ impl KMergeGadget {
                     return Err(R1CSError::InvalidR1CSConstruction);
                 }
             } else {
-                // "move" operation, so we don't do anything
+                // "move" operation, so D.quantity = B.quantity, so we don't change anything
             }
             // make new variables for D
-            let (D_q_var, D_a_var) = cs.assign_uncommitted(D.q.1, D.a.1)?;
-            let (D_t_var, _) = cs.assign_uncommitted(D.t.1, Assignment::zero())?;
+            let (D_q_var, _) = cs.assign_uncommitted(D.q.1, Assignment::zero())?;
+            let (D_a_var, D_t_var) = cs.assign_uncommitted(D.a.1, D.t.1)?;
             D.q.0 = D_q_var;
             D.a.0 = D_a_var;
             D.t.0 = D_t_var;
 
-            MergeGadget::fill_cs(cs, A, B, C, D.clone())?;
+            MixGadget::fill_cs(cs, A, B, C, D.clone())?;
 
             A = D;
             B = inputs[i + 2].clone();
@@ -285,24 +272,23 @@ impl KMergeGadget {
         }
 
         D = outputs[outputs.len() - 1].clone();
-        MergeGadget::fill_cs(cs, A, B, C, D)
+        MixGadget::fill_cs(cs, A, B, C, D)
     }
 }
 
-struct SplitGadget {}
+pub struct KSplitGadget {}
 
-impl SplitGadget {
+impl KSplitGadget {
     fn fill_cs<CS: ConstraintSystem>(
         cs: &mut CS,
-        A: Value,
-        B: Value,
-        C: Value,
-        D: Value,
+        inputs: Vec<Value>,
+        outputs: Vec<Value>,
     ) -> Result<(), R1CSError> {
-        MixGadget::fill_cs(cs, D, C, B, A)
+        inputs.clone().reverse();
+        outputs.clone().reverse();
+        KMergeGadget::fill_cs(cs, outputs, inputs)
     }
 }
-// TODO: write split tests
 
 pub struct RangeProofGadget {}
 
