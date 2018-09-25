@@ -6,7 +6,7 @@ use bulletproofs::R1CSError;
 use curve25519_dalek::scalar::Scalar;
 use util::Value;
 
-pub struct KShuffleGadget {}
+struct KShuffleGadget {}
 
 impl KShuffleGadget {
     fn fill_cs<CS: ConstraintSystem>(
@@ -119,7 +119,7 @@ impl KShuffleGadget {
     }
 }
 
-struct KValueShuffleGadget {}
+pub struct KValueShuffleGadget {}
 
 impl KValueShuffleGadget {
     fn fill_cs<CS: ConstraintSystem>(
@@ -127,7 +127,50 @@ impl KValueShuffleGadget {
         x: Vec<Value>,
         y: Vec<Value>,
     ) -> Result<(), R1CSError> {
-        unimplemented!();
+        let one = Scalar::one();
+
+        if x.len() != y.len() {
+            return Err(R1CSError::InvalidR1CSConstruction);
+        }
+        let k = x.len();
+        if k == 1 {
+            cs.add_constraint([(x[0].q.0, -one), (y[0].q.0, one)].iter().collect());
+            cs.add_constraint([(x[0].a.0, -one), (y[0].a.0, one)].iter().collect());
+            cs.add_constraint([(x[0].t.0, -one), (y[0].t.0, one)].iter().collect());
+            return Ok(());
+        }
+
+        let w = cs.challenge_scalar(b"k-value-shuffle challenge");
+        let mut x_pairs = vec![];
+        let mut y_pairs = vec![];
+        for i in 0..k {
+            let x_i = x[i].q.1 + x[i].a.1 * w + x[i].t.1 * w * w;
+            let y_i = y[i].q.1 + y[i].a.1 * w + y[i].t.1 * w * w;
+            let (x_i_var, y_i_var) = cs.assign_uncommitted(x_i, y_i)?;
+            cs.add_constraint(
+                [
+                    (x_i_var, -one),
+                    (x[i].q.0, one),
+                    (x[i].a.0, w),
+                    (x[i].t.0, w * w),
+                ]
+                    .iter()
+                    .collect(),
+            );
+            cs.add_constraint(
+                [
+                    (y_i_var, -one),
+                    (y[i].q.0, one),
+                    (y[i].a.0, w),
+                    (y[i].t.0, w * w),
+                ]
+                    .iter()
+                    .collect(),
+            );
+            x_pairs.push((x_i_var, x_i));
+            y_pairs.push((y_i_var, y_i));
+        }
+        KShuffleGadget::fill_cs(cs, x_pairs, y_pairs)
     }
 }
 
@@ -255,15 +298,21 @@ impl KMergeGadget {
         let mut D = B.clone(); // assumes "move", will be overwritten if "merge".
 
         for i in 0..inputs.len() - 2 {
+            let C_equals_zero = match C.q.1 {
+                Assignment::Value(c_val) => c_val == Scalar::zero(),
+                Assignment::Missing() => false,
+            };
+
             // update assignment for D.quantity
             if A.assignments() == C.assignments() {
                 // "move" operation, so D.quantity = B.quantity, so we don't change anything
-            } else if A.flavor() == B.flavor() {
+            } else if A.flavor() == B.flavor() && C_equals_zero {
                 // "merge" operation, so D.quantity = A.quantity + B.quantity
                 D.q.1 = A.q.1 + B.q.1;
                 D.a.1 = A.a.1;
                 D.t.1 = A.t.1;
             } else {
+                // Misconfigured prover error
                 return Err(R1CSError::InvalidR1CSConstruction);
             }
             // make new variables for D
@@ -481,6 +530,9 @@ mod tests {
 
         KShuffleGadget::fill_cs(cs, in_pairs, out_pairs)
     }
+
+    #[test]
+    fn value_shuffle() {}
 
     #[test]
     fn mix_gadget() {
@@ -736,6 +788,13 @@ mod tests {
                 vec![(3, peso, ptag), (6, peso, ptag), (1, peso, ptag)],
                 vec![(0, zero, zero), (0, zero, zero), (10, peso, ptag)],
             ).is_ok()
+        );
+        // incomplete merge, input sum does not equal output sum
+        assert!(
+            merge_helper(
+                vec![(3, peso, ptag), (6, peso, ptag), (1, peso, ptag)],
+                vec![(1, zero, zero), (0, zero, zero), (9, peso, ptag)],
+            ).is_err()
         );
         // error when merging with different asset types
         assert!(
