@@ -276,6 +276,7 @@ impl KMergeGadget {
     }
 }
 
+// TODO: write tests for KSplitGadget
 pub struct KSplitGadget {}
 
 impl KSplitGadget {
@@ -293,13 +294,52 @@ impl KSplitGadget {
 pub struct RangeProofGadget {}
 
 impl RangeProofGadget {
+    // Enforce that the value v is in the range [0, 2^n)
     fn fill_cs<CS: ConstraintSystem>(
         cs: &mut CS,
         v: (Variable, Assignment),
+        n: usize,
     ) -> Result<(), R1CSError> {
         let one = Scalar::one();
-        let var_one = Variable::One();
-        unimplemented!();
+
+        let mut constraint = vec![(v.0, -one)];
+        match v.1 {
+            Assignment::Value(v_val) => {
+                let mut exp_2 = one;
+                for i in 0..n {
+                    // b_i = ith bit of v_val
+                    let b_i = (v_val[i / 8] >> (i % 8)) & 1;
+                    let a_i = 1 - b_i;
+
+                    // Enforce a_i * b_i = 0
+                    let (_, b_i_var, _) = cs.assign_multiplier(
+                        Assignment::from(a_i as u64),
+                        Assignment::from(b_i as u64),
+                        Assignment::zero(),
+                    )?;
+
+                    constraint.push((b_i_var, exp_2));
+                    exp_2 = exp_2 + exp_2;
+                }
+            }
+            Assignment::Missing() => {
+                let mut exp_2 = one;
+                for _ in 0..n {
+                    let (_, b_i_var, _) = cs.assign_multiplier(
+                        Assignment::Missing(),
+                        Assignment::Missing(),
+                        Assignment::Missing(),
+                    )?;
+
+                    constraint.push((b_i_var, exp_2));
+                    exp_2 = exp_2 + exp_2;
+                }
+            }
+        }
+        // Enforce that v = Sum(b_i * 2^i, i = 0..n-1)
+        cs.add_constraint(constraint.iter().collect());
+
+        Ok(())
     }
 }
 
@@ -307,7 +347,6 @@ impl RangeProofGadget {
 mod tests {
     use super::*;
     use bulletproofs::circuit_proof::{prover, verifier};
-    use bulletproofs::R1CSError;
     use bulletproofs::{Generators, PedersenGenerators, Transcript};
 
     #[test]
@@ -716,7 +755,7 @@ mod tests {
                 ],
             ).is_ok()
         );
-        // error when merging, total is not equal
+        // error when merging, output sum not equal to input sum
         assert!(
             merge_helper(
                 vec![
@@ -815,6 +854,59 @@ mod tests {
         }
 
         assert!(KMergeGadget::fill_cs(&mut verifier_cs, input_vals, output_vals).is_ok());
+
+        verifier_cs.verify(&proof)
+    }
+
+    #[test]
+    fn range_proof_gadget() {
+        assert!(range_proof_helper(0, 2).is_ok());
+        assert!(range_proof_helper(1, 2).is_ok());
+        assert!(range_proof_helper(3, 2).is_ok());
+        assert!(range_proof_helper(4, 2).is_err());
+        assert!(range_proof_helper(0, 10).is_ok());
+        assert!(range_proof_helper(1, 10).is_ok());
+        assert!(range_proof_helper(1023, 10).is_ok());
+        assert!(range_proof_helper(1024, 10).is_err());
+    }
+
+    fn range_proof_helper(v_val: u64, n: usize) -> Result<(), R1CSError> {
+        // Common
+        let gens = Generators::new(PedersenGenerators::default(), 128, 1);
+
+        // Prover's scope
+        let (proof, commitments) = {
+            // Prover makes a `ConstraintSystem` instance representing a merge gadget
+            // v and v_blinding emptpy because we are only testing low-level variable constraints
+            let v = vec![];
+            let v_blinding = vec![];
+            let mut prover_transcript = Transcript::new(b"RangeProofTest");
+            let (mut prover_cs, _variables, commitments) =
+                prover::ProverCS::new(&mut prover_transcript, &gens, v, v_blinding.clone());
+
+            // Prover allocates variables and adds constraints to the constraint system
+            let (v_var, _) =
+                prover_cs.assign_uncommitted(Assignment::from(v_val), Assignment::zero())?;
+
+            RangeProofGadget::fill_cs(&mut prover_cs, (v_var, Assignment::from(v_val)), n)?;
+
+            let proof = prover_cs.prove()?;
+
+            (proof, commitments)
+        };
+
+        // Verifier makes a `ConstraintSystem` instance representing a merge gadget
+        let mut verifier_transcript = Transcript::new(b"RangeProofTest");
+        let (mut verifier_cs, _variables) =
+            verifier::VerifierCS::new(&mut verifier_transcript, &gens, commitments);
+
+        // Verifier allocates variables and adds constraints to the constraint system
+        let (v_var, _) =
+            verifier_cs.assign_uncommitted(Assignment::Missing(), Assignment::Missing())?;
+
+        assert!(
+            RangeProofGadget::fill_cs(&mut verifier_cs, (v_var, Assignment::Missing()), n).is_ok()
+        );
 
         verifier_cs.verify(&proof)
     }
