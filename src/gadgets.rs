@@ -694,6 +694,59 @@ mod tests {
                 vec![(0, zero, zero), (0, zero, zero), (10, peso, ptag)],
             ).is_err()
         );
+
+        // k=4
+        // merge each of 2 asset types
+        assert!(
+            merge_helper(
+                vec![
+                    (3, peso, ptag),
+                    (6, peso, ptag),
+                    (1, yuan, ytag),
+                    (2, yuan, ytag)
+                ],
+                vec![
+                    (0, zero, zero),
+                    (9, peso, ptag),
+                    (0, zero, zero),
+                    (3, yuan, ytag)
+                ],
+            ).is_ok()
+        );
+        // merge all, same asset
+        assert!(
+            merge_helper(
+                vec![
+                    (3, peso, ptag),
+                    (6, peso, ptag),
+                    (2, peso, ptag),
+                    (1, peso, ptag)
+                ],
+                vec![
+                    (0, zero, zero),
+                    (0, zero, zero),
+                    (0, zero, zero),
+                    (12, peso, ptag)
+                ],
+            ).is_ok()
+        );
+        // error when merging, total is not equal
+        assert!(
+            merge_helper(
+                vec![
+                    (3, peso, ptag),
+                    (6, peso, ptag),
+                    (2, peso, ptag),
+                    (1, peso, ptag)
+                ],
+                vec![
+                    (0, zero, zero),
+                    (0, zero, zero),
+                    (0, zero, zero),
+                    (10, peso, ptag)
+                ],
+            ).is_err()
+        );
     }
 
     fn merge_helper(
