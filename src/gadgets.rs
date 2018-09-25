@@ -429,13 +429,11 @@ mod tests {
         assert!(shuffle_helper(vec![3], vec![3]).is_ok());
         assert!(shuffle_helper(vec![6], vec![6]).is_ok());
         assert!(shuffle_helper(vec![3], vec![6]).is_err());
-        assert!(shuffle_helper(vec![3], vec![3, 6]).is_ok());
         // k=2
         assert!(shuffle_helper(vec![3, 6], vec![3, 6]).is_ok());
         assert!(shuffle_helper(vec![3, 6], vec![6, 3]).is_ok());
         assert!(shuffle_helper(vec![6, 6], vec![6, 6]).is_ok());
         assert!(shuffle_helper(vec![3, 3], vec![6, 3]).is_err());
-        assert!(shuffle_helper(vec![3, 6], vec![3, 6, 10]).is_ok());
         // k=3
         assert!(shuffle_helper(vec![3, 6, 10], vec![3, 6, 10]).is_ok());
         assert!(shuffle_helper(vec![3, 6, 10], vec![3, 10, 6]).is_ok());
@@ -505,6 +503,9 @@ mod tests {
     ) -> Result<(), R1CSError> {
         let mut in_pairs = vec![];
         let mut out_pairs = vec![];
+        if input.len() != output.len() {
+            return Err(R1CSError::InvalidR1CSConstruction);
+        }
         let k = input.len();
 
         // Allocate pairs of low-level variables and their assignments
@@ -530,10 +531,39 @@ mod tests {
 
         KShuffleGadget::fill_cs(cs, in_pairs, out_pairs)
     }
-
+    /*
     #[test]
-    fn value_shuffle() {}
+    fn value_shuffle() {
+        // k=1
+        assert!(value_shuffle_helper(vec![(1, 2, 3)], vec![(1, 2, 3)]).is_ok());
+        assert!(value_shuffle_helper(vec![(4, 5, 6)], vec![(4, 5, 6)]).is_ok());
+        assert!(value_shuffle_helper(vec![(1, 2, 3)], vec![(4, 5, 6)]).is_err());
+        assert!(value_shuffle_helper(vec![(1, 2, 3)], vec![(1, 2, 3), (4, 5, 6)]).is_ok());
+        // k=2value_
+        assert!(value_shuffle_helper(vec![(1, 2, 3), (4, 5, 6)], vec![(1, 2, 3), (4, 5, 6)]).is_ok());
+        assert!(value_shuffle_helper(vec![(1, 2, 3), (4, 5, 6)], vec![(4, 5, 6), (1, 2, 3)]).is_ok());
+        assert!(value_shuffle_helper(vec![(4, 5, 6), (4, 5, 6)], vec![(4, 5, 6), (4, 5, 6)]).is_ok());
+        assert!(value_shuffle_helper(vec![(1, 2, 3), (1, 2, 3)], vec![(4, 5, 6), (1, 2, 3)]).is_err());
+        assert!(value_shuffle_helper(vec![(1, 2, 3), (4, 5, 6)], vec![(1, 2, 3), (4, 5, 6)]).is_ok());
+        // k=(1, 2, 3)
+        assert!(value_shuffle_helper(vec![(1, 2, 3), 6, 10], vec![(1, 2, 3), 6, 10]).is_ok());
+        assert!(value_shuffle_helper(vec![(1, 2, 3), 6, 10], vec![(1, 2, 3), 10, 6]).is_ok());
+        assert!(value_shuffle_helper(vec![(1, 2, 3), 6, 10], vec![6, (1, 2, 3), 10]).is_ok());
+        assert!(value_shuffle_helper(vec![(1, 2, 3), 6, 10], vec![6, 10, (1, 2, 3)]).is_ok());
+        assert!(value_shuffle_helper(vec![(1, 2, 3), 6, 10], vec![10, (1, 2, 3), 6]).is_ok());
+        assert!(value_shuffle_helper(vec![(1, 2, 3), 6, 10], vec![10, 6, (1, 2, 3)]).is_ok());
+        assert!(value_shuffle_helper(vec![3, 6, 10], vec![30, 6, 10]).is_err());
+        assert!(value_shuffle_helper(vec![(1, 2, 3), 6, 10], vec![(1, 2, 3), 60, 10]).is_err());
+        assert!(value_shuffle_helper(vec![(1, 2, 3), 6, 10], vec![(1, 2, 3), 6, 100]).is_err());
+        // k=4
+        assert!(value_shuffle_helper(vec![(1, 2, 3), 6, 10, 15], vec![(1, 2, 3), 6, 10, 15]).is_ok());
+        assert!(value_shuffle_helper(vec![(1, 2, 3), 6, 10, 15], vec![15, 6, 10, (1, 2, 3)]).is_ok());
+        assert!(value_shuffle_helper(vec![(1, 2, 3), 6, 10, 15], vec![(1, 2, 3), 6, 10, (1, 2, 3)]).is_err());
 
+    }
+
+    }
+*/
     #[test]
     fn mix_gadget() {
         let peso = 66;
