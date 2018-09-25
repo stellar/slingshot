@@ -531,39 +531,189 @@ mod tests {
 
         KShuffleGadget::fill_cs(cs, in_pairs, out_pairs)
     }
-    /*
+
     #[test]
     fn value_shuffle() {
         // k=1
         assert!(value_shuffle_helper(vec![(1, 2, 3)], vec![(1, 2, 3)]).is_ok());
         assert!(value_shuffle_helper(vec![(4, 5, 6)], vec![(4, 5, 6)]).is_ok());
         assert!(value_shuffle_helper(vec![(1, 2, 3)], vec![(4, 5, 6)]).is_err());
-        assert!(value_shuffle_helper(vec![(1, 2, 3)], vec![(1, 2, 3), (4, 5, 6)]).is_ok());
-        // k=2value_
-        assert!(value_shuffle_helper(vec![(1, 2, 3), (4, 5, 6)], vec![(1, 2, 3), (4, 5, 6)]).is_ok());
-        assert!(value_shuffle_helper(vec![(1, 2, 3), (4, 5, 6)], vec![(4, 5, 6), (1, 2, 3)]).is_ok());
-        assert!(value_shuffle_helper(vec![(4, 5, 6), (4, 5, 6)], vec![(4, 5, 6), (4, 5, 6)]).is_ok());
-        assert!(value_shuffle_helper(vec![(1, 2, 3), (1, 2, 3)], vec![(4, 5, 6), (1, 2, 3)]).is_err());
-        assert!(value_shuffle_helper(vec![(1, 2, 3), (4, 5, 6)], vec![(1, 2, 3), (4, 5, 6)]).is_ok());
-        // k=(1, 2, 3)
-        assert!(value_shuffle_helper(vec![(1, 2, 3), 6, 10], vec![(1, 2, 3), 6, 10]).is_ok());
-        assert!(value_shuffle_helper(vec![(1, 2, 3), 6, 10], vec![(1, 2, 3), 10, 6]).is_ok());
-        assert!(value_shuffle_helper(vec![(1, 2, 3), 6, 10], vec![6, (1, 2, 3), 10]).is_ok());
-        assert!(value_shuffle_helper(vec![(1, 2, 3), 6, 10], vec![6, 10, (1, 2, 3)]).is_ok());
-        assert!(value_shuffle_helper(vec![(1, 2, 3), 6, 10], vec![10, (1, 2, 3), 6]).is_ok());
-        assert!(value_shuffle_helper(vec![(1, 2, 3), 6, 10], vec![10, 6, (1, 2, 3)]).is_ok());
-        assert!(value_shuffle_helper(vec![3, 6, 10], vec![30, 6, 10]).is_err());
-        assert!(value_shuffle_helper(vec![(1, 2, 3), 6, 10], vec![(1, 2, 3), 60, 10]).is_err());
-        assert!(value_shuffle_helper(vec![(1, 2, 3), 6, 10], vec![(1, 2, 3), 6, 100]).is_err());
-        // k=4
-        assert!(value_shuffle_helper(vec![(1, 2, 3), 6, 10, 15], vec![(1, 2, 3), 6, 10, 15]).is_ok());
-        assert!(value_shuffle_helper(vec![(1, 2, 3), 6, 10, 15], vec![15, 6, 10, (1, 2, 3)]).is_ok());
-        assert!(value_shuffle_helper(vec![(1, 2, 3), 6, 10, 15], vec![(1, 2, 3), 6, 10, (1, 2, 3)]).is_err());
-
+        // k=2
+        assert!(
+            value_shuffle_helper(vec![(1, 2, 3), (4, 5, 6)], vec![(1, 2, 3), (4, 5, 6)]).is_ok()
+        );
+        assert!(
+            value_shuffle_helper(vec![(1, 2, 3), (4, 5, 6)], vec![(4, 5, 6), (1, 2, 3)]).is_ok()
+        );
+        assert!(
+            value_shuffle_helper(vec![(4, 5, 6), (4, 5, 6)], vec![(4, 5, 6), (4, 5, 6)]).is_ok()
+        );
+        assert!(
+            value_shuffle_helper(vec![(1, 2, 3), (1, 2, 3)], vec![(4, 5, 6), (1, 2, 3)]).is_err()
+        );
+        assert!(
+            value_shuffle_helper(vec![(1, 2, 3), (4, 5, 6)], vec![(1, 2, 3), (4, 5, 6)]).is_ok()
+        );
+        // k=3
+        assert!(
+            value_shuffle_helper(
+                vec![(1, 2, 3), (4, 5, 6), (8, 9, 10)],
+                vec![(1, 2, 3), (4, 5, 6), (8, 9, 10)]
+            ).is_ok()
+        );
+        assert!(
+            value_shuffle_helper(
+                vec![(1, 2, 3), (4, 5, 6), (8, 9, 10)],
+                vec![(1, 2, 3), (8, 9, 10), (4, 5, 6)]
+            ).is_ok()
+        );
+        assert!(
+            value_shuffle_helper(
+                vec![(1, 2, 3), (4, 5, 6), (8, 9, 10)],
+                vec![(4, 5, 6), (1, 2, 3), (8, 9, 10)]
+            ).is_ok()
+        );
+        assert!(
+            value_shuffle_helper(
+                vec![(1, 2, 3), (4, 5, 6), (8, 9, 10)],
+                vec![(4, 5, 6), (8, 9, 10), (1, 2, 3)]
+            ).is_ok()
+        );
+        assert!(
+            value_shuffle_helper(
+                vec![(1, 2, 3), (4, 5, 6), (8, 9, 10)],
+                vec![(8, 9, 10), (1, 2, 3), (4, 5, 6)]
+            ).is_ok()
+        );
+        assert!(
+            value_shuffle_helper(
+                vec![(1, 2, 3), (4, 5, 6), (8, 9, 10)],
+                vec![(8, 9, 10), (4, 5, 6), (1, 2, 3)]
+            ).is_ok()
+        );
+        assert!(
+            value_shuffle_helper(
+                vec![(1, 2, 3), (4, 5, 6), (8, 9, 10)],
+                vec![(10, 20, 30), (4, 5, 6), (8, 9, 10)]
+            ).is_err()
+        );
+        assert!(
+            value_shuffle_helper(
+                vec![(1, 2, 3), (4, 5, 6), (8, 9, 10)],
+                vec![(1, 2, 3), (40, 50, 60), (8, 9, 10)]
+            ).is_err()
+        );
+        assert!(
+            value_shuffle_helper(
+                vec![(1, 2, 3), (4, 5, 6), (8, 9, 10)],
+                vec![(1, 2, 3), (4, 5, 6), (98, 99, 100)]
+            ).is_err()
+        );
     }
 
+    fn value_shuffle_helper(
+        input: Vec<(u64, u64, u64)>,
+        output: Vec<(u64, u64, u64)>,
+    ) -> Result<(), R1CSError> {
+        // Common
+        let gens = Generators::new(PedersenGenerators::default(), 128, 1);
+
+        // Prover's scope
+        let (proof, commitments) = {
+            // Prover makes a `ConstraintSystem` instance representing a shuffle gadget
+            // v and v_blinding empty because we are only testing low-level variable constraints
+            let v = vec![];
+            let v_blinding = vec![];
+            let mut prover_transcript = Transcript::new(b"ValueShuffleTest");
+            let (mut prover_cs, _variables, commitments) =
+                prover::ProverCS::new(&mut prover_transcript, &gens, v, v_blinding.clone());
+
+            // Prover allocates variables and adds constraints to the constraint system
+            let in_assignments = input
+                .iter()
+                .map(|in_i| {
+                    (
+                        Assignment::from(in_i.0.clone()),
+                        Assignment::from(in_i.1.clone()),
+                        Assignment::from(in_i.2.clone()),
+                    )
+                }).collect();
+            let out_assignments = output
+                .iter()
+                .map(|out_i| {
+                    (
+                        Assignment::from(out_i.0.clone()),
+                        Assignment::from(out_i.1.clone()),
+                        Assignment::from(out_i.2.clone()),
+                    )
+                }).collect();
+            value_shuffle_cs(&mut prover_cs, in_assignments, out_assignments)?;
+            let proof = prover_cs.prove()?;
+
+            (proof, commitments)
+        };
+
+        // Verifier makes a `ConstraintSystem` instance representing a shuffle gadget
+        let mut verifier_transcript = Transcript::new(b"ValueShuffleTest");
+        let (mut verifier_cs, _variables) =
+            verifier::VerifierCS::new(&mut verifier_transcript, &gens, commitments);
+
+        // Verifier allocates variables and adds constraints to the constraint system
+        let in_assignments = input
+            .iter()
+            .map(|_| {
+                (
+                    Assignment::Missing(),
+                    Assignment::Missing(),
+                    Assignment::Missing(),
+                )
+            }).collect();
+        let out_assignments = output
+            .iter()
+            .map(|_| {
+                (
+                    Assignment::Missing(),
+                    Assignment::Missing(),
+                    Assignment::Missing(),
+                )
+            }).collect();
+        assert!(value_shuffle_cs(&mut verifier_cs, in_assignments, out_assignments,).is_ok());
+        // Verifier verifies proof
+        Ok(verifier_cs.verify(&proof)?)
     }
-*/
+
+    fn value_shuffle_cs<CS: ConstraintSystem>(
+        cs: &mut CS,
+        input: Vec<(Assignment, Assignment, Assignment)>,
+        output: Vec<(Assignment, Assignment, Assignment)>,
+    ) -> Result<(), R1CSError> {
+        let mut in_vals: Vec<Value> = vec![];
+        let mut out_vals: Vec<Value> = vec![];
+        if input.len() != output.len() {
+            return Err(R1CSError::InvalidR1CSConstruction);
+        }
+        let k = input.len();
+
+        // Allocate pairs of low-level variables and their assignments
+        for i in 0..k {
+            let (in_q, out_q) = cs.assign_uncommitted(input[i].0, output[i].0)?;
+            let (in_a, out_a) = cs.assign_uncommitted(input[i].1, output[i].1)?;
+            let (in_t, out_t) = cs.assign_uncommitted(input[i].2, output[i].2)?;
+            in_vals.push(Value {
+                q: (in_q, input[i].0),
+                a: (in_a, input[i].1),
+                t: (in_t, input[i].2),
+            });
+            out_vals.push(Value {
+                q: (out_q, output[i].0),
+                a: (out_a, output[i].1),
+                t: (out_t, output[i].2),
+            });
+        }
+
+        KValueShuffleGadget::fill_cs(cs, in_vals, out_vals)
+    }
+
     #[test]
     fn mix_gadget() {
         let peso = 66;
@@ -1084,7 +1234,7 @@ mod tests {
 
         // Verifier allocates variables and adds constraints to the constraint system
         let mut vars = vec![];
-        for i in 0..vals.len() / 2 {
+        for _ in 0..vals.len() / 2 {
             let (var_a, var_b) =
                 verifier_cs.assign_uncommitted(Assignment::Missing(), Assignment::Missing())?;
             vars.push(var_a);
