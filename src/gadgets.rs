@@ -164,18 +164,19 @@ impl KValueShuffleGadget {
         }
 
         let w = cs.challenge_scalar(b"k-value-shuffle challenge");
+        let w2 = w * w;
         let mut x_pairs = vec![];
         let mut y_pairs = vec![];
         for i in 0..k {
-            let x_i = x[i].q.1 + x[i].a.1 * w + x[i].t.1 * w * w;
-            let y_i = y[i].q.1 + y[i].a.1 * w + y[i].t.1 * w * w;
+            let x_i = x[i].q.1 + x[i].a.1 * w + x[i].t.1 * w2;
+            let y_i = y[i].q.1 + y[i].a.1 * w + y[i].t.1 * w2;
             let (x_i_var, y_i_var) = cs.assign_uncommitted(x_i, y_i)?;
             cs.add_constraint(
                 [
                     (x_i_var, -one),
                     (x[i].q.0, one),
                     (x[i].a.0, w),
-                    (x[i].t.0, w * w),
+                    (x[i].t.0, w2),
                 ]
                     .iter()
                     .collect(),
@@ -185,7 +186,7 @@ impl KValueShuffleGadget {
                     (y_i_var, -one),
                     (y[i].q.0, one),
                     (y[i].a.0, w),
-                    (y[i].t.0, w * w),
+                    (y[i].t.0, w2),
                 ]
                     .iter()
                     .collect(),
@@ -209,23 +210,27 @@ impl MixGadget {
     ) -> Result<(), R1CSError> {
         let one = Scalar::one();
         let w = cs.challenge_scalar(b"mix challenge");
+        let w2 = w * w;
+        let w3 = w2 * w;
+        let w4 = w3 * w;
+        let w5 = w4 * w;
 
         // create variables for multiplication
         let (mul_left, mul_right, mul_out) = cs.assign_multiplier(
             // left gate to multiplier
             (A.q.1 - C.q.1)
                 + (A.a.1 - C.a.1) * w
-                + (A.t.1 - C.t.1) * w * w
-                + (B.q.1 - D.q.1) * w * w * w
-                + (B.a.1 - D.a.1) * w * w * w * w
-                + (B.t.1 - D.t.1) * w * w * w * w * w,
+                + (A.t.1 - C.t.1) * w2
+                + (B.q.1 - D.q.1) * w3
+                + (B.a.1 - D.a.1) * w4
+                + (B.t.1 - D.t.1) * w5,
             // right gate to multiplier
             C.q.1
                 + (A.a.1 - B.a.1) * w
-                + (A.t.1 - B.t.1) * w * w
-                + (D.q.1 - A.q.1 - B.q.1) * w * w * w
-                + (D.a.1 - A.a.1) * w * w * w * w
-                + (D.t.1 - A.t.1) * w * w * w * w * w,
+                + (A.t.1 - B.t.1) * w2
+                + (D.q.1 - A.q.1 - B.q.1) * w3
+                + (D.a.1 - A.a.1) * w4
+                + (D.t.1 - A.t.1) * w5,
             // out gate to multiplier
             Assignment::zero(),
         )?;
@@ -242,14 +247,14 @@ impl MixGadget {
                 (C.q.0, -one),
                 (A.a.0, w),
                 (C.a.0, -w),
-                (A.t.0, w * w),
-                (C.t.0, -w * w),
-                (B.q.0, w * w * w),
-                (D.q.0, -w * w * w),
-                (B.a.0, w * w * w * w),
-                (D.a.0, -w * w * w * w),
-                (B.t.0, w * w * w * w * w),
-                (D.t.0, -w * w * w * w * w),
+                (A.t.0, w2),
+                (C.t.0, -w2),
+                (B.q.0, w3),
+                (D.q.0, -w3),
+                (B.a.0, w4),
+                (D.a.0, -w4),
+                (B.t.0, w5),
+                (D.t.0, -w5),
             ]
                 .iter()
                 .collect(),
@@ -266,15 +271,15 @@ impl MixGadget {
                 (C.q.0, one),
                 (A.a.0, w),
                 (B.a.0, -w),
-                (A.t.0, w * w),
-                (B.t.0, -w * w),
-                (D.q.0, w * w * w),
-                (A.q.0, -w * w * w),
-                (B.q.0, -w * w * w),
-                (D.a.0, w * w * w * w),
-                (A.a.0, -w * w * w * w),
-                (D.t.0, w * w * w * w * w),
-                (A.t.0, -w * w * w * w * w),
+                (A.t.0, w2),
+                (B.t.0, -w2),
+                (D.q.0, w3),
+                (A.q.0, -w3),
+                (B.q.0, -w3),
+                (D.a.0, w4),
+                (A.a.0, -w4),
+                (D.t.0, w5),
+                (A.t.0, -w5),
             ]
                 .iter()
                 .collect(),
