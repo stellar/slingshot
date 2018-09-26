@@ -15,7 +15,6 @@ impl KShuffleGadget {
         y: Vec<(Variable, Assignment)>,
     ) -> Result<(), R1CSError> {
         let one = Scalar::one();
-        let var_one = Variable::One();
         let z = cs.challenge_scalar(b"k-shuffle challenge");
         let neg_z = -z;
 
@@ -32,19 +31,17 @@ impl KShuffleGadget {
         let mut mulx_left = x[k - 1].1 + neg_z;
         let mut mulx_right = x[k - 2].1 + neg_z;
         let mut mulx_out = mulx_left * mulx_right;
-        let (mulx_left_var, mulx_right_var, mulx_out_var) =
-            cs.assign_multiplier(mulx_left, mulx_right, mulx_out)?;
-        cs.add_constraint(
-            [(mulx_left_var, -one), (var_one, neg_z), (x[k - 1].0, one)]
-                .iter()
-                .collect(),
-        );
-        cs.add_constraint(
-            [(mulx_right_var, -one), (var_one, neg_z), (x[k - 2].0, one)]
-                .iter()
-                .collect(),
-        );
-        let mut mulx_out_var_prev = mulx_out_var;
+
+        let mut mulx_out_var_prev = KShuffleGadget::multiplier_helper(
+            cs,
+            neg_z,
+            mulx_left,
+            mulx_right,
+            mulx_out,
+            x[k - 1].0,
+            x[k - 2].0,
+            true,
+        )?;
 
         // Make multipliers for x from i == [0, k-3]
         for i in (0..k - 2).rev() {
@@ -52,39 +49,33 @@ impl KShuffleGadget {
             mulx_right = x[i].1 + neg_z;
             mulx_out = mulx_left * mulx_right;
 
-            let (mulx_left_var, mulx_right_var, mulx_out_var) =
-                cs.assign_multiplier(mulx_left, mulx_right, mulx_out)?;
-            cs.add_constraint(
-                [(mulx_left_var, -one), (mulx_out_var_prev, one)]
-                    .iter()
-                    .collect(),
-            );
-            cs.add_constraint(
-                [(mulx_right_var, -one), (var_one, neg_z), (x[i].0, one)]
-                    .iter()
-                    .collect(),
-            );
-
-            mulx_out_var_prev = mulx_out_var;
+            mulx_out_var_prev = KShuffleGadget::multiplier_helper(
+                cs,
+                neg_z,
+                mulx_left,
+                mulx_right,
+                mulx_out,
+                mulx_out_var_prev,
+                x[i].0,
+                false,
+            )?;
         }
 
         // Make last y multiplier for i = k-1 and k-2
         let mut muly_left = y[k - 1].1 - z;
         let mut muly_right = y[k - 2].1 - z;
         let mut muly_out = muly_left * muly_right;
-        let (muly_left_var, muly_right_var, muly_out_var) =
-            cs.assign_multiplier(muly_left, muly_right, muly_out)?;
-        cs.add_constraint(
-            [(muly_left_var, -one), (var_one, neg_z), (y[k - 1].0, one)]
-                .iter()
-                .collect(),
-        );
-        cs.add_constraint(
-            [(muly_right_var, -one), (var_one, neg_z), (y[k - 2].0, one)]
-                .iter()
-                .collect(),
-        );
-        let mut muly_out_var_prev = muly_out_var;
+
+        let mut muly_out_var_prev = KShuffleGadget::multiplier_helper(
+            cs,
+            neg_z,
+            muly_left,
+            muly_right,
+            muly_out,
+            y[k - 1].0,
+            y[k - 2].0,
+            true,
+        )?;
 
         // Make multipliers for y from i == [0, k-3]
         for i in (0..k - 2).rev() {
@@ -92,20 +83,16 @@ impl KShuffleGadget {
             muly_right = y[i].1 + neg_z;
             muly_out = muly_left * muly_right;
 
-            let (muly_left_var, muly_right_var, muly_out_var) =
-                cs.assign_multiplier(muly_left, muly_right, muly_out)?;
-            cs.add_constraint(
-                [(muly_left_var, -one), (muly_out_var_prev, one)]
-                    .iter()
-                    .collect(),
-            );
-            cs.add_constraint(
-                [(muly_right_var, -one), (var_one, neg_z), (y[i].0, one)]
-                    .iter()
-                    .collect(),
-            );
-
-            muly_out_var_prev = muly_out_var;
+            muly_out_var_prev = KShuffleGadget::multiplier_helper(
+                cs,
+                neg_z,
+                muly_left,
+                muly_right,
+                muly_out,
+                muly_out_var_prev,
+                y[i].0,
+                false,
+            )?;
         }
 
         // Check equality between last x mul output and last y mul output
@@ -117,12 +104,48 @@ impl KShuffleGadget {
 
         Ok(())
     }
+
+    fn multiplier_helper<CS: ConstraintSystem>(
+        cs: &mut CS,
+        neg_z: Scalar,
+        left: Assignment,
+        right: Assignment,
+        out: Assignment,
+        left_var: Variable,
+        right_var: Variable,
+        is_last_mul: bool,
+    ) -> Result<Variable, R1CSError> {
+        let one = Scalar::one();
+        let var_one = Variable::One();
+
+        // Make multiplier gate variables
+        let (left_mul_var, right_mul_var, out_mul_var) = cs.assign_multiplier(left, right, out)?;
+
+        if is_last_mul {
+            // Make last multiplier
+            cs.add_constraint(
+                [(left_mul_var, -one), (var_one, neg_z), (left_var, one)]
+                    .iter()
+                    .collect(),
+            );
+        } else {
+            // Make intermediate multiplier
+            cs.add_constraint([(left_mul_var, -one), (left_var, one)].iter().collect());
+        }
+        cs.add_constraint(
+            [(right_mul_var, -one), (var_one, neg_z), (right_var, one)]
+                .iter()
+                .collect(),
+        );
+
+        Ok(out_mul_var)
+    }
 }
 
 pub struct KValueShuffleGadget {}
 
 impl KValueShuffleGadget {
-    fn fill_cs<CS: ConstraintSystem>(
+    pub fn fill_cs<CS: ConstraintSystem>(
         cs: &mut CS,
         x: Vec<Value>,
         y: Vec<Value>,
@@ -266,7 +289,7 @@ impl MixGadget {
 pub struct KMergeGadget {}
 
 impl KMergeGadget {
-    fn fill_cs<CS: ConstraintSystem>(
+    pub fn fill_cs<CS: ConstraintSystem>(
         cs: &mut CS,
         inputs: Vec<Value>,
         outputs: Vec<Value>,
@@ -339,7 +362,7 @@ impl KMergeGadget {
 pub struct KSplitGadget {}
 
 impl KSplitGadget {
-    fn fill_cs<CS: ConstraintSystem>(
+    pub fn fill_cs<CS: ConstraintSystem>(
         cs: &mut CS,
         inputs: Vec<Value>,
         outputs: Vec<Value>,
@@ -354,7 +377,7 @@ pub struct RangeProofGadget {}
 
 impl RangeProofGadget {
     // Enforce that the quantity of v is in the range [0, 2^n)
-    fn fill_cs<CS: ConstraintSystem>(
+    pub fn fill_cs<CS: ConstraintSystem>(
         cs: &mut CS,
         v: (Variable, Assignment),
         n: usize,
@@ -405,7 +428,10 @@ pub struct PadGadget {}
 
 impl PadGadget {
     // Enforces that all variables are equal to zero.
-    fn fill_cs<CS: ConstraintSystem>(cs: &mut CS, vars: Vec<Variable>) -> Result<(), R1CSError> {
+    pub fn fill_cs<CS: ConstraintSystem>(
+        cs: &mut CS,
+        vars: Vec<Variable>,
+    ) -> Result<(), R1CSError> {
         for var in vars {
             cs.add_constraint(
                 [(var, Scalar::one()), (Variable::One(), Scalar::zero())]
