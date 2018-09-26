@@ -3,9 +3,9 @@ use bulletproofs::circuit_proof::ConstraintSystem;
 use bulletproofs::R1CSError;
 use util::Value;
 
-pub struct AssemblerGadget {}
+pub struct TransactionGadget {}
 
-impl AssemblerGadget {
+impl TransactionGadget {
     fn fill_cs<CS: ConstraintSystem>(
         cs: &mut CS,
         inputs: Vec<Value>,
