@@ -291,10 +291,10 @@ impl MixGadget {
     }
 }
 
-pub struct KMixGadget {}
+struct KMixGadget {}
 
 impl KMixGadget {
-    pub fn fill_cs<CS: ConstraintSystem>(
+    fn fill_cs<CS: ConstraintSystem>(
         cs: &mut CS,
         inputs: Vec<Value>,
         outputs: Vec<Value>,
