@@ -291,9 +291,9 @@ impl MixGadget {
     }
 }
 
-pub struct KMergeGadget {}
+pub struct KMixGadget {}
 
-impl KMergeGadget {
+impl KMixGadget {
     pub fn fill_cs<CS: ConstraintSystem>(
         cs: &mut CS,
         inputs: Vec<Value>,
@@ -363,7 +363,18 @@ impl KMergeGadget {
     }
 }
 
-// TODO: write tests for KSplitGadget
+pub struct KMergeGadget {}
+
+impl KMergeGadget {
+    pub fn fill_cs<CS: ConstraintSystem>(
+        cs: &mut CS,
+        inputs: Vec<Value>,
+        outputs: Vec<Value>,
+    ) -> Result<(), R1CSError> {
+        KMixGadget::fill_cs(cs, inputs, outputs)
+    }
+}
+
 pub struct KSplitGadget {}
 
 impl KSplitGadget {
@@ -931,7 +942,7 @@ mod tests {
     }
 
     #[test]
-    fn merge_gadget() {
+    fn kmix_gadget() {
         let peso = 66;
         let ptag = 77;
         let yuan = 88;
@@ -940,28 +951,28 @@ mod tests {
 
         // k=1
         // no merge, same asset types
-        assert!(merge_helper(vec![(6, peso, ptag)], vec![(6, peso, ptag)]).is_ok());
+        assert!(kmix_helper(vec![(6, peso, ptag)], vec![(6, peso, ptag)]).is_ok());
         // error when merging different asset types
-        assert!(merge_helper(vec![(3, peso, ptag)], vec![(3, yuan, ytag)]).is_err());
+        assert!(kmix_helper(vec![(3, peso, ptag)], vec![(3, yuan, ytag)]).is_err());
 
         // k=2 ... more extensive k=2 tests are in the MixGadget tests
         // no merge, different asset types
         assert!(
-            merge_helper(
+            kmix_helper(
                 vec![(3, peso, ptag), (6, yuan, ytag)],
                 vec![(3, peso, ptag), (6, yuan, ytag)],
             ).is_ok()
         );
         // merge, same asset types
         assert!(
-            merge_helper(
+            kmix_helper(
                 vec![(3, peso, ptag), (6, peso, ptag)],
                 vec![(0, peso, ptag), (9, peso, ptag)],
             ).is_ok()
         );
         // error when merging different asset types
         assert!(
-            merge_helper(
+            kmix_helper(
                 vec![(3, peso, ptag), (3, yuan, ytag)],
                 vec![(0, peso, ptag), (6, yuan, ytag)],
             ).is_err()
@@ -970,49 +981,49 @@ mod tests {
         // k=3
         // no merge, same asset types
         assert!(
-            merge_helper(
+            kmix_helper(
                 vec![(3, peso, ptag), (6, peso, ptag), (6, peso, ptag)],
                 vec![(3, peso, ptag), (6, peso, ptag), (6, peso, ptag)],
             ).is_ok()
         );
         // no merge, different asset types
         assert!(
-            merge_helper(
+            kmix_helper(
                 vec![(3, peso, ptag), (6, yuan, ytag), (6, peso, ptag)],
                 vec![(3, peso, ptag), (6, yuan, ytag), (6, peso, ptag)],
             ).is_ok()
         );
         // merge first two
         assert!(
-            merge_helper(
+            kmix_helper(
                 vec![(3, peso, ptag), (6, peso, ptag), (1, yuan, ytag)],
                 vec![(0, peso, ptag), (9, peso, ptag), (1, yuan, ytag)],
             ).is_ok()
         );
         // merge last two
         assert!(
-            merge_helper(
+            kmix_helper(
                 vec![(1, yuan, ytag), (3, peso, ptag), (6, peso, ptag)],
                 vec![(1, yuan, ytag), (0, peso, ptag), (9, peso, ptag)],
             ).is_ok()
         );
         // merge all, same asset types, zero value is different asset type
         assert!(
-            merge_helper(
+            kmix_helper(
                 vec![(3, peso, ptag), (6, peso, ptag), (1, peso, ptag)],
                 vec![(0, zero, zero), (0, zero, zero), (10, peso, ptag)],
             ).is_ok()
         );
         // incomplete merge, input sum does not equal output sum
         assert!(
-            merge_helper(
+            kmix_helper(
                 vec![(3, peso, ptag), (6, peso, ptag), (1, peso, ptag)],
                 vec![(1, zero, zero), (0, zero, zero), (9, peso, ptag)],
             ).is_err()
         );
         // error when merging with different asset types
         assert!(
-            merge_helper(
+            kmix_helper(
                 vec![(3, peso, ptag), (6, yuan, ytag), (1, peso, ptag)],
                 vec![(0, zero, zero), (0, zero, zero), (10, peso, ptag)],
             ).is_err()
@@ -1021,7 +1032,7 @@ mod tests {
         // k=4
         // merge each of 2 asset types
         assert!(
-            merge_helper(
+            kmix_helper(
                 vec![
                     (3, peso, ptag),
                     (6, peso, ptag),
@@ -1038,7 +1049,7 @@ mod tests {
         );
         // merge all, same asset
         assert!(
-            merge_helper(
+            kmix_helper(
                 vec![
                     (3, peso, ptag),
                     (6, peso, ptag),
@@ -1055,7 +1066,7 @@ mod tests {
         );
         // error when merging, output sum not equal to input sum
         assert!(
-            merge_helper(
+            kmix_helper(
                 vec![
                     (3, peso, ptag),
                     (6, peso, ptag),
@@ -1072,7 +1083,7 @@ mod tests {
         );
     }
 
-    fn merge_helper(
+    fn kmix_helper(
         inputs: Vec<(u64, u64, u64)>,
         outputs: Vec<(u64, u64, u64)>,
     ) -> Result<(), R1CSError> {
@@ -1086,7 +1097,7 @@ mod tests {
             // v and v_blinding emptpy because we are only testing low-level variable constraints
             let v = vec![];
             let v_blinding = vec![];
-            let mut prover_transcript = Transcript::new(b"MergeTest");
+            let mut prover_transcript = Transcript::new(b"KMixTest");
             let (mut prover_cs, _variables, commitments) =
                 prover::ProverCS::new(&mut prover_transcript, &gens, v, v_blinding.clone());
 
@@ -1118,7 +1129,7 @@ mod tests {
                 });
             }
 
-            KMergeGadget::fill_cs(&mut prover_cs, input_vals, output_vals)?;
+            KMixGadget::fill_cs(&mut prover_cs, input_vals, output_vals)?;
 
             let proof = prover_cs.prove()?;
 
@@ -1126,7 +1137,7 @@ mod tests {
         };
 
         // Verifier makes a `ConstraintSystem` instance representing a merge gadget
-        let mut verifier_transcript = Transcript::new(b"MergeTest");
+        let mut verifier_transcript = Transcript::new(b"KMixTest");
         let (mut verifier_cs, _variables) =
             verifier::VerifierCS::new(&mut verifier_transcript, &gens, commitments);
 
@@ -1152,7 +1163,7 @@ mod tests {
             });
         }
 
-        assert!(KMergeGadget::fill_cs(&mut verifier_cs, input_vals, output_vals).is_ok());
+        assert!(KMixGadget::fill_cs(&mut verifier_cs, input_vals, output_vals).is_ok());
 
         verifier_cs.verify(&proof)
     }
