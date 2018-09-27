@@ -165,8 +165,8 @@ impl KValueShuffleGadget {
 
         let w = cs.challenge_scalar(b"k-value-shuffle challenge");
         let w2 = w * w;
-        let mut x_pairs = vec![];
-        let mut y_pairs = vec![];
+        let mut x_pairs = Vec::with_capacity(k);
+        let mut y_pairs = Vec::with_capacity(k);
         for i in 0..k {
             let x_i = x[i].q.1 + x[i].a.1 * w + x[i].t.1 * w2;
             let y_i = y[i].q.1 + y[i].a.1 * w + y[i].t.1 * w2;
@@ -532,12 +532,12 @@ mod tests {
         input: Vec<Assignment>,
         output: Vec<Assignment>,
     ) -> Result<(), R1CSError> {
-        let mut in_pairs = vec![];
-        let mut out_pairs = vec![];
         if input.len() != output.len() {
             return Err(R1CSError::InvalidR1CSConstruction);
         }
         let k = input.len();
+        let mut in_pairs = Vec::with_capacity(k);
+        let mut out_pairs = Vec::with_capacity(k);
 
         // Allocate pairs of low-level variables and their assignments
         for i in 0..k / 2 {
@@ -718,12 +718,12 @@ mod tests {
         input: Vec<(Assignment, Assignment, Assignment)>,
         output: Vec<(Assignment, Assignment, Assignment)>,
     ) -> Result<(), R1CSError> {
-        let mut in_vals: Vec<Value> = vec![];
-        let mut out_vals: Vec<Value> = vec![];
         if input.len() != output.len() {
             return Err(R1CSError::InvalidR1CSConstruction);
         }
         let k = input.len();
+        let mut in_vals = Vec::with_capacity(k);
+        let mut out_vals = Vec::with_capacity(k);
 
         // Allocate pairs of low-level variables and their assignments
         for i in 0..k {
@@ -1075,6 +1075,7 @@ mod tests {
     ) -> Result<(), R1CSError> {
         // Common
         let gens = Generators::new(PedersenGenerators::default(), 128, 1);
+        let k = inputs.len();
 
         // Prover's scope
         let (proof, commitments) = {
@@ -1087,9 +1088,9 @@ mod tests {
                 prover::ProverCS::new(&mut prover_transcript, &gens, v, v_blinding.clone());
 
             // Prover allocates variables and adds constraints to the constraint system
-            let mut input_vals = vec![];
-            let mut output_vals = vec![];
-            for i in 0..inputs.len() {
+            let mut input_vals = Vec::with_capacity(k);
+            let mut output_vals = Vec::with_capacity(k);
+            for i in 0..k {
                 let (in_q, out_q) = prover_cs.assign_uncommitted(
                     Assignment::from(inputs[i].0),
                     Assignment::from(outputs[i].0),
@@ -1127,9 +1128,9 @@ mod tests {
             verifier::VerifierCS::new(&mut verifier_transcript, &gens, commitments);
 
         // Verifier allocates variables and adds constraints to the constraint system
-        let mut input_vals = vec![];
-        let mut output_vals = vec![];
-        for _ in 0..inputs.len() {
+        let mut input_vals = Vec::with_capacity(k);
+        let mut output_vals = Vec::with_capacity(k);
+        for _ in 0..k {
             let (in_q, out_q) =
                 verifier_cs.assign_uncommitted(Assignment::Missing(), Assignment::Missing())?;
             let (in_a, out_a) =
@@ -1224,6 +1225,7 @@ mod tests {
     fn pad_helper(vals: Vec<u64>) -> Result<(), R1CSError> {
         // Common
         let gens = Generators::new(PedersenGenerators::default(), 128, 1);
+        let k = vals.len();
 
         // Prover's scope
         let (proof, commitments) = {
@@ -1236,14 +1238,14 @@ mod tests {
                 prover::ProverCS::new(&mut prover_transcript, &gens, v, v_blinding.clone());
 
             // Prover allocates variables and adds constraints to the constraint system
-            let mut vars = vec![];
-            for i in 0..vals.len() / 2 {
+            let mut vars = Vec::with_capacity(k);
+            for i in 0..k / 2 {
                 let (var_a, var_b) = prover_cs
                     .assign_uncommitted(Assignment::from(vals[i]), Assignment::from(vals[i + 1]))?;
                 vars.push(var_a);
                 vars.push(var_b);
             }
-            if vals.len() % 2 == 1 {
+            if k % 2 == 1 {
                 let (var, _) = prover_cs.assign_uncommitted(
                     Assignment::from(vals[vals.len() - 1]),
                     Assignment::zero(),
@@ -1264,14 +1266,14 @@ mod tests {
             verifier::VerifierCS::new(&mut verifier_transcript, &gens, commitments);
 
         // Verifier allocates variables and adds constraints to the constraint system
-        let mut vars = vec![];
-        for _ in 0..vals.len() / 2 {
+        let mut vars = Vec::with_capacity(k);
+        for _ in 0..k / 2 {
             let (var_a, var_b) =
                 verifier_cs.assign_uncommitted(Assignment::Missing(), Assignment::Missing())?;
             vars.push(var_a);
             vars.push(var_b);
         }
-        if vals.len() % 2 == 1 {
+        if k % 2 == 1 {
             let (var, _) =
                 verifier_cs.assign_uncommitted(Assignment::Missing(), Assignment::zero())?;
             vars.push(var);
