@@ -4,7 +4,8 @@ version = "0.1.0"
 authors = ["Henry de Valence <hdevalence@hdevalence.ca>", "Cathie Yun <cathieyun@gmail.com>", "Oleg Andreev <oleganza@gmail.com>"]
 
 [dependencies]
-bulletproofs = { git = "https://github.com/dalek-cryptography/bulletproofs", branch = "equality" }
-curve25519-dalek = { version = "0.19", features = ["serde"] }
+bulletproofs = { git = "https://github.com/dalek-cryptography/bulletproofs", branch = "circuit" }
+curve25519-dalek = { version = "0.20", features = ["serde"] }
 merlin = "0.3"
 rand = "0.5.0-pre.2"
+subtle = "1"

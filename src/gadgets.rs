@@ -4,6 +4,7 @@ use bulletproofs::circuit_proof::assignment::Assignment;
 use bulletproofs::circuit_proof::{ConstraintSystem, Variable};
 use bulletproofs::R1CSError;
 use curve25519_dalek::scalar::Scalar;
+use subtle::{ConditionallySelectable, ConstantTimeEq};
 use util::Value;
 
 struct KShuffleGadget {}
@@ -326,23 +327,26 @@ impl KMixGadget {
         let mut D = B.clone(); // assumes "move", will be overwritten if "merge".
 
         for i in 0..inputs.len() - 2 {
-            let C_equals_zero = match C.q.1 {
-                Assignment::Value(c_val) => c_val == Scalar::zero(),
-                Assignment::Missing() => false,
-            };
+            // Update assignment for D.quantity
+            // Check that A and C have the same assignments for all fields (q, a, t)
+            let is_move = A.q.1.ct_eq(&C.q.1) & A.a.1.ct_eq(&C.a.1) & A.t.1.ct_eq(&C.t.1);
+            // Check that A and B have the same time (a and t are the same) and that C.q = 0
+            let is_merge =
+                A.a.1.ct_eq(&B.a.1) & A.t.1.ct_eq(&B.t.1) & C.q.1.ct_eq(&Assignment::zero());
 
-            // update assignment for D.quantity
-            if A.assignments() == C.assignments() {
-                // "move" operation, so D.quantity = B.quantity, so we don't change anything
-            } else if A.flavor() == B.flavor() && C_equals_zero {
-                // "merge" operation, so D.quantity = A.quantity + B.quantity
-                D.q.1 = A.q.1 + B.q.1;
-                D.a.1 = A.a.1;
-                D.t.1 = A.t.1;
-            } else {
+            // Enforce that at least one of is_move and is_merge must be true.
+            // It is okay that this is not constant-time because the proof will fail to build anyway.
+            if bool::from(!is_move & !is_merge) {
                 // Misconfigured prover error
                 return Err(R1CSError::InvalidR1CSConstruction);
             }
+
+            // If is_move is true, then we perform a "move" operation, so D.quantity = B.quantity
+            // Else, we perform a "merge" operation, so D.quantity = A.quantity + B.quantity
+            D.q.1 = ConditionallySelectable::conditional_select(&(A.q.1 + B.q.1), &D.q.1, is_move);
+            D.a.1 = ConditionallySelectable::conditional_select(&A.a.1, &D.a.1, is_move);
+            D.t.1 = ConditionallySelectable::conditional_select(&A.t.1, &D.t.1, is_move);
+
             // make new variables for D
             let (D_q_var, _) = cs.assign_uncommitted(D.q.1, Assignment::zero())?;
             let (D_a_var, D_t_var) = cs.assign_uncommitted(D.a.1, D.t.1)?;
@@ -466,7 +470,7 @@ impl PadGadget {
 mod tests {
     use super::*;
     use bulletproofs::circuit_proof::{prover, verifier};
-    use bulletproofs::{Generators, PedersenGenerators, Transcript};
+    use bulletproofs::{BulletproofGens, PedersenGens, Transcript};
 
     #[test]
     fn shuffle_gadget() {
@@ -501,7 +505,8 @@ mod tests {
 
     fn shuffle_helper(input: Vec<u64>, output: Vec<u64>) -> Result<(), R1CSError> {
         // Common
-        let gens = Generators::new(PedersenGenerators::default(), 128, 1);
+        let pc_gens = PedersenGens::default();
+        let bp_gens = BulletproofGens::new(128, 1);
 
         // Prover's scope
         let (proof, commitments) = {
@@ -510,8 +515,13 @@ mod tests {
             let v = vec![];
             let v_blinding = vec![];
             let mut prover_transcript = Transcript::new(b"ShuffleTest");
-            let (mut prover_cs, _variables, commitments) =
-                prover::ProverCS::new(&mut prover_transcript, &gens, v, v_blinding.clone());
+            let (mut prover_cs, _variables, commitments) = prover::ProverCS::new(
+                &bp_gens,
+                &pc_gens,
+                &mut prover_transcript,
+                v,
+                v_blinding.clone(),
+            );
 
             // Prover allocates variables and adds constraints to the constraint system
             let in_assignments = input
@@ -531,7 +541,7 @@ mod tests {
         // Verifier makes a `ConstraintSystem` instance representing a shuffle gadget
         let mut verifier_transcript = Transcript::new(b"ShuffleTest");
         let (mut verifier_cs, _variables) =
-            verifier::VerifierCS::new(&mut verifier_transcript, &gens, commitments);
+            verifier::VerifierCS::new(&bp_gens, &pc_gens, &mut verifier_transcript, commitments);
 
         // Verifier allocates variables and adds constraints to the constraint system
         let in_assignments = input.iter().map(|_| Assignment::Missing()).collect();
@@ -661,7 +671,8 @@ mod tests {
         output: Vec<(u64, u64, u64)>,
     ) -> Result<(), R1CSError> {
         // Common
-        let gens = Generators::new(PedersenGenerators::default(), 128, 1);
+        let pc_gens = PedersenGens::default();
+        let bp_gens = BulletproofGens::new(128, 1);
 
         // Prover's scope
         let (proof, commitments) = {
@@ -670,8 +681,13 @@ mod tests {
             let v = vec![];
             let v_blinding = vec![];
             let mut prover_transcript = Transcript::new(b"ValueShuffleTest");
-            let (mut prover_cs, _variables, commitments) =
-                prover::ProverCS::new(&mut prover_transcript, &gens, v, v_blinding.clone());
+            let (mut prover_cs, _variables, commitments) = prover::ProverCS::new(
+                &bp_gens,
+                &pc_gens,
+                &mut prover_transcript,
+                v,
+                v_blinding.clone(),
+            );
 
             // Prover allocates variables and adds constraints to the constraint system
             let in_assignments = input
@@ -701,7 +717,7 @@ mod tests {
         // Verifier makes a `ConstraintSystem` instance representing a shuffle gadget
         let mut verifier_transcript = Transcript::new(b"ValueShuffleTest");
         let (mut verifier_cs, _variables) =
-            verifier::VerifierCS::new(&mut verifier_transcript, &gens, commitments);
+            verifier::VerifierCS::new(&bp_gens, &pc_gens, &mut verifier_transcript, commitments);
 
         // Verifier allocates variables and adds constraints to the constraint system
         let in_assignments = input
@@ -847,7 +863,8 @@ mod tests {
         D: (u64, u64, u64),
     ) -> Result<(), R1CSError> {
         // Common
-        let gens = Generators::new(PedersenGenerators::default(), 128, 1);
+        let pc_gens = PedersenGens::default();
+        let bp_gens = BulletproofGens::new(128, 1);
 
         // Prover's scope
         let (proof, commitments) = {
@@ -856,8 +873,13 @@ mod tests {
             let v = vec![];
             let v_blinding = vec![];
             let mut prover_transcript = Transcript::new(b"MixTest");
-            let (mut prover_cs, _variables, commitments) =
-                prover::ProverCS::new(&mut prover_transcript, &gens, v, v_blinding.clone());
+            let (mut prover_cs, _variables, commitments) = prover::ProverCS::new(
+                &bp_gens,
+                &pc_gens,
+                &mut prover_transcript,
+                v,
+                v_blinding.clone(),
+            );
 
             // Prover allocates variables and adds constraints to the constraint system
             let (A_q, B_q) =
@@ -902,7 +924,7 @@ mod tests {
         // Verifier makes a `ConstraintSystem` instance representing a merge gadget
         let mut verifier_transcript = Transcript::new(b"MixTest");
         let (mut verifier_cs, _variables) =
-            verifier::VerifierCS::new(&mut verifier_transcript, &gens, commitments);
+            verifier::VerifierCS::new(&bp_gens, &pc_gens, &mut verifier_transcript, commitments);
         // Verifier allocates variables and adds constraints to the constraint system
         let (A_q, B_q) =
             verifier_cs.assign_uncommitted(Assignment::Missing(), Assignment::Missing())?;
@@ -1088,7 +1110,8 @@ mod tests {
         outputs: Vec<(u64, u64, u64)>,
     ) -> Result<(), R1CSError> {
         // Common
-        let gens = Generators::new(PedersenGenerators::default(), 128, 1);
+        let pc_gens = PedersenGens::default();
+        let bp_gens = BulletproofGens::new(128, 1);
         let k = inputs.len();
 
         // Prover's scope
@@ -1098,8 +1121,13 @@ mod tests {
             let v = vec![];
             let v_blinding = vec![];
             let mut prover_transcript = Transcript::new(b"KMixTest");
-            let (mut prover_cs, _variables, commitments) =
-                prover::ProverCS::new(&mut prover_transcript, &gens, v, v_blinding.clone());
+            let (mut prover_cs, _variables, commitments) = prover::ProverCS::new(
+                &bp_gens,
+                &pc_gens,
+                &mut prover_transcript,
+                v,
+                v_blinding.clone(),
+            );
 
             // Prover allocates variables and adds constraints to the constraint system
             let mut input_vals = Vec::with_capacity(k);
@@ -1139,7 +1167,7 @@ mod tests {
         // Verifier makes a `ConstraintSystem` instance representing a merge gadget
         let mut verifier_transcript = Transcript::new(b"KMixTest");
         let (mut verifier_cs, _variables) =
-            verifier::VerifierCS::new(&mut verifier_transcript, &gens, commitments);
+            verifier::VerifierCS::new(&bp_gens, &pc_gens, &mut verifier_transcript, commitments);
 
         // Verifier allocates variables and adds constraints to the constraint system
         let mut input_vals = Vec::with_capacity(k);
@@ -1188,7 +1216,8 @@ mod tests {
 
     fn range_proof_helper(v_val: u64, n: usize) -> Result<(), R1CSError> {
         // Common
-        let gens = Generators::new(PedersenGenerators::default(), 128, 1);
+        let pc_gens = PedersenGens::default();
+        let bp_gens = BulletproofGens::new(128, 1);
 
         // Prover's scope
         let (proof, commitments) = {
@@ -1197,8 +1226,13 @@ mod tests {
             let v = vec![];
             let v_blinding = vec![];
             let mut prover_transcript = Transcript::new(b"RangeProofTest");
-            let (mut prover_cs, _variables, commitments) =
-                prover::ProverCS::new(&mut prover_transcript, &gens, v, v_blinding.clone());
+            let (mut prover_cs, _variables, commitments) = prover::ProverCS::new(
+                &bp_gens,
+                &pc_gens,
+                &mut prover_transcript,
+                v,
+                v_blinding.clone(),
+            );
 
             // Prover allocates variables and adds constraints to the constraint system
             let (v_var, _) =
@@ -1214,7 +1248,7 @@ mod tests {
         // Verifier makes a `ConstraintSystem` instance representing a merge gadget
         let mut verifier_transcript = Transcript::new(b"RangeProofTest");
         let (mut verifier_cs, _variables) =
-            verifier::VerifierCS::new(&mut verifier_transcript, &gens, commitments);
+            verifier::VerifierCS::new(&bp_gens, &pc_gens, &mut verifier_transcript, commitments);
 
         // Verifier allocates variables and adds constraints to the constraint system
         let (v_var, _) =
@@ -1238,7 +1272,8 @@ mod tests {
 
     fn pad_helper(vals: Vec<u64>) -> Result<(), R1CSError> {
         // Common
-        let gens = Generators::new(PedersenGenerators::default(), 128, 1);
+        let pc_gens = PedersenGens::default();
+        let bp_gens = BulletproofGens::new(128, 1);
         let k = vals.len();
 
         // Prover's scope
@@ -1248,8 +1283,13 @@ mod tests {
             let v = vec![];
             let v_blinding = vec![];
             let mut prover_transcript = Transcript::new(b"PadTest");
-            let (mut prover_cs, _variables, commitments) =
-                prover::ProverCS::new(&mut prover_transcript, &gens, v, v_blinding.clone());
+            let (mut prover_cs, _variables, commitments) = prover::ProverCS::new(
+                &bp_gens,
+                &pc_gens,
+                &mut prover_transcript,
+                v,
+                v_blinding.clone(),
+            );
 
             // Prover allocates variables and adds constraints to the constraint system
             let mut vars = Vec::with_capacity(k);
@@ -1277,7 +1317,7 @@ mod tests {
         // Verifier makes a `ConstraintSystem` instance representing a merge gadget
         let mut verifier_transcript = Transcript::new(b"PadTest");
         let (mut verifier_cs, _variables) =
-            verifier::VerifierCS::new(&mut verifier_transcript, &gens, commitments);
+            verifier::VerifierCS::new(&bp_gens, &pc_gens, &mut verifier_transcript, commitments);
 
         // Verifier allocates variables and adds constraints to the constraint system
         let mut vars = Vec::with_capacity(k);
