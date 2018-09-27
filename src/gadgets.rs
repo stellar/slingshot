@@ -405,26 +405,25 @@ impl RangeProofGadget {
         let one = Scalar::one();
         let one_var = Variable::One();
 
-        let (is_assigned, v_val) = match v.1 {
-            Assignment::Value(v_val) => (true, v_val),
-            Assignment::Missing() => (false, one),
-        };
-
-        // Create low-level variables and add them to constraints
         let mut constraint = vec![(v.0, -one)];
         let mut exp_2 = Scalar::one();
         for i in 0..n {
-            let mut a_i = Assignment::Missing();
-            let mut b_i = Assignment::Missing();
-            let mut c_i = Assignment::Missing();
-            if is_assigned {
-                // b_i_val = ith bit of v_val
-                let b_i_val = (v_val[i / 8] >> (i % 8)) & 1;
-                b_i = Assignment::from(b_i_val as u64);
-                a_i = Assignment::from(1 - b_i_val as u64);
-                c_i = Assignment::zero();
-            }
-            let (a_i_var, b_i_var, out_var) = cs.assign_multiplier(a_i, b_i, c_i)?;
+            // Create low-level variables and add them to constraints
+            let (a_i_var, b_i_var, out_var) = match v.1 {
+                Assignment::Value(v_val) => {
+                    let bit = (v_val[i / 8] >> (i % 8)) & 1;
+                    cs.assign_multiplier(
+                        Assignment::from(1 - bit as u64),
+                        Assignment::from(bit as u64),
+                        Assignment::zero(),
+                    )?
+                }
+                Assignment::Missing() => cs.assign_multiplier(
+                    Assignment::Missing(),
+                    Assignment::Missing(),
+                    Assignment::Missing(),
+                )?,
+            };
 
             // Enforce a_i * b_i = 0
             cs.add_constraint([(out_var, one)].iter().collect());
