@@ -285,7 +285,7 @@ impl MixGadget {
                 .collect(),
         );
         // mul_out   = 0
-        cs.add_constraint([(mul_out, -one)].iter().collect());
+        cs.add_constraint([(mul_out, one)].iter().collect());
 
         Ok(())
     }
@@ -387,41 +387,44 @@ impl RangeProofGadget {
         v: (Variable, Assignment),
         n: usize,
     ) -> Result<(), R1CSError> {
+        let one = Scalar::one();
+        let one_var = Variable::One();
+
+        let (is_assigned, v_val) = match v.1 {
+            Assignment::Value(v_val) => (true, v_val),
+            Assignment::Missing() => (false, one),
+        };
+
         // Create low-level variables and add them to constraints
-        let mut constraint = vec![(v.0, -Scalar::one())];
-        match v.1 {
-            Assignment::Value(v_val) => {
-                let mut exp_2 = Scalar::one();
-                for i in 0..n {
-                    // b_i = ith bit of v_val
-                    let b_i = (v_val[i / 8] >> (i % 8)) & 1;
-                    let a_i = 1 - b_i;
-
-                    // Enforce a_i * b_i = 0
-                    let (_, b_i_var, _) = cs.assign_multiplier(
-                        Assignment::from(a_i as u64),
-                        Assignment::from(b_i as u64),
-                        Assignment::zero(),
-                    )?;
-
-                    constraint.push((b_i_var, exp_2));
-                    exp_2 = exp_2 + exp_2;
-                }
+        let mut constraint = vec![(v.0, -one)];
+        let mut exp_2 = Scalar::one();
+        for i in 0..n {
+            let mut a_i = Assignment::Missing();
+            let mut b_i = Assignment::Missing();
+            let mut c_i = Assignment::Missing();
+            if is_assigned {
+                // b_i_val = ith bit of v_val
+                let b_i_val = (v_val[i / 8] >> (i % 8)) & 1;
+                b_i = Assignment::from(b_i_val as u64);
+                a_i = Assignment::from(1 - b_i_val as u64);
+                c_i = Assignment::zero();
             }
-            Assignment::Missing() => {
-                let mut exp_2 = Scalar::one();
-                for _ in 0..n {
-                    let (_, b_i_var, _) = cs.assign_multiplier(
-                        Assignment::Missing(),
-                        Assignment::Missing(),
-                        Assignment::Missing(),
-                    )?;
+            let (a_i_var, b_i_var, out_var) = cs.assign_multiplier(a_i, b_i, c_i)?;
 
-                    constraint.push((b_i_var, exp_2));
-                    exp_2 = exp_2 + exp_2;
-                }
-            }
+            // Enforce a_i * b_i = 0
+            cs.add_constraint([(out_var, one)].iter().collect());
+
+            // Enforce that a_i = 1 - b_i
+            cs.add_constraint(
+                [(a_i_var, one), (b_i_var, one), (one_var, -one)]
+                    .iter()
+                    .collect(),
+            );
+
+            constraint.push((b_i_var, exp_2));
+            exp_2 = exp_2 + exp_2;
         }
+
         // Enforce that v = Sum(b_i * 2^i, i = 0..n-1)
         cs.add_constraint(constraint.iter().collect());
 
