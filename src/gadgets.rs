@@ -324,20 +324,21 @@ impl KMixGadget {
         let mut A = inputs[0].clone();
         let mut B = inputs[1].clone();
         let mut C = outputs[0].clone();
-        let mut D = B.clone(); // assumes "move", will be overwritten if "merge".
 
         for i in 0..inputs.len() - 2 {
-            // Update assignment for D.quantity
+            let mut D = B.clone(); // placeholder; will be overwritten
+
+            // Update assignments for D
             // Check that A and C have the same assignments for all fields (q, a, t)
             let is_move = A.q.1.ct_eq(&C.q.1) & A.a.1.ct_eq(&C.a.1) & A.t.1.ct_eq(&C.t.1);
-            // Check that A and B have the same time (a and t are the same) and that C.q = 0
+            // Check that A and B have the same type (a and t are the same) and that C.q = 0
             let is_merge =
                 A.a.1.ct_eq(&B.a.1) & A.t.1.ct_eq(&B.t.1) & C.q.1.ct_eq(&Assignment::zero());
 
-            // Enforce that at least one of is_move and is_merge must be true.
+            // Enforce that at least one of is_move and is_merge must be true. If not, error.
             // It is okay that this is not constant-time because the proof will fail to build anyway.
             if bool::from(!is_move & !is_merge) {
-                // Misconfigured prover error
+                // Misconfigured prover constraint system error
                 return Err(R1CSError::InvalidR1CSConstruction);
             }
 
@@ -347,7 +348,7 @@ impl KMixGadget {
             D.a.1 = ConditionallySelectable::conditional_select(&A.a.1, &D.a.1, is_move);
             D.t.1 = ConditionallySelectable::conditional_select(&A.t.1, &D.t.1, is_move);
 
-            // make new variables for D
+            // Update variable assignments for D by making new variables
             let (D_q_var, _) = cs.assign_uncommitted(D.q.1, Assignment::zero())?;
             let (D_a_var, D_t_var) = cs.assign_uncommitted(D.a.1, D.t.1)?;
             D.q.0 = D_q_var;
@@ -359,10 +360,9 @@ impl KMixGadget {
             A = D;
             B = inputs[i + 2].clone();
             C = outputs[i + 1].clone();
-            D = B.clone();
         }
 
-        D = outputs[outputs.len() - 1].clone();
+        let D = outputs[outputs.len() - 1].clone();
         MixGadget::fill_cs(cs, A, B, C, D)
     }
 }
