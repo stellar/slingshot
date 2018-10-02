@@ -502,8 +502,8 @@ mod tests {
         assert!(shuffle_helper(vec![3, 6, 10, 15, 17], vec![3, 6, 10, 15, 3]).is_err());
     }
 
-    // This test allocates variables for the high-level variables, to test that high-level
-    // variable allocation and commitment works. 
+    // This test allocates variables for the high-level variables, to check that high-level
+    // variable allocation and commitment works.
     fn shuffle_helper(input: Vec<u64>, output: Vec<u64>) -> Result<(), R1CSError> {
         // Common
         let pc_gens = PedersenGens::default();
@@ -539,7 +539,7 @@ mod tests {
                 use rand::thread_rng;
                 builder.finalize(&mut thread_rng())
             };
-            let v_blinding: Vec<Scalar> = (0..2*k).map(|_| Scalar::random(&mut rng)).collect();
+            let v_blinding: Vec<Scalar> = (0..2 * k).map(|_| Scalar::random(&mut rng)).collect();
 
             let (mut prover_cs, variables, commitments) = prover::ProverCS::new(
                 &bp_gens,
@@ -550,11 +550,13 @@ mod tests {
             );
 
             // Prover allocates variables and adds constraints to the constraint system
-            let in_pairs = variables[0..k].iter()
+            let in_pairs = variables[0..k]
+                .iter()
                 .zip(input.iter())
                 .map(|(var_i, in_i)| (*var_i, Assignment::from(in_i.clone())))
                 .collect();
-            let out_pairs = variables[k..2*k].iter()
+            let out_pairs = variables[k..2 * k]
+                .iter()
                 .zip(output.iter())
                 .map(|(var_i, out_i)| (*var_i, Assignment::from(out_i.clone())))
                 .collect();
@@ -571,8 +573,14 @@ mod tests {
             verifier::VerifierCS::new(&bp_gens, &pc_gens, &mut verifier_transcript, commitments);
 
         // Verifier allocates variables and adds constraints to the constraint system
-        let in_pairs = variables[0..k].iter().map(|var_i| (*var_i, Assignment::Missing())).collect();
-        let out_pairs = variables[k..2*k].iter().map(|var_i| (*var_i, Assignment::Missing())).collect();
+        let in_pairs = variables[0..k]
+            .iter()
+            .map(|var_i| (*var_i, Assignment::Missing()))
+            .collect();
+        let out_pairs = variables[k..2 * k]
+            .iter()
+            .map(|var_i| (*var_i, Assignment::Missing()))
+            .collect();
         assert!(KShuffleGadget::fill_cs(&mut verifier_cs, in_pairs, out_pairs).is_ok());
 
         // Verifier verifies proof
