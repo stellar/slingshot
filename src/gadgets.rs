@@ -502,19 +502,46 @@ mod tests {
         assert!(shuffle_helper(vec![3, 6, 10, 15, 17], vec![3, 6, 10, 15, 3]).is_err());
     }
 
+    // This test allocates variables for the high-level variables, to test that high-level
+    // variable allocation and commitment works. 
     fn shuffle_helper(input: Vec<u64>, output: Vec<u64>) -> Result<(), R1CSError> {
         // Common
         let pc_gens = PedersenGens::default();
         let bp_gens = BulletproofGens::new(128, 1);
 
+        let k = input.len();
+        if k != output.len() {
+            return Err(R1CSError::InvalidR1CSConstruction);
+        }
+
         // Prover's scope
         let (proof, commitments) = {
             // Prover makes a `ConstraintSystem` instance representing a shuffle gadget
-            // v and v_blinding empty because we are only testing low-level variable constraints
-            let v = vec![];
-            let v_blinding = vec![];
+            // Make v vector
+            let mut v = vec![];
+            for i in 0..k {
+                v.push(Scalar::from(input[i]));
+            }
+            for i in 0..k {
+                v.push(Scalar::from(output[i]));
+            }
+
+            // Make v_blinding vector using RNG from transcript
             let mut prover_transcript = Transcript::new(b"ShuffleTest");
-            let (mut prover_cs, _variables, commitments) = prover::ProverCS::new(
+            let mut rng = {
+                let mut builder = prover_transcript.build_rng();
+
+                // commit the secret values
+                for &v_i in &v {
+                    builder = builder.commit_witness_bytes(b"v_i", v_i.as_bytes());
+                }
+
+                use rand::thread_rng;
+                builder.finalize(&mut thread_rng())
+            };
+            let v_blinding: Vec<Scalar> = (0..2*k).map(|_| Scalar::random(&mut rng)).collect();
+
+            let (mut prover_cs, variables, commitments) = prover::ProverCS::new(
                 &bp_gens,
                 &pc_gens,
                 &mut prover_transcript,
@@ -523,15 +550,16 @@ mod tests {
             );
 
             // Prover allocates variables and adds constraints to the constraint system
-            let in_assignments = input
-                .iter()
-                .map(|in_i| Assignment::from(in_i.clone()))
+            let in_pairs = variables[0..k].iter()
+                .zip(input.iter())
+                .map(|(var_i, in_i)| (*var_i, Assignment::from(in_i.clone())))
                 .collect();
-            let out_assignments = output
-                .iter()
-                .map(|out_i| Assignment::from(out_i.clone()))
+            let out_pairs = variables[k..2*k].iter()
+                .zip(output.iter())
+                .map(|(var_i, out_i)| (*var_i, Assignment::from(out_i.clone())))
                 .collect();
-            shuffle_cs(&mut prover_cs, in_assignments, out_assignments)?;
+
+            KShuffleGadget::fill_cs(&mut prover_cs, in_pairs, out_pairs);
             let proof = prover_cs.prove()?;
 
             (proof, commitments)
@@ -539,51 +567,16 @@ mod tests {
 
         // Verifier makes a `ConstraintSystem` instance representing a shuffle gadget
         let mut verifier_transcript = Transcript::new(b"ShuffleTest");
-        let (mut verifier_cs, _variables) =
+        let (mut verifier_cs, variables) =
             verifier::VerifierCS::new(&bp_gens, &pc_gens, &mut verifier_transcript, commitments);
 
         // Verifier allocates variables and adds constraints to the constraint system
-        let in_assignments = input.iter().map(|_| Assignment::Missing()).collect();
-        let out_assignments = output.iter().map(|_| Assignment::Missing()).collect();
-        assert!(shuffle_cs(&mut verifier_cs, in_assignments, out_assignments,).is_ok());
+        let in_pairs = variables[0..k].iter().map(|var_i| (*var_i, Assignment::Missing())).collect();
+        let out_pairs = variables[k..2*k].iter().map(|var_i| (*var_i, Assignment::Missing())).collect();
+        assert!(KShuffleGadget::fill_cs(&mut verifier_cs, in_pairs, out_pairs).is_ok());
+
         // Verifier verifies proof
         Ok(verifier_cs.verify(&proof)?)
-    }
-
-    fn shuffle_cs<CS: ConstraintSystem>(
-        cs: &mut CS,
-        input: Vec<Assignment>,
-        output: Vec<Assignment>,
-    ) -> Result<(), R1CSError> {
-        if input.len() != output.len() {
-            return Err(R1CSError::InvalidR1CSConstruction);
-        }
-        let k = input.len();
-        let mut in_pairs = Vec::with_capacity(k);
-        let mut out_pairs = Vec::with_capacity(k);
-
-        // Allocate pairs of low-level variables and their assignments
-        for i in 0..k / 2 {
-            let idx_l = i * 2;
-            let idx_r = idx_l + 1;
-            let (in_var_left, in_var_right) = cs.assign_uncommitted(input[idx_l], input[idx_r])?;
-            in_pairs.push((in_var_left, input[idx_l]));
-            in_pairs.push((in_var_right, input[idx_r]));
-
-            let (out_var_left, out_var_right) =
-                cs.assign_uncommitted(output[idx_l], output[idx_r])?;
-            out_pairs.push((out_var_left, output[idx_l]));
-            out_pairs.push((out_var_right, output[idx_r]));
-        }
-        if k % 2 == 1 {
-            let idx = k - 1;
-            let (in_var_left, _) = cs.assign_uncommitted(input[idx], Assignment::zero())?;
-            in_pairs.push((in_var_left, input[idx]));
-            let (out_var_left, _) = cs.assign_uncommitted(output[idx], Assignment::zero())?;
-            out_pairs.push((out_var_left, output[idx]));
-        }
-
-        KShuffleGadget::fill_cs(cs, in_pairs, out_pairs)
     }
 
     #[test]
