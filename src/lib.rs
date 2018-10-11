@@ -4,6 +4,9 @@ extern crate merlin;
 extern crate rand;
 extern crate subtle;
 
+#[macro_use]
+extern crate failure;
+
 mod gadgets;
 mod transaction;
 mod util;

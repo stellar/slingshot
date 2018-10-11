@@ -1,11 +1,13 @@
 #![allow(non_snake_case)]
 
-use bulletproofs::circuit_proof::assignment::Assignment;
-use bulletproofs::circuit_proof::{ConstraintSystem, Variable};
-use bulletproofs::R1CSError;
+use bulletproofs::r1cs::{Assignment, ConstraintSystem, R1CSError, Variable};
 use curve25519_dalek::scalar::Scalar;
 use subtle::{ConditionallySelectable, ConstantTimeEq};
 use util::Value;
+
+// TODO: gadgets are currently returning R1CSError errors when they fail to build. 
+// They should create custom errors that implement "from R1CSError", and return those instead.
+// In the meantime, they will return R1CSError::MissingAssignment as a placeholder.
 
 struct KShuffleGadget {}
 
@@ -14,13 +16,13 @@ impl KShuffleGadget {
         cs: &mut CS,
         x: Vec<(Variable, Assignment)>,
         y: Vec<(Variable, Assignment)>,
-    ) -> Result<(), R1CSError> {
+    ) -> Result<(), ShuffleError> {
         let one = Scalar::one();
         let z = cs.challenge_scalar(b"k-shuffle challenge");
         let neg_z = -z;
 
         if x.len() != y.len() {
-            return Err(R1CSError::InvalidR1CSConstruction);
+            return Err(ShuffleError::InvalidR1CSConstruction);
         }
         let k = x.len();
         if k == 1 {
@@ -150,11 +152,11 @@ impl KValueShuffleGadget {
         cs: &mut CS,
         x: Vec<Value>,
         y: Vec<Value>,
-    ) -> Result<(), R1CSError> {
+    ) -> Result<(), ShuffleError> {
         let one = Scalar::one();
 
         if x.len() != y.len() {
-            return Err(R1CSError::InvalidR1CSConstruction);
+            return Err(ShuffleError::InvalidR1CSConstruction);
         }
         let k = x.len();
         if k == 1 {
@@ -199,6 +201,31 @@ impl KValueShuffleGadget {
     }
 }
 
+
+/// Represents an error during the proof creation of verification for a KShuffle or KValueShuffle gadget.
+#[derive(Fail, Copy, Clone, Debug, Eq, PartialEq)]
+pub enum ShuffleError {
+    /// Error in the constraint system creation process
+    #[fail(display = "Invalid KShuffle constraint system construction")]
+    InvalidR1CSConstruction,
+    /// Occurs when there are insufficient generators for the proof.
+    #[fail(display = "Invalid generators size, too few generators for proof")]
+    InvalidGeneratorsLength,
+    /// Occurs when verification of an [`R1CSProof`](::r1cs::R1CSProof) fails.
+    #[fail(display = "R1CSProof did not verify correctly.")]
+    VerificationError,
+}
+
+impl From<R1CSError> for ShuffleError {
+    fn from(e: R1CSError) -> ShuffleError {
+        match e {
+            R1CSError::InvalidGeneratorsLength => ShuffleError::InvalidGeneratorsLength,
+            R1CSError::MissingAssignment => ShuffleError::InvalidR1CSConstruction,
+            R1CSError::VerificationError => ShuffleError::VerificationError,
+        }
+    }
+}
+
 struct MixGadget {}
 
 impl MixGadget {
@@ -233,7 +260,7 @@ impl MixGadget {
                 + (D.a.1 - A.a.1) * w4
                 + (D.t.1 - A.t.1) * w5,
             // out gate to multiplier
-            Assignment::zero(),
+            Scalar::zero().into(),
         )?;
         // mul_left  = (A.q - C.q) +
         //             (A.a - C.a) * w +
@@ -333,13 +360,13 @@ impl KMixGadget {
             let is_move = A.q.1.ct_eq(&C.q.1) & A.a.1.ct_eq(&C.a.1) & A.t.1.ct_eq(&C.t.1);
             // Check that A and B have the same type (a and t are the same) and that C.q = 0
             let is_merge =
-                A.a.1.ct_eq(&B.a.1) & A.t.1.ct_eq(&B.t.1) & C.q.1.ct_eq(&Assignment::zero());
+                A.a.1.ct_eq(&B.a.1) & A.t.1.ct_eq(&B.t.1) & C.q.1.ct_eq(&Scalar::zero().into());
 
             // Enforce that at least one of is_move and is_merge must be true. If not, error.
             // It is okay that this is not constant-time because the proof will fail to build anyway.
             if bool::from(!is_move & !is_merge) {
                 // Misconfigured prover constraint system error
-                return Err(R1CSError::InvalidR1CSConstruction);
+                return Err(R1CSError::MissingAssignment);
             }
 
             // If is_move is true, then we perform a "move" operation, so D.quantity = B.quantity
@@ -349,7 +376,7 @@ impl KMixGadget {
             D.t.1 = ConditionallySelectable::conditional_select(&A.t.1, &D.t.1, is_move);
 
             // Update variable assignments for D by making new variables
-            let (D_q_var, _) = cs.assign_uncommitted(D.q.1, Assignment::zero())?;
+            let (D_q_var, _) = cs.assign_uncommitted(D.q.1, Scalar::zero().into())?;
             let (D_a_var, D_t_var) = cs.assign_uncommitted(D.a.1, D.t.1)?;
             D.q.0 = D_q_var;
             D.a.0 = D_a_var;
@@ -415,7 +442,7 @@ impl RangeProofGadget {
                     cs.assign_multiplier(
                         Assignment::from(1 - bit as u64),
                         Assignment::from(bit as u64),
-                        Assignment::zero(),
+                        Scalar::zero().into(),
                     )?
                 }
                 Assignment::Missing() => cs.assign_multiplier(
@@ -468,8 +495,9 @@ impl PadGadget {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use bulletproofs::circuit_proof::{prover, verifier};
-    use bulletproofs::{BulletproofGens, PedersenGens, Transcript};
+    use bulletproofs::r1cs::{ProverCS, VerifierCS};
+    use bulletproofs::{BulletproofGens, PedersenGens};
+    use merlin::Transcript;
 
     #[test]
     fn shuffle_gadget() {
@@ -504,14 +532,14 @@ mod tests {
 
     // This test allocates variables for the high-level variables, to check that high-level
     // variable allocation and commitment works.
-    fn shuffle_helper(input: Vec<u64>, output: Vec<u64>) -> Result<(), R1CSError> {
+    fn shuffle_helper(input: Vec<u64>, output: Vec<u64>) -> Result<(), ShuffleError> {
         // Common
         let pc_gens = PedersenGens::default();
         let bp_gens = BulletproofGens::new(128, 1);
 
         let k = input.len();
         if k != output.len() {
-            return Err(R1CSError::InvalidR1CSConstruction);
+            return Err(ShuffleError::InvalidR1CSConstruction);
         }
 
         // Prover's scope
@@ -541,7 +569,7 @@ mod tests {
             };
             let v_blinding: Vec<Scalar> = (0..2 * k).map(|_| Scalar::random(&mut rng)).collect();
 
-            let (mut prover_cs, variables, commitments) = prover::ProverCS::new(
+            let (mut prover_cs, variables, commitments) = ProverCS::new(
                 &bp_gens,
                 &pc_gens,
                 &mut prover_transcript,
@@ -561,7 +589,7 @@ mod tests {
                 .map(|(var_i, out_i)| (*var_i, Assignment::from(out_i.clone())))
                 .collect();
 
-            KShuffleGadget::fill_cs(&mut prover_cs, in_pairs, out_pairs);
+            KShuffleGadget::fill_cs(&mut prover_cs, in_pairs, out_pairs)?;
             let proof = prover_cs.prove()?;
 
             (proof, commitments)
@@ -570,7 +598,7 @@ mod tests {
         // Verifier makes a `ConstraintSystem` instance representing a shuffle gadget
         let mut verifier_transcript = Transcript::new(b"ShuffleTest");
         let (mut verifier_cs, variables) =
-            verifier::VerifierCS::new(&bp_gens, &pc_gens, &mut verifier_transcript, commitments);
+            VerifierCS::new(&bp_gens, &pc_gens, &mut verifier_transcript, commitments);
 
         // Verifier allocates variables and adds constraints to the constraint system
         let in_pairs = variables[0..k]
@@ -669,7 +697,7 @@ mod tests {
     fn value_shuffle_helper(
         input: Vec<(u64, u64, u64)>,
         output: Vec<(u64, u64, u64)>,
-    ) -> Result<(), R1CSError> {
+    ) -> Result<(), ShuffleError> {
         // Common
         let pc_gens = PedersenGens::default();
         let bp_gens = BulletproofGens::new(128, 1);
@@ -681,7 +709,7 @@ mod tests {
             let v = vec![];
             let v_blinding = vec![];
             let mut prover_transcript = Transcript::new(b"ValueShuffleTest");
-            let (mut prover_cs, _variables, commitments) = prover::ProverCS::new(
+            let (mut prover_cs, _variables, commitments) = ProverCS::new(
                 &bp_gens,
                 &pc_gens,
                 &mut prover_transcript,
@@ -717,7 +745,7 @@ mod tests {
         // Verifier makes a `ConstraintSystem` instance representing a shuffle gadget
         let mut verifier_transcript = Transcript::new(b"ValueShuffleTest");
         let (mut verifier_cs, _variables) =
-            verifier::VerifierCS::new(&bp_gens, &pc_gens, &mut verifier_transcript, commitments);
+            VerifierCS::new(&bp_gens, &pc_gens, &mut verifier_transcript, commitments);
 
         // Verifier allocates variables and adds constraints to the constraint system
         let in_assignments = input
@@ -747,9 +775,9 @@ mod tests {
         cs: &mut CS,
         input: Vec<(Assignment, Assignment, Assignment)>,
         output: Vec<(Assignment, Assignment, Assignment)>,
-    ) -> Result<(), R1CSError> {
+    ) -> Result<(), ShuffleError> {
         if input.len() != output.len() {
-            return Err(R1CSError::InvalidR1CSConstruction);
+            return Err(ShuffleError::InvalidR1CSConstruction);
         }
         let k = input.len();
         let mut in_vals = Vec::with_capacity(k);
@@ -815,7 +843,7 @@ mod tests {
             let v = vec![];
             let v_blinding = vec![];
             let mut prover_transcript = Transcript::new(b"MixTest");
-            let (mut prover_cs, _variables, commitments) = prover::ProverCS::new(
+            let (mut prover_cs, _variables, commitments) = ProverCS::new(
                 &bp_gens,
                 &pc_gens,
                 &mut prover_transcript,
@@ -866,7 +894,7 @@ mod tests {
         // Verifier makes a `ConstraintSystem` instance representing a merge gadget
         let mut verifier_transcript = Transcript::new(b"MixTest");
         let (mut verifier_cs, _variables) =
-            verifier::VerifierCS::new(&bp_gens, &pc_gens, &mut verifier_transcript, commitments);
+            VerifierCS::new(&bp_gens, &pc_gens, &mut verifier_transcript, commitments);
         // Verifier allocates variables and adds constraints to the constraint system
         let (A_q, B_q) =
             verifier_cs.assign_uncommitted(Assignment::Missing(), Assignment::Missing())?;
@@ -1031,7 +1059,7 @@ mod tests {
             let v = vec![];
             let v_blinding = vec![];
             let mut prover_transcript = Transcript::new(b"KMixTest");
-            let (mut prover_cs, _variables, commitments) = prover::ProverCS::new(
+            let (mut prover_cs, _variables, commitments) = ProverCS::new(
                 &bp_gens,
                 &pc_gens,
                 &mut prover_transcript,
@@ -1077,7 +1105,7 @@ mod tests {
         // Verifier makes a `ConstraintSystem` instance representing a merge gadget
         let mut verifier_transcript = Transcript::new(b"KMixTest");
         let (mut verifier_cs, _variables) =
-            verifier::VerifierCS::new(&bp_gens, &pc_gens, &mut verifier_transcript, commitments);
+            VerifierCS::new(&bp_gens, &pc_gens, &mut verifier_transcript, commitments);
 
         // Verifier allocates variables and adds constraints to the constraint system
         let mut input_vals = Vec::with_capacity(k);
@@ -1136,7 +1164,7 @@ mod tests {
             let v = vec![];
             let v_blinding = vec![];
             let mut prover_transcript = Transcript::new(b"RangeProofTest");
-            let (mut prover_cs, _variables, commitments) = prover::ProverCS::new(
+            let (mut prover_cs, _variables, commitments) = ProverCS::new(
                 &bp_gens,
                 &pc_gens,
                 &mut prover_transcript,
@@ -1146,7 +1174,7 @@ mod tests {
 
             // Prover allocates variables and adds constraints to the constraint system
             let (v_var, _) =
-                prover_cs.assign_uncommitted(Assignment::from(v_val), Assignment::zero())?;
+                prover_cs.assign_uncommitted(Assignment::from(v_val), Scalar::zero().into())?;
 
             RangeProofGadget::fill_cs(&mut prover_cs, (v_var, Assignment::from(v_val)), n)?;
 
@@ -1158,7 +1186,7 @@ mod tests {
         // Verifier makes a `ConstraintSystem` instance representing a merge gadget
         let mut verifier_transcript = Transcript::new(b"RangeProofTest");
         let (mut verifier_cs, _variables) =
-            verifier::VerifierCS::new(&bp_gens, &pc_gens, &mut verifier_transcript, commitments);
+            VerifierCS::new(&bp_gens, &pc_gens, &mut verifier_transcript, commitments);
 
         // Verifier allocates variables and adds constraints to the constraint system
         let (v_var, _) =
@@ -1193,7 +1221,7 @@ mod tests {
             let v = vec![];
             let v_blinding = vec![];
             let mut prover_transcript = Transcript::new(b"PadTest");
-            let (mut prover_cs, _variables, commitments) = prover::ProverCS::new(
+            let (mut prover_cs, _variables, commitments) = ProverCS::new(
                 &bp_gens,
                 &pc_gens,
                 &mut prover_transcript,
@@ -1212,7 +1240,7 @@ mod tests {
             if k % 2 == 1 {
                 let (var, _) = prover_cs.assign_uncommitted(
                     Assignment::from(vals[vals.len() - 1]),
-                    Assignment::zero(),
+                    Scalar::zero().into(),
                 )?;
                 vars.push(var);
             }
@@ -1227,7 +1255,7 @@ mod tests {
         // Verifier makes a `ConstraintSystem` instance representing a merge gadget
         let mut verifier_transcript = Transcript::new(b"PadTest");
         let (mut verifier_cs, _variables) =
-            verifier::VerifierCS::new(&bp_gens, &pc_gens, &mut verifier_transcript, commitments);
+            VerifierCS::new(&bp_gens, &pc_gens, &mut verifier_transcript, commitments);
 
         // Verifier allocates variables and adds constraints to the constraint system
         let mut vars = Vec::with_capacity(k);
@@ -1239,7 +1267,7 @@ mod tests {
         }
         if k % 2 == 1 {
             let (var, _) =
-                verifier_cs.assign_uncommitted(Assignment::Missing(), Assignment::zero())?;
+                verifier_cs.assign_uncommitted(Assignment::Missing(), Scalar::zero().into())?;
             vars.push(var);
         }
 

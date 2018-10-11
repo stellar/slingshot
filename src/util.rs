@@ -1,5 +1,4 @@
-use bulletproofs::circuit_proof::assignment::Assignment;
-use bulletproofs::circuit_proof::Variable;
+use bulletproofs::r1cs::{Assignment, Variable};
 
 #[derive(Clone, Debug)]
 pub struct Value {

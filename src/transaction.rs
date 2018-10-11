@@ -1,6 +1,5 @@
 // use gadgets::{KMergeGadget, KValueShuffleGadget, KSplitGadget, RangeProofGadget, PadGadget};
-use bulletproofs::circuit_proof::ConstraintSystem;
-use bulletproofs::R1CSError;
+use bulletproofs::r1cs::{ConstraintSystem, R1CSError};
 use util::Value;
 
 pub struct TransactionGadget {}

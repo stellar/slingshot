@@ -5,7 +5,8 @@ authors = ["Henry de Valence <hdevalence@hdevalence.ca>", "Cathie Yun <cathieyun
 
 [dependencies]
 bulletproofs = { git = "https://github.com/dalek-cryptography/bulletproofs", branch = "circuit" }
-curve25519-dalek = { version = "0.20", features = ["serde"] }
-merlin = "0.3"
+curve25519-dalek = { version = "0.21", features = ["serde"] }
+merlin = "0.4"
 rand = "0.5.0-pre.2"
 subtle = "1"
+failure = "0.1"
