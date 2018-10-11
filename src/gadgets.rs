@@ -1,13 +1,9 @@
 #![allow(non_snake_case)]
 
-use bulletproofs::r1cs::{Assignment, ConstraintSystem, R1CSError, Variable};
+use bulletproofs::r1cs::{Assignment, ConstraintSystem, Variable};
 use curve25519_dalek::scalar::Scalar;
 use subtle::{ConditionallySelectable, ConstantTimeEq};
-use util::Value;
-
-// TODO: gadgets are currently returning R1CSError errors when they fail to build. 
-// They should create custom errors that implement "from R1CSError", and return those instead.
-// In the meantime, they will return R1CSError::MissingAssignment as a placeholder.
+use util::{Value, SpacesuitError};
 
 struct KShuffleGadget {}
 
@@ -16,13 +12,13 @@ impl KShuffleGadget {
         cs: &mut CS,
         x: Vec<(Variable, Assignment)>,
         y: Vec<(Variable, Assignment)>,
-    ) -> Result<(), ShuffleError> {
+    ) -> Result<(), SpacesuitError> {
         let one = Scalar::one();
         let z = cs.challenge_scalar(b"k-shuffle challenge");
         let neg_z = -z;
 
         if x.len() != y.len() {
-            return Err(ShuffleError::InvalidR1CSConstruction);
+            return Err(SpacesuitError::InvalidR1CSConstruction);
         }
         let k = x.len();
         if k == 1 {
@@ -117,7 +113,7 @@ impl KShuffleGadget {
         left_var: Variable,
         right_var: Variable,
         is_last_mul: bool,
-    ) -> Result<Variable, R1CSError> {
+    ) -> Result<Variable, SpacesuitError> {
         let one = Scalar::one();
         let var_one = Variable::One();
 
@@ -152,11 +148,11 @@ impl KValueShuffleGadget {
         cs: &mut CS,
         x: Vec<Value>,
         y: Vec<Value>,
-    ) -> Result<(), ShuffleError> {
+    ) -> Result<(), SpacesuitError> {
         let one = Scalar::one();
 
         if x.len() != y.len() {
-            return Err(ShuffleError::InvalidR1CSConstruction);
+            return Err(SpacesuitError::InvalidR1CSConstruction);
         }
         let k = x.len();
         if k == 1 {
@@ -201,31 +197,6 @@ impl KValueShuffleGadget {
     }
 }
 
-
-/// Represents an error during the proof creation of verification for a KShuffle or KValueShuffle gadget.
-#[derive(Fail, Copy, Clone, Debug, Eq, PartialEq)]
-pub enum ShuffleError {
-    /// Error in the constraint system creation process
-    #[fail(display = "Invalid KShuffle constraint system construction")]
-    InvalidR1CSConstruction,
-    /// Occurs when there are insufficient generators for the proof.
-    #[fail(display = "Invalid generators size, too few generators for proof")]
-    InvalidGeneratorsLength,
-    /// Occurs when verification of an [`R1CSProof`](::r1cs::R1CSProof) fails.
-    #[fail(display = "R1CSProof did not verify correctly.")]
-    VerificationError,
-}
-
-impl From<R1CSError> for ShuffleError {
-    fn from(e: R1CSError) -> ShuffleError {
-        match e {
-            R1CSError::InvalidGeneratorsLength => ShuffleError::InvalidGeneratorsLength,
-            R1CSError::MissingAssignment => ShuffleError::InvalidR1CSConstruction,
-            R1CSError::VerificationError => ShuffleError::VerificationError,
-        }
-    }
-}
-
 struct MixGadget {}
 
 impl MixGadget {
@@ -235,7 +206,7 @@ impl MixGadget {
         B: Value,
         C: Value,
         D: Value,
-    ) -> Result<(), R1CSError> {
+    ) -> Result<(), SpacesuitError> {
         let one = Scalar::one();
         let w = cs.challenge_scalar(b"mix challenge");
         let w2 = w * w;
@@ -326,7 +297,7 @@ impl KMixGadget {
         cs: &mut CS,
         inputs: Vec<Value>,
         outputs: Vec<Value>,
-    ) -> Result<(), R1CSError> {
+    ) -> Result<(), SpacesuitError> {
         let one = Scalar::one();
 
         if inputs.len() == 1 {
@@ -366,7 +337,7 @@ impl KMixGadget {
             // It is okay that this is not constant-time because the proof will fail to build anyway.
             if bool::from(!is_move & !is_merge) {
                 // Misconfigured prover constraint system error
-                return Err(R1CSError::MissingAssignment);
+                return Err(SpacesuitError::InvalidR1CSConstruction);
             }
 
             // If is_move is true, then we perform a "move" operation, so D.quantity = B.quantity
@@ -401,7 +372,7 @@ impl KMergeGadget {
         cs: &mut CS,
         inputs: Vec<Value>,
         outputs: Vec<Value>,
-    ) -> Result<(), R1CSError> {
+    ) -> Result<(), SpacesuitError> {
         KMixGadget::fill_cs(cs, inputs, outputs)
     }
 }
@@ -413,7 +384,7 @@ impl KSplitGadget {
         cs: &mut CS,
         inputs: Vec<Value>,
         outputs: Vec<Value>,
-    ) -> Result<(), R1CSError> {
+    ) -> Result<(), SpacesuitError> {
         inputs.clone().reverse();
         outputs.clone().reverse();
         KMergeGadget::fill_cs(cs, outputs, inputs)
@@ -428,7 +399,7 @@ impl RangeProofGadget {
         cs: &mut CS,
         v: (Variable, Assignment),
         n: usize,
-    ) -> Result<(), R1CSError> {
+    ) -> Result<(), SpacesuitError> {
         let one = Scalar::one();
         let one_var = Variable::One();
 
@@ -480,7 +451,7 @@ impl PadGadget {
     pub fn fill_cs<CS: ConstraintSystem>(
         cs: &mut CS,
         vars: Vec<Variable>,
-    ) -> Result<(), R1CSError> {
+    ) -> Result<(), SpacesuitError> {
         for var in vars {
             cs.add_constraint(
                 [(var, Scalar::one()), (Variable::One(), Scalar::zero())]
@@ -532,14 +503,14 @@ mod tests {
 
     // This test allocates variables for the high-level variables, to check that high-level
     // variable allocation and commitment works.
-    fn shuffle_helper(input: Vec<u64>, output: Vec<u64>) -> Result<(), ShuffleError> {
+    fn shuffle_helper(input: Vec<u64>, output: Vec<u64>) -> Result<(), SpacesuitError> {
         // Common
         let pc_gens = PedersenGens::default();
         let bp_gens = BulletproofGens::new(128, 1);
 
         let k = input.len();
         if k != output.len() {
-            return Err(ShuffleError::InvalidR1CSConstruction);
+            return Err(SpacesuitError::InvalidR1CSConstruction);
         }
 
         // Prover's scope
@@ -697,7 +668,7 @@ mod tests {
     fn value_shuffle_helper(
         input: Vec<(u64, u64, u64)>,
         output: Vec<(u64, u64, u64)>,
-    ) -> Result<(), ShuffleError> {
+    ) -> Result<(), SpacesuitError> {
         // Common
         let pc_gens = PedersenGens::default();
         let bp_gens = BulletproofGens::new(128, 1);
@@ -775,9 +746,9 @@ mod tests {
         cs: &mut CS,
         input: Vec<(Assignment, Assignment, Assignment)>,
         output: Vec<(Assignment, Assignment, Assignment)>,
-    ) -> Result<(), ShuffleError> {
+    ) -> Result<(), SpacesuitError> {
         if input.len() != output.len() {
-            return Err(ShuffleError::InvalidR1CSConstruction);
+            return Err(SpacesuitError::InvalidR1CSConstruction);
         }
         let k = input.len();
         let mut in_vals = Vec::with_capacity(k);
@@ -831,7 +802,7 @@ mod tests {
         B: (u64, u64, u64),
         C: (u64, u64, u64),
         D: (u64, u64, u64),
-    ) -> Result<(), R1CSError> {
+    ) -> Result<(), SpacesuitError> {
         // Common
         let pc_gens = PedersenGens::default();
         let bp_gens = BulletproofGens::new(128, 1);
@@ -930,7 +901,7 @@ mod tests {
         };
         assert!(MixGadget::fill_cs(&mut verifier_cs, A, B, C, D).is_ok());
 
-        verifier_cs.verify(&proof)
+        Ok(verifier_cs.verify(&proof)?)
     }
 
     #[test]
@@ -1046,7 +1017,7 @@ mod tests {
     fn kmix_helper(
         inputs: Vec<(u64, u64, u64)>,
         outputs: Vec<(u64, u64, u64)>,
-    ) -> Result<(), R1CSError> {
+    ) -> Result<(), SpacesuitError> {
         // Common
         let pc_gens = PedersenGens::default();
         let bp_gens = BulletproofGens::new(128, 1);
@@ -1131,7 +1102,7 @@ mod tests {
 
         assert!(KMixGadget::fill_cs(&mut verifier_cs, input_vals, output_vals).is_ok());
 
-        verifier_cs.verify(&proof)
+        Ok(verifier_cs.verify(&proof)?)
     }
 
     #[test]
@@ -1152,7 +1123,7 @@ mod tests {
         }
     }
 
-    fn range_proof_helper(v_val: u64, n: usize) -> Result<(), R1CSError> {
+    fn range_proof_helper(v_val: u64, n: usize) -> Result<(), SpacesuitError> {
         // Common
         let pc_gens = PedersenGens::default();
         let bp_gens = BulletproofGens::new(128, 1);
@@ -1196,7 +1167,7 @@ mod tests {
             RangeProofGadget::fill_cs(&mut verifier_cs, (v_var, Assignment::Missing()), n).is_ok()
         );
 
-        verifier_cs.verify(&proof)
+        Ok(verifier_cs.verify(&proof)?)
     }
 
     #[test]
@@ -1208,7 +1179,7 @@ mod tests {
         assert!(pad_helper(vec![0, 2, 0, 0, 0]).is_err());
     }
 
-    fn pad_helper(vals: Vec<u64>) -> Result<(), R1CSError> {
+    fn pad_helper(vals: Vec<u64>) -> Result<(), SpacesuitError> {
         // Common
         let pc_gens = PedersenGens::default();
         let bp_gens = BulletproofGens::new(128, 1);
@@ -1273,6 +1244,6 @@ mod tests {
 
         assert!(PadGadget::fill_cs(&mut verifier_cs, vars).is_ok());
 
-        verifier_cs.verify(&proof)
+        Ok(verifier_cs.verify(&proof)?)
     }
 }
