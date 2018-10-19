@@ -20,7 +20,7 @@ pub fn fill_cs<CS: ConstraintSystem>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use bulletproofs::r1cs::{ProverCS, VerifierCS, Assignment};
+    use bulletproofs::r1cs::{Assignment, ProverCS, VerifierCS};
     use bulletproofs::{BulletproofGens, PedersenGens};
     use merlin::Transcript;
 

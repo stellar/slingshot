@@ -116,9 +116,7 @@ mod tests {
         let (v_var, _) =
             verifier_cs.assign_uncommitted(Assignment::Missing(), Assignment::Missing())?;
 
-        assert!(
-            fill_cs(&mut verifier_cs, (v_var, Assignment::Missing()), n).is_ok()
-        );
+        assert!(fill_cs(&mut verifier_cs, (v_var, Assignment::Missing()), n).is_ok());
 
         Ok(verifier_cs.verify(&proof)?)
     }
