@@ -28,7 +28,7 @@ pub fn fill_cs<CS: ConstraintSystem>(
     let mut mulx_right = x[k - 2].1 + neg_z;
     let mut mulx_out = mulx_left * mulx_right;
 
-    let mut mulx_out_var_prev = multiplier_helper(
+    let mut mulx_out_var_prev = last_multiplier(
         cs,
         neg_z,
         mulx_left,
@@ -36,7 +36,6 @@ pub fn fill_cs<CS: ConstraintSystem>(
         mulx_out,
         x[k - 1].0,
         x[k - 2].0,
-        true,
     )?;
 
     // Make multipliers for x from i == [0, k-3]
@@ -45,7 +44,7 @@ pub fn fill_cs<CS: ConstraintSystem>(
         mulx_right = x[i].1 + neg_z;
         mulx_out = mulx_left * mulx_right;
 
-        mulx_out_var_prev = multiplier_helper(
+        mulx_out_var_prev = intermediate_multiplier(
             cs,
             neg_z,
             mulx_left,
@@ -53,7 +52,6 @@ pub fn fill_cs<CS: ConstraintSystem>(
             mulx_out,
             mulx_out_var_prev,
             x[i].0,
-            false,
         )?;
     }
 
@@ -62,7 +60,7 @@ pub fn fill_cs<CS: ConstraintSystem>(
     let mut muly_right = y[k - 2].1 - z;
     let mut muly_out = muly_left * muly_right;
 
-    let mut muly_out_var_prev = multiplier_helper(
+    let mut muly_out_var_prev = last_multiplier(
         cs,
         neg_z,
         muly_left,
@@ -70,7 +68,6 @@ pub fn fill_cs<CS: ConstraintSystem>(
         muly_out,
         y[k - 1].0,
         y[k - 2].0,
-        true,
     )?;
 
     // Make multipliers for y from i == [0, k-3]
@@ -79,7 +76,7 @@ pub fn fill_cs<CS: ConstraintSystem>(
         muly_right = y[i].1 + neg_z;
         muly_out = muly_left * muly_right;
 
-        muly_out_var_prev = multiplier_helper(
+        muly_out_var_prev = intermediate_multiplier(
             cs,
             neg_z,
             muly_left,
@@ -87,7 +84,6 @@ pub fn fill_cs<CS: ConstraintSystem>(
             muly_out,
             muly_out_var_prev,
             y[i].0,
-            false,
         )?;
     }
 
@@ -101,7 +97,7 @@ pub fn fill_cs<CS: ConstraintSystem>(
     Ok(())
 }
 
-fn multiplier_helper<CS: ConstraintSystem>(
+fn last_multiplier<CS: ConstraintSystem>(
     cs: &mut CS,
     neg_z: Scalar,
     left: Assignment,
@@ -109,7 +105,6 @@ fn multiplier_helper<CS: ConstraintSystem>(
     out: Assignment,
     left_var: Variable,
     right_var: Variable,
-    is_last_mul: bool,
 ) -> Result<Variable, SpacesuitError> {
     let one = Scalar::one();
     let var_one = Variable::One();
@@ -117,17 +112,38 @@ fn multiplier_helper<CS: ConstraintSystem>(
     // Make multiplier gate variables
     let (left_mul_var, right_mul_var, out_mul_var) = cs.assign_multiplier(left, right, out)?;
 
-    if is_last_mul {
-        // Make last multiplier
-        cs.add_constraint(
-            [(left_mul_var, -one), (var_one, neg_z), (left_var, one)]
-                .iter()
-                .collect(),
-        );
-    } else {
-        // Make intermediate multiplier
-        cs.add_constraint([(left_mul_var, -one), (left_var, one)].iter().collect());
-    }
+    // Make multipliers
+    cs.add_constraint(
+        [(left_mul_var, -one), (var_one, neg_z), (left_var, one)]
+            .iter()
+            .collect(),
+    );
+    cs.add_constraint(
+        [(right_mul_var, -one), (var_one, neg_z), (right_var, one)]
+            .iter()
+            .collect(),
+    );
+
+    Ok(out_mul_var)
+}
+
+fn intermediate_multiplier<CS: ConstraintSystem>(
+    cs: &mut CS,
+    neg_z: Scalar,
+    left: Assignment,
+    right: Assignment,
+    out: Assignment,
+    left_var: Variable,
+    right_var: Variable,
+) -> Result<Variable, SpacesuitError> {
+    let one = Scalar::one();
+    let var_one = Variable::One();
+
+    // Make multiplier gate variables
+    let (left_mul_var, right_mul_var, out_mul_var) = cs.assign_multiplier(left, right, out)?;
+
+    // Make multipliers
+    cs.add_constraint([(left_mul_var, -one), (left_var, one)].iter().collect());
     cs.add_constraint(
         [(right_mul_var, -one), (var_one, neg_z), (right_var, one)]
             .iter()
