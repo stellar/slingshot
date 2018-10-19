@@ -2,6 +2,9 @@ use bulletproofs::r1cs::{Assignment, ConstraintSystem, Variable};
 use curve25519_dalek::scalar::Scalar;
 use util::SpacesuitError;
 
+/// Enforces that the output variables `y` are a valid reordering of the inputs variables `x`.
+/// The inputs and outputs are all tuples of the `Variable, Assignment`, where the `Assignment`
+/// can be either assigned as `Value::Scalar` or unassigned as `Missing`.
 pub fn fill_cs<CS: ConstraintSystem>(
     cs: &mut CS,
     x: Vec<(Variable, Assignment)>,

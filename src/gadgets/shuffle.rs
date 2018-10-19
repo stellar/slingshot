@@ -3,6 +3,9 @@ use bulletproofs::r1cs::ConstraintSystem;
 use curve25519_dalek::scalar::Scalar;
 use util::{SpacesuitError, Value};
 
+/// Enforces that the output values `y` are a valid reordering of the inputs values `x`.
+/// The inputs and outputs are all of the `Value` type, which contains the fields
+/// quantity, issuer, and tag. Works for `k` inputs and `k` outputs.
 pub fn fill_cs<CS: ConstraintSystem>(
     cs: &mut CS,
     x: Vec<Value>,
