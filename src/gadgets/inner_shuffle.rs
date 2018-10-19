@@ -24,24 +24,12 @@ pub fn fill_cs<CS: ConstraintSystem>(
     }
 
     // Make last x multiplier for i = k-1 and k-2
-    let mut mulx_left = x[k - 1].1 + neg_z;
-    let mut mulx_right = x[k - 2].1 + neg_z;
-    let mut mulx_out = mulx_left * mulx_right;
-
-    let mut mulx_out_var_prev = last_multiplier(
-        cs,
-        neg_z,
-        mulx_left,
-        mulx_right,
-        mulx_out,
-        x[k - 1].0,
-        x[k - 2].0,
-    )?;
+    let (mut mulx_out_var_prev, mut mulx_out) = last_multiplier(cs, neg_z, x[k - 1], x[k - 2])?;
 
     // Make multipliers for x from i == [0, k-3]
     for i in (0..k - 2).rev() {
-        mulx_left = mulx_out;
-        mulx_right = x[i].1 + neg_z;
+        let mulx_left = mulx_out;
+        let mulx_right = x[i].1 + neg_z;
         mulx_out = mulx_left * mulx_right;
 
         mulx_out_var_prev = intermediate_multiplier(
@@ -56,24 +44,12 @@ pub fn fill_cs<CS: ConstraintSystem>(
     }
 
     // Make last y multiplier for i = k-1 and k-2
-    let mut muly_left = y[k - 1].1 - z;
-    let mut muly_right = y[k - 2].1 - z;
-    let mut muly_out = muly_left * muly_right;
-
-    let mut muly_out_var_prev = last_multiplier(
-        cs,
-        neg_z,
-        muly_left,
-        muly_right,
-        muly_out,
-        y[k - 1].0,
-        y[k - 2].0,
-    )?;
+    let (mut muly_out_var_prev, mut muly_out) = last_multiplier(cs, neg_z, y[k - 1], y[k - 2])?;
 
     // Make multipliers for y from i == [0, k-3]
     for i in (0..k - 2).rev() {
-        muly_left = muly_out;
-        muly_right = y[i].1 + neg_z;
+        let muly_left = muly_out;
+        let muly_right = y[i].1 + neg_z;
         muly_out = muly_left * muly_right;
 
         muly_out_var_prev = intermediate_multiplier(
@@ -100,31 +76,33 @@ pub fn fill_cs<CS: ConstraintSystem>(
 fn last_multiplier<CS: ConstraintSystem>(
     cs: &mut CS,
     neg_z: Scalar,
-    left: Assignment,
-    right: Assignment,
-    out: Assignment,
-    left_var: Variable,
-    right_var: Variable,
-) -> Result<Variable, SpacesuitError> {
+    left: (Variable, Assignment),
+    right: (Variable, Assignment),
+) -> Result<(Variable, Assignment), SpacesuitError> {
+    let left_mul = left.1 + neg_z;
+    let right_mul = right.1 + neg_z;
+    let out_mul = left_mul * right_mul;
+
     let one = Scalar::one();
     let var_one = Variable::One();
 
     // Make multiplier gate variables
-    let (left_mul_var, right_mul_var, out_mul_var) = cs.assign_multiplier(left, right, out)?;
+    let (left_mul_var, right_mul_var, out_mul_var) =
+        cs.assign_multiplier(left_mul, right_mul, out_mul)?;
 
     // Make multipliers
     cs.add_constraint(
-        [(left_mul_var, -one), (var_one, neg_z), (left_var, one)]
+        [(left_mul_var, -one), (var_one, neg_z), (left.0, one)]
             .iter()
             .collect(),
     );
     cs.add_constraint(
-        [(right_mul_var, -one), (var_one, neg_z), (right_var, one)]
+        [(right_mul_var, -one), (var_one, neg_z), (right.0, one)]
             .iter()
             .collect(),
     );
 
-    Ok(out_mul_var)
+    Ok((out_mul_var, out_mul))
 }
 
 fn intermediate_multiplier<CS: ConstraintSystem>(
@@ -161,39 +139,39 @@ mod tests {
     use merlin::Transcript;
 
     #[test]
-    fn shuffle_gadget() {
+    fn inner_shuffle_gadget() {
         // k=1
-        assert!(shuffle_helper(vec![3], vec![3]).is_ok());
-        assert!(shuffle_helper(vec![6], vec![6]).is_ok());
-        assert!(shuffle_helper(vec![3], vec![6]).is_err());
+        assert!(inner_shuffle_helper(vec![3], vec![3]).is_ok());
+        assert!(inner_shuffle_helper(vec![6], vec![6]).is_ok());
+        assert!(inner_shuffle_helper(vec![3], vec![6]).is_err());
         // k=2
-        assert!(shuffle_helper(vec![3, 6], vec![3, 6]).is_ok());
-        assert!(shuffle_helper(vec![3, 6], vec![6, 3]).is_ok());
-        assert!(shuffle_helper(vec![6, 6], vec![6, 6]).is_ok());
-        assert!(shuffle_helper(vec![3, 3], vec![6, 3]).is_err());
+        assert!(inner_shuffle_helper(vec![3, 6], vec![3, 6]).is_ok());
+        assert!(inner_shuffle_helper(vec![3, 6], vec![6, 3]).is_ok());
+        assert!(inner_shuffle_helper(vec![6, 6], vec![6, 6]).is_ok());
+        assert!(inner_shuffle_helper(vec![3, 3], vec![6, 3]).is_err());
         // k=3
-        assert!(shuffle_helper(vec![3, 6, 10], vec![3, 6, 10]).is_ok());
-        assert!(shuffle_helper(vec![3, 6, 10], vec![3, 10, 6]).is_ok());
-        assert!(shuffle_helper(vec![3, 6, 10], vec![6, 3, 10]).is_ok());
-        assert!(shuffle_helper(vec![3, 6, 10], vec![6, 10, 3]).is_ok());
-        assert!(shuffle_helper(vec![3, 6, 10], vec![10, 3, 6]).is_ok());
-        assert!(shuffle_helper(vec![3, 6, 10], vec![10, 6, 3]).is_ok());
-        assert!(shuffle_helper(vec![3, 6, 10], vec![30, 6, 10]).is_err());
-        assert!(shuffle_helper(vec![3, 6, 10], vec![3, 60, 10]).is_err());
-        assert!(shuffle_helper(vec![3, 6, 10], vec![3, 6, 100]).is_err());
+        assert!(inner_shuffle_helper(vec![3, 6, 10], vec![3, 6, 10]).is_ok());
+        assert!(inner_shuffle_helper(vec![3, 6, 10], vec![3, 10, 6]).is_ok());
+        assert!(inner_shuffle_helper(vec![3, 6, 10], vec![6, 3, 10]).is_ok());
+        assert!(inner_shuffle_helper(vec![3, 6, 10], vec![6, 10, 3]).is_ok());
+        assert!(inner_shuffle_helper(vec![3, 6, 10], vec![10, 3, 6]).is_ok());
+        assert!(inner_shuffle_helper(vec![3, 6, 10], vec![10, 6, 3]).is_ok());
+        assert!(inner_shuffle_helper(vec![3, 6, 10], vec![30, 6, 10]).is_err());
+        assert!(inner_shuffle_helper(vec![3, 6, 10], vec![3, 60, 10]).is_err());
+        assert!(inner_shuffle_helper(vec![3, 6, 10], vec![3, 6, 100]).is_err());
         // k=4
-        assert!(shuffle_helper(vec![3, 6, 10, 15], vec![3, 6, 10, 15]).is_ok());
-        assert!(shuffle_helper(vec![3, 6, 10, 15], vec![15, 6, 10, 3]).is_ok());
-        assert!(shuffle_helper(vec![3, 6, 10, 15], vec![3, 6, 10, 3]).is_err());
+        assert!(inner_shuffle_helper(vec![3, 6, 10, 15], vec![3, 6, 10, 15]).is_ok());
+        assert!(inner_shuffle_helper(vec![3, 6, 10, 15], vec![15, 6, 10, 3]).is_ok());
+        assert!(inner_shuffle_helper(vec![3, 6, 10, 15], vec![3, 6, 10, 3]).is_err());
         // k=5
-        assert!(shuffle_helper(vec![3, 6, 10, 15, 17], vec![3, 6, 10, 15, 17]).is_ok());
-        assert!(shuffle_helper(vec![3, 6, 10, 15, 17], vec![10, 17, 3, 15, 6]).is_ok());
-        assert!(shuffle_helper(vec![3, 6, 10, 15, 17], vec![3, 6, 10, 15, 3]).is_err());
+        assert!(inner_shuffle_helper(vec![3, 6, 10, 15, 17], vec![3, 6, 10, 15, 17]).is_ok());
+        assert!(inner_shuffle_helper(vec![3, 6, 10, 15, 17], vec![10, 17, 3, 15, 6]).is_ok());
+        assert!(inner_shuffle_helper(vec![3, 6, 10, 15, 17], vec![3, 6, 10, 15, 3]).is_err());
     }
 
     // This test allocates variables for the high-level variables, to check that high-level
     // variable allocation and commitment works.
-    fn shuffle_helper(input: Vec<u64>, output: Vec<u64>) -> Result<(), SpacesuitError> {
+    fn inner_shuffle_helper(input: Vec<u64>, output: Vec<u64>) -> Result<(), SpacesuitError> {
         // Common
         let pc_gens = PedersenGens::default();
         let bp_gens = BulletproofGens::new(128, 1);
