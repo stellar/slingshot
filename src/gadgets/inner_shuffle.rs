@@ -1,4 +1,3 @@
-
 use bulletproofs::r1cs::{Assignment, ConstraintSystem, Variable};
 use curve25519_dalek::scalar::Scalar;
 use util::SpacesuitError;

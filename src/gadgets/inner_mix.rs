@@ -2,9 +2,9 @@
 
 use bulletproofs::r1cs::ConstraintSystem;
 use curve25519_dalek::scalar::Scalar;
-use util::{Value, SpacesuitError};
+use util::{SpacesuitError, Value};
 
-fn fill_cs<CS: ConstraintSystem>(
+pub fn fill_cs<CS: ConstraintSystem>(
     cs: &mut CS,
     A: Value,
     B: Value,
@@ -96,34 +96,34 @@ fn fill_cs<CS: ConstraintSystem>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use bulletproofs::r1cs::{ProverCS, VerifierCS, Assignment};
+    use bulletproofs::r1cs::{Assignment, ProverCS, VerifierCS};
     use bulletproofs::{BulletproofGens, PedersenGens};
     use merlin::Transcript;
 
     #[test]
-    fn mix_gadget() {
+    fn inner_mix_gadget() {
         let peso = 66;
         let yuan = 88;
 
         // no merge, same asset types
-        assert!(mix_helper((6, peso, 0), (6, peso, 0), (6, peso, 0), (6, peso, 0),).is_ok());
+        assert!(inner_mix_helper((6, peso, 0), (6, peso, 0), (6, peso, 0), (6, peso, 0),).is_ok());
         // no merge, different asset types
-        assert!(mix_helper((3, peso, 0), (6, yuan, 0), (3, peso, 0), (6, yuan, 0),).is_ok());
+        assert!(inner_mix_helper((3, peso, 0), (6, yuan, 0), (3, peso, 0), (6, yuan, 0),).is_ok());
         // merge, same asset types
-        assert!(mix_helper((3, peso, 0), (6, peso, 0), (0, peso, 0), (9, peso, 0),).is_ok());
+        assert!(inner_mix_helper((3, peso, 0), (6, peso, 0), (0, peso, 0), (9, peso, 0),).is_ok());
         // merge, zero value is different asset type
-        assert!(mix_helper((3, peso, 0), (6, peso, 0), (0, yuan, 0), (9, peso, 0),).is_ok());
+        assert!(inner_mix_helper((3, peso, 0), (6, peso, 0), (0, yuan, 0), (9, peso, 0),).is_ok());
         // error when merging different asset types
-        assert!(mix_helper((3, peso, 0), (3, yuan, 0), (0, peso, 0), (6, yuan, 0),).is_err());
+        assert!(inner_mix_helper((3, peso, 0), (3, yuan, 0), (0, peso, 0), (6, yuan, 0),).is_err());
         // error when not merging, but asset type changes
-        assert!(mix_helper((3, peso, 0), (3, yuan, 0), (3, peso, 0), (3, peso, 0),).is_err());
+        assert!(inner_mix_helper((3, peso, 0), (3, yuan, 0), (3, peso, 0), (3, peso, 0),).is_err());
         // error when creating more value (same asset types)
-        assert!(mix_helper((3, peso, 0), (3, peso, 0), (3, peso, 0), (6, peso, 0),).is_err());
+        assert!(inner_mix_helper((3, peso, 0), (3, peso, 0), (3, peso, 0), (6, peso, 0),).is_err());
         // error when creating more value (different asset types)
-        assert!(mix_helper((3, peso, 0), (3, yuan, 0), (3, peso, 0), (6, yuan, 0),).is_err());
+        assert!(inner_mix_helper((3, peso, 0), (3, yuan, 0), (3, peso, 0), (6, yuan, 0),).is_err());
     }
 
-    fn mix_helper(
+    fn inner_mix_helper(
         A: (u64, u64, u64),
         B: (u64, u64, u64),
         C: (u64, u64, u64),

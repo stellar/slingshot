@@ -1,4 +1,4 @@
-use bulletproofs::r1cs::{Assignment, Variable, R1CSError};
+use bulletproofs::r1cs::{Assignment, R1CSError, Variable};
 
 #[derive(Clone, Debug)]
 pub struct Value {

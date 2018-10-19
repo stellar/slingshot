@@ -1,10 +1,8 @@
-#![allow(non_snake_case)]
-
 use super::inner_shuffle;
-use bulletproofs::r1cs::{ConstraintSystem};
+use bulletproofs::r1cs::ConstraintSystem;
 use curve25519_dalek::scalar::Scalar;
-use util::{Value, SpacesuitError};
-    
+use util::{SpacesuitError, Value};
+
 pub fn fill_cs<CS: ConstraintSystem>(
     cs: &mut CS,
     x: Vec<Value>,
@@ -60,7 +58,7 @@ pub fn fill_cs<CS: ConstraintSystem>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use bulletproofs::r1cs::{ProverCS, VerifierCS, Assignment};
+    use bulletproofs::r1cs::{Assignment, ProverCS, VerifierCS};
     use bulletproofs::{BulletproofGens, PedersenGens};
     use merlin::Transcript;
 

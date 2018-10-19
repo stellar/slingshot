@@ -1,61 +1,54 @@
-#![allow(non_snake_case)]
-
 use bulletproofs::r1cs::{Assignment, ConstraintSystem, Variable};
 use curve25519_dalek::scalar::Scalar;
-use subtle::{ConditionallySelectable, ConstantTimeEq};
-use util::{Value, SpacesuitError};
+use util::SpacesuitError;
 
-pub struct RangeProofGadget {}
+// Enforce that the quantity of v is in the range [0, 2^n)
+pub fn fill_cs<CS: ConstraintSystem>(
+    cs: &mut CS,
+    v: (Variable, Assignment),
+    n: usize,
+) -> Result<(), SpacesuitError> {
+    let one = Scalar::one();
+    let one_var = Variable::One();
 
-impl RangeProofGadget {
-    // Enforce that the quantity of v is in the range [0, 2^n)
-    pub fn fill_cs<CS: ConstraintSystem>(
-        cs: &mut CS,
-        v: (Variable, Assignment),
-        n: usize,
-    ) -> Result<(), SpacesuitError> {
-        let one = Scalar::one();
-        let one_var = Variable::One();
+    let mut constraint = vec![(v.0, -one)];
+    let mut exp_2 = Scalar::one();
+    for i in 0..n {
+        // Create low-level variables and add them to constraints
+        let (a_i_var, b_i_var, out_var) = match v.1 {
+            Assignment::Value(v_val) => {
+                let bit = (v_val[i / 8] >> (i % 8)) & 1;
+                cs.assign_multiplier(
+                    Assignment::from(1 - bit as u64),
+                    Assignment::from(bit as u64),
+                    Scalar::zero().into(),
+                )?
+            }
+            Assignment::Missing() => cs.assign_multiplier(
+                Assignment::Missing(),
+                Assignment::Missing(),
+                Assignment::Missing(),
+            )?,
+        };
 
-        let mut constraint = vec![(v.0, -one)];
-        let mut exp_2 = Scalar::one();
-        for i in 0..n {
-            // Create low-level variables and add them to constraints
-            let (a_i_var, b_i_var, out_var) = match v.1 {
-                Assignment::Value(v_val) => {
-                    let bit = (v_val[i / 8] >> (i % 8)) & 1;
-                    cs.assign_multiplier(
-                        Assignment::from(1 - bit as u64),
-                        Assignment::from(bit as u64),
-                        Scalar::zero().into(),
-                    )?
-                }
-                Assignment::Missing() => cs.assign_multiplier(
-                    Assignment::Missing(),
-                    Assignment::Missing(),
-                    Assignment::Missing(),
-                )?,
-            };
+        // Enforce a_i * b_i = 0
+        cs.add_constraint([(out_var, one)].iter().collect());
 
-            // Enforce a_i * b_i = 0
-            cs.add_constraint([(out_var, one)].iter().collect());
+        // Enforce that a_i = 1 - b_i
+        cs.add_constraint(
+            [(a_i_var, one), (b_i_var, one), (one_var, -one)]
+                .iter()
+                .collect(),
+        );
 
-            // Enforce that a_i = 1 - b_i
-            cs.add_constraint(
-                [(a_i_var, one), (b_i_var, one), (one_var, -one)]
-                    .iter()
-                    .collect(),
-            );
-
-            constraint.push((b_i_var, exp_2));
-            exp_2 = exp_2 + exp_2;
-        }
-
-        // Enforce that v = Sum(b_i * 2^i, i = 0..n-1)
-        cs.add_constraint(constraint.iter().collect());
-
-        Ok(())
+        constraint.push((b_i_var, exp_2));
+        exp_2 = exp_2 + exp_2;
     }
+
+    // Enforce that v = Sum(b_i * 2^i, i = 0..n-1)
+    cs.add_constraint(constraint.iter().collect());
+
+    Ok(())
 }
 
 #[cfg(test)]
@@ -107,7 +100,7 @@ mod tests {
             let (v_var, _) =
                 prover_cs.assign_uncommitted(Assignment::from(v_val), Scalar::zero().into())?;
 
-            RangeProofGadget::fill_cs(&mut prover_cs, (v_var, Assignment::from(v_val)), n)?;
+            fill_cs(&mut prover_cs, (v_var, Assignment::from(v_val)), n)?;
 
             let proof = prover_cs.prove()?;
 
@@ -124,7 +117,7 @@ mod tests {
             verifier_cs.assign_uncommitted(Assignment::Missing(), Assignment::Missing())?;
 
         assert!(
-            RangeProofGadget::fill_cs(&mut verifier_cs, (v_var, Assignment::Missing()), n).is_ok()
+            fill_cs(&mut verifier_cs, (v_var, Assignment::Missing()), n).is_ok()
         );
 
         Ok(verifier_cs.verify(&proof)?)

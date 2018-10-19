@@ -1,33 +1,26 @@
-#![allow(non_snake_case)]
-
-use bulletproofs::r1cs::{Assignment, ConstraintSystem, Variable};
+use bulletproofs::r1cs::{ConstraintSystem, Variable};
 use curve25519_dalek::scalar::Scalar;
-use subtle::{ConditionallySelectable, ConstantTimeEq};
-use util::{Value, SpacesuitError};
+use util::SpacesuitError;
 
-pub struct PadGadget {}
-
-impl PadGadget {
-    // Enforces that all variables are equal to zero.
-    pub fn fill_cs<CS: ConstraintSystem>(
-        cs: &mut CS,
-        vars: Vec<Variable>,
-    ) -> Result<(), SpacesuitError> {
-        for var in vars {
-            cs.add_constraint(
-                [(var, Scalar::one()), (Variable::One(), Scalar::zero())]
-                    .iter()
-                    .collect(),
-            );
-        }
-        Ok(())
+// Enforces that all variables are equal to zero.
+pub fn fill_cs<CS: ConstraintSystem>(
+    cs: &mut CS,
+    vars: Vec<Variable>,
+) -> Result<(), SpacesuitError> {
+    for var in vars {
+        cs.add_constraint(
+            [(var, Scalar::one()), (Variable::One(), Scalar::zero())]
+                .iter()
+                .collect(),
+        );
     }
+    Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use bulletproofs::r1cs::{ProverCS, VerifierCS};
+    use bulletproofs::r1cs::{ProverCS, VerifierCS, Assignment};
     use bulletproofs::{BulletproofGens, PedersenGens};
     use merlin::Transcript;
 
@@ -77,7 +70,7 @@ mod tests {
                 vars.push(var);
             }
 
-            PadGadget::fill_cs(&mut prover_cs, vars)?;
+            fill_cs(&mut prover_cs, vars)?;
 
             let proof = prover_cs.prove()?;
 
@@ -103,7 +96,8 @@ mod tests {
             vars.push(var);
         }
 
-        assert!(PadGadget::fill_cs(&mut verifier_cs, vars).is_ok());
+        assert!(fill_cs(&mut verifier_cs, vars).is_ok());
 
         Ok(verifier_cs.verify(&proof)?)
     }
+}

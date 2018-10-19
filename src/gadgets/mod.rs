@@ -1,8 +1,9 @@
+pub mod merge;
 pub mod shuffle;
-mod inner_shuffle;
-// pub mod merge;
-// pub mod split;
-// mod mix;
+pub mod split;
+pub mod range_proof;
+pub mod pad;
+
 mod inner_mix;
-// pub mod range_proof;
-// pub mod pad;
+mod inner_shuffle;
+mod mix;
