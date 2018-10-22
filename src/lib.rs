@@ -1,10 +1,12 @@
-
 extern crate bulletproofs;
+extern crate curve25519_dalek;
+extern crate merlin;
+extern crate rand;
+extern crate subtle;
 
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn it_works() {
-        assert_eq!(2 + 2, 4);
-    }
-}
+#[macro_use]
+extern crate failure;
+
+mod gadgets;
+mod transaction;
+mod util;
