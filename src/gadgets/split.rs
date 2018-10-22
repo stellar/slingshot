@@ -1,4 +1,4 @@
-use super::mix;
+use super::k_mix;
 use bulletproofs::r1cs::ConstraintSystem;
 use util::{SpacesuitError, Value};
 
@@ -12,5 +12,5 @@ pub fn fill_cs<CS: ConstraintSystem>(
 ) -> Result<(), SpacesuitError> {
     inputs.clone().reverse();
     outputs.clone().reverse();
-    mix::fill_cs(cs, outputs, inputs)
+    k_mix::fill_cs(cs, outputs, inputs)
 }

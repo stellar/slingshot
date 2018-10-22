@@ -15,7 +15,7 @@ The Rust implementation of the Interstellar Cloak is called [Spacesuit](https://
     * [Tag](#tag)
     * [Gadget](#gadget)
     * [Transaction](#transaction)
-    * [K-shuffle](#k-shuffle)
+    * [K-scalar shuffle](#k-scalar-shuffle)
     * [K-value shuffle](#k-value-shuffle)
     * [Pad](#pad)
     * [Mix](#mix)
@@ -142,7 +142,7 @@ Prover provides M input commitments, N output commitments and a proof of the abo
 Verifier constructs the relation from the commitments and parameters M and N, and verifies the proof.
 If the verification is successful, the verifier is convinced in the [soundness](#soundness) of the transfer.
 
-### K-shuffle
+### K-scalar shuffle
 
 Represents a permutation of a list of `k` [scalars](#scalar) `{x_i}`
 into a list of `k` [scalars](#scalar) `{y_i}`.
@@ -155,7 +155,7 @@ the roots of the two polynomials in terms of `z` are the same up to a permutatio
 Prover can commit to blinded scalars `x_i` and `y_i`, then receive a random challenge `z`,
 and build a proof that the above relation holds.
 
-K-shuffle requires `2*(K-1)` multipliers.
+K-scalar shuffle requires `2*(K-1)` multipliers.
 
 For K > 1:
 
@@ -204,10 +204,10 @@ Each tuple of [scalars](#scalar) `(q, a, t)` is combined into a single scalar us
 
     x = q  + w*a  + w*w*t
 
-Then, the combined scalars are permuted using [K-shuffle](#k-shuffle) gadget. 
+Then, the combined scalars are permuted using [K-scalar shuffle](#k-scalar-shuffle) gadget. 
 
 If `w` is chosen unpredictably to a prover, any `x` scalar can be equal to a `y` scalar (computed in the same way)
-iff the their corresponding [quantities](#quantity) `q` and [flavors](#flavor) `(a,t)` are equal.
+iff their corresponding [quantities](#quantity) `q` and [flavors](#flavor) `(a,t)` are equal.
 
 Note: for K = 1, no compression is necessary as the input variables can be constrained to be equal
 to the output variables (or the same variables reused for adjacent gadgets).
@@ -283,7 +283,7 @@ and one multiplier for `OR` statement.
     --------------------------------------
     1 multiplier, 3 constraints
 
-When computing the proof the assignments of all input and output values are assumed to be known.
+When computing the proof, the assignments of all input and output values are assumed to be known.
 
 
 ### K-mix

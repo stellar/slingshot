@@ -1,4 +1,4 @@
-use super::inner_shuffle;
+use super::scalar_shuffle;
 use bulletproofs::r1cs::ConstraintSystem;
 use curve25519_dalek::scalar::Scalar;
 use util::{SpacesuitError, Value};
@@ -24,7 +24,7 @@ pub fn fill_cs<CS: ConstraintSystem>(
         return Ok(());
     }
 
-    let w = cs.challenge_scalar(b"k-value-shuffle challenge");
+    let w = cs.challenge_scalar(b"k-value shuffle challenge");
     let w2 = w * w;
     let mut x_pairs = Vec::with_capacity(k);
     let mut y_pairs = Vec::with_capacity(k);
@@ -55,7 +55,7 @@ pub fn fill_cs<CS: ConstraintSystem>(
         x_pairs.push((x_i_var, x_i));
         y_pairs.push((y_i_var, y_i));
     }
-    inner_shuffle::fill_cs(cs, x_pairs, y_pairs)
+    scalar_shuffle::fill_cs(cs, x_pairs, y_pairs)
 }
 
 #[cfg(test)]
