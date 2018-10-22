@@ -207,7 +207,7 @@ Each tuple of [scalars](#scalar) `(q, a, t)` is combined into a single scalar us
 Then, the combined scalars are permuted using [K-shuffle](#k-shuffle) gadget. 
 
 If `w` is chosen unpredictably to a prover, any `x` scalar can be equal to a `y` scalar (computed in the same way)
-iff the their corresponding [quantities](#quantity) `q` and [flavors](#flavor) `(a,t)` are equal.
+iff their corresponding [quantities](#quantity) `q` and [flavors](#flavor) `(a,t)` are equal.
 
 Note: for K = 1, no compression is necessary as the input variables can be constrained to be equal
 to the output variables (or the same variables reused for adjacent gadgets).
@@ -283,7 +283,7 @@ and one multiplier for `OR` statement.
     --------------------------------------
     1 multiplier, 3 constraints
 
-When computing the proof the assignments of all input and output values are assumed to be known.
+When computing the proof, the assignments of all input and output values are assumed to be known.
 
 
 ### K-mix
