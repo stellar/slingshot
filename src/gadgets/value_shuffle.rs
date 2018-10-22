@@ -1,4 +1,4 @@
-use super::k_shuffle;
+use super::scalar_shuffle;
 use bulletproofs::r1cs::ConstraintSystem;
 use curve25519_dalek::scalar::Scalar;
 use util::{SpacesuitError, Value};
@@ -24,7 +24,7 @@ pub fn fill_cs<CS: ConstraintSystem>(
         return Ok(());
     }
 
-    let w = cs.challenge_scalar(b"k-value-shuffle challenge");
+    let w = cs.challenge_scalar(b"k-value shuffle challenge");
     let w2 = w * w;
     let mut x_pairs = Vec::with_capacity(k);
     let mut y_pairs = Vec::with_capacity(k);
@@ -55,7 +55,7 @@ pub fn fill_cs<CS: ConstraintSystem>(
         x_pairs.push((x_i_var, x_i));
         y_pairs.push((y_i_var, y_i));
     }
-    k_shuffle::fill_cs(cs, x_pairs, y_pairs)
+    scalar_shuffle::fill_cs(cs, x_pairs, y_pairs)
 }
 
 #[cfg(test)]
@@ -66,85 +66,85 @@ mod tests {
     use merlin::Transcript;
 
     #[test]
-    fn k_value_shuffle() {
+    fn value_shuffle() {
         // k=1
-        assert!(k_value_shuffle_helper(vec![(1, 2, 3)], vec![(1, 2, 3)]).is_ok());
-        assert!(k_value_shuffle_helper(vec![(4, 5, 6)], vec![(4, 5, 6)]).is_ok());
-        assert!(k_value_shuffle_helper(vec![(1, 2, 3)], vec![(4, 5, 6)]).is_err());
+        assert!(value_shuffle_helper(vec![(1, 2, 3)], vec![(1, 2, 3)]).is_ok());
+        assert!(value_shuffle_helper(vec![(4, 5, 6)], vec![(4, 5, 6)]).is_ok());
+        assert!(value_shuffle_helper(vec![(1, 2, 3)], vec![(4, 5, 6)]).is_err());
         // k=2
         assert!(
-            k_value_shuffle_helper(vec![(1, 2, 3), (4, 5, 6)], vec![(1, 2, 3), (4, 5, 6)]).is_ok()
+            value_shuffle_helper(vec![(1, 2, 3), (4, 5, 6)], vec![(1, 2, 3), (4, 5, 6)]).is_ok()
         );
         assert!(
-            k_value_shuffle_helper(vec![(1, 2, 3), (4, 5, 6)], vec![(4, 5, 6), (1, 2, 3)]).is_ok()
+            value_shuffle_helper(vec![(1, 2, 3), (4, 5, 6)], vec![(4, 5, 6), (1, 2, 3)]).is_ok()
         );
         assert!(
-            k_value_shuffle_helper(vec![(4, 5, 6), (4, 5, 6)], vec![(4, 5, 6), (4, 5, 6)]).is_ok()
+            value_shuffle_helper(vec![(4, 5, 6), (4, 5, 6)], vec![(4, 5, 6), (4, 5, 6)]).is_ok()
         );
         assert!(
-            k_value_shuffle_helper(vec![(1, 2, 3), (1, 2, 3)], vec![(4, 5, 6), (1, 2, 3)]).is_err()
+            value_shuffle_helper(vec![(1, 2, 3), (1, 2, 3)], vec![(4, 5, 6), (1, 2, 3)]).is_err()
         );
         assert!(
-            k_value_shuffle_helper(vec![(1, 2, 3), (4, 5, 6)], vec![(1, 2, 3), (4, 5, 6)]).is_ok()
+            value_shuffle_helper(vec![(1, 2, 3), (4, 5, 6)], vec![(1, 2, 3), (4, 5, 6)]).is_ok()
         );
         // k=3
         assert!(
-            k_value_shuffle_helper(
+            value_shuffle_helper(
                 vec![(1, 2, 3), (4, 5, 6), (8, 9, 10)],
                 vec![(1, 2, 3), (4, 5, 6), (8, 9, 10)]
             ).is_ok()
         );
         assert!(
-            k_value_shuffle_helper(
+            value_shuffle_helper(
                 vec![(1, 2, 3), (4, 5, 6), (8, 9, 10)],
                 vec![(1, 2, 3), (8, 9, 10), (4, 5, 6)]
             ).is_ok()
         );
         assert!(
-            k_value_shuffle_helper(
+            value_shuffle_helper(
                 vec![(1, 2, 3), (4, 5, 6), (8, 9, 10)],
                 vec![(4, 5, 6), (1, 2, 3), (8, 9, 10)]
             ).is_ok()
         );
         assert!(
-            k_value_shuffle_helper(
+            value_shuffle_helper(
                 vec![(1, 2, 3), (4, 5, 6), (8, 9, 10)],
                 vec![(4, 5, 6), (8, 9, 10), (1, 2, 3)]
             ).is_ok()
         );
         assert!(
-            k_value_shuffle_helper(
+            value_shuffle_helper(
                 vec![(1, 2, 3), (4, 5, 6), (8, 9, 10)],
                 vec![(8, 9, 10), (1, 2, 3), (4, 5, 6)]
             ).is_ok()
         );
         assert!(
-            k_value_shuffle_helper(
+            value_shuffle_helper(
                 vec![(1, 2, 3), (4, 5, 6), (8, 9, 10)],
                 vec![(8, 9, 10), (4, 5, 6), (1, 2, 3)]
             ).is_ok()
         );
         assert!(
-            k_value_shuffle_helper(
+            value_shuffle_helper(
                 vec![(1, 2, 3), (4, 5, 6), (8, 9, 10)],
                 vec![(10, 20, 30), (4, 5, 6), (8, 9, 10)]
             ).is_err()
         );
         assert!(
-            k_value_shuffle_helper(
+            value_shuffle_helper(
                 vec![(1, 2, 3), (4, 5, 6), (8, 9, 10)],
                 vec![(1, 2, 3), (40, 50, 60), (8, 9, 10)]
             ).is_err()
         );
         assert!(
-            k_value_shuffle_helper(
+            value_shuffle_helper(
                 vec![(1, 2, 3), (4, 5, 6), (8, 9, 10)],
                 vec![(1, 2, 3), (4, 5, 6), (98, 99, 100)]
             ).is_err()
         );
     }
 
-    fn k_value_shuffle_helper(
+    fn value_shuffle_helper(
         input: Vec<(u64, u64, u64)>,
         output: Vec<(u64, u64, u64)>,
     ) -> Result<(), SpacesuitError> {
@@ -186,7 +186,7 @@ mod tests {
                         Assignment::from(out_i.2.clone()),
                     )
                 }).collect();
-            k_value_shuffle_cs(&mut prover_cs, in_assignments, out_assignments)?;
+            value_shuffle_cs(&mut prover_cs, in_assignments, out_assignments)?;
             let proof = prover_cs.prove()?;
 
             (proof, commitments)
@@ -216,12 +216,12 @@ mod tests {
                     Assignment::Missing(),
                 )
             }).collect();
-        assert!(k_value_shuffle_cs(&mut verifier_cs, in_assignments, out_assignments,).is_ok());
+        assert!(value_shuffle_cs(&mut verifier_cs, in_assignments, out_assignments,).is_ok());
         // Verifier verifies proof
         Ok(verifier_cs.verify(&proof)?)
     }
 
-    fn k_value_shuffle_cs<CS: ConstraintSystem>(
+    fn value_shuffle_cs<CS: ConstraintSystem>(
         cs: &mut CS,
         input: Vec<(Assignment, Assignment, Assignment)>,
         output: Vec<(Assignment, Assignment, Assignment)>,
