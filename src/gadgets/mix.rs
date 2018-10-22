@@ -209,11 +209,33 @@ mod tests {
         // Prover's scope
         let (proof, commitments) = {
             // Prover makes a `ConstraintSystem` instance representing a merge gadget
-            // v and v_blinding emptpy because we are only testing low-level variable constraints
-            let v = vec![];
-            let v_blinding = vec![];
+            // Make v vector
+            let mut v = Vec::with_capacity(6 * k);
+            for i in 0..k {
+                v.push(Scalar::from(inputs[i].0));
+                v.push(Scalar::from(inputs[i].1));
+                v.push(Scalar::from(inputs[i].2));
+                v.push(Scalar::from(outputs[i].0));
+                v.push(Scalar::from(outputs[i].1));
+                v.push(Scalar::from(outputs[i].2));
+            }
+
+            // Make v_blinding vector using RNG from transcript
             let mut prover_transcript = Transcript::new(b"KMixTest");
-            let (mut prover_cs, _variables, commitments) = ProverCS::new(
+            let mut rng = {
+                let mut builder = prover_transcript.build_rng();
+
+                // commit the secret values
+                for &v_i in &v {
+                    builder = builder.commit_witness_bytes(b"v_i", v_i.as_bytes());
+                }
+
+                use rand::thread_rng;
+                builder.finalize(&mut thread_rng())
+            };
+            let v_blinding: Vec<Scalar> = (0..6 * k).map(|_| Scalar::random(&mut rng)).collect();
+
+            let (mut prover_cs, variables, commitments) = ProverCS::new(
                 &bp_gens,
                 &pc_gens,
                 &mut prover_transcript,
@@ -221,22 +243,17 @@ mod tests {
                 v_blinding.clone(),
             );
 
-            // Prover allocates variables and adds constraints to the constraint system
+            // Prover adds constraints to the constraint system
             let mut input_vals = Vec::with_capacity(k);
             let mut output_vals = Vec::with_capacity(k);
             for i in 0..k {
-                let (in_q, out_q) = prover_cs.assign_uncommitted(
-                    Assignment::from(inputs[i].0),
-                    Assignment::from(outputs[i].0),
-                )?;
-                let (in_a, out_a) = prover_cs.assign_uncommitted(
-                    Assignment::from(inputs[i].1),
-                    Assignment::from(outputs[i].1),
-                )?;
-                let (in_t, out_t) = prover_cs.assign_uncommitted(
-                    Assignment::from(inputs[i].2),
-                    Assignment::from(outputs[i].2),
-                )?;
+                let in_q = variables[i * 6 + 0];
+                let in_a = variables[i * 6 + 1];
+                let in_t = variables[i * 6 + 2];
+                let out_q = variables[i * 6 + 3];
+                let out_a = variables[i * 6 + 4];
+                let out_t = variables[i * 6 + 5];
+
                 input_vals.push(Value {
                     q: (in_q, Assignment::from(inputs[i].0)),
                     a: (in_a, Assignment::from(inputs[i].1)),
@@ -248,7 +265,6 @@ mod tests {
                     t: (out_t, Assignment::from(outputs[i].2)),
                 });
             }
-
             fill_cs(&mut prover_cs, input_vals, output_vals)?;
 
             let proof = prover_cs.prove()?;
@@ -258,19 +274,20 @@ mod tests {
 
         // Verifier makes a `ConstraintSystem` instance representing a merge gadget
         let mut verifier_transcript = Transcript::new(b"KMixTest");
-        let (mut verifier_cs, _variables) =
+        let (mut verifier_cs, variables) =
             VerifierCS::new(&bp_gens, &pc_gens, &mut verifier_transcript, commitments);
 
         // Verifier allocates variables and adds constraints to the constraint system
         let mut input_vals = Vec::with_capacity(k);
         let mut output_vals = Vec::with_capacity(k);
-        for _ in 0..k {
-            let (in_q, out_q) =
-                verifier_cs.assign_uncommitted(Assignment::Missing(), Assignment::Missing())?;
-            let (in_a, out_a) =
-                verifier_cs.assign_uncommitted(Assignment::Missing(), Assignment::Missing())?;
-            let (in_t, out_t) =
-                verifier_cs.assign_uncommitted(Assignment::Missing(), Assignment::Missing())?;
+        for i in 0..k {
+            let in_q = variables[i * 6 + 0];
+            let in_a = variables[i * 6 + 1];
+            let in_t = variables[i * 6 + 2];
+            let out_q = variables[i * 6 + 3];
+            let out_a = variables[i * 6 + 4];
+            let out_t = variables[i * 6 + 5];
+
             input_vals.push(Value {
                 q: (in_q, Assignment::Missing()),
                 a: (in_a, Assignment::Missing()),
