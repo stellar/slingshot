@@ -24,23 +24,27 @@ pub fn fill_cs<CS: ConstraintSystem>(
     }
 
     // Make last x multiplier for i = k-1 and k-2
-    let mut mulx_out = last_multiplier(cs, neg_z, x[k - 1], x[k - 2])?;
+    let last_mulx_out = last_multiplier(cs, neg_z, x[k - 1], x[k - 2]);
 
     // Make multipliers for x from i == [0, k-3]
-    for i in (0..k - 2).rev() {
-        mulx_out = intermediate_multiplier(cs, neg_z, mulx_out, x[i])?;
-    }
+    let first_mulx_out = (0..k - 2).rev().fold(last_mulx_out, |prev_out, i| {
+        intermediate_multiplier(cs, neg_z, prev_out?, x[i])
+    })?;
 
     // Make last y multiplier for i = k-1 and k-2
-    let mut muly_out = last_multiplier(cs, neg_z, y[k - 1], y[k - 2])?;
+    let last_muly_out = last_multiplier(cs, neg_z, y[k - 1], y[k - 2]);
 
     // Make multipliers for y from i == [0, k-3]
-    for i in (0..k - 2).rev() {
-        muly_out = intermediate_multiplier(cs, neg_z, muly_out, y[i])?;
-    }
+    let first_muly_out = (0..k - 2).rev().fold(last_muly_out, |prev_out, i| {
+        intermediate_multiplier(cs, neg_z, prev_out?, y[i])
+    })?;
 
     // Check equality between last x mul output and last y mul output
-    cs.add_constraint([(muly_out.0, -one), (mulx_out.0, one)].iter().collect());
+    cs.add_constraint(
+        [(first_muly_out.0, -one), (first_mulx_out.0, one)]
+            .iter()
+            .collect(),
+    );
 
     Ok(())
 }
