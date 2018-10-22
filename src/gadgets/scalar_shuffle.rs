@@ -11,7 +11,7 @@ pub fn fill_cs<CS: ConstraintSystem>(
     y: Vec<(Variable, Assignment)>,
 ) -> Result<(), SpacesuitError> {
     let one = Scalar::one();
-    let z = cs.challenge_scalar(b"k-shuffle challenge");
+    let z = cs.challenge_scalar(b"k-scalar shuffle challenge");
     let neg_z = -z;
 
     if x.len() != y.len() {
@@ -117,39 +117,39 @@ mod tests {
     use merlin::Transcript;
 
     #[test]
-    fn k_shuffle_gadget() {
+    fn scalar_shuffle_gadget() {
         // k=1
-        assert!(k_shuffle_helper(vec![3], vec![3]).is_ok());
-        assert!(k_shuffle_helper(vec![6], vec![6]).is_ok());
-        assert!(k_shuffle_helper(vec![3], vec![6]).is_err());
+        assert!(scalar_shuffle_helper(vec![3], vec![3]).is_ok());
+        assert!(scalar_shuffle_helper(vec![6], vec![6]).is_ok());
+        assert!(scalar_shuffle_helper(vec![3], vec![6]).is_err());
         // k=2
-        assert!(k_shuffle_helper(vec![3, 6], vec![3, 6]).is_ok());
-        assert!(k_shuffle_helper(vec![3, 6], vec![6, 3]).is_ok());
-        assert!(k_shuffle_helper(vec![6, 6], vec![6, 6]).is_ok());
-        assert!(k_shuffle_helper(vec![3, 3], vec![6, 3]).is_err());
+        assert!(scalar_shuffle_helper(vec![3, 6], vec![3, 6]).is_ok());
+        assert!(scalar_shuffle_helper(vec![3, 6], vec![6, 3]).is_ok());
+        assert!(scalar_shuffle_helper(vec![6, 6], vec![6, 6]).is_ok());
+        assert!(scalar_shuffle_helper(vec![3, 3], vec![6, 3]).is_err());
         // k=3
-        assert!(k_shuffle_helper(vec![3, 6, 10], vec![3, 6, 10]).is_ok());
-        assert!(k_shuffle_helper(vec![3, 6, 10], vec![3, 10, 6]).is_ok());
-        assert!(k_shuffle_helper(vec![3, 6, 10], vec![6, 3, 10]).is_ok());
-        assert!(k_shuffle_helper(vec![3, 6, 10], vec![6, 10, 3]).is_ok());
-        assert!(k_shuffle_helper(vec![3, 6, 10], vec![10, 3, 6]).is_ok());
-        assert!(k_shuffle_helper(vec![3, 6, 10], vec![10, 6, 3]).is_ok());
-        assert!(k_shuffle_helper(vec![3, 6, 10], vec![30, 6, 10]).is_err());
-        assert!(k_shuffle_helper(vec![3, 6, 10], vec![3, 60, 10]).is_err());
-        assert!(k_shuffle_helper(vec![3, 6, 10], vec![3, 6, 100]).is_err());
+        assert!(scalar_shuffle_helper(vec![3, 6, 10], vec![3, 6, 10]).is_ok());
+        assert!(scalar_shuffle_helper(vec![3, 6, 10], vec![3, 10, 6]).is_ok());
+        assert!(scalar_shuffle_helper(vec![3, 6, 10], vec![6, 3, 10]).is_ok());
+        assert!(scalar_shuffle_helper(vec![3, 6, 10], vec![6, 10, 3]).is_ok());
+        assert!(scalar_shuffle_helper(vec![3, 6, 10], vec![10, 3, 6]).is_ok());
+        assert!(scalar_shuffle_helper(vec![3, 6, 10], vec![10, 6, 3]).is_ok());
+        assert!(scalar_shuffle_helper(vec![3, 6, 10], vec![30, 6, 10]).is_err());
+        assert!(scalar_shuffle_helper(vec![3, 6, 10], vec![3, 60, 10]).is_err());
+        assert!(scalar_shuffle_helper(vec![3, 6, 10], vec![3, 6, 100]).is_err());
         // k=4
-        assert!(k_shuffle_helper(vec![3, 6, 10, 15], vec![3, 6, 10, 15]).is_ok());
-        assert!(k_shuffle_helper(vec![3, 6, 10, 15], vec![15, 6, 10, 3]).is_ok());
-        assert!(k_shuffle_helper(vec![3, 6, 10, 15], vec![3, 6, 10, 3]).is_err());
+        assert!(scalar_shuffle_helper(vec![3, 6, 10, 15], vec![3, 6, 10, 15]).is_ok());
+        assert!(scalar_shuffle_helper(vec![3, 6, 10, 15], vec![15, 6, 10, 3]).is_ok());
+        assert!(scalar_shuffle_helper(vec![3, 6, 10, 15], vec![3, 6, 10, 3]).is_err());
         // k=5
-        assert!(k_shuffle_helper(vec![3, 6, 10, 15, 17], vec![3, 6, 10, 15, 17]).is_ok());
-        assert!(k_shuffle_helper(vec![3, 6, 10, 15, 17], vec![10, 17, 3, 15, 6]).is_ok());
-        assert!(k_shuffle_helper(vec![3, 6, 10, 15, 17], vec![3, 6, 10, 15, 3]).is_err());
+        assert!(scalar_shuffle_helper(vec![3, 6, 10, 15, 17], vec![3, 6, 10, 15, 17]).is_ok());
+        assert!(scalar_shuffle_helper(vec![3, 6, 10, 15, 17], vec![10, 17, 3, 15, 6]).is_ok());
+        assert!(scalar_shuffle_helper(vec![3, 6, 10, 15, 17], vec![3, 6, 10, 15, 3]).is_err());
     }
 
     // This test allocates variables for the high-level variables, to check that high-level
     // variable allocation and commitment works.
-    fn k_shuffle_helper(input: Vec<u64>, output: Vec<u64>) -> Result<(), SpacesuitError> {
+    fn scalar_shuffle_helper(input: Vec<u64>, output: Vec<u64>) -> Result<(), SpacesuitError> {
         // Common
         let pc_gens = PedersenGens::default();
         let bp_gens = BulletproofGens::new(128, 1);
