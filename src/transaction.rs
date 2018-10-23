@@ -1,33 +1,40 @@
 use bulletproofs::r1cs::{Assignment, ConstraintSystem, Variable};
 use curve25519_dalek::scalar::Scalar;
 use gadgets::{merge, pad, range_proof, split, value_shuffle};
+use subtle::ConstantTimeEq;
 use util::{SpacesuitError, Value};
 
 // Enforces that the outputs are a valid rearrangement of the inputs, following the
 // soundness and secrecy requirements in the spacesuit spec.
+// TODO: add padding for different input and output sizes. (currently assuming n = m)
 pub fn fill_cs<CS: ConstraintSystem>(
     cs: &mut CS,
     inputs: Vec<Value>,
     outputs: Vec<Value>,
 ) -> Result<(), SpacesuitError> {
+    let n = inputs.len();
+    let m = outputs.len();
+
     // Shuffle 1
     // Group the inputs by flavor.
+    let mut shuffle1_outputs = inputs.clone();
+    // shuffle1_outputs.sort_by(|cur, next| cur.a.1.ct_eq(&next.a.1)); // Choice -> Ordering conversion? seems wrong...
+
+    value_shuffle::fill_cs(cs, inputs, outputs)
 
     // Merge
     // Combine all the inputs of the same flavor. If different flavors, do not combine.
 
-    // Pad?
     // Shuffle 2
-    // Pad?
 
     // Split
     // Combine all the outputs of the same flavor. If different flavors, do not combine.
 
     // Shuffle 3
     // Group the outputs by flavor.
+    // let shuffle3_inputs = Vec::with_capacity(m);
 
     // Range Proof
-    unimplemented!();
 }
 
 #[cfg(test)]
