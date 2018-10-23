@@ -8,5 +8,5 @@ extern crate subtle;
 extern crate failure;
 
 mod gadgets;
-mod transaction;
+pub mod transaction;
 mod util;

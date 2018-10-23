@@ -252,5 +252,4 @@ mod tests {
 
         fill_cs(cs, in_vals, out_vals)
     }
-
 }
