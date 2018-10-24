@@ -75,43 +75,51 @@ pub fn make_commitments(
     let commitment_count = 2 * m + inner_merge_count + 2 * n + inner_split_count;
     let mut v = Vec::with_capacity(commitment_count);
 
+    // Input to transaction
     for i in 0..m {
         v.push(Scalar::from(inputs[i].0));
         v.push(Scalar::from(inputs[i].1));
         v.push(Scalar::from(inputs[i].2));
     }
     // dummy logic here
+    // Shuffle 1 output, input to merge
     for i in 0..m {
         v.push(Scalar::from(inputs[i].0));
         v.push(Scalar::from(inputs[i].1));
         v.push(Scalar::from(inputs[i].2));
     }
+    // Intermediate merge
     for i in 0..inner_merge_count {
         v.push(Scalar::from(inputs[i + 1].0));
         v.push(Scalar::from(inputs[i + 1].1));
         v.push(Scalar::from(inputs[i + 1].2));
     }
+    // Output to merge, input to shuffle 2
     for i in 0..m {
         v.push(Scalar::from(inputs[i].0));
         v.push(Scalar::from(inputs[i].1));
         v.push(Scalar::from(inputs[i].2));
     }
+    // Output to shuffle 2, input to split
     for i in 0..n {
         v.push(Scalar::from(inputs[i].0));
         v.push(Scalar::from(inputs[i].1));
         v.push(Scalar::from(inputs[i].2));
     }
+    // Intermediate split
     for i in 0..inner_split_count {
         v.push(Scalar::from(inputs[i + 1].0));
         v.push(Scalar::from(inputs[i + 1].1));
         v.push(Scalar::from(inputs[i + 1].2));
     }
+    // Output to split, input to shuffle 3
     for i in 0..n {
         v.push(Scalar::from(inputs[i].0));
         v.push(Scalar::from(inputs[i].1));
         v.push(Scalar::from(inputs[i].2));
     }
     // dummy logic ends
+    // Output of transaction
     for i in 0..n {
         v.push(Scalar::from(outputs[i].0));
         v.push(Scalar::from(outputs[i].1));
@@ -135,7 +143,7 @@ mod tests {
         assert!(transaction_helper(vec![(4, 5, 6)], vec![(4, 5, 6)]).is_ok());
         assert!(transaction_helper(vec![(1, 2, 3)], vec![(4, 5, 6)]).is_err());
 
-        // m=2, n=2, only shuffle
+        // m=2, n=2, only shuffle (all different flavors)
         assert!(transaction_helper(vec![(1, 2, 3), (4, 5, 6)], vec![(1, 2, 3), (4, 5, 6)]).is_ok());
         assert!(transaction_helper(vec![(1, 2, 3), (4, 5, 6)], vec![(4, 5, 6), (1, 2, 3)]).is_ok());
         assert!(transaction_helper(vec![(4, 5, 6), (4, 5, 6)], vec![(4, 5, 6), (4, 5, 6)]).is_ok());
@@ -143,6 +151,12 @@ mod tests {
             transaction_helper(vec![(1, 2, 3), (1, 2, 3)], vec![(4, 5, 6), (1, 2, 3)]).is_err()
         );
         assert!(transaction_helper(vec![(1, 2, 3), (4, 5, 6)], vec![(1, 2, 3), (4, 5, 6)]).is_ok());
+
+        // m=2, n=2, uses merge and split (has multiple inputs or outputs of same flavor)
+        // $5 + $3 = $5 + $3
+        assert!(transaction_helper(vec![(5, 9, 9), (3, 9, 9)], vec![(5, 9, 9), (3, 9, 9)]).is_ok());
+        // $5 + $3 = $1 + $7
+        assert!(transaction_helper(vec![(5, 9, 9), (3, 9, 9)], vec![(1, 9, 9), (7, 9, 9)]).is_ok());
 
         // m=3, n=3, only shuffle
         assert!(
