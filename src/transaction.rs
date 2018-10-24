@@ -59,7 +59,7 @@ pub fn fill_cs<CS: ConstraintSystem>(
 pub fn make_commitments(
     inputs: Vec<(u64, u64, u64)>,
     outputs: Vec<(u64, u64, u64)>,
-) -> (Vec<u64>, Vec<u64>, Vec<u64>, Vec<u64>, Vec<u64>, Vec<u64>) {
+) -> Vec<Scalar> {
     let m = inputs.len();
     let n = outputs.len();
     let commitment_count = 2 * m + (m - 2) + 2 * n + (n - 2);
@@ -104,7 +104,7 @@ mod tests {
         let (proof, commitments) = {
             // Prover makes a `ConstraintSystem` instance representing a transaction gadget
             // Make v vector
-            let v = transaction::make_commitments(inputs, outputs);
+            let v = make_commitments(inputs, outputs);
 
             // Make v_blinding vector using RNG from transcript
             let mut prover_transcript = Transcript::new(b"TransactionTest");
@@ -121,31 +121,20 @@ mod tests {
             };
             let v_blinding: Vec<Scalar> = (0..v.len()).map(|_| Scalar::random(&mut rng)).collect();
 
-            let (mut prover_cs, variables, commitments) =
-                ProverCS::new(&bp_gens, &pc_gens, &mut prover_transcript, v, v_blinding);
+            let (mut prover_cs, variables, commitments) = ProverCS::new(
+                &bp_gens,
+                &pc_gens,
+                &mut prover_transcript,
+                v.clone(),
+                v_blinding,
+            );
 
             // Prover adds constraints to the constraint system
-            let mut values = value_helper(variables, v);
-            let output_vals = values.split_off(n);
-            let split_out_vals = values.split_off(n);
-            let split_mid_vals = values.split_off(n - 2);
-            let split_in_vals = values.split_off(n);
-            let merge_out_vals = values.split_off(m);
-            let merge_mid_vals = values.split_off(m - 2);
-            let merge_in_vals = values.split_off(m);
-            let input_vals = values.split_off(m);
+            let v_assignments = v.iter().map(|v_i| Assignment::from(*v_i)).collect();
+            let (inp, m_i, m_m, m_o, s_i, s_m, s_o, out) =
+                value_helper(variables, v_assignments, m, n);
 
-            fill_cs(
-                &mut prover_cs,
-                input_vals,
-                merge_in_vals,
-                merge_mid_vals,
-                merge_out_vals,
-                split_in_vals,
-                split_mid_vals,
-                split_out_vals,
-                output_vals,
-            )?;
+            fill_cs(&mut prover_cs, inp, m_i, m_m, m_o, s_i, s_m, s_o, out)?;
 
             let proof = prover_cs.prove()?;
 
@@ -158,43 +147,48 @@ mod tests {
             VerifierCS::new(&bp_gens, &pc_gens, &mut verifier_transcript, commitments);
 
         // Verifier allocates variables and adds constraints to the constraint system
-        let mut input_vals = Vec::with_capacity(k);
-        let mut output_vals = Vec::with_capacity(k);
-        for i in 0..k {
-            let in_q = variables[i * 6 + 0];
-            let in_a = variables[i * 6 + 1];
-            let in_t = variables[i * 6 + 2];
-            let out_q = variables[i * 6 + 3];
-            let out_a = variables[i * 6 + 4];
-            let out_t = variables[i * 6 + 5];
+        let v_assignments = vec![Assignment::Missing(); variables.len()];
+        let (inp, m_i, m_m, m_o, s_i, s_m, s_o, out) = value_helper(variables, v_assignments, m, n);
 
-            input_vals.push(Value {
-                q: (in_q, Assignment::Missing()),
-                a: (in_a, Assignment::Missing()),
-                t: (in_t, Assignment::Missing()),
-            });
-            output_vals.push(Value {
-                q: (out_q, Assignment::Missing()),
-                a: (out_a, Assignment::Missing()),
-                t: (out_t, Assignment::Missing()),
-            });
-        }
-
-        assert!(fill_cs(&mut verifier_cs, input_vals, output_vals).is_ok());
+        assert!(fill_cs(&mut verifier_cs, inp, m_i, m_m, m_o, s_i, s_m, s_o, out).is_ok());
 
         Ok(verifier_cs.verify(&proof)?)
     }
 
-    fn value_helper(variables: Vec<Variable>, scalars: Vec<Scalar>) -> Vec<Value> {
-        let val_count = variables / 3;
-        let mut vals = Vec::with_capacity(val_count);
+    fn value_helper(
+        variables: Vec<Variable>,
+        assignments: Vec<Assignment>,
+        m: usize,
+        n: usize,
+    ) -> (
+        Vec<Value>,
+        Vec<Value>,
+        Vec<Value>,
+        Vec<Value>,
+        Vec<Value>,
+        Vec<Value>,
+        Vec<Value>,
+        Vec<Value>,
+    ) {
+        let val_count = variables.len() / 3;
+        let mut values = Vec::with_capacity(val_count);
         for i in 0..val_count {
-            vals.push(Value {
-                q: (variables[i * 3], Assignment::from(scalars[i * 3])),
-                a: (variables[i * 3 + 1], Assignment::from(scalars[i * 3 + 1])),
-                t: (variables[i * 3 + 2], Assignment::from(scalars[i * 3 + 2])),
+            values.push(Value {
+                q: (variables[i * 3], assignments[i * 3]),
+                a: (variables[i * 3 + 1], assignments[i * 3 + 1]),
+                t: (variables[i * 3 + 2], assignments[i * 3 + 2]),
             });
         }
-        vals
+
+        let out = values.split_off(n);
+        let s_o = values.split_off(n);
+        let s_m = values.split_off(n - 2);
+        let s_i = values.split_off(n);
+        let m_o = values.split_off(m);
+        let m_m = values.split_off(m - 2);
+        let m_i = values.split_off(m);
+        let inp = values.split_off(m);
+
+        (inp, m_i, m_m, m_o, s_i, s_m, s_o, out)
     }
 }
