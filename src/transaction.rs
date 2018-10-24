@@ -37,15 +37,20 @@ pub fn fill_cs<CS: ConstraintSystem>(
     // Group the inputs by flavor.
     // Choice -> Ordering conversion? seems wrong...
     // shuffle1_outputs.sort_by(|cur, next| cur.a.1.ct_eq(&next.a.1));
-    value_shuffle::fill_cs(cs, inputs, merge_in)?;
+    value_shuffle::fill_cs(cs, inputs, merge_in.clone())?;
 
     // Merge
     // Combine all the inputs of the same flavor. If different flavors, do not combine.
+    // TODO: use merge_mid
+    merge::fill_cs(cs, merge_in, merge_out.clone())?;
 
     // Shuffle 2
+    value_shuffle::fill_cs(cs, merge_out, split_in.clone())?;
 
     // Split
     // Combine all the outputs of the same flavor. If different flavors, do not combine.
+    // TODO: use split_mid
+    split::fill_cs(cs, split_in, split_out.clone())?;
 
     // Shuffle 3
     // Group the outputs by flavor.
@@ -81,11 +86,11 @@ pub fn make_commitments(
         v.push(Scalar::from(inputs[i].1));
         v.push(Scalar::from(inputs[i].2));
     }
-    // for i in 0..n-2 {
-    //     v.push(Scalar::from(inputs[i].0));
-    //     v.push(Scalar::from(inputs[i].1));
-    //     v.push(Scalar::from(inputs[i].2));
-    // }
+    for i in 0..n - 2 {
+        v.push(Scalar::from(inputs[i].0));
+        v.push(Scalar::from(inputs[i].1));
+        v.push(Scalar::from(inputs[i].2));
+    }
     for i in 0..m {
         v.push(Scalar::from(inputs[i].0));
         v.push(Scalar::from(inputs[i].1));
@@ -96,11 +101,11 @@ pub fn make_commitments(
         v.push(Scalar::from(inputs[i].1));
         v.push(Scalar::from(inputs[i].2));
     }
-    // for i in 0..m-2 {
-    //     v.push(Scalar::from(inputs[i].0));
-    //     v.push(Scalar::from(inputs[i].1));
-    //     v.push(Scalar::from(inputs[i].2));
-    // }
+    for i in 0..m - 2 {
+        v.push(Scalar::from(inputs[i].0));
+        v.push(Scalar::from(inputs[i].1));
+        v.push(Scalar::from(inputs[i].2));
+    }
     for i in 0..n {
         v.push(Scalar::from(inputs[i].0));
         v.push(Scalar::from(inputs[i].1));
@@ -125,7 +130,75 @@ mod tests {
 
     #[test]
     fn transaction() {
-        assert!(transaction_helper(vec![(1, 2, 3)], vec![(1, 2, 3)]).is_ok());
+        // m=1, n=1, only shuffle
+        // assert!(transaction_helper(vec![(1, 2, 3)], vec![(1, 2, 3)]).is_ok());
+        // assert!(transaction_helper(vec![(4, 5, 6)], vec![(4, 5, 6)]).is_ok());
+        // assert!(transaction_helper(vec![(1, 2, 3)], vec![(4, 5, 6)]).is_err());
+
+        // m=2, n=2, only shuffle
+        // assert!(transaction_helper(vec![(1, 2, 3), (4, 5, 6)], vec![(1, 2, 3), (4, 5, 6)]).is_ok());
+        // assert!(transaction_helper(vec![(1, 2, 3), (4, 5, 6)], vec![(4, 5, 6), (1, 2, 3)]).is_ok());
+        // assert!(transaction_helper(vec![(4, 5, 6), (4, 5, 6)], vec![(4, 5, 6), (4, 5, 6)]).is_ok());
+        // assert!(
+        //     transaction_helper(vec![(1, 2, 3), (1, 2, 3)], vec![(4, 5, 6), (1, 2, 3)]).is_err()
+        // );
+        // assert!(transaction_helper(vec![(1, 2, 3), (4, 5, 6)], vec![(1, 2, 3), (4, 5, 6)]).is_ok());
+
+        // m=3, n=3, only shuffle
+        assert!(
+            transaction_helper(
+                vec![(1, 2, 3), (4, 5, 6), (8, 9, 10)],
+                vec![(1, 2, 3), (4, 5, 6), (8, 9, 10)]
+            ).is_ok()
+        );
+        assert!(
+            transaction_helper(
+                vec![(1, 2, 3), (4, 5, 6), (8, 9, 10)],
+                vec![(1, 2, 3), (8, 9, 10), (4, 5, 6)]
+            ).is_ok()
+        );
+        assert!(
+            transaction_helper(
+                vec![(1, 2, 3), (4, 5, 6), (8, 9, 10)],
+                vec![(4, 5, 6), (1, 2, 3), (8, 9, 10)]
+            ).is_ok()
+        );
+        assert!(
+            transaction_helper(
+                vec![(1, 2, 3), (4, 5, 6), (8, 9, 10)],
+                vec![(4, 5, 6), (8, 9, 10), (1, 2, 3)]
+            ).is_ok()
+        );
+        assert!(
+            transaction_helper(
+                vec![(1, 2, 3), (4, 5, 6), (8, 9, 10)],
+                vec![(8, 9, 10), (1, 2, 3), (4, 5, 6)]
+            ).is_ok()
+        );
+        assert!(
+            transaction_helper(
+                vec![(1, 2, 3), (4, 5, 6), (8, 9, 10)],
+                vec![(8, 9, 10), (4, 5, 6), (1, 2, 3)]
+            ).is_ok()
+        );
+        assert!(
+            transaction_helper(
+                vec![(1, 2, 3), (4, 5, 6), (8, 9, 10)],
+                vec![(10, 20, 30), (4, 5, 6), (8, 9, 10)]
+            ).is_err()
+        );
+        assert!(
+            transaction_helper(
+                vec![(1, 2, 3), (4, 5, 6), (8, 9, 10)],
+                vec![(1, 2, 3), (40, 50, 60), (8, 9, 10)]
+            ).is_err()
+        );
+        assert!(
+            transaction_helper(
+                vec![(1, 2, 3), (4, 5, 6), (8, 9, 10)],
+                vec![(1, 2, 3), (4, 5, 6), (98, 99, 100)]
+            ).is_err()
+        );
     }
 
     fn transaction_helper(
@@ -134,7 +207,7 @@ mod tests {
     ) -> Result<(), SpacesuitError> {
         // Common
         let pc_gens = PedersenGens::default();
-        let bp_gens = BulletproofGens::new(128, 1);
+        let bp_gens = BulletproofGens::new(500, 1);
         let m = inputs.len();
         let n = outputs.len();
 
@@ -168,12 +241,10 @@ mod tests {
 
             // Prover adds constraints to the constraint system
             let v_assignments = v.iter().map(|v_i| Assignment::from(*v_i)).collect();
-            println!("got here");
             let (inp, m_i, m_m, m_o, s_i, s_m, s_o, out) =
                 value_helper(variables, v_assignments, m, n);
 
             fill_cs(&mut prover_cs, inp, m_i, m_m, m_o, s_i, s_m, s_o, out)?;
-
             let proof = prover_cs.prove()?;
 
             (proof, commitments)
@@ -211,9 +282,7 @@ mod tests {
         let inner_merge_count = max(m as isize - 2, 0) as usize;
         let inner_split_count = max(n as isize - 2, 0) as usize;
         let val_count = variables.len() / 3;
-        println!("val count: {:?}", val_count);
-        println!("m: {:?}", m);
-        println!("n: {:?}", n);
+
         let mut values = Vec::with_capacity(val_count);
         for i in 0..val_count {
             values.push(Value {
@@ -223,7 +292,7 @@ mod tests {
             });
         }
 
-        // surely there's a better way to do this
+        // TODO: surely there's a better way to do this
         let mut index = 0;
         let inp = &values[index..index + m];
         index = index + m;
