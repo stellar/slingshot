@@ -21,12 +21,14 @@ pub fn fill_cs<CS: ConstraintSystem>(
 ) -> Result<(), SpacesuitError> {
     let m = inputs.len();
     let n = outputs.len();
+    let inner_merge_count = max(m as isize - 2, 0) as usize;
+    let inner_split_count = max(n as isize - 2, 0) as usize;
     if inputs.len() != merge_in.len()
         || merge_in.len() != merge_out.len()
         || split_in.len() != split_out.len()
         || split_out.len() != outputs.len()
-        || merge_mid.len() != m - 2
-        || split_mid.len() != n - 2
+        || merge_mid.len() != inner_merge_count
+        || split_mid.len() != inner_split_count
     {
         return Err(SpacesuitError::InvalidR1CSConstruction);
     }
@@ -68,13 +70,13 @@ pub fn make_commitments(
     let commitment_count = 2 * m + inner_merge_count + 2 * n + inner_split_count;
     let mut v = Vec::with_capacity(commitment_count);
 
-    for i in 0..n {
+    for i in 0..m {
         v.push(Scalar::from(inputs[i].0));
         v.push(Scalar::from(inputs[i].1));
         v.push(Scalar::from(inputs[i].2));
     }
     // dummy logic here
-    for i in 0..n {
+    for i in 0..m {
         v.push(Scalar::from(inputs[i].0));
         v.push(Scalar::from(inputs[i].1));
         v.push(Scalar::from(inputs[i].2));
@@ -84,12 +86,12 @@ pub fn make_commitments(
     //     v.push(Scalar::from(inputs[i].1));
     //     v.push(Scalar::from(inputs[i].2));
     // }
-    for i in 0..n {
+    for i in 0..m {
         v.push(Scalar::from(inputs[i].0));
         v.push(Scalar::from(inputs[i].1));
         v.push(Scalar::from(inputs[i].2));
     }
-    for i in 0..m {
+    for i in 0..n {
         v.push(Scalar::from(inputs[i].0));
         v.push(Scalar::from(inputs[i].1));
         v.push(Scalar::from(inputs[i].2));
@@ -99,13 +101,13 @@ pub fn make_commitments(
     //     v.push(Scalar::from(inputs[i].1));
     //     v.push(Scalar::from(inputs[i].2));
     // }
-    for i in 0..m {
+    for i in 0..n {
         v.push(Scalar::from(inputs[i].0));
         v.push(Scalar::from(inputs[i].1));
         v.push(Scalar::from(inputs[i].2));
     }
     // dummy logic ends
-    for i in 0..m {
+    for i in 0..n {
         v.push(Scalar::from(outputs[i].0));
         v.push(Scalar::from(outputs[i].1));
         v.push(Scalar::from(outputs[i].2));
@@ -166,6 +168,7 @@ mod tests {
 
             // Prover adds constraints to the constraint system
             let v_assignments = v.iter().map(|v_i| Assignment::from(*v_i)).collect();
+            println!("got here");
             let (inp, m_i, m_m, m_o, s_i, s_m, s_o, out) =
                 value_helper(variables, v_assignments, m, n);
 
@@ -205,7 +208,12 @@ mod tests {
         Vec<Value>,
         Vec<Value>,
     ) {
+        let inner_merge_count = max(m as isize - 2, 0) as usize;
+        let inner_split_count = max(n as isize - 2, 0) as usize;
         let val_count = variables.len() / 3;
+        println!("val count: {:?}", val_count);
+        println!("m: {:?}", m);
+        println!("n: {:?}", n);
         let mut values = Vec::with_capacity(val_count);
         for i in 0..val_count {
             values.push(Value {
@@ -215,15 +223,33 @@ mod tests {
             });
         }
 
-        let out = values.split_off(n);
-        let s_o = values.split_off(n);
-        let s_m = values.split_off(max(0, n as isize - 2) as usize);
-        let s_i = values.split_off(n);
-        let m_o = values.split_off(m);
-        let m_m = values.split_off(max(0, m as isize - 2) as usize);
-        let m_i = values.split_off(m);
-        let inp = values.split_off(m);
+        // surely there's a better way to do this
+        let mut index = 0;
+        let inp = &values[index..index + m];
+        index = index + m;
+        let m_i = &values[index..index + m];
+        index = index + m;
+        let m_m = &values[index..index + inner_merge_count];
+        index = index + inner_merge_count;
+        let m_o = &values[index..index + m];
+        index = index + m;
+        let s_i = &values[index..index + n];
+        index = index + n;
+        let s_m = &values[index..index + inner_split_count];
+        index = index + inner_split_count;
+        let s_o = &values[index..index + n];
+        index = index + n;
+        let out = &values[index..index + n];
 
-        (inp, m_i, m_m, m_o, s_i, s_m, s_o, out)
+        (
+            inp.to_vec(),
+            m_i.to_vec(),
+            m_m.to_vec(),
+            m_o.to_vec(),
+            s_i.to_vec(),
+            s_m.to_vec(),
+            s_o.to_vec(),
+            out.to_vec(),
+        )
     }
 }
