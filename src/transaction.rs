@@ -1,6 +1,7 @@
 use bulletproofs::r1cs::{Assignment, ConstraintSystem, Variable};
 use curve25519_dalek::scalar::Scalar;
 use gadgets::{merge, pad, range_proof, split, value_shuffle};
+use std::cmp::max;
 use subtle::ConstantTimeEq;
 use util::{SpacesuitError, Value};
 
@@ -62,7 +63,9 @@ pub fn make_commitments(
 ) -> Vec<Scalar> {
     let m = inputs.len();
     let n = outputs.len();
-    let commitment_count = 2 * m + (m - 2) + 2 * n + (n - 2);
+    let inner_merge_count = max(m as isize - 2, 0) as usize;
+    let inner_split_count = max(n as isize - 2, 0) as usize;
+    let commitment_count = 2 * m + inner_merge_count + 2 * n + inner_split_count;
     let mut v = Vec::with_capacity(commitment_count);
 
     for i in 0..n {
@@ -70,12 +73,45 @@ pub fn make_commitments(
         v.push(Scalar::from(inputs[i].1));
         v.push(Scalar::from(inputs[i].2));
     }
+    // dummy logic here
+    for i in 0..n {
+        v.push(Scalar::from(inputs[i].0));
+        v.push(Scalar::from(inputs[i].1));
+        v.push(Scalar::from(inputs[i].2));
+    }
+    // for i in 0..n-2 {
+    //     v.push(Scalar::from(inputs[i].0));
+    //     v.push(Scalar::from(inputs[i].1));
+    //     v.push(Scalar::from(inputs[i].2));
+    // }
+    for i in 0..n {
+        v.push(Scalar::from(inputs[i].0));
+        v.push(Scalar::from(inputs[i].1));
+        v.push(Scalar::from(inputs[i].2));
+    }
+    for i in 0..m {
+        v.push(Scalar::from(inputs[i].0));
+        v.push(Scalar::from(inputs[i].1));
+        v.push(Scalar::from(inputs[i].2));
+    }
+    // for i in 0..m-2 {
+    //     v.push(Scalar::from(inputs[i].0));
+    //     v.push(Scalar::from(inputs[i].1));
+    //     v.push(Scalar::from(inputs[i].2));
+    // }
+    for i in 0..m {
+        v.push(Scalar::from(inputs[i].0));
+        v.push(Scalar::from(inputs[i].1));
+        v.push(Scalar::from(inputs[i].2));
+    }
+    // dummy logic ends
     for i in 0..m {
         v.push(Scalar::from(outputs[i].0));
         v.push(Scalar::from(outputs[i].1));
         v.push(Scalar::from(outputs[i].2));
     }
-    unimplemented!();
+
+    v
 }
 
 #[cfg(test)]
@@ -111,11 +147,10 @@ mod tests {
             let mut rng = {
                 let mut builder = prover_transcript.build_rng();
 
-                // commit the secret values
+                // Commit the secret values
                 for &v_i in &v {
                     builder = builder.commit_witness_bytes(b"v_i", v_i.as_bytes());
                 }
-
                 use rand::thread_rng;
                 builder.finalize(&mut thread_rng())
             };
@@ -182,10 +217,10 @@ mod tests {
 
         let out = values.split_off(n);
         let s_o = values.split_off(n);
-        let s_m = values.split_off(n - 2);
+        let s_m = values.split_off(max(0, n as isize - 2) as usize);
         let s_i = values.split_off(n);
         let m_o = values.split_off(m);
-        let m_m = values.split_off(m - 2);
+        let m_m = values.split_off(max(0, m as isize - 2) as usize);
         let m_i = values.split_off(m);
         let inp = values.split_off(m);
 
