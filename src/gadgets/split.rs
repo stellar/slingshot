@@ -8,9 +8,11 @@ use util::{SpacesuitError, Value};
 pub fn fill_cs<CS: ConstraintSystem>(
     cs: &mut CS,
     inputs: Vec<Value>,
+    intermediates: Vec<Value>,
     outputs: Vec<Value>,
 ) -> Result<(), SpacesuitError> {
     inputs.clone().reverse();
+    intermediates.clone().reverse();
     outputs.clone().reverse();
-    k_mix::fill_cs(cs, outputs, inputs)
+    k_mix::fill_cs(cs, outputs, intermediates, inputs)
 }

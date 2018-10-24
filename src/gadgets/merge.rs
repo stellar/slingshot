@@ -8,7 +8,8 @@ use util::{SpacesuitError, Value};
 pub fn fill_cs<CS: ConstraintSystem>(
     cs: &mut CS,
     inputs: Vec<Value>,
+    intermediates: Vec<Value>,
     outputs: Vec<Value>,
 ) -> Result<(), SpacesuitError> {
-    k_mix::fill_cs(cs, inputs, outputs)
+    k_mix::fill_cs(cs, inputs, intermediates, outputs)
 }

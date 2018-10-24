@@ -2,7 +2,7 @@ use bulletproofs::r1cs::{Assignment, ConstraintSystem, Variable};
 use curve25519_dalek::scalar::Scalar;
 use gadgets::{merge, pad, range_proof, split, value_shuffle};
 use std::cmp::max;
-use subtle::ConstantTimeEq;
+use subtle::{ConditionallySelectable, ConstantTimeEq};
 use util::{SpacesuitError, Value};
 
 // Enforces that the outputs are a valid rearrangement of the inputs, following the
@@ -42,7 +42,7 @@ pub fn fill_cs<CS: ConstraintSystem>(
     // Merge
     // Combine all the inputs of the same flavor. If different flavors, do not combine.
     // TODO: use merge_mid
-    merge::fill_cs(cs, merge_in, merge_out.clone())?;
+    merge::fill_cs(cs, merge_in, merge_mid, merge_out.clone())?;
 
     // Shuffle 2
     value_shuffle::fill_cs(cs, merge_out, split_in.clone())?;
@@ -50,7 +50,7 @@ pub fn fill_cs<CS: ConstraintSystem>(
     // Split
     // Combine all the outputs of the same flavor. If different flavors, do not combine.
     // TODO: use split_mid
-    split::fill_cs(cs, split_in, split_out.clone())?;
+    split::fill_cs(cs, split_in, split_mid, split_out.clone())?;
 
     // Shuffle 3
     // Group the outputs by flavor.
@@ -130,19 +130,21 @@ mod tests {
 
     #[test]
     fn transaction() {
-        // m=1, n=1, only shuffle
-        // assert!(transaction_helper(vec![(1, 2, 3)], vec![(1, 2, 3)]).is_ok());
-        // assert!(transaction_helper(vec![(4, 5, 6)], vec![(4, 5, 6)]).is_ok());
-        // assert!(transaction_helper(vec![(1, 2, 3)], vec![(4, 5, 6)]).is_err());
+        // m=1, n=1
+        assert!(transaction_helper(vec![(1, 2, 3)], vec![(1, 2, 3)]).is_ok());
+        assert!(transaction_helper(vec![(4, 5, 6)], vec![(4, 5, 6)]).is_ok());
+        assert!(transaction_helper(vec![(1, 2, 3)], vec![(4, 5, 6)]).is_err());
 
         // m=2, n=2, only shuffle
-        // assert!(transaction_helper(vec![(1, 2, 3), (4, 5, 6)], vec![(1, 2, 3), (4, 5, 6)]).is_ok());
-        // assert!(transaction_helper(vec![(1, 2, 3), (4, 5, 6)], vec![(4, 5, 6), (1, 2, 3)]).is_ok());
-        // assert!(transaction_helper(vec![(4, 5, 6), (4, 5, 6)], vec![(4, 5, 6), (4, 5, 6)]).is_ok());
-        // assert!(
-        //     transaction_helper(vec![(1, 2, 3), (1, 2, 3)], vec![(4, 5, 6), (1, 2, 3)]).is_err()
-        // );
-        // assert!(transaction_helper(vec![(1, 2, 3), (4, 5, 6)], vec![(1, 2, 3), (4, 5, 6)]).is_ok());
+        assert!(transaction_helper(vec![(1, 2, 3), (4, 5, 6)], vec![(1, 2, 3), (4, 5, 6)]).is_ok());
+        assert!(transaction_helper(vec![(1, 2, 3), (4, 5, 6)], vec![(4, 5, 6), (1, 2, 3)]).is_ok());
+        assert!(transaction_helper(vec![(4, 5, 6), (4, 5, 6)], vec![(4, 5, 6), (4, 5, 6)]).is_ok());
+        assert!(
+            transaction_helper(vec![(1, 2, 3), (1, 2, 3)], vec![(4, 5, 6), (1, 2, 3)]).is_err()
+        );
+        assert!(transaction_helper(vec![(1, 2, 3), (4, 5, 6)], vec![(1, 2, 3), (4, 5, 6)]).is_ok());
+
+        // m=2, n=2, merge & split
 
         // m=3, n=3, only shuffle
         assert!(

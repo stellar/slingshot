@@ -6,17 +6,24 @@ use curve25519_dalek::scalar::Scalar;
 use subtle::{ConditionallySelectable, ConstantTimeEq};
 use util::{SpacesuitError, Value};
 
+/// NOTE: this version of k-mix is not secure because it creates intermediate variables
+/// that are not committed, therefore a malicious prover could choose the intermediate
+/// variables in such a way that they cancel out the (predicatable) challenge value.
+/// This would be fixed in the future with a "Bulletproofs++" which binds the challenge 
+/// value to the intermediate variables as well. The discussion for that is here:
+/// https://github.com/dalek-cryptography/bulletproofs/issues/186
+///
 /// Enforces that the outputs are either a merge of the inputs :`D = A + B && C = 0`,
 /// or the outputs are equal to the inputs `C = A && D = B`.
 /// Works for `k` inputs and `k` outputs.
 pub fn fill_cs<CS: ConstraintSystem>(
     cs: &mut CS,
     inputs: Vec<Value>,
-    intermediates: Vec<Value>,
     outputs: Vec<Value>,
 ) -> Result<(), SpacesuitError> {
     let one = Scalar::one();
-    if inputs.len() == 1 && outputs.len() == 1 {
+
+    if inputs.len() == 1 {
         cs.add_constraint(
             [(inputs[0].q.0, -one), (outputs[0].q.0, one)]
                 .iter()
@@ -33,10 +40,6 @@ pub fn fill_cs<CS: ConstraintSystem>(
                 .collect(),
         );
         return Ok(());
-    }
-
-    if inputs.len() != outputs.len() || intermediates.len() != inputs.len() - 2 {
-        return Err(SpacesuitError::InvalidR1CSConstruction);
     }
 
     let mut A = inputs[0].clone();
@@ -84,7 +87,6 @@ pub fn fill_cs<CS: ConstraintSystem>(
     mix::fill_cs(cs, A, B, C, D)
 }
 
-/*
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -310,4 +312,3 @@ mod tests {
         Ok(verifier_cs.verify(&proof)?)
     }
 }
-*/
