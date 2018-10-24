@@ -86,10 +86,10 @@ pub fn make_commitments(
         v.push(Scalar::from(inputs[i].1));
         v.push(Scalar::from(inputs[i].2));
     }
-    for i in 0..n - 2 {
-        v.push(Scalar::from(inputs[i].0));
-        v.push(Scalar::from(inputs[i].1));
-        v.push(Scalar::from(inputs[i].2));
+    for i in 0..inner_merge_count {
+        v.push(Scalar::from(inputs[i + 1].0));
+        v.push(Scalar::from(inputs[i + 1].1));
+        v.push(Scalar::from(inputs[i + 1].2));
     }
     for i in 0..m {
         v.push(Scalar::from(inputs[i].0));
@@ -101,10 +101,10 @@ pub fn make_commitments(
         v.push(Scalar::from(inputs[i].1));
         v.push(Scalar::from(inputs[i].2));
     }
-    for i in 0..m - 2 {
-        v.push(Scalar::from(inputs[i].0));
-        v.push(Scalar::from(inputs[i].1));
-        v.push(Scalar::from(inputs[i].2));
+    for i in 0..inner_split_count {
+        v.push(Scalar::from(inputs[i + 1].0));
+        v.push(Scalar::from(inputs[i + 1].1));
+        v.push(Scalar::from(inputs[i + 1].2));
     }
     for i in 0..n {
         v.push(Scalar::from(inputs[i].0));
@@ -143,8 +143,6 @@ mod tests {
             transaction_helper(vec![(1, 2, 3), (1, 2, 3)], vec![(4, 5, 6), (1, 2, 3)]).is_err()
         );
         assert!(transaction_helper(vec![(1, 2, 3), (4, 5, 6)], vec![(1, 2, 3), (4, 5, 6)]).is_ok());
-
-        // m=2, n=2, merge & split
 
         // m=3, n=3, only shuffle
         assert!(
