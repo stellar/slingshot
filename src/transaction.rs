@@ -84,20 +84,12 @@ pub fn make_commitments(
     append_values(&mut v, &merge_mid);
     append_values(&mut v, &merge_out);
 
-    println!("merge_in, {:?}", merge_in);
-    println!("merge_mid, {:?}", merge_mid);
-    println!("merge_out, {:?}", merge_out);
-
     // dummy shuffle logic to calculate split_out
     let split_out = outputs.clone();
     let (split_mid, split_in) = split_helper(&split_out);
     append_values(&mut v, &split_in);
     append_values(&mut v, &split_mid);
     append_values(&mut v, &split_out);
-
-    println!("split_in, {:?}", split_in);
-    println!("split_mid, {:?}", split_mid);
-    println!("split_out, {:?}", split_out);
 
     // Output of transaction
     append_values(&mut v, &outputs);
@@ -164,7 +156,6 @@ fn merge_helper(merge_in: &Vec<(u64, u64, u64)>) -> (Vec<(u64, u64, u64)>, Vec<(
 }
 
 fn append_values(values: &mut Vec<Scalar>, list: &Vec<(u64, u64, u64)>) {
-    println!("values: {:?}", list);
     for i in 0..list.len() {
         values.push(Scalar::from(list[i].0));
         values.push(Scalar::from(list[i].1));
@@ -185,7 +176,7 @@ mod tests {
     ) -> Result<(), SpacesuitError> {
         // Common
         let pc_gens = PedersenGens::default();
-        let bp_gens = BulletproofGens::new(500, 1);
+        let bp_gens = BulletproofGens::new(10000, 1);
         let m = inputs.len();
         let n = outputs.len();
 
@@ -416,7 +407,7 @@ mod tests {
             ).is_err()
         );
 
-        // m=3, n=4, only shuffle
+        // m=4, n=4, only shuffle
         assert!(
             transaction_helper(
                 vec![(1, 2, 3), (4, 5, 6), (7, 8, 9), (10, 11, 12)],
