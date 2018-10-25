@@ -177,6 +177,14 @@ mod tests {
                 vec![(0, zero, 0), (0, zero, 0), (0, zero, 0), (8, peso, 0)],
             ).is_ok()
         );
+        // no merge, different assets
+        assert!(
+            k_mix_helper(
+                vec![(3, peso, 0), (2, peso, 1), (2, peso, 2), (1, peso, 3)],
+                vec![(2, peso, 1), (2, peso, 2)],
+                vec![(3, peso, 0), (2, peso, 1), (2, peso, 2), (1, peso, 3)],
+            ).is_ok()
+        );
         // error when merging, output sum not equal to input sum
         assert!(
             k_mix_helper(

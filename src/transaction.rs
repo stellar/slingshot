@@ -75,38 +75,47 @@ pub fn make_commitments(
     let mut v = Vec::with_capacity(commitment_count);
 
     // Input to transaction
-    append_values(&mut v, inputs.clone());
+    append_values(&mut v, &inputs);
 
-    // dummy logic here
-    // Shuffle 1 output, input to merge
+    // dummy shuffle logic to calculate merge_in
     let merge_in = inputs.clone();
-    append_values(&mut v, merge_in.clone());
+    let (merge_mid, merge_out) = merge_helper(&merge_in);
+    append_values(&mut v, &merge_in);
+    append_values(&mut v, &merge_mid);
+    append_values(&mut v, &merge_out);
 
-    // Merge intermediates and outputs
-    let (merge_mid, merge_out) = merge_helper(merge_in);
-    append_values(&mut v, merge_mid);
-    append_values(&mut v, merge_out);
+    println!("merge_in, {:?}", merge_in);
+    println!("merge_mid, {:?}", merge_mid);
+    println!("merge_out, {:?}", merge_out);
 
-    // Output to split, input to shuffle 3
+    // dummy shuffle logic to calculate split_out
     let split_out = outputs.clone();
-    let (split_mid, split_in) = split_helper(split_out.clone());
+    let (split_mid, split_in) = split_helper(&split_out);
+    append_values(&mut v, &split_in);
+    append_values(&mut v, &split_mid);
+    append_values(&mut v, &split_out);
 
-    append_values(&mut v, split_in.clone());
-    append_values(&mut v, split_mid.clone());
-    append_values(&mut v, split_out.clone());
-    // dummy logic ends
+    println!("split_in, {:?}", split_in);
+    println!("split_mid, {:?}", split_mid);
+    println!("split_out, {:?}", split_out);
 
     // Output of transaction
-    append_values(&mut v, outputs);
+    append_values(&mut v, &outputs);
 
     Ok(v)
 }
 
+// Takes in one side of the shuffle, returns the other side
+// TODO: be able to have different m and n. Right now assume m = n
+fn shuffle_helper(shuffle_in: Vec<(u64, u64, u64)>) -> Vec<(u64, u64, u64)> {
+    unimplemented!();
+}
+
 // takes in split_out, returns split_mid and split_in
-fn split_helper(split_out: Vec<(u64, u64, u64)>) -> (Vec<(u64, u64, u64)>, Vec<(u64, u64, u64)>) {
+fn split_helper(split_out: &Vec<(u64, u64, u64)>) -> (Vec<(u64, u64, u64)>, Vec<(u64, u64, u64)>) {
     let mut split_out_rev = split_out.clone();
     split_out_rev.reverse();
-    let (mut split_mid, mut split_in) = merge_helper(split_out_rev);
+    let (mut split_mid, mut split_in) = merge_helper(&split_out_rev);
     split_mid.reverse();
     split_in.reverse();
 
@@ -114,7 +123,7 @@ fn split_helper(split_out: Vec<(u64, u64, u64)>) -> (Vec<(u64, u64, u64)>, Vec<(
 }
 
 // takes in merge_in, returns merge_mid and merge_out
-fn merge_helper(merge_in: Vec<(u64, u64, u64)>) -> (Vec<(u64, u64, u64)>, Vec<(u64, u64, u64)>) {
+fn merge_helper(merge_in: &Vec<(u64, u64, u64)>) -> (Vec<(u64, u64, u64)>, Vec<(u64, u64, u64)>) {
     if merge_in.len() < 2 {
         return (vec![], merge_in.clone());
     }
@@ -154,7 +163,8 @@ fn merge_helper(merge_in: Vec<(u64, u64, u64)>) -> (Vec<(u64, u64, u64)>, Vec<(u
     (merge_mid, merge_out)
 }
 
-fn append_values(values: &mut Vec<Scalar>, list: Vec<(u64, u64, u64)>) {
+fn append_values(values: &mut Vec<Scalar>, list: &Vec<(u64, u64, u64)>) {
+    println!("values: {:?}", list);
     for i in 0..list.len() {
         values.push(Scalar::from(list[i].0));
         values.push(Scalar::from(list[i].1));
@@ -291,7 +301,7 @@ mod tests {
     }
 
     #[test]
-    fn transaction() {
+    fn transaction_test() {
         // m=1, n=1
         assert!(transaction_helper(vec![(1, 2, 3)], vec![(1, 2, 3)]).is_ok());
         assert!(transaction_helper(vec![(4, 5, 6)], vec![(4, 5, 6)]).is_ok());
@@ -309,7 +319,7 @@ mod tests {
         assert!(
             transaction_helper(vec![(1, 2, 3), (1, 2, 3)], vec![(4, 5, 6), (1, 2, 3)]).is_err()
         );
-        
+
         // m=2, n=2, uses end shuffles (multiple asset types that need to be grouped and merged or split)
 
         // m=3, n=3, only shuffle
@@ -404,6 +414,99 @@ mod tests {
                 vec![(1, 2, 3), (2, 2, 3), (5, 2, 3)],
                 vec![(4, 2, 3), (3, 2, 3), (10, 2, 3)]
             ).is_err()
+        );
+
+        // m=3, n=4, only shuffle
+        assert!(
+            transaction_helper(
+                vec![(1, 2, 3), (4, 5, 6), (7, 8, 9), (10, 11, 12)],
+                vec![(1, 2, 3), (4, 5, 6), (7, 8, 9), (10, 11, 12)]
+            ).is_ok()
+        );
+        assert!(
+            transaction_helper(
+                vec![(1, 2, 3), (4, 5, 6), (7, 8, 9), (10, 11, 12)],
+                vec![(7, 8, 9), (1, 2, 3), (10, 11, 12), (4, 5, 6),]
+            ).is_ok()
+        );
+
+        // m=4, n=4, middle shuffle & merge & split
+        assert!(
+            transaction_helper(
+                vec![(1, 2, 3), (1, 2, 3), (4, 5, 6), (4, 5, 6)],
+                vec![(1, 2, 3), (1, 2, 3), (4, 5, 6), (4, 5, 6)]
+            ).is_ok()
+        );
+        assert!(
+            transaction_helper(
+                vec![(4, 2, 3), (3, 2, 3), (4, 5, 6), (4, 5, 6)],
+                vec![(2, 2, 3), (5, 2, 3), (1, 5, 6), (7, 5, 6)]
+            ).is_ok()
+        );
+        assert!(
+            transaction_helper(
+                vec![(4, 2, 3), (3, 2, 3), (4, 5, 6), (4, 5, 6)],
+                vec![(1, 5, 6), (7, 5, 6), (2, 2, 3), (5, 2, 3)]
+            ).is_ok()
+        );
+        assert!(
+            transaction_helper(
+                vec![(1, 2, 3), (1, 2, 3), (5, 2, 3), (2, 2, 3)],
+                vec![(1, 2, 3), (1, 2, 3), (5, 2, 3), (2, 2, 3)]
+            ).is_ok()
+        );
+        assert!(
+            transaction_helper(
+                vec![(1, 2, 3), (2, 2, 3), (5, 2, 3), (2, 2, 3)],
+                vec![(4, 2, 3), (3, 2, 3), (3, 2, 3), (0, 0, 0)]
+            ).is_ok()
+        );
+        assert!(
+            transaction_helper(
+                vec![(1, 2, 3), (2, 2, 3), (5, 2, 3), (2, 2, 3)],
+                vec![(4, 2, 3), (3, 2, 3), (3, 2, 3), (20, 2, 3)]
+            ).is_err()
+        );
+    }
+
+    #[test]
+    fn merge_helper_test() {
+        // k = 2
+        assert_eq!(
+            merge_helper(&vec![(1, 2, 3), (4, 5, 6)]),
+            (vec![], vec![(1, 2, 3), (4, 5, 6)])
+        );
+        assert_eq!(
+            merge_helper(&vec![(1, 9, 9), (3, 9, 9)]),
+            (vec![], vec![(0, 0, 0), (4, 9, 9)])
+        );
+        // k = 3
+        assert_eq!(
+            merge_helper(&vec![(1, 2, 3), (4, 5, 6), (7, 8, 9)]),
+            (vec![(4, 5, 6)], vec![(1, 2, 3), (4, 5, 6), (7, 8, 9)])
+        );
+        assert_eq!(
+            merge_helper(&vec![(1, 9, 9), (3, 9, 9), (2, 8, 8)]),
+            (vec![(4, 9, 9)], vec![(0, 0, 0), (4, 9, 9), (2, 8, 8)])
+        );
+        assert_eq!(
+            merge_helper(&vec![(2, 8, 8), (1, 9, 9), (3, 9, 9)]),
+            (vec![(1, 9, 9)], vec![(2, 8, 8), (0, 0, 0), (4, 9, 9)])
+        );
+        // k = 4
+        assert_eq!(
+            merge_helper(&vec![(1, 2, 3), (1, 2, 3), (4, 5, 6), (4, 5, 6)]),
+            (
+                vec![(2, 2, 3), (4, 5, 6)],
+                vec![(0, 0, 0), (2, 2, 3), (0, 0, 0), (8, 5, 6)]
+            )
+        );
+        assert_eq!(
+            merge_helper(&vec![(1, 9, 9), (2, 9, 9), (3, 9, 9), (4, 9, 9)]),
+            (
+                vec![(3, 9, 9), (6, 9, 9)],
+                vec![(0, 0, 0), (0, 0, 0), (0, 0, 0), (10, 9, 9)]
+            )
         );
     }
 }
