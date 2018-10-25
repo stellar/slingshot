@@ -3,7 +3,6 @@
 use super::mix;
 use bulletproofs::r1cs::ConstraintSystem;
 use curve25519_dalek::scalar::Scalar;
-use subtle::{ConditionallySelectable, ConstantTimeEq};
 use util::{SpacesuitError, Value};
 
 /// Enforces that the outputs are either a merge of the inputs :`D = A + B && C = 0`,

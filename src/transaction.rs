@@ -88,31 +88,25 @@ pub fn make_commitments(
     append_values(&mut v, merge_mid);
     append_values(&mut v, merge_out);
 
-    // Output to shuffle 2, input to split
-    let split_in = inputs.clone();
-    append_values(&mut v, split_in);
-
-    // Intermediate split
-    for i in 0..split_mid_count {
-        v.push(Scalar::from(inputs[i + 1].0));
-        v.push(Scalar::from(inputs[i + 1].1));
-        v.push(Scalar::from(inputs[i + 1].2));
-    }
-
     // Output to split, input to shuffle 3
-    for i in 0..n {
-        v.push(Scalar::from(inputs[i].0));
-        v.push(Scalar::from(inputs[i].1));
-        v.push(Scalar::from(inputs[i].2));
-    }
+    let split_out = outputs.clone();
+    let mut split_out_rev = split_out.clone();
+    split_out_rev.reverse();
+    let (mut split_mid, mut split_in) = mix_helper(split_out_rev);
+    split_in.reverse();
+    split_mid.reverse();
+
+    append_values(&mut v, split_in.clone());
+    append_values(&mut v, split_mid.clone());
+    append_values(&mut v, split_out.clone());
+
+    println!("split_in: {:?}", split_in);
+    println!("split_mid: {:?}", split_mid);
+    println!("split_out: {:?}", split_out);
     // dummy logic ends
 
     // Output of transaction
-    for i in 0..n {
-        v.push(Scalar::from(outputs[i].0));
-        v.push(Scalar::from(outputs[i].1));
-        v.push(Scalar::from(outputs[i].2));
-    }
+    append_values(&mut v, outputs);
 
     Ok(v)
 }
@@ -189,10 +183,8 @@ mod tests {
 
         // m=2, n=2, uses merge and split (has multiple inputs or outputs of same flavor)
         assert!(transaction_helper(vec![(4, 5, 6), (4, 5, 6)], vec![(4, 5, 6), (4, 5, 6)]).is_ok());
-        // $5 + $3 = $5 + $3
         assert!(transaction_helper(vec![(5, 9, 9), (3, 9, 9)], vec![(5, 9, 9), (3, 9, 9)]).is_ok());
-        // $5 + $3 = $1 + $7
-        // assert!(transaction_helper(vec![(5, 9, 9), (3, 9, 9)], vec![(1, 9, 9), (7, 9, 9)]).is_ok());
+        assert!(transaction_helper(vec![(5, 9, 9), (3, 9, 9)], vec![(1, 9, 9), (7, 9, 9)]).is_ok());
 
         // m=3, n=3, only shuffle
         assert!(
