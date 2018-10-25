@@ -11,8 +11,11 @@ pub fn fill_cs<CS: ConstraintSystem>(
     intermediates: Vec<Value>,
     outputs: Vec<Value>,
 ) -> Result<(), SpacesuitError> {
-    inputs.clone().reverse();
-    intermediates.clone().reverse();
-    outputs.clone().reverse();
-    k_mix::fill_cs(cs, outputs, intermediates, inputs)
+    let mut inputs_rev = inputs.clone();
+    inputs_rev.reverse();
+    let mut intermediates_rev = intermediates.clone();
+    intermediates_rev.reverse();
+    let mut outputs_rev = outputs.clone();
+    outputs_rev.reverse();
+    k_mix::fill_cs(cs, outputs_rev, intermediates_rev, inputs_rev)
 }

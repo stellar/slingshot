@@ -38,7 +38,6 @@ pub fn fill_cs<CS: ConstraintSystem>(
     // Shuffle 1
     // Group the inputs by flavor.
     // Choice -> Ordering conversion? seems wrong...
-    // shuffle1_outputs.sort_by(|cur, next| cur.a.1.ct_eq(&next.a.1));
     value_shuffle::fill_cs(cs, inputs, merge_in.clone())?;
 
     // Merge
@@ -84,25 +83,17 @@ pub fn make_commitments(
     append_values(&mut v, merge_in.clone());
 
     // Merge intermediates and outputs
-    let (merge_mid, merge_out) = mix_helper(merge_in);
+    let (merge_mid, merge_out) = merge_helper(merge_in);
     append_values(&mut v, merge_mid);
     append_values(&mut v, merge_out);
 
     // Output to split, input to shuffle 3
     let split_out = outputs.clone();
-    let mut split_out_rev = split_out.clone();
-    split_out_rev.reverse();
-    let (mut split_mid, mut split_in) = mix_helper(split_out_rev);
-    split_in.reverse();
-    split_mid.reverse();
+    let (split_mid, split_in) = split_helper(split_out.clone());
 
     append_values(&mut v, split_in.clone());
     append_values(&mut v, split_mid.clone());
     append_values(&mut v, split_out.clone());
-
-    println!("split_in: {:?}", split_in);
-    println!("split_mid: {:?}", split_mid);
-    println!("split_out: {:?}", split_out);
     // dummy logic ends
 
     // Output of transaction
@@ -111,18 +102,30 @@ pub fn make_commitments(
     Ok(v)
 }
 
-fn mix_helper(mix_in: Vec<(u64, u64, u64)>) -> (Vec<(u64, u64, u64)>, Vec<(u64, u64, u64)>) {
-    if mix_in.len() < 2 {
-        return (vec![], mix_in.clone());
+// takes in split_out, returns split_mid and split_in
+fn split_helper(split_out: Vec<(u64, u64, u64)>) -> (Vec<(u64, u64, u64)>, Vec<(u64, u64, u64)>) {
+    let mut split_out_rev = split_out.clone();
+    split_out_rev.reverse();
+    let (mut split_mid, mut split_in) = merge_helper(split_out_rev);
+    split_mid.reverse();
+    split_in.reverse();
+
+    (split_mid, split_in)
+}
+
+// takes in merge_in, returns merge_mid and merge_out
+fn merge_helper(merge_in: Vec<(u64, u64, u64)>) -> (Vec<(u64, u64, u64)>, Vec<(u64, u64, u64)>) {
+    if merge_in.len() < 2 {
+        return (vec![], merge_in.clone());
     }
 
-    let mix_count = mix_in.len() - 1;
-    let mut mix_mid = Vec::with_capacity(mix_count);
-    let mut mix_out = Vec::with_capacity(mix_in.len());
+    let merge_count = merge_in.len() - 1;
+    let mut merge_mid = Vec::with_capacity(merge_count);
+    let mut merge_out = Vec::with_capacity(merge_in.len());
 
-    let mut A = mix_in[0];
-    let mut B = mix_in[1];
-    for i in 0..mix_count {
+    let mut A = merge_in[0];
+    let mut B = merge_in[1];
+    for i in 0..merge_count {
         // Check if A and B have the same flavors
         let same_flavor = A.1.ct_eq(&B.1) & A.2.ct_eq(&B.2);
 
@@ -138,17 +141,17 @@ fn mix_helper(mix_in: Vec<(u64, u64, u64)>) -> (Vec<(u64, u64, u64)>, Vec<(u64, 
         let D_a = ConditionallySelectable::conditional_select(&B.1, &A.1, same_flavor);
         let D_t = ConditionallySelectable::conditional_select(&B.2, &A.2, same_flavor);
 
-        mix_out.push((C_q, C_a, C_t));
-        mix_mid.push((D_q, D_a, D_t));
+        merge_out.push((C_q, C_a, C_t));
+        merge_mid.push((D_q, D_a, D_t));
 
         A = (D_q, D_a, D_t);
-        B = mix_in[min(i + 2, mix_count)];
+        B = merge_in[min(i + 2, merge_count)];
     }
 
-    // Move the last mix_mid to be the last mix_out, to match the protocol
-    mix_out.push(mix_mid.pop().unwrap()); // TODO: handle this error
+    // Move the last merge_mid to be the last merge_out, to match the protocol
+    merge_out.push(merge_mid.pop().unwrap()); // TODO: handle this error
 
-    (mix_mid, mix_out)
+    (merge_mid, merge_out)
 }
 
 fn append_values(values: &mut Vec<Scalar>, list: Vec<(u64, u64, u64)>) {
