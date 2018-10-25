@@ -77,15 +77,15 @@ pub fn make_commitments(
     // Input to transaction
     append_values(&mut v, &inputs);
 
-    // dummy shuffle logic to calculate merge_in
-    let merge_in = inputs.clone();
+    // Inputs, intermediates, and outputs of merge gadget
+    let merge_in = shuffle_helper(&inputs);
     let (merge_mid, merge_out) = merge_helper(&merge_in);
     append_values(&mut v, &merge_in);
     append_values(&mut v, &merge_mid);
     append_values(&mut v, &merge_out);
 
-    // dummy shuffle logic to calculate split_out
-    let split_out = outputs.clone();
+    // Inputs, intermediates, and outputs of split gadget
+    let split_out = shuffle_helper(&outputs);
     let (split_mid, split_in) = split_helper(&split_out);
     append_values(&mut v, &split_in);
     append_values(&mut v, &split_mid);
@@ -97,10 +97,12 @@ pub fn make_commitments(
     Ok(v)
 }
 
-// Takes in one side of the shuffle, returns the other side
-// TODO: be able to have different m and n. Right now assume m = n
-fn shuffle_helper(shuffle_in: Vec<(u64, u64, u64)>) -> Vec<(u64, u64, u64)> {
-    unimplemented!();
+// Takes in the ungrouped side of shuffle, returns the values grouped by flavor.
+// TODO: do this in constant time
+fn shuffle_helper(shuffle_in: &Vec<(u64, u64, u64)>) -> Vec<(u64, u64, u64)> {
+    let mut shuffle_out = shuffle_in.clone();
+    shuffle_out.sort_unstable_by_key(|(_q, a, t)| (a.clone(), t.clone()));
+    shuffle_out
 }
 
 // takes in split_out, returns split_mid and split_in
@@ -311,8 +313,6 @@ mod tests {
             transaction_helper(vec![(1, 2, 3), (1, 2, 3)], vec![(4, 5, 6), (1, 2, 3)]).is_err()
         );
 
-        // m=2, n=2, uses end shuffles (multiple asset types that need to be grouped and merged or split)
-
         // m=3, n=3, only shuffle
         assert!(
             transaction_helper(
@@ -390,12 +390,6 @@ mod tests {
         );
         assert!(
             transaction_helper(
-                vec![(1, 2, 3), (1, 2, 3), (5, 2, 3)],
-                vec![(1, 2, 3), (1, 2, 3), (5, 2, 3)]
-            ).is_ok()
-        );
-        assert!(
-            transaction_helper(
                 vec![(1, 2, 3), (2, 2, 3), (5, 2, 3)],
                 vec![(4, 2, 3), (3, 2, 3), (1, 2, 3)]
             ).is_ok()
@@ -405,6 +399,21 @@ mod tests {
                 vec![(1, 2, 3), (2, 2, 3), (5, 2, 3)],
                 vec![(4, 2, 3), (3, 2, 3), (10, 2, 3)]
             ).is_err()
+        );
+
+        // m=3, n=3, uses end shuffles & merge & split & middle shuffle
+        // (multiple asset types that need to be grouped and merged or split)
+        assert!(
+            transaction_helper(
+                vec![(1, 2, 3), (4, 5, 6), (1, 2, 3)],
+                vec![(1, 2, 3), (1, 2, 3), (4, 5, 6)]
+            ).is_ok()
+        );
+        assert!(
+            transaction_helper(
+                vec![(4, 2, 3), (4, 5, 6), (3, 2, 3)],
+                vec![(3, 5, 6), (7, 2, 3), (1, 5, 6)]
+            ).is_ok()
         );
 
         // m=4, n=4, only shuffle
@@ -457,6 +466,42 @@ mod tests {
                 vec![(1, 2, 3), (2, 2, 3), (5, 2, 3), (2, 2, 3)],
                 vec![(4, 2, 3), (3, 2, 3), (3, 2, 3), (20, 2, 3)]
             ).is_err()
+        );
+    }
+
+    // Note: the output vector for shuffle_helper does not have to be in a particular order,
+    // it just has to be grouped by flavor. Thus, it is possible to make a valid change to
+    // shuffle_helper but break the tests.
+    #[test]
+    fn shuffle_helper_test() {
+        // k = 1
+        assert_eq!(shuffle_helper(&vec![(1, 9, 9)]), vec![(1, 9, 9)]);
+        // k = 2
+        assert_eq!(
+            shuffle_helper(&vec![(1, 9, 9), (2, 9, 9)]),
+            vec![(1, 9, 9), (2, 9, 9)]
+        );
+        assert_eq!(
+            shuffle_helper(&vec![(1, 9, 9), (2, 8, 8)]),
+            vec![(2, 8, 8), (1, 9, 9)]
+        );
+        // k = 3
+        assert_eq!(
+            shuffle_helper(&vec![(1, 9, 9), (3, 8, 8), (2, 9, 9)]),
+            vec![(3, 8, 8), (1, 9, 9), (2, 9, 9)]
+        );
+        // k = 4
+        assert_eq!(
+            shuffle_helper(&vec![(1, 9, 9), (3, 8, 8), (2, 9, 9), (4, 8, 8)]),
+            vec![(3, 8, 8), (4, 8, 8), (1, 9, 9), (2, 9, 9)]
+        );
+        assert_eq!(
+            shuffle_helper(&vec![(1, 9, 9), (3, 8, 8), (4, 8, 8), (2, 9, 9)]),
+            vec![(3, 8, 8), (4, 8, 8), (1, 9, 9), (2, 9, 9)]
+        );
+        assert_eq!(
+            shuffle_helper(&vec![(1, 9, 9), (3, 8, 8), (4, 7, 7), (2, 9, 9)]),
+            vec![(4, 7, 7), (3, 8, 8), (1, 9, 9), (2, 9, 9)]
         );
     }
 
