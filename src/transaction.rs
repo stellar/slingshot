@@ -169,83 +169,6 @@ mod tests {
     use bulletproofs::{BulletproofGens, PedersenGens};
     use merlin::Transcript;
 
-    #[test]
-    fn transaction() {
-        // m=1, n=1
-        assert!(transaction_helper(vec![(1, 2, 3)], vec![(1, 2, 3)]).is_ok());
-        assert!(transaction_helper(vec![(4, 5, 6)], vec![(4, 5, 6)]).is_ok());
-        assert!(transaction_helper(vec![(1, 2, 3)], vec![(4, 5, 6)]).is_err());
-
-        // m=2, n=2, only shuffle (all different flavors)
-        assert!(transaction_helper(vec![(1, 2, 3), (4, 5, 6)], vec![(1, 2, 3), (4, 5, 6)]).is_ok());
-        assert!(transaction_helper(vec![(1, 2, 3), (4, 5, 6)], vec![(4, 5, 6), (1, 2, 3)]).is_ok());
-        assert!(transaction_helper(vec![(1, 2, 3), (4, 5, 6)], vec![(1, 2, 3), (4, 5, 6)]).is_ok());
-        assert!(
-            transaction_helper(vec![(1, 2, 3), (1, 2, 3)], vec![(4, 5, 6), (1, 2, 3)]).is_err()
-        );
-
-        // m=2, n=2, uses merge and split (has multiple inputs or outputs of same flavor)
-        assert!(transaction_helper(vec![(4, 5, 6), (4, 5, 6)], vec![(4, 5, 6), (4, 5, 6)]).is_ok());
-        assert!(transaction_helper(vec![(5, 9, 9), (3, 9, 9)], vec![(5, 9, 9), (3, 9, 9)]).is_ok());
-        assert!(transaction_helper(vec![(5, 9, 9), (3, 9, 9)], vec![(1, 9, 9), (7, 9, 9)]).is_ok());
-
-        // m=3, n=3, only shuffle
-        assert!(
-            transaction_helper(
-                vec![(1, 2, 3), (4, 5, 6), (8, 9, 10)],
-                vec![(1, 2, 3), (4, 5, 6), (8, 9, 10)]
-            ).is_ok()
-        );
-        assert!(
-            transaction_helper(
-                vec![(1, 2, 3), (4, 5, 6), (8, 9, 10)],
-                vec![(1, 2, 3), (8, 9, 10), (4, 5, 6)]
-            ).is_ok()
-        );
-        assert!(
-            transaction_helper(
-                vec![(1, 2, 3), (4, 5, 6), (8, 9, 10)],
-                vec![(4, 5, 6), (1, 2, 3), (8, 9, 10)]
-            ).is_ok()
-        );
-        assert!(
-            transaction_helper(
-                vec![(1, 2, 3), (4, 5, 6), (8, 9, 10)],
-                vec![(4, 5, 6), (8, 9, 10), (1, 2, 3)]
-            ).is_ok()
-        );
-        assert!(
-            transaction_helper(
-                vec![(1, 2, 3), (4, 5, 6), (8, 9, 10)],
-                vec![(8, 9, 10), (1, 2, 3), (4, 5, 6)]
-            ).is_ok()
-        );
-        assert!(
-            transaction_helper(
-                vec![(1, 2, 3), (4, 5, 6), (8, 9, 10)],
-                vec![(8, 9, 10), (4, 5, 6), (1, 2, 3)]
-            ).is_ok()
-        );
-        assert!(
-            transaction_helper(
-                vec![(1, 2, 3), (4, 5, 6), (8, 9, 10)],
-                vec![(10, 20, 30), (4, 5, 6), (8, 9, 10)]
-            ).is_err()
-        );
-        assert!(
-            transaction_helper(
-                vec![(1, 2, 3), (4, 5, 6), (8, 9, 10)],
-                vec![(1, 2, 3), (40, 50, 60), (8, 9, 10)]
-            ).is_err()
-        );
-        assert!(
-            transaction_helper(
-                vec![(1, 2, 3), (4, 5, 6), (8, 9, 10)],
-                vec![(1, 2, 3), (4, 5, 6), (98, 99, 100)]
-            ).is_err()
-        );
-    }
-
     fn transaction_helper(
         inputs: Vec<(u64, u64, u64)>,
         outputs: Vec<(u64, u64, u64)>,
@@ -365,5 +288,122 @@ mod tests {
             s_o.to_vec(),
             out.to_vec(),
         )
+    }
+
+    #[test]
+    fn transaction() {
+        // m=1, n=1
+        assert!(transaction_helper(vec![(1, 2, 3)], vec![(1, 2, 3)]).is_ok());
+        assert!(transaction_helper(vec![(4, 5, 6)], vec![(4, 5, 6)]).is_ok());
+        assert!(transaction_helper(vec![(1, 2, 3)], vec![(4, 5, 6)]).is_err());
+
+        // m=2, n=2, only shuffle (all different flavors)
+        assert!(transaction_helper(vec![(1, 2, 3), (4, 5, 6)], vec![(1, 2, 3), (4, 5, 6)]).is_ok());
+        assert!(transaction_helper(vec![(1, 2, 3), (4, 5, 6)], vec![(4, 5, 6), (1, 2, 3)]).is_ok());
+
+        // m=2, n=2, middle shuffle & merge & split (has multiple inputs or outputs of same flavor)
+        assert!(transaction_helper(vec![(4, 5, 6), (4, 5, 6)], vec![(4, 5, 6), (4, 5, 6)]).is_ok());
+        assert!(transaction_helper(vec![(5, 9, 9), (3, 9, 9)], vec![(5, 9, 9), (3, 9, 9)]).is_ok());
+        assert!(transaction_helper(vec![(5, 9, 9), (3, 9, 9)], vec![(1, 9, 9), (7, 9, 9)]).is_ok());
+        assert!(transaction_helper(vec![(1, 9, 9), (8, 9, 9)], vec![(0, 9, 9), (9, 9, 9)]).is_ok());
+        assert!(
+            transaction_helper(vec![(1, 2, 3), (1, 2, 3)], vec![(4, 5, 6), (1, 2, 3)]).is_err()
+        );
+        
+        // m=2, n=2, uses end shuffles (multiple asset types that need to be grouped and merged or split)
+
+        // m=3, n=3, only shuffle
+        assert!(
+            transaction_helper(
+                vec![(1, 2, 3), (4, 5, 6), (8, 9, 10)],
+                vec![(1, 2, 3), (4, 5, 6), (8, 9, 10)]
+            ).is_ok()
+        );
+        assert!(
+            transaction_helper(
+                vec![(1, 2, 3), (4, 5, 6), (8, 9, 10)],
+                vec![(1, 2, 3), (8, 9, 10), (4, 5, 6)]
+            ).is_ok()
+        );
+        assert!(
+            transaction_helper(
+                vec![(1, 2, 3), (4, 5, 6), (8, 9, 10)],
+                vec![(4, 5, 6), (1, 2, 3), (8, 9, 10)]
+            ).is_ok()
+        );
+        assert!(
+            transaction_helper(
+                vec![(1, 2, 3), (4, 5, 6), (8, 9, 10)],
+                vec![(4, 5, 6), (8, 9, 10), (1, 2, 3)]
+            ).is_ok()
+        );
+        assert!(
+            transaction_helper(
+                vec![(1, 2, 3), (4, 5, 6), (8, 9, 10)],
+                vec![(8, 9, 10), (1, 2, 3), (4, 5, 6)]
+            ).is_ok()
+        );
+        assert!(
+            transaction_helper(
+                vec![(1, 2, 3), (4, 5, 6), (8, 9, 10)],
+                vec![(8, 9, 10), (4, 5, 6), (1, 2, 3)]
+            ).is_ok()
+        );
+        assert!(
+            transaction_helper(
+                vec![(1, 2, 3), (4, 5, 6), (8, 9, 10)],
+                vec![(10, 20, 30), (4, 5, 6), (8, 9, 10)]
+            ).is_err()
+        );
+        assert!(
+            transaction_helper(
+                vec![(1, 2, 3), (4, 5, 6), (8, 9, 10)],
+                vec![(1, 2, 3), (40, 50, 60), (8, 9, 10)]
+            ).is_err()
+        );
+        assert!(
+            transaction_helper(
+                vec![(1, 2, 3), (4, 5, 6), (8, 9, 10)],
+                vec![(1, 2, 3), (4, 5, 6), (98, 99, 100)]
+            ).is_err()
+        );
+
+        // m=3, n=3, middle shuffle & merge & split
+        assert!(
+            transaction_helper(
+                vec![(1, 2, 3), (1, 2, 3), (4, 5, 6)],
+                vec![(1, 2, 3), (1, 2, 3), (4, 5, 6)]
+            ).is_ok()
+        );
+        assert!(
+            transaction_helper(
+                vec![(4, 2, 3), (3, 2, 3), (4, 5, 6)],
+                vec![(2, 2, 3), (5, 2, 3), (4, 5, 6)]
+            ).is_ok()
+        );
+        assert!(
+            transaction_helper(
+                vec![(4, 2, 3), (3, 2, 3), (4, 5, 6)],
+                vec![(4, 5, 6), (2, 2, 3), (5, 2, 3)]
+            ).is_ok()
+        );
+        assert!(
+            transaction_helper(
+                vec![(1, 2, 3), (1, 2, 3), (5, 2, 3)],
+                vec![(1, 2, 3), (1, 2, 3), (5, 2, 3)]
+            ).is_ok()
+        );
+        assert!(
+            transaction_helper(
+                vec![(1, 2, 3), (2, 2, 3), (5, 2, 3)],
+                vec![(4, 2, 3), (3, 2, 3), (1, 2, 3)]
+            ).is_ok()
+        );
+        assert!(
+            transaction_helper(
+                vec![(1, 2, 3), (2, 2, 3), (5, 2, 3)],
+                vec![(4, 2, 3), (3, 2, 3), (10, 2, 3)]
+            ).is_err()
+        );
     }
 }
