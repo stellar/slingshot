@@ -57,43 +57,51 @@ mod tests {
     fn padded_shuffle() {
         // k=2, with interspersed empty values
         assert!(
+            padded_shuffle_helper(vec![peso(1), zero(), yuan(4)], vec![peso(1), yuan(4)]).is_ok()
+        );
+        assert!(
             padded_shuffle_helper(
-                vec![(1, 2, 3), (0, 0, 0), (4, 5, 6)],
-                vec![(1, 2, 3), (4, 5, 6)]
+                vec![peso(1), yuan(4)],
+                vec![zero(), yuan(4), zero(), peso(1)]
             ).is_ok()
         );
         assert!(
             padded_shuffle_helper(
-                vec![(1, 2, 3), (4, 5, 6)],
-                vec![(0, 0, 0), (4, 5, 6), (0, 0, 0), (1, 2, 3)]
-            ).is_ok()
-        );
-        assert!(
-            padded_shuffle_helper(
-                vec![(4, 5, 6), (0, 0, 0), (0, 0, 0), (4, 5, 6)],
-                vec![(0, 0, 0), (4, 5, 6), (4, 5, 6)]
+                vec![yuan(4), zero(), zero(), yuan(4)],
+                vec![zero(), yuan(4), yuan(4)]
             ).is_ok()
         );
 
         // k=3, with interspersed empty values
         assert!(
             padded_shuffle_helper(
-                vec![(1, 2, 3), (4, 5, 6), (0, 0, 0), (8, 9, 10)],
-                vec![(1, 2, 3), (4, 5, 6), (8, 9, 10)]
+                vec![yuan(1), yuan(4), zero(), peso(8)],
+                vec![yuan(1), yuan(4), peso(8)]
             ).is_ok()
         );
         assert!(
             padded_shuffle_helper(
-                vec![(1, 2, 3), (4, 5, 6), (8, 9, 10)],
-                vec![(1, 2, 3), (0, 0, 0), (8, 9, 10), (0, 0, 0), (4, 5, 6)]
+                vec![yuan(1), yuan(4), peso(8)],
+                vec![yuan(1), zero(), peso(8), zero(), yuan(4)]
             ).is_ok()
         );
         assert!(
             padded_shuffle_helper(
-                vec![(1, 2, 3), (4, 5, 6), (0, 0, 0), (8, 9, 10)],
-                vec![(0, 0, 0), (0, 0, 0), (4, 5, 6), (1, 2, 3), (8, 9, 10)]
+                vec![yuan(1), yuan(4), zero(), peso(8)],
+                vec![zero(), zero(), yuan(4), yuan(1), peso(8)]
             ).is_ok()
         );
+    }
+
+    // Helper functions to make the tests easier to read
+    fn yuan(val: u64) -> (u64, u64, u64) {
+        (val, 888, 999)
+    }
+    fn peso(val: u64) -> (u64, u64, u64) {
+        (val, 666, 777)
+    }
+    fn zero() -> (u64, u64, u64) {
+        (0, 0, 0)
     }
 
     fn padded_shuffle_helper(

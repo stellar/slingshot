@@ -131,36 +131,45 @@ mod tests {
         )
     }
 
+    // Helper functions to make the tests easier to read
+    fn yuan(val: u64) -> (u64, u64, u64) {
+        (val, 888, 999)
+    }
+    fn peso(val: u64) -> (u64, u64, u64) {
+        (val, 666, 777)
+    }
+    fn euro(val: u64) -> (u64, u64, u64) {
+        (val, 444, 555)
+    }
+
     // m=1, n=1
     #[test]
     fn transaction_1_1() {
-        assert!(transaction_helper(vec![(1, 2, 3)], vec![(1, 2, 3)]).is_ok());
-        assert!(transaction_helper(vec![(4, 5, 6)], vec![(4, 5, 6)]).is_ok());
-        assert!(transaction_helper(vec![(1, 2, 3)], vec![(4, 5, 6)]).is_err());
+        assert!(transaction_helper(vec![yuan(1)], vec![yuan(1)]).is_ok());
+        assert!(transaction_helper(vec![peso(4)], vec![peso(4)]).is_ok());
+        assert!(transaction_helper(vec![yuan(1)], vec![peso(4)]).is_err());
     }
 
     // max(m, n) = 2
     #[test]
     fn transaction_uneven_2() {
-        assert!(transaction_helper(vec![(3, 2, 3)], vec![(1, 2, 3), (2, 2, 3)]).is_ok());
-        assert!(transaction_helper(vec![(1, 2, 3), (2, 2, 3)], vec![(3, 2, 3)]).is_ok());
+        assert!(transaction_helper(vec![yuan(3)], vec![yuan(1), yuan(2)]).is_ok());
+        assert!(transaction_helper(vec![yuan(1), yuan(2)], vec![yuan(3)]).is_ok());
     }
 
     // m=2, n=2
     #[test]
     fn transaction_2_2() {
         // Only shuffle (all different flavors)
-        assert!(transaction_helper(vec![(1, 2, 3), (4, 5, 6)], vec![(1, 2, 3), (4, 5, 6)]).is_ok());
-        assert!(transaction_helper(vec![(1, 2, 3), (4, 5, 6)], vec![(4, 5, 6), (1, 2, 3)]).is_ok());
+        assert!(transaction_helper(vec![yuan(1), peso(4)], vec![yuan(1), peso(4)]).is_ok());
+        assert!(transaction_helper(vec![yuan(1), peso(4)], vec![peso(4), yuan(1)]).is_ok());
 
         // Middle shuffle & merge & split (has multiple inputs or outputs of same flavor)
-        assert!(transaction_helper(vec![(4, 5, 6), (4, 5, 6)], vec![(4, 5, 6), (4, 5, 6)]).is_ok());
-        assert!(transaction_helper(vec![(5, 9, 9), (3, 9, 9)], vec![(5, 9, 9), (3, 9, 9)]).is_ok());
-        assert!(transaction_helper(vec![(5, 9, 9), (3, 9, 9)], vec![(1, 9, 9), (7, 9, 9)]).is_ok());
-        assert!(transaction_helper(vec![(1, 9, 9), (8, 9, 9)], vec![(0, 9, 9), (9, 9, 9)]).is_ok());
-        assert!(
-            transaction_helper(vec![(1, 2, 3), (1, 2, 3)], vec![(4, 5, 6), (1, 2, 3)]).is_err()
-        );
+        assert!(transaction_helper(vec![peso(4), peso(4)], vec![peso(4), peso(4)]).is_ok());
+        assert!(transaction_helper(vec![peso(5), peso(3)], vec![peso(5), peso(3)]).is_ok());
+        assert!(transaction_helper(vec![peso(5), peso(3)], vec![peso(1), peso(7)]).is_ok());
+        assert!(transaction_helper(vec![peso(1), peso(8)], vec![peso(0), peso(9)]).is_ok());
+        assert!(transaction_helper(vec![yuan(1), yuan(1)], vec![peso(4), yuan(1)]).is_err());
     }
 
     // m=3, n=3
@@ -169,88 +178,88 @@ mod tests {
         // only shuffle
         assert!(
             transaction_helper(
-                vec![(1, 2, 3), (4, 5, 6), (8, 9, 10)],
-                vec![(1, 2, 3), (4, 5, 6), (8, 9, 10)]
+                vec![yuan(1), peso(4), euro(8)],
+                vec![yuan(1), peso(4), euro(8)]
             ).is_ok()
         );
         assert!(
             transaction_helper(
-                vec![(1, 2, 3), (4, 5, 6), (8, 9, 10)],
-                vec![(1, 2, 3), (8, 9, 10), (4, 5, 6)]
+                vec![yuan(1), peso(4), euro(8)],
+                vec![yuan(1), euro(8), peso(4)]
             ).is_ok()
         );
         assert!(
             transaction_helper(
-                vec![(1, 2, 3), (4, 5, 6), (8, 9, 10)],
-                vec![(4, 5, 6), (1, 2, 3), (8, 9, 10)]
+                vec![yuan(1), peso(4), euro(8)],
+                vec![peso(4), yuan(1), euro(8)]
             ).is_ok()
         );
         assert!(
             transaction_helper(
-                vec![(1, 2, 3), (4, 5, 6), (8, 9, 10)],
-                vec![(4, 5, 6), (8, 9, 10), (1, 2, 3)]
+                vec![yuan(1), peso(4), euro(8)],
+                vec![peso(4), euro(8), yuan(1)]
             ).is_ok()
         );
         assert!(
             transaction_helper(
-                vec![(1, 2, 3), (4, 5, 6), (8, 9, 10)],
-                vec![(8, 9, 10), (1, 2, 3), (4, 5, 6)]
+                vec![yuan(1), peso(4), euro(8)],
+                vec![euro(8), yuan(1), peso(4)]
             ).is_ok()
         );
         assert!(
             transaction_helper(
-                vec![(1, 2, 3), (4, 5, 6), (8, 9, 10)],
-                vec![(8, 9, 10), (4, 5, 6), (1, 2, 3)]
+                vec![yuan(1), peso(4), euro(8)],
+                vec![euro(8), peso(4), yuan(1)]
             ).is_ok()
         );
         assert!(
             transaction_helper(
-                vec![(1, 2, 3), (4, 5, 6), (8, 9, 10)],
-                vec![(10, 20, 30), (4, 5, 6), (8, 9, 10)]
+                vec![yuan(1), peso(4), euro(8)],
+                vec![yuan(2), peso(4), euro(8)]
             ).is_err()
         );
         assert!(
             transaction_helper(
-                vec![(1, 2, 3), (4, 5, 6), (8, 9, 10)],
-                vec![(1, 2, 3), (40, 50, 60), (8, 9, 10)]
+                vec![yuan(1), peso(4), euro(8)],
+                vec![yuan(1), (40, 50, 60), euro(8)]
             ).is_err()
         );
         assert!(
             transaction_helper(
-                vec![(1, 2, 3), (4, 5, 6), (8, 9, 10)],
-                vec![(1, 2, 3), (4, 5, 6), (98, 99, 100)]
+                vec![yuan(1), peso(4), euro(8)],
+                vec![yuan(1), peso(4), euro(9)]
             ).is_err()
         );
 
         // middle shuffle & merge & split
         assert!(
             transaction_helper(
-                vec![(1, 2, 3), (1, 2, 3), (4, 5, 6)],
-                vec![(1, 2, 3), (1, 2, 3), (4, 5, 6)]
+                vec![yuan(1), yuan(1), peso(4)],
+                vec![yuan(1), yuan(1), peso(4)]
             ).is_ok()
         );
         assert!(
             transaction_helper(
-                vec![(4, 2, 3), (3, 2, 3), (4, 5, 6)],
-                vec![(2, 2, 3), (5, 2, 3), (4, 5, 6)]
+                vec![yuan(4), yuan(3), peso(4)],
+                vec![yuan(2), yuan(5), peso(4)]
             ).is_ok()
         );
         assert!(
             transaction_helper(
-                vec![(4, 2, 3), (3, 2, 3), (4, 5, 6)],
-                vec![(4, 5, 6), (2, 2, 3), (5, 2, 3)]
+                vec![yuan(4), yuan(3), peso(4)],
+                vec![peso(4), yuan(2), yuan(5)]
             ).is_ok()
         );
         assert!(
             transaction_helper(
-                vec![(1, 2, 3), (2, 2, 3), (5, 2, 3)],
-                vec![(4, 2, 3), (3, 2, 3), (1, 2, 3)]
+                vec![yuan(1), yuan(2), yuan(5)],
+                vec![yuan(4), yuan(3), yuan(1)]
             ).is_ok()
         );
         assert!(
             transaction_helper(
-                vec![(1, 2, 3), (2, 2, 3), (5, 2, 3)],
-                vec![(4, 2, 3), (3, 2, 3), (10, 2, 3)]
+                vec![yuan(1), yuan(2), yuan(5)],
+                vec![yuan(4), yuan(3), yuan(10)]
             ).is_err()
         );
 
@@ -258,14 +267,14 @@ mod tests {
         // (multiple asset types that need to be grouped and merged or split)
         assert!(
             transaction_helper(
-                vec![(1, 2, 3), (4, 5, 6), (1, 2, 3)],
-                vec![(1, 2, 3), (1, 2, 3), (4, 5, 6)]
+                vec![yuan(1), peso(4), yuan(1)],
+                vec![yuan(1), yuan(1), peso(4)]
             ).is_ok()
         );
         assert!(
             transaction_helper(
-                vec![(4, 2, 3), (4, 5, 6), (3, 2, 3)],
-                vec![(3, 5, 6), (7, 2, 3), (1, 5, 6)]
+                vec![yuan(4), peso(4), yuan(3)],
+                vec![peso(3), yuan(7), peso(1)]
             ).is_ok()
         );
     }
@@ -273,35 +282,19 @@ mod tests {
     // max(m, n) = 3
     #[test]
     fn transaction_uneven_3() {
+        assert!(transaction_helper(vec![yuan(4), yuan(4), yuan(3)], vec![yuan(11)]).is_ok());
+        assert!(transaction_helper(vec![yuan(11)], vec![yuan(4), yuan(4), yuan(3)],).is_ok());
         assert!(
-            transaction_helper(vec![(4, 2, 3), (4, 2, 3), (3, 2, 3)], vec![(11, 2, 3)]).is_ok()
+            transaction_helper(vec![yuan(11), peso(4)], vec![yuan(4), yuan(7), peso(4)],).is_ok()
         );
         assert!(
-            transaction_helper(vec![(11, 2, 3)], vec![(4, 2, 3), (4, 2, 3), (3, 2, 3)],).is_ok()
+            transaction_helper(vec![yuan(4), yuan(7), peso(4)], vec![yuan(11), peso(4)],).is_ok()
         );
         assert!(
-            transaction_helper(
-                vec![(11, 2, 3), (4, 5, 6)],
-                vec![(4, 2, 3), (7, 2, 3), (4, 5, 6)],
-            ).is_ok()
+            transaction_helper(vec![yuan(5), yuan(6)], vec![yuan(4), yuan(4), yuan(3)],).is_ok()
         );
         assert!(
-            transaction_helper(
-                vec![(4, 2, 3), (7, 2, 3), (4, 5, 6)],
-                vec![(11, 2, 3), (4, 5, 6)],
-            ).is_ok()
-        );
-        assert!(
-            transaction_helper(
-                vec![(5, 2, 3), (6, 2, 3)],
-                vec![(4, 2, 3), (4, 2, 3), (3, 2, 3)],
-            ).is_ok()
-        );
-        assert!(
-            transaction_helper(
-                vec![(4, 2, 3), (4, 2, 3), (3, 2, 3)],
-                vec![(5, 2, 3), (6, 2, 3)],
-            ).is_ok()
+            transaction_helper(vec![yuan(4), yuan(4), yuan(3)], vec![yuan(5), yuan(6)],).is_ok()
         );
     }
 
@@ -311,72 +304,72 @@ mod tests {
         // Only shuffle
         assert!(
             transaction_helper(
-                vec![(1, 2, 3), (4, 5, 6), (7, 8, 9), (10, 11, 12)],
-                vec![(1, 2, 3), (4, 5, 6), (7, 8, 9), (10, 11, 12)]
+                vec![yuan(1), peso(4), euro(7), euro(10)],
+                vec![yuan(1), peso(4), euro(7), euro(10)]
             ).is_ok()
         );
         assert!(
             transaction_helper(
-                vec![(1, 2, 3), (4, 5, 6), (7, 8, 9), (10, 11, 12)],
-                vec![(7, 8, 9), (1, 2, 3), (10, 11, 12), (4, 5, 6),]
+                vec![yuan(1), peso(4), euro(7), euro(10)],
+                vec![euro(7), yuan(1), euro(10), peso(4),]
             ).is_ok()
         );
 
         // Middle shuffle & merge & split
         assert!(
             transaction_helper(
-                vec![(1, 2, 3), (1, 2, 3), (4, 5, 6), (4, 5, 6)],
-                vec![(1, 2, 3), (1, 2, 3), (4, 5, 6), (4, 5, 6)]
+                vec![yuan(1), yuan(1), peso(4), peso(4)],
+                vec![yuan(1), yuan(1), peso(4), peso(4)]
             ).is_ok()
         );
         assert!(
             transaction_helper(
-                vec![(4, 2, 3), (3, 2, 3), (4, 5, 6), (4, 5, 6)],
-                vec![(2, 2, 3), (5, 2, 3), (1, 5, 6), (7, 5, 6)]
+                vec![yuan(4), yuan(3), peso(4), peso(4)],
+                vec![yuan(2), yuan(5), peso(1), peso(7)]
             ).is_ok()
         );
         assert!(
             transaction_helper(
-                vec![(4, 2, 3), (3, 2, 3), (4, 5, 6), (4, 5, 6)],
-                vec![(1, 5, 6), (7, 5, 6), (2, 2, 3), (5, 2, 3)]
+                vec![yuan(4), yuan(3), peso(4), peso(4)],
+                vec![peso(1), peso(7), yuan(2), yuan(5)]
             ).is_ok()
         );
         assert!(
             transaction_helper(
-                vec![(1, 2, 3), (1, 2, 3), (5, 2, 3), (2, 2, 3)],
-                vec![(1, 2, 3), (1, 2, 3), (5, 2, 3), (2, 2, 3)]
+                vec![yuan(1), yuan(1), yuan(5), yuan(2)],
+                vec![yuan(1), yuan(1), yuan(5), yuan(2)]
             ).is_ok()
         );
         assert!(
             transaction_helper(
-                vec![(1, 2, 3), (2, 2, 3), (5, 2, 3), (2, 2, 3)],
-                vec![(4, 2, 3), (3, 2, 3), (3, 2, 3), (0, 0, 0)]
+                vec![yuan(1), yuan(2), yuan(5), yuan(2)],
+                vec![yuan(4), yuan(3), yuan(3), (0, 0, 0)]
             ).is_ok()
         );
         assert!(
             transaction_helper(
-                vec![(1, 2, 3), (2, 2, 3), (5, 2, 3), (2, 2, 3)],
-                vec![(4, 2, 3), (3, 2, 3), (3, 2, 3), (20, 2, 3)]
+                vec![yuan(1), yuan(2), yuan(5), yuan(2)],
+                vec![yuan(4), yuan(3), yuan(3), yuan(20)]
             ).is_err()
         );
 
         // End shuffles & merge & split & middle shuffle
         assert!(
             transaction_helper(
-                vec![(1, 2, 3), (4, 5, 6), (1, 2, 3), (4, 5, 6)],
-                vec![(4, 5, 6), (1, 2, 3), (1, 2, 3), (4, 5, 6)]
+                vec![yuan(1), peso(4), yuan(1), peso(4)],
+                vec![peso(4), yuan(1), yuan(1), peso(4)]
             ).is_ok()
         );
         assert!(
             transaction_helper(
-                vec![(4, 2, 3), (4, 5, 6), (4, 5, 6), (3, 2, 3)],
-                vec![(1, 5, 6), (2, 2, 3), (5, 2, 3), (7, 5, 6)]
+                vec![yuan(4), peso(4), peso(4), yuan(3)],
+                vec![peso(1), yuan(2), yuan(5), peso(7)]
             ).is_ok()
         );
         assert!(
             transaction_helper(
-                vec![(10, 2, 3), (1, 5, 6), (2, 5, 6), (3, 5, 6)],
-                vec![(5, 2, 3), (4, 2, 3), (1, 2, 3), (6, 5, 6)]
+                vec![yuan(10), peso(1), peso(2), peso(3)],
+                vec![yuan(5), yuan(4), yuan(1), peso(6)]
             ).is_ok()
         );
     }

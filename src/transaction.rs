@@ -7,9 +7,9 @@ use std::cmp::{max, min};
 use subtle::{ConditionallySelectable, ConstantTimeEq};
 use util::{SpacesuitError, Value};
 
-// Enforces that the outputs are a valid rearrangement of the inputs, following the
-// soundness and secrecy requirements in the spacesuit spec.
-// TODO: add padding for different input and output sizes. (currently assuming n = m)
+/// Enforces that the outputs are a valid rearrangement of the inputs, following the
+/// soundness and secrecy requirements in the spacesuit transaction spec:
+/// https://github.com/interstellar/spacesuit/blob/master/spec.md
 pub fn fill_cs<CS: ConstraintSystem>(
     cs: &mut CS,
     inputs: Vec<Value>,
@@ -36,26 +36,32 @@ pub fn fill_cs<CS: ConstraintSystem>(
     }
 
     // Shuffle 1
-    // Group the inputs by flavor.
-    // Choice -> Ordering conversion? seems wrong...
+    // Check that when merge_in is a valid reordering of inputs
+    // when the inputs are grouped by flavor.
     value_shuffle::fill_cs(cs, inputs, merge_in.clone())?;
 
     // Merge
-    // Combine all the merge_in of the same flavor. If different flavors, do not combine.
+    // Check that merge_out is a valid combination of merge_in, 
+    // when all values of the same flavor in merge_in are combined.
     merge::fill_cs(cs, merge_in, merge_mid, merge_out.clone())?;
 
     // Shuffle 2
+    // Check that split_in is a valid reordering of merge_out, allowing for 
+    // the adding or dropping of padding values (quantity = 0) if m != n.
     padded_shuffle::fill_cs(cs, merge_out, split_in.clone())?;
 
     // Split
-    // Combine all the split_out of the same flavor. If different flavors, do not combine.
+    // Check that split_in is a valid combination of split_out, 
+    // when all values of the same flavor in split_out are combined.
     split::fill_cs(cs, split_in, split_mid, split_out.clone())?;
 
     // Shuffle 3
-    // Group the outputs by flavor.
+    // Check that when split_out is a valid reordering of outputs
+    // when the outputs are grouped by flavor.
     value_shuffle::fill_cs(cs, split_out, outputs.clone())?;
 
     // Range Proof
+    // Check that each of the output quantities lies in [0, 2^64).
     for output in outputs {
         range_proof::fill_cs(cs, output.q, 64)?;
     }
@@ -63,6 +69,17 @@ pub fn fill_cs<CS: ConstraintSystem>(
     Ok(())
 }
 
+/// Given the input and output values for a spacesuit transaction, determine
+/// what the intermediate commitments need to be.
+/// 
+/// Note: It is essential that we create commitments to the intermediate variables, 
+/// because the challenges used in the `shuffle`, `merge`, and `split` gadgets are 
+/// generated from these commitments. If we do not commit to the intermediate variables,
+/// then the intermediate variables can have malleable quantities and as a result it 
+/// could be possible to choose them maliciously to cancel out the challenge variables.
+/// This will be fixed in the future with a "Bulletproofs++" which binds the challenge 
+/// value to the intermediate variables as well. The discussion for that is here:
+/// https://github.com/dalek-cryptography/bulletproofs/issues/186
 pub fn make_commitments(
     inputs: Vec<(u64, u64, u64)>,
     outputs: Vec<(u64, u64, u64)>,
@@ -105,7 +122,9 @@ fn shuffle_helper(shuffle_in: &Vec<(u64, u64, u64)>) -> Vec<(u64, u64, u64)> {
     shuffle_out
 }
 
-// takes in split_out, returns split_mid and split_in
+// Takes in split_out, returns split_mid and split_in
+// Runs in constant time - runtime does not reveal anything about input values
+// except for how many there are (which is public knowledge).
 fn split_helper(
     split_out: &Vec<(u64, u64, u64)>,
 ) -> Result<(Vec<(u64, u64, u64)>, Vec<(u64, u64, u64)>), SpacesuitError> {
@@ -118,7 +137,9 @@ fn split_helper(
     Ok((split_mid, split_in))
 }
 
-// takes in merge_in, returns merge_mid and merge_out
+// Takes in merge_in, returns merge_mid and merge_out
+// Runs in constant time - runtime does not reveal anything about input values
+// except for how many there are (which is public knowledge).
 fn merge_helper(
     merge_in: &Vec<(u64, u64, u64)>,
 ) -> Result<(Vec<(u64, u64, u64)>, Vec<(u64, u64, u64)>), SpacesuitError> {
@@ -126,6 +147,7 @@ fn merge_helper(
         return Ok((vec![], merge_in.clone()));
     }
 
+    // The number of 2-merge gadgets that will be created
     let merge_count = merge_in.len() - 1;
     let mut merge_mid = Vec::with_capacity(merge_count);
     let mut merge_out = Vec::with_capacity(merge_in.len());
@@ -155,7 +177,7 @@ fn merge_helper(
         B = merge_in[min(i + 2, merge_count)];
     }
 
-    // Move the last merge_mid to be the last merge_out, to match the protocol
+    // Move the last merge_mid to be the last merge_out, to match the protocol definition
     match merge_mid.pop() {
         Some(val) => merge_out.push(val),
         None => return Err(SpacesuitError::InvalidR1CSConstruction),
@@ -176,39 +198,50 @@ fn append_values(values: &mut Vec<Scalar>, list: &Vec<(u64, u64, u64)>) {
 mod tests {
     use super::*;
 
+    // Helper functions to make the tests easier to read
+    fn yuan(val: u64) -> (u64, u64, u64) {
+        (val, 888, 999)
+    }
+    fn peso(val: u64) -> (u64, u64, u64) {
+        (val, 666, 777)
+    }
+    fn zero() -> (u64, u64, u64) {
+        (0, 0, 0)
+    }
+
     // Note: the output vector for shuffle_helper does not have to be in a particular order,
     // it just has to be grouped by flavor. Thus, it is possible to make a valid change to
     // shuffle_helper but break the tests.
     #[test]
     fn shuffle_helper_test() {
         // k = 1
-        assert_eq!(shuffle_helper(&vec![(1, 9, 9)]), vec![(1, 9, 9)]);
+        assert_eq!(shuffle_helper(&vec![yuan(1)]), vec![yuan(1)]);
         // k = 2
         assert_eq!(
-            shuffle_helper(&vec![(1, 9, 9), (2, 9, 9)]),
-            vec![(1, 9, 9), (2, 9, 9)]
+            shuffle_helper(&vec![yuan(1), yuan(2)]),
+            vec![yuan(1), yuan(2)]
         );
         assert_eq!(
-            shuffle_helper(&vec![(1, 9, 9), (2, 8, 8)]),
-            vec![(2, 8, 8), (1, 9, 9)]
+            shuffle_helper(&vec![yuan(1), peso(2)]),
+            vec![peso(2), yuan(1)]
         );
         // k = 3
         assert_eq!(
-            shuffle_helper(&vec![(1, 9, 9), (3, 8, 8), (2, 9, 9)]),
-            vec![(3, 8, 8), (1, 9, 9), (2, 9, 9)]
+            shuffle_helper(&vec![yuan(1), peso(3), yuan(2)]),
+            vec![peso(3), yuan(1), yuan(2)]
         );
         // k = 4
         assert_eq!(
-            shuffle_helper(&vec![(1, 9, 9), (3, 8, 8), (2, 9, 9), (4, 8, 8)]),
-            vec![(3, 8, 8), (4, 8, 8), (1, 9, 9), (2, 9, 9)]
+            shuffle_helper(&vec![yuan(1), peso(3), yuan(2), peso(4)]),
+            vec![peso(3), peso(4), yuan(1), yuan(2)]
         );
         assert_eq!(
-            shuffle_helper(&vec![(1, 9, 9), (3, 8, 8), (4, 8, 8), (2, 9, 9)]),
-            vec![(3, 8, 8), (4, 8, 8), (1, 9, 9), (2, 9, 9)]
+            shuffle_helper(&vec![yuan(1), peso(3), peso(4), yuan(2)]),
+            vec![peso(3), peso(4), yuan(1), yuan(2)]
         );
         assert_eq!(
-            shuffle_helper(&vec![(1, 9, 9), (3, 8, 8), (4, 7, 7), (2, 9, 9)]),
-            vec![(4, 7, 7), (3, 8, 8), (1, 9, 9), (2, 9, 9)]
+            shuffle_helper(&vec![yuan(1), peso(3), zero(), yuan(2)]),
+            vec![zero(), peso(3), yuan(1), yuan(2)]
         );
     }
 
@@ -216,39 +249,39 @@ mod tests {
     fn merge_helper_test() {
         // k = 2
         assert_eq!(
-            merge_helper(&vec![(1, 2, 3), (4, 5, 6)]).unwrap(),
-            (vec![], vec![(1, 2, 3), (4, 5, 6)])
+            merge_helper(&vec![yuan(1), peso(4)]).unwrap(),
+            (vec![], vec![yuan(1), peso(4)])
         );
         assert_eq!(
-            merge_helper(&vec![(1, 9, 9), (3, 9, 9)]).unwrap(),
-            (vec![], vec![(0, 0, 0), (4, 9, 9)])
+            merge_helper(&vec![yuan(1), yuan(3)]).unwrap(),
+            (vec![], vec![zero(), yuan(4)])
         );
         // k = 3
         assert_eq!(
-            merge_helper(&vec![(1, 2, 3), (4, 5, 6), (7, 8, 9)]).unwrap(),
-            (vec![(4, 5, 6)], vec![(1, 2, 3), (4, 5, 6), (7, 8, 9)])
+            merge_helper(&vec![yuan(1), peso(4), zero()]).unwrap(),
+            (vec![peso(4)], vec![yuan(1), peso(4), zero()])
         );
         assert_eq!(
-            merge_helper(&vec![(1, 9, 9), (3, 9, 9), (2, 8, 8)]).unwrap(),
-            (vec![(4, 9, 9)], vec![(0, 0, 0), (4, 9, 9), (2, 8, 8)])
+            merge_helper(&vec![yuan(1), yuan(3), peso(2)]).unwrap(),
+            (vec![yuan(4)], vec![zero(), yuan(4), peso(2)])
         );
         assert_eq!(
-            merge_helper(&vec![(2, 8, 8), (1, 9, 9), (3, 9, 9)]).unwrap(),
-            (vec![(1, 9, 9)], vec![(2, 8, 8), (0, 0, 0), (4, 9, 9)])
+            merge_helper(&vec![peso(2), yuan(1), yuan(3)]).unwrap(),
+            (vec![yuan(1)], vec![peso(2), zero(), yuan(4)])
         );
         // k = 4
         assert_eq!(
-            merge_helper(&vec![(1, 2, 3), (1, 2, 3), (4, 5, 6), (4, 5, 6)]).unwrap(),
+            merge_helper(&vec![yuan(1), yuan(1), peso(4), peso(4)]).unwrap(),
             (
-                vec![(2, 2, 3), (4, 5, 6)],
-                vec![(0, 0, 0), (2, 2, 3), (0, 0, 0), (8, 5, 6)]
+                vec![yuan(2), peso(4)],
+                vec![zero(), yuan(2), zero(), peso(8)]
             )
         );
         assert_eq!(
-            merge_helper(&vec![(1, 9, 9), (2, 9, 9), (3, 9, 9), (4, 9, 9)]).unwrap(),
+            merge_helper(&vec![yuan(1), yuan(2), yuan(3), yuan(4)]).unwrap(),
             (
-                vec![(3, 9, 9), (6, 9, 9)],
-                vec![(0, 0, 0), (0, 0, 0), (0, 0, 0), (10, 9, 9)]
+                vec![yuan(3), yuan(6)],
+                vec![zero(), zero(), zero(), yuan(10)]
             )
         );
     }

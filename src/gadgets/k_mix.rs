@@ -64,99 +64,88 @@ mod tests {
     use merlin::Transcript;
     use std::cmp::max;
 
+    // Helper functions to make the tests easier to read
+    fn yuan(val: u64) -> (u64, u64, u64) {
+        (val, 888, 999)
+    }
+    fn peso(val: u64) -> (u64, u64, u64) {
+        (val, 666, 777)
+    }
+    fn zero() -> (u64, u64, u64) {
+        (0, 0, 0)
+    }
+
     #[test]
     fn k_mix_gadget() {
-        let peso = 66;
-        let yuan = 88;
-        let zero = 0; // just so the test case formatting lines up nicely
-
         // k=1
         // no merge, same asset types
-        assert!(k_mix_helper(vec![(6, peso, 0)], vec![], vec![(6, peso, 0)]).is_ok());
+        assert!(k_mix_helper(vec![peso(6)], vec![], vec![peso(6)]).is_ok());
         // error when merging different asset types
-        assert!(k_mix_helper(vec![(3, peso, 0)], vec![], vec![(3, yuan, 0)]).is_err());
+        assert!(k_mix_helper(vec![peso(3)], vec![], vec![yuan(3)]).is_err());
 
         // k=2 ... more extensive k=2 tests are in the MixGadget tests
         // no merge, different asset types
-        assert!(
-            k_mix_helper(
-                vec![(3, peso, 0), (6, yuan, 0)],
-                vec![],
-                vec![(3, peso, 0), (6, yuan, 0)],
-            ).is_ok()
-        );
+        assert!(k_mix_helper(vec![peso(3), yuan(6)], vec![], vec![peso(3), yuan(6)],).is_ok());
         // merge, same asset types
-        assert!(
-            k_mix_helper(
-                vec![(3, peso, 0), (6, peso, 0)],
-                vec![],
-                vec![(0, peso, 0), (9, peso, 0)],
-            ).is_ok()
-        );
+        assert!(k_mix_helper(vec![peso(3), peso(6)], vec![], vec![peso(0), peso(9)],).is_ok());
         // error when merging different asset types
-        assert!(
-            k_mix_helper(
-                vec![(3, peso, 0), (3, yuan, 0)],
-                vec![],
-                vec![(0, peso, 0), (6, yuan, 0)],
-            ).is_err()
-        );
+        assert!(k_mix_helper(vec![peso(3), yuan(3)], vec![], vec![peso(0), yuan(6)],).is_err());
 
         // k=3
         // no merge, same asset types
         assert!(
             k_mix_helper(
-                vec![(3, peso, 0), (6, peso, 0), (6, peso, 0)],
-                vec![(6, peso, 0)],
-                vec![(3, peso, 0), (6, peso, 0), (6, peso, 0)],
+                vec![peso(3), peso(6), peso(6)],
+                vec![peso(6)],
+                vec![peso(3), peso(6), peso(6)],
             ).is_ok()
         );
         // no merge, different asset types
         assert!(
             k_mix_helper(
-                vec![(3, peso, 0), (6, yuan, 0), (6, peso, 0)],
-                vec![(6, yuan, 0)],
-                vec![(3, peso, 0), (6, yuan, 0), (6, peso, 0)],
+                vec![peso(3), yuan(6), peso(6)],
+                vec![yuan(6)],
+                vec![peso(3), yuan(6), peso(6)],
             ).is_ok()
         );
         // merge first two
         assert!(
             k_mix_helper(
-                vec![(3, peso, 0), (6, peso, 0), (1, yuan, 0)],
-                vec![(9, peso, 0)],
-                vec![(0, peso, 0), (9, peso, 0), (1, yuan, 0)],
+                vec![peso(3), peso(6), yuan(1)],
+                vec![peso(9)],
+                vec![peso(0), peso(9), yuan(1)],
             ).is_ok()
         );
         // merge last two
         assert!(
             k_mix_helper(
-                vec![(1, yuan, 0), (3, peso, 0), (6, peso, 0)],
-                vec![(3, peso, 0)],
-                vec![(1, yuan, 0), (0, peso, 0), (9, peso, 0)],
+                vec![yuan(1), peso(3), peso(6)],
+                vec![peso(3)],
+                vec![yuan(1), peso(0), peso(9)],
             ).is_ok()
         );
         // merge all, same asset types, zero value is different asset type
         assert!(
             k_mix_helper(
-                vec![(3, peso, 0), (6, peso, 0), (1, peso, 0)],
-                vec![(9, peso, 0)],
-                vec![(0, zero, 0), (0, zero, 0), (10, peso, 0)],
+                vec![peso(3), peso(6), peso(1)],
+                vec![peso(9)],
+                vec![zero(), zero(), peso(10)],
             ).is_ok()
         );
         // incomplete merge, input sum does not equal output sum
         assert!(
             k_mix_helper(
-                vec![(3, peso, 0), (6, peso, 0), (1, peso, 0)],
-                vec![(9, peso, 0)],
-                vec![(1, zero, 0), (0, zero, 0), (9, peso, 0)],
+                vec![peso(3), peso(6), peso(1)],
+                vec![peso(9)],
+                vec![zero(), zero(), peso(9)],
             ).is_err()
         );
         // error when merging with different asset types
         assert!(
             k_mix_helper(
-                vec![(3, peso, 0), (6, yuan, 0), (1, peso, 0)],
-                vec![(9, peso, 0)],
-                vec![(0, zero, 0), (0, zero, 0), (10, peso, 0)],
+                vec![peso(3), yuan(6), peso(1)],
+                vec![peso(9)],
+                vec![zero(), zero(), peso(10)],
             ).is_err()
         );
 
@@ -164,33 +153,33 @@ mod tests {
         // merge each of 2 asset types
         assert!(
             k_mix_helper(
-                vec![(3, peso, 0), (6, peso, 0), (1, yuan, 0), (2, yuan, 0)],
-                vec![(9, peso, 0), (1, yuan, 0)],
-                vec![(0, zero, 0), (9, peso, 0), (0, zero, 0), (3, yuan, 0)],
+                vec![peso(3), peso(6), yuan(1), yuan(2)],
+                vec![peso(9), yuan(1)],
+                vec![zero(), peso(9), zero(), yuan(3)],
             ).is_ok()
         );
         // merge all, same asset
         assert!(
             k_mix_helper(
-                vec![(3, peso, 0), (2, peso, 0), (2, peso, 0), (1, peso, 0)],
-                vec![(5, peso, 0), (7, peso, 0)],
-                vec![(0, zero, 0), (0, zero, 0), (0, zero, 0), (8, peso, 0)],
+                vec![peso(3), peso(2), peso(2), peso(1)],
+                vec![peso(5), peso(7)],
+                vec![zero(), zero(), zero(), peso(8)],
             ).is_ok()
         );
         // no merge, different assets
         assert!(
             k_mix_helper(
-                vec![(3, peso, 0), (2, peso, 1), (2, peso, 2), (1, peso, 3)],
-                vec![(2, peso, 1), (2, peso, 2)],
-                vec![(3, peso, 0), (2, peso, 1), (2, peso, 2), (1, peso, 3)],
+                vec![peso(3), yuan(2), peso(2), yuan(1)],
+                vec![yuan(2), peso(2)],
+                vec![peso(3), yuan(2), peso(2), yuan(1)],
             ).is_ok()
         );
         // error when merging, output sum not equal to input sum
         assert!(
             k_mix_helper(
-                vec![(3, peso, 0), (2, peso, 0), (2, peso, 0), (1, peso, 0)],
-                vec![(5, peso, 0), (7, peso, 0)],
-                vec![(0, zero, 0), (0, zero, 0), (0, zero, 0), (9, peso, 0)],
+                vec![peso(3), peso(2), peso(2), peso(1)],
+                vec![peso(5), peso(7)],
+                vec![zero(), zero(), zero(), peso(9)],
             ).is_err()
         );
     }
