@@ -2,7 +2,7 @@
 
 use bulletproofs::r1cs::ConstraintSystem;
 use curve25519_dalek::scalar::Scalar;
-use gadgets::{merge, pad, range_proof, split, value_shuffle};
+use gadgets::{merge, padded_shuffle, range_proof, split, value_shuffle};
 use std::cmp::{max, min};
 use subtle::{ConditionallySelectable, ConstantTimeEq};
 use util::{SpacesuitError, Value};
@@ -45,7 +45,7 @@ pub fn fill_cs<CS: ConstraintSystem>(
     merge::fill_cs(cs, merge_in, merge_mid, merge_out.clone())?;
 
     // Shuffle 2
-    value_shuffle::fill_cs(cs, merge_out, split_in.clone())?;
+    padded_shuffle::fill_cs(cs, merge_out, split_in.clone())?;
 
     // Split
     // Combine all the split_out of the same flavor. If different flavors, do not combine.

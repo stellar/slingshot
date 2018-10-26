@@ -1,9 +1,10 @@
 pub mod merge;
-pub mod pad;
+pub mod padded_shuffle;
 pub mod range_proof;
 pub mod split;
 pub mod value_shuffle;
 
 mod k_mix;
 mod mix;
+mod pad;
 mod scalar_shuffle;

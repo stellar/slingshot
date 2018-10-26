@@ -139,6 +139,13 @@ mod tests {
         assert!(transaction_helper(vec![(1, 2, 3)], vec![(4, 5, 6)]).is_err());
     }
 
+    // max(m, n) = 2
+    #[test]
+    fn transaction_uneven_2() {
+        assert!(transaction_helper(vec![(3, 2, 3)], vec![(1, 2, 3), (2, 2, 3)]).is_ok());
+        assert!(transaction_helper(vec![(1, 2, 3), (2, 2, 3)], vec![(3, 2, 3)]).is_ok());
+    }
+
     // m=2, n=2
     #[test]
     fn transaction_2_2() {
@@ -263,6 +270,41 @@ mod tests {
         );
     }
 
+    // max(m, n) = 3
+    #[test]
+    fn transaction_uneven_3() {
+        assert!(
+            transaction_helper(vec![(4, 2, 3), (4, 2, 3), (3, 2, 3)], vec![(11, 2, 3)]).is_ok()
+        );
+        assert!(
+            transaction_helper(vec![(11, 2, 3)], vec![(4, 2, 3), (4, 2, 3), (3, 2, 3)],).is_ok()
+        );
+        assert!(
+            transaction_helper(
+                vec![(11, 2, 3), (4, 5, 6)],
+                vec![(4, 2, 3), (7, 2, 3), (4, 5, 6)],
+            ).is_ok()
+        );
+        assert!(
+            transaction_helper(
+                vec![(4, 2, 3), (7, 2, 3), (4, 5, 6)],
+                vec![(11, 2, 3), (4, 5, 6)],
+            ).is_ok()
+        );
+        assert!(
+            transaction_helper(
+                vec![(5, 2, 3), (6, 2, 3)],
+                vec![(4, 2, 3), (4, 2, 3), (3, 2, 3)],
+            ).is_ok()
+        );
+        assert!(
+            transaction_helper(
+                vec![(4, 2, 3), (4, 2, 3), (3, 2, 3)],
+                vec![(5, 2, 3), (6, 2, 3)],
+            ).is_ok()
+        );
+    }
+
     // m=4, n=4
     #[test]
     fn transaction_4_4() {
@@ -329,6 +371,12 @@ mod tests {
             transaction_helper(
                 vec![(4, 2, 3), (4, 5, 6), (4, 5, 6), (3, 2, 3)],
                 vec![(1, 5, 6), (2, 2, 3), (5, 2, 3), (7, 5, 6)]
+            ).is_ok()
+        );
+        assert!(
+            transaction_helper(
+                vec![(10, 2, 3), (1, 5, 6), (2, 5, 6), (3, 5, 6)],
+                vec![(5, 2, 3), (4, 2, 3), (1, 2, 3), (6, 5, 6)]
             ).is_ok()
         );
     }
