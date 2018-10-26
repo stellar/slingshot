@@ -13,8 +13,8 @@ use util::{SpacesuitError, Value};
 /// value to the intermediate variables as well. The discussion for that is here:
 /// https://github.com/dalek-cryptography/bulletproofs/issues/186
 ///
-/// Enforces that the outputs are either a merge of the inputs :`D = A + B && C = 0`,
-/// or the outputs are equal to the inputs `C = A && D = B`.
+/// Enforces that the outputs are either a merge of the inputs: `D = A + B && C = 0`,
+/// or the outputs are equal to the inputs `C = A && D = B`. See spec for more details.
 /// Works for `k` inputs and `k` outputs.
 pub fn fill_cs<CS: ConstraintSystem>(
     cs: &mut CS,

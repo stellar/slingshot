@@ -175,7 +175,7 @@ mod tests {
     // m=3, n=3
     #[test]
     fn transaction_3_3() {
-        // only shuffle
+        // Only shuffle
         assert!(
             transaction_helper(
                 vec![yuan(1), peso(4), euro(8)],
@@ -231,7 +231,7 @@ mod tests {
             ).is_err()
         );
 
-        // middle shuffle & merge & split
+        // Middle shuffle & merge & split
         assert!(
             transaction_helper(
                 vec![yuan(1), yuan(1), peso(4)],

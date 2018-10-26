@@ -5,7 +5,7 @@ use curve25519_dalek::scalar::Scalar;
 use util::{SpacesuitError, Value};
 
 /// Enforces that the outputs are either a merge of the inputs :`D = A + B && C = 0`,
-/// or the outputs are equal to the inputs `C = A && D = B`.
+/// or the outputs are equal to the inputs `C = A && D = B`. See spec for more details.
 /// Works for 2 inputs and 2 outputs.
 pub fn fill_cs<CS: ConstraintSystem>(
     cs: &mut CS,

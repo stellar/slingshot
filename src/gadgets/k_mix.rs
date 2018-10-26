@@ -5,8 +5,8 @@ use bulletproofs::r1cs::ConstraintSystem;
 use curve25519_dalek::scalar::Scalar;
 use util::{SpacesuitError, Value};
 
-/// Enforces that the outputs are either a merge of the inputs :`D = A + B && C = 0`,
-/// or the outputs are equal to the inputs `C = A && D = B`.
+/// Enforces that the outputs are either a merge of the inputs: `D = A + B && C = 0`,
+/// or the outputs are equal to the inputs `C = A && D = B`. See spec for more details.
 /// Works for `k` inputs and `k` outputs.
 pub fn fill_cs<CS: ConstraintSystem>(
     cs: &mut CS,
@@ -83,7 +83,7 @@ mod tests {
         // error when merging different asset types
         assert!(k_mix_helper(vec![peso(3)], vec![], vec![yuan(3)]).is_err());
 
-        // k=2 ... more extensive k=2 tests are in the MixGadget tests
+        // k=2. More extensive k=2 tests are in the MixGadget tests
         // no merge, different asset types
         assert!(k_mix_helper(vec![peso(3), yuan(6)], vec![], vec![peso(3), yuan(6)],).is_ok());
         // merge, same asset types

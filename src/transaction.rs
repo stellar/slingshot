@@ -41,17 +41,17 @@ pub fn fill_cs<CS: ConstraintSystem>(
     value_shuffle::fill_cs(cs, inputs, merge_in.clone())?;
 
     // Merge
-    // Check that merge_out is a valid combination of merge_in, 
+    // Check that merge_out is a valid combination of merge_in,
     // when all values of the same flavor in merge_in are combined.
     merge::fill_cs(cs, merge_in, merge_mid, merge_out.clone())?;
 
     // Shuffle 2
-    // Check that split_in is a valid reordering of merge_out, allowing for 
+    // Check that split_in is a valid reordering of merge_out, allowing for
     // the adding or dropping of padding values (quantity = 0) if m != n.
     padded_shuffle::fill_cs(cs, merge_out, split_in.clone())?;
 
     // Split
-    // Check that split_in is a valid combination of split_out, 
+    // Check that split_in is a valid combination of split_out,
     // when all values of the same flavor in split_out are combined.
     split::fill_cs(cs, split_in, split_mid, split_out.clone())?;
 
@@ -71,13 +71,13 @@ pub fn fill_cs<CS: ConstraintSystem>(
 
 /// Given the input and output values for a spacesuit transaction, determine
 /// what the intermediate commitments need to be.
-/// 
-/// Note: It is essential that we create commitments to the intermediate variables, 
-/// because the challenges used in the `shuffle`, `merge`, and `split` gadgets are 
+///
+/// Note: It is essential that we create commitments to the intermediate variables,
+/// because the challenges used in the `shuffle`, `merge`, and `split` gadgets are
 /// generated from these commitments. If we do not commit to the intermediate variables,
-/// then the intermediate variables can have malleable quantities and as a result it 
+/// then the intermediate variables can have malleable quantities and as a result it
 /// could be possible to choose them maliciously to cancel out the challenge variables.
-/// This will be fixed in the future with a "Bulletproofs++" which binds the challenge 
+/// This will be fixed in the future with a "Bulletproofs++" which binds the challenge
 /// value to the intermediate variables as well. The discussion for that is here:
 /// https://github.com/dalek-cryptography/bulletproofs/issues/186
 pub fn make_commitments(

@@ -2,7 +2,7 @@ use bulletproofs::r1cs::{Assignment, ConstraintSystem, Variable};
 use curve25519_dalek::scalar::Scalar;
 use util::SpacesuitError;
 
-// Enforce that the quantity of v is in the range [0, 2^n)
+/// Enforces that the quantity of v is in the range [0, 2^n).
 pub fn fill_cs<CS: ConstraintSystem>(
     cs: &mut CS,
     v: (Variable, Assignment),

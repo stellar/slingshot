@@ -2,7 +2,8 @@ use super::{pad, value_shuffle};
 use bulletproofs::r1cs::{Assignment, ConstraintSystem};
 use util::{SpacesuitError, Value};
 
-// Enforces that all variables are equal to zero.
+/// Enforces that the values in `y` are a valid reordering of the values in `x`,
+/// allowing for padding (zero values) in x that can be omitted in y (or the other way around).
 pub fn fill_cs<CS: ConstraintSystem>(
     cs: &mut CS,
     x: Vec<Value>,
