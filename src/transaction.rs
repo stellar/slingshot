@@ -79,14 +79,14 @@ pub fn make_commitments(
 
     // Inputs, intermediates, and outputs of merge gadget
     let merge_in = shuffle_helper(&inputs);
-    let (merge_mid, merge_out) = merge_helper(&merge_in);
+    let (merge_mid, merge_out) = merge_helper(&merge_in)?;
     append_values(&mut v, &merge_in);
     append_values(&mut v, &merge_mid);
     append_values(&mut v, &merge_out);
 
     // Inputs, intermediates, and outputs of split gadget
     let split_out = shuffle_helper(&outputs);
-    let (split_mid, split_in) = split_helper(&split_out);
+    let (split_mid, split_in) = split_helper(&split_out)?;
     append_values(&mut v, &split_in);
     append_values(&mut v, &split_mid);
     append_values(&mut v, &split_out);
@@ -106,20 +106,24 @@ fn shuffle_helper(shuffle_in: &Vec<(u64, u64, u64)>) -> Vec<(u64, u64, u64)> {
 }
 
 // takes in split_out, returns split_mid and split_in
-fn split_helper(split_out: &Vec<(u64, u64, u64)>) -> (Vec<(u64, u64, u64)>, Vec<(u64, u64, u64)>) {
+fn split_helper(
+    split_out: &Vec<(u64, u64, u64)>,
+) -> Result<(Vec<(u64, u64, u64)>, Vec<(u64, u64, u64)>), SpacesuitError> {
     let mut split_out_rev = split_out.clone();
     split_out_rev.reverse();
-    let (mut split_mid, mut split_in) = merge_helper(&split_out_rev);
+    let (mut split_mid, mut split_in) = merge_helper(&split_out_rev)?;
     split_mid.reverse();
     split_in.reverse();
 
-    (split_mid, split_in)
+    Ok((split_mid, split_in))
 }
 
 // takes in merge_in, returns merge_mid and merge_out
-fn merge_helper(merge_in: &Vec<(u64, u64, u64)>) -> (Vec<(u64, u64, u64)>, Vec<(u64, u64, u64)>) {
+fn merge_helper(
+    merge_in: &Vec<(u64, u64, u64)>,
+) -> Result<(Vec<(u64, u64, u64)>, Vec<(u64, u64, u64)>), SpacesuitError> {
     if merge_in.len() < 2 {
-        return (vec![], merge_in.clone());
+        return Ok((vec![], merge_in.clone()));
     }
 
     let merge_count = merge_in.len() - 1;
@@ -152,9 +156,12 @@ fn merge_helper(merge_in: &Vec<(u64, u64, u64)>) -> (Vec<(u64, u64, u64)>, Vec<(
     }
 
     // Move the last merge_mid to be the last merge_out, to match the protocol
-    merge_out.push(merge_mid.pop().unwrap()); // TODO: handle this error
+    match merge_mid.pop() {
+        Some(val) => merge_out.push(val),
+        None => return Err(SpacesuitError::InvalidR1CSConstruction),
+    }
 
-    (merge_mid, merge_out)
+    Ok((merge_mid, merge_out))
 }
 
 fn append_values(values: &mut Vec<Scalar>, list: &Vec<(u64, u64, u64)>) {
@@ -209,36 +216,36 @@ mod tests {
     fn merge_helper_test() {
         // k = 2
         assert_eq!(
-            merge_helper(&vec![(1, 2, 3), (4, 5, 6)]),
+            merge_helper(&vec![(1, 2, 3), (4, 5, 6)]).unwrap(),
             (vec![], vec![(1, 2, 3), (4, 5, 6)])
         );
         assert_eq!(
-            merge_helper(&vec![(1, 9, 9), (3, 9, 9)]),
+            merge_helper(&vec![(1, 9, 9), (3, 9, 9)]).unwrap(),
             (vec![], vec![(0, 0, 0), (4, 9, 9)])
         );
         // k = 3
         assert_eq!(
-            merge_helper(&vec![(1, 2, 3), (4, 5, 6), (7, 8, 9)]),
+            merge_helper(&vec![(1, 2, 3), (4, 5, 6), (7, 8, 9)]).unwrap(),
             (vec![(4, 5, 6)], vec![(1, 2, 3), (4, 5, 6), (7, 8, 9)])
         );
         assert_eq!(
-            merge_helper(&vec![(1, 9, 9), (3, 9, 9), (2, 8, 8)]),
+            merge_helper(&vec![(1, 9, 9), (3, 9, 9), (2, 8, 8)]).unwrap(),
             (vec![(4, 9, 9)], vec![(0, 0, 0), (4, 9, 9), (2, 8, 8)])
         );
         assert_eq!(
-            merge_helper(&vec![(2, 8, 8), (1, 9, 9), (3, 9, 9)]),
+            merge_helper(&vec![(2, 8, 8), (1, 9, 9), (3, 9, 9)]).unwrap(),
             (vec![(1, 9, 9)], vec![(2, 8, 8), (0, 0, 0), (4, 9, 9)])
         );
         // k = 4
         assert_eq!(
-            merge_helper(&vec![(1, 2, 3), (1, 2, 3), (4, 5, 6), (4, 5, 6)]),
+            merge_helper(&vec![(1, 2, 3), (1, 2, 3), (4, 5, 6), (4, 5, 6)]).unwrap(),
             (
                 vec![(2, 2, 3), (4, 5, 6)],
                 vec![(0, 0, 0), (2, 2, 3), (0, 0, 0), (8, 5, 6)]
             )
         );
         assert_eq!(
-            merge_helper(&vec![(1, 9, 9), (2, 9, 9), (3, 9, 9), (4, 9, 9)]),
+            merge_helper(&vec![(1, 9, 9), (2, 9, 9), (3, 9, 9), (4, 9, 9)]).unwrap(),
             (
                 vec![(3, 9, 9), (6, 9, 9)],
                 vec![(0, 0, 0), (0, 0, 0), (0, 0, 0), (10, 9, 9)]
