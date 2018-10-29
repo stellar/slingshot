@@ -36,32 +36,32 @@ pub fn fill_cs<CS: ConstraintSystem>(
     }
 
     // Shuffle 1
-    // Check that when merge_in is a valid reordering of inputs
-    // when the inputs are grouped by flavor.
+    // Check that `merge_in` is a valid reordering of `inputs`
+    // when `inputs` are grouped by flavor.
     value_shuffle::fill_cs(cs, inputs, merge_in.clone())?;
 
     // Merge
-    // Check that merge_out is a valid combination of merge_in,
-    // when all values of the same flavor in merge_in are combined.
+    // Check that `merge_out` is a valid combination of `merge_in`,
+    // when all values of the same flavor in `merge_in` are combined.
     merge::fill_cs(cs, merge_in, merge_mid, merge_out.clone())?;
 
     // Shuffle 2
-    // Check that split_in is a valid reordering of merge_out, allowing for
+    // Check that `split_in` is a valid reordering of `merge_out`, allowing for
     // the adding or dropping of padding values (quantity = 0) if m != n.
     padded_shuffle::fill_cs(cs, merge_out, split_in.clone())?;
 
     // Split
-    // Check that split_in is a valid combination of split_out,
-    // when all values of the same flavor in split_out are combined.
+    // Check that `split_in` is a valid combination of `split_out`,
+    // when all values of the same flavor in `split_out` are combined.
     split::fill_cs(cs, split_in, split_mid, split_out.clone())?;
 
     // Shuffle 3
-    // Check that when split_out is a valid reordering of outputs
-    // when the outputs are grouped by flavor.
+    // Check that `split_out` is a valid reordering of `outputs`
+    // when `outputs` are grouped by flavor.
     value_shuffle::fill_cs(cs, split_out, outputs.clone())?;
 
     // Range Proof
-    // Check that each of the output quantities lies in [0, 2^64).
+    // Check that each of the quantities in `outputs` lies in [0, 2^64).
     for output in outputs {
         range_proof::fill_cs(cs, output.q, 64)?;
     }

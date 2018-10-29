@@ -6,5 +6,4 @@ pub mod value_shuffle;
 
 mod k_mix;
 mod mix;
-mod pad;
 mod scalar_shuffle;
