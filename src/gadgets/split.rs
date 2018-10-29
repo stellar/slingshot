@@ -7,7 +7,7 @@ use util::{SpacesuitError, Value};
 /// Works for `k` inputs and `k` outputs.
 ///
 /// Note: the `split` gadget is the same thing as a `merge` gadget, but "backwards".
-/// This means that if you reverse all of the commitment vectors, and switch the 
+/// This means that if you reverse all of the commitment vectors, and switch the
 /// inputs and outputs of a `merge` gadget, then you have a `split` gadget.
 pub fn fill_cs<CS: ConstraintSystem>(
     cs: &mut CS,

@@ -1,6 +1,6 @@
 #![allow(non_snake_case)]
 
-use bulletproofs::r1cs::ConstraintSystem;
+use bulletproofs::r1cs::{Assignment, ConstraintSystem, Variable};
 use curve25519_dalek::scalar::Scalar;
 use gadgets::{merge, padded_shuffle, range_proof, split, value_shuffle};
 use std::cmp::{max, min};
@@ -112,6 +112,64 @@ pub fn make_commitments(
     append_values(&mut v, &outputs);
 
     Ok(v)
+}
+
+pub fn value_helper(
+    variables: Vec<Variable>,
+    assignments: Vec<Assignment>,
+    m: usize,
+    n: usize,
+) -> (
+    Vec<Value>,
+    Vec<Value>,
+    Vec<Value>,
+    Vec<Value>,
+    Vec<Value>,
+    Vec<Value>,
+    Vec<Value>,
+    Vec<Value>,
+) {
+    let inner_merge_count = max(m as isize - 2, 0) as usize;
+    let inner_split_count = max(n as isize - 2, 0) as usize;
+    let val_count = variables.len() / 3;
+
+    let mut values = Vec::with_capacity(val_count);
+    for i in 0..val_count {
+        values.push(Value {
+            q: (variables[i * 3], assignments[i * 3]),
+            a: (variables[i * 3 + 1], assignments[i * 3 + 1]),
+            t: (variables[i * 3 + 2], assignments[i * 3 + 2]),
+        });
+    }
+
+    // TODO: surely there's a better way to do this
+    let mut index = 0;
+    let inp = &values[index..index + m];
+    index = index + m;
+    let m_i = &values[index..index + m];
+    index = index + m;
+    let m_m = &values[index..index + inner_merge_count];
+    index = index + inner_merge_count;
+    let m_o = &values[index..index + m];
+    index = index + m;
+    let s_i = &values[index..index + n];
+    index = index + n;
+    let s_m = &values[index..index + inner_split_count];
+    index = index + inner_split_count;
+    let s_o = &values[index..index + n];
+    index = index + n;
+    let out = &values[index..index + n];
+
+    (
+        inp.to_vec(),
+        m_i.to_vec(),
+        m_m.to_vec(),
+        m_o.to_vec(),
+        s_i.to_vec(),
+        s_m.to_vec(),
+        s_o.to_vec(),
+        out.to_vec(),
+    )
 }
 
 // Takes in the ungrouped side of shuffle, returns the values grouped by flavor.

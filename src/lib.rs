@@ -9,5 +9,4 @@ extern crate failure;
 
 mod gadgets;
 pub mod transaction;
-mod transaction_tests;
-mod util;
+pub mod util;
