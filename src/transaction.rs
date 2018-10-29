@@ -4,7 +4,7 @@ use bulletproofs::r1cs::{Assignment, ConstraintSystem, Variable};
 use curve25519_dalek::scalar::Scalar;
 use gadgets::{merge, padded_shuffle, range_proof, split, value_shuffle};
 use std::cmp::{max, min};
-use subtle::{ConditionallySelectable, ConstantTimeEq};
+use subtle::{ConditionallyAssignable, ConstantTimeEq};
 use util::{SpacesuitError, Value};
 
 /// Enforces that the outputs are a valid rearrangement of the inputs, following the
@@ -80,9 +80,9 @@ pub fn fill_cs<CS: ConstraintSystem>(
 /// This will be fixed in the future with a "Bulletproofs++" which binds the challenge
 /// value to the intermediate variables as well. The discussion for that is here:
 /// https://github.com/dalek-cryptography/bulletproofs/issues/186
-pub fn make_commitments(
-    inputs: Vec<(u64, u64, u64)>,
-    outputs: Vec<(u64, u64, u64)>,
+pub fn compute_intermediate_values(
+    inputs: Vec<(Scalar, Scalar, Scalar)>,
+    outputs: Vec<(Scalar, Scalar, Scalar)>,
 ) -> Result<Vec<Scalar>, SpacesuitError> {
     let m = inputs.len();
     let n = outputs.len();
@@ -165,9 +165,9 @@ pub fn value_helper(
 
 // Takes in the ungrouped side of shuffle, returns the values grouped by flavor.
 // TODO: do this in constant time
-fn shuffle_helper(shuffle_in: &Vec<(u64, u64, u64)>) -> Vec<(u64, u64, u64)> {
+fn shuffle_helper(shuffle_in: &Vec<(Scalar, Scalar, Scalar)>) -> Vec<(Scalar, Scalar, Scalar)> {
     let mut shuffle_out = shuffle_in.clone();
-    shuffle_out.sort_unstable_by_key(|(_q, a, t)| (a.clone(), t.clone()));
+    shuffle_out.sort_unstable_by_key(|(_q, a, t)| (a.to_bytes(), t.to_bytes()));
     shuffle_out
 }
 
@@ -175,8 +175,8 @@ fn shuffle_helper(shuffle_in: &Vec<(u64, u64, u64)>) -> Vec<(u64, u64, u64)> {
 // Runs in constant time - runtime does not reveal anything about input values
 // except for how many there are (which is public knowledge).
 fn split_helper(
-    split_out: &Vec<(u64, u64, u64)>,
-) -> Result<(Vec<(u64, u64, u64)>, Vec<(u64, u64, u64)>), SpacesuitError> {
+    split_out: &Vec<(Scalar, Scalar, Scalar)>,
+) -> Result<(Vec<(Scalar, Scalar, Scalar)>, Vec<(Scalar, Scalar, Scalar)>), SpacesuitError> {
     let mut split_out_rev = split_out.clone();
     split_out_rev.reverse();
     let (mut split_mid, mut split_in) = merge_helper(&split_out_rev)?;
@@ -190,8 +190,8 @@ fn split_helper(
 // Runs in constant time - runtime does not reveal anything about input values
 // except for how many there are (which is public knowledge).
 fn merge_helper(
-    merge_in: &Vec<(u64, u64, u64)>,
-) -> Result<(Vec<(u64, u64, u64)>, Vec<(u64, u64, u64)>), SpacesuitError> {
+    merge_in: &Vec<(Scalar, Scalar, Scalar)>,
+) -> Result<(Vec<(Scalar, Scalar, Scalar)>, Vec<(Scalar, Scalar, Scalar)>), SpacesuitError> {
     if merge_in.len() < 2 {
         return Ok((vec![], merge_in.clone()));
     }
@@ -209,20 +209,21 @@ fn merge_helper(
 
         // If same_flavor, merge: C.q, C.a, C.t = 0.
         // Else, move: C = A.
-        let C_q = ConditionallySelectable::conditional_select(&A.0, &0, same_flavor);
-        let C_a = ConditionallySelectable::conditional_select(&A.1, &0, same_flavor);
-        let C_t = ConditionallySelectable::conditional_select(&A.2, &0, same_flavor);
+        let mut C = A.clone();
+        C.0.conditional_assign(&Scalar::zero(), same_flavor);
+        C.1.conditional_assign(&Scalar::zero(), same_flavor);
+        C.2.conditional_assign(&Scalar::zero(), same_flavor);
+        merge_out.push(C);
 
         // If same_flavor, merge: D.q = A.q + B.q, D.a = A.a, D.t = A.t.
         // Else, move: D = B.
-        let D_q = ConditionallySelectable::conditional_select(&B.0, &(A.0 + B.0), same_flavor);
-        let D_a = ConditionallySelectable::conditional_select(&B.1, &A.1, same_flavor);
-        let D_t = ConditionallySelectable::conditional_select(&B.2, &A.2, same_flavor);
+        let mut D = B.clone();
+        D.0.conditional_assign(&(A.0 + B.0), same_flavor);
+        D.1.conditional_assign(&A.1, same_flavor);
+        D.2.conditional_assign(&A.2, same_flavor);
+        merge_mid.push(D);
 
-        merge_out.push((C_q, C_a, C_t));
-        merge_mid.push((D_q, D_a, D_t));
-
-        A = (D_q, D_a, D_t);
+        A = D;
         B = merge_in[min(i + 2, merge_count)];
     }
 
@@ -235,11 +236,11 @@ fn merge_helper(
     Ok((merge_mid, merge_out))
 }
 
-fn append_values(values: &mut Vec<Scalar>, list: &Vec<(u64, u64, u64)>) {
+fn append_values(values: &mut Vec<Scalar>, list: &Vec<(Scalar, Scalar, Scalar)>) {
     for i in 0..list.len() {
-        values.push(Scalar::from(list[i].0));
-        values.push(Scalar::from(list[i].1));
-        values.push(Scalar::from(list[i].2));
+        values.push(list[i].0);
+        values.push(list[i].1);
+        values.push(list[i].2);
     }
 }
 
@@ -248,14 +249,22 @@ mod tests {
     use super::*;
 
     // Helper functions to make the tests easier to read
-    fn yuan(val: u64) -> (u64, u64, u64) {
-        (val, 888, 999)
+    fn yuan(val: u64) -> (Scalar, Scalar, Scalar) {
+        (
+            Scalar::from(val),
+            Scalar::from(888u64),
+            Scalar::from(999u64),
+        )
     }
-    fn peso(val: u64) -> (u64, u64, u64) {
-        (val, 666, 777)
+    fn peso(val: u64) -> (Scalar, Scalar, Scalar) {
+        (
+            Scalar::from(val),
+            Scalar::from(666u64),
+            Scalar::from(777u64),
+        )
     }
-    fn zero() -> (u64, u64, u64) {
-        (0, 0, 0)
+    fn zero() -> (Scalar, Scalar, Scalar) {
+        (Scalar::zero(), Scalar::zero(), Scalar::zero())
     }
 
     // Note: the output vector for shuffle_helper does not have to be in a particular order,

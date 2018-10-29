@@ -15,8 +15,8 @@ use merlin::Transcript;
 extern crate rand;
 
 fn transaction_helper(
-    inputs: Vec<(u64, u64, u64)>,
-    outputs: Vec<(u64, u64, u64)>,
+    inputs: Vec<(Scalar, Scalar, Scalar)>,
+    outputs: Vec<(Scalar, Scalar, Scalar)>,
 ) -> Result<(), SpacesuitError> {
     // Common
     let pc_gens = PedersenGens::default();
@@ -28,7 +28,7 @@ fn transaction_helper(
     let (proof, commitments) = {
         // Prover makes a `ConstraintSystem` instance representing a transaction gadget
         // Make v vector
-        let v = transaction::make_commitments(inputs, outputs)?;
+        let v = transaction::compute_intermediate_values(inputs, outputs)?;
 
         // Make v_blinding vector using RNG from transcript
         let mut prover_transcript = Transcript::new(b"TransactionTest");
@@ -79,14 +79,29 @@ fn transaction_helper(
 }
 
 // Helper functions to make the tests easier to read
-fn yuan(val: u64) -> (u64, u64, u64) {
-    (val, 888, 999)
+fn yuan(val: u64) -> (Scalar, Scalar, Scalar) {
+    (
+        Scalar::from(val),
+        Scalar::from(888u64),
+        Scalar::from(999u64),
+    )
 }
-fn peso(val: u64) -> (u64, u64, u64) {
-    (val, 666, 777)
+fn peso(val: u64) -> (Scalar, Scalar, Scalar) {
+    (
+        Scalar::from(val),
+        Scalar::from(666u64),
+        Scalar::from(777u64),
+    )
 }
-fn euro(val: u64) -> (u64, u64, u64) {
-    (val, 444, 555)
+fn euro(val: u64) -> (Scalar, Scalar, Scalar) {
+    (
+        Scalar::from(val),
+        Scalar::from(444u64),
+        Scalar::from(555u64),
+    )
+}
+fn zero() -> (Scalar, Scalar, Scalar) {
+    (Scalar::zero(), Scalar::zero(), Scalar::zero())
 }
 
 // m=1, n=1
@@ -168,7 +183,7 @@ fn transaction_3_3() {
     assert!(
         transaction_helper(
             vec![yuan(1), peso(4), euro(8)],
-            vec![yuan(1), (40, 50, 60), euro(8)]
+            vec![yuan(1), euro(4), euro(8)]
         ).is_err()
     );
     assert!(
@@ -282,7 +297,7 @@ fn transaction_4_4() {
     assert!(
         transaction_helper(
             vec![yuan(1), yuan(2), yuan(5), yuan(2)],
-            vec![yuan(4), yuan(3), yuan(3), (0, 0, 0)]
+            vec![yuan(4), yuan(3), yuan(3), zero()]
         ).is_ok()
     );
     assert!(
