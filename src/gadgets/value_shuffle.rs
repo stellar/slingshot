@@ -143,6 +143,7 @@ mod tests {
                 vec![peso(1), yuan(4), (98, 99, 100)]
             ).is_err()
         );
+        assert!(value_shuffle_helper(vec![(0, 0, 0)], vec![(0, 0, 1)]).is_err());
     }
 
     fn value_shuffle_helper(

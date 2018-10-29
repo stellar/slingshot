@@ -41,6 +41,7 @@ pub fn fill_cs<CS: ConstraintSystem>(
     } else if m < n {
         x.append(&mut values);
     }
+
     value_shuffle::fill_cs(cs, x, y)?;
 
     Ok(())
@@ -92,19 +93,13 @@ mod tests {
                 vec![zero(), zero(), yuan(4), yuan(1), peso(8)]
             ).is_ok()
         );
+        assert!(padded_shuffle_helper(vec![peso(1), yuan(4)], vec![yuan(4), peso(2)]).is_err());
         assert!(
             padded_shuffle_helper(
                 vec![yuan(1), yuan(4), peso(8)],
                 vec![zero(), (1, 0, 0), yuan(4), yuan(1), peso(8)]
             ).is_err()
         );
-        // TODO: Figure out why this test is failing :o
-        // assert!(
-        //     padded_shuffle_helper(
-        //         vec![yuan(1), yuan(4), zero(), peso(8)],
-        //         vec![zero(), (0, 0, 1), yuan(4), yuan(1), peso(8)]
-        //     ).is_err()
-        // );
     }
 
     // Helper functions to make the tests easier to read
@@ -136,12 +131,12 @@ mod tests {
             for tuple in input {
                 v.push(Scalar::from(tuple.0));
                 v.push(Scalar::from(tuple.1));
-                v.push(Scalar::from(tuple.1));
+                v.push(Scalar::from(tuple.2));
             }
             for tuple in output {
                 v.push(Scalar::from(tuple.0));
                 v.push(Scalar::from(tuple.1));
-                v.push(Scalar::from(tuple.1));
+                v.push(Scalar::from(tuple.2));
             }
 
             // Make v_blinding vector using RNG from transcript
