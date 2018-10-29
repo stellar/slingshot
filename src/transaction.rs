@@ -23,8 +23,8 @@ pub fn fill_cs<CS: ConstraintSystem>(
 ) -> Result<(), SpacesuitError> {
     let m = inputs.len();
     let n = outputs.len();
-    let inner_merge_count = max(m as isize - 2, 0) as usize;
-    let inner_split_count = max(n as isize - 2, 0) as usize;
+    let inner_merge_count = max(m, 2) - 2; // max(m - 2, 0)
+    let inner_split_count = max(n, 2) - 2; // max(n - 2, 0)
     if inputs.len() != merge_in.len()
         || merge_in.len() != merge_out.len()
         || split_in.len() != split_out.len()
@@ -86,8 +86,8 @@ pub fn make_commitments(
 ) -> Result<Vec<Scalar>, SpacesuitError> {
     let m = inputs.len();
     let n = outputs.len();
-    let merge_mid_count = max(m as isize - 2, 0) as usize;
-    let split_mid_count = max(n as isize - 2, 0) as usize;
+    let merge_mid_count = max(m, 2) - 2; // max(m - 2, 0)
+    let split_mid_count = max(n, 2) - 2; // max(n - 2, 0)
     let commitment_count = 2 * m + merge_mid_count + 2 * n + split_mid_count;
     let mut v = Vec::with_capacity(commitment_count);
 
@@ -129,8 +129,8 @@ pub fn value_helper(
     Vec<Value>,
     Vec<Value>,
 ) {
-    let inner_merge_count = max(m as isize - 2, 0) as usize;
-    let inner_split_count = max(n as isize - 2, 0) as usize;
+    let inner_merge_count = max(m, 2) - 2; // max(m - 2, 0)
+    let inner_split_count = max(n, 2) - 2; // max(n - 2, 0)
     let val_count = variables.len() / 3;
 
     let mut values = Vec::with_capacity(val_count);
@@ -142,23 +142,14 @@ pub fn value_helper(
         });
     }
 
-    // TODO: surely there's a better way to do this
-    let mut index = 0;
-    let inp = &values[index..index + m];
-    index = index + m;
-    let m_i = &values[index..index + m];
-    index = index + m;
-    let m_m = &values[index..index + inner_merge_count];
-    index = index + inner_merge_count;
-    let m_o = &values[index..index + m];
-    index = index + m;
-    let s_i = &values[index..index + n];
-    index = index + n;
-    let s_m = &values[index..index + inner_split_count];
-    index = index + inner_split_count;
-    let s_o = &values[index..index + n];
-    index = index + n;
-    let out = &values[index..index + n];
+    let (inp, values) = values.split_at(m);
+    let (m_i, values) = values.split_at(m);
+    let (m_m, values) = values.split_at(inner_merge_count);
+    let (m_o, values) = values.split_at(m);
+    let (s_i, values) = values.split_at(n);
+    let (s_m, values) = values.split_at(inner_split_count);
+    let (s_o, values) = values.split_at(n);
+    let (out, _) = values.split_at(n);
 
     (
         inp.to_vec(),

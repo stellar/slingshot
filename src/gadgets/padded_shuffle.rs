@@ -1,6 +1,7 @@
 use super::value_shuffle;
 use bulletproofs::r1cs::{Assignment, ConstraintSystem};
 use curve25519_dalek::scalar::Scalar;
+use std::cmp::{max, min};
 
 use util::{SpacesuitError, Value};
 
@@ -15,7 +16,7 @@ pub fn fill_cs<CS: ConstraintSystem>(
     let n = y.len();
 
     // Number of values to be padded on one side of the shuffle
-    let pad_count = (m as i8 - n as i8).abs() as usize;
+    let pad_count = max(m, n) - min(m, n);
     let mut values = Vec::with_capacity(pad_count);
 
     for _ in 0..pad_count {

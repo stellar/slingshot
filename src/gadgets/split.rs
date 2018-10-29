@@ -11,15 +11,12 @@ use util::{SpacesuitError, Value};
 /// inputs and outputs of a `merge` gadget, then you have a `split` gadget.
 pub fn fill_cs<CS: ConstraintSystem>(
     cs: &mut CS,
-    inputs: Vec<Value>,
-    intermediates: Vec<Value>,
-    outputs: Vec<Value>,
+    mut inputs: Vec<Value>,
+    mut intermediates: Vec<Value>,
+    mut outputs: Vec<Value>,
 ) -> Result<(), SpacesuitError> {
-    let mut inputs_rev = inputs.clone();
-    inputs_rev.reverse();
-    let mut intermediates_rev = intermediates.clone();
-    intermediates_rev.reverse();
-    let mut outputs_rev = outputs.clone();
-    outputs_rev.reverse();
-    k_mix::fill_cs(cs, outputs_rev, intermediates_rev, inputs_rev)
+    inputs.reverse();
+    intermediates.reverse();
+    outputs.reverse();
+    k_mix::fill_cs(cs, outputs, intermediates, inputs)
 }
