@@ -281,25 +281,25 @@ mod tests {
         );
         assert_eq!(
             shuffle_helper(&vec![yuan(1), peso(2)]),
-            vec![peso(2), yuan(1)]
+            vec![yuan(1), peso(2)]
         );
         // k = 3
         assert_eq!(
             shuffle_helper(&vec![yuan(1), peso(3), yuan(2)]),
-            vec![peso(3), yuan(1), yuan(2)]
+            vec![yuan(1), yuan(2), peso(3)]
         );
         // k = 4
         assert_eq!(
             shuffle_helper(&vec![yuan(1), peso(3), yuan(2), peso(4)]),
-            vec![peso(3), peso(4), yuan(1), yuan(2)]
+            vec![yuan(1), yuan(2), peso(3), peso(4)]
         );
         assert_eq!(
             shuffle_helper(&vec![yuan(1), peso(3), peso(4), yuan(2)]),
-            vec![peso(3), peso(4), yuan(1), yuan(2)]
+            vec![yuan(1), yuan(2), peso(3), peso(4)]
         );
         assert_eq!(
             shuffle_helper(&vec![yuan(1), peso(3), zero(), yuan(2)]),
-            vec![zero(), peso(3), yuan(1), yuan(2)]
+            vec![zero(), yuan(1), yuan(2), peso(3)]
         );
     }
 
