@@ -1,9 +1,12 @@
-pub mod merge;
-pub mod padded_shuffle;
-pub mod range_proof;
-pub mod split;
-pub mod value_shuffle;
+pub mod transaction;
 
 mod k_mix;
+mod merge;
 mod mix;
+mod split;
+
+mod padded_shuffle;
 mod scalar_shuffle;
+mod value_shuffle;
+
+mod range_proof;

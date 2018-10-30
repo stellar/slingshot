@@ -1,72 +1,81 @@
 #![allow(non_snake_case)]
 
-use bulletproofs::r1cs::{Assignment, ConstraintSystem, Variable};
+use bulletproofs::r1cs::{Assignment, ProverCS, R1CSProof, Variable, VerifierCS};
+use bulletproofs::{BulletproofGens, PedersenGens};
+use curve25519_dalek::ristretto::CompressedRistretto;
 use curve25519_dalek::scalar::Scalar;
-use gadgets::{merge, padded_shuffle, range_proof, split, value_shuffle};
+use gadgets::transaction;
+use merlin::Transcript;
 use std::cmp::max;
 use subtle::{ConditionallyAssignable, ConstantTimeEq};
 use util::{SpacesuitError, Value};
 
-/// Enforces that the outputs are a valid rearrangement of the inputs, following the
-/// soundness and secrecy requirements in the spacesuit transaction spec:
-/// https://github.com/interstellar/spacesuit/blob/master/spec.md
-pub fn fill_cs<CS: ConstraintSystem>(
-    cs: &mut CS,
-    inputs: Vec<Value>,
-    merge_in: Vec<Value>,
-    merge_mid: Vec<Value>,
-    merge_out: Vec<Value>,
-    split_in: Vec<Value>,
-    split_mid: Vec<Value>,
-    split_out: Vec<Value>,
-    outputs: Vec<Value>,
-) -> Result<(), SpacesuitError> {
+pub fn prove(
+    inputs: Vec<(Scalar, Scalar, Scalar)>,
+    outputs: Vec<(Scalar, Scalar, Scalar)>,
+) -> Result<(R1CSProof, Vec<CompressedRistretto>), SpacesuitError> {
+    let pc_gens = PedersenGens::default();
+    let bp_gens = BulletproofGens::new(10000, 1);
     let m = inputs.len();
     let n = outputs.len();
-    let inner_merge_count = max(m, 2) - 2; // max(m - 2, 0)
-    let inner_split_count = max(n, 2) - 2; // max(n - 2, 0)
-    if inputs.len() != merge_in.len()
-        || merge_in.len() != merge_out.len()
-        || split_in.len() != split_out.len()
-        || split_out.len() != outputs.len()
-        || merge_mid.len() != inner_merge_count
-        || split_mid.len() != inner_split_count
-    {
-        return Err(SpacesuitError::InvalidR1CSConstruction);
-    }
 
-    // Shuffle 1
-    // Check that `merge_in` is a valid reordering of `inputs`
-    // when `inputs` are grouped by flavor.
-    value_shuffle::fill_cs(cs, inputs, merge_in.clone())?;
+    // Prover makes a `ConstraintSystem` instance representing a transaction gadget
+    // Make v vector
+    let v = compute_intermediate_values(inputs, outputs)?;
 
-    // Merge
-    // Check that `merge_out` is a valid combination of `merge_in`,
-    // when all values of the same flavor in `merge_in` are combined.
-    merge::fill_cs(cs, merge_in, merge_mid, merge_out.clone())?;
+    // Make v_blinding vector using RNG from transcript
+    let mut prover_transcript = Transcript::new(b"TransactionTest");
+    let mut rng = {
+        let mut builder = prover_transcript.build_rng();
 
-    // Shuffle 2
-    // Check that `split_in` is a valid reordering of `merge_out`, allowing for
-    // the adding or dropping of padding values (quantity = 0) if m != n.
-    padded_shuffle::fill_cs(cs, merge_out, split_in.clone())?;
+        // Commit the secret values
+        for &v_i in &v {
+            builder = builder.commit_witness_bytes(b"v_i", v_i.as_bytes());
+        }
+        use rand::thread_rng;
+        builder.finalize(&mut thread_rng())
+    };
+    let v_blinding: Vec<Scalar> = (0..v.len()).map(|_| Scalar::random(&mut rng)).collect();
 
-    // Split
-    // Check that `split_in` is a valid combination of `split_out`,
-    // when all values of the same flavor in `split_out` are combined.
-    split::fill_cs(cs, split_in, split_mid, split_out.clone())?;
+    let (mut prover_cs, variables, commitments) = ProverCS::new(
+        &bp_gens,
+        &pc_gens,
+        &mut prover_transcript,
+        v.clone(),
+        v_blinding,
+    );
 
-    // Shuffle 3
-    // Check that `split_out` is a valid reordering of `outputs`
-    // when `outputs` are grouped by flavor.
-    value_shuffle::fill_cs(cs, split_out, outputs.clone())?;
+    // Prover adds constraints to the constraint system
+    let v_assignments = v.iter().map(|v_i| Assignment::from(*v_i)).collect();
+    let (inp, m_i, m_m, m_o, s_i, s_m, s_o, out) = value_helper(variables, v_assignments, m, n);
 
-    // Range Proof
-    // Check that each of the quantities in `outputs` lies in [0, 2^64).
-    for output in outputs {
-        range_proof::fill_cs(cs, output.q, 64)?;
-    }
+    transaction::fill_cs(&mut prover_cs, inp, m_i, m_m, m_o, s_i, s_m, s_o, out)?;
+    let proof = prover_cs.prove()?;
 
-    Ok(())
+    Ok((proof, commitments))
+}
+
+pub fn verify(
+    proof: R1CSProof,
+    commitments: Vec<CompressedRistretto>,
+    m: usize,
+    n: usize,
+) -> Result<(), SpacesuitError> {
+    let pc_gens = PedersenGens::default();
+    let bp_gens = BulletproofGens::new(10000, 1);
+
+    // Verifier makes a `ConstraintSystem` instance representing a merge gadget
+    let mut verifier_transcript = Transcript::new(b"TransactionTest");
+    let (mut verifier_cs, variables) =
+        VerifierCS::new(&bp_gens, &pc_gens, &mut verifier_transcript, commitments);
+
+    // Verifier allocates variables and adds constraints to the constraint system
+    let v_assignments = vec![Assignment::Missing(); variables.len()];
+    let (inp, m_i, m_m, m_o, s_i, s_m, s_o, out) = value_helper(variables, v_assignments, m, n);
+
+    assert!(transaction::fill_cs(&mut verifier_cs, inp, m_i, m_m, m_o, s_i, s_m, s_o, out).is_ok());
+
+    Ok(verifier_cs.verify(&proof)?)
 }
 
 /// Given the input and output values for a spacesuit transaction, determine
@@ -80,7 +89,7 @@ pub fn fill_cs<CS: ConstraintSystem>(
 /// This will be fixed in the future with a "Bulletproofs++" which binds the challenge
 /// value to the intermediate variables as well. The discussion for that is here:
 /// https://github.com/dalek-cryptography/bulletproofs/issues/186
-pub fn compute_intermediate_values(
+fn compute_intermediate_values(
     inputs: Vec<(Scalar, Scalar, Scalar)>,
     outputs: Vec<(Scalar, Scalar, Scalar)>,
 ) -> Result<Vec<Scalar>, SpacesuitError> {
@@ -114,7 +123,7 @@ pub fn compute_intermediate_values(
     Ok(v)
 }
 
-pub fn value_helper(
+fn value_helper(
     variables: Vec<Variable>,
     assignments: Vec<Assignment>,
     m: usize,

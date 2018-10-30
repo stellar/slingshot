@@ -8,5 +8,5 @@ extern crate subtle;
 extern crate failure;
 
 mod gadgets;
-pub mod transaction;
+pub mod spacesuit;
 pub mod util;
