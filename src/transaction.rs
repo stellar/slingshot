@@ -3,7 +3,7 @@
 use bulletproofs::r1cs::{Assignment, ConstraintSystem, Variable};
 use curve25519_dalek::scalar::Scalar;
 use gadgets::{merge, padded_shuffle, range_proof, split, value_shuffle};
-use std::cmp::{max, min};
+use std::cmp::max;
 use subtle::{ConditionallyAssignable, ConstantTimeEq};
 use util::{SpacesuitError, Value};
 
@@ -202,8 +202,7 @@ fn merge_helper(
     let mut merge_out = Vec::with_capacity(merge_in.len());
 
     let mut A = merge_in[0];
-    let mut B = merge_in[1];
-    for i in 0..merge_count {
+    for B in merge_in.into_iter().skip(1) {
         // Check if A and B have the same flavors
         let same_flavor = A.1.ct_eq(&B.1) & A.2.ct_eq(&B.2);
 
@@ -224,7 +223,6 @@ fn merge_helper(
         merge_mid.push(D);
 
         A = D;
-        B = merge_in[min(i + 2, merge_count)];
     }
 
     // Move the last merge_mid to be the last merge_out, to match the protocol definition
