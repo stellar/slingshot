@@ -1,7 +1,7 @@
-use super::scalar_shuffle;
+use super::{scalar_shuffle, value::Value};
 use bulletproofs::r1cs::ConstraintSystem;
 use curve25519_dalek::scalar::Scalar;
-use util::{SpacesuitError, Value};
+use error::SpacesuitError;
 
 /// Enforces that the output values `y` are a valid reordering of the inputs values `x`.
 /// The inputs and outputs are all of the `Value` type, which contains the fields

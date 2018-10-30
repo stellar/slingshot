@@ -1,9 +1,9 @@
-use super::value_shuffle;
+use super::{value::Value, value_shuffle};
 use bulletproofs::r1cs::{Assignment, ConstraintSystem};
 use curve25519_dalek::scalar::Scalar;
 use std::cmp::{max, min};
 
-use util::{SpacesuitError, Value};
+use error::SpacesuitError;
 
 /// Enforces that the values in `y` are a valid reordering of the values in `x`,
 /// allowing for padding (zero values) in x that can be omitted in y (or the other way around).

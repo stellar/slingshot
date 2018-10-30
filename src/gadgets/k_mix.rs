@@ -1,10 +1,10 @@
 #![allow(non_snake_case)]
 
-use super::mix;
+use super::{mix, value::Value};
 use bulletproofs::r1cs::ConstraintSystem;
 use curve25519_dalek::scalar::Scalar;
+use error::SpacesuitError;
 use std::iter::once;
-use util::{SpacesuitError, Value};
 
 /// Enforces that the outputs are either a merge of the inputs: `D = A + B && C = 0`,
 /// or the outputs are equal to the inputs `C = A && D = B`. See spec for more details.
