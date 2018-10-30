@@ -11,10 +11,13 @@ use util::{SpacesuitError, Value};
 pub fn fill_cs<CS: ConstraintSystem>(
     cs: &mut CS,
     inputs: Vec<Value>,
-    intermediates: Vec<Value>,
+    mut intermediates: Vec<Value>,
     outputs: Vec<Value>,
 ) -> Result<(), SpacesuitError> {
     let one = Scalar::one();
+
+    // If there is only one input and output, just constrain the input
+    // and output to be equal to each other.
     if inputs.len() == 1 && outputs.len() == 1 {
         cs.add_constraint(
             [(inputs[0].q.0, -one), (outputs[0].q.0, one)]
@@ -38,22 +41,27 @@ pub fn fill_cs<CS: ConstraintSystem>(
         return Err(SpacesuitError::InvalidR1CSConstruction);
     }
 
-    let mut A = inputs[0].clone();
-    let mut B = inputs[1].clone();
-    let mut C = outputs[0].clone();
+    // Set the first item of inputs to be first in intermediates, and
+    // set the last item of outputs to be last in intermediates, so
+    // we can define A = intermediates[i] and D = intermediates[i+1] for all rounds.
+    intermediates.insert(0, inputs[0].clone());
+    intermediates.push(outputs[outputs.len() - 1].clone());
 
-    for i in 0..inputs.len() - 2 {
-        let mut D = intermediates[i].clone();
-
-        mix::fill_cs(cs, A, B, C, D)?;
-
-        A = intermediates[i].clone();
-        B = inputs[i + 2].clone();
-        C = outputs[i + 1].clone();
+    // For each 2-mix, we have:
+    // A = intermediates[i]
+    // B = inputs[i+1]
+    // C = outputs[i]
+    // D = intermediates[i+1]
+    for (((A, B), C), D) in intermediates
+        .clone()
+        .into_iter()
+        .zip(inputs.into_iter().skip(1))
+        .zip(outputs.into_iter())
+        .zip(intermediates.into_iter().skip(1))
+    {
+        mix::fill_cs(cs, A, B, C, D)?
     }
-
-    let D = outputs[outputs.len() - 1].clone();
-    mix::fill_cs(cs, A, B, C, D)
+    Ok(())
 }
 
 #[cfg(test)]
