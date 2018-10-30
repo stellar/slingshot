@@ -3,20 +3,22 @@
 use super::mix;
 use bulletproofs::r1cs::ConstraintSystem;
 use curve25519_dalek::scalar::Scalar;
-use subtle::{ConditionallySelectable, ConstantTimeEq};
 use util::{SpacesuitError, Value};
 
-/// Enforces that the outputs are either a merge of the inputs :`D = A + B && C = 0`,
-/// or the outputs are equal to the inputs `C = A && D = B`.
+/// Enforces that the outputs are either a merge of the inputs: `D = A + B && C = 0`,
+/// or the outputs are equal to the inputs `C = A && D = B`. See spec for more details.
 /// Works for `k` inputs and `k` outputs.
 pub fn fill_cs<CS: ConstraintSystem>(
     cs: &mut CS,
     inputs: Vec<Value>,
+    mut intermediates: Vec<Value>,
     outputs: Vec<Value>,
 ) -> Result<(), SpacesuitError> {
     let one = Scalar::one();
 
-    if inputs.len() == 1 {
+    // If there is only one input and output, just constrain the input
+    // and output to be equal to each other.
+    if inputs.len() == 1 && outputs.len() == 1 {
         cs.add_constraint(
             [(inputs[0].q.0, -one), (outputs[0].q.0, one)]
                 .iter()
@@ -35,141 +37,123 @@ pub fn fill_cs<CS: ConstraintSystem>(
         return Ok(());
     }
 
-    let mut A = inputs[0].clone();
-    let mut B = inputs[1].clone();
-    let mut C = outputs[0].clone();
-
-    for i in 0..inputs.len() - 2 {
-        let mut D = B.clone(); // placeholder; will be overwritten
-
-        // Update assignments for D
-        // Check that A and C have the same assignments for all fields (q, a, t)
-        let is_move = A.q.1.ct_eq(&C.q.1) & A.a.1.ct_eq(&C.a.1) & A.t.1.ct_eq(&C.t.1);
-        // Check that A and B have the same type (a and t are the same) and that C.q = 0
-        let is_merge =
-            A.a.1.ct_eq(&B.a.1) & A.t.1.ct_eq(&B.t.1) & C.q.1.ct_eq(&Scalar::zero().into());
-
-        // Enforce that at least one of is_move and is_merge must be true. If not, error.
-        // It is okay that this is not constant-time because the proof will fail to build anyway.
-        if bool::from(!is_move & !is_merge) {
-            // Misconfigured prover constraint system error
-            return Err(SpacesuitError::InvalidR1CSConstruction);
-        }
-
-        // If is_move is true, then we perform a "move" operation, so D.quantity = B.quantity
-        // Else, we perform a "merge" operation, so D.quantity = A.quantity + B.quantity
-        D.q.1 = ConditionallySelectable::conditional_select(&(A.q.1 + B.q.1), &D.q.1, is_move);
-        D.a.1 = ConditionallySelectable::conditional_select(&A.a.1, &D.a.1, is_move);
-        D.t.1 = ConditionallySelectable::conditional_select(&A.t.1, &D.t.1, is_move);
-
-        // Update variable assignments for D by making new variables
-        let (D_q_var, _) = cs.assign_uncommitted(D.q.1, Scalar::zero().into())?;
-        let (D_a_var, D_t_var) = cs.assign_uncommitted(D.a.1, D.t.1)?;
-        D.q.0 = D_q_var;
-        D.a.0 = D_a_var;
-        D.t.0 = D_t_var;
-
-        mix::fill_cs(cs, A, B, C, D.clone())?;
-
-        A = D;
-        B = inputs[i + 2].clone();
-        C = outputs[i + 1].clone();
+    if inputs.len() != outputs.len() || intermediates.len() != inputs.len() - 2 {
+        return Err(SpacesuitError::InvalidR1CSConstruction);
     }
 
-    let D = outputs[outputs.len() - 1].clone();
-    mix::fill_cs(cs, A, B, C, D)
+    // Set the first item of inputs to be first in intermediates, and
+    // set the last item of outputs to be last in intermediates, so
+    // we can define A = intermediates[i] and D = intermediates[i+1] for all rounds.
+    intermediates.insert(0, inputs[0].clone());
+    intermediates.push(outputs[outputs.len() - 1].clone());
+
+    // For each 2-mix, we have:
+    // A = intermediates[i]
+    // B = inputs[i+1]
+    // C = outputs[i]
+    // D = intermediates[i+1]
+    for (((A, B), C), D) in intermediates
+        .clone()
+        .into_iter()
+        .zip(inputs.into_iter().skip(1))
+        .zip(outputs.into_iter())
+        .zip(intermediates.into_iter().skip(1))
+    {
+        mix::fill_cs(cs, A, B, C, D)?
+    }
+    Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use bulletproofs::r1cs::{Assignment, ProverCS, VerifierCS};
+    use bulletproofs::r1cs::{Assignment, ProverCS, Variable, VerifierCS};
     use bulletproofs::{BulletproofGens, PedersenGens};
     use merlin::Transcript;
+    use std::cmp::max;
+
+    // Helper functions to make the tests easier to read
+    fn yuan(val: u64) -> (u64, u64, u64) {
+        (val, 888, 999)
+    }
+    fn peso(val: u64) -> (u64, u64, u64) {
+        (val, 666, 777)
+    }
+    fn zero() -> (u64, u64, u64) {
+        (0, 0, 0)
+    }
 
     #[test]
     fn k_mix_gadget() {
-        let peso = 66;
-        let yuan = 88;
-        let zero = 0; // just so the test case formatting lines up nicely
-
         // k=1
         // no merge, same asset types
-        assert!(k_mix_helper(vec![(6, peso, 0)], vec![(6, peso, 0)]).is_ok());
+        assert!(k_mix_helper(vec![peso(6)], vec![], vec![peso(6)]).is_ok());
         // error when merging different asset types
-        assert!(k_mix_helper(vec![(3, peso, 0)], vec![(3, yuan, 0)]).is_err());
+        assert!(k_mix_helper(vec![peso(3)], vec![], vec![yuan(3)]).is_err());
 
-        // k=2 ... more extensive k=2 tests are in the MixGadget tests
+        // k=2. More extensive k=2 tests are in the MixGadget tests
         // no merge, different asset types
-        assert!(
-            k_mix_helper(
-                vec![(3, peso, 0), (6, yuan, 0)],
-                vec![(3, peso, 0), (6, yuan, 0)],
-            ).is_ok()
-        );
+        assert!(k_mix_helper(vec![peso(3), yuan(6)], vec![], vec![peso(3), yuan(6)],).is_ok());
         // merge, same asset types
-        assert!(
-            k_mix_helper(
-                vec![(3, peso, 0), (6, peso, 0)],
-                vec![(0, peso, 0), (9, peso, 0)],
-            ).is_ok()
-        );
+        assert!(k_mix_helper(vec![peso(3), peso(6)], vec![], vec![peso(0), peso(9)],).is_ok());
         // error when merging different asset types
-        assert!(
-            k_mix_helper(
-                vec![(3, peso, 0), (3, yuan, 0)],
-                vec![(0, peso, 0), (6, yuan, 0)],
-            ).is_err()
-        );
+        assert!(k_mix_helper(vec![peso(3), yuan(3)], vec![], vec![peso(0), yuan(6)],).is_err());
 
         // k=3
         // no merge, same asset types
         assert!(
             k_mix_helper(
-                vec![(3, peso, 0), (6, peso, 0), (6, peso, 0)],
-                vec![(3, peso, 0), (6, peso, 0), (6, peso, 0)],
+                vec![peso(3), peso(6), peso(6)],
+                vec![peso(6)],
+                vec![peso(3), peso(6), peso(6)],
             ).is_ok()
         );
         // no merge, different asset types
         assert!(
             k_mix_helper(
-                vec![(3, peso, 0), (6, yuan, 0), (6, peso, 0)],
-                vec![(3, peso, 0), (6, yuan, 0), (6, peso, 0)],
+                vec![peso(3), yuan(6), peso(6)],
+                vec![yuan(6)],
+                vec![peso(3), yuan(6), peso(6)],
             ).is_ok()
         );
         // merge first two
         assert!(
             k_mix_helper(
-                vec![(3, peso, 0), (6, peso, 0), (1, yuan, 0)],
-                vec![(0, peso, 0), (9, peso, 0), (1, yuan, 0)],
+                vec![peso(3), peso(6), yuan(1)],
+                vec![peso(9)],
+                vec![peso(0), peso(9), yuan(1)],
             ).is_ok()
         );
         // merge last two
         assert!(
             k_mix_helper(
-                vec![(1, yuan, 0), (3, peso, 0), (6, peso, 0)],
-                vec![(1, yuan, 0), (0, peso, 0), (9, peso, 0)],
+                vec![yuan(1), peso(3), peso(6)],
+                vec![peso(3)],
+                vec![yuan(1), peso(0), peso(9)],
             ).is_ok()
         );
         // merge all, same asset types, zero value is different asset type
         assert!(
             k_mix_helper(
-                vec![(3, peso, 0), (6, peso, 0), (1, peso, 0)],
-                vec![(0, zero, 0), (0, zero, 0), (10, peso, 0)],
+                vec![peso(3), peso(6), peso(1)],
+                vec![peso(9)],
+                vec![zero(), zero(), peso(10)],
             ).is_ok()
         );
         // incomplete merge, input sum does not equal output sum
         assert!(
             k_mix_helper(
-                vec![(3, peso, 0), (6, peso, 0), (1, peso, 0)],
-                vec![(1, zero, 0), (0, zero, 0), (9, peso, 0)],
+                vec![peso(3), peso(6), peso(1)],
+                vec![peso(9)],
+                vec![zero(), zero(), peso(9)],
             ).is_err()
         );
         // error when merging with different asset types
         assert!(
             k_mix_helper(
-                vec![(3, peso, 0), (6, yuan, 0), (1, peso, 0)],
-                vec![(0, zero, 0), (0, zero, 0), (10, peso, 0)],
+                vec![peso(3), yuan(6), peso(1)],
+                vec![peso(9)],
+                vec![zero(), zero(), peso(10)],
             ).is_err()
         );
 
@@ -177,34 +161,50 @@ mod tests {
         // merge each of 2 asset types
         assert!(
             k_mix_helper(
-                vec![(3, peso, 0), (6, peso, 0), (1, yuan, 0), (2, yuan, 0)],
-                vec![(0, zero, 0), (9, peso, 0), (0, zero, 0), (3, yuan, 0)],
+                vec![peso(3), peso(6), yuan(1), yuan(2)],
+                vec![peso(9), yuan(1)],
+                vec![zero(), peso(9), zero(), yuan(3)],
             ).is_ok()
         );
         // merge all, same asset
         assert!(
             k_mix_helper(
-                vec![(3, peso, 0), (2, peso, 0), (2, peso, 0), (1, peso, 0)],
-                vec![(0, zero, 0), (0, zero, 0), (0, zero, 0), (8, peso, 0)],
+                vec![peso(3), peso(2), peso(2), peso(1)],
+                vec![peso(5), peso(7)],
+                vec![zero(), zero(), zero(), peso(8)],
+            ).is_ok()
+        );
+        // no merge, different assets
+        assert!(
+            k_mix_helper(
+                vec![peso(3), yuan(2), peso(2), yuan(1)],
+                vec![yuan(2), peso(2)],
+                vec![peso(3), yuan(2), peso(2), yuan(1)],
             ).is_ok()
         );
         // error when merging, output sum not equal to input sum
         assert!(
             k_mix_helper(
-                vec![(3, peso, 0), (2, peso, 0), (2, peso, 0), (1, peso, 0)],
-                vec![(0, zero, 0), (0, zero, 0), (0, zero, 0), (9, peso, 0)],
+                vec![peso(3), peso(2), peso(2), peso(1)],
+                vec![peso(5), peso(7)],
+                vec![zero(), zero(), zero(), peso(9)],
             ).is_err()
         );
     }
 
     fn k_mix_helper(
         inputs: Vec<(u64, u64, u64)>,
+        intermediates: Vec<(u64, u64, u64)>,
         outputs: Vec<(u64, u64, u64)>,
     ) -> Result<(), SpacesuitError> {
         // Common
         let pc_gens = PedersenGens::default();
         let bp_gens = BulletproofGens::new(128, 1);
         let k = inputs.len();
+        let inter_count = intermediates.len();
+        if k != outputs.len() || inter_count != max(k as isize - 2, 0) as usize {
+            return Err(SpacesuitError::InvalidR1CSConstruction);
+        }
 
         // Prover's scope
         let (proof, commitments) = {
@@ -215,6 +215,14 @@ mod tests {
                 v.push(Scalar::from(inputs[i].0));
                 v.push(Scalar::from(inputs[i].1));
                 v.push(Scalar::from(inputs[i].2));
+            }
+            for i in 0..inter_count {
+                v.push(Scalar::from(intermediates[i].0));
+                v.push(Scalar::from(intermediates[i].1));
+                v.push(Scalar::from(intermediates[i].2));
+            }
+
+            for i in 0..k {
                 v.push(Scalar::from(outputs[i].0));
                 v.push(Scalar::from(outputs[i].1));
                 v.push(Scalar::from(outputs[i].2));
@@ -233,39 +241,22 @@ mod tests {
                 use rand::thread_rng;
                 builder.finalize(&mut thread_rng())
             };
-            let v_blinding: Vec<Scalar> = (0..6 * k).map(|_| Scalar::random(&mut rng)).collect();
+            let v_blinding: Vec<Scalar> = (0..v.len()).map(|_| Scalar::random(&mut rng)).collect();
 
             let (mut prover_cs, variables, commitments) = ProverCS::new(
                 &bp_gens,
                 &pc_gens,
                 &mut prover_transcript,
-                v,
+                v.clone(),
                 v_blinding.clone(),
             );
 
             // Prover adds constraints to the constraint system
-            let mut input_vals = Vec::with_capacity(k);
-            let mut output_vals = Vec::with_capacity(k);
-            for i in 0..k {
-                let in_q = variables[i * 6 + 0];
-                let in_a = variables[i * 6 + 1];
-                let in_t = variables[i * 6 + 2];
-                let out_q = variables[i * 6 + 3];
-                let out_a = variables[i * 6 + 4];
-                let out_t = variables[i * 6 + 5];
+            let v_assignments = v.iter().map(|v_i| Assignment::from(*v_i)).collect();
+            let (input_vals, inter_vals, output_vals) =
+                value_helper(variables, v_assignments, k, inter_count);
 
-                input_vals.push(Value {
-                    q: (in_q, Assignment::from(inputs[i].0)),
-                    a: (in_a, Assignment::from(inputs[i].1)),
-                    t: (in_t, Assignment::from(inputs[i].2)),
-                });
-                output_vals.push(Value {
-                    q: (out_q, Assignment::from(outputs[i].0)),
-                    a: (out_a, Assignment::from(outputs[i].1)),
-                    t: (out_t, Assignment::from(outputs[i].2)),
-                });
-            }
-            fill_cs(&mut prover_cs, input_vals, output_vals)?;
+            fill_cs(&mut prover_cs, input_vals, inter_vals, output_vals)?;
 
             let proof = prover_cs.prove()?;
 
@@ -277,31 +268,37 @@ mod tests {
         let (mut verifier_cs, variables) =
             VerifierCS::new(&bp_gens, &pc_gens, &mut verifier_transcript, commitments);
 
-        // Verifier allocates variables and adds constraints to the constraint system
-        let mut input_vals = Vec::with_capacity(k);
-        let mut output_vals = Vec::with_capacity(k);
-        for i in 0..k {
-            let in_q = variables[i * 6 + 0];
-            let in_a = variables[i * 6 + 1];
-            let in_t = variables[i * 6 + 2];
-            let out_q = variables[i * 6 + 3];
-            let out_a = variables[i * 6 + 4];
-            let out_t = variables[i * 6 + 5];
+        // Verifier adds constraints to the constraint system
+        let v_assignments = vec![Assignment::Missing(); variables.len()];
+        let (input_vals, inter_vals, output_vals) =
+            value_helper(variables, v_assignments, k, inter_count);
 
-            input_vals.push(Value {
-                q: (in_q, Assignment::Missing()),
-                a: (in_a, Assignment::Missing()),
-                t: (in_t, Assignment::Missing()),
-            });
-            output_vals.push(Value {
-                q: (out_q, Assignment::Missing()),
-                a: (out_a, Assignment::Missing()),
-                t: (out_t, Assignment::Missing()),
+        assert!(fill_cs(&mut verifier_cs, input_vals, inter_vals, output_vals).is_ok());
+
+        Ok(verifier_cs.verify(&proof)?)
+    }
+
+    fn value_helper(
+        variables: Vec<Variable>,
+        assignments: Vec<Assignment>,
+        k: usize,
+        inter_count: usize,
+    ) -> (Vec<Value>, Vec<Value>, Vec<Value>) {
+        let val_count = variables.len() / 3;
+
+        let mut values = Vec::with_capacity(val_count);
+        for i in 0..val_count {
+            values.push(Value {
+                q: (variables[i * 3], assignments[i * 3]),
+                a: (variables[i * 3 + 1], assignments[i * 3 + 1]),
+                t: (variables[i * 3 + 2], assignments[i * 3 + 2]),
             });
         }
 
-        assert!(fill_cs(&mut verifier_cs, input_vals, output_vals).is_ok());
+        let input_vals = values[0..k].to_vec();
+        let inter_vals = values[k..k + inter_count].to_vec();
+        let output_vals = values[k + inter_count..2 * k + inter_count].to_vec();
 
-        Ok(verifier_cs.verify(&proof)?)
+        (input_vals, inter_vals, output_vals)
     }
 }

@@ -65,83 +65,85 @@ mod tests {
     use bulletproofs::{BulletproofGens, PedersenGens};
     use merlin::Transcript;
 
+    // Helper functions to make the tests easier to read
+    fn yuan(val: u64) -> (u64, u64, u64) {
+        (val, 888, 999)
+    }
+    fn peso(val: u64) -> (u64, u64, u64) {
+        (val, 666, 777)
+    }
+    fn euro(val: u64) -> (u64, u64, u64) {
+        (val, 444, 555)
+    }
+
     #[test]
     fn value_shuffle() {
         // k=1
-        assert!(value_shuffle_helper(vec![(1, 2, 3)], vec![(1, 2, 3)]).is_ok());
-        assert!(value_shuffle_helper(vec![(4, 5, 6)], vec![(4, 5, 6)]).is_ok());
-        assert!(value_shuffle_helper(vec![(1, 2, 3)], vec![(4, 5, 6)]).is_err());
+        assert!(value_shuffle_helper(vec![peso(1)], vec![peso(1)]).is_ok());
+        assert!(value_shuffle_helper(vec![yuan(4)], vec![yuan(4)]).is_ok());
+        assert!(value_shuffle_helper(vec![peso(1)], vec![yuan(4)]).is_err());
         // k=2
-        assert!(
-            value_shuffle_helper(vec![(1, 2, 3), (4, 5, 6)], vec![(1, 2, 3), (4, 5, 6)]).is_ok()
-        );
-        assert!(
-            value_shuffle_helper(vec![(1, 2, 3), (4, 5, 6)], vec![(4, 5, 6), (1, 2, 3)]).is_ok()
-        );
-        assert!(
-            value_shuffle_helper(vec![(4, 5, 6), (4, 5, 6)], vec![(4, 5, 6), (4, 5, 6)]).is_ok()
-        );
-        assert!(
-            value_shuffle_helper(vec![(1, 2, 3), (1, 2, 3)], vec![(4, 5, 6), (1, 2, 3)]).is_err()
-        );
-        assert!(
-            value_shuffle_helper(vec![(1, 2, 3), (4, 5, 6)], vec![(1, 2, 3), (4, 5, 6)]).is_ok()
-        );
+        assert!(value_shuffle_helper(vec![peso(1), yuan(4)], vec![peso(1), yuan(4)]).is_ok());
+        assert!(value_shuffle_helper(vec![peso(1), yuan(4)], vec![yuan(4), peso(1)]).is_ok());
+        assert!(value_shuffle_helper(vec![yuan(4), yuan(4)], vec![yuan(4), yuan(4)]).is_ok());
+        assert!(value_shuffle_helper(vec![peso(1), peso(1)], vec![yuan(4), peso(1)]).is_err());
+        assert!(value_shuffle_helper(vec![peso(1), yuan(4)], vec![peso(1), yuan(4)]).is_ok());
         // k=3
         assert!(
             value_shuffle_helper(
-                vec![(1, 2, 3), (4, 5, 6), (8, 9, 10)],
-                vec![(1, 2, 3), (4, 5, 6), (8, 9, 10)]
+                vec![peso(1), yuan(4), euro(8)],
+                vec![peso(1), yuan(4), euro(8)]
             ).is_ok()
         );
         assert!(
             value_shuffle_helper(
-                vec![(1, 2, 3), (4, 5, 6), (8, 9, 10)],
-                vec![(1, 2, 3), (8, 9, 10), (4, 5, 6)]
+                vec![peso(1), yuan(4), euro(8)],
+                vec![peso(1), euro(8), yuan(4)]
             ).is_ok()
         );
         assert!(
             value_shuffle_helper(
-                vec![(1, 2, 3), (4, 5, 6), (8, 9, 10)],
-                vec![(4, 5, 6), (1, 2, 3), (8, 9, 10)]
+                vec![peso(1), yuan(4), euro(8)],
+                vec![yuan(4), peso(1), euro(8)]
             ).is_ok()
         );
         assert!(
             value_shuffle_helper(
-                vec![(1, 2, 3), (4, 5, 6), (8, 9, 10)],
-                vec![(4, 5, 6), (8, 9, 10), (1, 2, 3)]
+                vec![peso(1), yuan(4), euro(8)],
+                vec![yuan(4), euro(8), peso(1)]
             ).is_ok()
         );
         assert!(
             value_shuffle_helper(
-                vec![(1, 2, 3), (4, 5, 6), (8, 9, 10)],
-                vec![(8, 9, 10), (1, 2, 3), (4, 5, 6)]
+                vec![peso(1), yuan(4), euro(8)],
+                vec![euro(8), peso(1), yuan(4)]
             ).is_ok()
         );
         assert!(
             value_shuffle_helper(
-                vec![(1, 2, 3), (4, 5, 6), (8, 9, 10)],
-                vec![(8, 9, 10), (4, 5, 6), (1, 2, 3)]
+                vec![peso(1), yuan(4), euro(8)],
+                vec![euro(8), yuan(4), peso(1)]
             ).is_ok()
         );
         assert!(
             value_shuffle_helper(
-                vec![(1, 2, 3), (4, 5, 6), (8, 9, 10)],
-                vec![(10, 20, 30), (4, 5, 6), (8, 9, 10)]
+                vec![peso(1), yuan(4), euro(8)],
+                vec![(10, 20, 30), yuan(4), euro(8)]
             ).is_err()
         );
         assert!(
             value_shuffle_helper(
-                vec![(1, 2, 3), (4, 5, 6), (8, 9, 10)],
-                vec![(1, 2, 3), (40, 50, 60), (8, 9, 10)]
+                vec![peso(1), yuan(4), euro(8)],
+                vec![peso(1), (40, 50, 60), euro(8)]
             ).is_err()
         );
         assert!(
             value_shuffle_helper(
-                vec![(1, 2, 3), (4, 5, 6), (8, 9, 10)],
-                vec![(1, 2, 3), (4, 5, 6), (98, 99, 100)]
+                vec![peso(1), yuan(4), euro(8)],
+                vec![peso(1), yuan(4), (98, 99, 100)]
             ).is_err()
         );
+        assert!(value_shuffle_helper(vec![(0, 0, 0)], vec![(0, 0, 1)]).is_err());
     }
 
     fn value_shuffle_helper(
@@ -252,5 +254,4 @@ mod tests {
 
         fill_cs(cs, in_vals, out_vals)
     }
-
 }
