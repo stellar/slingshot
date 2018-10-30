@@ -3,6 +3,7 @@
 use super::mix;
 use bulletproofs::r1cs::ConstraintSystem;
 use curve25519_dalek::scalar::Scalar;
+use std::iter::once;
 use util::{SpacesuitError, Value};
 
 /// Enforces that the outputs are either a merge of the inputs: `D = A + B && C = 0`,
@@ -11,7 +12,7 @@ use util::{SpacesuitError, Value};
 pub fn fill_cs<CS: ConstraintSystem>(
     cs: &mut CS,
     inputs: Vec<Value>,
-    mut intermediates: Vec<Value>,
+    intermediates: Vec<Value>,
     outputs: Vec<Value>,
 ) -> Result<(), SpacesuitError> {
     let one = Scalar::one();
@@ -41,23 +42,19 @@ pub fn fill_cs<CS: ConstraintSystem>(
         return Err(SpacesuitError::InvalidR1CSConstruction);
     }
 
-    // Set the first item of inputs to be first in intermediates, and
-    // set the last item of outputs to be last in intermediates, so
-    // we can define A = intermediates[i] and D = intermediates[i+1] for all rounds.
-    intermediates.insert(0, inputs[0].clone());
-    intermediates.push(outputs[outputs.len() - 1].clone());
+    let first_input = inputs[0].clone();
+    let last_output = outputs[outputs.len() - 1].clone();
 
-    // For each 2-mix, we have:
-    // A = intermediates[i]
-    // B = inputs[i+1]
-    // C = outputs[i]
-    // D = intermediates[i+1]
-    for (((A, B), C), D) in intermediates
-        .clone()
-        .into_iter()
+    // For each 2-mix, constrain A, B, C, D:
+    for (((A, B), C), D) in
+        // A = first_input||intermediates[i]
+        once(first_input).chain(intermediates.clone().into_iter())
+        // B = inputs[i+1]
         .zip(inputs.into_iter().skip(1))
-        .zip(outputs.into_iter())
-        .zip(intermediates.into_iter().skip(1))
+        // C = outputs[i]
+        .zip(outputs.clone().into_iter())
+        // D = intermediates||last_output[i]
+        .zip(intermediates.into_iter().chain(once(last_output)))
     {
         mix::fill_cs(cs, A, B, C, D)?
     }
