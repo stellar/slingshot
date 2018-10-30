@@ -1,7 +1,8 @@
 use bulletproofs::r1cs::ConstraintSystem;
 use error::SpacesuitError;
-use gadgets::{merge, padded_shuffle, range_proof, split, value::Value, value_shuffle};
+use gadgets::{merge, padded_shuffle, range_proof, split, value_shuffle};
 use std::cmp::max;
+use value::Value;
 
 /// Enforces that the outputs are a valid rearrangement of the inputs, following the
 /// soundness and secrecy requirements in the spacesuit transaction spec:

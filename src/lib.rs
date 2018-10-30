@@ -10,3 +10,4 @@ extern crate failure;
 pub mod error;
 mod gadgets;
 pub mod spacesuit;
+mod value;

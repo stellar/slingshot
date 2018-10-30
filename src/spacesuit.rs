@@ -4,11 +4,12 @@ use bulletproofs::r1cs::{Assignment, ProverCS, R1CSProof, Variable, VerifierCS};
 use bulletproofs::{BulletproofGens, PedersenGens};
 use curve25519_dalek::ristretto::CompressedRistretto;
 use curve25519_dalek::scalar::Scalar;
-use gadgets::{transaction, value::Value};
+use error::SpacesuitError;
+use gadgets::transaction;
 use merlin::Transcript;
 use std::cmp::max;
 use subtle::{ConditionallyAssignable, ConstantTimeEq};
-use error::SpacesuitError;
+use value::Value;
 
 pub fn prove(
     inputs: Vec<(Scalar, Scalar, Scalar)>,

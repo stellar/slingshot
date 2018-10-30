@@ -1,5 +1,4 @@
 pub mod transaction;
-pub mod value;
 
 mod k_mix;
 mod merge;
