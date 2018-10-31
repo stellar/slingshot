@@ -241,19 +241,19 @@ fn merge_helper(
 
     let mut A = merge_in[0];
     for B in merge_in.into_iter().skip(1) {
-        // Check if a and b have the same flavors
+        // Check if A and B have the same flavors
         let same_flavor = A.1.ct_eq(&B.1) & A.2.ct_eq(&B.2);
 
-        // If same_flavor, merge: c.0, c.1, c.2 = 0.
-        // Else, move: c = a.
+        // If same_flavor, merge: C.0, C.1, C.2 = 0.
+        // Else, move: C = A.
         let mut C = A.clone();
         C.0.conditional_assign(&Scalar::zero(), same_flavor);
         C.1.conditional_assign(&Scalar::zero(), same_flavor);
         C.2.conditional_assign(&Scalar::zero(), same_flavor);
         merge_out.push(C);
 
-        // If same_flavor, merge: d.0 = a.0 + b.0, D.1 = A.1, D.2 = A.2.
-        // Else, move: d = b.
+        // If same_flavor, merge: D.0 = A.0 + B.0, D.1 = A.1, D.2 = A.2.
+        // Else, move: D = B.
         let mut D = B.clone();
         D.0.conditional_assign(&(A.0 + B.0), same_flavor);
         D.1.conditional_assign(&A.1, same_flavor);
