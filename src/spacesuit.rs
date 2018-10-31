@@ -339,6 +339,19 @@ mod tests {
             shuffle_helper(&vec![yuan(1), yuan(2), yuan(3), yuan(4)]),
             vec![yuan(1), yuan(4), yuan(3), yuan(2)]
         );
+        // k = 5
+        assert_eq!(
+            shuffle_helper(&vec![yuan(1), yuan(2), yuan(3), yuan(4), yuan(5)]),
+            vec![yuan(1), yuan(5), yuan(4), yuan(3), yuan(2)]
+        );
+        assert_eq!(
+            shuffle_helper(&vec![yuan(1), peso(2), yuan(3), peso(4), yuan(5)]),
+            vec![yuan(1), yuan(5), yuan(3), peso(4), peso(2)]
+        );
+        assert_eq!(
+            shuffle_helper(&vec![yuan(1), peso(2), zero(), peso(4), yuan(5)]),
+            vec![yuan(1), yuan(5), zero(), peso(4), peso(2)]
+        );
     }
 
     #[test]
