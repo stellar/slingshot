@@ -1,5 +1,3 @@
-#![allow(non_snake_case)]
-
 use bulletproofs::r1cs::{Assignment, ProverCS, R1CSProof, Variable, VerifierCS};
 use bulletproofs::{BulletproofGens, PedersenGens};
 use curve25519_dalek::ristretto::CompressedRistretto;
@@ -11,10 +9,12 @@ use std::cmp::max;
 use subtle::{ConditionallyAssignable, ConstantTimeEq};
 use value::Value;
 
+pub struct SpacesuitProof(R1CSProof);
+
 pub fn prove(
     inputs: Vec<(Scalar, Scalar, Scalar)>,
     outputs: Vec<(Scalar, Scalar, Scalar)>,
-) -> Result<(R1CSProof, Vec<CompressedRistretto>), SpacesuitError> {
+) -> Result<(SpacesuitProof, Vec<CompressedRistretto>), SpacesuitError> {
     let pc_gens = PedersenGens::default();
     let bp_gens = BulletproofGens::new(10000, 1);
     let m = inputs.len();
@@ -51,13 +51,13 @@ pub fn prove(
     let (inp, m_i, m_m, m_o, s_i, s_m, s_o, out) = value_helper(variables, v_assignments, m, n);
 
     transaction::fill_cs(&mut prover_cs, inp, m_i, m_m, m_o, s_i, s_m, s_o, out)?;
-    let proof = prover_cs.prove()?;
+    let proof = SpacesuitProof(prover_cs.prove()?);
 
     Ok((proof, commitments))
 }
 
 pub fn verify(
-    proof: R1CSProof,
+    proof: SpacesuitProof,
     commitments: Vec<CompressedRistretto>,
     m: usize,
     n: usize,
@@ -76,7 +76,7 @@ pub fn verify(
 
     assert!(transaction::fill_cs(&mut verifier_cs, inp, m_i, m_m, m_o, s_i, s_m, s_o, out).is_ok());
 
-    Ok(verifier_cs.verify(&proof)?)
+    Ok(verifier_cs.verify(&proof.0)?)
 }
 
 /// Given the input and output values for a spacesuit transaction, determine
@@ -232,28 +232,28 @@ fn merge_helper(
     let mut merge_mid = Vec::with_capacity(merge_count);
     let mut merge_out = Vec::with_capacity(merge_in.len());
 
-    let mut A = merge_in[0];
-    for B in merge_in.into_iter().skip(1) {
-        // Check if A and B have the same flavors
-        let same_flavor = A.1.ct_eq(&B.1) & A.2.ct_eq(&B.2);
+    let mut a = merge_in[0];
+    for b in merge_in.into_iter().skip(1) {
+        // Check if a and b have the same flavors
+        let same_flavor = a.1.ct_eq(&b.1) & a.2.ct_eq(&b.2);
 
-        // If same_flavor, merge: C.q, C.a, C.t = 0.
-        // Else, move: C = A.
-        let mut C = A.clone();
-        C.0.conditional_assign(&Scalar::zero(), same_flavor);
-        C.1.conditional_assign(&Scalar::zero(), same_flavor);
-        C.2.conditional_assign(&Scalar::zero(), same_flavor);
-        merge_out.push(C);
+        // If same_flavor, merge: c.0, c.1, c.2 = 0.
+        // Else, move: c = a.
+        let mut c = a.clone();
+        c.0.conditional_assign(&Scalar::zero(), same_flavor);
+        c.1.conditional_assign(&Scalar::zero(), same_flavor);
+        c.2.conditional_assign(&Scalar::zero(), same_flavor);
+        merge_out.push(c);
 
-        // If same_flavor, merge: D.q = A.q + B.q, D.a = A.a, D.t = A.t.
-        // Else, move: D = B.
-        let mut D = B.clone();
-        D.0.conditional_assign(&(A.0 + B.0), same_flavor);
-        D.1.conditional_assign(&A.1, same_flavor);
-        D.2.conditional_assign(&A.2, same_flavor);
-        merge_mid.push(D);
+        // If same_flavor, merge: d.0 = a.0 + b.0, D.1 = A.1, D.2 = A.2.
+        // Else, move: d = b.
+        let mut d = b.clone();
+        d.0.conditional_assign(&(a.0 + b.0), same_flavor);
+        d.1.conditional_assign(&a.1, same_flavor);
+        d.2.conditional_assign(&a.2, same_flavor);
+        merge_mid.push(d);
 
-        A = D;
+        a = d;
     }
 
     // Move the last merge_mid to be the last merge_out, to match the protocol definition
