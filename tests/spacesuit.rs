@@ -1,6 +1,5 @@
 extern crate spacesuit;
-use spacesuit::error::SpacesuitError;
-use spacesuit::spacesuit::{prove, verify};
+use spacesuit::{prove, verify, SpacesuitError};
 
 extern crate curve25519_dalek;
 use curve25519_dalek::scalar::Scalar;

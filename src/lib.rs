@@ -7,7 +7,10 @@ extern crate subtle;
 #[macro_use]
 extern crate failure;
 
-pub mod error;
+mod error;
 mod gadgets;
-pub mod spacesuit;
+mod spacesuit;
 mod value;
+
+pub use error::SpacesuitError;
+pub use spacesuit::*;
