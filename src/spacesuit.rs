@@ -173,21 +173,26 @@ fn value_helper(
     )
 }
 
-// Takes in the ungrouped side of shuffle, returns the values grouped by flavor.
+// Takes in shuffle_in, returns shuffle_out which is a reordering of the tuples in shuffle_in
+// where they have been grouped according to flavor.
 fn shuffle_helper(shuffle_in: &Vec<(Scalar, Scalar, Scalar)>) -> Vec<(Scalar, Scalar, Scalar)> {
     let k = shuffle_in.len();
     let mut shuffle_out = shuffle_in.clone();
 
     for i in 0..k - 1 {
+        // This tuple has the flavor that we are trying to group by in this loop
         let flav = shuffle_out[i];
+        // This tuple may be swapped with another tuple (`comp`) 
+        // if `comp` and `flav` have the same flavor.
         let mut swap = shuffle_out[i + 1];
 
         for j in i + 2..k {
+            // Iterate over all following tuples, assigning them to `comp`.
             let comp = shuffle_out[j];
-            // Check if flav and comp have the same flavor.
+            // Check if `flav` and `comp` have the same flavor.
             let same_flavor = flav.1.ct_eq(&comp.1) & flav.2.ct_eq(&comp.2);
 
-            // If same_flavor, then switch comp and swap. Else, keep the same.
+            // If same_flavor, then swap `comp` and `swap`. Else, keep the same.
             // TODO: when `Scalar` implements `ConditionallySwappable`, use
             // `conditional_swap` instead of `conditional_assign`.
             shuffle_out[j].0.conditional_assign(&swap.0, same_flavor);
