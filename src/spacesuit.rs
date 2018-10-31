@@ -174,10 +174,31 @@ fn value_helper(
 }
 
 // Takes in the ungrouped side of shuffle, returns the values grouped by flavor.
-// TODO: do this in constant time
 fn shuffle_helper(shuffle_in: &Vec<(Scalar, Scalar, Scalar)>) -> Vec<(Scalar, Scalar, Scalar)> {
+    let k = shuffle_in.len();
     let mut shuffle_out = shuffle_in.clone();
-    shuffle_out.sort_unstable_by_key(|(_q, a, t)| (a.to_bytes(), t.to_bytes()));
+
+    for i in 0..k - 1 {
+        let flav = shuffle_out[i];
+        let mut swap = shuffle_out[i + 1];
+
+        for j in i + 2..k {
+            let comp = shuffle_out[j];
+            // Check if flav and comp have the same flavor.
+            let same_flavor = flav.1.ct_eq(&comp.1) & flav.2.ct_eq(&comp.2);
+
+            // If same_flavor, then switch comp and swap. Else, keep the same.
+            // TODO: when `Scalar` implements `ConditionallySwappable`, use
+            // `conditional_swap` instead of `conditional_assign`.
+            shuffle_out[j].0.conditional_assign(&swap.0, same_flavor);
+            shuffle_out[j].1.conditional_assign(&swap.1, same_flavor);
+            shuffle_out[j].2.conditional_assign(&swap.2, same_flavor);
+            swap.0.conditional_assign(&comp.0, same_flavor);
+            swap.1.conditional_assign(&comp.1, same_flavor);
+            swap.2.conditional_assign(&comp.2, same_flavor);
+            shuffle_out[i + 1] = swap;
+        }
+    }
     shuffle_out
 }
 
@@ -303,11 +324,15 @@ mod tests {
         );
         assert_eq!(
             shuffle_helper(&vec![yuan(1), peso(3), peso(4), yuan(2)]),
-            vec![yuan(1), yuan(2), peso(3), peso(4)]
+            vec![yuan(1), yuan(2), peso(4), peso(3)]
         );
         assert_eq!(
             shuffle_helper(&vec![yuan(1), peso(3), zero(), yuan(2)]),
-            vec![zero(), yuan(1), yuan(2), peso(3)]
+            vec![yuan(1), yuan(2), zero(), peso(3)]
+        );
+        assert_eq!(
+            shuffle_helper(&vec![yuan(1), yuan(2), yuan(3), yuan(4)]),
+            vec![yuan(1), yuan(4), yuan(3), yuan(2)]
         );
     }
 
