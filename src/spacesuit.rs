@@ -14,8 +14,8 @@ use value::Value;
 pub struct SpacesuitProof(R1CSProof);
 
 pub fn prove(
-    inputs: Vec<(Scalar, Scalar, Scalar)>,
-    outputs: Vec<(Scalar, Scalar, Scalar)>,
+    inputs: &Vec<(Scalar, Scalar, Scalar)>,
+    outputs: &Vec<(Scalar, Scalar, Scalar)>,
 ) -> Result<(SpacesuitProof, Vec<CompressedRistretto>), SpacesuitError> {
     let pc_gens = PedersenGens::default();
     let bp_gens = BulletproofGens::new(10000, 1);
@@ -59,7 +59,7 @@ pub fn prove(
 }
 
 pub fn verify(
-    proof: SpacesuitProof,
+    proof: &SpacesuitProof,
     commitments: Vec<CompressedRistretto>,
     m: usize,
     n: usize,
@@ -93,8 +93,8 @@ pub fn verify(
 /// value to the intermediate variables as well. The discussion for that is here:
 /// https://github.com/dalek-cryptography/bulletproofs/issues/186
 fn compute_intermediate_values(
-    inputs: Vec<(Scalar, Scalar, Scalar)>,
-    outputs: Vec<(Scalar, Scalar, Scalar)>,
+    inputs: &Vec<(Scalar, Scalar, Scalar)>,
+    outputs: &Vec<(Scalar, Scalar, Scalar)>,
 ) -> Result<Vec<Scalar>, SpacesuitError> {
     let m = inputs.len();
     let n = outputs.len();
@@ -104,24 +104,24 @@ fn compute_intermediate_values(
     let mut v = Vec::with_capacity(commitment_count);
 
     // Input to transaction
-    append_values(&mut v, &inputs);
+    append_values(&mut v, inputs);
 
     // Inputs, intermediates, and outputs of merge gadget
-    let merge_in = shuffle_helper(&inputs);
+    let merge_in = shuffle_helper(inputs);
     let (merge_mid, merge_out) = merge_helper(&merge_in)?;
     append_values(&mut v, &merge_in);
     append_values(&mut v, &merge_mid);
     append_values(&mut v, &merge_out);
 
     // Inputs, intermediates, and outputs of split gadget
-    let split_out = shuffle_helper(&outputs);
+    let split_out = shuffle_helper(outputs);
     let (split_mid, split_in) = split_helper(&split_out)?;
     append_values(&mut v, &split_in);
     append_values(&mut v, &split_mid);
     append_values(&mut v, &split_out);
 
     // Output of transaction
-    append_values(&mut v, &outputs);
+    append_values(&mut v, outputs);
 
     Ok(v)
 }

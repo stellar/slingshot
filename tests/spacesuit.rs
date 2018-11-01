@@ -10,8 +10,8 @@ fn spacesuit_helper(
 ) -> Result<(), SpacesuitError> {
     let m = inputs.len();
     let n = outputs.len();
-    let (proof, commitments) = prove(inputs, outputs)?;
-    verify(proof, commitments, m, n)
+    let (proof, commitments) = prove(&inputs, &outputs)?;
+    verify(&proof, commitments, m, n)
 }
 
 // Helper functions to make the tests easier to read
