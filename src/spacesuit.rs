@@ -184,7 +184,7 @@ fn shuffle_helper(shuffle_in: &Vec<(Scalar, Scalar, Scalar)>) -> Vec<(Scalar, Sc
     for i in 0..k - 1 {
         // This tuple has the flavor that we are trying to group by in this loop
         let flav = shuffle_out[i];
-        // This tuple may be swapped with another tuple (`comp`) 
+        // This tuple may be swapped with another tuple (`comp`)
         // if `comp` and `flav` have the same flavor.
         let mut swap = shuffle_out[i + 1];
 

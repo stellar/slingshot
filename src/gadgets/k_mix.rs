@@ -53,7 +53,7 @@ pub fn fill_cs<CS: ConstraintSystem>(
         // B = inputs[i+1]
         .zip(inputs.into_iter().skip(1))
         // C = outputs[i]
-        .zip(outputs.clone().into_iter())
+        .zip(outputs.into_iter())
         // D = intermediates||last_output[i]
         .zip(intermediates.into_iter().chain(once(last_output)))
     {
