@@ -14,11 +14,11 @@ use value::Value;
 pub struct SpacesuitProof(R1CSProof);
 
 pub fn prove(
+    bp_gens: &BulletproofGens,
+    pc_gens: &PedersenGens,
     inputs: &Vec<(Scalar, Scalar, Scalar)>,
     outputs: &Vec<(Scalar, Scalar, Scalar)>,
 ) -> Result<(SpacesuitProof, Vec<CompressedRistretto>), SpacesuitError> {
-    let pc_gens = PedersenGens::default();
-    let bp_gens = BulletproofGens::new(10000, 1);
     let m = inputs.len();
     let n = outputs.len();
 
@@ -59,14 +59,13 @@ pub fn prove(
 }
 
 pub fn verify(
+    bp_gens: &BulletproofGens,
+    pc_gens: &PedersenGens,
     proof: &SpacesuitProof,
     commitments: Vec<CompressedRistretto>,
     m: usize,
     n: usize,
 ) -> Result<(), SpacesuitError> {
-    let pc_gens = PedersenGens::default();
-    let bp_gens = BulletproofGens::new(10000, 1);
-
     // Verifier makes a `ConstraintSystem` instance representing a merge gadget
     let mut verifier_transcript = Transcript::new(b"TransactionTest");
     let (mut verifier_cs, variables) =

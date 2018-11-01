@@ -11,11 +11,17 @@ use rand::Rng;
 extern crate spacesuit;
 use spacesuit::{prove, verify};
 
+extern crate bulletproofs;
+use bulletproofs::{BulletproofGens, PedersenGens};
+
 fn create_spacesuit_proof_helper(n: usize, c: &mut Criterion) {
     let label = format!("Spacesuit proof creation with {} inputs and outputs", n);
 
     c.bench_function(&label, move |b| {
         // Generate inputs and outputs to spacesuit prover
+        let bp_gens = BulletproofGens::new(10000, 1);
+        let pc_gens = PedersenGens::default();
+
         let mut rng = rand::thread_rng();
         let (min, max) = (0u64, std::u64::MAX);
         let inputs: Vec<(Scalar, Scalar, Scalar)> = (0..n)
@@ -31,9 +37,13 @@ fn create_spacesuit_proof_helper(n: usize, c: &mut Criterion) {
 
         // Make spacesuit proof
         b.iter(|| {
-            prove(&inputs, &outputs).unwrap();
+            prove(&bp_gens, &pc_gens, &inputs, &outputs).unwrap();
         })
     });
+}
+
+fn create_spacesuit_proof_n_2(c: &mut Criterion) {
+    create_spacesuit_proof_helper(2, c);
 }
 
 fn create_spacesuit_proof_n_8(c: &mut Criterion) {
@@ -57,6 +67,9 @@ fn verify_spacesuit_proof_helper(n: usize, c: &mut Criterion) {
 
     c.bench_function(&label, move |b| {
         // Generate inputs and outputs to spacesuit prover
+        let bp_gens = BulletproofGens::new(10000, 1);
+        let pc_gens = PedersenGens::default();
+
         let mut rng = rand::thread_rng();
         let (min, max) = (0u64, std::u64::MAX);
         let inputs: Vec<(Scalar, Scalar, Scalar)> = (0..n)
@@ -69,12 +82,16 @@ fn verify_spacesuit_proof_helper(n: usize, c: &mut Criterion) {
             }).collect();
         let mut outputs = inputs.clone();
         rand::thread_rng().shuffle(&mut outputs);
-        let (proof, commitments) = prove(&inputs, &outputs).unwrap();
+        let (proof, commitments) = prove(&bp_gens, &pc_gens, &inputs, &outputs).unwrap();
 
         b.iter(|| {
-            verify(&proof, commitments.clone(), n, n).unwrap();
+            verify(&bp_gens, &pc_gens, &proof, commitments.clone(), n, n).unwrap();
         })
     });
+}
+
+fn verify_spacesuit_proof_n_2(c: &mut Criterion) {
+    verify_spacesuit_proof_helper(2, c);
 }
 
 fn verify_spacesuit_proof_n_8(c: &mut Criterion) {
@@ -96,7 +113,8 @@ fn verify_spacesuit_proof_n_64(c: &mut Criterion) {
 criterion_group!{
     name = create_spacesuit_proof;
     config = Criterion::default().sample_size(10);
-    targets = create_spacesuit_proof_n_8,
+    targets = create_spacesuit_proof_n_2,
+        create_spacesuit_proof_n_8,
         create_spacesuit_proof_n_16,
         create_spacesuit_proof_n_32,
         create_spacesuit_proof_n_64,
@@ -105,7 +123,8 @@ criterion_group!{
 criterion_group!{
     name = verify_spacesuit_proof;
     config = Criterion::default().sample_size(10);
-    targets = verify_spacesuit_proof_n_8,
+    targets = verify_spacesuit_proof_n_2,
+        verify_spacesuit_proof_n_8,
         verify_spacesuit_proof_n_16,
         verify_spacesuit_proof_n_32,
         verify_spacesuit_proof_n_64,

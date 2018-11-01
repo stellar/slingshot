@@ -4,14 +4,20 @@ use spacesuit::{prove, verify, SpacesuitError};
 extern crate curve25519_dalek;
 use curve25519_dalek::scalar::Scalar;
 
+extern crate bulletproofs;
+use bulletproofs::{BulletproofGens, PedersenGens};
+
 fn spacesuit_helper(
     inputs: Vec<(Scalar, Scalar, Scalar)>,
     outputs: Vec<(Scalar, Scalar, Scalar)>,
 ) -> Result<(), SpacesuitError> {
     let m = inputs.len();
     let n = outputs.len();
-    let (proof, commitments) = prove(&inputs, &outputs)?;
-    verify(&proof, commitments, m, n)
+    let bp_gens = BulletproofGens::new(10000, 1);
+    let pc_gens = PedersenGens::default();
+
+    let (proof, commitments) = prove(&bp_gens, &pc_gens, &inputs, &outputs)?;
+    verify(&bp_gens, &pc_gens, &proof, commitments, m, n)
 }
 
 // Helper functions to make the tests easier to read
