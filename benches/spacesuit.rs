@@ -104,7 +104,7 @@ criterion_group!{
 
 criterion_group!{
     name = verify_spacesuit_proof;
-    config = Criterion::default();
+    config = Criterion::default().sample_size(10);
     targets = verify_spacesuit_proof_n_8,
         verify_spacesuit_proof_n_16,
         verify_spacesuit_proof_n_32,
