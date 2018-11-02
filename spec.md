@@ -140,7 +140,7 @@ Transaction is the outermost gadget of this protocol.
 Prover provides M input commitments, N output commitments and a proof of the above relation between inputs and outputs.
 
 Verifier constructs the relation from the commitments and parameters M and N, and verifies the proof.
-If the verification is successful, the verifier is convinced in the [soundness](#soundness) of the transfer.
+If the verification is successful, the verifier is convinced of the [soundness](#soundness) of the transfer.
 
 ### K-scalar shuffle
 
@@ -291,9 +291,9 @@ When computing the proof, the assignments of all input and output values are ass
 _K-mix_ is a composition of `K-1` [mix gadgets](#mix) connected sequentially.
 
 For a pair of [mixes](#mix) M1 and M2:
-* First output of M1 is the output of the K-mix.
-* Second output of M1 is the first input M2.
-* Second input of M2 is the input of K-mix.
+* First output of M1 is the first output of K-mix.
+* Second output of M1 is the first input of M2.
+* Second input of M2 is the last input of K-mix.
 
 ```ascii
   
@@ -335,7 +335,7 @@ and using inputs as outputs and vice versa:
 ### Range proof
 
 Proves that a given [quantity](#quantity) is in a valid range using a binary representation:
-the quantity is a sum of all bits multiplied by powers of two, and each bit has either 0 or 1 value.
+the quantity is a sum of all bits in its bit-representation multiplied by corresponding powers of two, and each bit has either 0 or 1 value.
 
 `n` multipliers `a_i*b_i = c_i` and `1 + 2*n` constraints:
 
@@ -345,14 +345,14 @@ the quantity is a sum of all bits multiplied by powers of two, and each bit has 
 
 where:
 
-* `b_i` is a bit and a left input to an i’th multiplier.
-* `a_i` is a right input to an i’th multiplier set to `1 - b_i` .
+* `b_i` is a bit and a left input to the `i`th multiplier.
+* `a_i` is a right input to an `i`th multiplier set to `1 - b_i` .
 * `c_i` is a multiplication result of `a_i` and `b_i`.
 * `q` is a [quantity](#quantity).
 
 Computing the proof:
 
-1. The [quantity](#quantity) is assumed to be known and be in range `[0, 2^64-1]`.
+1. The [quantity](#quantity) is assumed to be known and be in range `[0, 2^64)`.
 2. Create 64 multipliers.
 3. Assign the inputs and outputs of the multipliers to the values specified above.
 
@@ -513,15 +513,17 @@ between the left and right halves of the transaction. It must only be consistent
 
 #### [K-mix](#k-mix) assignments
 
-All input and output values are assumed to be known.
+All input values are assumed to be known.
 
-The interior variables connecting inner [mix gadgets](#mix) are assigned sequentially,
-such that for each [mix](#mix) gadget, its A, B, C [values](#value) are already assigned,
-and D is to be determined.
+The interior variables connecting inner [mix gadgets](#mix) and output variables are assigned sequentially.
+For each [mix](#mix) gadget, its A and B [values](#value) are known, and C and D are to be determined.
 
-1. If A value is equal to C value, D is assigned to B.
-2. If C has zero [quantity](#quantity) and flavors of A and B are the same, D is assigned to `A+B`.
-3. In any other case the proof cannot be computed.
+1. If A and B have the same [flavor](#flavor), then values are redistributed: 
+   - Assign D to have quantity `A.quantity + B.quantity` and have flavor equal to `A.flavor` and `B.flavor`. 
+   - Assign C to have [quantity](#quantity) and [flavor](#flavor) of zero.
+2. If A and B have different [flavors](#flavor), then values are unchanged: 
+   - Assign C to be equal to A.
+   - Assign D to be equal to B.
 
 
 

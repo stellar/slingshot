@@ -1,12 +1,16 @@
 # Spacesuit: Interstellar's implementation of cloaked transactions
 
-This library implements the [cloak][cloak] protocol, using the [Bulletproofs][bp_website]
-zero-knowledge proof circuit protocol as implemented in rust in [this][bp_repo] library.
+This library is a pure-Rust implementation of the [Cloak][cloak] protocol. We use the
+[Bulletproofs][bp_website] zero-knowledge circuit proof system, as implemented in
+Rust in [this library][bp_repo]. 
+
+## Documentation
+
+Specs for the Cloak protocol can be [found here][cloak].
 
 ## WARNING
 
-This code is still research-quality.  It is not (yet) suitable for
-deployment. 
+This code is still research-quality.  It is not (yet) suitable for deployment. 
 
 ## Tests 
 
