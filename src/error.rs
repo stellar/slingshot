@@ -1,11 +1,4 @@
-use bulletproofs::r1cs::{Assignment, R1CSError, Variable};
-
-#[derive(Clone, Debug)]
-pub struct Value {
-    pub q: (Variable, Assignment), // quantity
-    pub a: (Variable, Assignment), // issuer
-    pub t: (Variable, Assignment), // tag
-}
+use bulletproofs::r1cs::R1CSError;
 
 /// Represents an error during the proof creation of verification for a KShuffle or KValueShuffle gadget.
 #[derive(Fail, Copy, Clone, Debug, Eq, PartialEq)]

@@ -1,72 +1,83 @@
 #![allow(non_snake_case)]
 
-use bulletproofs::r1cs::{Assignment, ConstraintSystem, Variable};
+use bulletproofs::r1cs::{Assignment, ProverCS, R1CSProof, Variable, VerifierCS};
+use bulletproofs::{BulletproofGens, PedersenGens};
+use curve25519_dalek::ristretto::CompressedRistretto;
 use curve25519_dalek::scalar::Scalar;
-use gadgets::{merge, padded_shuffle, range_proof, split, value_shuffle};
-use std::cmp::{max, min};
+use error::SpacesuitError;
+use gadgets::transaction;
+use merlin::Transcript;
+use std::cmp::max;
 use subtle::{ConditionallyAssignable, ConstantTimeEq};
-use util::{SpacesuitError, Value};
+use value::Value;
 
-/// Enforces that the outputs are a valid rearrangement of the inputs, following the
-/// soundness and secrecy requirements in the spacesuit transaction spec:
-/// https://github.com/interstellar/spacesuit/blob/master/spec.md
-pub fn fill_cs<CS: ConstraintSystem>(
-    cs: &mut CS,
-    inputs: Vec<Value>,
-    merge_in: Vec<Value>,
-    merge_mid: Vec<Value>,
-    merge_out: Vec<Value>,
-    split_in: Vec<Value>,
-    split_mid: Vec<Value>,
-    split_out: Vec<Value>,
-    outputs: Vec<Value>,
-) -> Result<(), SpacesuitError> {
+pub struct SpacesuitProof(R1CSProof);
+
+pub fn prove(
+    bp_gens: &BulletproofGens,
+    pc_gens: &PedersenGens,
+    inputs: &Vec<(Scalar, Scalar, Scalar)>,
+    outputs: &Vec<(Scalar, Scalar, Scalar)>,
+) -> Result<(SpacesuitProof, Vec<CompressedRistretto>), SpacesuitError> {
     let m = inputs.len();
     let n = outputs.len();
-    let inner_merge_count = max(m, 2) - 2; // max(m - 2, 0)
-    let inner_split_count = max(n, 2) - 2; // max(n - 2, 0)
-    if inputs.len() != merge_in.len()
-        || merge_in.len() != merge_out.len()
-        || split_in.len() != split_out.len()
-        || split_out.len() != outputs.len()
-        || merge_mid.len() != inner_merge_count
-        || split_mid.len() != inner_split_count
-    {
-        return Err(SpacesuitError::InvalidR1CSConstruction);
-    }
 
-    // Shuffle 1
-    // Check that `merge_in` is a valid reordering of `inputs`
-    // when `inputs` are grouped by flavor.
-    value_shuffle::fill_cs(cs, inputs, merge_in.clone())?;
+    // Prover makes a `ConstraintSystem` instance representing a transaction gadget
+    // Make v vector
+    let v = compute_intermediate_values(inputs, outputs)?;
 
-    // Merge
-    // Check that `merge_out` is a valid combination of `merge_in`,
-    // when all values of the same flavor in `merge_in` are combined.
-    merge::fill_cs(cs, merge_in, merge_mid, merge_out.clone())?;
+    // Make v_blinding vector using RNG from transcript
+    let mut prover_transcript = Transcript::new(b"TransactionTest");
+    let mut rng = {
+        let mut builder = prover_transcript.build_rng();
 
-    // Shuffle 2
-    // Check that `split_in` is a valid reordering of `merge_out`, allowing for
-    // the adding or dropping of padding values (quantity = 0) if m != n.
-    padded_shuffle::fill_cs(cs, merge_out, split_in.clone())?;
+        // Commit the secret values
+        for &v_i in &v {
+            builder = builder.commit_witness_bytes(b"v_i", v_i.as_bytes());
+        }
+        use rand::thread_rng;
+        builder.finalize(&mut thread_rng())
+    };
+    let v_blinding: Vec<Scalar> = (0..v.len()).map(|_| Scalar::random(&mut rng)).collect();
 
-    // Split
-    // Check that `split_in` is a valid combination of `split_out`,
-    // when all values of the same flavor in `split_out` are combined.
-    split::fill_cs(cs, split_in, split_mid, split_out.clone())?;
+    let (mut prover_cs, variables, commitments) = ProverCS::new(
+        &bp_gens,
+        &pc_gens,
+        &mut prover_transcript,
+        v.clone(),
+        v_blinding,
+    );
 
-    // Shuffle 3
-    // Check that `split_out` is a valid reordering of `outputs`
-    // when `outputs` are grouped by flavor.
-    value_shuffle::fill_cs(cs, split_out, outputs.clone())?;
+    // Prover adds constraints to the constraint system
+    let v_assignments = v.iter().map(|v_i| Assignment::from(*v_i)).collect();
+    let (inp, m_i, m_m, m_o, s_i, s_m, s_o, out) = value_helper(variables, v_assignments, m, n);
 
-    // Range Proof
-    // Check that each of the quantities in `outputs` lies in [0, 2^64).
-    for output in outputs {
-        range_proof::fill_cs(cs, output.q, 64)?;
-    }
+    transaction::fill_cs(&mut prover_cs, inp, m_i, m_m, m_o, s_i, s_m, s_o, out)?;
+    let proof = SpacesuitProof(prover_cs.prove()?);
 
-    Ok(())
+    Ok((proof, commitments))
+}
+
+pub fn verify(
+    bp_gens: &BulletproofGens,
+    pc_gens: &PedersenGens,
+    proof: &SpacesuitProof,
+    commitments: Vec<CompressedRistretto>,
+    m: usize,
+    n: usize,
+) -> Result<(), SpacesuitError> {
+    // Verifier makes a `ConstraintSystem` instance representing a merge gadget
+    let mut verifier_transcript = Transcript::new(b"TransactionTest");
+    let (mut verifier_cs, variables) =
+        VerifierCS::new(&bp_gens, &pc_gens, &mut verifier_transcript, commitments);
+
+    // Verifier allocates variables and adds constraints to the constraint system
+    let v_assignments = vec![Assignment::Missing(); variables.len()];
+    let (inp, m_i, m_m, m_o, s_i, s_m, s_o, out) = value_helper(variables, v_assignments, m, n);
+
+    assert!(transaction::fill_cs(&mut verifier_cs, inp, m_i, m_m, m_o, s_i, s_m, s_o, out).is_ok());
+
+    Ok(verifier_cs.verify(&proof.0)?)
 }
 
 /// Given the input and output values for a spacesuit transaction, determine
@@ -80,9 +91,9 @@ pub fn fill_cs<CS: ConstraintSystem>(
 /// This will be fixed in the future with a "Bulletproofs++" which binds the challenge
 /// value to the intermediate variables as well. The discussion for that is here:
 /// https://github.com/dalek-cryptography/bulletproofs/issues/186
-pub fn compute_intermediate_values(
-    inputs: Vec<(Scalar, Scalar, Scalar)>,
-    outputs: Vec<(Scalar, Scalar, Scalar)>,
+fn compute_intermediate_values(
+    inputs: &Vec<(Scalar, Scalar, Scalar)>,
+    outputs: &Vec<(Scalar, Scalar, Scalar)>,
 ) -> Result<Vec<Scalar>, SpacesuitError> {
     let m = inputs.len();
     let n = outputs.len();
@@ -92,29 +103,29 @@ pub fn compute_intermediate_values(
     let mut v = Vec::with_capacity(commitment_count);
 
     // Input to transaction
-    append_values(&mut v, &inputs);
+    append_values(&mut v, inputs);
 
     // Inputs, intermediates, and outputs of merge gadget
-    let merge_in = shuffle_helper(&inputs);
+    let merge_in = shuffle_helper(inputs);
     let (merge_mid, merge_out) = merge_helper(&merge_in)?;
     append_values(&mut v, &merge_in);
     append_values(&mut v, &merge_mid);
     append_values(&mut v, &merge_out);
 
     // Inputs, intermediates, and outputs of split gadget
-    let split_out = shuffle_helper(&outputs);
+    let split_out = shuffle_helper(outputs);
     let (split_mid, split_in) = split_helper(&split_out)?;
     append_values(&mut v, &split_in);
     append_values(&mut v, &split_mid);
     append_values(&mut v, &split_out);
 
     // Output of transaction
-    append_values(&mut v, &outputs);
+    append_values(&mut v, outputs);
 
     Ok(v)
 }
 
-pub fn value_helper(
+fn value_helper(
     variables: Vec<Variable>,
     assignments: Vec<Assignment>,
     m: usize,
@@ -163,11 +174,36 @@ pub fn value_helper(
     )
 }
 
-// Takes in the ungrouped side of shuffle, returns the values grouped by flavor.
-// TODO: do this in constant time
+// Takes in shuffle_in, returns shuffle_out which is a reordering of the tuples in shuffle_in
+// where they have been grouped according to flavor.
 fn shuffle_helper(shuffle_in: &Vec<(Scalar, Scalar, Scalar)>) -> Vec<(Scalar, Scalar, Scalar)> {
+    let k = shuffle_in.len();
     let mut shuffle_out = shuffle_in.clone();
-    shuffle_out.sort_unstable_by_key(|(_q, a, t)| (a.to_bytes(), t.to_bytes()));
+
+    for i in 0..k - 1 {
+        // This tuple has the flavor that we are trying to group by in this loop
+        let flav = shuffle_out[i];
+        // This tuple may be swapped with another tuple (`comp`)
+        // if `comp` and `flav` have the same flavor.
+        let mut swap = shuffle_out[i + 1];
+
+        for j in i + 2..k {
+            // Iterate over all following tuples, assigning them to `comp`.
+            let comp = shuffle_out[j];
+            // Check if `flav` and `comp` have the same flavor.
+            let same_flavor = flav.1.ct_eq(&comp.1) & flav.2.ct_eq(&comp.2);
+
+            // If same_flavor, then swap `comp` and `swap`. Else, keep the same.
+            // TODO: when `Scalar` implements `ConditionallySwappable`, use
+            // `conditional_swap` instead of `conditional_assign`.
+            shuffle_out[j].0.conditional_assign(&swap.0, same_flavor);
+            shuffle_out[j].1.conditional_assign(&swap.1, same_flavor);
+            shuffle_out[j].2.conditional_assign(&swap.2, same_flavor);
+            swap.0.conditional_assign(&comp.0, same_flavor);
+            swap.1.conditional_assign(&comp.1, same_flavor);
+            swap.2.conditional_assign(&comp.2, same_flavor);
+        }
+    }
     shuffle_out
 }
 
@@ -202,12 +238,11 @@ fn merge_helper(
     let mut merge_out = Vec::with_capacity(merge_in.len());
 
     let mut A = merge_in[0];
-    let mut B = merge_in[1];
-    for i in 0..merge_count {
+    for B in merge_in.into_iter().skip(1) {
         // Check if A and B have the same flavors
         let same_flavor = A.1.ct_eq(&B.1) & A.2.ct_eq(&B.2);
 
-        // If same_flavor, merge: C.q, C.a, C.t = 0.
+        // If same_flavor, merge: C.0, C.1, C.2 = 0.
         // Else, move: C = A.
         let mut C = A.clone();
         C.0.conditional_assign(&Scalar::zero(), same_flavor);
@@ -215,7 +250,7 @@ fn merge_helper(
         C.2.conditional_assign(&Scalar::zero(), same_flavor);
         merge_out.push(C);
 
-        // If same_flavor, merge: D.q = A.q + B.q, D.a = A.a, D.t = A.t.
+        // If same_flavor, merge: D.0 = A.0 + B.0, D.1 = A.1, D.2 = A.2.
         // Else, move: D = B.
         let mut D = B.clone();
         D.0.conditional_assign(&(A.0 + B.0), same_flavor);
@@ -224,7 +259,6 @@ fn merge_helper(
         merge_mid.push(D);
 
         A = D;
-        B = merge_in[min(i + 2, merge_count)];
     }
 
     // Move the last merge_mid to be the last merge_out, to match the protocol definition
@@ -295,11 +329,28 @@ mod tests {
         );
         assert_eq!(
             shuffle_helper(&vec![yuan(1), peso(3), peso(4), yuan(2)]),
-            vec![yuan(1), yuan(2), peso(3), peso(4)]
+            vec![yuan(1), yuan(2), peso(4), peso(3)]
         );
         assert_eq!(
             shuffle_helper(&vec![yuan(1), peso(3), zero(), yuan(2)]),
-            vec![zero(), yuan(1), yuan(2), peso(3)]
+            vec![yuan(1), yuan(2), zero(), peso(3)]
+        );
+        assert_eq!(
+            shuffle_helper(&vec![yuan(1), yuan(2), yuan(3), yuan(4)]),
+            vec![yuan(1), yuan(4), yuan(3), yuan(2)]
+        );
+        // k = 5
+        assert_eq!(
+            shuffle_helper(&vec![yuan(1), yuan(2), yuan(3), yuan(4), yuan(5)]),
+            vec![yuan(1), yuan(5), yuan(4), yuan(3), yuan(2)]
+        );
+        assert_eq!(
+            shuffle_helper(&vec![yuan(1), peso(2), yuan(3), peso(4), yuan(5)]),
+            vec![yuan(1), yuan(5), yuan(3), peso(4), peso(2)]
+        );
+        assert_eq!(
+            shuffle_helper(&vec![yuan(1), peso(2), zero(), peso(4), yuan(5)]),
+            vec![yuan(1), yuan(5), zero(), peso(4), peso(2)]
         );
     }
 

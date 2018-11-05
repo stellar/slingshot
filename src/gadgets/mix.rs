@@ -2,7 +2,8 @@
 
 use bulletproofs::r1cs::ConstraintSystem;
 use curve25519_dalek::scalar::Scalar;
-use util::{SpacesuitError, Value};
+use error::SpacesuitError;
+use value::Value;
 
 /// Enforces that the outputs are either a merge of the inputs :`D = A + B && C = 0`,
 /// or the outputs are equal to the inputs `C = A && D = B`. See spec for more details.

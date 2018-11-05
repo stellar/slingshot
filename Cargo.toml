@@ -10,3 +10,10 @@ merlin = "0.4"
 rand = "0.5.0-pre.2"
 subtle = "1"
 failure = "0.1"
+
+[dev-dependencies]
+criterion = "0.2"
+
+[[bench]]
+name = "spacesuit"
+harness = false
