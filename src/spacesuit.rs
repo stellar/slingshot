@@ -202,7 +202,6 @@ fn shuffle_helper(shuffle_in: &Vec<(Scalar, Scalar, Scalar)>) -> Vec<(Scalar, Sc
             swap.0.conditional_assign(&comp.0, same_flavor);
             swap.1.conditional_assign(&comp.1, same_flavor);
             swap.2.conditional_assign(&comp.2, same_flavor);
-            shuffle_out[i + 1] = swap;
         }
     }
     shuffle_out

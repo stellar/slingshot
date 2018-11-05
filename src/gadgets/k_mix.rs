@@ -48,13 +48,13 @@ pub fn fill_cs<CS: ConstraintSystem>(
 
     // For each 2-mix, constrain A, B, C, D:
     for (((A, B), C), D) in
-        // A = first_input||intermediates[i]
+        // A = (first_input||intermediates)[i]
         once(first_input).chain(intermediates.clone().into_iter())
         // B = inputs[i+1]
         .zip(inputs.into_iter().skip(1))
         // C = outputs[i]
         .zip(outputs.into_iter())
-        // D = intermediates||last_output[i]
+        // D = (intermediates||last_output)[i]
         .zip(intermediates.into_iter().chain(once(last_output)))
     {
         mix::fill_cs(cs, A, B, C, D)?
