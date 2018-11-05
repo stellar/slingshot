@@ -2,8 +2,6 @@
 
 _Cloak_ is a protocol for confidential assets based on [Bulletproofs](https://crypto.stanford.edu/bulletproofs/) zero-knowledge proof system. _Cloaked transactions_ exchange values of different “asset types” (which we call [flavors](#flavor)).
 
-The Rust implementation of the Interstellar Cloak is called [Spacesuit](https://crates.io/crates/spacesuit).
-
 * [Requirements](#requirements)
 * [Future directions](#future-directions)
 * [Definitions](#definitions)
@@ -46,15 +44,6 @@ In other words, all transfers with `M` inputs and `N` outputs must be indistingu
 Note: protecting the metadata (e.g. linkability of asset flow between the distinct transactions)
 is out of scope of this protocol. However, a higher-level system that solves this problem could
 use Cloak as a building block.
-
-## Future directions
-
-As a step towards protecting the metadata, we need to allow multiple parties to perform
-individual transactions using a single circuit making them indistinguishable from a single-party transaction
-of the same size. In order to achieve that we will need a multi-party computation protocol 
-that allows multiple parties compute a joint proof for such combined circuit, while preserving privacy
-of the participants with respect to each other.
-
 
 ## Definitions
 
@@ -113,10 +102,10 @@ A transaction consists of:
 
 1. [M-value shuffle](#k-value-shuffle) that proves that [values](#value) are sorted by [flavor](#flavor) for the following merge.
 2. [M-merge](#k-merge) that proves merge of all [values](#value) of the same [flavor](#flavor) in one.
-3. [K-value shuffle](#k-value-shuffle) (`K = max(M,N)`) that proves that [values](#value) are reordered by [flavor](#flavor) (such that non-zero values go before the zeroed ones). This gadget is [padded](#pad) with zero values on inputs or outputs as required.
+3. [K-value padded shuffle](#k-value-shuffle) (`K = max(M,N)`) that proves that [values](#value) are reordered by [flavor](#flavor) (such that non-zero values go before the zeroed ones). This gadget is [padded](#pad) with zero values on inputs or outputs as required.
 4. [N-split](#k-split) that proves split of non-zero [values](#value) into a required number of smaller values per [flavor](#flavor).
 5. [N-value shuffle](#k-value-shuffle) that proves that [values](#value) are preserved while being permuted in random order.
-6. [Range proof](#range-proof) that proves that each [quantity](#quantity) is in a valid range `[0, 2^64)`. This prevents the prover from creating “negative” quantities that may offset inflated “positive” quantities.
+6. [N range proofs](#range-proof) that prove that each [quantity](#quantity) is in a valid range `[0, 2^64)`. This prevents the prover from creating “negative” quantities that may offset inflated “positive” quantities.
 
 Transaction is the outermost gadget of this protocol.
 
@@ -137,7 +126,7 @@ Transaction is the outermost gadget of this protocol.
                             middle shuffle
 ```
 
-Prover provides M input commitments, N output commitments and a proof of the above relation between inputs and outputs.
+Prover provides M input commitments, N output commitments, intermediate commitments, and a proof of the above relation between inputs and outputs.
 
 Verifier constructs the relation from the commitments and parameters M and N, and verifies the proof.
 If the verification is successful, the verifier is convinced of the [soundness](#soundness) of the transfer.
@@ -526,5 +515,10 @@ For each [mix](#mix) gadget, its A and B [values](#value) are known, and C and D
    - Assign C to be equal to A.
    - Assign D to be equal to B.
 
+## Future directions
 
-
+As a step towards protecting the metadata, we need to allow multiple parties to perform
+individual transactions using a single circuit making them indistinguishable from a single-party transaction
+of the same size. In order to achieve that we will need a multi-party computation protocol 
+that allows multiple parties compute a joint proof for such combined circuit, while preserving privacy
+of the participants with respect to each other.
