@@ -436,7 +436,7 @@ B        0
 B        B_sum
 ```
 
-If `N` is greater than `M`, the list is [padded](#pad) with all-zero values:
+If `N` is greater than `M`, the list is [padded](#pad) with `|M - N|` all-zero values:
 
 ```
 0          0
@@ -477,7 +477,8 @@ B_sum       B
 0           B
 ```
 
-If `N` is less than `M`, the list is [padded](#pad) with all-zero values:
+If `N` is less than `M` (not the case in this example transaction), the list is [padded](#pad) 
+with `|M - N|` all-zero values:
 
 ```
 A_sum       A_sum
@@ -493,7 +494,7 @@ B_sum       B_sum
 
 Finally, the lists of values on the left and right sides of the middle [K-value shuffle](#k-value-shuffle)
 have `K = max(N,M)` values in each, with the same amount of zero values and one non-zero value per flavor,
-satisfying the permutation constraint:
+satisfying the permutation constraint that the outputs are a valid reordering of the inputs.
 
 ```
           ____________
@@ -505,7 +506,7 @@ B_sum ---|            |--- 0
 0     ---|            |--- 0      
 0     ---|____________|--- 0 
 
-(M < N => the inputs are padded with two zeroes)
+(Since N = M + 2, the inputs are padded with two all-zero values.)
 ```
 
 Note: order of flavors with respect to each other is actually unimportant and can be inconsistent
