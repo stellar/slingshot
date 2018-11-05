@@ -1,6 +1,6 @@
 # Cloak
 
-_Cloak_ is a protocol for confidential assets based on [Bulletproofs](https://crypto.stanford.edu/bulletproofs/) zero-knowledge proof system. _Cloaked transactions_ exchange values of different “asset types” (which we call [flavors](#flavor)).
+_Cloak_ is a protocol for confidential assets based on the [Bulletproofs](https://crypto.stanford.edu/bulletproofs/) zero-knowledge proof system. _Cloaked transactions_ exchange values of different “asset types” (which we call [flavors](#flavor)).
 
 * [Requirements](#requirements)
 * [Future directions](#future-directions)
@@ -505,7 +505,7 @@ between the left and right halves of the transaction. It must only be consistent
 
 All input values are assumed to be known.
 
-The interior variables connecting inner [mix gadgets](#mix) and output variables are assigned sequentially.
+The intermediate variables connecting inner [mix gadgets](#mix) and output variables are assigned sequentially.
 For each [mix](#mix) gadget, its A and B [values](#value) are known, and C and D are to be determined.
 
 1. If A and B have the same [flavor](#flavor), then values are redistributed: 

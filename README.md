@@ -4,7 +4,7 @@ This library provides a pure-Rust implementation of [Cloak][cloak], a confidenti
 protocol based on the [Bulletproofs][bp_website] zero-knowledge circuit proof system as 
 implemented in [this library][bp_repo].
 
-The Rust implementation of the [Interstellar][interstellar] Cloak is called [Spacesuit][spacesuit_crate].
+The implementation of the Cloak protocol for [Interstellar][interstellar] is called [Spacesuit][spacesuit_crate].
 
 ## Documentation
 
@@ -37,3 +37,4 @@ developed by Henry de Valence, Cathie Yun, and Oleg Andreev.
 [milestones]: https://github.com/interstellar/spacesuit/milestones
 [spacesuit_repo]: https://github.com/interstellar/spacesuit
 [spacesuit_crate]: https://crates.io/crates/spacesuit
+[criterion]: https://github.com/japaric/criterion.rs
