@@ -1,8 +1,6 @@
 # Cloak
 
-_Cloak_ is a protocol for confidential assets based on [Bulletproofs](https://crypto.stanford.edu/bulletproofs/) zero-knowledge proof system. _Cloaked transactions_ exchange values of different “asset types” (which we call [flavors](#flavor)).
-
-The Rust implementation of the Interstellar Cloak is called [Spacesuit](https://crates.io/crates/spacesuit).
+_Cloak_ is a protocol for confidential assets based on the [Bulletproofs](https://crypto.stanford.edu/bulletproofs/) zero-knowledge proof system. _Cloaked transactions_ exchange values of different “asset types” (which we call [flavors](#flavor)).
 
 * [Requirements](#requirements)
 * [Future directions](#future-directions)
@@ -46,15 +44,6 @@ In other words, all transfers with `M` inputs and `N` outputs must be indistingu
 Note: protecting the metadata (e.g. linkability of asset flow between the distinct transactions)
 is out of scope of this protocol. However, a higher-level system that solves this problem could
 use Cloak as a building block.
-
-## Future directions
-
-As a step towards protecting the metadata, we need to allow multiple parties to perform
-individual transactions using a single circuit making them indistinguishable from a single-party transaction
-of the same size. In order to achieve that we will need a multi-party computation protocol 
-that allows multiple parties compute a joint proof for such combined circuit, while preserving privacy
-of the participants with respect to each other.
-
 
 ## Definitions
 
@@ -113,10 +102,10 @@ A transaction consists of:
 
 1. [M-value shuffle](#k-value-shuffle) that proves that [values](#value) are sorted by [flavor](#flavor) for the following merge.
 2. [M-merge](#k-merge) that proves merge of all [values](#value) of the same [flavor](#flavor) in one.
-3. [K-value shuffle](#k-value-shuffle) (`K = max(M,N)`) that proves that [values](#value) are reordered by [flavor](#flavor) (such that non-zero values go before the zeroed ones). This gadget is [padded](#pad) with zero values on inputs or outputs as required.
+3. [K-value padded shuffle](#k-value-shuffle) (`K = max(M,N)`) that proves that [values](#value) are reordered by [flavor](#flavor) (such that non-zero values go before the zeroed ones). This gadget is [padded](#pad) with zero values on inputs or outputs as required.
 4. [N-split](#k-split) that proves split of non-zero [values](#value) into a required number of smaller values per [flavor](#flavor).
 5. [N-value shuffle](#k-value-shuffle) that proves that [values](#value) are preserved while being permuted in random order.
-6. [Range proof](#range-proof) that proves that each [quantity](#quantity) is in a valid range `[0, 2^64)`. This prevents the prover from creating “negative” quantities that may offset inflated “positive” quantities.
+6. [N range proofs](#range-proof) that prove that each [quantity](#quantity) is in a valid range `[0, 2^64)`. This prevents the prover from creating “negative” quantities that may offset inflated “positive” quantities.
 
 Transaction is the outermost gadget of this protocol.
 
@@ -137,10 +126,10 @@ Transaction is the outermost gadget of this protocol.
                             middle shuffle
 ```
 
-Prover provides M input commitments, N output commitments and a proof of the above relation between inputs and outputs.
+Prover provides M input commitments, N output commitments, intermediate commitments, and a proof of the above relation between inputs and outputs.
 
 Verifier constructs the relation from the commitments and parameters M and N, and verifies the proof.
-If the verification is successful, the verifier is convinced in the [soundness](#soundness) of the transfer.
+If the verification is successful, the verifier is convinced of the [soundness](#soundness) of the transfer.
 
 ### K-scalar shuffle
 
@@ -291,9 +280,9 @@ When computing the proof, the assignments of all input and output values are ass
 _K-mix_ is a composition of `K-1` [mix gadgets](#mix) connected sequentially.
 
 For a pair of [mixes](#mix) M1 and M2:
-* First output of M1 is the output of the K-mix.
-* Second output of M1 is the first input M2.
-* Second input of M2 is the input of K-mix.
+* First output of M1 is the first output of K-mix.
+* Second output of M1 is the first input of M2.
+* Second input of M2 is the last input of K-mix.
 
 ```ascii
   
@@ -335,7 +324,7 @@ and using inputs as outputs and vice versa:
 ### Range proof
 
 Proves that a given [quantity](#quantity) is in a valid range using a binary representation:
-the quantity is a sum of all bits multiplied by powers of two, and each bit has either 0 or 1 value.
+the quantity is a sum of all bits in its bit-representation multiplied by corresponding powers of two, and each bit has either 0 or 1 value.
 
 `n` multipliers `a_i*b_i = c_i` and `1 + 2*n` constraints:
 
@@ -345,14 +334,14 @@ the quantity is a sum of all bits multiplied by powers of two, and each bit has 
 
 where:
 
-* `b_i` is a bit and a left input to an i’th multiplier.
-* `a_i` is a right input to an i’th multiplier set to `1 - b_i` .
+* `b_i` is a bit and a left input to the `i`th multiplier.
+* `a_i` is a right input to an `i`th multiplier set to `1 - b_i` .
 * `c_i` is a multiplication result of `a_i` and `b_i`.
 * `q` is a [quantity](#quantity).
 
 Computing the proof:
 
-1. The [quantity](#quantity) is assumed to be known and be in range `[0, 2^64-1]`.
+1. The [quantity](#quantity) is assumed to be known and be in range `[0, 2^64)`.
 2. Create 64 multipliers.
 3. Assign the inputs and outputs of the multipliers to the values specified above.
 
@@ -436,7 +425,7 @@ B        0
 B        B_sum
 ```
 
-If `N` is greater than `M`, the list is [padded](#pad) with all-zero values:
+If `N` is greater than `M`, the list is [padded](#pad) with `|M - N|` all-zero values:
 
 ```
 0          0
@@ -477,7 +466,8 @@ B_sum       B
 0           B
 ```
 
-If `N` is less than `M`, the list is [padded](#pad) with all-zero values:
+If `N` is less than `M` (not the case in this example transaction), the list is [padded](#pad) 
+with `|M - N|` all-zero values:
 
 ```
 A_sum       A_sum
@@ -493,7 +483,7 @@ B_sum       B_sum
 
 Finally, the lists of values on the left and right sides of the middle [K-value shuffle](#k-value-shuffle)
 have `K = max(N,M)` values in each, with the same amount of zero values and one non-zero value per flavor,
-satisfying the permutation constraint:
+satisfying the permutation constraint that the outputs are a valid reordering of the inputs.
 
 ```
           ____________
@@ -505,7 +495,7 @@ B_sum ---|            |--- 0
 0     ---|            |--- 0      
 0     ---|____________|--- 0 
 
-(M < N => the inputs are padded with two zeroes)
+(Since N = M + 2, the inputs are padded with two all-zero values.)
 ```
 
 Note: order of flavors with respect to each other is actually unimportant and can be inconsistent
@@ -513,15 +503,22 @@ between the left and right halves of the transaction. It must only be consistent
 
 #### [K-mix](#k-mix) assignments
 
-All input and output values are assumed to be known.
+All input values are assumed to be known.
 
-The interior variables connecting inner [mix gadgets](#mix) are assigned sequentially,
-such that for each [mix](#mix) gadget, its A, B, C [values](#value) are already assigned,
-and D is to be determined.
+The intermediate variables connecting inner [mix gadgets](#mix) and output variables are assigned sequentially.
+For each [mix](#mix) gadget, its A and B [values](#value) are known, and C and D are to be determined.
 
-1. If A value is equal to C value, D is assigned to B.
-2. If C has zero [quantity](#quantity) and flavors of A and B are the same, D is assigned to `A+B`.
-3. In any other case the proof cannot be computed.
+1. If A and B have the same [flavor](#flavor), then values are redistributed: 
+   - Assign D to have quantity `A.quantity + B.quantity` and have flavor equal to `A.flavor` and `B.flavor`. 
+   - Assign C to have [quantity](#quantity) and [flavor](#flavor) of zero.
+2. If A and B have different [flavors](#flavor), then values are unchanged: 
+   - Assign C to be equal to A.
+   - Assign D to be equal to B.
 
+## Future directions
 
-
+As a step towards protecting the metadata, we need to allow multiple parties to perform
+individual transactions using a single circuit making them indistinguishable from a single-party transaction
+of the same size. In order to achieve that we will need a multi-party computation protocol 
+that allows multiple parties compute a joint proof for such combined circuit, while preserving privacy
+of the participants with respect to each other.
