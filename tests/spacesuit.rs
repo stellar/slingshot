@@ -84,55 +84,64 @@ fn spacesuit_3_3() {
         spacesuit_helper(
             vec![yuan(1), peso(4), euro(8)],
             vec![yuan(1), peso(4), euro(8)]
-        ).is_ok()
+        )
+        .is_ok()
     );
     assert!(
         spacesuit_helper(
             vec![yuan(1), peso(4), euro(8)],
             vec![yuan(1), euro(8), peso(4)]
-        ).is_ok()
+        )
+        .is_ok()
     );
     assert!(
         spacesuit_helper(
             vec![yuan(1), peso(4), euro(8)],
             vec![peso(4), yuan(1), euro(8)]
-        ).is_ok()
+        )
+        .is_ok()
     );
     assert!(
         spacesuit_helper(
             vec![yuan(1), peso(4), euro(8)],
             vec![peso(4), euro(8), yuan(1)]
-        ).is_ok()
+        )
+        .is_ok()
     );
     assert!(
         spacesuit_helper(
             vec![yuan(1), peso(4), euro(8)],
             vec![euro(8), yuan(1), peso(4)]
-        ).is_ok()
+        )
+        .is_ok()
     );
     assert!(
         spacesuit_helper(
             vec![yuan(1), peso(4), euro(8)],
             vec![euro(8), peso(4), yuan(1)]
-        ).is_ok()
+        )
+        .is_ok()
     );
     assert!(
         spacesuit_helper(
             vec![yuan(1), peso(4), euro(8)],
             vec![yuan(2), peso(4), euro(8)]
-        ).is_err()
+        )
+        .is_err()
     );
     assert!(
         spacesuit_helper(
             vec![yuan(1), peso(4), euro(8)],
             vec![yuan(1), euro(4), euro(8)]
-        ).is_err()
+        )
+        .is_err()
     );
     assert!(
         spacesuit_helper(
             vec![yuan(1), peso(4), euro(8)],
             vec![yuan(1), peso(4), euro(9)]
-        ).is_err()
+        )
+        .is_err()
     );
 
     // Middle shuffle & merge & split
@@ -140,31 +149,36 @@ fn spacesuit_3_3() {
         spacesuit_helper(
             vec![yuan(1), yuan(1), peso(4)],
             vec![yuan(1), yuan(1), peso(4)]
-        ).is_ok()
+        )
+        .is_ok()
     );
     assert!(
         spacesuit_helper(
             vec![yuan(4), yuan(3), peso(4)],
             vec![yuan(2), yuan(5), peso(4)]
-        ).is_ok()
+        )
+        .is_ok()
     );
     assert!(
         spacesuit_helper(
             vec![yuan(4), yuan(3), peso(4)],
             vec![peso(4), yuan(2), yuan(5)]
-        ).is_ok()
+        )
+        .is_ok()
     );
     assert!(
         spacesuit_helper(
             vec![yuan(1), yuan(2), yuan(5)],
             vec![yuan(4), yuan(3), yuan(1)]
-        ).is_ok()
+        )
+        .is_ok()
     );
     assert!(
         spacesuit_helper(
             vec![yuan(1), yuan(2), yuan(5)],
             vec![yuan(4), yuan(3), yuan(10)]
-        ).is_err()
+        )
+        .is_err()
     );
 
     // End shuffles & merge & split & middle shuffle
@@ -173,13 +187,15 @@ fn spacesuit_3_3() {
         spacesuit_helper(
             vec![yuan(1), peso(4), yuan(1)],
             vec![yuan(1), yuan(1), peso(4)]
-        ).is_ok()
+        )
+        .is_ok()
     );
     assert!(
         spacesuit_helper(
             vec![yuan(4), peso(4), yuan(3)],
             vec![peso(3), yuan(7), peso(1)]
-        ).is_ok()
+        )
+        .is_ok()
     );
 }
 
@@ -202,13 +218,15 @@ fn spacesuit_4_4() {
         spacesuit_helper(
             vec![yuan(1), peso(4), euro(7), euro(10)],
             vec![yuan(1), peso(4), euro(7), euro(10)]
-        ).is_ok()
+        )
+        .is_ok()
     );
     assert!(
         spacesuit_helper(
             vec![yuan(1), peso(4), euro(7), euro(10)],
             vec![euro(7), yuan(1), euro(10), peso(4),]
-        ).is_ok()
+        )
+        .is_ok()
     );
 
     // Middle shuffle & merge & split
@@ -216,37 +234,43 @@ fn spacesuit_4_4() {
         spacesuit_helper(
             vec![yuan(1), yuan(1), peso(4), peso(4)],
             vec![yuan(1), yuan(1), peso(4), peso(4)]
-        ).is_ok()
+        )
+        .is_ok()
     );
     assert!(
         spacesuit_helper(
             vec![yuan(4), yuan(3), peso(4), peso(4)],
             vec![yuan(2), yuan(5), peso(1), peso(7)]
-        ).is_ok()
+        )
+        .is_ok()
     );
     assert!(
         spacesuit_helper(
             vec![yuan(4), yuan(3), peso(4), peso(4)],
             vec![peso(1), peso(7), yuan(2), yuan(5)]
-        ).is_ok()
+        )
+        .is_ok()
     );
     assert!(
         spacesuit_helper(
             vec![yuan(1), yuan(1), yuan(5), yuan(2)],
             vec![yuan(1), yuan(1), yuan(5), yuan(2)]
-        ).is_ok()
+        )
+        .is_ok()
     );
     assert!(
         spacesuit_helper(
             vec![yuan(1), yuan(2), yuan(5), yuan(2)],
             vec![yuan(4), yuan(3), yuan(3), zero()]
-        ).is_ok()
+        )
+        .is_ok()
     );
     assert!(
         spacesuit_helper(
             vec![yuan(1), yuan(2), yuan(5), yuan(2)],
             vec![yuan(4), yuan(3), yuan(3), yuan(20)]
-        ).is_err()
+        )
+        .is_err()
     );
 
     // End shuffles & merge & split & middle shuffle
@@ -254,18 +278,21 @@ fn spacesuit_4_4() {
         spacesuit_helper(
             vec![yuan(1), peso(4), yuan(1), peso(4)],
             vec![peso(4), yuan(1), yuan(1), peso(4)]
-        ).is_ok()
+        )
+        .is_ok()
     );
     assert!(
         spacesuit_helper(
             vec![yuan(4), peso(4), peso(4), yuan(3)],
             vec![peso(1), yuan(2), yuan(5), peso(7)]
-        ).is_ok()
+        )
+        .is_ok()
     );
     assert!(
         spacesuit_helper(
             vec![yuan(10), peso(1), peso(2), peso(3)],
             vec![yuan(5), yuan(4), yuan(1), peso(6)]
-        ).is_ok()
+        )
+        .is_ok()
     );
 }

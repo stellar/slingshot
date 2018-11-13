@@ -104,7 +104,8 @@ mod tests {
                 vec![peso(3), peso(6), peso(6)],
                 vec![peso(6)],
                 vec![peso(3), peso(6), peso(6)],
-            ).is_ok()
+            )
+            .is_ok()
         );
         // no merge, different asset types
         assert!(
@@ -112,7 +113,8 @@ mod tests {
                 vec![peso(3), yuan(6), peso(6)],
                 vec![yuan(6)],
                 vec![peso(3), yuan(6), peso(6)],
-            ).is_ok()
+            )
+            .is_ok()
         );
         // merge first two
         assert!(
@@ -120,7 +122,8 @@ mod tests {
                 vec![peso(3), peso(6), yuan(1)],
                 vec![peso(9)],
                 vec![peso(0), peso(9), yuan(1)],
-            ).is_ok()
+            )
+            .is_ok()
         );
         // merge last two
         assert!(
@@ -128,7 +131,8 @@ mod tests {
                 vec![yuan(1), peso(3), peso(6)],
                 vec![peso(3)],
                 vec![yuan(1), peso(0), peso(9)],
-            ).is_ok()
+            )
+            .is_ok()
         );
         // merge all, same asset types, zero value is different asset type
         assert!(
@@ -136,7 +140,8 @@ mod tests {
                 vec![peso(3), peso(6), peso(1)],
                 vec![peso(9)],
                 vec![zero(), zero(), peso(10)],
-            ).is_ok()
+            )
+            .is_ok()
         );
         // incomplete merge, input sum does not equal output sum
         assert!(
@@ -144,7 +149,8 @@ mod tests {
                 vec![peso(3), peso(6), peso(1)],
                 vec![peso(9)],
                 vec![zero(), zero(), peso(9)],
-            ).is_err()
+            )
+            .is_err()
         );
         // error when merging with different asset types
         assert!(
@@ -152,7 +158,8 @@ mod tests {
                 vec![peso(3), yuan(6), peso(1)],
                 vec![peso(9)],
                 vec![zero(), zero(), peso(10)],
-            ).is_err()
+            )
+            .is_err()
         );
 
         // k=4
@@ -162,7 +169,8 @@ mod tests {
                 vec![peso(3), peso(6), yuan(1), yuan(2)],
                 vec![peso(9), yuan(1)],
                 vec![zero(), peso(9), zero(), yuan(3)],
-            ).is_ok()
+            )
+            .is_ok()
         );
         // merge all, same asset
         assert!(
@@ -170,7 +178,8 @@ mod tests {
                 vec![peso(3), peso(2), peso(2), peso(1)],
                 vec![peso(5), peso(7)],
                 vec![zero(), zero(), zero(), peso(8)],
-            ).is_ok()
+            )
+            .is_ok()
         );
         // no merge, different assets
         assert!(
@@ -178,7 +187,8 @@ mod tests {
                 vec![peso(3), yuan(2), peso(2), yuan(1)],
                 vec![yuan(2), peso(2)],
                 vec![peso(3), yuan(2), peso(2), yuan(1)],
-            ).is_ok()
+            )
+            .is_ok()
         );
         // error when merging, output sum not equal to input sum
         assert!(
@@ -186,7 +196,8 @@ mod tests {
                 vec![peso(3), peso(2), peso(2), peso(1)],
                 vec![peso(5), peso(7)],
                 vec![zero(), zero(), zero(), peso(9)],
-            ).is_err()
+            )
+            .is_err()
         );
     }
 

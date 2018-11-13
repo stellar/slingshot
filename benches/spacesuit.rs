@@ -31,7 +31,8 @@ fn create_spacesuit_proof_helper(n: usize, c: &mut Criterion) {
                     Scalar::from(rng.gen_range(min, max)),
                     Scalar::from(rng.gen_range(min, max)),
                 )
-            }).collect();
+            })
+            .collect();
         let mut outputs = inputs.clone();
         rand::thread_rng().shuffle(&mut outputs);
 
@@ -79,7 +80,8 @@ fn verify_spacesuit_proof_helper(n: usize, c: &mut Criterion) {
                     Scalar::from(rng.gen_range(min, max)),
                     Scalar::from(rng.gen_range(min, max)),
                 )
-            }).collect();
+            })
+            .collect();
         let mut outputs = inputs.clone();
         rand::thread_rng().shuffle(&mut outputs);
         let (proof, commitments) = prove(&bp_gens, &pc_gens, &inputs, &outputs).unwrap();

@@ -66,13 +66,15 @@ mod tests {
             padded_shuffle_helper(
                 vec![peso(1), yuan(4)],
                 vec![zero(), yuan(4), zero(), peso(1)]
-            ).is_ok()
+            )
+            .is_ok()
         );
         assert!(
             padded_shuffle_helper(
                 vec![yuan(4), zero(), zero(), yuan(4)],
                 vec![zero(), yuan(4), yuan(4)]
-            ).is_ok()
+            )
+            .is_ok()
         );
 
         // k=3, with interspersed empty values
@@ -80,26 +82,30 @@ mod tests {
             padded_shuffle_helper(
                 vec![yuan(1), yuan(4), zero(), peso(8)],
                 vec![yuan(1), yuan(4), peso(8)]
-            ).is_ok()
+            )
+            .is_ok()
         );
         assert!(
             padded_shuffle_helper(
                 vec![yuan(1), yuan(4), peso(8)],
                 vec![yuan(1), zero(), peso(8), zero(), yuan(4)]
-            ).is_ok()
+            )
+            .is_ok()
         );
         assert!(
             padded_shuffle_helper(
                 vec![yuan(1), yuan(4), zero(), peso(8)],
                 vec![zero(), zero(), yuan(4), yuan(1), peso(8)]
-            ).is_ok()
+            )
+            .is_ok()
         );
         assert!(padded_shuffle_helper(vec![peso(1), yuan(4)], vec![yuan(4), peso(2)]).is_err());
         assert!(
             padded_shuffle_helper(
                 vec![yuan(1), yuan(4), peso(8)],
                 vec![zero(), (1, 0, 0), yuan(4), yuan(1), peso(8)]
-            ).is_err()
+            )
+            .is_err()
         );
     }
 

@@ -94,55 +94,64 @@ mod tests {
             value_shuffle_helper(
                 vec![peso(1), yuan(4), euro(8)],
                 vec![peso(1), yuan(4), euro(8)]
-            ).is_ok()
+            )
+            .is_ok()
         );
         assert!(
             value_shuffle_helper(
                 vec![peso(1), yuan(4), euro(8)],
                 vec![peso(1), euro(8), yuan(4)]
-            ).is_ok()
+            )
+            .is_ok()
         );
         assert!(
             value_shuffle_helper(
                 vec![peso(1), yuan(4), euro(8)],
                 vec![yuan(4), peso(1), euro(8)]
-            ).is_ok()
+            )
+            .is_ok()
         );
         assert!(
             value_shuffle_helper(
                 vec![peso(1), yuan(4), euro(8)],
                 vec![yuan(4), euro(8), peso(1)]
-            ).is_ok()
+            )
+            .is_ok()
         );
         assert!(
             value_shuffle_helper(
                 vec![peso(1), yuan(4), euro(8)],
                 vec![euro(8), peso(1), yuan(4)]
-            ).is_ok()
+            )
+            .is_ok()
         );
         assert!(
             value_shuffle_helper(
                 vec![peso(1), yuan(4), euro(8)],
                 vec![euro(8), yuan(4), peso(1)]
-            ).is_ok()
+            )
+            .is_ok()
         );
         assert!(
             value_shuffle_helper(
                 vec![peso(1), yuan(4), euro(8)],
                 vec![(10, 20, 30), yuan(4), euro(8)]
-            ).is_err()
+            )
+            .is_err()
         );
         assert!(
             value_shuffle_helper(
                 vec![peso(1), yuan(4), euro(8)],
                 vec![peso(1), (40, 50, 60), euro(8)]
-            ).is_err()
+            )
+            .is_err()
         );
         assert!(
             value_shuffle_helper(
                 vec![peso(1), yuan(4), euro(8)],
                 vec![peso(1), yuan(4), (98, 99, 100)]
-            ).is_err()
+            )
+            .is_err()
         );
         assert!(value_shuffle_helper(vec![(0, 0, 0)], vec![(0, 0, 1)]).is_err());
     }
@@ -179,7 +188,8 @@ mod tests {
                         Assignment::from(in_i.1.clone()),
                         Assignment::from(in_i.2.clone()),
                     )
-                }).collect();
+                })
+                .collect();
             let out_assignments = output
                 .iter()
                 .map(|out_i| {
@@ -188,7 +198,8 @@ mod tests {
                         Assignment::from(out_i.1.clone()),
                         Assignment::from(out_i.2.clone()),
                     )
-                }).collect();
+                })
+                .collect();
             value_shuffle_cs(&mut prover_cs, in_assignments, out_assignments)?;
             let proof = prover_cs.prove()?;
 
@@ -209,7 +220,8 @@ mod tests {
                     Assignment::Missing(),
                     Assignment::Missing(),
                 )
-            }).collect();
+            })
+            .collect();
         let out_assignments = output
             .iter()
             .map(|_| {
@@ -218,7 +230,8 @@ mod tests {
                     Assignment::Missing(),
                     Assignment::Missing(),
                 )
-            }).collect();
+            })
+            .collect();
         assert!(value_shuffle_cs(&mut verifier_cs, in_assignments, out_assignments,).is_ok());
         // Verifier verifies proof
         Ok(verifier_cs.verify(&proof)?)
