@@ -58,25 +58,25 @@ mod tests {
     use merlin::Transcript;
     use std::cmp::max;
 
-    use value::SecretValue;
+    use value::Value;
 
     // Helper functions to make the tests easier to read
-    fn yuan(q: u64) -> SecretValue {
-        SecretValue {
+    fn yuan(q: u64) -> Value {
+        Value {
             q,
             a: 888u64.into(),
             t: 999u64.into(),
         }
     }
-    fn peso(q: u64) -> SecretValue {
-        SecretValue {
+    fn peso(q: u64) -> Value {
+        Value {
             q,
             a: 666u64.into(),
             t: 777u64.into(),
         }
     }
-    fn zero() -> SecretValue {
-        SecretValue::zero()
+    fn zero() -> Value {
+        Value::zero()
     }
 
     #[test]
@@ -200,9 +200,9 @@ mod tests {
     }
 
     fn k_mix_helper(
-        inputs: Vec<SecretValue>,
-        intermediates: Vec<SecretValue>,
-        outputs: Vec<SecretValue>,
+        inputs: Vec<Value>,
+        intermediates: Vec<Value>,
+        outputs: Vec<Value>,
     ) -> Result<(), SpacesuitError> {
         // Common
         let pc_gens = PedersenGens::default();
@@ -266,7 +266,7 @@ mod tests {
 
     fn organize_values(
         variables: Vec<Variable>,
-        assignments: &Option<Vec<SecretValue>>,
+        assignments: &Option<Vec<Value>>,
         k: usize,
         inter_count: usize,
     ) -> (

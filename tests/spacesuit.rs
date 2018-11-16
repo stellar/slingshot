@@ -1,5 +1,5 @@
 extern crate spacesuit;
-use spacesuit::{prove, verify, SecretValue, SpacesuitError};
+use spacesuit::{prove, verify, Value, SpacesuitError};
 
 extern crate curve25519_dalek;
 
@@ -8,8 +8,8 @@ use bulletproofs::{BulletproofGens, PedersenGens};
 
 fn spacesuit_helper(
     bp_gens: &BulletproofGens,
-    inputs: Vec<SecretValue>,
-    outputs: Vec<SecretValue>,
+    inputs: Vec<Value>,
+    outputs: Vec<Value>,
 ) -> Result<(), SpacesuitError> {
     let m = inputs.len();
     let n = outputs.len();
@@ -20,29 +20,29 @@ fn spacesuit_helper(
 }
 
 // Helper functions to make the tests easier to read
-fn yuan(q: u64) -> SecretValue {
-    SecretValue {
+fn yuan(q: u64) -> Value {
+    Value {
         q,
         a: 888u64.into(),
         t: 999u64.into(),
     }
 }
-fn peso(q: u64) -> SecretValue {
-    SecretValue {
+fn peso(q: u64) -> Value {
+    Value {
         q,
         a: 666u64.into(),
         t: 777u64.into(),
     }
 }
-fn euro(q: u64) -> SecretValue {
-    SecretValue {
+fn euro(q: u64) -> Value {
+    Value {
         q,
         a: 444u64.into(),
         t: 555u64.into(),
     }
 }
-fn zero() -> SecretValue {
-    SecretValue::zero()
+fn zero() -> Value {
+    Value::zero()
 }
 
 // m=1, n=1

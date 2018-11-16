@@ -4,7 +4,7 @@ use std::cmp::{max, min};
 
 use super::value_shuffle;
 use error::SpacesuitError;
-use value::{AllocatedValue, SecretValue};
+use value::{AllocatedValue, Value};
 
 /// Enforces that the values in `y` are a valid reordering of the values in `x`,
 /// allowing for padding (zero values) in x that can be omitted in y (or the other way around).
@@ -25,7 +25,7 @@ pub fn fill_cs<CS: ConstraintSystem>(
         // We can do that with a single multiplier and two linear constraints for the inputs only.
         // The multiplication constraint is enough to ensure that the third wire is also zero.
         let (q, a, t) = cs.multiply(Scalar::zero().into(), Scalar::zero().into());
-        let assignment = Some(SecretValue::zero());
+        let assignment = Some(Value::zero());
         values.push(AllocatedValue {
             q,
             a,
@@ -102,7 +102,7 @@ mod tests {
                 vec![yuan(1), yuan(4), peso(8)],
                 vec![
                     zero(),
-                    SecretValue {
+                    Value {
                         q: 1,
                         a: 0u64.into(),
                         t: 0u64.into()
@@ -117,27 +117,27 @@ mod tests {
     }
 
     // Helper functions to make the tests easier to read
-    fn yuan(q: u64) -> SecretValue {
-        SecretValue {
+    fn yuan(q: u64) -> Value {
+        Value {
             q,
             a: 888u64.into(),
             t: 999u64.into(),
         }
     }
-    fn peso(q: u64) -> SecretValue {
-        SecretValue {
+    fn peso(q: u64) -> Value {
+        Value {
             q,
             a: 666u64.into(),
             t: 777u64.into(),
         }
     }
-    fn zero() -> SecretValue {
-        SecretValue::zero()
+    fn zero() -> Value {
+        Value::zero()
     }
 
     fn padded_shuffle_helper(
-        input: Vec<SecretValue>,
-        output: Vec<SecretValue>,
+        input: Vec<Value>,
+        output: Vec<Value>,
     ) -> Result<(), SpacesuitError> {
         // Common
         let pc_gens = PedersenGens::default();
@@ -193,7 +193,7 @@ mod tests {
 
     fn organize_values(
         variables: Vec<Variable>,
-        assignments: &Option<Vec<SecretValue>>,
+        assignments: &Option<Vec<Value>>,
         m: usize,
         n: usize,
     ) -> (Vec<AllocatedValue>, Vec<AllocatedValue>) {

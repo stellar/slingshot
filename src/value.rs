@@ -1,9 +1,8 @@
 use bulletproofs::r1cs::Variable;
 use curve25519_dalek::scalar::Scalar;
 
-/// TBD: rename to Value after Value is renamed to AllocatedValue.
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub struct SecretValue {
+pub struct Value {
     pub q: u64,    // quantity
     pub a: Scalar, // issuer
     pub t: Scalar, // tag
@@ -16,7 +15,7 @@ pub struct AllocatedValue {
     pub q: Variable, // quantity
     pub a: Variable, // issuer
     pub t: Variable, // tag
-    pub assignment: Option<SecretValue>,
+    pub assignment: Option<Value>,
 }
 
 /// Represents a variable for quantity, along with its assignment.
@@ -26,10 +25,10 @@ pub struct AllocatedQuantity {
     pub assignment: Option<u64>,
 }
 
-impl SecretValue {
+impl Value {
     /// Returns a zero quantity with a zero flavor.
-    pub fn zero() -> SecretValue {
-        SecretValue {
+    pub fn zero() -> Value {
+        Value {
             q: 0,
             a: Scalar::zero(),
             t: Scalar::zero(),

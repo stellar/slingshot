@@ -48,7 +48,7 @@ mod tests {
     use curve25519_dalek::scalar::Scalar;
     use merlin::Transcript;
 
-    use value::SecretValue;
+    use value::Value;
 
     #[test]
     fn mix_gadget() {
@@ -83,22 +83,22 @@ mod tests {
         let pc_gens = PedersenGens::default();
         let bp_gens = BulletproofGens::new(128, 1);
 
-        let A = SecretValue {
+        let A = Value {
             q: A.0,
             a: A.1.into(),
             t: A.2.into(),
         };
-        let B = SecretValue {
+        let B = Value {
             q: B.0,
             a: B.1.into(),
             t: B.2.into(),
         };
-        let C = SecretValue {
+        let C = Value {
             q: C.0,
             a: C.1.into(),
             t: C.2.into(),
         };
-        let D = SecretValue {
+        let D = Value {
             q: D.0,
             a: D.1.into(),
             t: D.2.into(),

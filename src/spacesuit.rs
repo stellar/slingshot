@@ -9,15 +9,15 @@ use gadgets::transaction;
 use merlin::Transcript;
 use std::cmp::max;
 use subtle::{ConditionallySelectable, ConstantTimeEq};
-use value::{AllocatedValue, SecretValue};
+use value::{AllocatedValue, Value};
 
 pub struct SpacesuitProof(R1CSProof);
 
 pub fn prove(
     bp_gens: &BulletproofGens,
     pc_gens: &PedersenGens,
-    inputs: &Vec<SecretValue>,
-    outputs: &Vec<SecretValue>,
+    inputs: &Vec<Value>,
+    outputs: &Vec<Value>,
 ) -> Result<(SpacesuitProof, Vec<CompressedRistretto>), SpacesuitError> {
     let m = inputs.len();
     let n = outputs.len();
@@ -106,16 +106,16 @@ pub fn verify(
 /// value to the intermediate variables as well. The discussion for that is here:
 /// https://github.com/dalek-cryptography/bulletproofs/issues/186
 fn compute_committed_values(
-    inputs: &Vec<SecretValue>,
-    outputs: &Vec<SecretValue>,
-) -> Result<Vec<SecretValue>, SpacesuitError> {
+    inputs: &Vec<Value>,
+    outputs: &Vec<Value>,
+) -> Result<Vec<Value>, SpacesuitError> {
     let m = inputs.len();
     let n = outputs.len();
     let merge_mid_count = max(m, 2) - 2; // max(m - 2, 0)
     let split_mid_count = max(n, 2) - 2; // max(n - 2, 0)
     let commitment_count = 2 * m + merge_mid_count + 2 * n + split_mid_count;
 
-    let mut v = Vec::<SecretValue>::with_capacity(commitment_count);
+    let mut v = Vec::<Value>::with_capacity(commitment_count);
 
     // Input to transaction
     v.extend_from_slice(inputs);
@@ -146,7 +146,7 @@ fn compute_committed_values(
 /// of variables for each gadget.
 fn organize_values(
     variables: Vec<Variable>,
-    assignments: &Option<Vec<SecretValue>>,
+    assignments: &Option<Vec<Value>>,
     m: usize,
     n: usize,
 ) -> (
@@ -199,7 +199,7 @@ fn organize_values(
 
 // Takes in shuffle_in, returns shuffle_out which is a reordering of the tuples in shuffle_in
 // where they have been grouped according to flavor.
-fn shuffle_helper(shuffle_in: &Vec<SecretValue>) -> Vec<SecretValue> {
+fn shuffle_helper(shuffle_in: &Vec<Value>) -> Vec<Value> {
     let k = shuffle_in.len();
     let mut shuffle_out = shuffle_in.clone();
 
@@ -235,8 +235,8 @@ fn shuffle_helper(shuffle_in: &Vec<SecretValue>) -> Vec<SecretValue> {
 // Runs in constant time - runtime does not reveal anything about input values
 // except for how many there are (which is public knowledge).
 fn split_helper(
-    split_out: &Vec<SecretValue>,
-) -> Result<(Vec<SecretValue>, Vec<SecretValue>), SpacesuitError> {
+    split_out: &Vec<Value>,
+) -> Result<(Vec<Value>, Vec<Value>), SpacesuitError> {
     let mut split_out_rev = split_out.clone();
     split_out_rev.reverse();
     let (mut split_mid, mut split_in) = merge_helper(&split_out_rev)?;
@@ -250,8 +250,8 @@ fn split_helper(
 // Runs in constant time - runtime does not reveal anything about input values
 // except for how many there are (which is public knowledge).
 fn merge_helper(
-    merge_in: &Vec<SecretValue>,
-) -> Result<(Vec<SecretValue>, Vec<SecretValue>), SpacesuitError> {
+    merge_in: &Vec<Value>,
+) -> Result<(Vec<Value>, Vec<Value>), SpacesuitError> {
     if merge_in.len() < 2 {
         return Ok((vec![], merge_in.clone()));
     }
@@ -299,22 +299,22 @@ mod tests {
     use super::*;
 
     // Helper functions to make the tests easier to read
-    fn yuan(val: u64) -> SecretValue {
-        SecretValue {
+    fn yuan(val: u64) -> Value {
+        Value {
             q: val,
             a: Scalar::from(888u64),
             t: Scalar::from(999u64),
         }
     }
-    fn peso(val: u64) -> SecretValue {
-        SecretValue {
+    fn peso(val: u64) -> Value {
+        Value {
             q: val,
             a: Scalar::from(666u64),
             t: Scalar::from(777u64),
         }
     }
-    fn zero() -> SecretValue {
-        SecretValue::zero()
+    fn zero() -> Value {
+        Value::zero()
     }
 
     // Note: the output vector for shuffle_helper does not have to be in a particular order,

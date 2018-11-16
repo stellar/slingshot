@@ -48,32 +48,32 @@ mod tests {
     use curve25519_dalek::scalar::Scalar;
     use merlin::Transcript;
 
-    use value::SecretValue;
+    use value::Value;
 
     // Helper functions to make the tests easier to read
-    fn yuan(q: u64) -> SecretValue {
-        SecretValue {
+    fn yuan(q: u64) -> Value {
+        Value {
             q,
             a: 888u64.into(),
             t: 999u64.into(),
         }
     }
-    fn peso(q: u64) -> SecretValue {
-        SecretValue {
+    fn peso(q: u64) -> Value {
+        Value {
             q,
             a: 666u64.into(),
             t: 777u64.into(),
         }
     }
-    fn euro(q: u64) -> SecretValue {
-        SecretValue {
+    fn euro(q: u64) -> Value {
+        Value {
             q,
             a: 444u64.into(),
             t: 555u64.into(),
         }
     }
-    fn wrong() -> SecretValue {
-        SecretValue {
+    fn wrong() -> Value {
+        Value {
             q: 9991u64,
             a: 9992u64.into(),
             t: 9993u64.into(),
@@ -158,12 +158,12 @@ mod tests {
         );
         assert!(
             value_shuffle_helper(
-                vec![SecretValue {
+                vec![Value {
                     q: 0,
                     a: 0u64.into(),
                     t: 0u64.into(),
                 }],
-                vec![SecretValue {
+                vec![Value {
                     q: 0,
                     a: 0u64.into(),
                     t: 1u64.into(),
@@ -174,8 +174,8 @@ mod tests {
     }
 
     fn value_shuffle_helper(
-        input: Vec<SecretValue>,
-        output: Vec<SecretValue>,
+        input: Vec<Value>,
+        output: Vec<Value>,
     ) -> Result<(), SpacesuitError> {
         // Common
         let pc_gens = PedersenGens::default();
@@ -227,7 +227,7 @@ mod tests {
 
     fn organize_values(
         variables: Vec<Variable>,
-        assignments: &Option<Vec<SecretValue>>,
+        assignments: &Option<Vec<Value>>,
     ) -> (Vec<AllocatedValue>, Vec<AllocatedValue>) {
         let n = (variables.len() / 3) / 2;
 
