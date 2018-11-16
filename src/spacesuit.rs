@@ -28,9 +28,9 @@ pub fn prove(
 
     // Flatten the values into a list of raw scalars to compute the Pedersen commitments.
     // TBD: would be nice if ProverCS had an API to do this per-value, so we can avoid
-    // flattening the structure of our input data.
-    let v: Vec<Scalar> = all_values.iter().fold(Vec::with_capacity(
-        3*all_values.len()),
+    // flattening the structure of our input data and then unflattening it via `organize_values`.
+    let v: Vec<Scalar> = all_values.iter().fold(
+        Vec::with_capacity(3*all_values.len()),
         |vec, value|{
             vec.push(value.q.into());
             vec.push(value.a);

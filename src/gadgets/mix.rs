@@ -3,7 +3,7 @@
 use bulletproofs::r1cs::ConstraintSystem;
 use curve25519_dalek::scalar::Scalar;
 use error::SpacesuitError;
-use value::AllocatedValue;
+use value::{AllocatedValue};
 
 /// Enforces that the outputs are either a merge of the inputs :`D = A + B && C = 0`,
 /// or the outputs are equal to the inputs `C = A && D = B`. See spec for more details.
@@ -47,6 +47,7 @@ pub fn fill_cs<CS: ConstraintSystem>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use value::SecretValue;
     use bulletproofs::r1cs::{ProverCS, VerifierCS};
     use bulletproofs::{BulletproofGens, PedersenGens};
     use merlin::Transcript;
@@ -84,14 +85,30 @@ mod tests {
         let pc_gens = PedersenGens::default();
         let bp_gens = BulletproofGens::new(128, 1);
 
+        let A = SecretValue{ q: A.0, a: A.1.into(), t: A.2.into() };
+        let B = SecretValue{ q: B.0, a: B.1.into(), t: B.2.into() };
+        let C = SecretValue{ q: C.0, a: C.1.into(), t: C.2.into() };
+        let D = SecretValue{ q: D.0, a: D.1.into(), t: D.2.into() };
+
         // Prover's scope
         let (proof, commitments) = {
             // Prover makes a `ConstraintSystem` instance representing a merge gadget
             // v and v_blinding emptpy because we are only testing low-level variable constraints
-            let v = vec![];
-            let v_blinding = vec![];
+            let values = vec![A,B,C,D];
+            let v: Vec<Scalar> = values.iter().fold(
+                Vec::new(),
+                |vec, value|{
+                    vec.push(value.q.into());
+                    vec.push(value.a);
+                    vec.push(value.t);
+                    vec
+            });
+            let v_blinding: Vec<Scalar> = (0..v.len()).map(|_| {
+                Scalar::random(&mut rand::thread_rng())
+            }).collect();
+
             let mut prover_transcript = Transcript::new(b"MixTest");
-            let (mut prover_cs, _variables, commitments) = ProverCS::new(
+            let (mut prover_cs, variables, commitments) = ProverCS::new(
                 &bp_gens,
                 &pc_gens,
                 &mut prover_transcript,
@@ -99,38 +116,29 @@ mod tests {
                 v_blinding.clone(),
             );
 
-            // Prover allocates variables and adds constraints to the constraint system
-            let (A_q, B_q) =
-                prover_cs.assign_uncommitted(Assignment::from(A.0), Assignment::from(B.0))?;
-            let (C_q, D_q) =
-                prover_cs.assign_uncommitted(Assignment::from(C.0), Assignment::from(D.0))?;
-            let (A_a, B_a) =
-                prover_cs.assign_uncommitted(Assignment::from(A.1), Assignment::from(B.1))?;
-            let (C_a, D_a) =
-                prover_cs.assign_uncommitted(Assignment::from(C.1), Assignment::from(D.1))?;
-            let (A_t, B_t) =
-                prover_cs.assign_uncommitted(Assignment::from(A.2), Assignment::from(B.2))?;
-            let (C_t, D_t) =
-                prover_cs.assign_uncommitted(Assignment::from(C.2), Assignment::from(D.2))?;
-            let A = Value {
-                q: (A_q, Assignment::from(A.0)),
-                a: (A_a, Assignment::from(A.1)),
-                t: (A_t, Assignment::from(A.2)),
+            let A = AllocatedValue {
+                q: variables[0],
+                a: variables[1],
+                t: variables[2],
+                assignment: Some(A),
             };
-            let B = Value {
-                q: (B_q, Assignment::from(B.0)),
-                a: (B_a, Assignment::from(B.1)),
-                t: (B_t, Assignment::from(B.2)),
+            let B = AllocatedValue {
+                q: variables[3],
+                a: variables[4],
+                t: variables[5],
+                assignment: Some(B),
             };
-            let C = Value {
-                q: (C_q, Assignment::from(C.0)),
-                a: (C_a, Assignment::from(C.1)),
-                t: (C_t, Assignment::from(C.2)),
+            let C = AllocatedValue {
+                q: variables[6],
+                a: variables[7],
+                t: variables[8],
+                assignment: Some(C),
             };
-            let D = Value {
-                q: (D_q, Assignment::from(D.0)),
-                a: (D_a, Assignment::from(D.1)),
-                t: (D_t, Assignment::from(D.2)),
+            let D = AllocatedValue {
+                q: variables[9],
+                a: variables[10],
+                t: variables[11],
+                assignment: Some(D),
             };
             assert!(fill_cs(&mut prover_cs, A, B, C, D).is_ok());
 
@@ -141,40 +149,32 @@ mod tests {
 
         // Verifier makes a `ConstraintSystem` instance representing a merge gadget
         let mut verifier_transcript = Transcript::new(b"MixTest");
-        let (mut verifier_cs, _variables) =
+        let (mut verifier_cs, variables) =
             VerifierCS::new(&bp_gens, &pc_gens, &mut verifier_transcript, commitments);
-        // Verifier allocates variables and adds constraints to the constraint system
-        let (A_q, B_q) =
-            verifier_cs.assign_uncommitted(Assignment::Missing(), Assignment::Missing())?;
-        let (C_q, D_q) =
-            verifier_cs.assign_uncommitted(Assignment::Missing(), Assignment::Missing())?;
-        let (A_a, B_a) =
-            verifier_cs.assign_uncommitted(Assignment::Missing(), Assignment::Missing())?;
-        let (C_a, D_a) =
-            verifier_cs.assign_uncommitted(Assignment::Missing(), Assignment::Missing())?;
-        let (A_t, B_t) =
-            verifier_cs.assign_uncommitted(Assignment::Missing(), Assignment::Missing())?;
-        let (C_t, D_t) =
-            verifier_cs.assign_uncommitted(Assignment::Missing(), Assignment::Missing())?;
-        let A = Value {
-            q: (A_q, Assignment::Missing()),
-            a: (A_a, Assignment::Missing()),
-            t: (A_t, Assignment::Missing()),
+        
+        let A = AllocatedValue {
+            q: variables[0],
+            a: variables[1],
+            t: variables[2],
+            assignment: None,
         };
-        let B = Value {
-            q: (B_q, Assignment::Missing()),
-            a: (B_a, Assignment::Missing()),
-            t: (B_t, Assignment::Missing()),
+        let B = AllocatedValue {
+            q: variables[3],
+            a: variables[4],
+            t: variables[5],
+            assignment: None,
         };
-        let C = Value {
-            q: (C_q, Assignment::Missing()),
-            a: (C_a, Assignment::Missing()),
-            t: (C_t, Assignment::Missing()),
+        let C = AllocatedValue {
+            q: variables[6],
+            a: variables[7],
+            t: variables[8],
+            assignment: None,
         };
-        let D = Value {
-            q: (D_q, Assignment::Missing()),
-            a: (D_a, Assignment::Missing()),
-            t: (D_t, Assignment::Missing()),
+        let D = AllocatedValue {
+            q: variables[9],
+            a: variables[10],
+            t: variables[11],
+            assignment: None,
         };
         assert!(fill_cs(&mut verifier_cs, A, B, C, D).is_ok());
 
