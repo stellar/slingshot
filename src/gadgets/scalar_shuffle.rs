@@ -1,6 +1,5 @@
 use bulletproofs::r1cs::{ConstraintSystem, Variable};
 use curve25519_dalek::scalar::Scalar;
-use error::SpacesuitError;
 
 /// Enforces that the output variables `y` are a valid reordering of the inputs variables `x`.
 /// The inputs and outputs are all tuples of the `Variable, Assignment`, where the `Assignment`
@@ -18,11 +17,11 @@ pub fn fill_cs<CS: ConstraintSystem>(cs: &mut CS, x: &[Variable], y: &[Variable]
     }
 
     // Make last x multiplier for i = k-1 and k-2
-    let (_, _, last_mulx_out) = cs.multiply(x[k - 1] - z, x[k - 2] - z)?;
+    let (_, _, last_mulx_out) = cs.multiply(x[k - 1] - z, x[k - 2] - z);
 
     // Make multipliers for x from i == [0, k-3]
     let first_mulx_out = (0..k - 2).rev().fold(last_mulx_out, |prev_out, i| {
-        let (_, _, o) = cs.multiply(prev_out.into(), x[i] - z)?;
+        let (_, _, o) = cs.multiply(prev_out.into(), x[i] - z);
         o
     });
 
@@ -31,7 +30,7 @@ pub fn fill_cs<CS: ConstraintSystem>(cs: &mut CS, x: &[Variable], y: &[Variable]
 
     // Make multipliers for y from i == [0, k-3]
     let first_muly_out = (0..k - 2).rev().fold(last_muly_out, |prev_out, i| {
-        let (_, _, o) = cs.multiply(prev_out.into(), y[i] - z)?;
+        let (_, _, o) = cs.multiply(prev_out.into(), y[i] - z);
         o
     });
 
@@ -42,6 +41,7 @@ pub fn fill_cs<CS: ConstraintSystem>(cs: &mut CS, x: &[Variable], y: &[Variable]
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ::error::SpacesuitError;
     use bulletproofs::r1cs::{ProverCS, VerifierCS};
     use bulletproofs::{BulletproofGens, PedersenGens};
     use merlin::Transcript;

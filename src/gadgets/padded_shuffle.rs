@@ -23,7 +23,7 @@ pub fn fill_cs<CS: ConstraintSystem>(
     for _ in 0..pad_count {
         // We need three independent variables constrained to be zeroes.
         // We can do that with a single multiplier and two linear constraints for the inputs only.
-        // The multiplication constraint is enough to ensure that the output is zero.
+        // The multiplication constraint is enough to ensure that the third wire is also zero.
         let (q, a, t) = cs.multiply(
             Scalar::zero().into(),
             Scalar::zero().into(),
@@ -98,26 +98,34 @@ mod tests {
         assert!(
             padded_shuffle_helper(
                 vec![yuan(1), yuan(4), peso(8)],
-                vec![zero(), (1, 0, 0), yuan(4), yuan(1), peso(8)]
+                vec![zero(), SecretValue{q:1, a:0u64.into(), t:0u64.into()}, yuan(4), yuan(1), peso(8)]
             )
             .is_err()
         );
     }
 
     // Helper functions to make the tests easier to read
-    fn yuan(val: u64) -> (u64, u64, u64) {
-        (val, 888, 999)
+    fn yuan(q: u64) -> SecretValue {
+        SecretValue {
+            q,
+            a: 888u64.into(),
+            t: 999u64.into(),
+        }
     }
-    fn peso(val: u64) -> (u64, u64, u64) {
-        (val, 666, 777)
+    fn peso(q: u64) -> SecretValue {
+        SecretValue {
+            q,
+            a: 666u64.into(),
+            t: 777u64.into(),
+        }
     }
-    fn zero() -> (u64, u64, u64) {
-        (0, 0, 0)
+    fn zero() -> SecretValue {
+        SecretValue::zero()
     }
 
     fn padded_shuffle_helper(
-        input: Vec<(u64, u64, u64)>,
-        output: Vec<(u64, u64, u64)>,
+        input: Vec<SecretValue>,
+        output: Vec<SecretValue>,
     ) -> Result<(), SpacesuitError> {
         // Common
         let pc_gens = PedersenGens::default();
@@ -127,34 +135,24 @@ mod tests {
 
         // Prover's scope
         let (proof, commitments) = {
-            // Prover makes a `ConstraintSystem` instance representing a shuffle gadget
-            // make v vector
-            let mut v = Vec::with_capacity(m * 3 + n * 3);
-            for tuple in input {
-                v.push(Scalar::from(tuple.0));
-                v.push(Scalar::from(tuple.1));
-                v.push(Scalar::from(tuple.2));
-            }
-            for tuple in output {
-                v.push(Scalar::from(tuple.0));
-                v.push(Scalar::from(tuple.1));
-                v.push(Scalar::from(tuple.2));
-            }
+
+            let mut values = input.clone();
+            values.append(&mut output.clone());
+
+            let v: Vec<Scalar> = values.iter().fold(
+                Vec::new(),
+                |vec, value|{
+                    vec.push(value.q.into());
+                    vec.push(value.a);
+                    vec.push(value.t);
+                    vec
+            });
+            let v_blinding: Vec<Scalar> = (0..v.len()).map(|_| {
+                Scalar::random(&mut rand::thread_rng())
+            }).collect();
 
             // Make v_blinding vector using RNG from transcript
             let mut prover_transcript = Transcript::new(b"PaddedShuffleTest");
-            let mut rng = {
-                let mut builder = prover_transcript.build_rng();
-
-                // Commit the secret values
-                for &v_i in &v {
-                    builder = builder.commit_witness_bytes(b"v_i", v_i.as_bytes());
-                }
-                use rand::thread_rng;
-                builder.finalize(&mut thread_rng())
-            };
-            let v_blinding: Vec<Scalar> = (0..v.len()).map(|_| Scalar::random(&mut rng)).collect();
-
             let (mut prover_cs, variables, commitments) = ProverCS::new(
                 &bp_gens,
                 &pc_gens,
@@ -163,7 +161,7 @@ mod tests {
                 v_blinding,
             );
 
-            let (input_vals, output_vals) = organize_values(variables, m);
+            let (input_vals, output_vals) = organize_values(variables, &Some(values), m, n);
 
             fill_cs(&mut prover_cs, input_vals, output_vals)?;
             let proof = prover_cs.prove()?;
@@ -177,7 +175,7 @@ mod tests {
             VerifierCS::new(&bp_gens, &pc_gens, &mut verifier_transcript, commitments);
 
         // Verifier allocates variables and adds constraints to the constraint system
-        let (input_vals, output_vals) = organize_values(variables, m);
+        let (input_vals, output_vals) = organize_values(variables, &None, m, n);
         assert!(fill_cs(&mut verifier_cs, input_vals, output_vals).is_ok());
 
         // Verifier verifies proof
@@ -186,21 +184,29 @@ mod tests {
 
     fn organize_values(
         variables: Vec<Variable>,
+        assignments: &Option<Vec<SecretValue>>,
         m: usize,
-    ) -> (Vec<Value>, Vec<Value>) {
-        let val_count = variables.len() / 3;
-        let mut values = Vec::with_capacity(val_count);
-        for i in 0..val_count {
-            values.push(Value {
-                q: variables[i * 3], 
+        n: usize,
+    ) -> (Vec<AllocatedValue>, Vec<AllocatedValue>) {
+        let mut inputs: Vec<AllocatedValue> = Vec::with_capacity(m);
+        let mut outputs: Vec<AllocatedValue> = Vec::with_capacity(n);
+        for i in 0..m {
+            inputs.push(AllocatedValue {
+                q: variables[i * 3],
                 a: variables[i * 3 + 1],
                 t: variables[i * 3 + 2],
+                assignment: assignments.map(|a| a[i])
+            });
+        }
+        for i in m..(m+n) {
+            outputs.push(AllocatedValue {
+                q: variables[i * 3],
+                a: variables[i * 3 + 1],
+                t: variables[i * 3 + 2],
+                assignment: assignments.map(|a| a[i])
             });
         }
 
-        let input = values[0..m].to_vec();
-        let output = values[m..values.len()].to_vec();
-
-        (input, output)
+        (inputs, outputs)
     }
 }
