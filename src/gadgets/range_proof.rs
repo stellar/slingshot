@@ -1,52 +1,36 @@
-use bulletproofs::r1cs::{Assignment, ConstraintSystem, Variable};
+use bulletproofs::r1cs::{ConstraintSystem, R1CSError};
 use curve25519_dalek::scalar::Scalar;
 use error::SpacesuitError;
+use value::AllocatedQuantity;
 
 /// Enforces that the quantity of v is in the range [0, 2^n).
 pub fn fill_cs<CS: ConstraintSystem>(
     cs: &mut CS,
-    v: (Variable, Assignment),
+    v: AllocatedQuantity,
     n: usize,
 ) -> Result<(), SpacesuitError> {
-    let one = Scalar::one();
-    let one_var = Variable::One();
-
-    let mut constraint = vec![(v.0, -one)];
+    let mut constraint = vec![(v.variable, -Scalar::one())];
     let mut exp_2 = Scalar::one();
     for i in 0..n {
         // Create low-level variables and add them to constraints
-        let (a_i_var, b_i_var, out_var) = match v.1 {
-            Assignment::Value(v_val) => {
-                let bit = (v_val[i / 8] >> (i % 8)) & 1;
-                cs.assign_multiplier(
-                    Assignment::from(1 - bit as u64),
-                    Assignment::from(bit as u64),
-                    Scalar::zero().into(),
-                )?
-            }
-            Assignment::Missing() => cs.assign_multiplier(
-                Assignment::Missing(),
-                Assignment::Missing(),
-                Assignment::Missing(),
-            )?,
-        };
+        let (a, b, o) = cs.allocate(|| {
+            let q: u64 = v.assignment.ok_or(R1CSError::MissingAssignment)?;
+            let bit: u64 = (q >> i) & 1;
+            Ok(((1 - bit).into(), bit.into(), Scalar::zero()))
+        })?;
 
-        // Enforce a_i * b_i = 0
-        cs.add_constraint([(out_var, one)].iter().collect());
+        // Enforce a * b = 0, so one of (a,b) is zero
+        cs.constrain(o.into());
 
-        // Enforce that a_i = 1 - b_i
-        cs.add_constraint(
-            [(a_i_var, one), (b_i_var, one), (one_var, -one)]
-                .iter()
-                .collect(),
-        );
+        // Enforce that a = 1 - b, so they both are 1 or 0.
+        cs.constrain(a + (b - 1u64));
 
-        constraint.push((b_i_var, exp_2));
+        constraint.push((b, exp_2));
         exp_2 = exp_2 + exp_2;
     }
 
     // Enforce that v = Sum(b_i * 2^i, i = 0..n-1)
-    cs.add_constraint(constraint.iter().collect());
+    cs.constrain(constraint.iter().collect());
 
     Ok(())
 }
@@ -85,10 +69,11 @@ mod tests {
         let (proof, commitments) = {
             // Prover makes a `ConstraintSystem` instance representing a merge gadget
             // v and v_blinding emptpy because we are only testing low-level variable constraints
-            let v = vec![];
-            let v_blinding = vec![];
+            let v: Vec<Scalar> = vec![v_val.into()];
+            let v_blinding: Vec<Scalar> = vec![Scalar::random(&mut rand::thread_rng())];
+
             let mut prover_transcript = Transcript::new(b"RangeProofTest");
-            let (mut prover_cs, _variables, commitments) = ProverCS::new(
+            let (mut prover_cs, variables, commitments) = ProverCS::new(
                 &bp_gens,
                 &pc_gens,
                 &mut prover_transcript,
@@ -96,11 +81,14 @@ mod tests {
                 v_blinding.clone(),
             );
 
-            // Prover allocates variables and adds constraints to the constraint system
-            let (v_var, _) =
-                prover_cs.assign_uncommitted(Assignment::from(v_val), Scalar::zero().into())?;
-
-            fill_cs(&mut prover_cs, (v_var, Assignment::from(v_val)), n)?;
+            fill_cs(
+                &mut prover_cs,
+                AllocatedQuantity {
+                    variable: variables[0],
+                    assignment: Some(v_val),
+                },
+                n,
+            )?;
 
             let proof = prover_cs.prove()?;
 
@@ -109,14 +97,19 @@ mod tests {
 
         // Verifier makes a `ConstraintSystem` instance representing a merge gadget
         let mut verifier_transcript = Transcript::new(b"RangeProofTest");
-        let (mut verifier_cs, _variables) =
+        let (mut verifier_cs, variables) =
             VerifierCS::new(&bp_gens, &pc_gens, &mut verifier_transcript, commitments);
 
-        // Verifier allocates variables and adds constraints to the constraint system
-        let (v_var, _) =
-            verifier_cs.assign_uncommitted(Assignment::Missing(), Assignment::Missing())?;
+        let result = fill_cs(
+            &mut verifier_cs,
+            AllocatedQuantity {
+                variable: variables[0],
+                assignment: None,
+            },
+            n,
+        );
 
-        assert!(fill_cs(&mut verifier_cs, (v_var, Assignment::Missing()), n).is_ok());
+        assert!(result.is_ok());
 
         Ok(verifier_cs.verify(&proof)?)
     }

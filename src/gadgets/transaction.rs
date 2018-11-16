@@ -2,21 +2,21 @@ use bulletproofs::r1cs::ConstraintSystem;
 use error::SpacesuitError;
 use gadgets::{merge, padded_shuffle, range_proof, split, value_shuffle};
 use std::cmp::max;
-use value::Value;
+use value::AllocatedValue;
 
 /// Enforces that the outputs are a valid rearrangement of the inputs, following the
 /// soundness and secrecy requirements in the spacesuit transaction spec:
 /// https://github.com/interstellar/spacesuit/blob/master/spec.md
 pub fn fill_cs<CS: ConstraintSystem>(
     cs: &mut CS,
-    inputs: Vec<Value>,
-    merge_in: Vec<Value>,
-    merge_mid: Vec<Value>,
-    merge_out: Vec<Value>,
-    split_in: Vec<Value>,
-    split_mid: Vec<Value>,
-    split_out: Vec<Value>,
-    outputs: Vec<Value>,
+    inputs: Vec<AllocatedValue>,
+    merge_in: Vec<AllocatedValue>,
+    merge_mid: Vec<AllocatedValue>,
+    merge_out: Vec<AllocatedValue>,
+    split_in: Vec<AllocatedValue>,
+    split_mid: Vec<AllocatedValue>,
+    split_out: Vec<AllocatedValue>,
+    outputs: Vec<AllocatedValue>,
 ) -> Result<(), SpacesuitError> {
     let m = inputs.len();
     let n = outputs.len();
@@ -60,7 +60,7 @@ pub fn fill_cs<CS: ConstraintSystem>(
     // Range Proof
     // Check that each of the quantities in `outputs` lies in [0, 2^64).
     for output in outputs {
-        range_proof::fill_cs(cs, output.q, 64)?;
+        range_proof::fill_cs(cs, output.quantity(), 64)?;
     }
 
     Ok(())
