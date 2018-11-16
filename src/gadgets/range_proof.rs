@@ -1,4 +1,4 @@
-use bulletproofs::r1cs::{ConstraintSystem, Variable};
+use bulletproofs::r1cs::{ConstraintSystem, Variable, R1CSError};
 use curve25519_dalek::scalar::Scalar;
 use error::SpacesuitError;
 use value::AllocatedQuantity;
@@ -26,7 +26,7 @@ pub fn fill_cs<CS: ConstraintSystem>(
         cs.constrain(o.into());
 
         // Enforce that a = 1 - b, so they both are 1 or 0.
-        cs.constrain(a - (1-b));
+        cs.constrain(a + (b - 1));
 
         constraint.push((b, exp_2));
         exp_2 = exp_2 + exp_2;

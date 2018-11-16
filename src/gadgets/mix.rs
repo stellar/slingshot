@@ -36,7 +36,7 @@ pub fn fill_cs<CS: ConstraintSystem>(
         + (D.q - A.q - B.q) * w3
         + (D.a - A.a) * w4
         + (D.t - A.t) * w5
-    )?;
+    );
 
     // multiplication output is zero
     cs.constrain(mul_out.into());

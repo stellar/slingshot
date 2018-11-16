@@ -1,9 +1,10 @@
-use super::value_shuffle;
-use bulletproofs::r1cs::{ConstraintSystem};
-use curve25519_dalek::scalar::Scalar;
-use error::SpacesuitError;
 use std::cmp::{max, min};
-use value::AllocatedValue;
+use curve25519_dalek::scalar::Scalar;
+use bulletproofs::r1cs::{ConstraintSystem};
+
+use super::value_shuffle;
+use error::SpacesuitError;
+use value::{AllocatedValue,SecretValue};
 
 /// Enforces that the values in `y` are a valid reordering of the values in `x`,
 /// allowing for padding (zero values) in x that can be omitted in y (or the other way around).
@@ -27,11 +28,7 @@ pub fn fill_cs<CS: ConstraintSystem>(
             Scalar::zero().into(),
             Scalar::zero().into(),
         );
-        let assignment = Some(SecretValue{
-            q: 0, 
-            a: Scalar::zero(), 
-            t: Scalar::zero()
-        });
+        let assignment = Some(SecretValue::zero());
         values.push(AllocatedValue{q, a, t, assignment});
     }
 
