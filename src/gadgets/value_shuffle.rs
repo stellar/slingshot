@@ -173,10 +173,7 @@ mod tests {
         );
     }
 
-    fn value_shuffle_helper(
-        input: Vec<Value>,
-        output: Vec<Value>,
-    ) -> Result<(), SpacesuitError> {
+    fn value_shuffle_helper(input: Vec<Value>, output: Vec<Value>) -> Result<(), SpacesuitError> {
         // Common
         let pc_gens = PedersenGens::default();
         let bp_gens = BulletproofGens::new(128, 1);

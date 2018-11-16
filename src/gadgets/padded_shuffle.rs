@@ -135,10 +135,7 @@ mod tests {
         Value::zero()
     }
 
-    fn padded_shuffle_helper(
-        input: Vec<Value>,
-        output: Vec<Value>,
-    ) -> Result<(), SpacesuitError> {
+    fn padded_shuffle_helper(input: Vec<Value>, output: Vec<Value>) -> Result<(), SpacesuitError> {
         // Common
         let pc_gens = PedersenGens::default();
         let bp_gens = BulletproofGens::new(128, 1);

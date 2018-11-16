@@ -1,5 +1,5 @@
 extern crate spacesuit;
-use spacesuit::{prove, verify, Value, SpacesuitError};
+use spacesuit::{prove, verify, SpacesuitError, Value};
 
 extern crate curve25519_dalek;
 

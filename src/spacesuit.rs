@@ -234,9 +234,7 @@ fn shuffle_helper(shuffle_in: &Vec<Value>) -> Vec<Value> {
 // Takes in split_out, returns split_mid and split_in
 // Runs in constant time - runtime does not reveal anything about input values
 // except for how many there are (which is public knowledge).
-fn split_helper(
-    split_out: &Vec<Value>,
-) -> Result<(Vec<Value>, Vec<Value>), SpacesuitError> {
+fn split_helper(split_out: &Vec<Value>) -> Result<(Vec<Value>, Vec<Value>), SpacesuitError> {
     let mut split_out_rev = split_out.clone();
     split_out_rev.reverse();
     let (mut split_mid, mut split_in) = merge_helper(&split_out_rev)?;
@@ -249,9 +247,7 @@ fn split_helper(
 // Takes in merge_in, returns merge_mid and merge_out
 // Runs in constant time - runtime does not reveal anything about input values
 // except for how many there are (which is public knowledge).
-fn merge_helper(
-    merge_in: &Vec<Value>,
-) -> Result<(Vec<Value>, Vec<Value>), SpacesuitError> {
+fn merge_helper(merge_in: &Vec<Value>) -> Result<(Vec<Value>, Vec<Value>), SpacesuitError> {
     if merge_in.len() < 2 {
         return Ok((vec![], merge_in.clone()));
     }
