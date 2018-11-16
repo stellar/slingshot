@@ -195,7 +195,10 @@ mod tests {
                 q: variables[i * 3],
                 a: variables[i * 3 + 1],
                 t: variables[i * 3 + 2],
-                assignment: assignments.map(|a| a[i])
+                assignment: match assignments {
+                    Some(ref a) => Some(a[i]),
+                    None=>None
+                }
             });
         }
         for i in m..(m+n) {
@@ -203,7 +206,10 @@ mod tests {
                 q: variables[i * 3],
                 a: variables[i * 3 + 1],
                 t: variables[i * 3 + 2],
-                assignment: assignments.map(|a| a[i])
+                assignment: match assignments {
+                    Some(ref a) => Some(a[i]),
+                    None=>None
+                }
             });
         }
 

@@ -1,15 +1,14 @@
 extern crate spacesuit;
-use spacesuit::{prove, verify, SpacesuitError};
+use spacesuit::{prove, verify, SpacesuitError, SecretValue};
 
 extern crate curve25519_dalek;
-use curve25519_dalek::scalar::Scalar;
 
 extern crate bulletproofs;
 use bulletproofs::{BulletproofGens, PedersenGens};
 
 fn spacesuit_helper(
-    inputs: Vec<(Scalar, Scalar, Scalar)>,
-    outputs: Vec<(Scalar, Scalar, Scalar)>,
+    inputs: Vec<SecretValue>,
+    outputs: Vec<SecretValue>,
 ) -> Result<(), SpacesuitError> {
     let m = inputs.len();
     let n = outputs.len();
@@ -21,30 +20,30 @@ fn spacesuit_helper(
 }
 
 // Helper functions to make the tests easier to read
-fn yuan(val: u64) -> (Scalar, Scalar, Scalar) {
-    (
-        Scalar::from(val),
-        Scalar::from(888u64),
-        Scalar::from(999u64),
-    )
-}
-fn peso(val: u64) -> (Scalar, Scalar, Scalar) {
-    (
-        Scalar::from(val),
-        Scalar::from(666u64),
-        Scalar::from(777u64),
-    )
-}
-fn euro(val: u64) -> (Scalar, Scalar, Scalar) {
-    (
-        Scalar::from(val),
-        Scalar::from(444u64),
-        Scalar::from(555u64),
-    )
-}
-fn zero() -> (Scalar, Scalar, Scalar) {
-    (Scalar::zero(), Scalar::zero(), Scalar::zero())
-}
+    fn yuan(q: u64) -> SecretValue {
+        SecretValue {
+            q,
+            a: 888u64.into(),
+            t: 999u64.into(),
+        }
+    }
+    fn peso(q: u64) -> SecretValue {
+        SecretValue {
+            q,
+            a: 666u64.into(),
+            t: 777u64.into(),
+        }
+    }
+    fn euro(q: u64) -> SecretValue {
+        SecretValue {
+            q,
+            a: 444u64.into(),
+            t: 555u64.into(),
+        }
+    }
+    fn zero() -> SecretValue {
+        SecretValue::zero()
+    }
 
 // m=1, n=1
 #[test]

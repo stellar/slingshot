@@ -14,3 +14,4 @@ mod value;
 
 pub use error::SpacesuitError;
 pub use spacesuit::*;
+pub use value::*;

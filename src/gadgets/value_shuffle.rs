@@ -1,6 +1,5 @@
 use super::scalar_shuffle;
 use bulletproofs::r1cs::ConstraintSystem;
-use curve25519_dalek::scalar::Scalar;
 use error::SpacesuitError;
 use value::AllocatedValue;
 
@@ -44,11 +43,13 @@ pub fn fill_cs<CS: ConstraintSystem>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ::value::SecretValue;
+    use curve25519_dalek::scalar::Scalar;
     use bulletproofs::r1cs::{ProverCS, VerifierCS,Variable};
     use bulletproofs::{BulletproofGens, PedersenGens};
     use merlin::Transcript;
 
+    use ::value::SecretValue;
+    
     // Helper functions to make the tests easier to read
     fn yuan(q: u64) -> SecretValue {
         SecretValue {
@@ -242,13 +243,19 @@ mod tests {
                 q: variables[i * 3],
                 a: variables[i * 3 + 1],
                 t: variables[i * 3 + 2],
-                assignment: assignments.map(|a| a[i])
+                assignment: match assignments {
+                    Some(ref a) => Some(a[i]),
+                    None=>None
+                }
             });
             outputs.push(AllocatedValue {
                 q: variables[(i + n) * 3],
                 a: variables[(i + n) * 3 + 1],
                 t: variables[(i + n) * 3 + 2],
-                assignment: assignments.map(|a| a[i+n])
+                assignment: match assignments {
+                    Some(ref a) => Some(a[i]),
+                    None=>None
+                }
             });
         }
 

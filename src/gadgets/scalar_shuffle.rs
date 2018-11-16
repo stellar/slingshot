@@ -1,5 +1,4 @@
 use bulletproofs::r1cs::{ConstraintSystem, Variable};
-use curve25519_dalek::scalar::Scalar;
 
 /// Enforces that the output variables `y` are a valid reordering of the inputs variables `x`.
 /// The inputs and outputs are all tuples of the `Variable, Assignment`, where the `Assignment`
@@ -40,10 +39,12 @@ pub fn fill_cs<CS: ConstraintSystem>(cs: &mut CS, x: &[Variable], y: &[Variable]
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ::error::SpacesuitError;
+    use curve25519_dalek::scalar::Scalar;
     use bulletproofs::r1cs::{ProverCS, VerifierCS};
     use bulletproofs::{BulletproofGens, PedersenGens};
     use merlin::Transcript;
+
+    use ::error::SpacesuitError;
 
     #[test]
     fn scalar_shuffle_gadget() {
