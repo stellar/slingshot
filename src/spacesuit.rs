@@ -29,6 +29,7 @@ pub fn prove(
     // Flatten the values into a list of raw scalars to compute the Pedersen commitments.
     // TBD: would be nice if ProverCS had an API to do this per-value, so we can avoid
     // flattening the structure of our input data and then unflattening it via `organize_values`.
+    // Bulletproofs repo issue: https://github.com/dalek-cryptography/bulletproofs/issues/218
     let v: Vec<Scalar> = all_values.iter().fold(
         Vec::with_capacity(3 * all_values.len()),
         |mut vec, value| {
