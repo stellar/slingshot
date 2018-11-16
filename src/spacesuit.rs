@@ -212,20 +212,16 @@ fn shuffle_helper(shuffle_in: &Vec<Value>) -> Vec<Value> {
 
         for j in i + 2..k {
             // Iterate over all following tuples, assigning them to `comp`.
-            let comp = shuffle_out[j];
+            let mut comp = shuffle_out[j];
             // Check if `flav` and `comp` have the same flavor.
             let same_flavor = flav.a.ct_eq(&comp.a) & flav.t.ct_eq(&comp.t);
 
             // If same_flavor, then swap `comp` and `swap`. Else, keep the same.
-            // TODO: when `Scalar` implements `ConditionallySwappable`, use
-            // `conditional_swap` instead of `conditional_assign`.
-            shuffle_out[j].q.conditional_assign(&swap.q, same_flavor);
-            shuffle_out[j].a.conditional_assign(&swap.a, same_flavor);
-            shuffle_out[j].t.conditional_assign(&swap.t, same_flavor);
-            swap.q.conditional_assign(&comp.q, same_flavor);
-            swap.a.conditional_assign(&comp.a, same_flavor);
-            swap.t.conditional_assign(&comp.t, same_flavor);
+            u64::conditional_swap(&mut swap.q, &mut comp.q, same_flavor);
+            Scalar::conditional_swap(&mut swap.a, &mut comp.a, same_flavor);
+            Scalar::conditional_swap(&mut swap.t, &mut comp.t, same_flavor);
             shuffle_out[i + 1] = swap;
+            shuffle_out[j] = comp;
         }
     }
     shuffle_out
