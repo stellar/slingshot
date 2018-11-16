@@ -31,7 +31,7 @@ pub fn fill_cs<CS: ConstraintSystem>(
     for i in 0..k {
         let (x_i_var, y_i_var, _) = cs.multiply(
             x[i].q + x[i].a * w + x[i].t * w2,
-            y[i].q + y[i].a * w + y[i].t * w2
+            y[i].q + y[i].a * w + y[i].t * w2,
         );
 
         x_scalars.push(x_i_var);
@@ -43,13 +43,13 @@ pub fn fill_cs<CS: ConstraintSystem>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use curve25519_dalek::scalar::Scalar;
-    use bulletproofs::r1cs::{ProverCS, VerifierCS,Variable};
+    use bulletproofs::r1cs::{ProverCS, Variable, VerifierCS};
     use bulletproofs::{BulletproofGens, PedersenGens};
+    use curve25519_dalek::scalar::Scalar;
     use merlin::Transcript;
 
-    use ::value::SecretValue;
-    
+    use value::SecretValue;
+
     // Helper functions to make the tests easier to read
     fn yuan(q: u64) -> SecretValue {
         SecretValue {
@@ -158,21 +158,18 @@ mod tests {
         );
         assert!(
             value_shuffle_helper(
-                vec![
-                    SecretValue {
-                        q: 0,
-                        a: 0u64.into(),
-                        t: 0u64.into(),
-                    }
-                ],
-                vec![
-                    SecretValue {
-                        q: 0,
-                        a: 0u64.into(),
-                        t: 1u64.into(),
-                    }
-                ]
-            ).is_err()
+                vec![SecretValue {
+                    q: 0,
+                    a: 0u64.into(),
+                    t: 0u64.into(),
+                }],
+                vec![SecretValue {
+                    q: 0,
+                    a: 0u64.into(),
+                    t: 1u64.into(),
+                }]
+            )
+            .is_err()
         );
     }
 
@@ -189,17 +186,15 @@ mod tests {
             let mut values = input.clone();
             values.append(&mut output.clone());
 
-            let v: Vec<Scalar> = values.iter().fold(
-                Vec::new(),
-                |mut vec, value|{
-                    vec.push(value.q.into());
-                    vec.push(value.a);
-                    vec.push(value.t);
-                    vec
+            let v: Vec<Scalar> = values.iter().fold(Vec::new(), |mut vec, value| {
+                vec.push(value.q.into());
+                vec.push(value.a);
+                vec.push(value.t);
+                vec
             });
-            let v_blinding: Vec<Scalar> = (0..v.len()).map(|_| {
-                Scalar::random(&mut rand::thread_rng())
-            }).collect();
+            let v_blinding: Vec<Scalar> = (0..v.len())
+                .map(|_| Scalar::random(&mut rand::thread_rng()))
+                .collect();
 
             let mut prover_transcript = Transcript::new(b"ValueShuffleTest");
             let (mut prover_cs, variables, commitments) = ProverCS::new(
@@ -210,7 +205,7 @@ mod tests {
                 v_blinding.clone(),
             );
 
-            let (ins,outs) = organize_values(variables, &Some(values));
+            let (ins, outs) = organize_values(variables, &Some(values));
             assert!(fill_cs(&mut prover_cs, ins, outs).is_ok());
             let proof = prover_cs.prove()?;
 
@@ -222,7 +217,7 @@ mod tests {
         let (mut verifier_cs, variables) =
             VerifierCS::new(&bp_gens, &pc_gens, &mut verifier_transcript, commitments);
 
-        let (ins,outs) = organize_values(variables, &None);
+        let (ins, outs) = organize_values(variables, &None);
 
         assert!(fill_cs(&mut verifier_cs, ins, outs).is_ok());
 
@@ -245,8 +240,8 @@ mod tests {
                 t: variables[i * 3 + 2],
                 assignment: match assignments {
                     Some(ref a) => Some(a[i]),
-                    None=>None
-                }
+                    None => None,
+                },
             });
             outputs.push(AllocatedValue {
                 q: variables[(i + n) * 3],
@@ -254,8 +249,8 @@ mod tests {
                 t: variables[(i + n) * 3 + 2],
                 assignment: match assignments {
                     Some(ref a) => Some(a[i]),
-                    None=>None
-                }
+                    None => None,
+                },
             });
         }
 

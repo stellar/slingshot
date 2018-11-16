@@ -1,10 +1,10 @@
-use std::cmp::{max, min};
+use bulletproofs::r1cs::ConstraintSystem;
 use curve25519_dalek::scalar::Scalar;
-use bulletproofs::r1cs::{ConstraintSystem};
+use std::cmp::{max, min};
 
 use super::value_shuffle;
 use error::SpacesuitError;
-use value::{AllocatedValue,SecretValue};
+use value::{AllocatedValue, SecretValue};
 
 /// Enforces that the values in `y` are a valid reordering of the values in `x`,
 /// allowing for padding (zero values) in x that can be omitted in y (or the other way around).
@@ -24,12 +24,14 @@ pub fn fill_cs<CS: ConstraintSystem>(
         // We need three independent variables constrained to be zeroes.
         // We can do that with a single multiplier and two linear constraints for the inputs only.
         // The multiplication constraint is enough to ensure that the third wire is also zero.
-        let (q, a, t) = cs.multiply(
-            Scalar::zero().into(),
-            Scalar::zero().into(),
-        );
+        let (q, a, t) = cs.multiply(Scalar::zero().into(), Scalar::zero().into());
         let assignment = Some(SecretValue::zero());
-        values.push(AllocatedValue{q, a, t, assignment});
+        values.push(AllocatedValue {
+            q,
+            a,
+            t,
+            assignment,
+        });
     }
 
     if m > n {
@@ -98,7 +100,17 @@ mod tests {
         assert!(
             padded_shuffle_helper(
                 vec![yuan(1), yuan(4), peso(8)],
-                vec![zero(), SecretValue{q:1, a:0u64.into(), t:0u64.into()}, yuan(4), yuan(1), peso(8)]
+                vec![
+                    zero(),
+                    SecretValue {
+                        q: 1,
+                        a: 0u64.into(),
+                        t: 0u64.into()
+                    },
+                    yuan(4),
+                    yuan(1),
+                    peso(8)
+                ]
             )
             .is_err()
         );
@@ -135,21 +147,18 @@ mod tests {
 
         // Prover's scope
         let (proof, commitments) = {
-
             let mut values = input.clone();
             values.append(&mut output.clone());
 
-            let v: Vec<Scalar> = values.iter().fold(
-                Vec::new(),
-                |mut vec, value|{
-                    vec.push(value.q.into());
-                    vec.push(value.a);
-                    vec.push(value.t);
-                    vec
+            let v: Vec<Scalar> = values.iter().fold(Vec::new(), |mut vec, value| {
+                vec.push(value.q.into());
+                vec.push(value.a);
+                vec.push(value.t);
+                vec
             });
-            let v_blinding: Vec<Scalar> = (0..v.len()).map(|_| {
-                Scalar::random(&mut rand::thread_rng())
-            }).collect();
+            let v_blinding: Vec<Scalar> = (0..v.len())
+                .map(|_| Scalar::random(&mut rand::thread_rng()))
+                .collect();
 
             // Make v_blinding vector using RNG from transcript
             let mut prover_transcript = Transcript::new(b"PaddedShuffleTest");
@@ -197,19 +206,19 @@ mod tests {
                 t: variables[i * 3 + 2],
                 assignment: match assignments {
                     Some(ref a) => Some(a[i]),
-                    None=>None
-                }
+                    None => None,
+                },
             });
         }
-        for i in m..(m+n) {
+        for i in m..(m + n) {
             outputs.push(AllocatedValue {
                 q: variables[i * 3],
                 a: variables[i * 3 + 1],
                 t: variables[i * 3 + 2],
                 assignment: match assignments {
                     Some(ref a) => Some(a[i]),
-                    None=>None
-                }
+                    None => None,
+                },
             });
         }
 

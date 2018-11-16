@@ -9,7 +9,7 @@ use gadgets::transaction;
 use merlin::Transcript;
 use std::cmp::max;
 use subtle::{ConditionallySelectable, ConstantTimeEq};
-use value::{SecretValue, AllocatedValue};
+use value::{AllocatedValue, SecretValue};
 
 pub struct SpacesuitProof(R1CSProof);
 
@@ -30,13 +30,14 @@ pub fn prove(
     // TBD: would be nice if ProverCS had an API to do this per-value, so we can avoid
     // flattening the structure of our input data and then unflattening it via `organize_values`.
     let v: Vec<Scalar> = all_values.iter().fold(
-        Vec::with_capacity(3*all_values.len()),
-        |mut vec, value|{
+        Vec::with_capacity(3 * all_values.len()),
+        |mut vec, value| {
             vec.push(value.q.into());
             vec.push(value.a);
             vec.push(value.t);
             vec
-    });
+        },
+    );
 
     // Make v_blinding vector using RNG from transcript
     let mut prover_transcript = Transcript::new(b"TransactionTest");
@@ -61,12 +62,8 @@ pub fn prove(
     );
 
     // Prover adds constraints to the constraint system
-    let (inp, m_i, m_m, m_o, s_i, s_m, s_o, out) = organize_values(
-        variables, 
-        &Some(all_values),
-        m, 
-        n
-    );
+    let (inp, m_i, m_m, m_o, s_i, s_m, s_o, out) =
+        organize_values(variables, &Some(all_values), m, n);
 
     transaction::fill_cs(&mut prover_cs, inp, m_i, m_m, m_o, s_i, s_m, s_o, out)?;
     let proof = SpacesuitProof(prover_cs.prove()?);
@@ -90,12 +87,7 @@ pub fn verify(
         VerifierCS::new(&bp_gens, &pc_gens, &mut verifier_transcript, commitments);
 
     // Verifier allocates variables and adds constraints to the constraint system
-    let (inp, m_i, m_m, m_o, s_i, s_m, s_o, out) = organize_values(
-        variables,
-        &None,
-        m,
-        n
-    );
+    let (inp, m_i, m_m, m_o, s_i, s_m, s_o, out) = organize_values(variables, &None, m, n);
 
     assert!(transaction::fill_cs(&mut verifier_cs, inp, m_i, m_m, m_o, s_i, s_m, s_o, out).is_ok());
 
@@ -131,7 +123,7 @@ fn compute_committed_values(
     // Inputs, intermediates, and outputs of merge gadget
     let merge_in = shuffle_helper(inputs);
     let (merge_mid, merge_out) = merge_helper(&merge_in)?;
-    
+
     v.extend_from_slice(&merge_in);
     v.extend_from_slice(&merge_mid);
     v.extend_from_slice(&merge_out);
@@ -179,8 +171,8 @@ fn organize_values(
             t: variables[i * 3 + 2],
             assignment: match assignments {
                 Some(ref a) => Some(a[i]),
-                None=>None
-            }
+                None => None,
+            },
         });
     }
 
@@ -302,21 +294,20 @@ fn merge_helper(
     Ok((merge_mid, merge_out))
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     // Helper functions to make the tests easier to read
     fn yuan(val: u64) -> SecretValue {
-        SecretValue{
+        SecretValue {
             q: val,
             a: Scalar::from(888u64),
             t: Scalar::from(999u64),
         }
     }
     fn peso(val: u64) -> SecretValue {
-        SecretValue{
+        SecretValue {
             q: val,
             a: Scalar::from(666u64),
             t: Scalar::from(777u64),

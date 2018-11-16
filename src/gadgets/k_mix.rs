@@ -52,13 +52,13 @@ pub fn fill_cs<CS: ConstraintSystem>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use curve25519_dalek::scalar::Scalar;
     use bulletproofs::r1cs::{ProverCS, Variable, VerifierCS};
     use bulletproofs::{BulletproofGens, PedersenGens};
+    use curve25519_dalek::scalar::Scalar;
     use merlin::Transcript;
     use std::cmp::max;
 
-    use ::value::SecretValue;
+    use value::SecretValue;
 
     // Helper functions to make the tests easier to read
     fn yuan(q: u64) -> SecretValue {
@@ -219,17 +219,15 @@ mod tests {
             values.append(&mut intermediates.clone());
             values.append(&mut outputs.clone());
 
-            let v: Vec<Scalar> = values.iter().fold(
-                Vec::new(),
-                |mut vec, value|{
-                    vec.push(value.q.into());
-                    vec.push(value.a);
-                    vec.push(value.t);
-                    vec
+            let v: Vec<Scalar> = values.iter().fold(Vec::new(), |mut vec, value| {
+                vec.push(value.q.into());
+                vec.push(value.a);
+                vec.push(value.t);
+                vec
             });
-            let v_blinding: Vec<Scalar> = (0..v.len()).map(|_| {
-                Scalar::random(&mut rand::thread_rng())
-            }).collect();
+            let v_blinding: Vec<Scalar> = (0..v.len())
+                .map(|_| Scalar::random(&mut rand::thread_rng()))
+                .collect();
 
             // Make v_blinding vector using RNG from transcript
             let mut prover_transcript = Transcript::new(b"KMixTest");
@@ -271,7 +269,11 @@ mod tests {
         assignments: &Option<Vec<SecretValue>>,
         k: usize,
         inter_count: usize,
-    ) -> (Vec<AllocatedValue>, Vec<AllocatedValue>, Vec<AllocatedValue>) {
+    ) -> (
+        Vec<AllocatedValue>,
+        Vec<AllocatedValue>,
+        Vec<AllocatedValue>,
+    ) {
         let val_count = variables.len() / 3;
 
         let mut values = Vec::with_capacity(val_count);
@@ -282,8 +284,8 @@ mod tests {
                 t: variables[i * 3 + 2],
                 assignment: match assignments {
                     Some(ref a) => Some(a[i]),
-                    None=>None
-                }
+                    None => None,
+                },
             });
         }
 

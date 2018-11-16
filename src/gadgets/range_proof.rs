@@ -13,7 +13,7 @@ pub fn fill_cs<CS: ConstraintSystem>(
     let mut exp_2 = Scalar::one();
     for i in 0..n {
         // Create low-level variables and add them to constraints
-        let (a, b, o) = cs.allocate(||{
+        let (a, b, o) = cs.allocate(|| {
             let q: u64 = v.assignment.ok_or(R1CSError::MissingAssignment)?;
             let bit: u64 = (q >> i) & 1;
             Ok(((1 - bit).into(), bit.into(), Scalar::zero()))
@@ -82,12 +82,12 @@ mod tests {
             );
 
             fill_cs(
-                &mut prover_cs, 
-                AllocatedQuantity{
+                &mut prover_cs,
+                AllocatedQuantity {
                     variable: variables[0],
                     assignment: Some(v_val),
                 },
-                n
+                n,
             )?;
 
             let proof = prover_cs.prove()?;
@@ -101,12 +101,12 @@ mod tests {
             VerifierCS::new(&bp_gens, &pc_gens, &mut verifier_transcript, commitments);
 
         let result = fill_cs(
-            &mut verifier_cs, 
-            AllocatedQuantity{
+            &mut verifier_cs,
+            AllocatedQuantity {
                 variable: variables[0],
                 assignment: None,
             },
-            n
+            n,
         );
 
         assert!(result.is_ok());

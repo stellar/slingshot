@@ -2,7 +2,7 @@
 
 use bulletproofs::r1cs::ConstraintSystem;
 use error::SpacesuitError;
-use value::{AllocatedValue};
+use value::AllocatedValue;
 
 /// Enforces that the outputs are either a merge of the inputs :`D = A + B && C = 0`,
 /// or the outputs are equal to the inputs `C = A && D = B`. See spec for more details.
@@ -22,18 +22,16 @@ pub fn fill_cs<CS: ConstraintSystem>(
 
     let (_, _, mul_out) = cs.multiply(
         (A.q - C.q)
-        + (A.a - C.a) * w
-        + (A.t - C.t) * w2
-        + (B.q - D.q) * w3
-        + (B.a - D.a) * w4
-        + (B.t - D.t) * w5,
-
-        C.q
-        + (A.a - B.a) * w
-        + (A.t - B.t) * w2
-        + (D.q - A.q - B.q) * w3
-        + (D.a - A.a) * w4
-        + (D.t - A.t) * w5
+            + (A.a - C.a) * w
+            + (A.t - C.t) * w2
+            + (B.q - D.q) * w3
+            + (B.a - D.a) * w4
+            + (B.t - D.t) * w5,
+        C.q + (A.a - B.a) * w
+            + (A.t - B.t) * w2
+            + (D.q - A.q - B.q) * w3
+            + (D.a - A.a) * w4
+            + (D.t - A.t) * w5,
     );
 
     // multiplication output is zero
@@ -45,9 +43,9 @@ pub fn fill_cs<CS: ConstraintSystem>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use curve25519_dalek::scalar::Scalar;
     use bulletproofs::r1cs::{ProverCS, VerifierCS};
     use bulletproofs::{BulletproofGens, PedersenGens};
+    use curve25519_dalek::scalar::Scalar;
     use merlin::Transcript;
 
     use value::SecretValue;
@@ -85,27 +83,41 @@ mod tests {
         let pc_gens = PedersenGens::default();
         let bp_gens = BulletproofGens::new(128, 1);
 
-        let A = SecretValue{ q: A.0, a: A.1.into(), t: A.2.into() };
-        let B = SecretValue{ q: B.0, a: B.1.into(), t: B.2.into() };
-        let C = SecretValue{ q: C.0, a: C.1.into(), t: C.2.into() };
-        let D = SecretValue{ q: D.0, a: D.1.into(), t: D.2.into() };
+        let A = SecretValue {
+            q: A.0,
+            a: A.1.into(),
+            t: A.2.into(),
+        };
+        let B = SecretValue {
+            q: B.0,
+            a: B.1.into(),
+            t: B.2.into(),
+        };
+        let C = SecretValue {
+            q: C.0,
+            a: C.1.into(),
+            t: C.2.into(),
+        };
+        let D = SecretValue {
+            q: D.0,
+            a: D.1.into(),
+            t: D.2.into(),
+        };
 
         // Prover's scope
         let (proof, commitments) = {
             // Prover makes a `ConstraintSystem` instance representing a merge gadget
             // v and v_blinding emptpy because we are only testing low-level variable constraints
-            let values = vec![A,B,C,D];
-            let v: Vec<Scalar> = values.iter().fold(
-                Vec::new(),
-                |mut vec, value|{
-                    vec.push(value.q.into());
-                    vec.push(value.a);
-                    vec.push(value.t);
-                    vec
+            let values = vec![A, B, C, D];
+            let v: Vec<Scalar> = values.iter().fold(Vec::new(), |mut vec, value| {
+                vec.push(value.q.into());
+                vec.push(value.a);
+                vec.push(value.t);
+                vec
             });
-            let v_blinding: Vec<Scalar> = (0..v.len()).map(|_| {
-                Scalar::random(&mut rand::thread_rng())
-            }).collect();
+            let v_blinding: Vec<Scalar> = (0..v.len())
+                .map(|_| Scalar::random(&mut rand::thread_rng()))
+                .collect();
 
             let mut prover_transcript = Transcript::new(b"MixTest");
             let (mut prover_cs, variables, commitments) = ProverCS::new(
@@ -151,7 +163,7 @@ mod tests {
         let mut verifier_transcript = Transcript::new(b"MixTest");
         let (mut verifier_cs, variables) =
             VerifierCS::new(&bp_gens, &pc_gens, &mut verifier_transcript, commitments);
-        
+
         let A = AllocatedValue {
             q: variables[0],
             a: variables[1],
