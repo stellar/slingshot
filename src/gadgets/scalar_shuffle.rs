@@ -5,7 +5,6 @@ use curve25519_dalek::scalar::Scalar;
 /// The inputs and outputs are all tuples of the `Variable, Assignment`, where the `Assignment`
 /// can be either assigned as `Value::Scalar` or unassigned as `Missing`.
 pub fn fill_cs<CS: ConstraintSystem>(cs: &mut CS, x: &[Variable], y: &[Variable]) {
-    let one = Scalar::one();
     let z = cs.challenge_scalar(b"k-scalar shuffle challenge");
 
     assert_eq!(x.len(), y.len());

@@ -2,7 +2,6 @@
 
 use super::mix;
 use bulletproofs::r1cs::ConstraintSystem;
-use curve25519_dalek::scalar::Scalar;
 use error::SpacesuitError;
 use std::iter::once;
 use value::AllocatedValue;
@@ -16,8 +15,6 @@ pub fn fill_cs<CS: ConstraintSystem>(
     intermediates: Vec<AllocatedValue>,
     outputs: Vec<AllocatedValue>,
 ) -> Result<(), SpacesuitError> {
-    let one = Scalar::one();
-
     // If there is only one input and output, just constrain the input
     // and output to be equal to each other.
     if inputs.len() == 1 && outputs.len() == 1 {
@@ -55,20 +52,31 @@ pub fn fill_cs<CS: ConstraintSystem>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use curve25519_dalek::scalar::Scalar;
     use bulletproofs::r1cs::{ProverCS, Variable, VerifierCS};
     use bulletproofs::{BulletproofGens, PedersenGens};
     use merlin::Transcript;
     use std::cmp::max;
 
+    use ::value::SecretValue;
+
     // Helper functions to make the tests easier to read
-    fn yuan(val: u64) -> (u64, u64, u64) {
-        (val, 888, 999)
+    fn yuan(q: u64) -> SecretValue {
+        SecretValue {
+            q,
+            a: 888u64.into(),
+            t: 999u64.into(),
+        }
     }
-    fn peso(val: u64) -> (u64, u64, u64) {
-        (val, 666, 777)
+    fn peso(q: u64) -> SecretValue {
+        SecretValue {
+            q,
+            a: 666u64.into(),
+            t: 777u64.into(),
+        }
     }
-    fn zero() -> (u64, u64, u64) {
-        (0, 0, 0)
+    fn zero() -> SecretValue {
+        SecretValue::zero()
     }
 
     #[test]
@@ -192,9 +200,9 @@ mod tests {
     }
 
     fn k_mix_helper(
-        inputs: Vec<(u64, u64, u64)>,
-        intermediates: Vec<(u64, u64, u64)>,
-        outputs: Vec<(u64, u64, u64)>,
+        inputs: Vec<SecretValue>,
+        intermediates: Vec<SecretValue>,
+        outputs: Vec<SecretValue>,
     ) -> Result<(), SpacesuitError> {
         // Common
         let pc_gens = PedersenGens::default();
@@ -207,41 +215,24 @@ mod tests {
 
         // Prover's scope
         let (proof, commitments) = {
-            // Prover makes a `ConstraintSystem` instance representing a merge gadget
-            // Make v vector
-            let mut v = Vec::with_capacity(6 * k);
-            for i in 0..k {
-                v.push(Scalar::from(inputs[i].0));
-                v.push(Scalar::from(inputs[i].1));
-                v.push(Scalar::from(inputs[i].2));
-            }
-            for i in 0..inter_count {
-                v.push(Scalar::from(intermediates[i].0));
-                v.push(Scalar::from(intermediates[i].1));
-                v.push(Scalar::from(intermediates[i].2));
-            }
+            let mut values = inputs.clone();
+            values.append(&mut intermediates.clone());
+            values.append(&mut outputs.clone());
 
-            for i in 0..k {
-                v.push(Scalar::from(outputs[i].0));
-                v.push(Scalar::from(outputs[i].1));
-                v.push(Scalar::from(outputs[i].2));
-            }
+            let v: Vec<Scalar> = values.iter().fold(
+                Vec::new(),
+                |mut vec, value|{
+                    vec.push(value.q.into());
+                    vec.push(value.a);
+                    vec.push(value.t);
+                    vec
+            });
+            let v_blinding: Vec<Scalar> = (0..v.len()).map(|_| {
+                Scalar::random(&mut rand::thread_rng())
+            }).collect();
 
             // Make v_blinding vector using RNG from transcript
             let mut prover_transcript = Transcript::new(b"KMixTest");
-            let mut rng = {
-                let mut builder = prover_transcript.build_rng();
-
-                // commit the secret values
-                for &v_i in &v {
-                    builder = builder.commit_witness_bytes(b"v_i", v_i.as_bytes());
-                }
-
-                use rand::thread_rng;
-                builder.finalize(&mut thread_rng())
-            };
-            let v_blinding: Vec<Scalar> = (0..v.len()).map(|_| Scalar::random(&mut rng)).collect();
-
             let (mut prover_cs, variables, commitments) = ProverCS::new(
                 &bp_gens,
                 &pc_gens,
@@ -252,7 +243,7 @@ mod tests {
 
             // Prover adds constraints to the constraint system
             let (input_vals, inter_vals, output_vals) =
-                organize_values(variables, k, inter_count);
+                organize_values(variables, &Some(values), k, inter_count);
 
             fill_cs(&mut prover_cs, input_vals, inter_vals, output_vals)?;
 
@@ -268,7 +259,7 @@ mod tests {
 
         // Verifier adds constraints to the constraint system
         let (input_vals, inter_vals, output_vals) =
-            organize_values(variables, k, inter_count);
+            organize_values(variables, &None, k, inter_count);
 
         assert!(fill_cs(&mut verifier_cs, input_vals, inter_vals, output_vals).is_ok());
 
@@ -277,17 +268,19 @@ mod tests {
 
     fn organize_values(
         variables: Vec<Variable>,
+        assignments: &Option<Vec<SecretValue>>,
         k: usize,
         inter_count: usize,
-    ) -> (Vec<Value>, Vec<Value>, Vec<Value>) {
+    ) -> (Vec<AllocatedValue>, Vec<AllocatedValue>, Vec<AllocatedValue>) {
         let val_count = variables.len() / 3;
 
         let mut values = Vec::with_capacity(val_count);
         for i in 0..val_count {
-            values.push(Value {
+            values.push(AllocatedValue {
                 q: variables[i * 3],
                 a: variables[i * 3 + 1],
                 t: variables[i * 3 + 2],
+                assignment: assignments.map(|a| a[i])
             });
         }
 

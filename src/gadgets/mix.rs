@@ -1,7 +1,6 @@
 #![allow(non_snake_case)]
 
 use bulletproofs::r1cs::ConstraintSystem;
-use curve25519_dalek::scalar::Scalar;
 use error::SpacesuitError;
 use value::{AllocatedValue};
 
@@ -15,14 +14,13 @@ pub fn fill_cs<CS: ConstraintSystem>(
     C: AllocatedValue,
     D: AllocatedValue,
 ) -> Result<(), SpacesuitError> {
-    let one = Scalar::one();
     let w = cs.challenge_scalar(b"mix challenge");
     let w2 = w * w;
     let w3 = w2 * w;
     let w4 = w3 * w;
     let w5 = w4 * w;
 
-    let (mul_left, mul_right, mul_out) = cs.multiply(
+    let (_, _, mul_out) = cs.multiply(
         (A.q - C.q)
         + (A.a - C.a) * w
         + (A.t - C.t) * w2
@@ -47,10 +45,12 @@ pub fn fill_cs<CS: ConstraintSystem>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use value::SecretValue;
+    use curve25519_dalek::scalar::Scalar;
     use bulletproofs::r1cs::{ProverCS, VerifierCS};
     use bulletproofs::{BulletproofGens, PedersenGens};
     use merlin::Transcript;
+
+    use value::SecretValue;
 
     #[test]
     fn mix_gadget() {
@@ -97,7 +97,7 @@ mod tests {
             let values = vec![A,B,C,D];
             let v: Vec<Scalar> = values.iter().fold(
                 Vec::new(),
-                |vec, value|{
+                |mut vec, value|{
                     vec.push(value.q.into());
                     vec.push(value.a);
                     vec.push(value.t);

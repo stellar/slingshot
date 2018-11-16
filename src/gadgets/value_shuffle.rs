@@ -12,8 +12,6 @@ pub fn fill_cs<CS: ConstraintSystem>(
     x: Vec<AllocatedValue>,
     y: Vec<AllocatedValue>,
 ) -> Result<(), SpacesuitError> {
-    let one = Scalar::one();
-
     if x.len() != y.len() {
         return Err(SpacesuitError::InvalidR1CSConstruction);
     }
@@ -192,7 +190,7 @@ mod tests {
 
             let v: Vec<Scalar> = values.iter().fold(
                 Vec::new(),
-                |vec, value|{
+                |mut vec, value|{
                     vec.push(value.q.into());
                     vec.push(value.a);
                     vec.push(value.t);

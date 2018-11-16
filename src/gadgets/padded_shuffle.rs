@@ -141,7 +141,7 @@ mod tests {
 
             let v: Vec<Scalar> = values.iter().fold(
                 Vec::new(),
-                |vec, value|{
+                |mut vec, value|{
                     vec.push(value.q.into());
                     vec.push(value.a);
                     vec.push(value.t);

@@ -31,7 +31,7 @@ pub fn prove(
     // flattening the structure of our input data and then unflattening it via `organize_values`.
     let v: Vec<Scalar> = all_values.iter().fold(
         Vec::with_capacity(3*all_values.len()),
-        |vec, value|{
+        |mut vec, value|{
             vec.push(value.q.into());
             vec.push(value.a);
             vec.push(value.t);
