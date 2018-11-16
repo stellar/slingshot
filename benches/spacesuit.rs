@@ -9,7 +9,7 @@ extern crate rand;
 use rand::Rng;
 
 extern crate spacesuit;
-use spacesuit::{prove, verify};
+use spacesuit::{prove, verify, Value};
 
 extern crate bulletproofs;
 use bulletproofs::{BulletproofGens, PedersenGens};
@@ -24,13 +24,11 @@ fn create_spacesuit_proof_helper(n: usize, c: &mut Criterion) {
 
         let mut rng = rand::thread_rng();
         let (min, max) = (0u64, std::u64::MAX);
-        let inputs: Vec<(Scalar, Scalar, Scalar)> = (0..n)
-            .map(|_| {
-                (
-                    Scalar::from(rng.gen_range(min, max)),
-                    Scalar::from(rng.gen_range(min, max)),
-                    Scalar::from(rng.gen_range(min, max)),
-                )
+        let inputs: Vec<Value> = (0..n)
+            .map(|_| Value {
+                q: rng.gen_range(min, max),
+                a: Scalar::random(&mut rng),
+                t: Scalar::random(&mut rng),
             })
             .collect();
         let mut outputs = inputs.clone();
@@ -73,13 +71,11 @@ fn verify_spacesuit_proof_helper(n: usize, c: &mut Criterion) {
 
         let mut rng = rand::thread_rng();
         let (min, max) = (0u64, std::u64::MAX);
-        let inputs: Vec<(Scalar, Scalar, Scalar)> = (0..n)
-            .map(|_| {
-                (
-                    Scalar::from(rng.gen_range(min, max)),
-                    Scalar::from(rng.gen_range(min, max)),
-                    Scalar::from(rng.gen_range(min, max)),
-                )
+        let inputs: Vec<Value> = (0..n)
+            .map(|_| Value {
+                q: rng.gen_range(min, max),
+                a: Scalar::random(&mut rng),
+                t: Scalar::random(&mut rng),
             })
             .collect();
         let mut outputs = inputs.clone();
