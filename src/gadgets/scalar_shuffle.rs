@@ -13,17 +13,16 @@ pub fn fill_cs<CS: ConstraintSystem>(cs: &mut CS, x: &[Variable], y: &[Variable]
 
     let k = x.len();
     if k == 1 {
-        //cs.constrain([(x[0], -one), (y[0], one)].iter().collect());
         cs.constrain(y[0] - x[0]);
         return;
     }
 
     // Make last x multiplier for i = k-1 and k-2
-    let (_, _, last_mulx_out) = cs.multiply(x[k - 1] - z, x[k - 2] - z);
+    let (_, _, last_mulx_out) = cs.multiply(x[k - 1] - z, x[k - 2] - z)?;
 
     // Make multipliers for x from i == [0, k-3]
     let first_mulx_out = (0..k - 2).rev().fold(last_mulx_out, |prev_out, i| {
-        let (_, _, o) = cs.multiply(prev_out.into(), x[i] - z);
+        let (_, _, o) = cs.multiply(prev_out.into(), x[i] - z)?;
         o
     });
 
@@ -32,16 +31,12 @@ pub fn fill_cs<CS: ConstraintSystem>(cs: &mut CS, x: &[Variable], y: &[Variable]
 
     // Make multipliers for y from i == [0, k-3]
     let first_muly_out = (0..k - 2).rev().fold(last_muly_out, |prev_out, i| {
-        let (_, _, o) = cs.multiply(prev_out.into(), y[i] - z);
+        let (_, _, o) = cs.multiply(prev_out.into(), y[i] - z)?;
         o
     });
 
     // Check equality between last x mul output and last y mul output
-    cs.constrain(
-        [(first_muly_out, -one), (first_mulx_out, one)]
-            .iter()
-            .collect(),
-    );
+    cs.constrain(first_muly_out - first_mulx_out)
 }
 
 #[cfg(test)]

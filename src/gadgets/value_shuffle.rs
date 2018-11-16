@@ -2,15 +2,15 @@ use super::scalar_shuffle;
 use bulletproofs::r1cs::ConstraintSystem;
 use curve25519_dalek::scalar::Scalar;
 use error::SpacesuitError;
-use value::Value;
+use value::AllocatedValue;
 
 /// Enforces that the output values `y` are a valid reordering of the inputs values `x`.
-/// The inputs and outputs are all of the `Value` type, which contains the fields
+/// The inputs and outputs are all of the `AllocatedValue` type, which contains the fields
 /// quantity, issuer, and tag. Works for `k` inputs and `k` outputs.
 pub fn fill_cs<CS: ConstraintSystem>(
     cs: &mut CS,
-    x: Vec<Value>,
-    y: Vec<Value>,
+    x: Vec<AllocatedValue>,
+    y: Vec<AllocatedValue>,
 ) -> Result<(), SpacesuitError> {
     let one = Scalar::one();
 
@@ -19,44 +19,28 @@ pub fn fill_cs<CS: ConstraintSystem>(
     }
     let k = x.len();
     if k == 1 {
-        cs.add_constraint([(x[0].q.0, -one), (y[0].q.0, one)].iter().collect());
-        cs.add_constraint([(x[0].a.0, -one), (y[0].a.0, one)].iter().collect());
-        cs.add_constraint([(x[0].t.0, -one), (y[0].t.0, one)].iter().collect());
+        let x = x[0];
+        let y = y[0];
+        cs.constrain(y.q - x.q);
+        cs.constrain(y.a - x.a);
+        cs.constrain(y.t - x.t);
         return Ok(());
     }
 
     let w = cs.challenge_scalar(b"k-value shuffle challenge");
     let w2 = w * w;
-    let mut x_pairs = Vec::with_capacity(k);
-    let mut y_pairs = Vec::with_capacity(k);
+    let mut x_scalars = Vec::with_capacity(k);
+    let mut y_scalars = Vec::with_capacity(k);
     for i in 0..k {
-        let x_i = x[i].q.1 + x[i].a.1 * w + x[i].t.1 * w2;
-        let y_i = y[i].q.1 + y[i].a.1 * w + y[i].t.1 * w2;
-        let (x_i_var, y_i_var) = cs.assign_uncommitted(x_i, y_i)?;
-        cs.add_constraint(
-            [
-                (x_i_var, -one),
-                (x[i].q.0, one),
-                (x[i].a.0, w),
-                (x[i].t.0, w2),
-            ]
-                .iter()
-                .collect(),
-        );
-        cs.add_constraint(
-            [
-                (y_i_var, -one),
-                (y[i].q.0, one),
-                (y[i].a.0, w),
-                (y[i].t.0, w2),
-            ]
-                .iter()
-                .collect(),
-        );
-        x_pairs.push((x_i_var, x_i));
-        y_pairs.push((y_i_var, y_i));
+        let (x_i_var, y_i_var, _) = cs.multiply(
+            x[i].q + x[i].a * w + x[i].t * w2,
+            y[i].q + y[i].a * w + y[i].t * w2
+        )?;
+
+        x_scalars.push(x_i_var);
+        y_scalars.push(y_i_var);
     }
-    scalar_shuffle::fill_cs(cs, x_pairs, y_pairs)
+    scalar_shuffle::fill_cs(cs, x_scalars, y_scalars)
 }
 
 #[cfg(test)]
