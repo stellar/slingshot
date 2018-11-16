@@ -5,41 +5,31 @@ use bulletproofs::r1cs::ConstraintSystem;
 use curve25519_dalek::scalar::Scalar;
 use error::SpacesuitError;
 use std::iter::once;
-use value::Value;
+use value::AllocatedValue;
 
 /// Enforces that the outputs are either a merge of the inputs: `D = A + B && C = 0`,
 /// or the outputs are equal to the inputs `C = A && D = B`. See spec for more details.
 /// Works for `k` inputs and `k` outputs.
 pub fn fill_cs<CS: ConstraintSystem>(
     cs: &mut CS,
-    inputs: Vec<Value>,
-    intermediates: Vec<Value>,
-    outputs: Vec<Value>,
+    inputs: Vec<AllocatedValue>,
+    intermediates: Vec<AllocatedValue>,
+    outputs: Vec<AllocatedValue>,
 ) -> Result<(), SpacesuitError> {
     let one = Scalar::one();
 
     // If there is only one input and output, just constrain the input
     // and output to be equal to each other.
     if inputs.len() == 1 && outputs.len() == 1 {
-        cs.add_constraint(
-            [(inputs[0].q.0, -one), (outputs[0].q.0, one)]
-                .iter()
-                .collect(),
-        );
-        cs.add_constraint(
-            [(inputs[0].a.0, -one), (outputs[0].a.0, one)]
-                .iter()
-                .collect(),
-        );
-        cs.add_constraint(
-            [(inputs[0].t.0, -one), (outputs[0].t.0, one)]
-                .iter()
-                .collect(),
-        );
+        let i = inputs[0];
+        let o = outputs[0];
+        cs.constrain(i.q - o.q);
+        cs.constrain(i.a - o.a);
+        cs.constrain(i.t - o.t);
         return Ok(());
     }
 
-    if inputs.len() != outputs.len() || intermediates.len() != inputs.len() - 2 {
+    if inputs.len() != outputs.len() || intermediates.len() != (inputs.len() - 2) {
         return Err(SpacesuitError::InvalidR1CSConstruction);
     }
 
@@ -65,7 +55,7 @@ pub fn fill_cs<CS: ConstraintSystem>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use bulletproofs::r1cs::{Assignment, ProverCS, Variable, VerifierCS};
+    use bulletproofs::r1cs::{ProverCS, Variable, VerifierCS};
     use bulletproofs::{BulletproofGens, PedersenGens};
     use merlin::Transcript;
     use std::cmp::max;
@@ -261,9 +251,8 @@ mod tests {
             );
 
             // Prover adds constraints to the constraint system
-            let v_assignments = v.iter().map(|v_i| Assignment::from(*v_i)).collect();
             let (input_vals, inter_vals, output_vals) =
-                value_helper(variables, v_assignments, k, inter_count);
+                organize_values(variables, k, inter_count);
 
             fill_cs(&mut prover_cs, input_vals, inter_vals, output_vals)?;
 
@@ -278,18 +267,16 @@ mod tests {
             VerifierCS::new(&bp_gens, &pc_gens, &mut verifier_transcript, commitments);
 
         // Verifier adds constraints to the constraint system
-        let v_assignments = vec![Assignment::Missing(); variables.len()];
         let (input_vals, inter_vals, output_vals) =
-            value_helper(variables, v_assignments, k, inter_count);
+            organize_values(variables, k, inter_count);
 
         assert!(fill_cs(&mut verifier_cs, input_vals, inter_vals, output_vals).is_ok());
 
         Ok(verifier_cs.verify(&proof)?)
     }
 
-    fn value_helper(
+    fn organize_values(
         variables: Vec<Variable>,
-        assignments: Vec<Assignment>,
         k: usize,
         inter_count: usize,
     ) -> (Vec<Value>, Vec<Value>, Vec<Value>) {
@@ -298,9 +285,9 @@ mod tests {
         let mut values = Vec::with_capacity(val_count);
         for i in 0..val_count {
             values.push(Value {
-                q: (variables[i * 3], assignments[i * 3]),
-                a: (variables[i * 3 + 1], assignments[i * 3 + 1]),
-                t: (variables[i * 3 + 2], assignments[i * 3 + 2]),
+                q: variables[i * 3],
+                a: variables[i * 3 + 1],
+                t: variables[i * 3 + 2],
             });
         }
 

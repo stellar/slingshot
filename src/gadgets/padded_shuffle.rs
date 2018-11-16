@@ -1,16 +1,16 @@
 use super::value_shuffle;
-use bulletproofs::r1cs::{Assignment, ConstraintSystem};
+use bulletproofs::r1cs::{ConstraintSystem};
 use curve25519_dalek::scalar::Scalar;
 use error::SpacesuitError;
 use std::cmp::{max, min};
-use value::Value;
+use value::AllocatedValue;
 
 /// Enforces that the values in `y` are a valid reordering of the values in `x`,
 /// allowing for padding (zero values) in x that can be omitted in y (or the other way around).
 pub fn fill_cs<CS: ConstraintSystem>(
     cs: &mut CS,
-    mut x: Vec<Value>,
-    mut y: Vec<Value>,
+    mut x: Vec<AllocatedValue>,
+    mut y: Vec<AllocatedValue>,
 ) -> Result<(), SpacesuitError> {
     let m = x.len();
     let n = y.len();
@@ -20,21 +20,19 @@ pub fn fill_cs<CS: ConstraintSystem>(
     let mut values = Vec::with_capacity(pad_count);
 
     for _ in 0..pad_count {
-        // We can use assign_multiplier (instead of assign_uncommitted) because we know that 0 * 0 = 0.
-        let (var_q, var_a, var_t) = cs.assign_multiplier(
-            Assignment::from(0),
-            Assignment::from(0),
-            Assignment::from(0),
-        )?;
-        values.push(Value {
-            q: (var_q, Assignment::from(0)),
-            a: (var_a, Assignment::from(0)),
-            t: (var_t, Assignment::from(0)),
+        // We need three independent variables constrained to be zeroes.
+        // We can do that with a single multiplier and two linear constraints for the inputs only.
+        // The multiplication constraint is enough to ensure that the output is zero.
+        let (q, a, t) = cs.multiply(
+            Scalar::zero().into(),
+            Scalar::zero().into(),
+        );
+        let assignment = Some(SecretValue{
+            q: 0, 
+            a: Scalar::zero(), 
+            t: Scalar::zero()
         });
-        // Constrain each of the padding variables to be equal to zero.
-        for var in vec![var_q, var_a, var_t] {
-            cs.add_constraint([(var, Scalar::one())].iter().collect());
-        }
+        values.push(AllocatedValue{q, a, t, assignment});
     }
 
     if m > n {
@@ -51,7 +49,7 @@ pub fn fill_cs<CS: ConstraintSystem>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use bulletproofs::r1cs::{Assignment, ProverCS, Variable, VerifierCS};
+    use bulletproofs::r1cs::{ProverCS, Variable, VerifierCS};
     use bulletproofs::{BulletproofGens, PedersenGens};
     use curve25519_dalek::scalar::Scalar;
     use merlin::Transcript;
@@ -168,8 +166,7 @@ mod tests {
                 v_blinding,
             );
 
-            let v_assignments = v.iter().map(|v_i| Assignment::from(*v_i)).collect();
-            let (input_vals, output_vals) = value_helper(variables, v_assignments, m);
+            let (input_vals, output_vals) = organize_values(variables, m);
 
             fill_cs(&mut prover_cs, input_vals, output_vals)?;
             let proof = prover_cs.prove()?;
@@ -183,26 +180,24 @@ mod tests {
             VerifierCS::new(&bp_gens, &pc_gens, &mut verifier_transcript, commitments);
 
         // Verifier allocates variables and adds constraints to the constraint system
-        let v_assignments = vec![Assignment::Missing(); variables.len()];
-        let (input_vals, output_vals) = value_helper(variables, v_assignments, m);
+        let (input_vals, output_vals) = organize_values(variables, m);
         assert!(fill_cs(&mut verifier_cs, input_vals, output_vals).is_ok());
 
         // Verifier verifies proof
         Ok(verifier_cs.verify(&proof)?)
     }
 
-    fn value_helper(
+    fn organize_values(
         variables: Vec<Variable>,
-        assignments: Vec<Assignment>,
         m: usize,
     ) -> (Vec<Value>, Vec<Value>) {
         let val_count = variables.len() / 3;
         let mut values = Vec::with_capacity(val_count);
         for i in 0..val_count {
             values.push(Value {
-                q: (variables[i * 3], assignments[i * 3]),
-                a: (variables[i * 3 + 1], assignments[i * 3 + 1]),
-                t: (variables[i * 3 + 2], assignments[i * 3 + 2]),
+                q: variables[i * 3], 
+                a: variables[i * 3 + 1],
+                t: variables[i * 3 + 2],
             });
         }
 

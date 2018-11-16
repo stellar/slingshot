@@ -1,6 +1,6 @@
 #![allow(non_snake_case)]
 
-use bulletproofs::r1cs::{Assignment, ProverCS, R1CSProof, Variable, VerifierCS};
+use bulletproofs::r1cs::{ProverCS, R1CSProof, Variable, VerifierCS};
 use bulletproofs::{BulletproofGens, PedersenGens};
 use curve25519_dalek::ristretto::CompressedRistretto;
 use curve25519_dalek::scalar::Scalar;
@@ -8,23 +8,22 @@ use error::SpacesuitError;
 use gadgets::transaction;
 use merlin::Transcript;
 use std::cmp::max;
-use subtle::{ConditionallyAssignable, ConstantTimeEq};
-use value::Value;
+use subtle::{ConditionallySelectable, ConstantTimeEq};
+use value::{SecretValue, AllocatedValue};
 
 pub struct SpacesuitProof(R1CSProof);
 
 pub fn prove(
     bp_gens: &BulletproofGens,
     pc_gens: &PedersenGens,
-    inputs: &Vec<(Scalar, Scalar, Scalar)>,
-    outputs: &Vec<(Scalar, Scalar, Scalar)>,
+    inputs: &Vec<SecretValue>,
+    outputs: &Vec<SecretValue>,
 ) -> Result<(SpacesuitProof, Vec<CompressedRistretto>), SpacesuitError> {
     let m = inputs.len();
     let n = outputs.len();
 
-    // Prover makes a `ConstraintSystem` instance representing a transaction gadget
-    // Make v vector
-    let v = compute_intermediate_values(inputs, outputs)?;
+    // Compute all intermediate values and add them to inputs and outputs
+    let v = compute_committed_values(inputs, outputs)?;
 
     // Make v_blinding vector using RNG from transcript
     let mut prover_transcript = Transcript::new(b"TransactionTest");
@@ -49,8 +48,7 @@ pub fn prove(
     );
 
     // Prover adds constraints to the constraint system
-    let v_assignments = v.iter().map(|v_i| Assignment::from(*v_i)).collect();
-    let (inp, m_i, m_m, m_o, s_i, s_m, s_o, out) = value_helper(variables, v_assignments, m, n);
+    let (inp, m_i, m_m, m_o, s_i, s_m, s_o, out) = organize_values(variables, m, n);
 
     transaction::fill_cs(&mut prover_cs, inp, m_i, m_m, m_o, s_i, s_m, s_o, out)?;
     let proof = SpacesuitProof(prover_cs.prove()?);
@@ -72,8 +70,7 @@ pub fn verify(
         VerifierCS::new(&bp_gens, &pc_gens, &mut verifier_transcript, commitments);
 
     // Verifier allocates variables and adds constraints to the constraint system
-    let v_assignments = vec![Assignment::Missing(); variables.len()];
-    let (inp, m_i, m_m, m_o, s_i, s_m, s_o, out) = value_helper(variables, v_assignments, m, n);
+    let (inp, m_i, m_m, m_o, s_i, s_m, s_o, out) = organize_values(variables, m, n);
 
     assert!(transaction::fill_cs(&mut verifier_cs, inp, m_i, m_m, m_o, s_i, s_m, s_o, out).is_ok());
 
@@ -91,9 +88,9 @@ pub fn verify(
 /// This will be fixed in the future with a "Bulletproofs++" which binds the challenge
 /// value to the intermediate variables as well. The discussion for that is here:
 /// https://github.com/dalek-cryptography/bulletproofs/issues/186
-fn compute_intermediate_values(
-    inputs: &Vec<(Scalar, Scalar, Scalar)>,
-    outputs: &Vec<(Scalar, Scalar, Scalar)>,
+fn compute_committed_values(
+    inputs: &Vec<SecretValue>,
+    outputs: &Vec<SecretValue>,
 ) -> Result<Vec<Scalar>, SpacesuitError> {
     let m = inputs.len();
     let n = outputs.len();
@@ -101,6 +98,14 @@ fn compute_intermediate_values(
     let split_mid_count = max(n, 2) - 2; // max(n - 2, 0)
     let commitment_count = 2 * m + merge_mid_count + 2 * n + split_mid_count;
     let mut v = Vec::with_capacity(commitment_count);
+
+    fn append_values(values: &mut Vec<Scalar>, list: &Vec<(Scalar, Scalar, Scalar)>) {
+        for i in 0..list.len() {
+            values.push(list[i].0);
+            values.push(list[i].1);
+            values.push(list[i].2);
+        }
+    }
 
     // Input to transaction
     append_values(&mut v, inputs);
@@ -125,9 +130,10 @@ fn compute_intermediate_values(
     Ok(v)
 }
 
-fn value_helper(
+/// Organizes a flat list of variables into the collections
+/// of variables for each gadget.
+fn organize_values(
     variables: Vec<Variable>,
-    assignments: Vec<Assignment>,
     m: usize,
     n: usize,
 ) -> (
@@ -147,9 +153,9 @@ fn value_helper(
     let mut values = Vec::with_capacity(val_count);
     for i in 0..val_count {
         values.push(Value {
-            q: (variables[i * 3], assignments[i * 3]),
-            a: (variables[i * 3 + 1], assignments[i * 3 + 1]),
-            t: (variables[i * 3 + 2], assignments[i * 3 + 2]),
+            q: variables[i * 3],
+            a: variables[i * 3 + 1],
+            t: variables[i * 3 + 2],
         });
     }
 
@@ -271,13 +277,6 @@ fn merge_helper(
     Ok((merge_mid, merge_out))
 }
 
-fn append_values(values: &mut Vec<Scalar>, list: &Vec<(Scalar, Scalar, Scalar)>) {
-    for i in 0..list.len() {
-        values.push(list[i].0);
-        values.push(list[i].1);
-        values.push(list[i].2);
-    }
-}
 
 #[cfg(test)]
 mod tests {

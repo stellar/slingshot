@@ -1,7 +1,7 @@
 use super::k_mix;
 use bulletproofs::r1cs::ConstraintSystem;
 use error::SpacesuitError;
-use value::Value;
+use value::AllocatedValue;
 
 /// Enforces that the outputs are either a split of the inputs :`A = C + D && B = 0`,
 /// or the outputs are equal to the inputs `C = A && D = B`. See spec for more details.
@@ -12,9 +12,9 @@ use value::Value;
 /// inputs and outputs of a `merge` gadget, then you have a `split` gadget.
 pub fn fill_cs<CS: ConstraintSystem>(
     cs: &mut CS,
-    mut inputs: Vec<Value>,
-    mut intermediates: Vec<Value>,
-    mut outputs: Vec<Value>,
+    mut inputs: Vec<AllocatedValue>,
+    mut intermediates: Vec<AllocatedValue>,
+    mut outputs: Vec<AllocatedValue>,
 ) -> Result<(), SpacesuitError> {
     inputs.reverse();
     intermediates.reverse();

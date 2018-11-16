@@ -1,11 +1,11 @@
-use bulletproofs::r1cs::{Assignment, ConstraintSystem, Variable};
+use bulletproofs::r1cs::{ConstraintSystem, Variable};
 use curve25519_dalek::scalar::Scalar;
 use error::SpacesuitError;
 
 /// Enforces that the output variables `y` are a valid reordering of the inputs variables `x`.
 /// The inputs and outputs are all tuples of the `Variable, Assignment`, where the `Assignment`
 /// can be either assigned as `Value::Scalar` or unassigned as `Missing`.
-fn fill_cs<CS: ConstraintSystem>(cs: &mut CS, x: &[Variable], y: &[Variable]) {
+pub fn fill_cs<CS: ConstraintSystem>(cs: &mut CS, x: &[Variable], y: &[Variable]) {
     let one = Scalar::one();
     let z = cs.challenge_scalar(b"k-scalar shuffle challenge");
 
@@ -13,30 +13,31 @@ fn fill_cs<CS: ConstraintSystem>(cs: &mut CS, x: &[Variable], y: &[Variable]) {
 
     let k = x.len();
     if k == 1 {
-        cs.add_auxiliary_constraint([(x[0], -one), (y[0], one)].iter().collect());
+        //cs.constrain([(x[0], -one), (y[0], one)].iter().collect());
+        cs.constrain(y[0] - x[0]);
         return;
     }
 
     // Make last x multiplier for i = k-1 and k-2
-    let (_, _, last_mulx_out) = cs.add_intermediate_constraint(x[k - 1] - z, x[k - 2] - z);
+    let (_, _, last_mulx_out) = cs.multiply(x[k - 1] - z, x[k - 2] - z);
 
     // Make multipliers for x from i == [0, k-3]
     let first_mulx_out = (0..k - 2).rev().fold(last_mulx_out, |prev_out, i| {
-        let (_, _, o) = cs.add_intermediate_constraint(prev_out.into(), x[i] - z);
+        let (_, _, o) = cs.multiply(prev_out.into(), x[i] - z);
         o
     });
 
     // Make last y multiplier for i = k-1 and k-2
-    let (_, _, last_muly_out) = cs.add_intermediate_constraint(y[k - 1] - z, y[k - 2] - z);
+    let (_, _, last_muly_out) = cs.multiply(y[k - 1] - z, y[k - 2] - z);
 
     // Make multipliers for y from i == [0, k-3]
     let first_muly_out = (0..k - 2).rev().fold(last_muly_out, |prev_out, i| {
-        let (_, _, o) = cs.add_intermediate_constraint(prev_out.into(), y[i] - z);
+        let (_, _, o) = cs.multiply(prev_out.into(), y[i] - z);
         o
     });
 
     // Check equality between last x mul output and last y mul output
-    cs.add_auxiliary_constraint(
+    cs.constrain(
         [(first_muly_out, -one), (first_mulx_out, one)]
             .iter()
             .collect(),

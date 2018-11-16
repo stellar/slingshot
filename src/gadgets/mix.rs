@@ -3,17 +3,17 @@
 use bulletproofs::r1cs::ConstraintSystem;
 use curve25519_dalek::scalar::Scalar;
 use error::SpacesuitError;
-use value::Value;
+use value::AllocatedValue;
 
 /// Enforces that the outputs are either a merge of the inputs :`D = A + B && C = 0`,
 /// or the outputs are equal to the inputs `C = A && D = B`. See spec for more details.
 /// Works for 2 inputs and 2 outputs.
 pub fn fill_cs<CS: ConstraintSystem>(
     cs: &mut CS,
-    A: Value,
-    B: Value,
-    C: Value,
-    D: Value,
+    A: AllocatedValue,
+    B: AllocatedValue,
+    C: AllocatedValue,
+    D: AllocatedValue,
 ) -> Result<(), SpacesuitError> {
     let one = Scalar::one();
     let w = cs.challenge_scalar(b"mix challenge");
@@ -22,77 +22,24 @@ pub fn fill_cs<CS: ConstraintSystem>(
     let w4 = w3 * w;
     let w5 = w4 * w;
 
-    // create variables for multiplication
-    let (mul_left, mul_right, mul_out) = cs.assign_multiplier(
-        // left gate to multiplier
-        (A.q.1 - C.q.1)
-            + (A.a.1 - C.a.1) * w
-            + (A.t.1 - C.t.1) * w2
-            + (B.q.1 - D.q.1) * w3
-            + (B.a.1 - D.a.1) * w4
-            + (B.t.1 - D.t.1) * w5,
-        // right gate to multiplier
-        C.q.1
-            + (A.a.1 - B.a.1) * w
-            + (A.t.1 - B.t.1) * w2
-            + (D.q.1 - A.q.1 - B.q.1) * w3
-            + (D.a.1 - A.a.1) * w4
-            + (D.t.1 - A.t.1) * w5,
-        // out gate to multiplier
-        Scalar::zero().into(),
+    let (mul_left, mul_right, mul_out) = cs.multiply(
+        (A.q - C.q)
+        + (A.a - C.a) * w
+        + (A.t - C.t) * w2
+        + (B.q - D.q) * w3
+        + (B.a - D.a) * w4
+        + (B.t - D.t) * w5,
+
+        C.q
+        + (A.a - B.a) * w
+        + (A.t - B.t) * w2
+        + (D.q - A.q - B.q) * w3
+        + (D.a - A.a) * w4
+        + (D.t - A.t) * w5
     )?;
-    // mul_left  = (A.q - C.q) +
-    //             (A.a - C.a) * w +
-    //             (A.t - C.t) * w^2 +
-    //             (B.q - D.q) * w^3 +
-    //             (B.a - D.a) * w^4 +
-    //             (B.t - D.t) * w^5
-    cs.add_constraint(
-        [
-            (mul_left, -one),
-            (A.q.0, one),
-            (C.q.0, -one),
-            (A.a.0, w),
-            (C.a.0, -w),
-            (A.t.0, w2),
-            (C.t.0, -w2),
-            (B.q.0, w3),
-            (D.q.0, -w3),
-            (B.a.0, w4),
-            (D.a.0, -w4),
-            (B.t.0, w5),
-            (D.t.0, -w5),
-        ]
-            .iter()
-            .collect(),
-    );
-    // mul_right = (C.q - 0) +
-    //             (A.a - B.a) * w +
-    //             (A.t - B.t) * w^2 +
-    //             (D.q - A.q - B.q) * w^3 +
-    //             (D.a - A.a) * w^4
-    //             (D.t - A.t) * w^5
-    cs.add_constraint(
-        [
-            (mul_right, -one),
-            (C.q.0, one),
-            (A.a.0, w),
-            (B.a.0, -w),
-            (A.t.0, w2),
-            (B.t.0, -w2),
-            (D.q.0, w3),
-            (A.q.0, -w3),
-            (B.q.0, -w3),
-            (D.a.0, w4),
-            (A.a.0, -w4),
-            (D.t.0, w5),
-            (A.t.0, -w5),
-        ]
-            .iter()
-            .collect(),
-    );
-    // mul_out   = 0
-    cs.add_constraint([(mul_out, one)].iter().collect());
+
+    // multiplication output is zero
+    cs.constrain(mul_out.into());
 
     Ok(())
 }
@@ -100,7 +47,7 @@ pub fn fill_cs<CS: ConstraintSystem>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use bulletproofs::r1cs::{Assignment, ProverCS, VerifierCS};
+    use bulletproofs::r1cs::{ProverCS, VerifierCS};
     use bulletproofs::{BulletproofGens, PedersenGens};
     use merlin::Transcript;
 
