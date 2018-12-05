@@ -1,96 +1,130 @@
 #![allow(non_snake_case)]
 
-use bulletproofs::r1cs::{ProverCS, R1CSProof, Variable, VerifierCS};
+use bulletproofs::r1cs::{Prover, R1CSProof, Verifier};
 use bulletproofs::{BulletproofGens, PedersenGens};
-use curve25519_dalek::ristretto::CompressedRistretto;
 use curve25519_dalek::scalar::Scalar;
 use error::SpacesuitError;
 use gadgets::transaction;
 use merlin::Transcript;
-use std::cmp::max;
+use rand::CryptoRng;
+use rand::Rng;
 use subtle::{ConditionallySelectable, ConstantTimeEq};
-use value::{AllocatedValue, Value};
+use value::*;
 
 pub struct SpacesuitProof(R1CSProof);
 
-pub fn prove(
+pub fn prove<R: Rng + CryptoRng>(
     bp_gens: &BulletproofGens,
     pc_gens: &PedersenGens,
     inputs: &Vec<Value>,
     outputs: &Vec<Value>,
-) -> Result<(SpacesuitProof, Vec<CompressedRistretto>), SpacesuitError> {
-    let m = inputs.len();
-    let n = outputs.len();
-
+    rng: &mut R,
+) -> Result<
+    (
+        SpacesuitProof,
+        Vec<CommittedValue>,
+        Vec<CommittedValue>,
+        Vec<CommittedValue>,
+        Vec<CommittedValue>,
+        Vec<CommittedValue>,
+        Vec<CommittedValue>,
+        Vec<CommittedValue>,
+        Vec<CommittedValue>,
+    ),
+    SpacesuitError,
+>
+where
+    R: rand::RngCore,
+{
     // Compute all intermediate values and add them to inputs and outputs,
     // returning raw variable assignments to be passed to the prover.
-    let all_values = compute_committed_values(inputs, outputs)?;
+    let (tx_in, merge_in, merge_mid, merge_out, split_in, split_mid, split_out, tx_out) =
+        compute_committed_values(inputs, outputs)?;
 
-    // Flatten the values into a list of raw scalars to compute the Pedersen commitments.
-    // TBD: would be nice if ProverCS had an API to do this per-value, so we can avoid
-    // flattening the structure of our input data and then unflattening it via `organize_values`.
-    // Bulletproofs repo issue: https://github.com/dalek-cryptography/bulletproofs/issues/218
-    let v: Vec<Scalar> = all_values.iter().fold(
-        Vec::with_capacity(3 * all_values.len()),
-        |mut vec, value| {
-            vec.push(value.q.into());
-            vec.push(value.a);
-            vec.push(value.t);
-            vec
-        },
-    );
-
-    // Make v_blinding vector using RNG from transcript
     let mut prover_transcript = Transcript::new(b"TransactionTest");
-    let mut rng = {
-        let mut builder = prover_transcript.build_rng();
+    let mut prover = Prover::new(&bp_gens, &pc_gens, &mut prover_transcript);
 
-        // Commit the secret values
-        for &v_i in &v {
-            builder = builder.commit_witness_bytes(b"v_i", v_i.as_bytes());
-        }
-        use rand::thread_rng;
-        builder.finalize(&mut thread_rng())
-    };
-    let v_blinding: Vec<Scalar> = (0..v.len()).map(|_| Scalar::random(&mut rng)).collect();
+    let (tx_in_com, tx_in_vars) = tx_in.commit(&mut prover, rng);
+    let (merge_in_com, merge_in_vars) = merge_in.commit(&mut prover, rng);
+    let (merge_mid_com, merge_mid_vars) = merge_mid.commit(&mut prover, rng);
+    let (merge_out_com, merge_out_vars) = merge_out.commit(&mut prover, rng);
+    let (split_in_com, split_in_vars) = split_in.commit(&mut prover, rng);
+    let (split_mid_com, split_mid_vars) = split_mid.commit(&mut prover, rng);
+    let (split_out_com, split_out_vars) = split_out.commit(&mut prover, rng);
+    let (tx_out_com, tx_out_vars) = tx_out.commit(&mut prover, rng);
 
-    let (mut prover_cs, variables, commitments) = ProverCS::new(
-        &bp_gens,
-        &pc_gens,
-        &mut prover_transcript,
-        v.clone(),
-        v_blinding,
-    );
+    let mut prover_cs = prover.finalize_inputs();
 
-    // Prover adds constraints to the constraint system
-    let (inp, m_i, m_m, m_o, s_i, s_m, s_o, out) =
-        organize_values(variables, &Some(all_values), m, n);
-
-    transaction::fill_cs(&mut prover_cs, inp, m_i, m_m, m_o, s_i, s_m, s_o, out)?;
+    transaction::fill_cs(
+        &mut prover_cs,
+        tx_in_vars,
+        merge_in_vars,
+        merge_mid_vars,
+        merge_out_vars,
+        split_in_vars,
+        split_mid_vars,
+        split_out_vars,
+        tx_out_vars,
+    )?;
     let proof = SpacesuitProof(prover_cs.prove()?);
 
-    Ok((proof, commitments))
+    Ok((
+        proof,
+        tx_in_com,
+        merge_in_com,
+        merge_mid_com,
+        merge_out_com,
+        split_in_com,
+        split_mid_com,
+        split_out_com,
+        tx_out_com,
+    ))
 }
 
 pub fn verify(
     bp_gens: &BulletproofGens,
     pc_gens: &PedersenGens,
     proof: &SpacesuitProof,
-    commitments: Vec<CompressedRistretto>,
-    m: usize,
-    n: usize,
+    tx_in_com: &Vec<CommittedValue>,
+    merge_in_com: &Vec<CommittedValue>,
+    merge_mid_com: &Vec<CommittedValue>,
+    merge_out_com: &Vec<CommittedValue>,
+    split_in_com: &Vec<CommittedValue>,
+    split_mid_com: &Vec<CommittedValue>,
+    split_out_com: &Vec<CommittedValue>,
+    tx_out_com: &Vec<CommittedValue>,
 ) -> Result<(), SpacesuitError> {
     // TBD: check the correctness of the size of the commitments
 
     // Verifier makes a `ConstraintSystem` instance representing a merge gadget
     let mut verifier_transcript = Transcript::new(b"TransactionTest");
-    let (mut verifier_cs, variables) =
-        VerifierCS::new(&bp_gens, &pc_gens, &mut verifier_transcript, commitments);
+    let mut verifier = Verifier::new(&bp_gens, &pc_gens, &mut verifier_transcript);
 
-    // Verifier allocates variables and adds constraints to the constraint system
-    let (inp, m_i, m_m, m_o, s_i, s_m, s_o, out) = organize_values(variables, &None, m, n);
+    let tx_in_vars = tx_in_com.commit(&mut verifier);
+    let merge_in_vars = merge_in_com.commit(&mut verifier);
+    let merge_mid_vars = merge_mid_com.commit(&mut verifier);
+    let merge_out_vars = merge_out_com.commit(&mut verifier);
+    let split_in_vars = split_in_com.commit(&mut verifier);
+    let split_mid_vars = split_mid_com.commit(&mut verifier);
+    let split_out_vars = split_out_com.commit(&mut verifier);
+    let tx_out_vars = tx_out_com.commit(&mut verifier);
 
-    assert!(transaction::fill_cs(&mut verifier_cs, inp, m_i, m_m, m_o, s_i, s_m, s_o, out).is_ok());
+    let mut verifier_cs = verifier.finalize_inputs();
+
+    assert!(
+        transaction::fill_cs(
+            &mut verifier_cs,
+            tx_in_vars,
+            merge_in_vars,
+            merge_mid_vars,
+            merge_out_vars,
+            split_in_vars,
+            split_mid_vars,
+            split_out_vars,
+            tx_out_vars,
+        )
+        .is_ok()
+    );
 
     Ok(verifier_cs.verify(&proof.0)?)
 }
@@ -109,93 +143,37 @@ pub fn verify(
 fn compute_committed_values(
     inputs: &Vec<Value>,
     outputs: &Vec<Value>,
-) -> Result<Vec<Value>, SpacesuitError> {
-    let m = inputs.len();
-    let n = outputs.len();
-    let merge_mid_count = max(m, 2) - 2; // max(m - 2, 0)
-    let split_mid_count = max(n, 2) - 2; // max(n - 2, 0)
-    let commitment_count = 2 * m + merge_mid_count + 2 * n + split_mid_count;
-
-    let mut v = Vec::<Value>::with_capacity(commitment_count);
-
-    // Input to transaction
-    v.extend_from_slice(inputs);
-
+) -> Result<
+    (
+        Vec<Value>,
+        Vec<Value>,
+        Vec<Value>,
+        Vec<Value>,
+        Vec<Value>,
+        Vec<Value>,
+        Vec<Value>,
+        Vec<Value>,
+    ),
+    SpacesuitError,
+> {
     // Inputs, intermediates, and outputs of merge gadget
     let merge_in = shuffle_helper(inputs);
     let (merge_mid, merge_out) = merge_helper(&merge_in)?;
-
-    v.extend_from_slice(&merge_in);
-    v.extend_from_slice(&merge_mid);
-    v.extend_from_slice(&merge_out);
 
     // Inputs, intermediates, and outputs of split gadget
     let split_out = shuffle_helper(outputs);
     let (split_mid, split_in) = split_helper(&split_out)?;
 
-    v.extend_from_slice(&split_in);
-    v.extend_from_slice(&split_mid);
-    v.extend_from_slice(&split_out);
-
-    // Output of transaction
-    v.extend_from_slice(&outputs);
-
-    Ok(v)
-}
-
-/// Organizes a flat list of variables into the collections
-/// of variables for each gadget.
-fn organize_values(
-    variables: Vec<Variable>,
-    assignments: &Option<Vec<Value>>,
-    m: usize,
-    n: usize,
-) -> (
-    Vec<AllocatedValue>,
-    Vec<AllocatedValue>,
-    Vec<AllocatedValue>,
-    Vec<AllocatedValue>,
-    Vec<AllocatedValue>,
-    Vec<AllocatedValue>,
-    Vec<AllocatedValue>,
-    Vec<AllocatedValue>,
-) {
-    let inner_merge_count = max(m, 2) - 2; // max(m - 2, 0)
-    let inner_split_count = max(n, 2) - 2; // max(n - 2, 0)
-    let val_count = variables.len() / 3;
-
-    let mut values = Vec::with_capacity(val_count);
-    for i in 0..val_count {
-        values.push(AllocatedValue {
-            q: variables[i * 3],
-            a: variables[i * 3 + 1],
-            t: variables[i * 3 + 2],
-            assignment: match assignments {
-                Some(ref a) => Some(a[i]),
-                None => None,
-            },
-        });
-    }
-
-    let (inp, values) = values.split_at(m);
-    let (m_i, values) = values.split_at(m);
-    let (m_m, values) = values.split_at(inner_merge_count);
-    let (m_o, values) = values.split_at(m);
-    let (s_i, values) = values.split_at(n);
-    let (s_m, values) = values.split_at(inner_split_count);
-    let (s_o, values) = values.split_at(n);
-    let (out, _) = values.split_at(n);
-
-    (
-        inp.to_vec(),
-        m_i.to_vec(),
-        m_m.to_vec(),
-        m_o.to_vec(),
-        s_i.to_vec(),
-        s_m.to_vec(),
-        s_o.to_vec(),
-        out.to_vec(),
-    )
+    Ok((
+        inputs.to_vec(),
+        merge_in,
+        merge_mid,
+        merge_out,
+        split_in,
+        split_mid,
+        split_out,
+        outputs.to_vec(),
+    ))
 }
 
 // Takes in shuffle_in, returns shuffle_out which is a reordering of the tuples in shuffle_in

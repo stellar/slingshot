@@ -52,13 +52,11 @@ pub fn fill_cs<CS: ConstraintSystem>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use bulletproofs::r1cs::{ProverCS, Variable, VerifierCS};
+    use bulletproofs::r1cs::{Prover, Verifier};
     use bulletproofs::{BulletproofGens, PedersenGens};
-    use curve25519_dalek::scalar::Scalar;
     use merlin::Transcript;
     use std::cmp::max;
-
-    use value::Value;
+    use value::{ProverCommittable, Value, VerifierCommittable};
 
     // Helper functions to make the tests easier to read
     fn yuan(q: u64) -> Value {
@@ -214,85 +212,35 @@ mod tests {
         }
 
         // Prover's scope
-        let (proof, commitments) = {
-            let mut values = inputs.clone();
-            values.append(&mut intermediates.clone());
-            values.append(&mut outputs.clone());
-
-            let v: Vec<Scalar> = values.iter().fold(Vec::new(), |mut vec, value| {
-                vec.push(value.q.into());
-                vec.push(value.a);
-                vec.push(value.t);
-                vec
-            });
-            let v_blinding: Vec<Scalar> = (0..v.len())
-                .map(|_| Scalar::random(&mut rand::thread_rng()))
-                .collect();
-
-            // Make v_blinding vector using RNG from transcript
+        let (proof, input_com, inter_com, output_com) = {
             let mut prover_transcript = Transcript::new(b"KMixTest");
-            let (mut prover_cs, variables, commitments) = ProverCS::new(
-                &bp_gens,
-                &pc_gens,
-                &mut prover_transcript,
-                v.clone(),
-                v_blinding.clone(),
-            );
+            let mut rng = rand::thread_rng();
 
-            // Prover adds constraints to the constraint system
-            let (input_vals, inter_vals, output_vals) =
-                organize_values(variables, &Some(values), k, inter_count);
+            let mut prover = Prover::new(&bp_gens, &pc_gens, &mut prover_transcript);
+            let (input_com, input_vars) = inputs.commit(&mut prover, &mut rng);
+            let (inter_com, inter_vars) = intermediates.commit(&mut prover, &mut rng);
+            let (output_com, output_vars) = outputs.commit(&mut prover, &mut rng);
 
-            fill_cs(&mut prover_cs, input_vals, inter_vals, output_vals)?;
+            let mut prover_cs = prover.finalize_inputs();
+            fill_cs(&mut prover_cs, input_vars, inter_vars, output_vars)?;
 
             let proof = prover_cs.prove()?;
-
-            (proof, commitments)
+            (proof, input_com, inter_com, output_com)
         };
 
         // Verifier makes a `ConstraintSystem` instance representing a merge gadget
         let mut verifier_transcript = Transcript::new(b"KMixTest");
-        let (mut verifier_cs, variables) =
-            VerifierCS::new(&bp_gens, &pc_gens, &mut verifier_transcript, commitments);
+        let mut verifier = Verifier::new(&bp_gens, &pc_gens, &mut verifier_transcript);
+
+        let input_vars = input_com.commit(&mut verifier);
+        let inter_vars = inter_com.commit(&mut verifier);
+        let output_vars = output_com.commit(&mut verifier);
+
+        let mut verifier_cs = verifier.finalize_inputs();
 
         // Verifier adds constraints to the constraint system
-        let (input_vals, inter_vals, output_vals) =
-            organize_values(variables, &None, k, inter_count);
-
-        assert!(fill_cs(&mut verifier_cs, input_vals, inter_vals, output_vals).is_ok());
+        assert!(fill_cs(&mut verifier_cs, input_vars, inter_vars, output_vars).is_ok());
 
         Ok(verifier_cs.verify(&proof)?)
-    }
-
-    fn organize_values(
-        variables: Vec<Variable>,
-        assignments: &Option<Vec<Value>>,
-        k: usize,
-        inter_count: usize,
-    ) -> (
-        Vec<AllocatedValue>,
-        Vec<AllocatedValue>,
-        Vec<AllocatedValue>,
-    ) {
-        let val_count = variables.len() / 3;
-
-        let mut values = Vec::with_capacity(val_count);
-        for i in 0..val_count {
-            values.push(AllocatedValue {
-                q: variables[i * 3],
-                a: variables[i * 3 + 1],
-                t: variables[i * 3 + 2],
-                assignment: match assignments {
-                    Some(ref a) => Some(a[i]),
-                    None => None,
-                },
-            });
-        }
-
-        let input_vals = values[0..k].to_vec();
-        let inter_vals = values[k..k + inter_count].to_vec();
-        let output_vals = values[k + inter_count..2 * k + inter_count].to_vec();
-
-        (input_vals, inter_vals, output_vals)
     }
 }

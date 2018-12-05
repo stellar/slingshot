@@ -38,7 +38,7 @@ pub fn fill_cs<CS: ConstraintSystem>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use bulletproofs::r1cs::{ProverCS, VerifierCS};
+    use bulletproofs::r1cs::{Prover, Verifier};
     use bulletproofs::{BulletproofGens, PedersenGens};
     use merlin::Transcript;
 
@@ -66,51 +66,42 @@ mod tests {
         let bp_gens = BulletproofGens::new(128, 1);
 
         // Prover's scope
-        let (proof, commitments) = {
-            // Prover makes a `ConstraintSystem` instance representing a merge gadget
-            // v and v_blinding emptpy because we are only testing low-level variable constraints
-            let v: Vec<Scalar> = vec![v_val.into()];
-            let v_blinding: Vec<Scalar> = vec![Scalar::random(&mut rand::thread_rng())];
-
+        let (proof, commitment) = {
+            // Prover makes a `ConstraintSystem` instance representing a range proof gadget
             let mut prover_transcript = Transcript::new(b"RangeProofTest");
-            let (mut prover_cs, variables, commitments) = ProverCS::new(
-                &bp_gens,
-                &pc_gens,
-                &mut prover_transcript,
-                v,
-                v_blinding.clone(),
-            );
+            let mut rng = rand::thread_rng();
 
-            fill_cs(
-                &mut prover_cs,
-                AllocatedQuantity {
-                    variable: variables[0],
-                    assignment: Some(v_val),
-                },
-                n,
-            )?;
+            let mut prover = Prover::new(&bp_gens, &pc_gens, &mut prover_transcript);
+
+            let (com, var) = prover.commit(v_val.into(), Scalar::random(&mut rng));
+            let quantity = AllocatedQuantity {
+                variable: var,
+                assignment: Some(v_val),
+            };
+            let mut prover_cs = prover.finalize_inputs();
+            assert!(fill_cs(&mut prover_cs, quantity, n).is_ok());
 
             let proof = prover_cs.prove()?;
 
-            (proof, commitments)
+            (proof, com)
         };
 
         // Verifier makes a `ConstraintSystem` instance representing a merge gadget
         let mut verifier_transcript = Transcript::new(b"RangeProofTest");
-        let (mut verifier_cs, variables) =
-            VerifierCS::new(&bp_gens, &pc_gens, &mut verifier_transcript, commitments);
+        let mut verifier = Verifier::new(&bp_gens, &pc_gens, &mut verifier_transcript);
 
-        let result = fill_cs(
-            &mut verifier_cs,
-            AllocatedQuantity {
-                variable: variables[0],
-                assignment: None,
-            },
-            n,
-        );
+        let var = verifier.commit(commitment);
+        let quantity = AllocatedQuantity {
+            variable: var,
+            assignment: None,
+        };
 
-        assert!(result.is_ok());
+        let mut verifier_cs = verifier.finalize_inputs();
 
+        // Verifier adds constraints to the constraint system
+        assert!(fill_cs(&mut verifier_cs, quantity, n).is_ok());
+
+        // Verifier verifies proof
         Ok(verifier_cs.verify(&proof)?)
     }
 }

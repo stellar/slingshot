@@ -32,11 +32,12 @@ fn create_spacesuit_proof_helper(n: usize, c: &mut Criterion) {
             })
             .collect();
         let mut outputs = inputs.clone();
-        rand::thread_rng().shuffle(&mut outputs);
+        let mut rng: rand::ThreadRng = rand::thread_rng();
+        rng.shuffle(&mut outputs);
 
         // Make spacesuit proof
         b.iter(|| {
-            prove(&bp_gens, &pc_gens, &inputs, &outputs).unwrap();
+            prove(&bp_gens, &pc_gens, &inputs, &outputs, &mut rng).unwrap();
         })
     });
 }
@@ -80,10 +81,34 @@ fn verify_spacesuit_proof_helper(n: usize, c: &mut Criterion) {
             .collect();
         let mut outputs = inputs.clone();
         rand::thread_rng().shuffle(&mut outputs);
-        let (proof, commitments) = prove(&bp_gens, &pc_gens, &inputs, &outputs).unwrap();
+        let mut rng: rand::ThreadRng = rand::thread_rng();
+        let (
+            proof,
+            tx_in_com,
+            merge_in_com,
+            merge_mid_com,
+            merge_out_com,
+            split_in_com,
+            split_mid_com,
+            split_out_com,
+            tx_out_com,
+        ) = prove(&bp_gens, &pc_gens, &inputs, &outputs, &mut rng).unwrap();
 
         b.iter(|| {
-            verify(&bp_gens, &pc_gens, &proof, commitments.clone(), n, n).unwrap();
+            verify(
+                &bp_gens,
+                &pc_gens,
+                &proof,
+                &tx_in_com,
+                &merge_in_com,
+                &merge_mid_com,
+                &merge_out_com,
+                &split_in_com,
+                &split_mid_com,
+                &split_out_com,
+                &tx_out_com,
+            )
+            .unwrap();
         })
     });
 }

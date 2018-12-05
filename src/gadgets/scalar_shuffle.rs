@@ -37,8 +37,9 @@ pub fn fill_cs<CS: ConstraintSystem>(cs: &mut CS, x: &[Variable], y: &[Variable]
 #[cfg(test)]
 mod tests {
     use super::*;
-    use bulletproofs::r1cs::{ProverCS, VerifierCS};
+    use bulletproofs::r1cs::{Prover, Verifier};
     use bulletproofs::{BulletproofGens, PedersenGens};
+    use curve25519_dalek::ristretto::CompressedRistretto;
     use curve25519_dalek::scalar::Scalar;
     use merlin::Transcript;
 
@@ -88,58 +89,42 @@ mod tests {
         }
 
         // Prover's scope
-        let (proof, commitments) = {
+        let (proof, input_com, output_com) = {
             // Prover makes a `ConstraintSystem` instance representing a shuffle gadget
-            // Make v vector
-            let mut v = vec![];
-            for i in 0..k {
-                v.push(Scalar::from(input[i]));
-            }
-            for i in 0..k {
-                v.push(Scalar::from(output[i]));
-            }
-
-            // Make v_blinding vector using RNG from transcript
             let mut prover_transcript = Transcript::new(b"ShuffleTest");
-            let mut rng = {
-                let mut builder = prover_transcript.build_rng();
+            let mut rng = rand::thread_rng();
 
-                // commit the secret values
-                for &v_i in &v {
-                    builder = builder.commit_witness_bytes(b"v_i", v_i.as_bytes());
-                }
+            let mut prover = Prover::new(&bp_gens, &pc_gens, &mut prover_transcript);
 
-                use rand::thread_rng;
-                builder.finalize(&mut thread_rng())
-            };
-            let v_blinding: Vec<Scalar> = (0..2 * k).map(|_| Scalar::random(&mut rng)).collect();
+            let (input_com, input_vars): (Vec<CompressedRistretto>, Vec<Variable>) = input
+                .iter()
+                .map(|v| prover.commit(Scalar::from(*v), Scalar::random(&mut rng)))
+                .unzip();
+            let (output_com, output_vars): (Vec<CompressedRistretto>, Vec<Variable>) = output
+                .iter()
+                .map(|v| prover.commit(Scalar::from(*v), Scalar::random(&mut rng)))
+                .unzip();
 
-            let (mut prover_cs, variables, commitments) = ProverCS::new(
-                &bp_gens,
-                &pc_gens,
-                &mut prover_transcript,
-                v,
-                v_blinding.clone(),
-            );
+            let mut prover_cs = prover.finalize_inputs();
+            fill_cs(&mut prover_cs, &input_vars, &output_vars);
 
-            // Prover allocates variables and adds constraints to the constraint system
-            let (input_vars, output_vars) = variables.split_at(k);
-            fill_cs(&mut prover_cs, input_vars, output_vars);
             let proof = prover_cs.prove()?;
-
-            (proof, commitments)
+            (proof, input_com, output_com)
         };
 
         // Verifier makes a `ConstraintSystem` instance representing a shuffle gadget
         let mut verifier_transcript = Transcript::new(b"ShuffleTest");
-        let (mut verifier_cs, variables) =
-            VerifierCS::new(&bp_gens, &pc_gens, &mut verifier_transcript, commitments);
+        let mut verifier = Verifier::new(&bp_gens, &pc_gens, &mut verifier_transcript);
 
-        // Verifier allocates variables and adds constraints to the constraint system
-        let (input_vars, output_vars) = variables.split_at(k);
-        fill_cs(&mut verifier_cs, input_vars, output_vars);
+        let input_vars: Vec<Variable> = input_com.iter().map(|com| verifier.commit(*com)).collect();
+        let output_vars: Vec<Variable> =
+            output_com.iter().map(|com| verifier.commit(*com)).collect();
 
-        // Verifier verifies proof
+        let mut verifier_cs = verifier.finalize_inputs();
+
+        // Verifier adds constraints to the constraint system
+        fill_cs(&mut verifier_cs, &input_vars, &output_vars);
+
         Ok(verifier_cs.verify(&proof)?)
     }
 }

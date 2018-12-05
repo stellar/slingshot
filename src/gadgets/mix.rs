@@ -43,12 +43,11 @@ pub fn fill_cs<CS: ConstraintSystem>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use bulletproofs::r1cs::{ProverCS, VerifierCS};
+    use bulletproofs::r1cs::{Prover, Verifier};
     use bulletproofs::{BulletproofGens, PedersenGens};
-    use curve25519_dalek::scalar::Scalar;
     use merlin::Transcript;
 
-    use value::Value;
+    use value::{ProverCommittable, Value, VerifierCommittable};
 
     #[test]
     fn mix_gadget() {
@@ -105,90 +104,35 @@ mod tests {
         };
 
         // Prover's scope
-        let (proof, commitments) = {
+        let (proof, A_com, B_com, C_com, D_com) = {
             // Prover makes a `ConstraintSystem` instance representing a merge gadget
-            // v and v_blinding emptpy because we are only testing low-level variable constraints
-            let values = vec![A, B, C, D];
-            let v: Vec<Scalar> = values.iter().fold(Vec::new(), |mut vec, value| {
-                vec.push(value.q.into());
-                vec.push(value.a);
-                vec.push(value.t);
-                vec
-            });
-            let v_blinding: Vec<Scalar> = (0..v.len())
-                .map(|_| Scalar::random(&mut rand::thread_rng()))
-                .collect();
-
             let mut prover_transcript = Transcript::new(b"MixTest");
-            let (mut prover_cs, variables, commitments) = ProverCS::new(
-                &bp_gens,
-                &pc_gens,
-                &mut prover_transcript,
-                v,
-                v_blinding.clone(),
-            );
+            let mut rng = rand::thread_rng();
 
-            let A = AllocatedValue {
-                q: variables[0],
-                a: variables[1],
-                t: variables[2],
-                assignment: Some(A),
-            };
-            let B = AllocatedValue {
-                q: variables[3],
-                a: variables[4],
-                t: variables[5],
-                assignment: Some(B),
-            };
-            let C = AllocatedValue {
-                q: variables[6],
-                a: variables[7],
-                t: variables[8],
-                assignment: Some(C),
-            };
-            let D = AllocatedValue {
-                q: variables[9],
-                a: variables[10],
-                t: variables[11],
-                assignment: Some(D),
-            };
-            assert!(fill_cs(&mut prover_cs, A, B, C, D).is_ok());
+            let mut prover = Prover::new(&bp_gens, &pc_gens, &mut prover_transcript);
+            let (A_com, A_var) = A.commit(&mut prover, &mut rng);
+            let (B_com, B_var) = B.commit(&mut prover, &mut rng);
+            let (C_com, C_var) = C.commit(&mut prover, &mut rng);
+            let (D_com, D_var) = D.commit(&mut prover, &mut rng);
+
+            let mut prover_cs = prover.finalize_inputs();
+            assert!(fill_cs(&mut prover_cs, A_var, B_var, C_var, D_var).is_ok());
 
             let proof = prover_cs.prove()?;
-
-            (proof, commitments)
+            (proof, A_com, B_com, C_com, D_com)
         };
 
         // Verifier makes a `ConstraintSystem` instance representing a merge gadget
         let mut verifier_transcript = Transcript::new(b"MixTest");
-        let (mut verifier_cs, variables) =
-            VerifierCS::new(&bp_gens, &pc_gens, &mut verifier_transcript, commitments);
+        let mut verifier = Verifier::new(&bp_gens, &pc_gens, &mut verifier_transcript);
 
-        let A = AllocatedValue {
-            q: variables[0],
-            a: variables[1],
-            t: variables[2],
-            assignment: None,
-        };
-        let B = AllocatedValue {
-            q: variables[3],
-            a: variables[4],
-            t: variables[5],
-            assignment: None,
-        };
-        let C = AllocatedValue {
-            q: variables[6],
-            a: variables[7],
-            t: variables[8],
-            assignment: None,
-        };
-        let D = AllocatedValue {
-            q: variables[9],
-            a: variables[10],
-            t: variables[11],
-            assignment: None,
-        };
-        assert!(fill_cs(&mut verifier_cs, A, B, C, D).is_ok());
+        let A_var = A_com.commit(&mut verifier);
+        let B_var = B_com.commit(&mut verifier);
+        let C_var = C_com.commit(&mut verifier);
+        let D_var = D_com.commit(&mut verifier);
+
+        let mut verifier_cs = verifier.finalize_inputs();
+        assert!(fill_cs(&mut verifier_cs, A_var, B_var, C_var, D_var).is_ok());
 
         Ok(verifier_cs.verify(&proof)?)
     }

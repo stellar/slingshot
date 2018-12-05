@@ -1,9 +1,8 @@
+use super::value_shuffle;
 use bulletproofs::r1cs::ConstraintSystem;
 use curve25519_dalek::scalar::Scalar;
-use std::cmp::{max, min};
-
-use super::value_shuffle;
 use error::SpacesuitError;
+use std::cmp::{max, min};
 use value::{AllocatedValue, Value};
 
 /// Enforces that the values in `y` are a valid reordering of the values in `x`,
@@ -48,10 +47,10 @@ pub fn fill_cs<CS: ConstraintSystem>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use bulletproofs::r1cs::{ProverCS, Variable, VerifierCS};
+    use bulletproofs::r1cs::{Prover, Verifier};
     use bulletproofs::{BulletproofGens, PedersenGens};
-    use curve25519_dalek::scalar::Scalar;
     use merlin::Transcript;
+    use value::{ProverCommittable, VerifierCommittable};
 
     #[test]
     fn padded_shuffle() {
@@ -139,86 +138,36 @@ mod tests {
         // Common
         let pc_gens = PedersenGens::default();
         let bp_gens = BulletproofGens::new(128, 1);
-        let m = input.len();
-        let n = output.len();
 
         // Prover's scope
-        let (proof, commitments) = {
-            let mut values = input.clone();
-            values.append(&mut output.clone());
-
-            let v: Vec<Scalar> = values.iter().fold(Vec::new(), |mut vec, value| {
-                vec.push(value.q.into());
-                vec.push(value.a);
-                vec.push(value.t);
-                vec
-            });
-            let v_blinding: Vec<Scalar> = (0..v.len())
-                .map(|_| Scalar::random(&mut rand::thread_rng()))
-                .collect();
-
-            // Make v_blinding vector using RNG from transcript
+        let (proof, input_com, output_com) = {
             let mut prover_transcript = Transcript::new(b"PaddedShuffleTest");
-            let (mut prover_cs, variables, commitments) = ProverCS::new(
-                &bp_gens,
-                &pc_gens,
-                &mut prover_transcript,
-                v.clone(),
-                v_blinding,
-            );
+            let mut rng = rand::thread_rng();
 
-            let (input_vals, output_vals) = organize_values(variables, &Some(values), m, n);
+            let mut prover = Prover::new(&bp_gens, &pc_gens, &mut prover_transcript);
+            let (input_com, input_vars) = input.commit(&mut prover, &mut rng);
+            let (output_com, output_vars) = output.commit(&mut prover, &mut rng);
 
-            fill_cs(&mut prover_cs, input_vals, output_vals)?;
+            let mut prover_cs = prover.finalize_inputs();
+            assert!(fill_cs(&mut prover_cs, input_vars, output_vars).is_ok());
+
             let proof = prover_cs.prove()?;
-
-            (proof, commitments)
+            (proof, input_com, output_com)
         };
 
         // Verifier makes a `ConstraintSystem` instance representing a shuffle gadget
         let mut verifier_transcript = Transcript::new(b"PaddedShuffleTest");
-        let (mut verifier_cs, variables) =
-            VerifierCS::new(&bp_gens, &pc_gens, &mut verifier_transcript, commitments);
+        let mut verifier = Verifier::new(&bp_gens, &pc_gens, &mut verifier_transcript);
 
-        // Verifier allocates variables and adds constraints to the constraint system
-        let (input_vals, output_vals) = organize_values(variables, &None, m, n);
-        assert!(fill_cs(&mut verifier_cs, input_vals, output_vals).is_ok());
+        let input_vars = input_com.commit(&mut verifier);
+        let output_vars = output_com.commit(&mut verifier);
+
+        let mut verifier_cs = verifier.finalize_inputs();
+
+        // Verifier adds constraints to the constraint system
+        assert!(fill_cs(&mut verifier_cs, input_vars, output_vars).is_ok());
 
         // Verifier verifies proof
         Ok(verifier_cs.verify(&proof)?)
-    }
-
-    fn organize_values(
-        variables: Vec<Variable>,
-        assignments: &Option<Vec<Value>>,
-        m: usize,
-        n: usize,
-    ) -> (Vec<AllocatedValue>, Vec<AllocatedValue>) {
-        let mut inputs: Vec<AllocatedValue> = Vec::with_capacity(m);
-        let mut outputs: Vec<AllocatedValue> = Vec::with_capacity(n);
-        for i in 0..m {
-            inputs.push(AllocatedValue {
-                q: variables[i * 3],
-                a: variables[i * 3 + 1],
-                t: variables[i * 3 + 2],
-                assignment: match assignments {
-                    Some(ref a) => Some(a[i]),
-                    None => None,
-                },
-            });
-        }
-        for i in m..(m + n) {
-            outputs.push(AllocatedValue {
-                q: variables[i * 3],
-                a: variables[i * 3 + 1],
-                t: variables[i * 3 + 2],
-                assignment: match assignments {
-                    Some(ref a) => Some(a[i]),
-                    None => None,
-                },
-            });
-        }
-
-        (inputs, outputs)
     }
 }

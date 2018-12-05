@@ -1,8 +1,5 @@
 extern crate spacesuit;
 use spacesuit::{prove, verify, SpacesuitError, Value};
-
-extern crate curve25519_dalek;
-
 extern crate bulletproofs;
 use bulletproofs::{BulletproofGens, PedersenGens};
 
@@ -11,12 +8,34 @@ fn spacesuit_helper(
     inputs: Vec<Value>,
     outputs: Vec<Value>,
 ) -> Result<(), SpacesuitError> {
-    let m = inputs.len();
-    let n = outputs.len();
     let pc_gens = PedersenGens::default();
+    let mut rng = rand::thread_rng();
 
-    let (proof, commitments) = prove(&bp_gens, &pc_gens, &inputs, &outputs)?;
-    verify(&bp_gens, &pc_gens, &proof, commitments, m, n)
+    let (
+        proof,
+        tx_in_com,
+        merge_in_com,
+        merge_mid_com,
+        merge_out_com,
+        split_in_com,
+        split_mid_com,
+        split_out_com,
+        tx_out_com,
+    ) = prove(&bp_gens, &pc_gens, &inputs, &outputs, &mut rng)?;
+
+    verify(
+        &bp_gens,
+        &pc_gens,
+        &proof,
+        &tx_in_com,
+        &merge_in_com,
+        &merge_mid_com,
+        &merge_out_com,
+        &split_in_com,
+        &split_mid_com,
+        &split_out_com,
+        &tx_out_com,
+    )
 }
 
 // Helper functions to make the tests easier to read

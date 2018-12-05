@@ -43,12 +43,10 @@ pub fn fill_cs<CS: ConstraintSystem>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use bulletproofs::r1cs::{ProverCS, Variable, VerifierCS};
+    use bulletproofs::r1cs::{Prover, Verifier};
     use bulletproofs::{BulletproofGens, PedersenGens};
-    use curve25519_dalek::scalar::Scalar;
     use merlin::Transcript;
-
-    use value::Value;
+    use value::{ProverCommittable, Value, VerifierCommittable};
 
     // Helper functions to make the tests easier to read
     fn yuan(q: u64) -> Value {
@@ -179,78 +177,34 @@ mod tests {
         let bp_gens = BulletproofGens::new(128, 1);
 
         // Prover's scope
-        let (proof, commitments) = {
-            let mut values = input.clone();
-            values.append(&mut output.clone());
-
-            let v: Vec<Scalar> = values.iter().fold(Vec::new(), |mut vec, value| {
-                vec.push(value.q.into());
-                vec.push(value.a);
-                vec.push(value.t);
-                vec
-            });
-            let v_blinding: Vec<Scalar> = (0..v.len())
-                .map(|_| Scalar::random(&mut rand::thread_rng()))
-                .collect();
-
+        let (proof, input_com, output_com) = {
             let mut prover_transcript = Transcript::new(b"ValueShuffleTest");
-            let (mut prover_cs, variables, commitments) = ProverCS::new(
-                &bp_gens,
-                &pc_gens,
-                &mut prover_transcript,
-                v,
-                v_blinding.clone(),
-            );
+            let mut rng = rand::thread_rng();
 
-            let (ins, outs) = organize_values(variables, &Some(values));
-            assert!(fill_cs(&mut prover_cs, ins, outs).is_ok());
+            let mut prover = Prover::new(&bp_gens, &pc_gens, &mut prover_transcript);
+            let (input_com, input_vars) = input.commit(&mut prover, &mut rng);
+            let (output_com, output_vars) = output.commit(&mut prover, &mut rng);
+
+            let mut prover_cs = prover.finalize_inputs();
+            assert!(fill_cs(&mut prover_cs, input_vars, output_vars).is_ok());
+
             let proof = prover_cs.prove()?;
-
-            (proof, commitments)
+            (proof, input_com, output_com)
         };
 
         // Verifier makes a `ConstraintSystem` instance representing a shuffle gadget
         let mut verifier_transcript = Transcript::new(b"ValueShuffleTest");
-        let (mut verifier_cs, variables) =
-            VerifierCS::new(&bp_gens, &pc_gens, &mut verifier_transcript, commitments);
+        let mut verifier = Verifier::new(&bp_gens, &pc_gens, &mut verifier_transcript);
 
-        let (ins, outs) = organize_values(variables, &None);
+        let input_vars = input_com.commit(&mut verifier);
+        let output_vars = output_com.commit(&mut verifier);
 
-        assert!(fill_cs(&mut verifier_cs, ins, outs).is_ok());
+        let mut verifier_cs = verifier.finalize_inputs();
+
+        // Verifier adds constraints to the constraint system
+        assert!(fill_cs(&mut verifier_cs, input_vars, output_vars).is_ok());
 
         // Verifier verifies proof
         Ok(verifier_cs.verify(&proof)?)
-    }
-
-    fn organize_values(
-        variables: Vec<Variable>,
-        assignments: &Option<Vec<Value>>,
-    ) -> (Vec<AllocatedValue>, Vec<AllocatedValue>) {
-        let n = (variables.len() / 3) / 2;
-
-        let mut inputs: Vec<AllocatedValue> = Vec::with_capacity(n);
-        let mut outputs: Vec<AllocatedValue> = Vec::with_capacity(n);
-        for i in 0..n {
-            inputs.push(AllocatedValue {
-                q: variables[i * 3],
-                a: variables[i * 3 + 1],
-                t: variables[i * 3 + 2],
-                assignment: match assignments {
-                    Some(ref a) => Some(a[i]),
-                    None => None,
-                },
-            });
-            outputs.push(AllocatedValue {
-                q: variables[(i + n) * 3],
-                a: variables[(i + n) * 3 + 1],
-                t: variables[(i + n) * 3 + 2],
-                assignment: match assignments {
-                    Some(ref a) => Some(a[i]),
-                    None => None,
-                },
-            });
-        }
-
-        (inputs, outputs)
     }
 }
