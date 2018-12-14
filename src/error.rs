@@ -4,7 +4,7 @@ use bulletproofs::r1cs::R1CSError;
 #[derive(Fail, Copy, Clone, Debug, Eq, PartialEq)]
 pub enum SpacesuitError {
     /// Error in the constraint system creation process
-    #[fail(display = "Invalid KShuffle constraint system construction")]
+    #[fail(display = "Invalid constraint system construction")]
     InvalidR1CSConstruction,
     /// Occurs when there are insufficient generators for the proof.
     #[fail(display = "Invalid generators size, too few generators for proof")]
