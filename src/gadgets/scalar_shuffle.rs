@@ -1,8 +1,7 @@
-use bulletproofs::r1cs::RandomizedConstraintSystem;
-use bulletproofs::r1cs::{ConstraintSystem, Variable};
+use bulletproofs::r1cs::{ConstraintSystem, RandomizedConstraintSystem, Variable};
 
 /// Enforces that the output variables `y` are a valid reordering of the inputs variables `x`.
-pub fn gadget<CS: ConstraintSystem>(cs: &mut CS, x: Vec<Variable>, y: Vec<Variable>) {
+pub fn fill_cs<CS: ConstraintSystem>(cs: &mut CS, x: Vec<Variable>, y: Vec<Variable>) {
     assert_eq!(x.len(), y.len());
 
     let k = x.len();
@@ -36,7 +35,8 @@ pub fn gadget<CS: ConstraintSystem>(cs: &mut CS, x: Vec<Variable>, y: Vec<Variab
         cs.constrain(first_mulx_out - first_muly_out);
 
         Ok(())
-    });
+    })
+    .unwrap(); // TODO: handle the error
 }
 
 #[cfg(test)]
@@ -110,7 +110,7 @@ mod tests {
                 .map(|v| prover.commit(Scalar::from(*v), Scalar::random(&mut rng)))
                 .unzip();
 
-            gadget(&mut prover, input_vars, output_vars);
+            fill_cs(&mut prover, input_vars, output_vars);
             let proof = prover.prove()?;
 
             (proof, input_com, output_com)
@@ -125,7 +125,7 @@ mod tests {
             output_com.iter().map(|com| verifier.commit(*com)).collect();
 
         // Verifier adds constraints to the constraint system
-        gadget(&mut verifier, input_vars, output_vars);
+        fill_cs(&mut verifier, input_vars, output_vars);
 
         Ok(verifier.verify(&proof)?)
     }

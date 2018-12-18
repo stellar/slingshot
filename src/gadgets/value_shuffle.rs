@@ -1,5 +1,5 @@
 use super::scalar_shuffle;
-use bulletproofs::r1cs::ConstraintSystem;
+use bulletproofs::r1cs::{ConstraintSystem, RandomizedConstraintSystem};
 use error::SpacesuitError;
 use value::AllocatedValue;
 
@@ -24,20 +24,26 @@ pub fn fill_cs<CS: ConstraintSystem>(
         return Ok(());
     }
 
-    let w = cs.challenge_scalar(b"k-value shuffle challenge");
-    let w2 = w * w;
-    let mut x_scalars = Vec::with_capacity(k);
-    let mut y_scalars = Vec::with_capacity(k);
-    for i in 0..k {
-        let (x_i_var, y_i_var, _) = cs.multiply(
-            x[i].q + x[i].a * w + x[i].t * w2,
-            y[i].q + y[i].a * w + y[i].t * w2,
-        );
+    cs.specify_randomized_constraints(move |cs| {
+        let w = cs.challenge_scalar(b"k-value shuffle challenge");
+        let w2 = w * w;
+        let mut x_scalars = Vec::with_capacity(k);
+        let mut y_scalars = Vec::with_capacity(k);
 
-        x_scalars.push(x_i_var);
-        y_scalars.push(y_i_var);
-    }
-    Ok(scalar_shuffle::fill_cs(cs, &x_scalars, &y_scalars))
+        for i in 0..k {
+            let (x_i_var, y_i_var, _) = cs.multiply(
+                x[i].q + x[i].a * w + x[i].t * w2,
+                y[i].q + y[i].a * w + y[i].t * w2,
+            );
+            x_scalars.push(x_i_var);
+            y_scalars.push(y_i_var);
+        }
+
+        scalar_shuffle::fill_cs(cs, x_scalars, y_scalars);
+        Ok(())
+    })?;
+
+    Ok(())
 }
 
 #[cfg(test)]
@@ -185,10 +191,9 @@ mod tests {
             let (input_com, input_vars) = input.commit(&mut prover, &mut rng);
             let (output_com, output_vars) = output.commit(&mut prover, &mut rng);
 
-            let mut prover_cs = prover.finalize_inputs();
-            assert!(fill_cs(&mut prover_cs, input_vars, output_vars).is_ok());
+            assert!(fill_cs(&mut prover, input_vars, output_vars).is_ok());
 
-            let proof = prover_cs.prove()?;
+            let proof = prover.prove()?;
             (proof, input_com, output_com)
         };
 
@@ -199,12 +204,10 @@ mod tests {
         let input_vars = input_com.commit(&mut verifier);
         let output_vars = output_com.commit(&mut verifier);
 
-        let mut verifier_cs = verifier.finalize_inputs();
-
         // Verifier adds constraints to the constraint system
-        assert!(fill_cs(&mut verifier_cs, input_vars, output_vars).is_ok());
+        assert!(fill_cs(&mut verifier, input_vars, output_vars).is_ok());
 
         // Verifier verifies proof
-        Ok(verifier_cs.verify(&proof)?)
+        Ok(verifier.verify(&proof)?)
     }
 }

@@ -53,10 +53,8 @@ where
     let (split_out_com, split_out_vars) = split_out.commit(&mut prover, rng);
     let (tx_out_com, tx_out_vars) = tx_out.commit(&mut prover, rng);
 
-    let mut prover_cs = prover.finalize_inputs();
-
     transaction::fill_cs(
-        &mut prover_cs,
+        &mut prover,
         tx_in_vars,
         merge_in_vars,
         merge_mid_vars,
@@ -66,7 +64,7 @@ where
         split_out_vars,
         tx_out_vars,
     )?;
-    let proof = SpacesuitProof(prover_cs.prove()?);
+    let proof = SpacesuitProof(prover.prove()?);
 
     Ok((
         proof,
@@ -109,11 +107,9 @@ pub fn verify(
     let split_out_vars = split_out_com.commit(&mut verifier);
     let tx_out_vars = tx_out_com.commit(&mut verifier);
 
-    let mut verifier_cs = verifier.finalize_inputs();
-
     assert!(
         transaction::fill_cs(
-            &mut verifier_cs,
+            &mut verifier,
             tx_in_vars,
             merge_in_vars,
             merge_mid_vars,
@@ -126,7 +122,7 @@ pub fn verify(
         .is_ok()
     );
 
-    Ok(verifier_cs.verify(&proof.0)?)
+    Ok(verifier.verify(&proof.0)?)
 }
 
 /// Given the input and output values for a spacesuit transaction, determine
