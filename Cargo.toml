@@ -4,15 +4,15 @@ version = "0.1.0"
 authors = ["Henry de Valence <hdevalence@hdevalence.ca>", "Cathie Yun <cathieyun@gmail.com>", "Oleg Andreev <oleganza@gmail.com>"]
 
 [dependencies]
-curve25519-dalek = { version = "1.0.0-pre.0", features = ["serde"] }
-merlin = "1.0.0-pre.0"
+curve25519-dalek = { version = "1.0.0-pre.1", features = ["serde"] }
+merlin = "1.0.0-pre.1"
 rand = "0.5.0-pre.2"
 subtle = "2.0.0-pre.0"
 failure = "0.1"
 
 [dependencies.bulletproofs]
 git = "https://github.com/dalek-cryptography/bulletproofs"
-branch = "develop"
+branch = "oleg/two-phase-impl"
 features = ["yoloproofs"]
 
 [dev-dependencies]

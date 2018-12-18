@@ -1,9 +1,8 @@
+use bulletproofs::r1cs::RandomizedConstraintSystem;
 use bulletproofs::r1cs::{ConstraintSystem, Variable};
 
 /// Enforces that the output variables `y` are a valid reordering of the inputs variables `x`.
-pub fn fill_cs<CS: ConstraintSystem>(cs: &mut CS, x: &[Variable], y: &[Variable]) {
-    let z = cs.challenge_scalar(b"k-scalar shuffle challenge");
-
+pub fn gadget<CS: ConstraintSystem>(cs: &mut CS, x: Vec<Variable>, y: Vec<Variable>) {
     assert_eq!(x.len(), y.len());
 
     let k = x.len();
@@ -12,26 +11,32 @@ pub fn fill_cs<CS: ConstraintSystem>(cs: &mut CS, x: &[Variable], y: &[Variable]
         return;
     }
 
-    // Make last x multiplier for i = k-1 and k-2
-    let (_, _, last_mulx_out) = cs.multiply(x[k - 1] - z, x[k - 2] - z);
+    cs.specify_randomized_constraints(move |cs| {
+        let z = cs.challenge_scalar(b"shuffle challenge");
 
-    // Make multipliers for x from i == [0, k-3]
-    let first_mulx_out = (0..k - 2).rev().fold(last_mulx_out, |prev_out, i| {
-        let (_, _, o) = cs.multiply(prev_out.into(), x[i] - z);
-        o
+        // Make last x multiplier for i = k-1 and k-2
+        let (_, _, last_mulx_out) = cs.multiply(x[k - 1] - z, x[k - 2] - z);
+
+        // Make multipliers for x from i == [0, k-3]
+        let first_mulx_out = (0..k - 2).rev().fold(last_mulx_out, |prev_out, i| {
+            let (_, _, o) = cs.multiply(prev_out.into(), x[i] - z);
+            o
+        });
+
+        // Make last y multiplier for i = k-1 and k-2
+        let (_, _, last_muly_out) = cs.multiply(y[k - 1] - z, y[k - 2] - z);
+
+        // Make multipliers for y from i == [0, k-3]
+        let first_muly_out = (0..k - 2).rev().fold(last_muly_out, |prev_out, i| {
+            let (_, _, o) = cs.multiply(prev_out.into(), y[i] - z);
+            o
+        });
+
+        // Constrain last x mul output and last y mul output to be equal
+        cs.constrain(first_mulx_out - first_muly_out);
+
+        Ok(())
     });
-
-    // Make last y multiplier for i = k-1 and k-2
-    let (_, _, last_muly_out) = cs.multiply(y[k - 1] - z, y[k - 2] - z);
-
-    // Make multipliers for y from i == [0, k-3]
-    let first_muly_out = (0..k - 2).rev().fold(last_muly_out, |prev_out, i| {
-        let (_, _, o) = cs.multiply(prev_out.into(), y[i] - z);
-        o
-    });
-
-    // Check equality between last x mul output and last y mul output
-    cs.constrain(first_muly_out - first_mulx_out)
 }
 
 #[cfg(test)]
@@ -105,10 +110,9 @@ mod tests {
                 .map(|v| prover.commit(Scalar::from(*v), Scalar::random(&mut rng)))
                 .unzip();
 
-            let mut prover_cs = prover.finalize_inputs();
-            fill_cs(&mut prover_cs, &input_vars, &output_vars);
+            gadget(&mut prover, input_vars, output_vars);
+            let proof = prover.prove()?;
 
-            let proof = prover_cs.prove()?;
             (proof, input_com, output_com)
         };
 
@@ -120,11 +124,9 @@ mod tests {
         let output_vars: Vec<Variable> =
             output_com.iter().map(|com| verifier.commit(*com)).collect();
 
-        let mut verifier_cs = verifier.finalize_inputs();
-
         // Verifier adds constraints to the constraint system
-        fill_cs(&mut verifier_cs, &input_vars, &output_vars);
+        gadget(&mut verifier, input_vars, output_vars);
 
-        Ok(verifier_cs.verify(&proof)?)
+        Ok(verifier.verify(&proof)?)
     }
 }
