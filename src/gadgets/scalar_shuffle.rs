@@ -35,8 +35,7 @@ pub fn fill_cs<CS: ConstraintSystem>(cs: &mut CS, x: Vec<Variable>, y: Vec<Varia
         cs.constrain(first_mulx_out - first_muly_out);
 
         Ok(())
-    })
-    .unwrap(); // TODO: handle the error
+    });
 }
 
 #[cfg(test)]

@@ -40,8 +40,9 @@ pub fn fill_cs<CS: ConstraintSystem>(
         }
 
         scalar_shuffle::fill_cs(cs, x_scalars, y_scalars);
+
         Ok(())
-    })?;
+    });
 
     Ok(())
 }

@@ -1,7 +1,6 @@
 #![allow(non_snake_case)]
 
 use bulletproofs::r1cs::{ConstraintSystem, RandomizedConstraintSystem};
-use error::SpacesuitError;
 use value::AllocatedValue;
 
 /// Enforces that the outputs are either a merge of the inputs :`D = A + B && C = 0`,
@@ -13,7 +12,7 @@ pub fn fill_cs<CS: ConstraintSystem>(
     B: AllocatedValue,
     C: AllocatedValue,
     D: AllocatedValue,
-) -> Result<(), SpacesuitError> {
+) {
     cs.specify_randomized_constraints(move |cs| {
         let w = cs.challenge_scalar(b"mix challenge");
         let w2 = w * w;
@@ -39,9 +38,7 @@ pub fn fill_cs<CS: ConstraintSystem>(
         cs.constrain(mul_out.into());
 
         Ok(())
-    })?;
-
-    Ok(())
+    });
 }
 
 #[cfg(test)]
@@ -49,6 +46,7 @@ mod tests {
     use super::*;
     use bulletproofs::r1cs::{Prover, Verifier};
     use bulletproofs::{BulletproofGens, PedersenGens};
+    use error::SpacesuitError;
     use merlin::Transcript;
 
     use value::{ProverCommittable, Value, VerifierCommittable};
@@ -119,7 +117,7 @@ mod tests {
             let (C_com, C_var) = C.commit(&mut prover, &mut rng);
             let (D_com, D_var) = D.commit(&mut prover, &mut rng);
 
-            assert!(fill_cs(&mut prover, A_var, B_var, C_var, D_var).is_ok());
+            fill_cs(&mut prover, A_var, B_var, C_var, D_var);
 
             let proof = prover.prove()?;
             (proof, A_com, B_com, C_com, D_com)
@@ -134,7 +132,7 @@ mod tests {
         let C_var = C_com.commit(&mut verifier);
         let D_var = D_com.commit(&mut verifier);
 
-        assert!(fill_cs(&mut verifier, A_var, B_var, C_var, D_var).is_ok());
+        fill_cs(&mut verifier, A_var, B_var, C_var, D_var);
 
         Ok(verifier.verify(&proof)?)
     }

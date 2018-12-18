@@ -44,7 +44,7 @@ pub fn fill_cs<CS: ConstraintSystem>(
         // D = (intermediates||last_output)[i]
         .zip(intermediates.into_iter().chain(once(last_output)))
     {
-        mix::fill_cs(cs, A, B, C, D)?
+        mix::fill_cs(cs, A, B, C, D)
     }
     Ok(())
 }
