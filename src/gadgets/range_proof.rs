@@ -78,10 +78,9 @@ mod tests {
                 variable: var,
                 assignment: Some(v_val),
             };
-            let mut prover_cs = prover.finalize_inputs();
-            assert!(fill_cs(&mut prover_cs, quantity, n).is_ok());
+            assert!(fill_cs(&mut prover, quantity, n).is_ok());
 
-            let proof = prover_cs.prove()?;
+            let proof = prover.prove()?;
 
             (proof, com)
         };
@@ -96,12 +95,10 @@ mod tests {
             assignment: None,
         };
 
-        let mut verifier_cs = verifier.finalize_inputs();
-
         // Verifier adds constraints to the constraint system
-        assert!(fill_cs(&mut verifier_cs, quantity, n).is_ok());
+        assert!(fill_cs(&mut verifier, quantity, n).is_ok());
 
         // Verifier verifies proof
-        Ok(verifier_cs.verify(&proof)?)
+        Ok(verifier.verify(&proof)?)
     }
 }

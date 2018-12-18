@@ -148,10 +148,9 @@ mod tests {
             let (input_com, input_vars) = input.commit(&mut prover, &mut rng);
             let (output_com, output_vars) = output.commit(&mut prover, &mut rng);
 
-            let mut prover_cs = prover.finalize_inputs();
-            assert!(fill_cs(&mut prover_cs, input_vars, output_vars).is_ok());
+            assert!(fill_cs(&mut prover, input_vars, output_vars).is_ok());
 
-            let proof = prover_cs.prove()?;
+            let proof = prover.prove()?;
             (proof, input_com, output_com)
         };
 
@@ -162,12 +161,10 @@ mod tests {
         let input_vars = input_com.commit(&mut verifier);
         let output_vars = output_com.commit(&mut verifier);
 
-        let mut verifier_cs = verifier.finalize_inputs();
-
         // Verifier adds constraints to the constraint system
-        assert!(fill_cs(&mut verifier_cs, input_vars, output_vars).is_ok());
+        assert!(fill_cs(&mut verifier, input_vars, output_vars).is_ok());
 
         // Verifier verifies proof
-        Ok(verifier_cs.verify(&proof)?)
+        Ok(verifier.verify(&proof)?)
     }
 }
