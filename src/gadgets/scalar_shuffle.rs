@@ -1,13 +1,21 @@
-use bulletproofs::r1cs::{ConstraintSystem, RandomizedConstraintSystem, Variable};
+use bulletproofs::r1cs::{ConstraintSystem, R1CSError, RandomizedConstraintSystem, Variable};
 
 /// Enforces that the output variables `y` are a valid reordering of the inputs variables `x`.
-pub fn fill_cs<CS: ConstraintSystem>(cs: &mut CS, x: Vec<Variable>, y: Vec<Variable>) {
-    assert_eq!(x.len(), y.len());
+pub fn fill_cs<CS: ConstraintSystem>(
+    cs: &mut CS,
+    x: Vec<Variable>,
+    y: Vec<Variable>,
+) -> Result<(), R1CSError> {
+    if x.len() != y.len() {
+        return Err(R1CSError::GadgetError {
+            description: "x and y vector lengths do not match in scalar shuffle".to_string(),
+        });
+    }
 
     let k = x.len();
     if k == 1 {
         cs.constrain(y[0] - x[0]);
-        return;
+        return Ok(());
     }
 
     cs.specify_randomized_constraints(move |cs| {
@@ -36,6 +44,8 @@ pub fn fill_cs<CS: ConstraintSystem>(cs: &mut CS, x: Vec<Variable>, y: Vec<Varia
 
         Ok(())
     });
+
+    Ok(())
 }
 
 #[cfg(test)]
@@ -46,8 +56,6 @@ mod tests {
     use curve25519_dalek::ristretto::CompressedRistretto;
     use curve25519_dalek::scalar::Scalar;
     use merlin::Transcript;
-
-    use error::SpacesuitError;
 
     #[test]
     fn scalar_shuffle_gadget() {
@@ -82,15 +90,10 @@ mod tests {
 
     // This test allocates variables for the high-level variables, to check that high-level
     // variable allocation and commitment works.
-    fn scalar_shuffle_helper(input: Vec<u64>, output: Vec<u64>) -> Result<(), SpacesuitError> {
+    fn scalar_shuffle_helper(input: Vec<u64>, output: Vec<u64>) -> Result<(), R1CSError> {
         // Common
         let pc_gens = PedersenGens::default();
         let bp_gens = BulletproofGens::new(128, 1);
-
-        let k = input.len();
-        if k != output.len() {
-            return Err(SpacesuitError::InvalidR1CSConstruction);
-        }
 
         // Prover's scope
         let (proof, input_com, output_com) = {
@@ -109,7 +112,7 @@ mod tests {
                 .map(|v| prover.commit(Scalar::from(*v), Scalar::random(&mut rng)))
                 .unzip();
 
-            fill_cs(&mut prover, input_vars, output_vars);
+            fill_cs(&mut prover, input_vars, output_vars)?;
             let proof = prover.prove()?;
 
             (proof, input_com, output_com)
@@ -124,7 +127,7 @@ mod tests {
             output_com.iter().map(|com| verifier.commit(*com)).collect();
 
         // Verifier adds constraints to the constraint system
-        fill_cs(&mut verifier, input_vars, output_vars);
+        fill_cs(&mut verifier, input_vars, output_vars)?;
 
         Ok(verifier.verify(&proof)?)
     }

@@ -1,7 +1,6 @@
 use super::value_shuffle;
-use bulletproofs::r1cs::ConstraintSystem;
+use bulletproofs::r1cs::{ConstraintSystem, R1CSError};
 use curve25519_dalek::scalar::Scalar;
-use error::SpacesuitError;
 use std::cmp::{max, min};
 use value::{AllocatedValue, Value};
 
@@ -11,7 +10,7 @@ pub fn fill_cs<CS: ConstraintSystem>(
     cs: &mut CS,
     mut x: Vec<AllocatedValue>,
     mut y: Vec<AllocatedValue>,
-) -> Result<(), SpacesuitError> {
+) -> Result<(), R1CSError> {
     let m = x.len();
     let n = y.len();
 
@@ -39,9 +38,7 @@ pub fn fill_cs<CS: ConstraintSystem>(
         x.append(&mut values);
     }
 
-    value_shuffle::fill_cs(cs, x, y)?;
-
-    Ok(())
+    value_shuffle::fill_cs(cs, x, y)
 }
 
 #[cfg(test)]
@@ -134,7 +131,7 @@ mod tests {
         Value::zero()
     }
 
-    fn padded_shuffle_helper(input: Vec<Value>, output: Vec<Value>) -> Result<(), SpacesuitError> {
+    fn padded_shuffle_helper(input: Vec<Value>, output: Vec<Value>) -> Result<(), R1CSError> {
         // Common
         let pc_gens = PedersenGens::default();
         let bp_gens = BulletproofGens::new(128, 1);

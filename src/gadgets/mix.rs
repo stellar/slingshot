@@ -44,9 +44,8 @@ pub fn fill_cs<CS: ConstraintSystem>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use bulletproofs::r1cs::{Prover, Verifier};
+    use bulletproofs::r1cs::{Prover, R1CSError, Verifier};
     use bulletproofs::{BulletproofGens, PedersenGens};
-    use error::SpacesuitError;
     use merlin::Transcript;
 
     use value::{ProverCommittable, Value, VerifierCommittable};
@@ -79,7 +78,7 @@ mod tests {
         B: (u64, u64, u64),
         C: (u64, u64, u64),
         D: (u64, u64, u64),
-    ) -> Result<(), SpacesuitError> {
+    ) -> Result<(), R1CSError> {
         // Common
         let pc_gens = PedersenGens::default();
         let bp_gens = BulletproofGens::new(128, 1);

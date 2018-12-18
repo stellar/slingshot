@@ -1,6 +1,5 @@
 use super::scalar_shuffle;
-use bulletproofs::r1cs::{ConstraintSystem, RandomizedConstraintSystem};
-use error::SpacesuitError;
+use bulletproofs::r1cs::{ConstraintSystem, R1CSError, RandomizedConstraintSystem};
 use value::AllocatedValue;
 
 /// Enforces that the output values `y` are a valid reordering of the inputs values `x`.
@@ -10,9 +9,11 @@ pub fn fill_cs<CS: ConstraintSystem>(
     cs: &mut CS,
     x: Vec<AllocatedValue>,
     y: Vec<AllocatedValue>,
-) -> Result<(), SpacesuitError> {
+) -> Result<(), R1CSError> {
     if x.len() != y.len() {
-        return Err(SpacesuitError::InvalidR1CSConstruction);
+        return Err(R1CSError::GadgetError {
+            description: "x and y vector lengths do not match in value shuffle".to_string(),
+        });
     }
     let k = x.len();
     if k == 1 {
@@ -39,9 +40,7 @@ pub fn fill_cs<CS: ConstraintSystem>(
             y_scalars.push(y_i_var);
         }
 
-        scalar_shuffle::fill_cs(cs, x_scalars, y_scalars);
-
-        Ok(())
+        scalar_shuffle::fill_cs(cs, x_scalars, y_scalars)
     });
 
     Ok(())
@@ -178,7 +177,7 @@ mod tests {
         );
     }
 
-    fn value_shuffle_helper(input: Vec<Value>, output: Vec<Value>) -> Result<(), SpacesuitError> {
+    fn value_shuffle_helper(input: Vec<Value>, output: Vec<Value>) -> Result<(), R1CSError> {
         // Common
         let pc_gens = PedersenGens::default();
         let bp_gens = BulletproofGens::new(128, 1);

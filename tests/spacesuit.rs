@@ -1,13 +1,14 @@
 extern crate spacesuit;
-use spacesuit::{prove, verify, SpacesuitError, Value};
+use spacesuit::{prove, verify, Value};
 extern crate bulletproofs;
+use bulletproofs::r1cs::R1CSError;
 use bulletproofs::{BulletproofGens, PedersenGens};
 
 fn spacesuit_helper(
     bp_gens: &BulletproofGens,
     inputs: Vec<Value>,
     outputs: Vec<Value>,
-) -> Result<(), SpacesuitError> {
+) -> Result<(), R1CSError> {
     let pc_gens = PedersenGens::default();
     let mut rng = rand::thread_rng();
 

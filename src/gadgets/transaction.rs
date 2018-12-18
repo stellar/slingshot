@@ -1,5 +1,4 @@
-use bulletproofs::r1cs::ConstraintSystem;
-use error::SpacesuitError;
+use bulletproofs::r1cs::{ConstraintSystem, R1CSError};
 use gadgets::{merge, padded_shuffle, range_proof, split, value_shuffle};
 use std::cmp::max;
 use value::AllocatedValue;
@@ -17,7 +16,7 @@ pub fn fill_cs<CS: ConstraintSystem>(
     split_mid: Vec<AllocatedValue>,
     split_out: Vec<AllocatedValue>,
     outputs: Vec<AllocatedValue>,
-) -> Result<(), SpacesuitError> {
+) -> Result<(), R1CSError> {
     let m = inputs.len();
     let n = outputs.len();
     let inner_merge_count = max(m, 2) - 2; // max(m - 2, 0)
@@ -29,7 +28,9 @@ pub fn fill_cs<CS: ConstraintSystem>(
         || merge_mid.len() != inner_merge_count
         || split_mid.len() != inner_split_count
     {
-        return Err(SpacesuitError::InvalidR1CSConstruction);
+        return Err(R1CSError::GadgetError {
+            description: "vector lengths do not match in transaction gadget".to_string(),
+        });
     }
 
     // Shuffle 1

@@ -1,6 +1,5 @@
 use super::k_mix;
-use bulletproofs::r1cs::ConstraintSystem;
-use error::SpacesuitError;
+use bulletproofs::r1cs::{ConstraintSystem, R1CSError};
 use value::AllocatedValue;
 
 /// Enforces that the outputs are either a merge of the inputs: `D = A + B && C = 0`,
@@ -11,6 +10,6 @@ pub fn fill_cs<CS: ConstraintSystem>(
     inputs: Vec<AllocatedValue>,
     intermediates: Vec<AllocatedValue>,
     outputs: Vec<AllocatedValue>,
-) -> Result<(), SpacesuitError> {
+) -> Result<(), R1CSError> {
     k_mix::fill_cs(cs, inputs, intermediates, outputs)
 }

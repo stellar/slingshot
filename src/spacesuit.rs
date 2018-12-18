@@ -1,9 +1,8 @@
 #![allow(non_snake_case)]
 
-use bulletproofs::r1cs::{Prover, R1CSProof, Verifier};
+use bulletproofs::r1cs::{Prover, R1CSError, R1CSProof, Verifier};
 use bulletproofs::{BulletproofGens, PedersenGens};
 use curve25519_dalek::scalar::Scalar;
-use error::SpacesuitError;
 use gadgets::transaction;
 use merlin::Transcript;
 use rand::CryptoRng;
@@ -31,7 +30,7 @@ pub fn prove<R: Rng + CryptoRng>(
         Vec<CommittedValue>,
         Vec<CommittedValue>,
     ),
-    SpacesuitError,
+    R1CSError,
 >
 where
     R: rand::RngCore,
@@ -91,7 +90,7 @@ pub fn verify(
     split_mid_com: &Vec<CommittedValue>,
     split_out_com: &Vec<CommittedValue>,
     tx_out_com: &Vec<CommittedValue>,
-) -> Result<(), SpacesuitError> {
+) -> Result<(), R1CSError> {
     // TBD: check the correctness of the size of the commitments
 
     // Verifier makes a `ConstraintSystem` instance representing a merge gadget
@@ -150,7 +149,7 @@ fn compute_committed_values(
         Vec<Value>,
         Vec<Value>,
     ),
-    SpacesuitError,
+    R1CSError,
 > {
     // Inputs, intermediates, and outputs of merge gadget
     let merge_in = shuffle_helper(inputs);
@@ -205,7 +204,7 @@ fn shuffle_helper(shuffle_in: &Vec<Value>) -> Vec<Value> {
 // Takes in split_out, returns split_mid and split_in
 // Runs in constant time - runtime does not reveal anything about input values
 // except for how many there are (which is public knowledge).
-fn split_helper(split_out: &Vec<Value>) -> Result<(Vec<Value>, Vec<Value>), SpacesuitError> {
+fn split_helper(split_out: &Vec<Value>) -> Result<(Vec<Value>, Vec<Value>), R1CSError> {
     let mut split_out_rev = split_out.clone();
     split_out_rev.reverse();
     let (mut split_mid, mut split_in) = merge_helper(&split_out_rev)?;
@@ -218,7 +217,7 @@ fn split_helper(split_out: &Vec<Value>) -> Result<(Vec<Value>, Vec<Value>), Spac
 // Takes in merge_in, returns merge_mid and merge_out
 // Runs in constant time - runtime does not reveal anything about input values
 // except for how many there are (which is public knowledge).
-fn merge_helper(merge_in: &Vec<Value>) -> Result<(Vec<Value>, Vec<Value>), SpacesuitError> {
+fn merge_helper(merge_in: &Vec<Value>) -> Result<(Vec<Value>, Vec<Value>), R1CSError> {
     if merge_in.len() < 2 {
         return Ok((vec![], merge_in.clone()));
     }
@@ -255,7 +254,12 @@ fn merge_helper(merge_in: &Vec<Value>) -> Result<(Vec<Value>, Vec<Value>), Space
     // Move the last merge_mid to be the last merge_out, to match the protocol definition
     match merge_mid.pop() {
         Some(val) => merge_out.push(val),
-        None => return Err(SpacesuitError::InvalidR1CSConstruction),
+        None => {
+            return Err(R1CSError::GadgetError {
+                description: "Last merge_mid was not popped successfully in merge_helper"
+                    .to_string(),
+            })
+        }
     }
 
     Ok((merge_mid, merge_out))

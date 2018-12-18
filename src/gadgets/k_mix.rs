@@ -1,8 +1,7 @@
 #![allow(non_snake_case)]
 
 use super::mix;
-use bulletproofs::r1cs::ConstraintSystem;
-use error::SpacesuitError;
+use bulletproofs::r1cs::{ConstraintSystem, R1CSError};
 use std::iter::once;
 use value::AllocatedValue;
 
@@ -14,7 +13,7 @@ pub fn fill_cs<CS: ConstraintSystem>(
     inputs: Vec<AllocatedValue>,
     intermediates: Vec<AllocatedValue>,
     outputs: Vec<AllocatedValue>,
-) -> Result<(), SpacesuitError> {
+) -> Result<(), R1CSError> {
     // If there is only one input and output, just constrain the input
     // and output to be equal to each other.
     if inputs.len() == 1 && outputs.len() == 1 {
@@ -27,7 +26,9 @@ pub fn fill_cs<CS: ConstraintSystem>(
     }
 
     if inputs.len() != outputs.len() || intermediates.len() != (inputs.len() - 2) {
-        return Err(SpacesuitError::InvalidR1CSConstruction);
+        return Err(R1CSError::GadgetError {
+            description: "input, output, and intermediate length error in k_mix".to_string(),
+        });
     }
 
     let first_input = inputs[0].clone();
@@ -201,15 +202,10 @@ mod tests {
         inputs: Vec<Value>,
         intermediates: Vec<Value>,
         outputs: Vec<Value>,
-    ) -> Result<(), SpacesuitError> {
+    ) -> Result<(), R1CSError> {
         // Common
         let pc_gens = PedersenGens::default();
         let bp_gens = BulletproofGens::new(128, 1);
-        let k = inputs.len();
-        let inter_count = intermediates.len();
-        if k != outputs.len() || inter_count != max(k as isize - 2, 0) as usize {
-            return Err(SpacesuitError::InvalidR1CSConstruction);
-        }
 
         // Prover's scope
         let (proof, input_com, inter_com, output_com) = {
