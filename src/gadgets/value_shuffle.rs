@@ -1,6 +1,6 @@
 use super::scalar_shuffle;
 use bulletproofs::r1cs::{ConstraintSystem, R1CSError, RandomizedConstraintSystem};
-use value::{AllocatedValue, Value};
+use value::AllocatedValue;
 
 /// Enforces that the output values `y` are a valid reordering of the inputs values `x`.
 /// The inputs and outputs are all of the `AllocatedValue` type, which contains the fields
@@ -8,15 +8,16 @@ use value::{AllocatedValue, Value};
 pub fn fill_cs<CS: ConstraintSystem>(
     cs: &mut CS,
     x: Vec<AllocatedValue>,
-) -> Result<Vec<AllocatedValue>, R1CSError> {
+    y: Vec<AllocatedValue>,
+) -> Result<(), R1CSError> {
     let k = x.len();
     if k == 1 {
         let x = x[0];
-        let y = x.reallocate(cs)?;
+        let y = y[0];
         cs.constrain(y.q - x.q);
         cs.constrain(y.a - x.a);
         cs.constrain(y.t - x.t);
-        return Ok(vec![y]);
+        return Ok(());
     }
 
     cs.specify_randomized_constraints(move |cs| {
@@ -38,36 +39,6 @@ pub fn fill_cs<CS: ConstraintSystem>(
     });
 
     Ok(())
-}
-
-// Takes in shuffle_in, returns shuffle_out which is a reordering of the tuples in shuffle_in
-// where they have been grouped according to flavor.
-fn shuffle_helper(shuffle_in: &Vec<Value>) -> Vec<Value> {
-    let k = shuffle_in.len();
-    let mut shuffle_out = shuffle_in.clone();
-
-    for i in 0..k - 1 {
-        // This tuple has the flavor that we are trying to group by in this loop
-        let flav = shuffle_out[i];
-        // This tuple may be swapped with another tuple (`comp`)
-        // if `comp` and `flav` have the same flavor.
-        let mut swap = shuffle_out[i + 1];
-
-        for j in i + 2..k {
-            // Iterate over all following tuples, assigning them to `comp`.
-            let mut comp = shuffle_out[j];
-            // Check if `flav` and `comp` have the same flavor.
-            let same_flavor = flav.a.ct_eq(&comp.a) & flav.t.ct_eq(&comp.t);
-
-            // If same_flavor, then swap `comp` and `swap`. Else, keep the same.
-            u64::conditional_swap(&mut swap.q, &mut comp.q, same_flavor);
-            Scalar::conditional_swap(&mut swap.a, &mut comp.a, same_flavor);
-            Scalar::conditional_swap(&mut swap.t, &mut comp.t, same_flavor);
-            shuffle_out[i + 1] = swap;
-            shuffle_out[j] = comp;
-        }
-    }
-    shuffle_out
 }
 
 #[cfg(test)]
