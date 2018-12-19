@@ -6,11 +6,10 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/chain/txvm/errors"
+	"github.com/chain/txvm/protocol"
+	"github.com/chain/txvm/protocol/bc"
 	"github.com/golang/protobuf/proto"
-
-	"i10r.io/errors"
-	"i10r.io/protocol"
-	"i10r.io/protocol/bc"
 )
 
 func submit(w http.ResponseWriter, req *http.Request) {
