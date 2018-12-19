@@ -5,10 +5,10 @@ import (
 	"database/sql"
 	"time"
 
-	"i10r.io/errors"
-	"i10r.io/protocol"
-	"i10r.io/protocol/bc"
-	"i10r.io/protocol/state"
+	"github.com/chain/txvm/errors"
+	"github.com/chain/txvm/protocol"
+	"github.com/chain/txvm/protocol/bc"
+	"github.com/chain/txvm/protocol/state"
 )
 
 type blockStore struct {

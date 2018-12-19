@@ -3,8 +3,8 @@ package main
 import (
 	"database/sql"
 
-	"i10r.io/protocol/bc"
-	"i10r.io/worizon"
+	"github.com/chain/txvm/protocol/bc"
+	"github.com/interstellar/starlight/worizon"
 )
 
 func watchPegs(db *sql.DB) func(worizon.Transaction) error {

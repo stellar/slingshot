@@ -11,11 +11,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/chain/txvm/protocol"
+	"github.com/chain/txvm/protocol/bc"
+	"github.com/interstellar/starlight/worizon"
 	_ "github.com/mattn/go-sqlite3"
-
-	"i10r.io/protocol"
-	"i10r.io/protocol/bc"
-	"i10r.io/worizon"
 )
 
 var (
