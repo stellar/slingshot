@@ -56,7 +56,6 @@ mod tests {
     use bulletproofs::r1cs::{Prover, Verifier};
     use bulletproofs::{BulletproofGens, PedersenGens};
     use merlin::Transcript;
-    use std::cmp::max;
     use value::{ProverCommittable, Value, VerifierCommittable};
 
     // Helper functions to make the tests easier to read
