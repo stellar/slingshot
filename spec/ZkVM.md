@@ -99,11 +99,11 @@ broad categories: [data types](#data-types) and [linear types](#linear-types).
 
 Data types can be freely created, copied, and destroyed.
 
-* [Scalars](#scalars)
-* [Points](#points)
-* [Strings](#strings)
-* [Variables](#variables)
-* [Constraints](#constraint)
+* [Scalar](#scalar-type)
+* [Point](#point-type)
+* [String](#string-type)
+* [Variable](#variable-type)
+* [Constraint](#constraint-type)
 
 
 ### Linear types
@@ -111,31 +111,31 @@ Data types can be freely created, copied, and destroyed.
 Linear types are subject to special rules as to when and how they may be created
 and destroyed, and may never be copied.
 
-* [Contracts](#contracts)
-* [Signed Values](#signed-values)
-* [Values](#values)
+* [Contract](#contract-type)
+* [Signed Value](#signed-value-type)
+* [Value](#value-type)
 
 
 ### Portable types
 
-The items of the following types can be _ported_ across transactions via [outputs](#outputs):
+The items of the following types can be _ported_ across transactions via [outputs](#output-structure):
 
 * [Plain data types](#data-types):
-    * [Scalars](#scalars)
-    * [Points](#points)
-    * [Strings](#strings)
-* [Values](#values)
+    * [Scalar](#scalar-type)
+    * [Point](#point-type)
+    * [String](#string-type)
+* [Value](#value-type)
 
-The [Signed Value](#signed-values) is not portable because it is not proven to be non-negative.
+The [Signed Value](#signed-value-type) is not portable because it is not proven to be non-negative.
 
-The [Contract](#contracts) is not portable because it must be satisfied within the current transaction
-or [output](#outputs) its contents itself.
+The [Contract](#contract-type) is not portable because it must be satisfied within the current transaction
+or [output](#output-structure) its contents itself.
 
-The [Variable](#variables) and [Constraint](#constraint) types have no meaning outside the VM state
+The [Variable](#variable-type) and [Constraint](#constraint-type) types have no meaning outside the VM state
 and its constraint system and therefore cannot be ported between transactions.
 
 
-### Scalars
+### Scalar type
 
 A _scalar_ is an integer modulo [Ristretto group](https://ristretto.group) order `2^252 + 27742317777372353535851937790883648493`.
 
@@ -143,7 +143,7 @@ Scalars are encoded as 32-byte arrays using little-endian notation.
 Every scalar in the VM is guaranteed to be in a canonical (reduced) form.
 
 
-### Points
+### Point type
 
 A _point_ is an element in the [Ristretto group](https://ristretto.group).
 
@@ -164,14 +164,15 @@ Both base points are orthogonal (the discrete log between them is unknown)
 and used in [commitments](#commitment), 
 [verification keys](#verification-key) and [predicates](#predicate).
 
-### Strings
+
+### String type
 
 A _string_ is a variable-length byte array used to represent signatures, proofs and programs.
 
 Strings cannot be larger than the entire transaction program and cannot be longer than `2^32-1`.
 
 
-### Contracts
+### Contract type
 
 A contract is a [predicate](#predicate) and a [payload](#payload) guarded by that predicate.
 
@@ -185,17 +186,17 @@ recorded in the [transaction log](#transaction-log).
 
 ### Payload
 
-A list of [items](#types) stored in the [contract](#contracts) or [output](#outputs).
+A list of [items](#types) stored in the [contract](#contract-type) or [output](#output-structure).
 
-Payload of a [contract](#contracts) may contain arbitrary [types](#types),
-but in the [output](#outputs) only the [portable types](#portable-types) are allowed.
+Payload of a [contract](#contract-type) may contain arbitrary [types](#types),
+but in the [output](#output-structure) only the [portable types](#portable-types) are allowed.
 
 
 ### Predicate
 
-A _predicate_ is a representation of a condition that unlocks the [contract](#contracts).
+A _predicate_ is a representation of a condition that unlocks the [contract](#contract-type).
 
-Predicate is encoded as a [point](#points) which can itself represent:
+Predicate is encoded as a [point](#point-type) which can itself represent:
 
 * a verification key,
 * a set of verification keys,
@@ -213,7 +214,7 @@ Predicates can be selected from a tree of alternatives via [`left`](#left) and [
 
 ### Verification key
 
-A _verification key_ (aka "public key") is a commitment to a _signing key_ (secret [scalar](#scalars))
+A _verification key_ (aka "public key") is a commitment to a _signing key_ (secret [scalar](#scalar-type))
 using the primary [base point](#base-points).
 
 ```
@@ -249,45 +250,45 @@ See the [instruction set](#instructions) for definition of the immediate data fo
 The part of the [VM state](#vm-state) that implements
 [Bulletprofs Rank-1 Constraint System](https://doc-internal.dalek.rs/develop/bulletproofs/notes/r1cs_proof/index.html).
 
-Constraint system keeps track of [variables](#variables) and [constraints](#constraint).
+Constraint system keeps track of [variables](#variable-type) and [constraints](#constraint-type).
 
-### Variables
+### Variable type
 
 _Variable_ is a linear combination of high-level and low-level variables in the [constraint system](#constraint-system).
 
 Variables can be added and multiplied, producing new variables (see [`zkadd`](#zkadd), [`zkneg`](#zkneg), [`zkmul`](#zkmul), [`scmul`](#scmul) and [`zkrange`](#zkrange) instructions).
 
-Equality of two variables is checked by creating a [constraint](#constraint) using the [`zkeq`](#zkeq) instruction.
+Equality of two variables is checked by creating a [constraint](#constraint-type) using the [`zkeq`](#zkeq) instruction.
 
-Examples of variables: [value quantities](#values) and [time bounds](#time-bounds).
+Examples of variables: [value quantities](#value-type) and [time bounds](#time-bounds).
 
-Cleartext [scalars](#scalars) can be turned into a `Variable` type using the [`const`](#const) instruction.
+Cleartext [scalars](#scalar-type) can be turned into a `Variable` type using the [`const`](#const) instruction.
 
 #### See also
 
-* [Constraint](#constrain)
+* [Constraint](#constraint-type)
 * [Constraint system](#constraint-system)
 
 
-### Constraint
+### Constraint Type
 
 _Constraint_ is a statement in the [constraint system](#constraint-system) that constrains
 a linear combination of variables to zero.
 
-Constraints are created using the [`zkeq`](#zkeq) instruction over two [variables](#variables).
+Constraints are created using the [`zkeq`](#zkeq) instruction over two [variables](#variable-type).
 
 Constraints can be combined using logical [`and`](#and) and [`or`](#or) instructions and added to the constraint
 system using the [verify](#verify) instruction.
 
 #### See also
 
-* [Variable](#variable)
+* [Variable](#variable-type)
 * [Constraint system](#constraint-system)
 
 
 ### Commitment
 
-A _commitment_ is a Pedersen commitment to a secret [scalar](#scalars) represented by a [point](#points):
+A _commitment_ is a Pedersen commitment to a secret [scalar](#scalar-type) represented by a [point](#point-type):
 
 ```
 P = Com(v, f) = v*B + f*B2
@@ -300,7 +301,7 @@ where:
 * `f` is a secret blinding factor (scalar),
 * `B` and `B2` are [base points](#base-points).
 
-Commitments can be used to allocate new [variables](#variables) using the [`var`](#var) instruction.
+Commitments can be used to allocate new [variables](#variable-type) using the [`var`](#var) instruction.
 
 Commitments can be proven to use a pre-determined blinding factor using [`encrypt`](#encrypt) and 
 [`decrypt`](#decrypt) instructions.
@@ -312,15 +313,15 @@ Each transaction is explicitly bound to a range of _minimum_ and _maximum_ time.
 
 Each bound is in _seconds_ since Jan 1st, 1970 (UTC), represented by an unsigned 64-bit integer.
 
-Time bounds are available in the transaction as [variables](#variables) provided by the instructions
+Time bounds are available in the transaction as [variables](#variable-type) provided by the instructions
 [`mintime`](#mintime) and [`maxtime`](#maxtime).
 
 
-### Values
+### Value type
 
 A value is a [linear type](#linear-types) representing a pair of *quantity* and *flavor*.
 
-Both quantity and flavor are represented as [scalars](#scalars).
+Both quantity and flavor are represented as [scalars](#scalar-type).
 Quantity is guaranteed to be in a 64-bit range (`[0..2^64-1]`).
 
 Values are created with [`issue`](#issue) and destroyed with [`retire`](#retire).
@@ -328,29 +329,29 @@ Values are created with [`issue`](#issue) and destroyed with [`retire`](#retire)
 A value can be merged and split together with other values using a [`cloak`](#cloak) instruction.
 Only values having the same flavor can be merged.
 
-Values are secured by “locking them up” inside [contracts](#contracts).
+Values are secured by “locking them up” inside [contracts](#contract-type).
 
 Contracts can also require payments by creating outputs using _borrowed_ values.
-[`borrow`](#borrow) instruction produces two items: a positive value and a negative [signed value](#signed-values),
+[`borrow`](#borrow) instruction produces two items: a positive value and a negative [signed value](#signed-value-type),
 which must be cleared using appropriate combination of positive values.
 
 
-### Signed values
+### Signed value type
 
-A signed value is an extension of the [value](#values) type where
+A signed value is an extension of the [value](#value-type) type where
 quantity is guaranteed to be in a 65-bit range (`[-(2^64-1)..2^64-1]`).
 
-The subtype [Value](#values) is most commonly used because it guarantees the non-negative quantity
-(for instance, [`output`](#output) instruction only permits positive [values](#values)),
+The subtype [Value](#value-type) is most commonly used because it guarantees the non-negative quantity
+(for instance, [`output`](#output) instruction only permits positive [values](#value-type)),
 and the signed value is only used as an output of [`borrow`](#borrow) and as an input to [`cloak`](#cloak).
 
 
 ### Signature
 
-Signature is a Schnorr proof of knowledge of a secret [scalar](#scalars) corresponding
+Signature is a Schnorr proof of knowledge of a secret [scalar](#scalar-type) corresponding
 to a [verification key](#verification-key).
 
-Signature is encoded as a 64-byte [string](#strings).
+Signature is encoded as a 64-byte [string](#string-type).
 
 The signature verification protocol is the following:
 
@@ -391,8 +392,8 @@ TBD: contract snapshot
 
 A proof of satisfiability of a [constraint system](#constraint-system) built during the VM execution.
 
-The proof is represented by a collection of [points](#points) and [scalars](#scalars)
-encoded in a single [string](#strings).
+The proof is represented by a collection of [points](#point-type) and [scalars](#scalar-type)
+encoded in a single [string](#string-type).
 
 The proof is provided to the [`finalize`](#finalize) instruction at which point the transaction is
 fully formed and the proof can be verified.
