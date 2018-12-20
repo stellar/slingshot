@@ -13,6 +13,3 @@ The other protocols that are tightly integrated in the ZkVM:
 * [Ristretto group](https://ristretto.group)
 * [Bulletproofs R1CS](https://doc-internal.dalek.rs/develop/bulletproofs/notes/r1cs_proof/index.html)
 * [Cloak](https://github.com/interstellar/spacesuit/blob/master/spec.md)
-* [Predicate Tree](spec/PredicateTree.md)
-* [Schnorr Proofs](spec/SchnorrProofs.md)
-* [Schnorr Aggregation](spec/SchnorrAggregation.md)

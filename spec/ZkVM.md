@@ -16,6 +16,7 @@ ZkVM defines a procedural representation for blockchain transactions and the rul
 * [VM operation](#vm-operation)
     * [VM state](#vm-state)
     * [Encoding](#encoding)
+* [Instructions](#instructions)
 * [Discussion](#discussion)
     * [Relation to TxVM](#relation-to-txvm)
     * [Compatibility](#compatibility)
@@ -150,6 +151,19 @@ Points are encoded as 32-byte arrays in _compressed Ristretto form_.
 Each point in the VM is guaranteed to be a valid Ristretto point.
 
 
+### Base points
+
+ZkVM defines two base points: primary `B` and secondary `B2`.
+
+```
+B  = e2f2ae0a6abc4e71a884a961c500515f58e30b6aa582dd8db6a65945e08d2d76
+B2 = hash-to-ristretto255(SHA3-512(B))
+```
+
+Both base points are orthogonal (the discrete log between them is unknown)
+and used in [commitments](#commitment), 
+[verification keys](#verification-key) and [predicates](#predicate).
+
 ### Strings
 
 A _string_ is a variable-length byte array used to represent signatures, proofs and programs.
@@ -179,7 +193,7 @@ but in the [output](#outputs) only the [portable types](#portable-types) are all
 
 ### Predicate
 
-Predicate is a representation of a condition that unlocks the [contract](#contracts).
+A _predicate_ is a representation of a condition that unlocks the [contract](#contracts).
 
 Predicate is encoded as a [point](#points) which can itself represent:
 
@@ -196,7 +210,21 @@ Each contract can be opened by either:
 
 Predicates can be selected from a tree of alternatives via [left](#left) and [right](#right) instructions.
 
-See the [Predicate Tree](PredicateTree.md) specification for additional details.
+
+### Verification key
+
+A _verification key_ (aka "public key") is a commitment to a _signing key_ (secret [scalar](#scalars))
+using the primary [base point](#base-points).
+
+```
+P = x * B
+```
+
+where:
+
+* `P` is a verification key,
+* `x` is a signing key (secret scalar),
+* `B` is the [primary base point](#base-points).
 
 
 ### Program
@@ -211,22 +239,177 @@ The **immediate data** is 0 or more bytes, depending on the opcode.
 See the [instruction set](#instructions) for definition of the immediate data for each opcode.
 
 
-### Variables
+### Constraint system
 
-_Variable_ is a linear combination of high-level and low-level variables in the
+The part of the [VM state](#vm-state) that implements
 [Bulletprofs Rank-1 Constraint System](https://doc-internal.dalek.rs/develop/bulletproofs/notes/r1cs_proof/index.html).
 
-Variables can be added and multiplied, producing new variables (see [zkadd](#zkadd), [zkneg](#zkneg), [zkmul](#zkmul), [scmul](#scmul) and [zkrange](#zkrange) instructions).
+Constraint system keeps track of [variables](#variables) and [constraints](#constraints).
 
-Variables can used to form [constraints](#constraints) using the equality instruction [zkeq](#zkeq).
+### Variables
 
-Examples of variables: [value quantities](#qty) and [time bounds](#maxtime).
+_Variable_ is a linear combination of high-level and low-level variables in the [constraint system](#constraint-system).
 
-Cleartext [scalars](#scalars) can be turned into a `Variable` type using the [const](#const) instruction.
+Variables can be added and multiplied, producing new variables (see [`zkadd`](#zkadd), [`zkneg`](#zkneg), [`zkmul`](#zkmul), [`scmul`](#scmul) and [`zkrange`](#zkrange) instructions).
+
+Equality of two variables is checked by creating a [constraint](#constraints) using the [`zkeq`](#zkeq) instruction.
+
+Examples of variables: [value quantities](#values) and [time bounds](#time-bounds).
+
+Cleartext [scalars](#scalars) can be turned into a `Variable` type using the [`const`](#const) instruction.
 
 
 ### Constraints
 
+_Constraint_ is a statement in the [constraint system](#constraint-system) that constrains
+a linear combination of variables to zero.
+
+Constraints are created using the [`zkeq`](#zkeq) instruction over two [variables](#variables).
+
+Constraints can be combined using logical [`and`](#and) and [`or`](#or) instructions and added to the constraint
+system using the [verify](#verify) instruction.
+
+
+### Commitment
+
+A _commitment_ is a Pedersen commitment to a secret [scalar](#scalars) represented by a [point](#points):
+
+```
+P = Com(v, f) = v*B + f*B2
+```
+
+where:
+
+* `P` is a point representing commitment,
+* `v` is a secret scalar value being committed to,
+* `f` is a secret blinding factor (scalar),
+* `B` and `B2` are [base points](#base-points).
+
+Commitments can be used to allocate new [variables](#variables) using the [`var`](#var) instruction.
+
+Commitments can be proven to use a pre-determined blinding factor using [`encrypt`](#encrypt) and 
+[`decrypt`](#decrypt) instructions.
+
+
+### Time bounds
+
+Each transaction is explicitly bound to a range of _minimum_ and _maximum_ time.
+
+Each bound is in _seconds_ since Jan 1st, 1970 (UTC), represented by an unsigned 64-bit integer.
+
+Time bounds are available in the transaction as [variables](#variables) provided by the instructions
+[`mintime`](#mintime) and [`maxtime`](#maxtime).
+
+
+### Values
+
+A value is a [linear type](#linear-types) representing a pair of *quantity* and *flavor*.
+
+Both quantity and flavor are represented as [scalars](#scalars).
+Quantity is guaranteed to be in a 64-bit range (`[0..2^64-1]`).
+
+Values are created with [issue](#issue) and destroyed with [retire](#retire).
+
+A value can be merged and split together with other values using a [`cloak`](#cloak) instruction.
+Only values having the same flavor can be merged.
+
+Values are secured by “locking them up” inside [contracts](#contracts).
+
+Contracts can also require payments by creating outputs using _borrowed_ values.
+[`borrow`](#borrow) instruction produces two items: a positive value and a negative [signed value](#signed-values),
+which must be cleared using appropriate combination of positive values.
+
+
+### Signed values
+
+A signed value is an extension of the [value](#values) type where
+quantity is guaranteed to be in a 65-bit range (`[-(2^64-1)..2^64-1]`).
+
+The subtype [Value](#values) is most commonly used because it guarantees the non-negative quantity
+(for instance, [`output`](#output) instruction only permits positive [values](#values)),
+and the signed value is only used as an output of [`borrow`](#borrow) and as an input to [`cloak`](#cloak).
+
+
+### Signature
+
+Signature is a Schnorr proof of knowledge of a secret [scalar](#scalars) corresponding
+to a [verification key](#verification-key).
+
+Signature is encoded as a 64-byte [string](#strings).
+
+The signature verification protocol is the following:
+
+```
+Prover                                  Verifier
+------------------------------------------------
+P := x*B
+                      T("ZkVM.Signature")
+                      T <- ("P", P)
+                      T <- ("M", message)
+r := random   
+R := r*B   
+                      T <- ("R", R)
+                 e <- T
+s := r + e*x
+                                 s*G =?= R + e*P
+```
+
+where:
+
+1. `T` is a [transcript](#transcript),
+2. `P` is a [verification key](#verification-key),
+3. `R` is a commitment to a random nonce `r`,
+4. `e` is a Fiat-Shamir challenge scalar.
+
+
+### Input structure
+
+TBD: serialized contract snapshot + txid
+
+
+### Output structure
+
+TBD: contract snapshot
+
+
+### Constraint system proof
+
+A proof of satisfiability of a [constraint system](#constraint-system) built during the VM execution.
+
+The proof is represented by a collection of [points](#points) and [scalars](#scalars)
+encoded in a single [string](#strings).
+
+The proof is provided to the [`finalize`](#finalize) instruction at which point the transaction is
+fully formed and the proof can be verified.
+
+
+### Transcript
+
+TBD: protocol label, challenge scalar, labeled inputs.
+
+
+### Transaction log
+
+The *transaction log* contains entries that describe the effects of various instructions.
+
+The transaction log is empty at the beginning of a ZkVM program. It is
+append-only. Items are added to it upon execution of any of the
+following instructions:
+
+* [finalize](#finalize)
+* [input](#input)
+* [issue](#issue)
+* [data](#data)
+* [nonce](#nonce)
+* [output](#output)
+* [retire](#retire)
+
+The details of the item added to the log differs for each
+instruction. See the instruction’s description for more information.
+
+The [finalize](#finalize) instruction prohibits further changes to the
+transaction log. Every ZkVM program must execute `finalize` exactly
+once.
 
 
 
@@ -241,6 +424,12 @@ TBD: the header, the stack, program stack, txlog, CS, schnorr ops.
 ### Encoding
 
 TBD: encoding of the txlog items and snapshots
+
+
+
+## Instructions
+
+TBD.
 
 
 
