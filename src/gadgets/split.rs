@@ -12,11 +12,7 @@ use value::AllocatedValue;
 pub fn fill_cs<CS: ConstraintSystem>(
     cs: &mut CS,
     mut inputs: Vec<AllocatedValue>,
-    mut intermediates: Vec<AllocatedValue>,
-    mut outputs: Vec<AllocatedValue>,
-) -> Result<(), R1CSError> {
+) -> Result<(Vec<AllocatedValue>, Vec<AllocatedValue>), R1CSError> {
     inputs.reverse();
-    intermediates.reverse();
-    outputs.reverse();
-    k_mix::fill_cs(cs, outputs, intermediates, inputs)
+    k_mix::fill_cs(cs, inputs)
 }

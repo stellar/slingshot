@@ -55,6 +55,27 @@ impl Value {
             assignment: Some(*self),
         })
     }
+
+    pub fn allocate_empty<CS: ConstraintSystem>(cs: &mut CS) -> Result<AllocatedValue, R1CSError> {
+        let (q_var, _, _) = cs.allocate(|| {
+            Err(R1CSError::GadgetError {
+                description: "Tried to allocate variable q_var from function".to_string(),
+            })
+        })?;
+        let (a_var, t_var, _) = cs.allocate(|| {
+            Err(R1CSError::GadgetError {
+                description: "Tried to allocate variables a_var and t_var from function"
+                    .to_string(),
+            })
+        })?;
+
+        Ok(AllocatedValue {
+            q: q_var,
+            a: a_var,
+            t: t_var,
+            assignment: None,
+        })
+    }
 }
 
 impl AllocatedValue {
@@ -73,26 +94,7 @@ impl AllocatedValue {
     ) -> Result<AllocatedValue, R1CSError> {
         match self.assignment {
             Some(value) => value.allocate(cs),
-            None => {
-                let (q_var, _, _) = cs.allocate(|| {
-                    Err(R1CSError::GadgetError {
-                        description: "Tried to allocate variable q_var from function".to_string(),
-                    })
-                })?;
-                let (a_var, t_var, _) = cs.allocate(|| {
-                    Err(R1CSError::GadgetError {
-                        description: "Tried to allocate variables a_var and t_var from function"
-                            .to_string(),
-                    })
-                })?;
-
-                Ok(AllocatedValue {
-                    q: q_var,
-                    a: a_var,
-                    t: t_var,
-                    assignment: None,
-                })
-            }
+            None => Value::allocate_empty(cs),
         }
     }
 }

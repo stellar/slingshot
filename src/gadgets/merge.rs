@@ -8,8 +8,6 @@ use value::AllocatedValue;
 pub fn fill_cs<CS: ConstraintSystem>(
     cs: &mut CS,
     inputs: Vec<AllocatedValue>,
-    intermediates: Vec<AllocatedValue>,
-    outputs: Vec<AllocatedValue>,
-) -> Result<(), R1CSError> {
-    k_mix::fill_cs(cs, inputs, intermediates, outputs)
+) -> Result<(Vec<AllocatedValue>, Vec<AllocatedValue>), R1CSError> {
+    k_mix::fill_cs(cs, inputs)
 }

@@ -43,9 +43,7 @@ pub fn fill_cs<CS: ConstraintSystem>(
         cs.constrain(first_mulx_out - first_muly_out);
 
         Ok(())
-    });
-
-    Ok(())
+    })
 }
 
 #[cfg(test)]
@@ -58,7 +56,7 @@ mod tests {
     use merlin::Transcript;
 
     #[test]
-    fn scalar_shuffle_gadget() {
+    fn scalar_shuffle() {
         // k=1
         assert!(scalar_shuffle_helper(vec![3], vec![3]).is_ok());
         assert!(scalar_shuffle_helper(vec![6], vec![6]).is_ok());

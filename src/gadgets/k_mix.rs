@@ -33,15 +33,15 @@ pub fn fill_cs<CS: ConstraintSystem>(
     // For each 2-mix, constrain A, B, C, D:
     for (((A, B), C), D) in
         // A = (first_in||mix_mid)[i]
-        once(first_in).chain(mix_mid.clone().into_iter())
+        once(&first_in).chain(mix_mid.iter())
         // B = mix_in[i+1]
-        .zip(mix_in.into_iter().skip(1))
+        .zip(mix_in.iter().skip(1))
         // C = mix_out[i]
-        .zip(mix_out.into_iter())
+        .zip(mix_out.iter())
         // D = (mix_mid||last_out)[i]
-        .zip(mix_mid.into_iter().chain(once(last_out)))
+        .zip(mix_mid.iter().chain(once(&last_out)))
     {
-        mix::fill_cs(cs, A, B, C, D)
+        mix::fill_cs(cs, *A, *B, *C, *D)?
     }
 
     Ok((mix_in, mix_out))
@@ -76,29 +76,30 @@ fn make_intermediate_values<CS: ConstraintSystem>(
     }
 }
 
-// Takes as input a vector of `AllocatedValue`s, returns a vector of `AllocatedValue`s that
-// is a reordering of the inputs where all `AllocatedValues` have been grouped according to flavor.
+// Takes:
+// * a vector of `AllocatedValue`s
+//
+// Returns:
+// * a vector of `AllocatedValue`s that is a reordering of the inputs
+//   where all `AllocatedValues` have been grouped according to flavor
+// * a vector of `Value`s that were used to create the output `AllocatedValue`s
 fn order_by_flavor<CS: ConstraintSystem>(
     inputs: &Vec<Value>,
     cs: &mut CS,
 ) -> Result<(Vec<AllocatedValue>, Vec<Value>), R1CSError> {
-    unimplemented!()
-}
-
-fn shuffle_helper(shuffle_in: &Vec<Value>) -> Vec<Value> {
-    let k = shuffle_in.len();
-    let mut shuffle_out = shuffle_in.clone();
+    let k = inputs.len();
+    let mut outputs = inputs.clone();
 
     for i in 0..k - 1 {
         // This tuple has the flavor that we are trying to group by in this loop
-        let flav = shuffle_out[i];
+        let flav = outputs[i];
         // This tuple may be swapped with another tuple (`comp`)
         // if `comp` and `flav` have the same flavor.
-        let mut swap = shuffle_out[i + 1];
+        let mut swap = outputs[i + 1];
 
         for j in i + 2..k {
             // Iterate over all following tuples, assigning them to `comp`.
-            let mut comp = shuffle_out[j];
+            let mut comp = outputs[j];
             // Check if `flav` and `comp` have the same flavor.
             let same_flavor = flav.a.ct_eq(&comp.a) & flav.t.ct_eq(&comp.t);
 
@@ -106,34 +107,41 @@ fn shuffle_helper(shuffle_in: &Vec<Value>) -> Vec<Value> {
             u64::conditional_swap(&mut swap.q, &mut comp.q, same_flavor);
             Scalar::conditional_swap(&mut swap.a, &mut comp.a, same_flavor);
             Scalar::conditional_swap(&mut swap.t, &mut comp.t, same_flavor);
-            shuffle_out[i + 1] = swap;
-            shuffle_out[j] = comp;
+            outputs[i + 1] = swap;
+            outputs[j] = comp;
         }
     }
-    shuffle_out
+
+    let allocated_outputs = outputs
+        .iter()
+        .map(|value| value.allocate(cs))
+        .collect::<Result<Vec<AllocatedValue>, _>>()?;
+
+    Ok((allocated_outputs, outputs))
 }
 
 // Takes:
-// * a vector of `AllocatedValue`s that represents the input values in a k-mix
+// * a vector of `Value`s that are grouped according to flavor
 //
 // Returns:
-// * a vector of `AllocatedValue`s that represents the intermediate values in a k-mix
-// * a vector of `AllocatedValue`s that represents the outputs values of a k-mix
+// * a vector of the `AllocatedValue`s that are both outputs and inputs to 2-mix gadgets,
+//   where `Value`s of the same flavor are combined and `Value`s of different flavors
+//   are moved without modification. (See `mix.rs` for more information on 2-mix gadgets.)
+// * a vector of the `AllocatedValue`s that are only outputs of 2-mix gadgets.
 fn combine_by_flavor<CS: ConstraintSystem>(
-    inputs: &Vec<Value>,
-    cs: &mut CS,
+    _inputs: &Vec<Value>,
+    _cs: &mut CS,
 ) -> Result<(Vec<AllocatedValue>, Vec<AllocatedValue>), R1CSError> {
     unimplemented!();
 }
 
-/*
 #[cfg(test)]
 mod tests {
     use super::*;
-    use bulletproofs::r1cs::{Prover, Verifier};
+    use bulletproofs::r1cs::Prover;
     use bulletproofs::{BulletproofGens, PedersenGens};
     use merlin::Transcript;
-    use value::{ProverCommittable, Value, VerifierCommittable};
+    use value::Value;
 
     // Helper functions to make the tests easier to read
     fn yuan(q: u64) -> Value {
@@ -154,163 +162,93 @@ mod tests {
         Value::zero()
     }
 
+    // Note: the output vectors for order_by_flavor does not have to be in a particular order,
+    // they just has to be grouped by flavor. Thus, it is possible to make a valid change to
+    // order_by_flavor but break the tests.
     #[test]
-    fn k_mix_gadget() {
-        // k=1
-        // no merge, same asset types
-        assert!(k_mix_helper(vec![peso(6)], vec![], vec![peso(6)]).is_ok());
-        // error when merging different asset types
-        assert!(k_mix_helper(vec![peso(3)], vec![], vec![yuan(3)]).is_err());
-
-        // k=2. More extensive k=2 tests are in the MixGadget tests
-        // no merge, different asset types
-        assert!(k_mix_helper(vec![peso(3), yuan(6)], vec![], vec![peso(3), yuan(6)],).is_ok());
-        // merge, same asset types
-        assert!(k_mix_helper(vec![peso(3), peso(6)], vec![], vec![peso(0), peso(9)],).is_ok());
-        // error when merging different asset types
-        assert!(k_mix_helper(vec![peso(3), yuan(3)], vec![], vec![peso(0), yuan(6)],).is_err());
-
-        // k=3
-        // no merge, same asset types
-        assert!(
-            k_mix_helper(
-                vec![peso(3), peso(6), peso(6)],
-                vec![peso(6)],
-                vec![peso(3), peso(6), peso(6)],
-            )
-            .is_ok()
-        );
-        // no merge, different asset types
-        assert!(
-            k_mix_helper(
-                vec![peso(3), yuan(6), peso(6)],
-                vec![yuan(6)],
-                vec![peso(3), yuan(6), peso(6)],
-            )
-            .is_ok()
-        );
-        // merge first two
-        assert!(
-            k_mix_helper(
-                vec![peso(3), peso(6), yuan(1)],
-                vec![peso(9)],
-                vec![peso(0), peso(9), yuan(1)],
-            )
-            .is_ok()
-        );
-        // merge last two
-        assert!(
-            k_mix_helper(
-                vec![yuan(1), peso(3), peso(6)],
-                vec![peso(3)],
-                vec![yuan(1), peso(0), peso(9)],
-            )
-            .is_ok()
-        );
-        // merge all, same asset types, zero value is different asset type
-        assert!(
-            k_mix_helper(
-                vec![peso(3), peso(6), peso(1)],
-                vec![peso(9)],
-                vec![zero(), zero(), peso(10)],
-            )
-            .is_ok()
-        );
-        // incomplete merge, input sum does not equal output sum
-        assert!(
-            k_mix_helper(
-                vec![peso(3), peso(6), peso(1)],
-                vec![peso(9)],
-                vec![zero(), zero(), peso(9)],
-            )
-            .is_err()
-        );
-        // error when merging with different asset types
-        assert!(
-            k_mix_helper(
-                vec![peso(3), yuan(6), peso(1)],
-                vec![peso(9)],
-                vec![zero(), zero(), peso(10)],
-            )
-            .is_err()
-        );
-
-        // k=4
-        // merge each of 2 asset types
-        assert!(
-            k_mix_helper(
-                vec![peso(3), peso(6), yuan(1), yuan(2)],
-                vec![peso(9), yuan(1)],
-                vec![zero(), peso(9), zero(), yuan(3)],
-            )
-            .is_ok()
-        );
-        // merge all, same asset
-        assert!(
-            k_mix_helper(
-                vec![peso(3), peso(2), peso(2), peso(1)],
-                vec![peso(5), peso(7)],
-                vec![zero(), zero(), zero(), peso(8)],
-            )
-            .is_ok()
-        );
-        // no merge, different assets
-        assert!(
-            k_mix_helper(
-                vec![peso(3), yuan(2), peso(2), yuan(1)],
-                vec![yuan(2), peso(2)],
-                vec![peso(3), yuan(2), peso(2), yuan(1)],
-            )
-            .is_ok()
-        );
-        // error when merging, output sum not equal to input sum
-        assert!(
-            k_mix_helper(
-                vec![peso(3), peso(2), peso(2), peso(1)],
-                vec![peso(5), peso(7)],
-                vec![zero(), zero(), zero(), peso(9)],
-            )
-            .is_err()
-        );
-    }
-
-    fn k_mix_helper(
-        inputs: Vec<Value>,
-        intermediates: Vec<Value>,
-        outputs: Vec<Value>,
-    ) -> Result<(), R1CSError> {
-        // Common
+    fn order_by_flavor_test() {
         let pc_gens = PedersenGens::default();
         let bp_gens = BulletproofGens::new(128, 1);
+        let mut transcript = Transcript::new(b"OrderByFlavorTest");
+        let mut prover_cs = Prover::new(&bp_gens, &pc_gens, &mut transcript);
 
-        // Prover's scope
-        let (proof, input_com, inter_com, output_com) = {
-            let mut prover_transcript = Transcript::new(b"KMixTest");
-            let mut rng = rand::thread_rng();
-
-            let mut prover = Prover::new(&bp_gens, &pc_gens, &mut prover_transcript);
-            let (input_com, input_vars) = inputs.commit(&mut prover, &mut rng);
-            let (inter_com, inter_vars) = intermediates.commit(&mut prover, &mut rng);
-            let (output_com, output_vars) = outputs.commit(&mut prover, &mut rng);
-
-            fill_cs(&mut prover, input_vars, inter_vars, output_vars)?;
-
-            let proof = prover.prove()?;
-            (proof, input_com, inter_com, output_com)
-        };
-
-        // Verifier makes a `ConstraintSystem` instance representing a merge gadget
-        let mut verifier_transcript = Transcript::new(b"KMixTest");
-        let mut verifier = Verifier::new(&bp_gens, &pc_gens, &mut verifier_transcript);
-
-        let input_vars = input_com.commit(&mut verifier);
-        let inter_vars = inter_com.commit(&mut verifier);
-        let output_vars = output_com.commit(&mut verifier);
-
-        // Verifier adds constraints to the constraint system
-        assert!(fill_cs(&mut verifier, input_vars, inter_vars, output_vars).is_ok());
-
-        Ok(verifier.verify(&proof)?)
+        // k = 1
+        assert_eq!(
+            order_by_flavor(&vec![yuan(1)], &mut prover_cs).unwrap().1,
+            vec![yuan(1)]
+        );
+        // k = 2
+        assert_eq!(
+            order_by_flavor(&vec![yuan(1), yuan(2)], &mut prover_cs)
+                .unwrap()
+                .1,
+            vec![yuan(1), yuan(2)]
+        );
+        assert_eq!(
+            order_by_flavor(&vec![yuan(1), peso(2)], &mut prover_cs)
+                .unwrap()
+                .1,
+            vec![yuan(1), peso(2)]
+        );
+        // k = 3
+        assert_eq!(
+            order_by_flavor(&vec![yuan(1), peso(3), yuan(2)], &mut prover_cs)
+                .unwrap()
+                .1,
+            vec![yuan(1), yuan(2), peso(3)]
+        );
+        // k = 4
+        assert_eq!(
+            order_by_flavor(&vec![yuan(1), peso(3), yuan(2), peso(4)], &mut prover_cs)
+                .unwrap()
+                .1,
+            vec![yuan(1), yuan(2), peso(3), peso(4)]
+        );
+        assert_eq!(
+            order_by_flavor(&vec![yuan(1), peso(3), peso(4), yuan(2)], &mut prover_cs)
+                .unwrap()
+                .1,
+            vec![yuan(1), yuan(2), peso(4), peso(3)]
+        );
+        assert_eq!(
+            order_by_flavor(&vec![yuan(1), peso(3), zero(), yuan(2)], &mut prover_cs)
+                .unwrap()
+                .1,
+            vec![yuan(1), yuan(2), zero(), peso(3)]
+        );
+        assert_eq!(
+            order_by_flavor(&vec![yuan(1), yuan(2), yuan(3), yuan(4)], &mut prover_cs)
+                .unwrap()
+                .1,
+            vec![yuan(1), yuan(4), yuan(3), yuan(2)]
+        );
+        // k = 5
+        assert_eq!(
+            order_by_flavor(
+                &vec![yuan(1), yuan(2), yuan(3), yuan(4), yuan(5)],
+                &mut prover_cs
+            )
+            .unwrap()
+            .1,
+            vec![yuan(1), yuan(5), yuan(4), yuan(3), yuan(2)]
+        );
+        assert_eq!(
+            order_by_flavor(
+                &vec![yuan(1), peso(2), yuan(3), peso(4), yuan(5)],
+                &mut prover_cs
+            )
+            .unwrap()
+            .1,
+            vec![yuan(1), yuan(5), yuan(3), peso(4), peso(2)]
+        );
+        assert_eq!(
+            order_by_flavor(
+                &vec![yuan(1), peso(2), zero(), peso(4), yuan(5)],
+                &mut prover_cs
+            )
+            .unwrap()
+            .1,
+            vec![yuan(1), yuan(5), zero(), peso(4), peso(2)]
+        );
     }
 }
-*/
