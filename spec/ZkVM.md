@@ -103,7 +103,7 @@ Data types can be freely created, copied, and destroyed.
 * [Points](#points)
 * [Strings](#strings)
 * [Variables](#variables)
-* [Constraints](#constraints)
+* [Constraints](#constraint)
 
 
 ### Linear types
@@ -131,7 +131,7 @@ The [Signed Value](#signed-values) is not portable because it is not proven to b
 The [Contract](#contracts) is not portable because it must be satisfied within the current transaction
 or [output](#outputs) its contents itself.
 
-The [Variable](#variables) and [Constraint](#constraints) types have no meaning outside the VM state
+The [Variable](#variables) and [Constraint](#constraint) types have no meaning outside the VM state
 and its constraint system and therefore cannot be ported between transactions.
 
 
@@ -175,11 +175,11 @@ Strings cannot be larger than the entire transaction program and cannot be longe
 
 A contract is a [predicate](#predicate) and a [payload](#payload) guarded by that predicate.
 
-Contracts are created with the [contract](#contract) instruction and
+Contracts are created with the [`contract`](#contract) instruction and
 destroyed by evaluating the predicate, leaving their stored items on the stack.
 
-Contracts can be "frozen" with the [output](#output) instruction that
-[encodes](#encoding) the predicate and the payload into the [output structure](#outputs) which is
+Contracts can be "frozen" with the [`output`](#output) instruction that
+[encodes](#encoding) the predicate and the payload into the [output structure](#output-structure) which is
 recorded in the [transaction log](#transaction-log).
 
 
@@ -204,11 +204,11 @@ Predicate is encoded as a [point](#points) which can itself represent:
 
 Each contract can be opened by either:
 
-1. signing the [transaction ID](#transaction-id) with a key ([signtx](#signtx) instruction),
-2. revealing the embedded program and evaluating it ([call](#call) instruction),
-3. signing a _delegate program_ and evaluating it ([delegate](#delegate) instruction).
+1. signing the [transaction ID](#transaction-id) with a key ([`signtx`](#signtx) instruction),
+2. revealing the embedded program and evaluating it ([`call`](#call) instruction),
+3. signing a _delegate program_ and evaluating it ([`delegate`](#delegate) instruction).
 
-Predicates can be selected from a tree of alternatives via [left](#left) and [right](#right) instructions.
+Predicates can be selected from a tree of alternatives via [`left`](#left) and [`right`](#right) instructions.
 
 
 ### Verification key
@@ -225,6 +225,11 @@ where:
 * `P` is a verification key,
 * `x` is a signing key (secret scalar),
 * `B` is the [primary base point](#base-points).
+
+#### See also
+
+* [Predicate](#predicate)
+* [Signature](#signature)
 
 
 ### Program
@@ -244,7 +249,7 @@ See the [instruction set](#instructions) for definition of the immediate data fo
 The part of the [VM state](#vm-state) that implements
 [Bulletprofs Rank-1 Constraint System](https://doc-internal.dalek.rs/develop/bulletproofs/notes/r1cs_proof/index.html).
 
-Constraint system keeps track of [variables](#variables) and [constraints](#constraints).
+Constraint system keeps track of [variables](#variables) and [constraints](#constraint).
 
 ### Variables
 
@@ -252,14 +257,19 @@ _Variable_ is a linear combination of high-level and low-level variables in the 
 
 Variables can be added and multiplied, producing new variables (see [`zkadd`](#zkadd), [`zkneg`](#zkneg), [`zkmul`](#zkmul), [`scmul`](#scmul) and [`zkrange`](#zkrange) instructions).
 
-Equality of two variables is checked by creating a [constraint](#constraints) using the [`zkeq`](#zkeq) instruction.
+Equality of two variables is checked by creating a [constraint](#constraint) using the [`zkeq`](#zkeq) instruction.
 
 Examples of variables: [value quantities](#values) and [time bounds](#time-bounds).
 
 Cleartext [scalars](#scalars) can be turned into a `Variable` type using the [`const`](#const) instruction.
 
+#### See also
 
-### Constraints
+* [Constraint](#constrain)
+* [Constraint system](#constraint-system)
+
+
+### Constraint
 
 _Constraint_ is a statement in the [constraint system](#constraint-system) that constrains
 a linear combination of variables to zero.
@@ -268,6 +278,11 @@ Constraints are created using the [`zkeq`](#zkeq) instruction over two [variable
 
 Constraints can be combined using logical [`and`](#and) and [`or`](#or) instructions and added to the constraint
 system using the [verify](#verify) instruction.
+
+#### See also
+
+* [Variable](#variable)
+* [Constraint system](#constraint-system)
 
 
 ### Commitment
@@ -308,7 +323,7 @@ A value is a [linear type](#linear-types) representing a pair of *quantity* and 
 Both quantity and flavor are represented as [scalars](#scalars).
 Quantity is guaranteed to be in a 64-bit range (`[0..2^64-1]`).
 
-Values are created with [issue](#issue) and destroyed with [retire](#retire).
+Values are created with [`issue`](#issue) and destroyed with [`retire`](#retire).
 
 A value can be merged and split together with other values using a [`cloak`](#cloak) instruction.
 Only values having the same flavor can be merged.
@@ -340,18 +355,18 @@ Signature is encoded as a 64-byte [string](#strings).
 The signature verification protocol is the following:
 
 ```
-Prover                                  Verifier
-------------------------------------------------
+Prover                                              Verifier
+------------------------------------------------------------
 P := x*B
-                      T("ZkVM.Signature")
-                      T <- ("P", P)
-                      T <- ("M", message)
-r := random   
+                 T("ZkVM.Signature")
+                          T <- ("P", P)
+                          T <- ("M", message)
+r := random       
 R := r*B   
-                      T <- ("R", R)
-                 e <- T
+                          T <- ("R", R)
+                     e <- T
 s := r + e*x
-                                 s*G =?= R + e*P
+                                             s*G =?= R + e*P
 ```
 
 where:
@@ -396,18 +411,18 @@ The transaction log is empty at the beginning of a ZkVM program. It is
 append-only. Items are added to it upon execution of any of the
 following instructions:
 
-* [finalize](#finalize)
-* [input](#input)
-* [issue](#issue)
-* [data](#data)
-* [nonce](#nonce)
-* [output](#output)
-* [retire](#retire)
+* [`finalize`](#finalize)
+* [`input`](#input)
+* [`issue`](#issue)
+* [`data`](#data)
+* [`nonce`](#nonce)
+* [`output`](#output)
+* [`retire`](#retire)
 
 The details of the item added to the log differs for each
 instruction. See the instruction’s description for more information.
 
-The [finalize](#finalize) instruction prohibits further changes to the
+The [`finalize`](#finalize) instruction prohibits further changes to the
 transaction log. Every ZkVM program must execute `finalize` exactly
 once.
 
