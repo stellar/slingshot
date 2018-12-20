@@ -10,6 +10,11 @@ pub fn fill_cs<CS: ConstraintSystem>(
     x: Vec<AllocatedValue>,
     y: Vec<AllocatedValue>,
 ) -> Result<(), R1CSError> {
+    if x.len() != y.len() {
+        return Err(R1CSError::GadgetError {
+            description: "x and y vector lengths do not match in value shuffle".to_string(),
+        });
+    }
     let k = x.len();
     if k == 1 {
         let x = x[0];

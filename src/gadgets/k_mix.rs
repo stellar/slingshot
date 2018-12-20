@@ -2,8 +2,10 @@
 
 use super::mix;
 use bulletproofs::r1cs::{ConstraintSystem, R1CSError};
+use curve25519_dalek::scalar::Scalar;
 use std::iter::once;
-use value::AllocatedValue;
+use subtle::{ConditionallySelectable, ConstantTimeEq};
+use value::{AllocatedValue, Value};
 
 /// Enforces that the outputs are either a merge of the inputs: `D = A + B && C = 0`,
 /// or the outputs are equal to the inputs `C = A && D = B`. See spec for more details.
@@ -11,45 +13,96 @@ use value::AllocatedValue;
 pub fn fill_cs<CS: ConstraintSystem>(
     cs: &mut CS,
     inputs: Vec<AllocatedValue>,
-    intermediates: Vec<AllocatedValue>,
-    outputs: Vec<AllocatedValue>,
-) -> Result<(), R1CSError> {
+) -> Result<(Vec<AllocatedValue>, Vec<AllocatedValue>), R1CSError> {
     // If there is only one input and output, just constrain the input
     // and output to be equal to each other.
-    if inputs.len() == 1 && outputs.len() == 1 {
+    if inputs.len() == 1 {
         let i = inputs[0];
-        let o = outputs[0];
+        let o = i.reallocate(cs)?;
         cs.constrain(i.q - o.q);
         cs.constrain(i.a - o.a);
         cs.constrain(i.t - o.t);
-        return Ok(());
+        return Ok((vec![i], vec![o]));
     }
 
-    if inputs.len() != outputs.len() || intermediates.len() != (inputs.len() - 2) {
-        return Err(R1CSError::GadgetError {
-            description: "input, output, and intermediate length error in k_mix".to_string(),
-        });
-    }
+    let mix_in = order_by_flavor(&inputs, cs);
+    let (mix_mid, mix_out) = mix_helper(&mix_in, cs);
 
-    let first_input = inputs[0].clone();
-    let last_output = outputs[outputs.len() - 1].clone();
+    let first_in = mix_in[0].clone();
+    let last_out = mix_out[mix_out.len() - 1].clone();
 
     // For each 2-mix, constrain A, B, C, D:
     for (((A, B), C), D) in
-        // A = (first_input||intermediates)[i]
-        once(first_input).chain(intermediates.clone().into_iter())
-        // B = inputs[i+1]
-        .zip(inputs.into_iter().skip(1))
-        // C = outputs[i]
-        .zip(outputs.into_iter())
-        // D = (intermediates||last_output)[i]
-        .zip(intermediates.into_iter().chain(once(last_output)))
+        // A = (first_in||mix_mid)[i]
+        once(first_in).chain(mix_mid.clone().into_iter())
+        // B = mix_in[i+1]
+        .zip(mix_in.into_iter().skip(1))
+        // C = mix_out[i]
+        .zip(mix_out.into_iter())
+        // D = (mix_mid||last_out)[i]
+        .zip(mix_mid.into_iter().chain(once(last_out)))
     {
         mix::fill_cs(cs, A, B, C, D)
     }
-    Ok(())
+
+    Ok((mix_in, mix_out))
 }
 
+// Takes as input a vector of `AllocatedValue`s, returns a vector of `AllocatedValue`s that
+// is a reordering of the inputs where all `AllocatedValues` have been grouped according to flavor.
+fn order_by_flavor<CS: ConstraintSystem>(
+    inputs: &Vec<AllocatedValue>,
+    cs: &mut CS,
+) -> Vec<AllocatedValue> {
+    let collected_inputs: Option<Vec<_>> = inputs.iter().map(|input| input.assignment).collect();
+    match collected_inputs {
+        Some(input_values) => unimplemented!(),
+        None => unimplemented!(),
+    }
+}
+
+fn shuffle_helper(shuffle_in: &Vec<Value>) -> Vec<Value> {
+    let k = shuffle_in.len();
+    let mut shuffle_out = shuffle_in.clone();
+
+    for i in 0..k - 1 {
+        // This tuple has the flavor that we are trying to group by in this loop
+        let flav = shuffle_out[i];
+        // This tuple may be swapped with another tuple (`comp`)
+        // if `comp` and `flav` have the same flavor.
+        let mut swap = shuffle_out[i + 1];
+
+        for j in i + 2..k {
+            // Iterate over all following tuples, assigning them to `comp`.
+            let mut comp = shuffle_out[j];
+            // Check if `flav` and `comp` have the same flavor.
+            let same_flavor = flav.a.ct_eq(&comp.a) & flav.t.ct_eq(&comp.t);
+
+            // If same_flavor, then swap `comp` and `swap`. Else, keep the same.
+            u64::conditional_swap(&mut swap.q, &mut comp.q, same_flavor);
+            Scalar::conditional_swap(&mut swap.a, &mut comp.a, same_flavor);
+            Scalar::conditional_swap(&mut swap.t, &mut comp.t, same_flavor);
+            shuffle_out[i + 1] = swap;
+            shuffle_out[j] = comp;
+        }
+    }
+    shuffle_out
+}
+
+// Takes:
+// * a vector of `AllocatedValue`s that represents the input values in a k-mix
+//
+// Returns:
+// * a vector of `AllocatedValue`s that represents the intermediate values in a k-mix
+// * a vector of `AllocatedValue`s that represents the outputs values of a k-mix
+fn mix_helper<CS: ConstraintSystem>(
+    inputs: &Vec<AllocatedValue>,
+    cs: &mut CS,
+) -> (Vec<AllocatedValue>, Vec<AllocatedValue>) {
+    unimplemented!();
+}
+
+/*
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -236,3 +289,4 @@ mod tests {
         Ok(verifier.verify(&proof)?)
     }
 }
+*/
