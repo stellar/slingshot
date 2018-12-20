@@ -25,8 +25,7 @@ pub fn fill_cs<CS: ConstraintSystem>(
         return Ok((vec![i], vec![o]));
     }
 
-    let mix_in = order_by_flavor(&inputs, cs);
-    let (mix_mid, mix_out) = mix_helper(&mix_in, cs);
+    let (mix_in, mix_mid, mix_out) = make_intermediate_values(&inputs, cs)?;
 
     let first_in = mix_in[0].clone();
     let last_out = mix_out[mix_out.len() - 1].clone();
@@ -48,17 +47,42 @@ pub fn fill_cs<CS: ConstraintSystem>(
     Ok((mix_in, mix_out))
 }
 
+// Takes:
+// * a vector of `AllocatedValue`s that represents the input (or output) values for a cloak gadget
+//
+// Returns:
+// * a vector of `AllocatedValue`s for the input values of a k-mix gadget
+// * a vector of `AllocatedValue`s for the middle values of a k-mix gadget
+// * a vector of `AllocatedValue`s for the output values of a k-mix gadget
+fn make_intermediate_values<CS: ConstraintSystem>(
+    inputs: &Vec<AllocatedValue>,
+    cs: &mut CS,
+) -> Result<
+    (
+        Vec<AllocatedValue>,
+        Vec<AllocatedValue>,
+        Vec<AllocatedValue>,
+    ),
+    R1CSError,
+> {
+    let collected_inputs: Option<Vec<_>> = inputs.iter().map(|input| input.assignment).collect();
+    match collected_inputs {
+        Some(input_values) => {
+            let (mix_in, mix_in_values) = order_by_flavor(&input_values, cs)?;
+            let (mix_mid, mix_out) = combine_by_flavor(&mix_in_values, cs)?;
+            Ok((mix_in, mix_mid, mix_out))
+        }
+        None => unimplemented!(),
+    }
+}
+
 // Takes as input a vector of `AllocatedValue`s, returns a vector of `AllocatedValue`s that
 // is a reordering of the inputs where all `AllocatedValues` have been grouped according to flavor.
 fn order_by_flavor<CS: ConstraintSystem>(
-    inputs: &Vec<AllocatedValue>,
+    inputs: &Vec<Value>,
     cs: &mut CS,
-) -> Vec<AllocatedValue> {
-    let collected_inputs: Option<Vec<_>> = inputs.iter().map(|input| input.assignment).collect();
-    match collected_inputs {
-        Some(input_values) => unimplemented!(),
-        None => unimplemented!(),
-    }
+) -> Result<(Vec<AllocatedValue>, Vec<Value>), R1CSError> {
+    unimplemented!()
 }
 
 fn shuffle_helper(shuffle_in: &Vec<Value>) -> Vec<Value> {
@@ -95,10 +119,10 @@ fn shuffle_helper(shuffle_in: &Vec<Value>) -> Vec<Value> {
 // Returns:
 // * a vector of `AllocatedValue`s that represents the intermediate values in a k-mix
 // * a vector of `AllocatedValue`s that represents the outputs values of a k-mix
-fn mix_helper<CS: ConstraintSystem>(
-    inputs: &Vec<AllocatedValue>,
+fn combine_by_flavor<CS: ConstraintSystem>(
+    inputs: &Vec<Value>,
     cs: &mut CS,
-) -> (Vec<AllocatedValue>, Vec<AllocatedValue>) {
+) -> Result<(Vec<AllocatedValue>, Vec<AllocatedValue>), R1CSError> {
     unimplemented!();
 }
 
