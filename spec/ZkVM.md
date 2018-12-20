@@ -136,9 +136,7 @@ and its constraint system and therefore cannot be ported between transactions.
 
 ### Scalars
 
-A _scalar_ is an integer modulo [Ristretto group](https://ristretto.group) order `l`.
-
-`l = 2^252 + 27742317777372353535851937790883648493`
+A _scalar_ is an integer modulo [Ristretto group](https://ristretto.group) order `2^252 + 27742317777372353535851937790883648493`.
 
 Scalars are encoded as 32-byte arrays using little-endian notation.
 Every scalar in the VM is guaranteed to be in a canonical (reduced) form.
@@ -198,8 +196,37 @@ Each contract can be opened by either:
 
 Predicates can be selected from a tree of alternatives via [left](#left) and [right](#right) instructions.
 
+See the [Predicate Tree](PredicateTree.md) specification for additional details.
+
 
 ### Program
+
+A program is a string containing a sequence of ZkVM [instructions](#instructions).
+Each instruction is an **opcode** optionally followed by **immediate data**.
+
+The **opcode** is a one-byte unsigned integer.
+
+The **immediate data** is 0 or more bytes, depending on the opcode.
+
+See the [instruction set](#instructions) for definition of the immediate data for each opcode.
+
+
+### Variables
+
+_Variable_ is a linear combination of high-level and low-level variables in the
+[Bulletprofs Rank-1 Constraint System](https://doc-internal.dalek.rs/develop/bulletproofs/notes/r1cs_proof/index.html).
+
+Variables can be added and multiplied, producing new variables (see [zkadd](#zkadd), [zkneg](#zkneg), [zkmul](#zkmul), [scmul](#scmul) and [zkrange](#zkrange) instructions).
+
+Variables can used to form [constraints](#constraints) using the equality instruction [zkeq](#zkeq).
+
+Examples of variables: [value quantities](#qty) and [time bounds](#maxtime).
+
+Cleartext [scalars](#scalars) can be turned into a `Variable` type using the [const](#const) instruction.
+
+
+### Constraints
+
 
 
 
@@ -208,7 +235,7 @@ Predicates can be selected from a tree of alternatives via [left](#left) and [ri
 
 ### VM state
 
-TBD:
+TBD: the header, the stack, program stack, txlog, CS, schnorr ops.
 
 
 ### Encoding
