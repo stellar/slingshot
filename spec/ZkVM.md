@@ -527,22 +527,19 @@ Extensions:
 
 ## Instructions
 
-[Data instructions](#data-instructions)  | Stack diagram                | Effects
+Instructions               | Stack diagram                              | Effects
 ---------------------------|--------------------------------------------|----------------------------------
+[**Data**](#data-instructions)  |                                       |
 [`scalar:x`](#scalar)      |                 ø → _scalar_               | 
 [`point:x`](#point)        |                 ø → _point_                | 
 [`string:n:x`](#string)    |                 ø → _string_               | 
-
-[Scalar instructions](#scalar-instructions)  | Stack diagram            | Effects
----------------------------|--------------------------------------------|----------------------------------
+[**Scalars**](#scalar-instructions)  |                                  | 
 [`add`](#add)              |             _a b_ → _a+b mod l_            | 
 [`neg`](#neg)              |               _a_ → _l–a_                  | 
 [`mul`](#mul)              |             _a b_ → _a·b mod l_            | 
 [`eq`](#eq)                |             _a b_ → ø                      | Fails if _a_ ≠ _b_.
 [`range:n`](#range)        |               _a_ → _a_                    | Fails if _a_ is not in range [0..2^64-1]
-
-[CS instructions](#constraint-system-instructions)  | Stack diagram     | Effects
----------------------------|--------------------------------------------|----------------------------------
+[**Constraints**](#constraint-system-instructions)  |                   | 
 [`var`](#var)              |           _point_ → _var_                  | Adds an external variable to [CS](#constraint-system)
 [`const`](#var)            |          _scalar_ → _var_                  | 
 [`mintime`](#mintime)      |                 ø → _var_                  |
@@ -558,9 +555,7 @@ Extensions:
 [`verify`](#verify)        |      _constraint_ → ø                      | Modifies [CS](#constraint-system) 
 [`encrypt`](#encrypt)      |     _X F V proof_ → _V_                    | Modifies [point operations](#point-operations)
 [`decrypt`](#decrypt)      |        _scalar V_ → _V_                    | Modifies [point operations](#point-operations)
-
-[Value instructions](#value-instructions)  | Stack diagram              | Effects
----------------------------|--------------------------------------------|----------------------------------
+[**Values**](#value-instructions)  |                                    |
 [`issue`](#issue)          | _qtycommitment predicate_ → _contract_     | Modifies [CS](#constraint-system), [tx log](#transaction-log)
 [`borrow`](#borrow)        | _qtycommitment flvrcommitment_ → _+V –V_   | Modifies [CS](#constraint-system)
 [`retire`](#retire)        | _value_ → ø                                | Modifies [CS](#constraint-system), [tx log](#transaction-log)
@@ -569,9 +564,7 @@ Extensions:
 [`cloak:m:n`](#cloak)      | _signedvalues commitments???_ → _values_   | Modifies [CS](#constraint-system)
 [`import`](#import)        | _???_ → _value_                            | Modifies [CS](#constraint-system), [tx log](#transaction-log)
 [`export`](#export)        | _value ???_ → ø                            | Modifies [CS](#constraint-system), [tx log](#transaction-log)
-
-[Contract instructions](#contract-instructions)  | Stack diagram        | Effects
----------------------------|--------------------------------------------|----------------------------------
+[**Contracts**](#contract-instructions)  |                              |
 [`inputs:n`](#inputs)      | _snapshots... predicates..._ → _contracts_ | Modifies [CS](#constraint-system), [tx log](#transaction-log)
 [`output:n`](#output)      | _items... predicatecommitment_ → ø         | Modifies [tx log](#transaction-log)
 [`contract:n`](#contract)  | _items... predicate_ → _contract_          | 
@@ -582,9 +575,7 @@ Extensions:
 [`left`](#left)            |       _contract A B_ → _contract’_         | Modifies [point operations](#point-operations)
 [`right`](#right)          |       _contract A B_ → _contract’_         | Modifies [point operations](#point-operations)
 [`delegate`](#delegate)    |  _contract prog sig_ → _results..._        | Modifies [point operations](#point-operations)
-
-[Stack instructions](#stack-instructions)  | Stack diagram              | Effects
----------------------------|--------------------------------------------|----------------------------------
+[**Stack**](#stack-instructions)  |                                     | 
 [`dup`](#dup)              |               _x_ → _x x_                  |
 [`drop`](#drop)            |               _x_ → ø                      |
 [`peek:n`](#peek)          |     _x[n] … x[0]_ → _x[n] ... x[0] x[n]_   |
