@@ -15,7 +15,6 @@ ZkVM defines a procedural representation for blockchain transactions and the rul
     * [Portable types](#portable-types)
 * [VM operation](#vm-operation)
     * [VM state](#vm-state)
-    * [Encoding](#encoding)
 * [Instructions](#instructions)
 * [Discussion](#discussion)
     * [Relation to TxVM](#relation-to-txvm)
@@ -44,23 +43,21 @@ ZkVM is the entirely new design that inherits most important insights from the T
 
 ### Concepts
 
-The transaction program, together with a version number and time bounds,
-is called the [transaction witness](#transaction-witness). It contains
-all data and logic required to produce a unique
-[transaction ID](#transaction-id). It also contains any necessary
-proofs (such as signatures) that do not contribute to the transaction ID.
+A transaction is represented by a [transaction witness](#transaction-witness) that
+contains a [program](#program) that runs in the context of a stack-based virtual machine,
+producing the [transaction ID](#transaction-id) if none of the checks failed.
 
-A [witness program](#witness-program) runs in the context of a
-stack-based virtual machine. When the virtual machine executes the program,
-it creates and manipulates data of various types:
+When the virtual machine executes a program, it creates and manipulates data of various types:
 [data types](#data-types) (e.g. [scalars](#scalar-type) and [points](#point-type))
 and special [linear types](#linear-types) that include [values](#value-type) and
 [contracts](#contract-type).
 
-A _value_ is a specific amount of a specific asset that can be merged or split, issued or retired,
-but not otherwise created or destroyed.
+A _value_ is a specific quantity of a specific flavor that can be
+merged or split, issued or retired, but not otherwise created or destroyed.
 
-A _contract_ encapsulates a predicate (a public key or a program), plus its runtime state, and once created must be executed to completion or persisted in the global state for later execution.
+A _contract_ encapsulates a predicate (a public key or a program),
+plus its runtime state, and once created must be executed to completion
+or persisted in the global state for later execution.
 
 Some ZkVM instructions (such as storing a contract for later
 execution) propose alterations to the global blockchain state. These
@@ -179,8 +176,8 @@ A contract is a [predicate](#predicate) and a [payload](#payload) guarded by tha
 Contracts are created with the [`contract`](#contract) instruction and
 destroyed by evaluating the predicate, leaving their stored items on the stack.
 
-Contracts can be "frozen" with the [`output`](#output) instruction that
-[encodes](#encoding) the predicate and the payload into the [output structure](#output-structure) which is
+Contracts can be "frozen" with the [`output`](#output) instruction that places the predicate
+and the payload into the [output structure](#output-structure) which is
 recorded in the [transaction log](#transaction-log).
 
 
@@ -392,16 +389,24 @@ TBD: contract snapshot
 
 A proof of satisfiability of a [constraint system](#constraint-system) built during the VM execution.
 
-The proof is represented by a collection of [points](#point-type) and [scalars](#scalar-type)
-encoded in a single [string](#string-type).
-
-The proof is provided to the [`finalize`](#finalize) instruction at which point the transaction is
-fully formed and the proof can be verified.
+The proof is provided to the VM at the beggining of execution and verified when the VM is finished.
 
 
 ### Transcript
 
 TBD: protocol label, challenge scalar, labeled inputs.
+
+
+### Transaction witness
+
+Transaction witness is a structure that contains all data and logic
+required to produce a unique [transaction ID](#transaction-id):
+
+* Version (uint64)
+* [Time bounds](#time-bounds) (pair of uint64)
+* [Program](#program) (variable-length string)
+* [Transaction signature](#signature) (64 bytes)
+* [Constraint system proof](#constraint-system-proof) (variable-length array of points and scalars)
 
 
 ### Transaction log
@@ -412,21 +417,28 @@ The transaction log is empty at the beginning of a ZkVM program. It is
 append-only. Items are added to it upon execution of any of the
 following instructions:
 
-* [`finalize`](#finalize)
 * [`input`](#input)
 * [`issue`](#issue)
 * [`data`](#data)
 * [`nonce`](#nonce)
 * [`output`](#output)
 * [`retire`](#retire)
+* [`import`](#import)
+* [`export`](#export)
 
 The details of the item added to the log differs for each
 instruction. See the instruction’s description for more information.
 
-The [`finalize`](#finalize) instruction prohibits further changes to the
-transaction log. Every ZkVM program must execute `finalize` exactly
-once.
 
+### Transaction ID
+
+TBD: merkle hash of all the items
+
+
+
+### Point operation
+
+TBD: points and scalars from `left`, `right`, `call`, `decrypt`, `encrypt` verification operations.
 
 
 
@@ -434,18 +446,111 @@ once.
 
 ### VM state
 
-TBD: the header, the stack, program stack, txlog, CS, schnorr ops.
+The ZkVM state consists of the static attributes and the state machine attributes.
+
+* [Transaction witness](#transaction-witness):
+    * `version`
+    * `mintime` and `maxtime`
+    * `program`
+    * `tx_signature`
+    * `cs_proof`
+* Extension flag (boolean)
+* Uniqueness flag (boolean)
+* Data stack (array of [items](#types))
+* Program stack (array of [programs](#program) with their offsets)
+* Current [program](#program) with its offset
+* [Transaction log](#transaction-log) (array of logged items)
+* Transaction signature verification keys (array of [points](#point-type))
+* Deferred [point operations](#point-operation)
+* [Constraint system](#constraint-system)
 
 
-### Encoding
+### VM execution
 
-TBD: encoding of the txlog items and snapshots
+The VM is initialized with the following state:
+
+1. A [transaction witness](#transaction-witness) as provided by the user.
+2. Extension flag set to `true` or `false` according to the [transaction versioning](#versioning) rules for the witness version.
+3. Uniqueness flag is set to `false`.
+4. Data stack is empty.
+5. Program stack is empty.
+6. Current program set to the transaction witness program; with zero offset.
+7. Transaction log is empty.
+8. 
+
+Then, the VM [runs](#running-programs) the current program till completion.
+
+Execution fails if:
+1. the data stack is empty, or
+2. the uniqueness flag is set to `false`.
+
+If execution did not fail, a [transaction id](#transaction-id)  is computed.
+
+After execution, the resulting transaction log is further
+validated against the blockchain state, as discussed above. That step,
+called _application_, is described in
+[the blockchain specification](Blockchain.md#apply-transaction-log).
+
+
+
+### Versioning
+
+1. Each transaction has a version number. Each
+   [block](Blockchain.md#block-header) also has a version number.
+2. Block version numbers must be monotonically non-decreasing: each
+   block must have a version number equal to or greater than the
+   version of the block before it.
+3. The **current block version** is 1. The **current transaction
+   version** is 1.
+
+Extensions:
+
+1. If the block version is equal to the **current block version**, no
+   transaction in the block may have a version higher than the
+   **current transaction version**.
+2. If a transaction’s version is higher than the **current transaction
+   version**, the ZkVM `extension` flag is set to `true`. Otherwise,
+   the `extension` flag is set to `false`.
+
 
 
 
 ## Instructions
 
-TBD.
+Instruction                | Stack diagram                    | Effects
+---------------------------|----------------------------------|----------------------------------
+[`scalar:x`](#scalar)      |               ø → _scalar_       | 
+[`point:x`](#point)        |               ø → _point_        | 
+[`string:n:x`](#string)    |               ø → _string_       | 
+[`var`](#var)              |         _point_ → _var_          | Adds an external variable to [CS](#constraint-system)
+[`const`](#var)            |        _scalar_ → _var_          | 
+[`add`](#add)              |           _a b_ → _a+b mod l_    | 
+[`neg`](#neg)              |             _a_ → _l–a_          | 
+[`mul`](#mul)              |           _a b_ → _a·b mod l_    | 
+[`eq`](#eq)                |           _a b_ → ø              | Fails if _a_ ≠ _b_.
+[`range:n`](#range)        |             _a_ → _a_            | Fails if _a_ is not in range [0..2^64-1]
+[`zkadd`](#zkadd)          |     _var1 var2_ → _var3_         |
+[`zkneg`](#zkneg)          | var1              → var2         |                                                   
+[`zkmul`](#zkmul)          | var1 var2         → var3         |                                                        
+[`scmul`](#scmul)          | var1 x            → var2         |                                                     
+[`zkeq`](#zkeq)            | var1 var2         → constraint   |                                                            
+[`zkrange:n`](#zkrange)    | var               → var          |                                                       
+[`and`](#and)              | constr1 constr2   → constr3      |                                                             
+[`or`](#or)                | constr1 constr2   → constr3      |                                                           
+[`verify`](#verify)        | constraint        → ø            |                                                        
+[`encrypt`](#encrypt)      | X F V proof       → V            |                                                            
+[`decrypt`](#decrypt)      | V scalar          → scalar       |                                                              
+[`dup`](#dup)              | x → x x                          |
+[`drop`](#drop)            | x → ø                            |
+[`peek:n`](#peek)          | x[n] … x[0] → x[n] … x[0] x[n]   |
+[`roll:n`](#roll)          | x[n] … x[0] → x[n-1] … x[0] x[n] |
+[`bury:n`](#bury)          | x[n] … x[0] → x[0] x[n] … x[1]   |
+
+
+
+
+
+
 
 
 
