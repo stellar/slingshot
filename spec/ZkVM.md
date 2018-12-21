@@ -222,8 +222,8 @@ P = x * B
 
 where:
 
-* `P` is a verification key,
-* `x` is a signing key (secret scalar),
+* `P` is the verification key,
+* `x` is the secret signing key (secret scalar),
 * `B` is the [primary base point](#base-points).
 
 
@@ -514,7 +514,7 @@ Extensions:
 
 ## Instructions
 
-Instructions               | Stack diagram                              | Effects
+Instruction                | Stack diagram                              | Effects
 ---------------------------|--------------------------------------------|----------------------------------
 [**Data**](#data-instructions)  |                                       |
 [`scalar:x`](#scalar)      |                 ø → _scalar_               | 
