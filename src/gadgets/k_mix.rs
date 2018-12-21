@@ -26,7 +26,16 @@ pub fn fill_cs<CS: ConstraintSystem>(
     }
 
     let (mix_in, mix_mid, mix_out) = make_intermediate_values(&inputs, cs)?;
+    call_mix_gadget(cs, &mix_in, &mix_mid, &mix_out)?;
+    Ok((mix_in, mix_out))
+}
 
+fn call_mix_gadget<CS: ConstraintSystem>(
+    cs: &mut CS,
+    mix_in: &Vec<AllocatedValue>,
+    mix_mid: &Vec<AllocatedValue>,
+    mix_out: &Vec<AllocatedValue>,
+) -> Result<(), R1CSError> {
     let first_in = mix_in[0].clone();
     let last_out = mix_out[mix_out.len() - 1].clone();
 
@@ -44,7 +53,7 @@ pub fn fill_cs<CS: ConstraintSystem>(
         mix::fill_cs(cs, *A, *B, *C, *D)?
     }
 
-    Ok((mix_in, mix_out))
+    Ok(())
 }
 
 // Takes:
@@ -138,10 +147,10 @@ fn combine_by_flavor<CS: ConstraintSystem>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use bulletproofs::r1cs::Prover;
+    use bulletproofs::r1cs::{Prover, Verifier};
     use bulletproofs::{BulletproofGens, PedersenGens};
     use merlin::Transcript;
-    use value::Value;
+    use value::{ProverCommittable, Value, VerifierCommittable};
 
     // Helper functions to make the tests easier to read
     fn yuan(q: u64) -> Value {
@@ -250,5 +259,158 @@ mod tests {
             .1,
             vec![yuan(1), yuan(5), zero(), peso(4), peso(2)]
         );
+    }
+
+    #[test]
+    fn k_mix() {
+        // k=2. More extensive k=2 tests are in the MixGadget tests
+        // no merge, different asset types
+        assert!(k_mix_helper(vec![peso(3), yuan(6)], vec![], vec![peso(3), yuan(6)],).is_ok());
+        // merge, same asset types
+        assert!(k_mix_helper(vec![peso(3), peso(6)], vec![], vec![peso(0), peso(9)],).is_ok());
+        // error when merging different asset types
+        assert!(k_mix_helper(vec![peso(3), yuan(3)], vec![], vec![peso(0), yuan(6)],).is_err());
+
+        // k=3
+        // no merge, same asset types
+        assert!(
+            k_mix_helper(
+                vec![peso(3), peso(6), peso(6)],
+                vec![peso(6)],
+                vec![peso(3), peso(6), peso(6)],
+            )
+            .is_ok()
+        );
+        // no merge, different asset types
+        assert!(
+            k_mix_helper(
+                vec![peso(3), yuan(6), peso(6)],
+                vec![yuan(6)],
+                vec![peso(3), yuan(6), peso(6)],
+            )
+            .is_ok()
+        );
+        // merge first two
+        assert!(
+            k_mix_helper(
+                vec![peso(3), peso(6), yuan(1)],
+                vec![peso(9)],
+                vec![peso(0), peso(9), yuan(1)],
+            )
+            .is_ok()
+        );
+        // merge last two
+        assert!(
+            k_mix_helper(
+                vec![yuan(1), peso(3), peso(6)],
+                vec![peso(3)],
+                vec![yuan(1), peso(0), peso(9)],
+            )
+            .is_ok()
+        );
+        // merge all, same asset types, zero value is different asset type
+        assert!(
+            k_mix_helper(
+                vec![peso(3), peso(6), peso(1)],
+                vec![peso(9)],
+                vec![zero(), zero(), peso(10)],
+            )
+            .is_ok()
+        );
+        // incomplete merge, input sum does not equal output sum
+        assert!(
+            k_mix_helper(
+                vec![peso(3), peso(6), peso(1)],
+                vec![peso(9)],
+                vec![zero(), zero(), peso(9)],
+            )
+            .is_err()
+        );
+        // error when merging with different asset types
+        assert!(
+            k_mix_helper(
+                vec![peso(3), yuan(6), peso(1)],
+                vec![peso(9)],
+                vec![zero(), zero(), peso(10)],
+            )
+            .is_err()
+        );
+
+        // k=4
+        // merge each of 2 asset types
+        assert!(
+            k_mix_helper(
+                vec![peso(3), peso(6), yuan(1), yuan(2)],
+                vec![peso(9), yuan(1)],
+                vec![zero(), peso(9), zero(), yuan(3)],
+            )
+            .is_ok()
+        );
+        // merge all, same asset
+        assert!(
+            k_mix_helper(
+                vec![peso(3), peso(2), peso(2), peso(1)],
+                vec![peso(5), peso(7)],
+                vec![zero(), zero(), zero(), peso(8)],
+            )
+            .is_ok()
+        );
+        // no merge, different assets
+        assert!(
+            k_mix_helper(
+                vec![peso(3), yuan(2), peso(2), yuan(1)],
+                vec![yuan(2), peso(2)],
+                vec![peso(3), yuan(2), peso(2), yuan(1)],
+            )
+            .is_ok()
+        );
+        // error when merging, output sum not equal to input sum
+        assert!(
+            k_mix_helper(
+                vec![peso(3), peso(2), peso(2), peso(1)],
+                vec![peso(5), peso(7)],
+                vec![zero(), zero(), zero(), peso(9)],
+            )
+            .is_err()
+        );
+    }
+
+    fn k_mix_helper(
+        inputs: Vec<Value>,
+        mid: Vec<Value>,
+        outputs: Vec<Value>,
+    ) -> Result<(), R1CSError> {
+        // Common
+        let pc_gens = PedersenGens::default();
+        let bp_gens = BulletproofGens::new(128, 1);
+
+        // Prover's scope
+        let (proof, input_com, mid_com, output_com) = {
+            let mut prover_transcript = Transcript::new(b"KMixTest");
+            let mut rng = rand::thread_rng();
+
+            let mut prover = Prover::new(&bp_gens, &pc_gens, &mut prover_transcript);
+            let (input_com, input_vars) = inputs.commit(&mut prover, &mut rng);
+            let (mid_com, mid_vars) = mid.commit(&mut prover, &mut rng);
+            let (output_com, output_vars) = outputs.commit(&mut prover, &mut rng);
+
+            call_mix_gadget(&mut prover, &input_vars, &mid_vars, &output_vars)?;
+
+            let proof = prover.prove()?;
+            (proof, input_com, mid_com, output_com)
+        };
+
+        // Verifier makes a `ConstraintSystem` instance representing a merge gadget
+        let mut verifier_transcript = Transcript::new(b"KMixTest");
+        let mut verifier = Verifier::new(&bp_gens, &pc_gens, &mut verifier_transcript);
+
+        let input_vars = input_com.commit(&mut verifier);
+        let mid_vars = mid_com.commit(&mut verifier);
+        let output_vars = output_com.commit(&mut verifier);
+
+        // Verifier adds constraints to the constraint system
+        assert!(call_mix_gadget(&mut verifier, &input_vars, &mid_vars, &output_vars).is_ok());
+
+        Ok(verifier.verify(&proof)?)
     }
 }
