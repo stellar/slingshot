@@ -138,10 +138,57 @@ fn order_by_flavor<CS: ConstraintSystem>(
 //   are moved without modification. (See `mix.rs` for more information on 2-mix gadgets.)
 // * a vector of the `AllocatedValue`s that are only outputs of 2-mix gadgets.
 fn combine_by_flavor<CS: ConstraintSystem>(
-    _inputs: &Vec<Value>,
-    _cs: &mut CS,
+    inputs: &Vec<Value>,
+    cs: &mut CS,
 ) -> Result<(Vec<AllocatedValue>, Vec<AllocatedValue>), R1CSError> {
-    unimplemented!();
+    let mut mid = Vec::with_capacity(inputs.len() - 1);
+    let mut outputs = Vec::with_capacity(inputs.len());
+
+    let mut A = inputs[0];
+    for B in inputs.into_iter().skip(1) {
+        // Check if A and B have the same flavors
+        let same_flavor = A.a.ct_eq(&B.a) & A.t.ct_eq(&B.t);
+
+        // If same_flavor, merge: C.0, C.1, C.2 = 0.
+        // Else, move: C = A.
+        let mut C = A.clone();
+        C.q.conditional_assign(&0u64, same_flavor);
+        C.a.conditional_assign(&Scalar::zero(), same_flavor);
+        C.t.conditional_assign(&Scalar::zero(), same_flavor);
+        outputs.push(C);
+
+        // If same_flavor, merge: D.0 = A.0 + B.0, D.1 = A.1, D.2 = A.2.
+        // Else, move: D = B.
+        let mut D = B.clone();
+        D.q.conditional_assign(&(A.q + B.q), same_flavor);
+        D.a.conditional_assign(&A.a, same_flavor);
+        D.t.conditional_assign(&A.t, same_flavor);
+        mid.push(D);
+
+        A = D;
+    }
+
+    // Move the last mid to be the last output, to match the protocol definition
+    match mid.pop() {
+        Some(val) => outputs.push(val),
+        None => {
+            return Err(R1CSError::GadgetError {
+                description: "Last merge_mid was not popped successfully in combine_by_flavor"
+                    .to_string(),
+            })
+        }
+    }
+
+    let allocated_mid = mid
+        .iter()
+        .map(|value| value.allocate(cs))
+        .collect::<Result<Vec<AllocatedValue>, _>>()?;
+    let allocated_outputs = outputs
+        .iter()
+        .map(|value| value.allocate(cs))
+        .collect::<Result<Vec<AllocatedValue>, _>>()?;
+
+    Ok((allocated_mid, allocated_outputs))
 }
 
 #[cfg(test)]
@@ -169,96 +216,6 @@ mod tests {
     }
     fn zero() -> Value {
         Value::zero()
-    }
-
-    // Note: the output vectors for order_by_flavor does not have to be in a particular order,
-    // they just has to be grouped by flavor. Thus, it is possible to make a valid change to
-    // order_by_flavor but break the tests.
-    #[test]
-    fn order_by_flavor_test() {
-        let pc_gens = PedersenGens::default();
-        let bp_gens = BulletproofGens::new(128, 1);
-        let mut transcript = Transcript::new(b"OrderByFlavorTest");
-        let mut prover_cs = Prover::new(&bp_gens, &pc_gens, &mut transcript);
-
-        // k = 1
-        assert_eq!(
-            order_by_flavor(&vec![yuan(1)], &mut prover_cs).unwrap().1,
-            vec![yuan(1)]
-        );
-        // k = 2
-        assert_eq!(
-            order_by_flavor(&vec![yuan(1), yuan(2)], &mut prover_cs)
-                .unwrap()
-                .1,
-            vec![yuan(1), yuan(2)]
-        );
-        assert_eq!(
-            order_by_flavor(&vec![yuan(1), peso(2)], &mut prover_cs)
-                .unwrap()
-                .1,
-            vec![yuan(1), peso(2)]
-        );
-        // k = 3
-        assert_eq!(
-            order_by_flavor(&vec![yuan(1), peso(3), yuan(2)], &mut prover_cs)
-                .unwrap()
-                .1,
-            vec![yuan(1), yuan(2), peso(3)]
-        );
-        // k = 4
-        assert_eq!(
-            order_by_flavor(&vec![yuan(1), peso(3), yuan(2), peso(4)], &mut prover_cs)
-                .unwrap()
-                .1,
-            vec![yuan(1), yuan(2), peso(3), peso(4)]
-        );
-        assert_eq!(
-            order_by_flavor(&vec![yuan(1), peso(3), peso(4), yuan(2)], &mut prover_cs)
-                .unwrap()
-                .1,
-            vec![yuan(1), yuan(2), peso(4), peso(3)]
-        );
-        assert_eq!(
-            order_by_flavor(&vec![yuan(1), peso(3), zero(), yuan(2)], &mut prover_cs)
-                .unwrap()
-                .1,
-            vec![yuan(1), yuan(2), zero(), peso(3)]
-        );
-        assert_eq!(
-            order_by_flavor(&vec![yuan(1), yuan(2), yuan(3), yuan(4)], &mut prover_cs)
-                .unwrap()
-                .1,
-            vec![yuan(1), yuan(4), yuan(3), yuan(2)]
-        );
-        // k = 5
-        assert_eq!(
-            order_by_flavor(
-                &vec![yuan(1), yuan(2), yuan(3), yuan(4), yuan(5)],
-                &mut prover_cs
-            )
-            .unwrap()
-            .1,
-            vec![yuan(1), yuan(5), yuan(4), yuan(3), yuan(2)]
-        );
-        assert_eq!(
-            order_by_flavor(
-                &vec![yuan(1), peso(2), yuan(3), peso(4), yuan(5)],
-                &mut prover_cs
-            )
-            .unwrap()
-            .1,
-            vec![yuan(1), yuan(5), yuan(3), peso(4), peso(2)]
-        );
-        assert_eq!(
-            order_by_flavor(
-                &vec![yuan(1), peso(2), zero(), peso(4), yuan(5)],
-                &mut prover_cs
-            )
-            .unwrap()
-            .1,
-            vec![yuan(1), yuan(5), zero(), peso(4), peso(2)]
-        );
     }
 
     #[test]
@@ -412,5 +369,157 @@ mod tests {
         assert!(call_mix_gadget(&mut verifier, &input_vars, &mid_vars, &output_vars).is_ok());
 
         Ok(verifier.verify(&proof)?)
+    }
+
+    // Note: the output vectors for order_by_flavor does not have to be in a particular order,
+    // they just has to be grouped by flavor. Thus, it is possible to make a valid change to
+    // order_by_flavor but break the tests.
+    #[test]
+    fn order_by_flavor_test() {
+        let pc_gens = PedersenGens::default();
+        let bp_gens = BulletproofGens::new(128, 1);
+        let mut transcript = Transcript::new(b"OrderByFlavorTest");
+        let mut prover_cs = Prover::new(&bp_gens, &pc_gens, &mut transcript);
+
+        // k = 1
+        assert_eq!(
+            order_by_flavor(&vec![yuan(1)], &mut prover_cs).unwrap().1,
+            vec![yuan(1)]
+        );
+        // k = 2
+        assert_eq!(
+            order_by_flavor(&vec![yuan(1), yuan(2)], &mut prover_cs)
+                .unwrap()
+                .1,
+            vec![yuan(1), yuan(2)]
+        );
+        assert_eq!(
+            order_by_flavor(&vec![yuan(1), peso(2)], &mut prover_cs)
+                .unwrap()
+                .1,
+            vec![yuan(1), peso(2)]
+        );
+        // k = 3
+        assert_eq!(
+            order_by_flavor(&vec![yuan(1), peso(3), yuan(2)], &mut prover_cs)
+                .unwrap()
+                .1,
+            vec![yuan(1), yuan(2), peso(3)]
+        );
+        // k = 4
+        assert_eq!(
+            order_by_flavor(&vec![yuan(1), peso(3), yuan(2), peso(4)], &mut prover_cs)
+                .unwrap()
+                .1,
+            vec![yuan(1), yuan(2), peso(3), peso(4)]
+        );
+        assert_eq!(
+            order_by_flavor(&vec![yuan(1), peso(3), peso(4), yuan(2)], &mut prover_cs)
+                .unwrap()
+                .1,
+            vec![yuan(1), yuan(2), peso(4), peso(3)]
+        );
+        assert_eq!(
+            order_by_flavor(&vec![yuan(1), peso(3), zero(), yuan(2)], &mut prover_cs)
+                .unwrap()
+                .1,
+            vec![yuan(1), yuan(2), zero(), peso(3)]
+        );
+        assert_eq!(
+            order_by_flavor(&vec![yuan(1), yuan(2), yuan(3), yuan(4)], &mut prover_cs)
+                .unwrap()
+                .1,
+            vec![yuan(1), yuan(4), yuan(3), yuan(2)]
+        );
+        // k = 5
+        assert_eq!(
+            order_by_flavor(
+                &vec![yuan(1), yuan(2), yuan(3), yuan(4), yuan(5)],
+                &mut prover_cs
+            )
+            .unwrap()
+            .1,
+            vec![yuan(1), yuan(5), yuan(4), yuan(3), yuan(2)]
+        );
+        assert_eq!(
+            order_by_flavor(
+                &vec![yuan(1), peso(2), yuan(3), peso(4), yuan(5)],
+                &mut prover_cs
+            )
+            .unwrap()
+            .1,
+            vec![yuan(1), yuan(5), yuan(3), peso(4), peso(2)]
+        );
+        assert_eq!(
+            order_by_flavor(
+                &vec![yuan(1), peso(2), zero(), peso(4), yuan(5)],
+                &mut prover_cs
+            )
+            .unwrap()
+            .1,
+            vec![yuan(1), yuan(5), zero(), peso(4), peso(2)]
+        );
+    }
+
+    #[test]
+    fn combine_by_flavor_test() {
+        // k = 2
+        assert_eq!(
+            combine_by_flavor_helper(&vec![yuan(1), peso(4)]),
+            (vec![], vec![yuan(1), peso(4)])
+        );
+        assert_eq!(
+            combine_by_flavor_helper(&vec![yuan(1), yuan(3)]),
+            (vec![], vec![zero(), yuan(4)])
+        );
+        // k = 3
+        assert_eq!(
+            combine_by_flavor_helper(&vec![yuan(1), peso(4), zero()]),
+            (vec![peso(4)], vec![yuan(1), peso(4), zero()])
+        );
+        assert_eq!(
+            combine_by_flavor_helper(&vec![yuan(1), yuan(3), peso(2)]),
+            (vec![yuan(4)], vec![zero(), yuan(4), peso(2)])
+        );
+        assert_eq!(
+            combine_by_flavor_helper(&vec![peso(2), yuan(1), yuan(3)]),
+            (vec![yuan(1)], vec![peso(2), zero(), yuan(4)])
+        );
+        // k = 4
+        assert_eq!(
+            combine_by_flavor_helper(&vec![yuan(1), yuan(1), peso(4), peso(4)]),
+            (
+                vec![yuan(2), peso(4)],
+                vec![zero(), yuan(2), zero(), peso(8)]
+            )
+        );
+        assert_eq!(
+            combine_by_flavor_helper(&vec![yuan(1), yuan(2), yuan(3), yuan(4)]),
+            (
+                vec![yuan(3), yuan(6)],
+                vec![zero(), zero(), zero(), yuan(10)]
+            )
+        );
+    }
+
+    fn combine_by_flavor_helper(inputs: &Vec<Value>) -> (Vec<Value>, Vec<Value>) {
+        let pc_gens = PedersenGens::default();
+        let bp_gens = BulletproofGens::new(128, 1);
+        let mut transcript = Transcript::new(b"CombineByFlavorTest");
+        let mut prover_cs = Prover::new(&bp_gens, &pc_gens, &mut transcript);
+
+        let (allocated_mid, allocated_output) = combine_by_flavor(&inputs, &mut prover_cs).unwrap();
+        let mid = allocated_mid
+            .iter()
+            .map(|allocated| allocated.assignment)
+            .collect::<Option<Vec<Value>>>()
+            .expect("should be a value");
+        let output = allocated_output
+            .iter()
+            .map(|allocated| allocated.assignment)
+            .collect::<Option<Vec<Value>>>()
+            .expect("should be a value");
+
+        (mid, output)
     }
 }
