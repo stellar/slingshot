@@ -12,31 +12,9 @@ fn spacesuit_helper(
     let pc_gens = PedersenGens::default();
     let mut rng = rand::thread_rng();
 
-    let (
-        proof,
-        tx_in_com,
-        merge_in_com,
-        merge_mid_com,
-        merge_out_com,
-        split_in_com,
-        split_mid_com,
-        split_out_com,
-        tx_out_com,
-    ) = prove(&bp_gens, &pc_gens, &inputs, &outputs, &mut rng)?;
+    let (proof, in_com, out_com) = prove(&bp_gens, &pc_gens, &inputs, &outputs, &mut rng)?;
 
-    verify(
-        &bp_gens,
-        &pc_gens,
-        &proof,
-        &tx_in_com,
-        &merge_in_com,
-        &merge_mid_com,
-        &merge_out_com,
-        &split_in_com,
-        &split_mid_com,
-        &split_out_com,
-        &tx_out_com,
-    )
+    verify(&bp_gens, &pc_gens, &proof, &in_com, &out_com)
 }
 
 // Helper functions to make the tests easier to read

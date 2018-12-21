@@ -81,7 +81,18 @@ fn make_intermediate_values<CS: ConstraintSystem>(
             let (mix_mid, mix_out) = combine_by_flavor(&mix_in_values, cs)?;
             Ok((mix_in, mix_mid, mix_out))
         }
-        None => unimplemented!(),
+        None => {
+            let mix_in = (0..inputs.len())
+                .map(|_| Value::allocate_empty(cs))
+                .collect::<Result<Vec<_>, _>>()?;
+            let mix_mid = (0..inputs.len() - 2)
+                .map(|_| Value::allocate_empty(cs))
+                .collect::<Result<Vec<_>, _>>()?;
+            let mix_out = (0..inputs.len())
+                .map(|_| Value::allocate_empty(cs))
+                .collect::<Result<Vec<_>, _>>()?;
+            Ok((mix_in, mix_mid, mix_out))
+        }
     }
 }
 
