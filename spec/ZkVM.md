@@ -438,8 +438,12 @@ TBD: merkle hash of all the items
 
 ### Point operation
 
-TBD: points and scalars from `left`, `right`, `call`, `decrypt`, `encrypt` verification operations.
+ZkVM defers operations on [points](#points) till the end of the transaction in order
+to batch them with the verification of [transaction signature](#signature) and
+[constraint system proof](#constraint-system-proof).
 
+TBD: describe the actual format of the storage and how it's converted into a check.
+TBD: instructions: `delegate`, `left`, `right`, `call`, `decrypt`, `encrypt`.
 
 
 ## VM operation
@@ -476,7 +480,9 @@ The VM is initialized with the following state:
 5. Program stack is empty.
 6. Current program set to the transaction witness program; with zero offset.
 7. Transaction log is empty.
-8. 
+8. Array of signature verification keys is empty.
+9. Array of deferred point operations is empty.
+10. Constraint system is empty.
 
 Then, the VM [runs](#running-programs) the current program till completion.
 
@@ -491,6 +497,10 @@ validated against the blockchain state, as discussed above. That step,
 called _application_, is described in
 [the blockchain specification](Blockchain.md#apply-transaction-log).
 
+
+### Running programs
+
+TBD.
 
 
 ### Versioning
@@ -517,36 +527,99 @@ Extensions:
 
 ## Instructions
 
-Instruction                | Stack diagram                    | Effects
----------------------------|----------------------------------|----------------------------------
-[`scalar:x`](#scalar)      |               ø → _scalar_       | 
-[`point:x`](#point)        |               ø → _point_        | 
-[`string:n:x`](#string)    |               ø → _string_       | 
-[`var`](#var)              |         _point_ → _var_          | Adds an external variable to [CS](#constraint-system)
-[`const`](#var)            |        _scalar_ → _var_          | 
-[`add`](#add)              |           _a b_ → _a+b mod l_    | 
-[`neg`](#neg)              |             _a_ → _l–a_          | 
-[`mul`](#mul)              |           _a b_ → _a·b mod l_    | 
-[`eq`](#eq)                |           _a b_ → ø              | Fails if _a_ ≠ _b_.
-[`range:n`](#range)        |             _a_ → _a_            | Fails if _a_ is not in range [0..2^64-1]
-[`zkadd`](#zkadd)          |     _var1 var2_ → _var3_         |
-[`zkneg`](#zkneg)          | var1              → var2         |                                                   
-[`zkmul`](#zkmul)          | var1 var2         → var3         |                                                        
-[`scmul`](#scmul)          | var1 x            → var2         |                                                     
-[`zkeq`](#zkeq)            | var1 var2         → constraint   |                                                            
-[`zkrange:n`](#zkrange)    | var               → var          |                                                       
-[`and`](#and)              | constr1 constr2   → constr3      |                                                             
-[`or`](#or)                | constr1 constr2   → constr3      |                                                           
-[`verify`](#verify)        | constraint        → ø            |                                                        
-[`encrypt`](#encrypt)      | X F V proof       → V            |                                                            
-[`decrypt`](#decrypt)      | V scalar          → scalar       |                                                              
-[`dup`](#dup)              | x → x x                          |
-[`drop`](#drop)            | x → ø                            |
-[`peek:n`](#peek)          | x[n] … x[0] → x[n] … x[0] x[n]   |
-[`roll:n`](#roll)          | x[n] … x[0] → x[n-1] … x[0] x[n] |
-[`bury:n`](#bury)          | x[n] … x[0] → x[0] x[n] … x[1]   |
+[Data instructions](#data-instructions)  | Stack diagram                | Effects
+---------------------------|--------------------------------------------|----------------------------------
+[`scalar:x`](#scalar)      |                 ø → _scalar_               | 
+[`point:x`](#point)        |                 ø → _point_                | 
+[`string:n:x`](#string)    |                 ø → _string_               | 
+
+[Scalar instructions](#scalar-instructions)  | Stack diagram            | Effects
+---------------------------|--------------------------------------------|----------------------------------
+[`add`](#add)              |             _a b_ → _a+b mod l_            | 
+[`neg`](#neg)              |               _a_ → _l–a_                  | 
+[`mul`](#mul)              |             _a b_ → _a·b mod l_            | 
+[`eq`](#eq)                |             _a b_ → ø                      | Fails if _a_ ≠ _b_.
+[`range:n`](#range)        |               _a_ → _a_                    | Fails if _a_ is not in range [0..2^64-1]
+
+[CS instructions](#constraint-system-instructions)  | Stack diagram     | Effects
+---------------------------|--------------------------------------------|----------------------------------
+[`var`](#var)              |           _point_ → _var_                  | Adds an external variable to [CS](#constraint-system)
+[`const`](#var)            |          _scalar_ → _var_                  | 
+[`mintime`](#mintime)      |                 ø → _var_                  |
+[`maxtime`](#maxtime)      |                 ø → _var_                  |
+[`zkadd`](#zkadd)          |       _var1 var2_ → _var3_                 |
+[`zkneg`](#zkneg)          |            _var1_ → _var2_                 |
+[`zkmul`](#zkmul)          |       _var1 var2_ → _var3_                 | Adds multiplier in [CS](#constraint-system)
+[`scmul`](#scmul)          |          _var1 x_ → _var2_                 | 
+[`zkeq`](#zkeq)            |       _var1 var2_ → _constraint_           | 
+[`zkrange:n`](#zkrange)    |             _var_ → _var_                  | Modifies [CS](#constraint-system)
+[`and`](#and)              | _constr1 constr2_ → _constr3_              |
+[`or`](#or)                | _constr1 constr2_ → _constr3_              |
+[`verify`](#verify)        |      _constraint_ → ø                      | Modifies [CS](#constraint-system) 
+[`encrypt`](#encrypt)      |     _X F V proof_ → _V_                    | Modifies [point operations](#point-operations)
+[`decrypt`](#decrypt)      |        _scalar V_ → _V_                    | Modifies [point operations](#point-operations)
+
+[Value instructions](#value-instructions)  | Stack diagram              | Effects
+---------------------------|--------------------------------------------|----------------------------------
+[`issue`](#issue)          | _qtycommitment predicate_ → _contract_     | Modifies [CS](#constraint-system), [tx log](#transaction-log)
+[`borrow`](#borrow)        | _qtycommitment flvrcommitment_ → _+V –V_   | Modifies [CS](#constraint-system)
+[`retire`](#retire)        | _value_ → ø                                | Modifies [CS](#constraint-system), [tx log](#transaction-log)
+[`qty`](#qty)              | _signedvalue_ → _signedvalue qtyvar_       |
+[`flavor`](#flavor)        | _signedvalue_ → _signedvalue flavorvar_    |
+[`cloak:m:n`](#cloak)      | _signedvalues commitments???_ → _values_   | Modifies [CS](#constraint-system)
+[`import`](#import)        | _???_ → _value_                            | Modifies [CS](#constraint-system), [tx log](#transaction-log)
+[`export`](#export)        | _value ???_ → ø                            | Modifies [CS](#constraint-system), [tx log](#transaction-log)
+
+[Contract instructions](#contract-instructions)  | Stack diagram        | Effects
+---------------------------|--------------------------------------------|----------------------------------
+[`inputs:n`](#inputs)      | _snapshots... predicates..._ → _contracts_ | Modifies [CS](#constraint-system), [tx log](#transaction-log)
+[`output:n`](#output)      | _items... predicatecommitment_ → ø         | Modifies [tx log](#transaction-log)
+[`contract:n`](#contract)  | _items... predicate_ → _contract_          | 
+[`nonce`](#nonce)          |          _predicate_ → _contract_          | Modifies [tx log](#transaction-log)
+[`data`](#data)            |               _item_ → ø                   | Modifies [tx log](#transaction-log)
+[`signtx`](#signtx)        |           _contract_ → _results..._        | Modifies [deferred verification keys](#signature)
+[`call`](#call)            |      _contract prog_ → _results..._        | Modifies [point operations](#point-operations)
+[`left`](#left)            |       _contract A B_ → _contract’_         | Modifies [point operations](#point-operations)
+[`right`](#right)          |       _contract A B_ → _contract’_         | Modifies [point operations](#point-operations)
+[`delegate`](#delegate)    |  _contract prog sig_ → _results..._        | Modifies [point operations](#point-operations)
+
+[Stack instructions](#stack-instructions)  | Stack diagram              | Effects
+---------------------------|--------------------------------------------|----------------------------------
+[`dup`](#dup)              |               _x_ → _x x_                  |
+[`drop`](#drop)            |               _x_ → ø                      |
+[`peek:n`](#peek)          |     _x[n] … x[0]_ → _x[n] ... x[0] x[n]_   |
+[`roll:n`](#roll)          |     _x[n] … x[0]_ → _x[n-1] ... x[0] x[n]_ |
+[`bury:n`](#bury)          |     _x[n] … x[0]_ → _x[0] x[n] ... x[1]_   |
 
 
+### Data instructions
+
+TBD
+
+
+### Scalar instructions
+
+TBD
+
+
+### Constraint system instructions
+
+TBD
+
+
+### Value instructions
+
+TBD
+
+
+### Contract instructions
+
+TBD
+
+
+### Stack instructions
+
+TBD
 
 
 
