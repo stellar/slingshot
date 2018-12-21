@@ -211,8 +211,10 @@ Predicates can be selected from a tree of alternatives via [`left`](#left) and [
 
 ### Verification key
 
-A _verification key_ (aka "public key") is a commitment to a _signing key_ (secret [scalar](#scalar-type))
+A _verification key_ `P` is a commitment to a secret [scalar](#scalar-type) `x` (_signing key_)
 using the primary [base point](#base-points).
+
+Verification keys are used to construct [predicates](#predicate).
 
 ```
 P = x * B
@@ -223,11 +225,6 @@ where:
 * `P` is a verification key,
 * `x` is a signing key (secret scalar),
 * `B` is the [primary base point](#base-points).
-
-#### See also
-
-* [Predicate](#predicate)
-* [Signature](#signature)
 
 
 ### Program
@@ -261,13 +258,8 @@ Examples of variables: [value quantities](#value-type) and [time bounds](#time-b
 
 Cleartext [scalars](#scalar-type) can be turned into a `Variable` type using the [`const`](#const) instruction.
 
-#### See also
 
-* [Constraint](#constraint-type)
-* [Constraint system](#constraint-system)
-
-
-### Constraint Type
+### Constraint type
 
 _Constraint_ is a statement in the [constraint system](#constraint-system) that constrains
 a linear combination of variables to zero.
@@ -276,11 +268,6 @@ Constraints are created using the [`zkeq`](#zkeq) instruction over two [variable
 
 Constraints can be combined using logical [`and`](#and) and [`or`](#or) instructions and added to the constraint
 system using the [verify](#verify) instruction.
-
-#### See also
-
-* [Variable](#variable-type)
-* [Constraint system](#constraint-system)
 
 
 ### Commitment
