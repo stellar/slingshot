@@ -230,13 +230,6 @@ where:
 ### Program
 
 A program is a string containing a sequence of ZkVM [instructions](#instructions).
-Each instruction is an **opcode** optionally followed by **immediate data**.
-
-The **opcode** is a one-byte unsigned integer.
-
-The **immediate data** is 0 or more bytes, depending on the opcode.
-
-See the [instruction set](#instructions) for definition of the immediate data for each opcode.
 
 
 ### Constraint system
@@ -246,9 +239,11 @@ The part of the [VM state](#vm-state) that implements
 
 Constraint system keeps track of [variables](#variable-type) and [constraints](#constraint-type).
 
+
 ### Variable type
 
-_Variable_ is a linear combination of high-level and low-level variables in the [constraint system](#constraint-system).
+_Variable_ in ZkVM is a linear combination of high-level and low-level variables
+in the underlying [constraint system](#constraint-system).
 
 Variables can be added and multiplied, producing new variables (see [`zkadd`](#zkadd), [`zkneg`](#zkneg), [`zkmul`](#zkmul), [`scmul`](#scmul) and [`zkrange`](#zkrange) instructions).
 
@@ -258,6 +253,8 @@ Examples of variables: [value quantities](#value-type) and [time bounds](#time-b
 
 Cleartext [scalars](#scalar-type) can be turned into a `Variable` type using the [`const`](#const) instruction.
 
+Variables can be copied and dropped at will.
+
 
 ### Constraint type
 
@@ -266,8 +263,10 @@ a linear combination of variables to zero.
 
 Constraints are created using the [`zkeq`](#zkeq) instruction over two [variables](#variable-type).
 
-Constraints can be combined using logical [`and`](#and) and [`or`](#or) instructions and added to the constraint
-system using the [verify](#verify) instruction.
+Constraints can be combined using logical [`and`](#and) and [`or`](#or) instructions,
+and can also be copied and dropped at will.
+
+Constraints only have an effect if added to the constraint system using the [`verify`](#verify) instruction.
 
 
 ### Commitment
@@ -514,15 +513,20 @@ Extensions:
 
 ## Instructions
 
+Each instruction is represented by a one-byte **opcode** optionally followed by **immediate data**.
+Immediate data is denoted by a colon `:` after the instruction name.
+
+Each instruction defines the format for immediate data. See the reference below for detailed specification.
+
 Instruction                | Stack diagram                              | Effects
 ---------------------------|--------------------------------------------|----------------------------------
-[**Data**](#data-instructions)  |                                       |
+[**Data**](#data-instructions)                 |                        |
 [`scalar:x`](#scalar)      |                 ø → _scalar_               | 
 [`point:x`](#point)        |                 ø → _point_                | 
 [`string:n:x`](#string)    |                 ø → _string_               | 
-[**Scalars**](#scalar-instructions)  |                                  | 
-[`add`](#add)              |             _a b_ → _a+b mod l_            | 
+[**Scalars**](#scalar-instructions)            |                        | 
 [`neg`](#neg)              |               _a_ → _l–a_                  | 
+[`add`](#add)              |             _a b_ → _a+b mod l_            | 
 [`mul`](#mul)              |             _a b_ → _a·b mod l_            | 
 [`eq`](#eq)                |             _a b_ → ø                      | Fails if _a_ ≠ _b_.
 [`range:n`](#range)        |               _a_ → _a_                    | Fails if _a_ is not in range [0..2^64-1]
@@ -531,8 +535,8 @@ Instruction                | Stack diagram                              | Effect
 [`const`](#var)            |          _scalar_ → _var_                  | 
 [`mintime`](#mintime)      |                 ø → _var_                  |
 [`maxtime`](#maxtime)      |                 ø → _var_                  |
-[`zkadd`](#zkadd)          |       _var1 var2_ → _var3_                 |
 [`zkneg`](#zkneg)          |            _var1_ → _var2_                 |
+[`zkadd`](#zkadd)          |       _var1 var2_ → _var3_                 |
 [`zkmul`](#zkmul)          |       _var1 var2_ → _var3_                 | Adds multiplier in [CS](#constraint-system)
 [`scmul`](#scmul)          |          _var1 x_ → _var2_                 | 
 [`zkeq`](#zkeq)            |       _var1 var2_ → _constraint_           | 
@@ -541,8 +545,8 @@ Instruction                | Stack diagram                              | Effect
 [`or`](#or)                | _constr1 constr2_ → _constr3_              |
 [`verify`](#verify)        |      _constraint_ → ø                      | Modifies [CS](#constraint-system) 
 [`encrypt`](#encrypt)      |     _X F V proof_ → _V_                    | Modifies [point operations](#point-operations)
-[`decrypt`](#decrypt)      |        _scalar V_ → _V_                    | Modifies [point operations](#point-operations)
-[**Values**](#value-instructions)  |                                    |
+[`decrypt`](#decrypt)      |        _V scalar_ → _V_                    | Modifies [point operations](#point-operations)
+[**Values**](#value-instructions)              |                        |
 [`issue`](#issue)          | _qtycommitment predicate_ → _contract_     | Modifies [CS](#constraint-system), [tx log](#transaction-log)
 [`borrow`](#borrow)        | _qtycommitment flvrcommitment_ → _+V –V_   | Modifies [CS](#constraint-system)
 [`retire`](#retire)        | _value_ → ø                                | Modifies [CS](#constraint-system), [tx log](#transaction-log)
@@ -551,7 +555,7 @@ Instruction                | Stack diagram                              | Effect
 [`cloak:m:n`](#cloak)      | _signedvalues commitments???_ → _values_   | Modifies [CS](#constraint-system)
 [`import`](#import)        | _???_ → _value_                            | Modifies [CS](#constraint-system), [tx log](#transaction-log)
 [`export`](#export)        | _value ???_ → ø                            | Modifies [CS](#constraint-system), [tx log](#transaction-log)
-[**Contracts**](#contract-instructions)  |                              |
+[**Contracts**](#contract-instructions)        |                        |
 [`inputs:n`](#inputs)      | _snapshots... predicates..._ → _contracts_ | Modifies [CS](#constraint-system), [tx log](#transaction-log)
 [`output:n`](#output)      | _items... predicatecommitment_ → ø         | Modifies [tx log](#transaction-log)
 [`contract:n`](#contract)  | _items... predicate_ → _contract_          | 
@@ -562,7 +566,7 @@ Instruction                | Stack diagram                              | Effect
 [`left`](#left)            |       _contract A B_ → _contract’_         | Modifies [point operations](#point-operations)
 [`right`](#right)          |       _contract A B_ → _contract’_         | Modifies [point operations](#point-operations)
 [`delegate`](#delegate)    |  _contract prog sig_ → _results..._        | Modifies [point operations](#point-operations)
-[**Stack**](#stack-instructions)  |                                     | 
+[**Stack**](#stack-instructions)               |                        | 
 [`dup`](#dup)              |               _x_ → _x x_                  |
 [`drop`](#drop)            |               _x_ → ø                      |
 [`peek:n`](#peek)          |     _x[n] … x[0]_ → _x[n] ... x[0] x[n]_   |
@@ -570,19 +574,195 @@ Instruction                | Stack diagram                              | Effect
 [`bury:n`](#bury)          |     _x[n] … x[0]_ → _x[0] x[n] ... x[1]_   |
 
 
+
 ### Data instructions
 
-TBD
+#### point
+
+**point:x** → _point_
+
+Pushes a [point](#point-type) `x` to the stack. `x` is a 32-byte immediate data.
+
+Fails if the point is not a valid compressed Ristretto point.
+
+#### scalar
+
+**scalar:x** → _scalar_
+
+Pushes a [scalar](#scalar-type) `x` to the stack. `x` is a 32-byte immediate data.
+
+Fails if the scalar is not canonically encoded (reduced modulo Ristretto group order).
+
+#### string
+
+**string:n:x** → _string_
+
+Pushes a [string](#string-type) `x` containing `n` bytes. 
+`n` is encoded as little-endian 32-bit integer, `x` is encoded as a sequence of `n` bytes.
+
 
 
 ### Scalar instructions
 
-TBD
+#### neg
+
+_a_ **neg** → _(l–a)_
+
+Negates the [scalar](#scalar-type) `a` modulo Ristretto group order `l`.
+
+Fails if item `a` is not of type [Scalar](#scalar-type).
+
+#### add
+
+_a b_ **add** → _(a+b mod l)_
+
+Adds [scalars](#scalar-type) `a` and `b` modulo Ristretto group order `l`.
+
+Fails if either `a` or `b` is not of type [Scalar](#scalar-type).
+
+#### mul
+
+_a b_ **mul** → _(a·b mod l)_
+
+Multiplies [scalars](#scalar-type) `a` and `b` modulo Ristretto group order `l`.
+
+Fails if either `a` or `b` is not of type [Scalar](#scalar-type).
+
+#### eq
+
+_a b_ **eq** → ø
+
+Checks that [scalars](#scalar-type) are equal. Fails execution if they are not.
+
+Fails if either `a` or `b` is not of type [Scalar](#scalar-type).
+
+#### range
+
+_a_ **range:n** → _a_
+
+Checks that the [scalar](#scalar-type) `a` is in `n`-bit range. Immediate data `n` is 1 byte and must be in [1,64] range.
+
+Fails if:
+* `a` is not of type [Scalar](#scalar-type), or
+* `n` is not in range [1,64].
 
 
 ### Constraint system instructions
 
-TBD
+#### var
+
+_p_ **var** → _v_
+
+Creates a high-level [variable](#variable-type) `v` 
+from a [commitment](#commitment) `p` and adds it to the [constraint system](#constraint-system).
+
+Fails if `p` is not of type [Point](#point-type).
+
+#### const
+
+_a_ **const** → _v_
+
+Creates a [variable](#variable-type) with weight `a` assigned to an R1CS constant `1`.
+
+Fails if `a` is not of type [Scalar](#scalar-type).
+
+#### mintime
+
+**mintime** → _v_
+
+Pushes a [variable](#variable-type) `v` corresponding to the [minimum time bound](#time-bounds) of the transaction.
+
+#### maxtime
+
+**maxtime** → _v_
+
+Pushes a [variable](#variable-type) `v` corresponding to the [maximum time bound](#time-bounds) of the transaction.
+
+
+#### zkneg
+
+_var1_ **zkneg** → _var2_
+
+Negates the weights in the linear combination.
+
+
+#### zkadd
+
+_var1 var2_ **zkadd** → _var3_
+
+Adds two linear combinations, producing a new linear combination.
+
+
+#### zkmul
+
+_var1 var2_ **zkmul** → _var3_
+
+Multiplies two variables. This creates a multiplier in R1CS, adds constraints to the left and right wires of the multiplier according to linear combinations in var1, var2, and pushes the output variable to the stack.
+
+
+#### scmul
+
+_var1 scalar_ **scmul** → _var2_
+
+Multiplies all weights in a variable by a scalar.
+
+
+#### zkeq
+
+_var1 var2_ **zkeq** → _constraint_
+
+Pushes a linear constraint `var1 - var2 = 0`
+
+
+#### zkrange
+
+_v_ **zkrange:n** → _v_
+
+Checks that variable is in n-bit range. Immediate data n is 1-byte and must be in [1,64] range.
+
+
+#### and
+
+_constraint1 constraint2_ **and** → _constraint3_
+
+Combines two constraints using logical AND: both must be satisfied.
+
+
+#### or
+
+_constraint1 constraint2_ **or** → _constraint3_
+
+Combines two constraints using logical OR: either constraint must be satisfied.
+
+
+#### verify
+
+_constraint_ **verify** → ø
+
+Adds constraint to the CS. If the constraint is a boolean function, appropriate challenges are generated after the R1CS is complete, but before it is checked.
+
+
+#### encrypt
+
+_X F V proof_ **encrypt** → _V_
+
+Verifies that `{F = x*V - x*v*B, X = x*B2}` using a 128-byte proof (4 elements: s_x, s_f, RX, RF). The actual verification is delayed and batched with all point multiplications.
+
+Usage 1: check if blinding factor is zero (therefore, the contract can allow interaction to anyone - like a partially fillable order book).
+
+Usage 2: commit a secret value, but allow counterparty compute the value dynamically with a pre-agreed blinding factor (e.g. in a contract “collateralized loan with interest”).
+
+Usage 3: embed blinding factor into the constraint system (since F is a valid unblinded commitment) and add constraints alongside other scalars.
+
+
+#### decrypt
+
+_V scalar_ **decrypt** → _V_
+
+Verifies that `V = scalar*B` and returns scalar.
+
+
+
 
 
 ### Value instructions
@@ -590,17 +770,49 @@ TBD
 TBD
 
 
+
+
 ### Contract instructions
 
 TBD
 
 
+
+
 ### Stack instructions
+
+#### dup
+
+_x_ **dup** → _x x_
+
+Pushes a copy of `x` to the stack.
+
+Fails if `x` is not a [data type](#data-types).
+
+#### drop
+
+_x_ **drop** → ø
+
+Drops `x` from the stack.
+
+Fails if `x` is not a [data type](#data-types).
+
+#### peek
 
 TBD
 
+**peek:n** → item
 
+Copies n’th data item from the top of the stack. `0 peek:0` is equivalent to `dup`.
+`n` is encoded as u8.
 
+#### roll
+
+TBD
+
+#### bury
+
+TBD
 
 
 
