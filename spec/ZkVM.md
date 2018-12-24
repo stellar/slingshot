@@ -12,7 +12,17 @@ ZkVM defines a procedural representation for blockchain transactions and the rul
     * [Data types](#data-types)
     * [Linear types](#linear-types)
     * [Portable types](#portable-types)
-    * [Portable types](#portable-types)
+    * [Scalar type](#scalar-type)
+    * [Point type](#point-type)
+    * [Base points](#base-points)
+    * [String type](#string-type)
+    * [Contract type](#contract-type)
+    * [Contract payload](#contract-payload)
+    * [Predicate](#predicate)
+    * [Verification key](#verification-key)
+    * [Program](#program)
+    * [Constraint system](#constraint-system)
+    * [Variable type](#variable-type)
 * [VM operation](#vm-operation)
     * [VM state](#vm-state)
 * [Instructions](#instructions)
@@ -171,7 +181,7 @@ Strings cannot be larger than the entire transaction program and cannot be longe
 
 ### Contract type
 
-A contract is a [predicate](#predicate) and a [payload](#payload) guarded by that predicate.
+A contract is a [predicate](#predicate) and a [payload](#contract-payload) guarded by that predicate.
 
 Contracts are created with the [`contract`](#contract) instruction and
 destroyed by evaluating the predicate, leaving their stored items on the stack.
@@ -181,7 +191,7 @@ and the payload into the [output structure](#output-structure) which is
 recorded in the [transaction log](#transaction-log).
 
 
-### Payload
+### Contract payload
 
 A list of [items](#types) stored in the [contract](#contract-type) or [output](#output-structure).
 
@@ -547,14 +557,14 @@ Instruction                | Stack diagram                              | Effect
 [`encrypt`](#encrypt)      |     _X F V proof_ → _V_                    | Modifies [point operations](#point-operations)
 [`decrypt`](#decrypt)      |        _V scalar_ → _V_                    | Modifies [point operations](#point-operations)
 [**Values**](#value-instructions)              |                        |
-[`issue`](#issue)          | _qtycommitment predicate_ → _contract_     | Modifies [CS](#constraint-system), [tx log](#transaction-log)
-[`borrow`](#borrow)        | _qtycommitment flvrcommitment_ → _+V –V_   | Modifies [CS](#constraint-system)
-[`retire`](#retire)        | _value_ → ø                                | Modifies [CS](#constraint-system), [tx log](#transaction-log)
-[`qty`](#qty)              | _signedvalue_ → _signedvalue qtyvar_       |
-[`flavor`](#flavor)        | _signedvalue_ → _signedvalue flavorvar_    |
-[`cloak:m:n`](#cloak)      | _signedvalues commitments???_ → _values_   | Modifies [CS](#constraint-system)
-[`import`](#import)        | _???_ → _value_                            | Modifies [CS](#constraint-system), [tx log](#transaction-log)
-[`export`](#export)        | _value ???_ → ø                            | Modifies [CS](#constraint-system), [tx log](#transaction-log)
+[`issue`](#issue)          |       _qtyc pred_ → _contract_             | Modifies [CS](#constraint-system), [tx log](#transaction-log)
+[`borrow`](#borrow)        |     _qtyc flavorc → _–V +V_                | Modifies [CS](#constraint-system)
+[`retire`](#retire)        |           _value_ → ø                      | Modifies [CS](#constraint-system), [tx log](#transaction-log)
+[`qty`](#qty)              |     _signedvalue_ → _signedvalue qtyvar_   |
+[`flavor`](#flavor)        |     _signedvalue_ → _signedvalue flavorvar_|
+[`cloak:m:n`](#cloak)      | _signedvalues commitments_ → _values_      | Modifies [CS](#constraint-system)
+[`import`](#import)        |             _???_ → _value_                | Modifies [CS](#constraint-system), [tx log](#transaction-log)
+[`export`](#export)        |       _value ???_ → ø                      | Modifies [CS](#constraint-system), [tx log](#transaction-log)
 [**Contracts**](#contract-instructions)        |                        |
 [`inputs:n`](#inputs)      | _snapshots... predicates..._ → _contracts_ | Modifies [CS](#constraint-system), [tx log](#transaction-log)
 [`output:n`](#output)      | _items... predicatecommitment_ → ø         | Modifies [tx log](#transaction-log)
@@ -598,7 +608,10 @@ Fails if the scalar is not canonically encoded (reduced modulo Ristretto group o
 **string:n:x** → _string_
 
 Pushes a [string](#string-type) `x` containing `n` bytes. 
-`n` is encoded as little-endian 32-bit integer, `x` is encoded as a sequence of `n` bytes.
+Immediate data `n` is encoded as little-endian 32-bit integer
+followed by `x` encoded as a sequence of `n` bytes.
+
+
 
 
 
@@ -647,6 +660,7 @@ Fails if:
 * `n` is not in range [1,64].
 
 
+
 ### Constraint system instructions
 
 #### var
@@ -678,13 +692,11 @@ Pushes a [variable](#variable-type) `v` corresponding to the [minimum time bound
 
 Pushes a [variable](#variable-type) `v` corresponding to the [maximum time bound](#time-bounds) of the transaction.
 
-
 #### zkneg
 
 _var1_ **zkneg** → _var2_
 
 Negates the weights in the linear combination.
-
 
 #### zkadd
 
@@ -692,13 +704,11 @@ _var1 var2_ **zkadd** → _var3_
 
 Adds two linear combinations, producing a new linear combination.
 
-
 #### zkmul
 
 _var1 var2_ **zkmul** → _var3_
 
 Multiplies two variables. This creates a multiplier in R1CS, adds constraints to the left and right wires of the multiplier according to linear combinations in var1, var2, and pushes the output variable to the stack.
-
 
 #### scmul
 
@@ -706,13 +716,11 @@ _var1 scalar_ **scmul** → _var2_
 
 Multiplies all weights in a variable by a scalar.
 
-
 #### zkeq
 
 _var1 var2_ **zkeq** → _constraint_
 
 Pushes a linear constraint `var1 - var2 = 0`
-
 
 #### zkrange
 
@@ -720,27 +728,31 @@ _v_ **zkrange:n** → _v_
 
 Checks that variable is in n-bit range. Immediate data n is 1-byte and must be in [1,64] range.
 
-
 #### and
 
 _constraint1 constraint2_ **and** → _constraint3_
 
-Combines two constraints using logical AND: both must be satisfied.
+Combines two constraints using logical conjunction: both constraints must be satisfied.
 
+No changes to the [constraint system](#constraint-system) are made until [`verify`](#verify) is executed.
 
 #### or
 
 _constraint1 constraint2_ **or** → _constraint3_
 
-Combines two constraints using logical OR: either constraint must be satisfied.
+Combines two constraints using logical disjunction: either of two constraints must be satisfied.
 
+No changes to the [constraint system](#constraint-system) are made until [`verify`](#verify) is executed.
 
 #### verify
 
 _constraint_ **verify** → ø
 
-Adds constraint to the CS. If the constraint is a boolean function, appropriate challenges are generated after the R1CS is complete, but before it is checked.
+Flattens the constraint and adds it to the [constraint system](#constraint-system).
 
+For each disjunction, a multiplier is allocated.
+
+For each conjunction, appropriate challenges are generated after the R1CS is complete, but before it is checked.
 
 #### encrypt
 
@@ -754,12 +766,12 @@ Usage 2: commit a secret value, but allow counterparty compute the value dynamic
 
 Usage 3: embed blinding factor into the constraint system (since F is a valid unblinded commitment) and add constraints alongside other scalars.
 
-
 #### decrypt
 
-_V scalar_ **decrypt** → _V_
+_V v_ **decrypt** → _V_
 
-Verifies that `V = scalar*B` and returns scalar.
+Pops [scalar](#scalar-type) `v` and [point](#point-type) `V` from the stack.
+Verifies that `V = v*B` and pushes back `V`.
 
 
 
@@ -767,7 +779,62 @@ Verifies that `V = scalar*B` and returns scalar.
 
 ### Value instructions
 
-TBD
+#### issue
+
+_qtyc pred_ **issue** → _contract_
+
+Creates a value with quantity represented by [commitment](#commitment) _qtycommitment_ and flavor defined by the [predicate](#predicate) `pred`, locked in a contract guarded by that predicate.
+
+Adds variables for quantity and flavor, and adds a 64-bit range proof constraint to the quantity.
+
+Adds an _issuance_ entry to the [transaction log](#transaction-log).
+
+User must unlock the value using the standard contract operations: [`signtx`](#signx), [`delegate`](#delegate) or [`call`](#call).
+
+#### borrow
+
+_qtyc flavorc_ **borrow** → _–V +V_
+
+1. Pops [points](#point-type) `flavorc`, then `qtyc` from the stack.
+2. Creates [value](#value-type) `+V`, allocating high-level variables for quantity and flavor in the [constraint system](#constraint-system).
+3. Creates [signed value](#signed-value-type) `–V`, allocating low-level variable for its negated quantity and adds a negation constraint.
+4. Pushes `–V`, then `+V` to the stack.
+
+The signed value `–V` is not a [portable type](#portable-types), and can only be consumed by a [`cloak`](#cloak) instruction
+(where it is merged with appropriate positive quantity of the same flavor).
+
+#### retire
+
+_value_ **retire** → ø
+
+Pops an unsigned [value](#value) from the stack.
+
+Adds a _retirement_ entry to the [transaction log](#transaction-log).
+
+#### qty
+
+_signedvalue_ **qty** → _signedvalue qtyvar_
+
+Copies a [variable](#variable-type) representing quantity of a [signed value](#signed-value-type) and pushes it to the stack.
+
+#### flavor
+
+_signedvalue_ **flavor** → _signedvalue flavorvar_
+
+Copies a [variable](#variable-type) representing flavor of a [signed value](#signed-value-type) and pushes it to the stack.
+
+#### cloak
+
+_signedvalues commitments_ **cloak:m:n** → _values_
+
+Merges and splits `m` [signed values](#signed-value-type) into `n` [values](#values).
+
+1. Pops `2·n` [points](#point-type) as pairs of flavor and quantity for each output value, quantity is popped first.
+2. Pops `m` [signed values](#signed-value-type) as input values.
+3. Creates constraints and range proofs per [Cloak protocol](https://github.com/interstellar/spacesuit/blob/master/spec.md).
+4. Pushes `n` [values](#values) to the stack in the same order as their commitments.
+
+Immediate data `m` and `n` are encoded as two 32-bit little-endian integers.
 
 
 
