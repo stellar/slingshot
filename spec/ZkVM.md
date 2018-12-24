@@ -63,7 +63,7 @@ The resulting design enables scalable blockchain state machine (since the state 
 
 TxVM, however, did not focus on privacy and in several places traded off simplicity for unlimited flexibility.
 
-ZkVM is the entirely new design that inherits most important insights from the TxVM, makes the security and privacy its primary focus, and provides a more constrained customization framework, while making the expression of most important contracts even more straightforward.
+ZkVM is the entirely new design that inherits most important insights from the TxVM, makes the security and privacy its primary focus, and provides a more constrained customization framework, while making the expression of the most common contracts even more straightforward.
 
 ### Concepts
 
