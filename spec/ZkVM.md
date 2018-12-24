@@ -418,6 +418,16 @@ The proof is provided to the VM at the beggining of execution and verified when 
 
 ### Transcript
 
+Transcript is an instance of the [Merlin](https://doc.dalek.rs/merlin/) construction,
+which is itself based on [STROBE](https://strobe.sourceforge.io/) and [Keccak-f](https://keccak.team/keccak.html)
+with 128-bit security parameter.
+
+Transcript is used throughout ZkVM to generate challenge [scalars](#scalar-type) and various hash-based commitments.
+
+
+
+
+
 TBD: merlin/strobe, protocol label, challenge scalar, labeled inputs.
 
 
@@ -672,25 +682,25 @@ followed by `x` encoded as a sequence of `n` bytes.
 
 #### neg
 
-_a_ **neg** → _(l–a)_
+_a_ **neg** → _(|G|–a)_
 
-Negates the [scalar](#scalar-type) `a` modulo Ristretto group order `l`.
+Negates the [scalar](#scalar-type) `a` modulo Ristretto group order `|G|`.
 
 Fails if item `a` is not of type [Scalar](#scalar-type).
 
 #### add
 
-_a b_ **add** → _(a+b mod l)_
+_a b_ **add** → _(a+b mod |G|)_
 
-Adds [scalars](#scalar-type) `a` and `b` modulo Ristretto group order `l`.
+Adds [scalars](#scalar-type) `a` and `b` modulo Ristretto group order `|G|`.
 
 Fails if either `a` or `b` is not of type [Scalar](#scalar-type).
 
 #### mul
 
-_a b_ **mul** → _(a·b mod l)_
+_a b_ **mul** → _(a·b mod |G|)_
 
-Multiplies [scalars](#scalar-type) `a` and `b` modulo Ristretto group order `l`.
+Multiplies [scalars](#scalar-type) `a` and `b` modulo Ristretto group order `|G|`.
 
 Fails if either `a` or `b` is not of type [Scalar](#scalar-type).
 
@@ -1080,6 +1090,12 @@ At the same time, ZkVM improves on the following tradeoffs in TxVM:
 Forward- and backward-compatible upgrades (“soft forks”) are possible
 with [extension instructions](#ext), enabled by the
 [extension flag](#versioning) and higher version numbers.
+
+For instance, to implement a SHA-256 function, an unsued extension instruction
+could be assigned `verifysha256` name and check if top two strings on the stack
+are preimage and image of the SHA-256 function respectively. The VM would fail if
+the check failed, while the non-upgraded software could choose to treat the instruction as no-op
+(e.g. by ignoring the upgraded transaction version).
 
 It is possible to write a compatible contract that uses features of a newer
 transaction version while remaining usable by non-upgraded software
