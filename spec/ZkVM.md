@@ -532,24 +532,27 @@ The VM is initialized with the following state:
 9. Array of deferred point operations is empty.
 10. Constraint system is empty.
 
-Then, the VM [runs](#running-programs) the current program till completion.
+Then, the VM executes the current program till completion:
 
-Execution fails if:
-1. the data stack is empty, or
-2. the uniqueness flag is set to `false`.
+1. Each instruction is read at the current program offset, including its immediate data (if any).
+2. Program offset is advanced immediately after reading the instruction to the next instruction.
+3. The instruction is executed per [specification below](#instructions). If the instruction fails, VM exits early with an error result.
+4. If VM encounters [`call`](#call) or [`delegate`](#delegate) instruction, the current program and the offset are saved in the program stack, and the new program with offset zero is set as the current program. 
+5. If the offset is less than the current program’s length, a new instruction is read (go back to step 1).
+6. Otherwise (reached the end of the current program):
+   1. If the program stack is not empty, pop top item from the program stack and set it to the current program. Go to step 5.
+   2. If the program stack is empty, the transaction is considered _finalized_ and VM successfully finishes execution.
 
-If execution did not fail, a [transaction id](#transaction-id)  is computed.
+If the execution finishes successfully, VM performs the following checks (and fails if any is not satisfied):
+1. the data stack must be empty,
+2. the uniqueness flag must be set to `true`,
+3. [constraint system proof](#constraint-system-proof) must be valid,
+4. aggregated signature over [transaction ID](#transaction-id) must be valid,
+5. all deferred point statements must be valid,
 
-After execution, the resulting transaction log is further
-validated against the blockchain state, as discussed above. That step,
-called _application_, is described in
+If VM execution succeeded, the resulting [transaction log](#transaction-log) is further
+validated against the blockchain state. That step, called _application_, is described in
 [the blockchain specification](Blockchain.md#apply-transaction-log).
-
-
-### Running programs
-
-TBD.
-
 
 ### Versioning
 
@@ -610,7 +613,7 @@ Instruction                | Stack diagram                              | Effect
 [`decrypt`](#decrypt)      |        _V scalar_ → _V_                    | Modifies [point operations](#point-operations)
 [**Values**](#value-instructions)              |                        |
 [`issue`](#issue)          |       _qtyc pred_ → _contract_             | Modifies [CS](#constraint-system), [tx log](#transaction-log)
-[`borrow`](#borrow)        |     _qtyc flavorc → _–V +V_                | Modifies [CS](#constraint-system)
+[`borrow`](#borrow)        |    _qtyc flavorc_ → _–V +V_                | Modifies [CS](#constraint-system)
 [`retire`](#retire)        |           _value_ → ø                      | Modifies [CS](#constraint-system), [tx log](#transaction-log)
 [`qty`](#qty)              |     _signedvalue_ → _signedvalue qtyvar_   |
 [`flavor`](#flavor)        |     _signedvalue_ → _signedvalue flavorvar_|
