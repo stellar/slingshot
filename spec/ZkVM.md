@@ -390,7 +390,7 @@ The proof is provided to the VM at the beggining of execution and verified when 
 
 ### Transcript
 
-TBD: protocol label, challenge scalar, labeled inputs.
+TBD: merlin/strobe, protocol label, challenge scalar, labeled inputs.
 
 
 ### Transaction witness
@@ -566,9 +566,9 @@ Instruction                | Stack diagram                              | Effect
 [`import`](#import)        |             _???_ → _value_                | Modifies [CS](#constraint-system), [tx log](#transaction-log)
 [`export`](#export)        |       _value ???_ → ø                      | Modifies [CS](#constraint-system), [tx log](#transaction-log)
 [**Contracts**](#contract-instructions)        |                        |
-[`inputs:n`](#inputs)      | _snapshots... predicates..._ → _contracts_ | Modifies [CS](#constraint-system), [tx log](#transaction-log)
-[`output:n`](#output)      | _items... predicatecommitment_ → ø         | Modifies [tx log](#transaction-log)
-[`contract:n`](#contract)  | _items... predicate_ → _contract_          | 
+[`inputs:m`](#inputs)      | _snapshots... predicates..._ → _contracts_ | Modifies [CS](#constraint-system), [tx log](#transaction-log)
+[`output:k`](#output)      | _items... predicatecommitment_ → ø         | Modifies [tx log](#transaction-log)
+[`contract:k`](#contract)  | _items... predicate_ → _contract_          | 
 [`nonce`](#nonce)          |          _predicate_ → _contract_          | Modifies [tx log](#transaction-log)
 [`data`](#data)            |               _item_ → ø                   | Modifies [tx log](#transaction-log)
 [`signtx`](#signtx)        |           _contract_ → _results..._        | Modifies [deferred verification keys](#signature)
@@ -579,9 +579,9 @@ Instruction                | Stack diagram                              | Effect
 [**Stack**](#stack-instructions)               |                        | 
 [`dup`](#dup)              |               _x_ → _x x_                  |
 [`drop`](#drop)            |               _x_ → ø                      |
-[`peek:n`](#peek)          |     _x[n] … x[0]_ → _x[n] ... x[0] x[n]_   |
-[`roll:n`](#roll)          |     _x[n] … x[0]_ → _x[n-1] ... x[0] x[n]_ |
-[`bury:n`](#bury)          |     _x[n] … x[0]_ → _x[0] x[n] ... x[1]_   |
+[`peek:k`](#peek)          |     _x[k] … x[0]_ → _x[k] ... x[0] x[k]_   |
+[`roll:k`](#roll)          |     _x[k] … x[0]_ → _x[k-1] ... x[0] x[k]_ |
+[`bury:k`](#bury)          |     _x[k] … x[0]_ → _x[0] x[k] ... x[1]_   |
 
 
 
@@ -825,7 +825,7 @@ Copies a [variable](#variable-type) representing flavor of a [signed value](#sig
 
 #### cloak
 
-_signedvalues commitments_ **cloak:m:n** → _values_
+_signedvalues commitments_ **cloak:m\:n** → _values_
 
 Merges and splits `m` [signed values](#signed-value-type) into `n` [values](#values).
 
@@ -841,7 +841,93 @@ Immediate data `m` and `n` are encoded as two 32-bit little-endian integers.
 
 ### Contract instructions
 
-TBD
+
+#### inputs
+
+_snapshots predicates_ **inputs:m** → _contracts_ 
+
+TBD.
+
+Claims the utxos and unpacks them into contracts.
+Snapshots are linked to the utxos being spent.
+Predicates are sorted randomly vis-a-vis snapshots (to be delinked).
+Resulting contracts are sorted the same way as predicates, and have number stack items corresponding to number of stack items in the snapshots.
+
+
+
+#### output
+
+_items predicatecommitment_ **output:k** → ø
+
+TBD.
+
+#### contract
+
+_items predicate_ **contract:k** → _contract_
+
+TBD.
+
+#### nonce
+
+_predicate_ **nonce** → _contract_
+
+TBD.
+
+#### data
+
+_item_ **data** → ø
+
+Pops [data type](#data-types) `item` from the stack.
+Adds _data_ entry to the [transaction log](#transaction-log).
+
+#### signtx
+
+_contract_ **signtx** → _results..._
+
+TBD.
+
+Unlocks the stack of the contract by deferring a signature check over txid with the predicate-as-a-pubkey.
+All such pubkeys are aggregated and a single signature is checked in the end of VM execution.
+
+#### call
+
+_contract prog_ **call** → _results..._
+
+TBD.
+
+Checks that contract’s predicate point `P == Hash(prog)*B2` and executes the prog with the contract stack.
+Point operations `(0 == Hash(prog)*B2 - P)` are added to the list of deferred point operations.
+
+#### left
+
+_contract L R_ → _contract’_         
+
+TBD.
+
+Checks that the contract’s predicate point P == L + Hash(L||R) * B and replaces the current predicate with L.
+The point operations are added to the list of deferred point operations.
+
+#### right
+
+_contract L R_ → _contract’_         
+
+TBD.
+
+Checks that the contract’s predicate point P == L + Hash(L||R) * B and replaces the current predicate with R.
+The point operations are added to the list of deferred point operations.
+
+#### delegate
+
+_contract prog sig_ → _results..._        
+
+Checks signature over the predicate using contract’s predicate-as-pubkey.
+The signature, predicate and pubkey are added to the list of deferred point operations 
+will be merged into single multi-scalar multiplication).
+The predicate is invoked as if it was the original predicate guarding the contract stack.
+
+
+
+
 
 
 
@@ -866,12 +952,11 @@ Fails if `x` is not a [data type](#data-types).
 
 #### peek
 
-TBD
+**peek:k** → item
 
-**peek:n** → item
+Copies k’th data item from the top of the stack. `0 peek:0` is equivalent to `dup`.
 
-Copies n’th data item from the top of the stack. `0 peek:0` is equivalent to `dup`.
-`n` is encoded as u8.
+Immediate data `k` is encoded as unsigned byte.
 
 #### roll
 
