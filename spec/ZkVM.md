@@ -889,6 +889,17 @@ Merges and splits `m` [signed values](#signed-value-type) into `n` [values](#val
 
 Immediate data `m` and `n` are encoded as two 32-bit little-endian integers.
 
+#### import
+
+_..._ **import** → _value_
+
+TBD: Creates [value](#value) from the external blockchain.
+
+#### export
+
+_value ..._ **export** → ø
+
+TBD: Retires imported [value](#value) with annotation for export.
 
 
 
@@ -1005,19 +1016,32 @@ Fails if `x` is not a [data type](#data-types).
 
 #### peek
 
-**peek:k** → item
+_x[k] … x[0]_ **peek:_k_** → _x[k] ... x[0] x[k]_
 
-Copies k’th data item from the top of the stack. `0 peek:0` is equivalent to `dup`.
+Copies k’th data item from the top of the stack.
+Immediate data `k` is encoded as an unsigned byte.
 
-Immediate data `k` is encoded as unsigned byte.
+Fails if `x[k]` is not a [data type](#data-types).
+
+Note: `peek:0` is equivalent to `dup`.
 
 #### roll
 
-TBD
+_x[k] x[k-1] ... x[0]_ **roll:_k_** → _x[k-1] ... x[0] x[k]_
+
+Looks past `k` items from the top, and moves the next item to the top of the stack.
+Immediate data `k` is encoded as an unsigned byte.
+
+Note: `roll:0` is a no-op, `roll:1` swaps the top two items.
 
 #### bury
 
-TBD
+_x[k] ... x[1] x[0]_ **bury:_k_** → _x[0] x[k] ... x[1]_
+
+Moves the top item past the `k` items below it.
+Immediate data `k` is encoded as an unsigned byte.
+
+Note: `bury:0` is a no-op, `bury:1` swaps the top two items.
 
 
 
