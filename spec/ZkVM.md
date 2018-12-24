@@ -639,25 +639,25 @@ Instruction                | Stack diagram                              | Effect
 
 ### Data instructions
 
-#### point
-
-**point:x** → _point_
-
-Pushes a [point](#point-type) `x` to the stack. `x` is a 32-byte immediate data.
-
-Fails if the point is not a valid compressed Ristretto point.
-
 #### scalar
 
-**scalar:x** → _scalar_
+**scalar:_x_** → _scalar_
 
 Pushes a [scalar](#scalar-type) `x` to the stack. `x` is a 32-byte immediate data.
 
 Fails if the scalar is not canonically encoded (reduced modulo Ristretto group order).
 
+#### point
+
+**point:_x_** → _point_
+
+Pushes a [point](#point-type) `x` to the stack. `x` is a 32-byte immediate data.
+
+Fails if the point is not a valid compressed Ristretto point.
+
 #### string
 
-**string:n:x** → _string_
+**string:_n_:_x_** → _string_
 
 Pushes a [string](#string-type) `x` containing `n` bytes. 
 Immediate data `n` is encoded as little-endian 32-bit integer
@@ -703,7 +703,7 @@ Fails if either `a` or `b` is not of type [Scalar](#scalar-type).
 
 #### range
 
-_a_ **range:n** → _a_
+_a_ **range:_n_** → _a_
 
 Checks that the [scalar](#scalar-type) `a` is in `n`-bit range. Immediate data `n` is 1 byte and must be in [1,64] range.
 
@@ -776,7 +776,7 @@ Pushes a linear constraint `var1 - var2 = 0`
 
 #### zkrange
 
-_v_ **zkrange:n** → _v_
+_v_ **zkrange:_n_** → _v_
 
 Checks that variable is in n-bit range. Immediate data n is 1-byte and must be in [1,64] range.
 
@@ -877,7 +877,7 @@ Copies a [variable](#variable-type) representing flavor of a [signed value](#sig
 
 #### cloak
 
-_signedvalues commitments_ **cloak:m\:n** → _values_
+_signedvalues commitments_ **cloak:_m_:_n_** → _values_
 
 Merges and splits `m` [signed values](#signed-value-type) into `n` [values](#values).
 
@@ -896,7 +896,7 @@ Immediate data `m` and `n` are encoded as two 32-bit little-endian integers.
 
 #### inputs
 
-_snapshots predicates_ **inputs:m** → _contracts_ 
+_snapshots predicates_ **inputs:_m_** → _contracts_
 
 TBD.
 
@@ -909,13 +909,13 @@ Resulting contracts are sorted the same way as predicates, and have number stack
 
 #### output
 
-_items predicatecommitment_ **output:k** → ø
+_items predicatecommitment_ **output:_k_** → ø
 
 TBD.
 
 #### contract
 
-_items predicate_ **contract:k** → _contract_
+_items predicate_ **contract:_k_** → _contract_
 
 TBD.
 
