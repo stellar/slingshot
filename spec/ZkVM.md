@@ -7,25 +7,39 @@ ZkVM defines a procedural representation for blockchain transactions and the rul
 * [Overview](#overview)
     * [Motivation](#motivation)
     * [Concepts](#concepts)
-* [Definitions](#definitions)
-    * [Types](#types)
+* [Types](#types)
     * [Data types](#data-types)
     * [Linear types](#linear-types)
     * [Portable types](#portable-types)
-    * [Scalar type](#scalar-type)
-    * [Point type](#point-type)
+    * [Scalar](#scalar-type)
+    * [Point](#point-type)
+    * [String](#string-type)
+    * [Contract](#contract-type)
+    * [Variable](#variable-type)
+    * [Constraint](#constraint-type)
+    * [Value](#value-type)
+    * [Signed value](#signed-value)
+* [Definitions](#definitions)
     * [Base points](#base-points)
-    * [String type](#string-type)
-    * [Contract type](#contract-type)
-    * [Contract payload](#contract-payload)
-    * [Predicate](#predicate)
+    * [Commitment](#commitment)
     * [Verification key](#verification-key)
-    * [Program](#program)
     * [Constraint system](#constraint-system)
-    * [Variable type](#variable-type)
+    * [Time bounds](#time-bounds)
+    * [Predicate](#predicate)
+    * [Program](#program)
+    * [Contract payload](#contract-payload)
+    * [Signature](#signature)
 * [VM operation](#vm-operation)
     * [VM state](#vm-state)
+    * [VM execution](#vm-execution)
+    * [Versioning](#versioning)
 * [Instructions](#instructions)
+    * [Data instructions](#data-instructions)
+    * [Scalar instructions](#scalar-instructions)
+    * [Constraint system instructions](#constraint-system-instructions)
+    * [Value instructions](#value-instructions)
+    * [Contract instructions](#contract-instructions)
+    * [Stack instructions](#stack-instructions)
 * [Discussion](#discussion)
     * [Relation to TxVM](#relation-to-txvm)
     * [Compatibility](#compatibility)
@@ -90,17 +104,10 @@ transaction’s applicability to the [blockchain](Blockchain.md).
 
 
 
-
-
-
-## Definitions
-
-
-### Types
+## Types
 
 The items on the ZkVM stack are typed. The available types fall into two
 broad categories: [data types](#data-types) and [linear types](#linear-types).
-
 
 ### Data types
 
@@ -127,10 +134,9 @@ and destroyed, and may never be copied.
 
 The items of the following types can be _ported_ across transactions via [outputs](#output-structure):
 
-* [Plain data types](#data-types):
-    * [Scalar](#scalar-type)
-    * [Point](#point-type)
-    * [String](#string-type)
+* [Scalar](#scalar-type)
+* [Point](#point-type)
+* [String](#string-type)
 * [Value](#value-type)
 
 The [Signed Value](#signed-value-type) is not portable because it is not proven to be non-negative.
@@ -158,20 +164,6 @@ Points are encoded as 32-byte arrays in _compressed Ristretto form_.
 Each point in the VM is guaranteed to be a valid Ristretto point.
 
 
-### Base points
-
-ZkVM defines two base points: primary `B` and secondary `B2`.
-
-```
-B  = e2f2ae0a6abc4e71a884a961c500515f58e30b6aa582dd8db6a65945e08d2d76
-B2 = hash-to-ristretto255(SHA3-512(B))
-```
-
-Both base points are orthogonal (the discrete log between them is unknown)
-and used in [commitments](#commitment), 
-[verification keys](#verification-key) and [predicates](#predicate).
-
-
 ### String type
 
 A _string_ is a variable-length byte array used to represent signatures, proofs and programs.
@@ -189,65 +181,6 @@ destroyed by evaluating the predicate, leaving their stored items on the stack.
 Contracts can be "frozen" with the [`output`](#output) instruction that places the predicate
 and the payload into the [output structure](#output-structure) which is
 recorded in the [transaction log](#transaction-log).
-
-
-### Contract payload
-
-A list of [items](#types) stored in the [contract](#contract-type) or [output](#output-structure).
-
-Payload of a [contract](#contract-type) may contain arbitrary [types](#types),
-but in the [output](#output-structure) only the [portable types](#portable-types) are allowed.
-
-
-### Predicate
-
-A _predicate_ is a representation of a condition that unlocks the [contract](#contract-type).
-
-Predicate is encoded as a [point](#point-type) which can itself represent:
-
-* a verification key,
-* a set of verification keys,
-* a disjunction of nested predicates,
-* a [program](#program).
-
-Each contract can be opened by either:
-
-1. signing the [transaction ID](#transaction-id) with a key ([`signtx`](#signtx) instruction),
-2. revealing the embedded program and evaluating it ([`call`](#call) instruction),
-3. signing a _delegate program_ and evaluating it ([`delegate`](#delegate) instruction).
-
-Predicates can be selected from a tree of alternatives via [`left`](#left) and [`right`](#right) instructions.
-
-
-### Verification key
-
-A _verification key_ `P` is a commitment to a secret [scalar](#scalar-type) `x` (_signing key_)
-using the primary [base point](#base-points).
-
-Verification keys are used to construct [predicates](#predicate).
-
-```
-P = x * B
-```
-
-where:
-
-* `P` is the verification key,
-* `x` is the secret signing key (secret scalar),
-* `B` is the [primary base point](#base-points).
-
-
-### Program
-
-A program is a string containing a sequence of ZkVM [instructions](#instructions).
-
-
-### Constraint system
-
-The part of the [VM state](#vm-state) that implements
-[Bulletprofs Rank-1 Constraint System](https://doc-internal.dalek.rs/develop/bulletproofs/notes/r1cs_proof/index.html).
-
-Constraint system keeps track of [variables](#variable-type) and [constraints](#constraint-type).
 
 
 ### Variable type
@@ -279,37 +212,6 @@ and can also be copied and dropped at will.
 Constraints only have an effect if added to the constraint system using the [`verify`](#verify) instruction.
 
 
-### Commitment
-
-A _commitment_ is a Pedersen commitment to a secret [scalar](#scalar-type) represented by a [point](#point-type):
-
-```
-P = Com(v, f) = v*B + f*B2
-```
-
-where:
-
-* `P` is a point representing commitment,
-* `v` is a secret scalar value being committed to,
-* `f` is a secret blinding factor (scalar),
-* `B` and `B2` are [base points](#base-points).
-
-Commitments can be used to allocate new [variables](#variable-type) using the [`var`](#var) instruction.
-
-Commitments can be proven to use a pre-determined blinding factor using [`encrypt`](#encrypt) and 
-[`decrypt`](#decrypt) instructions.
-
-
-### Time bounds
-
-Each transaction is explicitly bound to a range of _minimum_ and _maximum_ time.
-
-Each bound is in _seconds_ since Jan 1st, 1970 (UTC), represented by an unsigned 64-bit integer.
-
-Time bounds are available in the transaction as [variables](#variable-type) provided by the instructions
-[`mintime`](#mintime) and [`maxtime`](#maxtime).
-
-
 ### Value type
 
 A value is a [linear type](#linear-types) representing a pair of *quantity* and *flavor*.
@@ -337,6 +239,115 @@ quantity is guaranteed to be in a 65-bit range (`[-(2^64-1)..2^64-1]`).
 The subtype [Value](#value-type) is most commonly used because it guarantees the non-negative quantity
 (for instance, [`output`](#output) instruction only permits positive [values](#value-type)),
 and the signed value is only used as an output of [`borrow`](#borrow) and as an input to [`cloak`](#cloak).
+
+
+
+
+
+## Definitions
+
+### Base points
+
+ZkVM defines two base points: primary `B` and secondary `B2`.
+
+```
+B  = e2f2ae0a6abc4e71a884a961c500515f58e30b6aa582dd8db6a65945e08d2d76
+B2 = hash-to-ristretto255(SHA3-512(B))
+```
+
+Both base points are orthogonal (the discrete log between them is unknown)
+and used in [commitments](#commitment), 
+[verification keys](#verification-key) and [predicates](#predicate).
+
+
+### Commitment
+
+A _commitment_ is a Pedersen commitment to a secret [scalar](#scalar-type) represented by a [point](#point-type):
+
+```
+P = Com(v, f) = v*B + f*B2
+```
+
+where:
+
+* `P` is a point representing commitment,
+* `v` is a secret scalar value being committed to,
+* `f` is a secret blinding factor (scalar),
+* `B` and `B2` are [base points](#base-points).
+
+Commitments can be used to allocate new [variables](#variable-type) using the [`var`](#var) instruction.
+
+Commitments can be proven to use a pre-determined blinding factor using [`encrypt`](#encrypt) and 
+[`decrypt`](#decrypt) instructions.
+
+
+### Verification key
+
+A _verification key_ `P` is a commitment to a secret [scalar](#scalar-type) `x` (_signing key_)
+using the primary [base point](#base-points).
+
+Verification keys are used to construct [predicates](#predicate).
+
+```
+P = x * B
+```
+
+where:
+
+* `P` is the verification key,
+* `x` is the secret signing key (secret scalar),
+* `B` is the [primary base point](#base-points).
+
+
+### Constraint system
+
+The part of the [VM state](#vm-state) that implements
+[Bulletprofs Rank-1 Constraint System](https://doc-internal.dalek.rs/develop/bulletproofs/notes/r1cs_proof/index.html).
+
+Constraint system keeps track of [variables](#variable-type) and [constraints](#constraint-type).
+
+
+### Time bounds
+
+Each transaction is explicitly bound to a range of _minimum_ and _maximum_ time.
+
+Each bound is in _seconds_ since Jan 1st, 1970 (UTC), represented by an unsigned 64-bit integer.
+
+Time bounds are available in the transaction as [variables](#variable-type) provided by the instructions
+[`mintime`](#mintime) and [`maxtime`](#maxtime).
+
+
+### Predicate
+
+A _predicate_ is a representation of a condition that unlocks the [contract](#contract-type).
+
+Predicate is encoded as a [point](#point-type) which can itself represent:
+
+* a verification key,
+* a set of verification keys,
+* a disjunction of nested predicates,
+* a [program](#program).
+
+Each contract can be opened by either:
+
+1. signing the [transaction ID](#transaction-id) with a key ([`signtx`](#signtx) instruction),
+2. revealing the embedded program and evaluating it ([`call`](#call) instruction),
+3. signing a _delegate program_ and evaluating it ([`delegate`](#delegate) instruction).
+
+Predicates can be selected from a tree of alternatives via [`left`](#left) and [`right`](#right) instructions.
+
+
+### Program
+
+A program is a string containing a sequence of ZkVM [instructions](#instructions).
+
+
+### Contract payload
+
+A list of [items](#types) stored in the [contract](#contract-type) or [output](#output-structure).
+
+Payload of a [contract](#contract-type) may contain arbitrary [types](#types),
+but in the [output](#output-structure) only the [portable types](#portable-types) are allowed.
 
 
 ### Signature
@@ -373,12 +384,31 @@ where:
 
 ### Input structure
 
-TBD: serialized contract snapshot + txid
+Input structure represents an unspent output (UTXO) from a previous transaction.
+
+Input is serialized as [output](#output-structure) with extra 32 bytes containing
+this output’s [transaction ID](#transaction-id).
+
+```
+input = prevoutput || prevtxid
+```
 
 
 ### Output structure
 
-TBD: contract snapshot
+Output represents a _snapshot_ of a [contract](#contract-type)
+and can only contain [portable types](#portable-types).
+
+```
+k: u32
+k portable items: scalar, point, string, value
+    scalar: 0x00 || [u8; 32]
+    point:  0x01 || [u8; 32]
+    string: 0x02 || u32 || [u8]
+    value:  0x03 || [u8; 32] || [u8; 32]
+
+predicate: [u8; 32]
+```
 
 
 ### Constraint system proof
@@ -430,7 +460,29 @@ instruction. See the instruction’s description for more information.
 
 TBD: merkle hash of all the items
 
+```
+T = Transcript::new("ZkVM.TransactionID")
 
+// leaf: 
+T.commit("input", input)
+T.challenge_bytes -> [u8;32]
+
+// leaf:
+T.commit("output", output)
+T.challenge_bytes -> [u8;32]
+
+// leaf:
+T.commit("issue.qty", qtyc)
+T.commit("issue.flavor", flavorc)
+T.challenge_bytes -> [u8;32]
+
+...tbd...
+
+// node:
+T.commit("left", left)
+T.commit("right", right)
+T.challenge_bytes -> [u8;32]
+```
 
 ### Point operation
 
