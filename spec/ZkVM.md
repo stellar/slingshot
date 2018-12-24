@@ -150,7 +150,7 @@ and its constraint system and therefore cannot be ported between transactions.
 
 ### Scalar type
 
-A _scalar_ is an integer modulo [Ristretto group](https://ristretto.group) order `2^252 + 27742317777372353535851937790883648493`.
+A _scalar_ is an integer modulo [Ristretto group](https://ristretto.group) order `|G| = 2^252 + 27742317777372353535851937790883648493`.
 
 Scalars are encoded as 32-byte arrays using little-endian notation.
 Every scalar in the VM is guaranteed to be in a canonical (reduced) form.
@@ -363,9 +363,7 @@ The signature verification protocol is the following:
 Prover                                              Verifier
 ------------------------------------------------------------
 P := x*B
-                 T("ZkVM.Signature")
                           T <- ("P", P)
-                          T <- ("M", message)
 r := random       
 R := r*B   
                           T <- ("R", R)
@@ -590,9 +588,9 @@ Instruction                | Stack diagram                              | Effect
 [`point:x`](#point)        |                 ø → _point_                | 
 [`string:n:x`](#string)    |                 ø → _string_               | 
 [**Scalars**](#scalar-instructions)            |                        | 
-[`neg`](#neg)              |               _a_ → _l–a_                  | 
-[`add`](#add)              |             _a b_ → _a+b mod l_            | 
-[`mul`](#mul)              |             _a b_ → _a·b mod l_            | 
+[`neg`](#neg)              |               _a_ → _\|G\|–a_              | 
+[`add`](#add)              |             _a b_ → _a+b mod \|G\|_        | 
+[`mul`](#mul)              |             _a b_ → _a·b mod \|G\|_        | 
 [`eq`](#eq)                |             _a b_ → ø                      | Fails if _a_ ≠ _b_.
 [`range:n`](#range)        |               _a_ → _a_                    | Fails if _a_ is not in range [0..2^64-1]
 [**Constraints**](#constraint-system-instructions)  |                   | 
@@ -1066,7 +1064,6 @@ new-version code paths are protected by checks for the transaction
 version. To facilitate that, a hypothetical ZkVM upgrade may introduce
 an extension instruction “version assertion” that fails execution if
 the version is below a given number (e.g. `4 versionverify`).
-
 
 
 
