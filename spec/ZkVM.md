@@ -40,6 +40,16 @@ ZkVM defines a procedural representation for blockchain transactions and the rul
     * [Value instructions](#value-instructions)
     * [Contract instructions](#contract-instructions)
     * [Stack instructions](#stack-instructions)
+* [Examples](#examples)
+    * [Lock value example](#lock-value-example)
+    * [Unlock value example](#unlock-value-example)
+    * [Simple payment example](#simple-payment-example)
+    * [Offer example](#offer-example)
+    * [Offer with partial lift](#offer-with-partial-lift)
+    * [Loan example](#loan-example)
+    * [Loan with interest](#loan-with-interest)
+    * [Payment channel example](#payment-channel-example)
+    * [Payment routing example](#payment-routing-example)
 * [Discussion](#discussion)
     * [Relation to TxVM](#relation-to-txvm)
     * [Compatibility](#compatibility)
@@ -1052,6 +1062,55 @@ Moves the top item past the `k` items below it.
 Immediate data `k` is encoded as an unsigned byte.
 
 Note: `bury:0` is a no-op, `bury:1` swaps the top two items.
+
+
+
+
+
+
+
+
+
+## Examples
+
+### Lock value example
+
+TBD.
+
+### Unlock value example
+
+TBD.
+
+### Simple payment example
+
+TBD.
+
+### Offer example
+
+TBD.
+
+### Offer with partial lift
+
+TBD.
+
+### Loan example
+
+TBD.
+
+### Loan with interest
+
+TBD.
+
+### Payment channel example
+
+TBD.
+
+### Payment routing example
+
+TBD.
+
+
+
 
 
 
