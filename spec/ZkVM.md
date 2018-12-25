@@ -346,6 +346,18 @@ Each contract can be opened by either:
 
 Predicates can be selected from a tree of alternatives via [`left`](#left) and [`right`](#right) instructions.
 
+### Predicate commitment
+
+TBD:
+
+```
+T::new("ZkVM.Hash")
+T.commit("Predicate", predicate as [u8;32])
+let s = T.challenge_scalar("PredicateCommitment")
+
+PC = Com(s,blinding) = s*B + blinding*B2
+```
+
 
 ### Program
 
@@ -372,6 +384,8 @@ The signature verification protocol is the following:
 ```
 Prover                                              Verifier
 ------------------------------------------------------------
+                          T <- ("SignedTxID", txid)
+                          or   ("SignedProgram", prog)
 P := x*B
                           T <- ("P", P)
 r := random       
@@ -434,8 +448,15 @@ with 128-bit security parameter.
 
 Transcript is used throughout ZkVM to generate challenge [scalars](#scalar-type) and various hash-based commitments.
 
+Transcripts have the following operations:
 
+#### Initialize transcript
 
+`T := Transcript(label)`
+
+#### Commit bytes
+
+`T.commit()`
 
 
 TBD: merlin/strobe, protocol label, challenge scalar, labeled inputs.
@@ -941,21 +962,31 @@ Resulting contracts are sorted the same way as predicates, and have number stack
 
 #### output
 
-_items predicatecommitment_ **output:_k_** → ø
+_items... predc_ **output:_k_** → ø
 
-TBD.
+1. Pops [predicate commitment](#predicate-commitment) `predc` from the stack.
+2. Pops `k` items from the stack.
+3. Adds [output](#output-structure) to the [transaction log](#transaction-log).
+
+Immediate data `k` is encoded as an unsigned byte.
 
 #### contract
 
-_items predicate_ **contract:_k_** → _contract_
+_items... pred_ **contract:_k_** → _contract_
 
-TBD.
+1. Pops [predicate](#predicate) `pred` from the stack.
+2. Pops `k` items from the stack.
+3. Creates a contract with the `k` items as a payload and the predicate.
+4. Pushes the contract onto the stack.
+
+Immediate data `k` is encoded as an unsigned byte.
 
 #### nonce
 
 _predicate_ **nonce** → _contract_
 
-TBD.
+TBD. Creates nonce based on the predicate, tx.maxtime and adds it to the txlog. Returns a contract with the predicate and empty stack that must be satisfied. Normally, with signtx.
+
 
 #### data
 
@@ -984,7 +1015,7 @@ Point operations `(0 == Hash(prog)*B2 - P)` are added to the list of deferred po
 
 #### left
 
-_contract L R_ → _contract’_         
+_contract1 L R_ **left** → _contract2_
 
 TBD.
 
@@ -993,7 +1024,7 @@ The point operations are added to the list of deferred point operations.
 
 #### right
 
-_contract L R_ → _contract’_         
+_contract1 L R_ **right** → _contract2_
 
 TBD.
 
@@ -1002,7 +1033,7 @@ The point operations are added to the list of deferred point operations.
 
 #### delegate
 
-_contract prog sig_ → _results..._        
+_contract prog sig_ **delegate** → _results..._
 
 Checks signature over the predicate using contract’s predicate-as-pubkey.
 The signature, predicate and pubkey are added to the list of deferred point operations 
