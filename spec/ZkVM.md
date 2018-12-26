@@ -21,7 +21,7 @@ ZkVM defines a procedural representation for blockchain transactions and the rul
     * [Signed value](#signed-value)
 * [Definitions](#definitions)
     * [Base points](#base-points)
-    * [Commitment](#commitment)
+    * [Pedersen commitment](#pedersen-commitment)
     * [Verification key](#verification-key)
     * [Constraint system](#constraint-system)
     * [Time bounds](#time-bounds)
@@ -198,15 +198,15 @@ recorded in the [transaction log](#transaction-log).
 _Variable_ in ZkVM is a linear combination of high-level and low-level variables
 in the underlying [constraint system](#constraint-system).
 
-Variables can be added and multiplied, producing new variables (see [`zkadd`](#zkadd), [`zkneg`](#zkneg), [`zkmul`](#zkmul), [`scmul`](#scmul) and [`zkrange`](#zkrange) instructions).
+Variables can be added and multiplied, producing new variables
+(see [`zkadd`](#zkadd) and other [constraint system instructions](#constraint-system-instructions)).
+Cleartext [scalars](#scalar-type) can be turned into a _Variable_ type using the [`const`](#const) instruction.
 
-Equality of two variables is checked by creating a [constraint](#constraint-type) using the [`zkeq`](#zkeq) instruction.
+Variables can be copied and dropped at will,
+but cannot be ported across transactions via [outputs](#output-structure).
 
 Examples of variables: [value quantities](#value-type) and [time bounds](#time-bounds).
 
-Cleartext [scalars](#scalar-type) can be turned into a `Variable` type using the [`const`](#const) instruction.
-
-Variables can be copied and dropped at will.
 
 
 ### Constraint type
@@ -266,16 +266,17 @@ B2 = hash-to-ristretto255(SHA3-512(B))
 ```
 
 Both base points are orthogonal (the discrete log between them is unknown)
-and used in [commitments](#commitment), 
+and used in [Pedersen commitments](#pedersen-commitment), 
 [verification keys](#verification-key) and [predicates](#predicate).
 
 
-### Commitment
+### Pedersen commitment
 
-A _commitment_ is a Pedersen commitment to a secret [scalar](#scalar-type) represented by a [point](#point-type):
+Pedersen commitment to a secret [scalar](#scalar-type)
+is defined as a point with the following structure:
 
 ```
-P = Com(v, f) = v*B + f*B2
+P = Com(v, f) = v·B + f·B2
 ```
 
 where:
@@ -285,77 +286,147 @@ where:
 * `f` is a secret blinding factor (scalar),
 * `B` and `B2` are [base points](#base-points).
 
-Commitments can be used to allocate new [variables](#variable-type) using the [`var`](#var) instruction.
+Pedersen commitments can be used to allocate new [variables](#variable-type) using the [`var`](#var) instruction.
 
-Commitments can be proven to use a pre-determined blinding factor using [`encrypt`](#encrypt) and 
+Pedersen commitments can be proven to use a pre-determined blinding factor using [`encrypt`](#encrypt) and 
 [`decrypt`](#decrypt) instructions.
 
 
 ### Verification key
 
 A _verification key_ `P` is a commitment to a secret [scalar](#scalar-type) `x` (_signing key_)
-using the primary [base point](#base-points).
-
-Verification keys are used to construct [predicates](#predicate).
-
-```
-P = x * B
-```
-
-where:
-
-* `P` is the verification key,
-* `x` is the secret signing key (secret scalar),
-* `B` is the [primary base point](#base-points).
-
-
-### Constraint system
-
-The part of the [VM state](#vm-state) that implements
-[Bulletprofs Rank-1 Constraint System](https://doc-internal.dalek.rs/develop/bulletproofs/notes/r1cs_proof/index.html).
-
-Constraint system keeps track of [variables](#variable-type) and [constraints](#constraint-type).
-
+using the primary [base point](#base-points) `B`: `P = x·B`.
+Verification keys are used to construct [predicates](#predicate) and verify [signatures](#signature).
 
 ### Time bounds
 
 Each transaction is explicitly bound to a range of _minimum_ and _maximum_ time.
-
 Each bound is in _seconds_ since Jan 1st, 1970 (UTC), represented by an unsigned 64-bit integer.
-
 Time bounds are available in the transaction as [variables](#variable-type) provided by the instructions
 [`mintime`](#mintime) and [`maxtime`](#maxtime).
+
+
+
+### Transcript
+
+Transcript is an instance of the [Merlin](https://doc.dalek.rs/merlin/) construction,
+which is itself based on [STROBE](https://strobe.sourceforge.io/) and [Keccak-f](https://keccak.team/keccak.html)
+with 128-bit security parameter.
+
+Transcript is used throughout ZkVM to generate challenge [scalars](#scalar-type) and commitments.
+
+Transcripts have the following operations, each taking a label for domain separation:
+
+1. **Initialize** transcript:
+    ```    
+    T := Transcript(label)
+    ```
+
+2. **Commit bytes** of arbitrary length:
+    ```    
+    T.commit(label, bytes)
+    ```
+
+3. **Challenge bytes**
+    ```    
+    T.challenge_bytes<size>(label) -> bytes
+    ```
+
+4. **Challenge scalar** is defined as generating 64 challenge bytes and reducing the 512-bit little-endian integer modulo Ristretto group order `|G|`:
+    ```    
+    T.challenge_scalar(label) -> scalar
+    T.challenge_scalar(label) == T.challenge_bytes<64>(label) mod |G|
+    ```
+
+Labled instances of the transcript can be precomputed
+to reduce number of Keccak-f permutations to just one per challenge.
+
+
 
 
 ### Predicate
 
 A _predicate_ is a representation of a condition that unlocks the [contract](#contract-type).
+Predicate is encoded as a [point](#point-type) representing a node
+of a [predicate tree](#predicate-tree).
 
-Predicate is encoded as a [point](#point-type) which can itself represent:
 
-* a verification key,
-* a set of verification keys,
-* a disjunction of nested predicates,
-* a [program](#program).
+### Predicate tree
 
-Each contract can be opened by either:
+A _predicate tree_ is a composition of [predicates](#predicate) and [programs](#program) that
+provides flexible way to open a [contract](#contract-type).
 
-1. signing the [transaction ID](#transaction-id) with a key ([`signtx`](#signtx) instruction),
-2. revealing the embedded program and evaluating it ([`call`](#call) instruction),
-3. signing a _delegate program_ and evaluating it ([`delegate`](#delegate) instruction).
+Each node in a predicate tree is formed with one of the following:
 
-Predicates can be selected from a tree of alternatives via [`left`](#left) and [`right`](#right) instructions.
+1. [Verification key](#verification-key): can be satisfied by signing a transaction using [`signtx`](#signtx) or signing and executing a program using [`delegate`](#delegate).
+2. [Disjunction](#predicate-disjunction) of other predicates. Choice is made using [`left`](#left) and [`right`](#right) instructions.
+3. [Program commitment](#program-predicate). The structure of the commitment prevents signing and requires user to reveal and evaluate the program using [`call`](#call) instruction.
+
+
+### Predicate disjunction
+
+Disjunction of two predicates is implemented using a commitment `f` that
+commits to _left_ and _right_ [predicates](#predicate) `L` and `R`
+as a scalar factor on a [primary base point](#base-points) `B` added to the predicate `L`:
+
+```
+OR(L,R) = L + f(L, R)·B
+```
+
+Commitment scheme is defined using the [transcript](#transcript) protocol
+by committing compressed 32-byte points `L` and `R` and squeezing a scalar
+that is bound to both predicates:
+
+```
+T = Transcript("ZkVM.Predicate")
+T.commit("L", L)
+T.commit("R", R)
+f = T.challenge_scalar("f")
+OR(L,R) = L + f·B
+```
+
+The choice between the branches is performed using [`left`](#left) and [`right`](#right) instructions.
+
+Disjunction allows signing ([`signtx`](#signtx), [`delegate`](#delegate)) for the [key](#verification-key) `L` without
+revealing the alternative predicate `R` using the adjusted secret scalar `dlog(L) + f(L,R)`.
+
+
+### Program predicate
+
+_Program predicate_ is a commitment to a [program](#program) made using
+commitment scalar `h` on a [secondary base point](#base-points) `B2`:
+
+```
+PP(prog) = f(prog)·B2
+```
+
+Commitment scheme is defined using the [transcript](#transcript) protocol
+by committing the program string and squeezing a scalar that is bound to it:
+
+```
+T = Transcript("ZkVM.Predicate")
+T.commit("Program", prog)
+h = T.challenge_scalar("h")
+PP(prog) = h·B2
+```
+
+Program predicate can be satisfied only via the [`call`](#call) instruction that takes a cleartext program string, verifies the commitment and evaluates the program. Use of the [secondary base point](#base-points) `B2` prevents using the predicate as a [verification key](#verification-key)) and signing with `h` without executing it.
+
 
 ### Predicate commitment
 
-TBD:
+Predicate commitment is a [Pedersen commitment](#pedersen-commitment) to a [predicate](#predicate).
+Such commitments are used to minimize the link between the revealed predicate and the connected previous
+output in the context of the [`inputs`](#inputs) instruction.
+
+Commitment is defined using the [transcript](#transcript) protocol
+which compresses the predicate [point](#point-type) into a pseudo-random scalar `s`:
 
 ```
-T::new("ZkVM.Hash")
-T.commit("Predicate", predicate as [u8;32])
-let s = T.challenge_scalar("PredicateCommitment")
-
-PC = Com(s,blinding) = s*B + blinding*B2
+T = Transcript("ZkVM.Predicate")
+T.commit("Predicate", predicate)
+s = T.challenge_scalar("s")
+PC = Com(s,blinding) = s·B + blinding·B2
 ```
 
 
@@ -412,9 +483,10 @@ Input is serialized as [output](#output-structure) with extra 32 bytes containin
 this output’s [transaction ID](#transaction-id).
 
 ```
-input = prevoutput || prevtxid
-```
+       Input  =  PreviousOutput || PreviousTxID
+PreviousTxID  =  <32 bytes>
 
+```
 
 ### Output structure
 
@@ -422,44 +494,30 @@ Output represents a _snapshot_ of a [contract](#contract-type)
 and can only contain [portable types](#portable-types).
 
 ```
-k: u32
-k portable items: scalar, point, string, value
-    scalar: 0x00 || [u8; 32]
-    point:  0x01 || [u8; 32]
-    string: 0x02 || u32 || [u8]
-    value:  0x03 || [u8; 32] || [u8; 32]
-
-predicate: [u8; 32]
+       Input  =  LE32(k)  ||  Item[0]  || ... ||  Item[k-1]  ||  Predicate
+   Predicate  =  <32 bytes>
+        Item  =  enum { Scalar, Point, String, Value }
+      Scalar  =  0x00  ||  <32 bytes>
+       Point  =  0x01  ||  <32 bytes>
+      String  =  0x02  ||  LE32(len)  ||  <len bytes>
+       Value  =  0x03  ||  <32 bytes> ||  <32 bytes>
 ```
+
+
+### Constraint system
+
+The part of the [VM state](#vm-state) that implements
+[Bulletprofs rank-1 constraint system](https://doc-internal.dalek.rs/develop/bulletproofs/notes/r1cs_proof/index.html).
+
+Constraint system keeps track of [variables](#variable-type) and [constraints](#constraint-type)
+and is used to verify the [constraint system proof](#constraint-system-proof).
 
 
 ### Constraint system proof
 
 A proof of satisfiability of a [constraint system](#constraint-system) built during the VM execution.
 
-The proof is provided to the VM at the beggining of execution and verified when the VM is finished.
-
-
-### Transcript
-
-Transcript is an instance of the [Merlin](https://doc.dalek.rs/merlin/) construction,
-which is itself based on [STROBE](https://strobe.sourceforge.io/) and [Keccak-f](https://keccak.team/keccak.html)
-with 128-bit security parameter.
-
-Transcript is used throughout ZkVM to generate challenge [scalars](#scalar-type) and various hash-based commitments.
-
-Transcripts have the following operations:
-
-#### Initialize transcript
-
-`T := Transcript(label)`
-
-#### Commit bytes
-
-`T.commit()`
-
-
-TBD: merlin/strobe, protocol label, challenge scalar, labeled inputs.
+The proof is provided to the VM at the beggining of execution and verified when the VM is [finished](#vm-execution).
 
 
 ### Transaction witness
@@ -504,28 +562,28 @@ T = Transcript::new("ZkVM.TransactionID")
 
 // leaf: 
 T.commit("input", input)
-T.challenge_bytes -> [u8;32]
+T.challenge_string -> [u8;32]
 
 // leaf:
 T.commit("output", output)
-T.challenge_bytes -> [u8;32]
+T.challenge_string -> [u8;32]
 
 // leaf:
 T.commit("issue.qty", qtyc)
 T.commit("issue.flavor", flavorc)
-T.challenge_bytes -> [u8;32]
+T.challenge_string("node") -> [u8;32]
 
 ...tbd...
 
 // node:
 T.commit("left", left)
 T.commit("right", right)
-T.challenge_bytes -> [u8;32]
+T.challenge_string("node") -> [u8;32]
 ```
 
 ### Point operation
 
-ZkVM defers operations on [points](#points) till the end of the transaction in order
+ZkVM defers operations on [points](#point-type) till the end of the transaction in order
 to batch them with the verification of [transaction signature](#signature) and
 [constraint system proof](#constraint-system-proof).
 
@@ -628,12 +686,14 @@ Instruction                | Stack diagram                              | Effect
 [`scalar:x`](#scalar)      |                 ø → _scalar_               | 
 [`point:x`](#point)        |                 ø → _point_                | 
 [`string:n:x`](#string)    |                 ø → _string_               | 
+                           |                                            |
 [**Scalars**](#scalar-instructions)            |                        | 
 [`neg`](#neg)              |               _a_ → _\|G\|–a_              | 
 [`add`](#add)              |             _a b_ → _a+b mod \|G\|_        | 
 [`mul`](#mul)              |             _a b_ → _a·b mod \|G\|_        | 
 [`eq`](#eq)                |             _a b_ → ø                      | Fails if _a_ ≠ _b_.
 [`range:n`](#range)        |               _a_ → _a_                    | Fails if _a_ is not in range [0..2^64-1]
+                           |                                            |
 [**Constraints**](#constraint-system-instructions)  |                   | 
 [`var`](#var)              |           _point_ → _var_                  | Adds an external variable to [CS](#constraint-system)
 [`const`](#var)            |          _scalar_ → _var_                  | 
@@ -650,6 +710,7 @@ Instruction                | Stack diagram                              | Effect
 [`verify`](#verify)        |      _constraint_ → ø                      | Modifies [CS](#constraint-system) 
 [`encrypt`](#encrypt)      |     _X F V proof_ → _V_                    | Modifies [point operations](#point-operations)
 [`decrypt`](#decrypt)      |        _V scalar_ → _V_                    | Modifies [point operations](#point-operations)
+                           |                                            |
 [**Values**](#value-instructions)              |                        |
 [`issue`](#issue)          |       _qtyc pred_ → _contract_             | Modifies [CS](#constraint-system), [tx log](#transaction-log)
 [`borrow`](#borrow)        |    _qtyc flavorc_ → _–V +V_                | Modifies [CS](#constraint-system)
@@ -659,6 +720,7 @@ Instruction                | Stack diagram                              | Effect
 [`cloak:m:n`](#cloak)      | _signedvalues commitments_ → _values_      | Modifies [CS](#constraint-system)
 [`import`](#import)        |             _???_ → _value_                | Modifies [CS](#constraint-system), [tx log](#transaction-log)
 [`export`](#export)        |       _value ???_ → ø                      | Modifies [CS](#constraint-system), [tx log](#transaction-log)
+                           |                                            |
 [**Contracts**](#contract-instructions)        |                        |
 [`inputs:m`](#inputs)      | _snapshots... predicates..._ → _contracts_ | Modifies [CS](#constraint-system), [tx log](#transaction-log)
 [`output:k`](#output)      | _items... predicatecommitment_ → ø         | Modifies [tx log](#transaction-log)
@@ -670,6 +732,7 @@ Instruction                | Stack diagram                              | Effect
 [`left`](#left)            |       _contract A B_ → _contract’_         | Modifies [point operations](#point-operations)
 [`right`](#right)          |       _contract A B_ → _contract’_         | Modifies [point operations](#point-operations)
 [`delegate`](#delegate)    |  _contract prog sig_ → _results..._        | Modifies [point operations](#point-operations)
+                           |                                            |
 [**Stack**](#stack-instructions)               |                        | 
 [`dup`](#dup)              |               _x_ → _x x_                  |
 [`drop`](#drop)            |               _x_ → ø                      |
@@ -759,10 +822,10 @@ Fails if:
 
 #### var
 
-_p_ **var** → _v_
+_P_ **var** → _v_
 
 Creates a high-level [variable](#variable-type) `v` 
-from a [commitment](#commitment) `p` and adds it to the [constraint system](#constraint-system).
+from a [Pedersen commitment](#pedersen-commitment) `P` and adds it to the [constraint system](#constraint-system).
 
 Fails if `p` is not of type [Point](#point-type).
 
@@ -877,7 +940,7 @@ Verifies that `V = v*B` and pushes back `V`.
 
 _qtyc pred_ **issue** → _contract_
 
-Creates a value with quantity represented by [commitment](#commitment) _qtycommitment_ and flavor defined by the [predicate](#predicate) `pred`, locked in a contract guarded by that predicate.
+Creates a value with quantity represented by a [Pedersen commitment](#pedersen-commitment) _qtycommitment_ and flavor defined by the [predicate](#predicate) `pred`, locked in a contract guarded by that predicate.
 
 Adds variables for quantity and flavor, and adds a 64-bit range proof constraint to the quantity.
 
