@@ -298,6 +298,7 @@ A _verification key_ `P` is a commitment to a secret [scalar](#scalar-type) `x` 
 using the primary [base point](#base-points) `B`: `P = x·B`.
 Verification keys are used to construct [predicates](#predicate) and verify [signatures](#signature).
 
+
 ### Time bounds
 
 Each transaction is explicitly bound to a range of _minimum_ and _maximum_ time.
@@ -338,10 +339,8 @@ Transcripts have the following operations, each taking a label for domain separa
     T.challenge_scalar(label) == T.challenge_bytes<64>(label) mod |G|
     ```
 
-Labled instances of the transcript can be precomputed
+Labeled instances of the transcript can be precomputed
 to reduce number of Keccak-f permutations to just one per challenge.
-
-
 
 
 ### Predicate
@@ -397,7 +396,7 @@ _Program predicate_ is a commitment to a [program](#program) made using
 commitment scalar `h` on a [secondary base point](#base-points) `B2`:
 
 ```
-PP(prog) = f(prog)·B2
+PP(prog) = h(prog)·B2
 ```
 
 Commitment scheme is defined using the [transcript](#transcript) protocol
@@ -423,10 +422,10 @@ Commitment is defined using the [transcript](#transcript) protocol
 which compresses the predicate [point](#point-type) into a pseudo-random scalar `s`:
 
 ```
-T = Transcript("ZkVM.Predicate")
+T  = Transcript("ZkVM.Predicate")
 T.commit("Predicate", predicate)
-s = T.challenge_scalar("s")
-PC = Com(s,blinding) = s·B + blinding·B2
+s  = T.challenge_scalar("s")
+PC = Com(s, blinding) = s·B + blinding·B2
 ```
 
 
@@ -450,29 +449,36 @@ to a [verification key](#verification-key).
 
 Signature is encoded as a 64-byte [string](#string-type).
 
-The signature verification protocol is the following:
+The protocol is the following:
 
-```
-Prover                                              Verifier
-------------------------------------------------------------
-                          T <- ("SignedTxID", txid)
-                          or   ("SignedProgram", prog)
-P := x*B
-                          T <- ("P", P)
-r := random       
-R := r*B   
-                          T <- ("R", R)
-                     e <- T
-s := r + e*x
-                                             s*G =?= R + e*P
-```
-
-where:
-
-1. `T` is a [transcript](#transcript),
-2. `P` is a [verification key](#verification-key),
-3. `R` is a commitment to a random nonce `r`,
-4. `e` is a Fiat-Shamir challenge scalar.
+1. Prover and verifier obtain a [transcript](#transcript) `T` defined by the context in which the signature is used (see [`signtx`](#signtx), [`delegate`](#delegate)).
+2. Prover creates a _secret nonce_, randomly sampled [scalar](#scalar-type) `r`.
+3. Prover commits to nonce:
+    ```
+    R = r·B
+    ```
+4. Prover sends `R` to the verifier.
+5. Prover and verifier write the [verification key](#verification-key) `P` to the transcript:
+    ```
+    T.commit("P", P)
+    ```
+6. Prover and verifier write the nonce commitment `R` to the transcript:
+    ```
+    T.commit("R", R)
+    ```
+7. Prover and verifier compute a Fiat-Shamir challenge scalar `e` using the transcript:
+    ```
+    e = T.challenge_scalar("e")
+    ```
+8. Prover computes a signature scalar `s` using the nonce, the challenge and the secret key `dlog(P)`:
+    ```
+    s = r + e·dlog(P)
+    ```
+9. Prover sends `s` to the verifier.
+10. Verifier checks the relation:
+    ```
+    s·B == R + e·P
+    ```
 
 
 ### Input structure
@@ -487,6 +493,7 @@ this output’s [transaction ID](#transaction-id).
 PreviousTxID  =  <32 bytes>
 
 ```
+
 
 ### Output structure
 
@@ -591,6 +598,54 @@ TBD: describe the actual format of the storage and how it's converted into a che
 TBD: instructions: `delegate`, `left`, `right`, `call`, `decrypt`, `encrypt`.
 
 
+### Aggregated transaction signature
+
+Instruction [`signtx`](#signtx) unlocks a contract if its [predicate](#predicate)
+correctly signs the [transaction ID](#transaction-id). The contract‘s predicate
+is added to the array of deferred [verification keys](#verification-key) that
+are later aggregated in a single key and a Schnorr [signature](#signature) protocol
+is executed for the [transaction ID](#transaction-id).
+
+Aggregation protocol is:
+
+1. Instantiate the [transcript](#transcript) `TA` for aggregation:
+    ```
+    TA = Transcript("ZkVM.KeyAggregation")
+    ```
+2. Commit the count `n` of deferred keys as little-endian 32-bit integer:
+    ```
+    TA.commit("n", LE32(n))
+    ```
+3. Commit all deferred keys `P[i]` in order, one by one:
+    ```
+    TA.commit("P", P[i])
+    ```
+4. For each key, generate a randomizing scalar:
+    ```
+    x[i] = TA.challenge_scalar("x")
+    ```
+5. Form an aggregated key without computing it right away:
+    ```
+    PA = x[0]·P[0] + ... + x[n-1]·P[n-1]
+    ```
+5. Instantiate another transcript `TS` for the [signature protocol](#signature):
+    ```
+    TS = Transcript("ZkVM.TxSignature")
+    ```
+6. Form a verification statement ...
+
+TBD: remove commit(P) from Signature and reuse this single transcript for aggregation and signature.
+
+
+
+
+
+
+
+
+
+
+
 ## VM operation
 
 ### VM state
@@ -644,7 +699,7 @@ If the execution finishes successfully, VM performs the following checks (and fa
 1. the data stack must be empty,
 2. the uniqueness flag must be set to `true`,
 3. [constraint system proof](#constraint-system-proof) must be valid,
-4. aggregated signature over [transaction ID](#transaction-id) must be valid,
+4. [aggregated signature](#aggregated-transaction-signature) over [transaction ID](#transaction-id) must be valid,
 5. all deferred point statements must be valid,
 
 If VM execution succeeded, the resulting [transaction log](#transaction-log) is further
@@ -1062,37 +1117,60 @@ Adds _data_ entry to the [transaction log](#transaction-log).
 
 _contract_ **signtx** → _results..._
 
-TBD.
+1. Pops the [contract](#contract-type) from the stack.
+2. Adds the contract’s [predicate](#predicate) as a [verification key](#verification-key)
 
 Unlocks the stack of the contract by deferring a signature check over txid with the predicate-as-a-pubkey.
 All such pubkeys are aggregated and a single signature is checked in the end of VM execution.
 
 #### call
 
-_contract prog_ **call** → _results..._
+_contract(P) prog_ **call** → _results..._
 
-TBD.
+1. Pops the [string](#string-type) `prog` and a [contract](#contract-type) `contract`.
+2. Reads the [predicate](#predicate) `P` from the contract.
+3. Forms a statement for [program predicate](#program-predicate) of `prog` being equal to `P`:
+    ```
+    0 == -P + h(prog)·B2
+    ```
+4. Adds the statement to the deferred point operations.
+5. Places the [payload](#contract-payload) on the stack (last item on top), discarding the contract.
+6. Saves the current program in the program stack, sets the `prog` as current and [runs it](#vm-execution).
 
-Checks that contract’s predicate point `P == Hash(prog)*B2` and executes the prog with the contract stack.
-Point operations `(0 == Hash(prog)*B2 - P)` are added to the list of deferred point operations.
+Fails if the top item is not a [string](#string-type) or
+the second-from-the-top is not a [contract](#contract-type).
 
 #### left
 
-_contract1 L R_ **left** → _contract2_
+_contract(P) L R_ **left** → _contract(L)_
 
-TBD.
+1. Pops the right [predicate](#predicate) `R`, then the left [predicate](#predicate) `L`.
+2. Reads the [predicate](#predicate) `P` from the contract.
+3. Forms a statement for [predicate disjunction](#predicate-disjunction) of `L` and `R` being equal to `P`:
+    ```
+    0 == -P + L + f(L, R)·B
+    ```
+4. Adds the statement to the deferred point operations.
+5. Replaces the contract’s predicate with `L` and leaves the contract on stack.
 
-Checks that the contract’s predicate point P == L + Hash(L||R) * B and replaces the current predicate with L.
-The point operations are added to the list of deferred point operations.
+Fails if the top two items are not [points](#point-type),
+or if the third from the top item is not a [contract](#contract-type).
 
 #### right
 
-_contract1 L R_ **right** → _contract2_
+_contract(P) L R_ **left** → _contract(R)_
 
-TBD.
+1. Pops the right [predicate](#predicate) `R`, then the left [predicate](#predicate) `L`.
+2. Reads the [predicate](#predicate) `P` from the contract.
+3. Forms a statement of [predicate disjunction](#predicate-disjunction) of `L` and `R` being equal to `P`:
+    ```
+    0 == -P + L + f(L, R)·B
+    ```
+4. Adds the statement to the deferred point operations.
+5. Replaces the contract’s predicate with `R` and leaves the contract on stack.
 
-Checks that the contract’s predicate point P == L + Hash(L||R) * B and replaces the current predicate with R.
-The point operations are added to the list of deferred point operations.
+Fails if the top two items are not [points](#point-type),
+or if the third from the top item is not a [contract](#contract-type).
 
 #### delegate
 
