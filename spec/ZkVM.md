@@ -404,7 +404,7 @@ by committing the program string and squeezing a scalar that is bound to it:
 
 ```
 T = Transcript("ZkVM.Predicate")
-T.commit("Program", prog)
+T.commit("prog", prog)
 h = T.challenge_scalar("h")
 PP(prog) = h·B2
 ```
@@ -423,7 +423,7 @@ which compresses the predicate [point](#point-type) into a pseudo-random scalar 
 
 ```
 T  = Transcript("ZkVM.Predicate")
-T.commit("Predicate", predicate)
+T.commit("pred", predicate)
 s  = T.challenge_scalar("s")
 PC = Com(s, blinding) = s·B + blinding·B2
 ```
@@ -440,45 +440,6 @@ A list of [items](#types) stored in the [contract](#contract-type) or [output](#
 
 Payload of a [contract](#contract-type) may contain arbitrary [types](#types),
 but in the [output](#output-structure) only the [portable types](#portable-types) are allowed.
-
-
-### Signature
-
-Signature is a Schnorr proof of knowledge of a secret [scalar](#scalar-type) corresponding
-to a [verification key](#verification-key).
-
-Signature is encoded as a 64-byte [string](#string-type).
-
-The protocol is the following:
-
-1. Prover and verifier obtain a [transcript](#transcript) `T` defined by the context in which the signature is used (see [`signtx`](#signtx), [`delegate`](#delegate)).
-2. Prover creates a _secret nonce_, randomly sampled [scalar](#scalar-type) `r`.
-3. Prover commits to nonce:
-    ```
-    R = r·B
-    ```
-4. Prover sends `R` to the verifier.
-5. Prover and verifier write the [verification key](#verification-key) `P` to the transcript:
-    ```
-    T.commit("P", P)
-    ```
-6. Prover and verifier write the nonce commitment `R` to the transcript:
-    ```
-    T.commit("R", R)
-    ```
-7. Prover and verifier compute a Fiat-Shamir challenge scalar `e` using the transcript:
-    ```
-    e = T.challenge_scalar("e")
-    ```
-8. Prover computes a signature scalar `s` using the nonce, the challenge and the secret key `dlog(P)`:
-    ```
-    s = r + e·dlog(P)
-    ```
-9. Prover sends `s` to the verifier.
-10. Verifier checks the relation:
-    ```
-    s·B == R + e·P
-    ```
 
 
 ### Input structure
@@ -588,14 +549,40 @@ T.commit("right", right)
 T.challenge_string("node") -> [u8;32]
 ```
 
-### Point operation
 
-ZkVM defers operations on [points](#point-type) till the end of the transaction in order
-to batch them with the verification of [transaction signature](#signature) and
-[constraint system proof](#constraint-system-proof).
+### Signature
 
-TBD: describe the actual format of the storage and how it's converted into a check.
-TBD: instructions: `delegate`, `left`, `right`, `call`, `decrypt`, `encrypt`.
+Signature is a Schnorr proof of knowledge of a secret [scalar](#scalar-type) corresponding
+to a [verification key](#verification-key) in a context of some _message_.
+
+Signature is encoded as a 64-byte [string](#string-type).
+
+The protocol is the following:
+
+1. Prover and verifier obtain a [transcript](#transcript) `T` defined by the context in which the signature is used (see [`signtx`](#signtx), [`delegate`](#delegate)). The transcript is assumed to be already bound to the _message_ and the [verification key](#verification-key) `P`.
+2. Prover creates a _secret nonce_, randomly sampled [scalar](#scalar-type) `r`.
+3. Prover commits to nonce:
+    ```
+    R = r·B
+    ```
+4. Prover sends `R` to the verifier.
+5. Prover and verifier write the nonce commitment `R` to the transcript:
+    ```
+    T.commit("R", R)
+    ```
+6. Prover and verifier compute a Fiat-Shamir challenge scalar `e` using the transcript:
+    ```
+    e = T.challenge_scalar("e")
+    ```
+7. Prover computes a signature scalar `s` using the nonce, the challenge and the secret key `dlog(P)`:
+    ```
+    s = r + e·dlog(P)
+    ```
+8. Prover sends `s` to the verifier.
+9. Verifier checks the relation:
+    ```
+    s·B == R + e·P
+    ```
 
 
 ### Aggregated transaction signature
@@ -608,39 +595,35 @@ is executed for the [transaction ID](#transaction-id).
 
 Aggregation protocol is:
 
-1. Instantiate the [transcript](#transcript) `TA` for aggregation:
+1. Instantiate the [transcript](#transcript) `TA` for transaction signature:
     ```
-    TA = Transcript("ZkVM.KeyAggregation")
+    T = Transcript("ZkVM.signtx")
     ```
 2. Commit the count `n` of deferred keys as little-endian 32-bit integer:
     ```
-    TA.commit("n", LE32(n))
+    T.commit("n", LE32(n))
     ```
 3. Commit all deferred keys `P[i]` in order, one by one:
     ```
-    TA.commit("P", P[i])
+    T.commit("P", P[i])
     ```
 4. For each key, generate a randomizing scalar:
     ```
-    x[i] = TA.challenge_scalar("x")
+    x[i] = T.challenge_scalar("x")
     ```
 5. Form an aggregated key without computing it right away:
     ```
     PA = x[0]·P[0] + ... + x[n-1]·P[n-1]
     ```
-5. Instantiate another transcript `TS` for the [signature protocol](#signature):
+6. Perform the [signature protocol](#signature) using the transcript `T`, randomized secret keys `x[i]·dlog(P[i])`, and unrolling `PA` in the final statement:
     ```
-    TS = Transcript("ZkVM.TxSignature")
+    s[i] = r[i] + e·x[i]·dlog(P[i])
+      s  = sum{s[i]}
+
+    s·B  ==  R + e·PA
+         ==  R + e·x[0]·P[0] + ... + e·x[n-1]·P[n-1]
     ```
-6. Form a verification statement ...
-
-TBD: remove commit(P) from Signature and reuse this single transcript for aggregation and signature.
-
-
-
-
-
-
+7. Add the statement to the list of [deferred point operations](#deferred-point-operations).
 
 
 
@@ -665,7 +648,7 @@ The ZkVM state consists of the static attributes and the state machine attribute
 * Current [program](#program) with its offset
 * [Transaction log](#transaction-log) (array of logged items)
 * Transaction signature verification keys (array of [points](#point-type))
-* Deferred [point operations](#point-operation)
+* [Deferred point operations](#deferred-point-operations)
 * [Constraint system](#constraint-system)
 
 
@@ -699,12 +682,46 @@ If the execution finishes successfully, VM performs the following checks (and fa
 1. the data stack must be empty,
 2. the uniqueness flag must be set to `true`,
 3. [constraint system proof](#constraint-system-proof) must be valid,
-4. [aggregated signature](#aggregated-transaction-signature) over [transaction ID](#transaction-id) must be valid,
-5. all deferred point statements must be valid,
+4. [aggregated transaction signature](#aggregated-transaction-signature) must be valid,
+5. all [deferred point operations](#deferred-point-operations) must be valid,
 
 If VM execution succeeded, the resulting [transaction log](#transaction-log) is further
 validated against the blockchain state. That step, called _application_, is described in
 [the blockchain specification](Blockchain.md#apply-transaction-log).
+
+
+### Deferred point operations
+
+VM defers operations on [points](#point-type) till the end of the transaction in order
+to batch them with the verification of [transaction signature](#signature) and
+[constraint system proof](#constraint-system-proof).
+
+Each deferred operation at index `i` represents a statement:
+```
+0  ==  sum{s[i,j]·P[i,j], for all j}  +  a[i]·B  +  b[i]·B2
+```
+where:
+1. `{s[i,j],P[i,j]}` is an array of ([scalar](#scalar-type),[point](#point-type)) tuples,
+2. `a[i]` is a [scalar](#scalar-type) weight of a [primary base point](#base-points) `B`,
+3. `b[i]` is a [scalar](#scalar-type) weight of a [secondary base point](#base-points) `B2`.
+
+All such statements are combined using the following method:
+
+1. For each statement, a random [scalar](#scalar-type) `x[i]` is sampled.
+2. Each weight `s[i,j]` is multiplied by `x[i]` for all weights per statement `i`:
+    ```
+    z[i,j] = x[i]·s[i,j]
+    ```
+3. All weights `a[i]` and `b[i]` are independently added up with `x[i]` factors:
+    ```
+    a = sum{a[i]·x[i]}
+    b = sum{b[i]·x[i]}
+    ```
+4. A single multi-scalar multiplication is performed to verify the combined statement:
+    ```
+    0  ==  sum{z[i,j]·P[i,j], for all i,j}  +  a·B  +  b·B2
+    ```
+
 
 ### Versioning
 
@@ -763,8 +780,8 @@ Instruction                | Stack diagram                              | Effect
 [`and`](#and)              | _constr1 constr2_ → _constr3_              |
 [`or`](#or)                | _constr1 constr2_ → _constr3_              |
 [`verify`](#verify)        |      _constraint_ → ø                      | Modifies [CS](#constraint-system) 
-[`encrypt`](#encrypt)      |     _X F V proof_ → _V_                    | Modifies [point operations](#point-operations)
-[`decrypt`](#decrypt)      |        _V scalar_ → _V_                    | Modifies [point operations](#point-operations)
+[`encrypt`](#encrypt)      |     _X F V proof_ → _V_                    | [Defers point operations](#deferred-point-operations)
+[`decrypt`](#decrypt)      |        _V scalar_ → _V_                    | [Defers point operations](#deferred-point-operations))
                            |                                            |
 [**Values**](#value-instructions)              |                        |
 [`issue`](#issue)          |       _qtyc pred_ → _contract_             | Modifies [CS](#constraint-system), [tx log](#transaction-log)
@@ -783,10 +800,10 @@ Instruction                | Stack diagram                              | Effect
 [`nonce`](#nonce)          |          _predicate_ → _contract_          | Modifies [tx log](#transaction-log)
 [`data`](#data)            |               _item_ → ø                   | Modifies [tx log](#transaction-log)
 [`signtx`](#signtx)        |           _contract_ → _results..._        | Modifies [deferred verification keys](#signature)
-[`call`](#call)            |      _contract prog_ → _results..._        | Modifies [point operations](#point-operations)
-[`left`](#left)            |       _contract A B_ → _contract’_         | Modifies [point operations](#point-operations)
-[`right`](#right)          |       _contract A B_ → _contract’_         | Modifies [point operations](#point-operations)
-[`delegate`](#delegate)    |  _contract prog sig_ → _results..._        | Modifies [point operations](#point-operations)
+[`call`](#call)            |      _contract prog_ → _results..._        | [Defers point operations](#deferred-point-operations)
+[`left`](#left)            |       _contract A B_ → _contract’_         | [Defers point operations](#deferred-point-operations)
+[`right`](#right)          |       _contract A B_ → _contract’_         | [Defers point operations](#deferred-point-operations)
+[`delegate`](#delegate)    |  _contract prog sig_ → _results..._        | [Defers point operations](#deferred-point-operations)
                            |                                            |
 [**Stack**](#stack-instructions)               |                        | 
 [`dup`](#dup)              |               _x_ → _x x_                  |
@@ -1119,9 +1136,13 @@ _contract_ **signtx** → _results..._
 
 1. Pops the [contract](#contract-type) from the stack.
 2. Adds the contract’s [predicate](#predicate) as a [verification key](#verification-key)
+   to the list of deferred keys for [aggregated transaction signature](#aggregated-transaction-signature)
+   check at the end of the VM execution.
+3. Places the [payload](#contract-payload) on the stack (last item on top), discarding the contract.
 
-Unlocks the stack of the contract by deferring a signature check over txid with the predicate-as-a-pubkey.
-All such pubkeys are aggregated and a single signature is checked in the end of VM execution.
+Note: the instruction never fails as the only check (signature verification)
+is deferred until the end of VM execution.
+
 
 #### call
 
@@ -1176,15 +1197,37 @@ or if the third from the top item is not a [contract](#contract-type).
 
 _contract prog sig_ **delegate** → _results..._
 
-Checks signature over the predicate using contract’s predicate-as-pubkey.
-The signature, predicate and pubkey are added to the list of deferred point operations 
-will be merged into single multi-scalar multiplication).
-The predicate is invoked as if it was the original predicate guarding the contract stack.
+1. Pops [strings](#string-type) `sig`, [string](#string-type) `prog` and the [contract](#contract-type) from the stack.
+2. Instantiates the [transcript](#transcript):
+    ```
+    T = Transcript("ZkVM.delegate")
+    ```
+3. Commits the contract’s [predicate](#predicate) to the transcript:
+    ```
+    P = contract.predicate
+    T.commit("P", P)
+    ```
+4. Commits the program `prog` to the transcript:
+    ```
+    T.commit("prog", prog)
+    ```
+5. Extracts nonce commitment `R` and scalar `s` from a 64-byte string `sig`:
+    ```
+    R = sig[ 0..32]
+    s = sig[32..64]
+    ```
+6. Performs the [signature protocol](#signature) using the transcript `T`, secret key `dlog(contract.predicate)` and the values `R` and `s`:
+    ```
+    (s = dlog(r) + e·dlog(P))
+    s·B  ==  R + e·P
+    ```
+7. Adds the statement to the list of [deferred point operations](#deferred-point-operations).
+8. Saves the current program in the program stack, sets the `prog` as current and [runs it](#vm-execution).
 
-
-
-
-
+Fails if:
+1. the `sig` is not a 64-byte long [string](#string-type),
+2. or `prog` is not a string,
+3. or `contract` is not a [contract type](#contract-type).
 
 
 
