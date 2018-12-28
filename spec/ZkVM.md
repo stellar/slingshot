@@ -225,13 +225,11 @@ Constraints only have an effect if added to the constraint system using the [`ve
 ### Value type
 
 A value is a [linear type](#linear-types) representing a pair of *quantity* and *flavor*.
-
 Both quantity and flavor are represented as [scalars](#scalar-type).
 Quantity is guaranteed to be in a 64-bit range (`[0..2^64-1]`).
 
 Values are created with [`issue`](#issue) and destroyed with [`retire`](#retire).
-
-A value can be merged and split together with other values using a [`cloak`](#cloak) instruction.
+Values can be merged and split together with other values using a [`cloak`](#cloak) instruction.
 Only values having the same flavor can be merged.
 
 Values are secured by “locking them up” inside [contracts](#contract-type).
@@ -322,17 +320,14 @@ Transcripts have the following operations, each taking a label for domain separa
     ```    
     T := Transcript(label)
     ```
-
 2. **Commit bytes** of arbitrary length:
     ```    
     T.commit(label, bytes)
     ```
-
 3. **Challenge bytes**
     ```    
     T.challenge_bytes<size>(label) -> bytes
     ```
-
 4. **Challenge scalar** is defined as generating 64 challenge bytes and reducing the 512-bit little-endian integer modulo Ristretto group order `|G|`:
     ```    
     T.challenge_scalar(label) -> scalar
@@ -377,7 +372,7 @@ by committing compressed 32-byte points `L` and `R` and squeezing a scalar
 that is bound to both predicates:
 
 ```
-T = Transcript("ZkVM.Predicate")
+T = Transcript("ZkVM.predicate")
 T.commit("L", L)
 T.commit("R", R)
 f = T.challenge_scalar("f")
@@ -403,7 +398,7 @@ Commitment scheme is defined using the [transcript](#transcript) protocol
 by committing the program string and squeezing a scalar that is bound to it:
 
 ```
-T = Transcript("ZkVM.Predicate")
+T = Transcript("ZkVM.predicate")
 T.commit("prog", prog)
 h = T.challenge_scalar("h")
 PP(prog) = h·B2
@@ -422,7 +417,7 @@ Commitment is defined using the [transcript](#transcript) protocol
 which compresses the predicate [point](#point-type) into a pseudo-random scalar `s`:
 
 ```
-T  = Transcript("ZkVM.Predicate")
+T  = Transcript("ZkVM.predicate")
 T.commit("pred", predicate)
 s  = T.challenge_scalar("s")
 PC = Com(s, blinding) = s·B + blinding·B2
@@ -455,6 +450,20 @@ PreviousTxID  =  <32 bytes>
 
 ```
 
+### UTXO
+
+UTXO is an _unspent transaction output_ identified by a 32-byte hash computed using [transcript](#transcript):
+
+```
+T = Transcript("ZkVM.utxo")
+T.commit("txid", previous_txid)
+T.commit("output", previous_output)
+utxo = T.challenge_bytes("id")
+```
+
+In the above, `previous_txid` is the [transaction ID](#transaction-id) of the transaction where the output was created,
+and `previous_output` is the [output](#output-structure), serialized.
+
 
 ### Output structure
 
@@ -467,10 +476,11 @@ and can only contain [portable types](#portable-types).
         Item  =  enum { Scalar, Point, String, Value }
       Scalar  =  0x00  ||  <32 bytes>
        Point  =  0x01  ||  <32 bytes>
-      String  =  0x02  ||  LE32(len)  ||  <len bytes>
+      String  =  0x02  ||  LE32(len)  ||  <bytes>
        Value  =  0x03  ||  <32 bytes> ||  <32 bytes>
 ```
 
+Note: the [plain data](#data-types) items are encoded as VM instructions that produce the corresponding item.
 
 ### Constraint system
 
@@ -509,45 +519,140 @@ append-only. Items are added to it upon execution of any of the
 following instructions:
 
 * [`input`](#input)
-* [`issue`](#issue)
-* [`data`](#data)
-* [`nonce`](#nonce)
 * [`output`](#output)
+* [`issue`](#issue)
 * [`retire`](#retire)
+* [`nonce`](#nonce)
+* [`data`](#data)
 * [`import`](#import)
 * [`export`](#export)
 
-The details of the item added to the log differs for each
-instruction. See the instruction’s description for more information.
+See the specification of each instruction for the details of which data is stored.
+
+Note: transaction log items are only serialized when committed to a [transcript](#transcript)
+during the [transaction ID](#transaction-id) computation.
 
 
 ### Transaction ID
 
-TBD: merkle hash of all the items
+Transaction ID is defined as a [merkle hash](#merkle-binary-tree) of a list consisting of 
+a _header entry_ (transaction version and [time bounds](#time-bounds)),
+followed by all the entries from the [transaction log](#transaction-log):
 
 ```
-T = Transcript::new("ZkVM.TransactionID")
-
-// leaf: 
-T.commit("input", input)
-T.challenge_string -> [u8;32]
-
-// leaf:
-T.commit("output", output)
-T.challenge_string -> [u8;32]
-
-// leaf:
-T.commit("issue.qty", qtyc)
-T.commit("issue.flavor", flavorc)
-T.challenge_string("node") -> [u8;32]
-
-...tbd...
-
-// node:
-T.commit("left", left)
-T.commit("right", right)
-T.challenge_string("node") -> [u8;32]
+T = Transcript("ZkVM.txid")
+txid = MerkleHash(T, {header} || txlog )
 ```
+
+Entries are committed to the [transcript](#transcript) using the following schema.
+
+#### Header entry
+
+```
+T.commit("tx.version", LE64(version))
+T.commit("tx.mintime", LE64(mintime))
+T.commit("tx.maxtime", LE64(maxtime))
+```
+
+#### Input entry
+
+```
+T.commit("input", utxo_id)
+```
+
+where `utxo_id` is the ID of the corresponding [UTXO](#utxo).
+
+#### Output entry
+
+```
+T.commit("output", output_structure)
+```
+
+where `output_structure` is a serialized [output](#output-structure).
+
+#### Issue entry
+
+```
+T.commit("issue.q", qty_commitment)
+T.commit("issue.f", flavor_commitment)
+```
+
+#### Retire entry
+
+```
+T.commit("retire.q", qty_commitment)
+T.commit("retire.f", flavor_commitment)
+```
+
+#### Nonce entry
+
+```
+T.commit("nonce.p", predicate)
+T.commit("nonce.t", maxtime)
+```
+
+#### Data entry
+
+A [data type](#data-types) ([scalar](#scalar-type), [point](#point-type) or [string](#string-type)) is encoded
+as a single-instruction program that produces an item of the corresponding type (see [output structure](#output-structure)).
+
+```
+T.commit("data", prog)
+```
+
+#### Import entry
+
+TBD.
+
+#### Export entry
+
+TBD.
+
+
+
+### Merkle binary tree
+
+The construction of a merkle binary tree is based on the [RFC 6962 Section 2.1](https://tools.ietf.org/html/rfc6962#section-2.1)
+with hash function replaced with a [transcript](#transcript).
+
+Leafs and nodes in the tree use the same instance of a transcript provided by the upstream protocol:
+
+```
+T = Transcript(<label>)
+```
+
+The hash of an empty list is a 32-byte challenge string with the label `merkle.empty`:
+
+```
+MerkleHash(T, {}) = T.challenge_bytes("merkle.empty")
+```
+
+The hash of a list with one entry (also known as a leaf hash) is
+computed by committing the entry to the transcript (defined by the item type),
+and then generating 32-byte challenge string the label `merkle.leaf`:
+
+```
+MerkleHash(T, {item}) = {
+    T.commit(<field1 name>, item.field1)
+    T.commit(<field2 name>, item.field2)
+    ...
+    T.challenge_bytes("merkle.leaf")
+}
+```
+
+For n > 1, let k be the largest power of two smaller than n (i.e., k < n ≤ 2k). The merkle hash of an n-element list is then defined recursively as:
+
+```
+MerkleHash(T, list) = {
+    T.commit("L", MerkleHash(list[0..k]))
+    T.commit("R", MerkleHash(list[k..n]))
+    T.challenge_bytes("merkle.node")
+}
+```
+
+Note that we do not require the length of the input list to be a power of two.
+The resulting merkle binary tree may thus not be balanced; however,
+its shape is uniquely determined by the number of leaves.
 
 
 ### Signature
@@ -751,65 +856,65 @@ Immediate data is denoted by a colon `:` after the instruction name.
 
 Each instruction defines the format for immediate data. See the reference below for detailed specification.
 
-Instruction                | Stack diagram                              | Effects
----------------------------|--------------------------------------------|----------------------------------
-[**Data**](#data-instructions)                 |                        |
-[`scalar:x`](#scalar)      |                 ø → _scalar_               | 
-[`point:x`](#point)        |                 ø → _point_                | 
-[`string:n:x`](#string)    |                 ø → _string_               | 
-                           |                                            |
-[**Scalars**](#scalar-instructions)            |                        | 
-[`neg`](#neg)              |               _a_ → _\|G\|–a_              | 
-[`add`](#add)              |             _a b_ → _a+b mod \|G\|_        | 
-[`mul`](#mul)              |             _a b_ → _a·b mod \|G\|_        | 
-[`eq`](#eq)                |             _a b_ → ø                      | Fails if _a_ ≠ _b_.
-[`range:n`](#range)        |               _a_ → _a_                    | Fails if _a_ is not in range [0..2^64-1]
-                           |                                            |
-[**Constraints**](#constraint-system-instructions)  |                   | 
-[`var`](#var)              |           _point_ → _var_                  | Adds an external variable to [CS](#constraint-system)
-[`const`](#var)            |          _scalar_ → _var_                  | 
-[`mintime`](#mintime)      |                 ø → _var_                  |
-[`maxtime`](#maxtime)      |                 ø → _var_                  |
-[`zkneg`](#zkneg)          |            _var1_ → _var2_                 |
-[`zkadd`](#zkadd)          |       _var1 var2_ → _var3_                 |
-[`zkmul`](#zkmul)          |       _var1 var2_ → _var3_                 | Adds multiplier in [CS](#constraint-system)
-[`scmul`](#scmul)          |          _var1 x_ → _var2_                 | 
-[`zkeq`](#zkeq)            |       _var1 var2_ → _constraint_           | 
-[`zkrange:n`](#zkrange)    |             _var_ → _var_                  | Modifies [CS](#constraint-system)
-[`and`](#and)              | _constr1 constr2_ → _constr3_              |
-[`or`](#or)                | _constr1 constr2_ → _constr3_              |
-[`verify`](#verify)        |      _constraint_ → ø                      | Modifies [CS](#constraint-system) 
-[`encrypt`](#encrypt)      |     _X F V proof_ → _V_                    | [Defers point operations](#deferred-point-operations)
-[`decrypt`](#decrypt)      |        _V scalar_ → _V_                    | [Defers point operations](#deferred-point-operations))
-                           |                                            |
-[**Values**](#value-instructions)              |                        |
-[`issue`](#issue)          |       _qtyc pred_ → _contract_             | Modifies [CS](#constraint-system), [tx log](#transaction-log)
-[`borrow`](#borrow)        |    _qtyc flavorc_ → _–V +V_                | Modifies [CS](#constraint-system)
-[`retire`](#retire)        |           _value_ → ø                      | Modifies [CS](#constraint-system), [tx log](#transaction-log)
-[`qty`](#qty)              |     _signedvalue_ → _signedvalue qtyvar_   |
-[`flavor`](#flavor)        |     _signedvalue_ → _signedvalue flavorvar_|
-[`cloak:m:n`](#cloak)      | _signedvalues commitments_ → _values_      | Modifies [CS](#constraint-system)
-[`import`](#import)        |             _???_ → _value_                | Modifies [CS](#constraint-system), [tx log](#transaction-log)
-[`export`](#export)        |       _value ???_ → ø                      | Modifies [CS](#constraint-system), [tx log](#transaction-log)
-                           |                                            |
-[**Contracts**](#contract-instructions)        |                        |
-[`inputs:m`](#inputs)      | _snapshots... predicates..._ → _contracts_ | Modifies [CS](#constraint-system), [tx log](#transaction-log)
-[`output:k`](#output)      | _items... predicatecommitment_ → ø         | Modifies [tx log](#transaction-log)
-[`contract:k`](#contract)  | _items... predicate_ → _contract_          | 
-[`nonce`](#nonce)          |          _predicate_ → _contract_          | Modifies [tx log](#transaction-log)
-[`data`](#data)            |               _item_ → ø                   | Modifies [tx log](#transaction-log)
-[`signtx`](#signtx)        |           _contract_ → _results..._        | Modifies [deferred verification keys](#signature)
-[`call`](#call)            |      _contract prog_ → _results..._        | [Defers point operations](#deferred-point-operations)
-[`left`](#left)            |       _contract A B_ → _contract’_         | [Defers point operations](#deferred-point-operations)
-[`right`](#right)          |       _contract A B_ → _contract’_         | [Defers point operations](#deferred-point-operations)
-[`delegate`](#delegate)    |  _contract prog sig_ → _results..._        | [Defers point operations](#deferred-point-operations)
-                           |                                            |
-[**Stack**](#stack-instructions)               |                        | 
-[`dup`](#dup)              |               _x_ → _x x_                  |
-[`drop`](#drop)            |               _x_ → ø                      |
-[`peek:k`](#peek)          |     _x[k] … x[0]_ → _x[k] ... x[0] x[k]_   |
-[`roll:k`](#roll)          |     _x[k] … x[0]_ → _x[k-1] ... x[0] x[k]_ |
-[`bury:k`](#bury)          |     _x[k] … x[0]_ → _x[0] x[k] ... x[1]_   |
+Code | Instruction                | Stack diagram                              | Effects
+-----|----------------------------|--------------------------------------------|----------------------------------
+ |     [**Data**](#data-instructions)                 |                        |
+0x00 | [`scalar:x`](#scalar)      |                 ø → _scalar_               | 
+0x01 | [`point:x`](#point)        |                 ø → _point_                | 
+0x02 | [`string:n:x`](#string)    |                 ø → _string_               | 
+ |                                |                                            |
+ |     [**Scalars**](#scalar-instructions)            |                        | 
+0x?? | [`neg`](#neg)              |               _a_ → _\|G\|–a_              | 
+0x?? | [`add`](#add)              |             _a b_ → _a+b mod \|G\|_        | 
+0x?? | [`mul`](#mul)              |             _a b_ → _a·b mod \|G\|_        | 
+0x?? | [`eq`](#eq)                |             _a b_ → ø                      | Fails if _a_ ≠ _b_.
+0x?? | [`range:n`](#range)        |               _a_ → _a_                    | Fails if _a_ is not in range [0..2^64-1]
+ |                                |                                            |
+ |     [**Constraints**](#constraint-system-instructions)  |                   | 
+0x?? | [`var`](#var)              |           _point_ → _var_                  | Adds an external variable to [CS](#constraint-system)
+0x?? | [`const`](#var)            |          _scalar_ → _var_                  | 
+0x?? | [`mintime`](#mintime)      |                 ø → _var_                  |
+0x?? | [`maxtime`](#maxtime)      |                 ø → _var_                  |
+0x?? | [`zkneg`](#zkneg)          |            _var1_ → _var2_                 |
+0x?? | [`zkadd`](#zkadd)          |       _var1 var2_ → _var3_                 |
+0x?? | [`zkmul`](#zkmul)          |       _var1 var2_ → _var3_                 | Adds multiplier in [CS](#constraint-system)
+0x?? | [`scmul`](#scmul)          |          _var1 x_ → _var2_                 | 
+0x?? | [`zkeq`](#zkeq)            |       _var1 var2_ → _constraint_           | 
+0x?? | [`zkrange:n`](#zkrange)    |             _var_ → _var_                  | Modifies [CS](#constraint-system)
+0x?? | [`and`](#and)              | _constr1 constr2_ → _constr3_              |
+0x?? | [`or`](#or)                | _constr1 constr2_ → _constr3_              |
+0x?? | [`verify`](#verify)        |      _constraint_ → ø                      | Modifies [CS](#constraint-system) 
+0x?? | [`encrypt`](#encrypt)      |     _X F V proof_ → _V_                    | [Defers point operations](#deferred-point-operations)
+0x?? | [`decrypt`](#decrypt)      |        _V scalar_ → _V_                    | [Defers point operations](#deferred-point-operations))
+ |                                |                                            |
+ |     [**Values**](#value-instructions)              |                        |
+0x?? | [`issue`](#issue)          |       _qtyc pred_ → _contract_             | Modifies [CS](#constraint-system), [tx log](#transaction-log)
+0x?? | [`borrow`](#borrow)        |    _qtyc flavorc_ → _–V +V_                | Modifies [CS](#constraint-system)
+0x?? | [`retire`](#retire)        |           _value_ → ø                      | Modifies [CS](#constraint-system), [tx log](#transaction-log)
+0x?? | [`qty`](#qty)              |     _signedvalue_ → _signedvalue qtyvar_   |
+0x?? | [`flavor`](#flavor)        |     _signedvalue_ → _signedvalue flavorvar_|
+0x?? | [`cloak:m:n`](#cloak)      | _signedvalues commitments_ → _values_      | Modifies [CS](#constraint-system)
+0x?? | [`import`](#import)        |             _???_ → _value_                | Modifies [CS](#constraint-system), [tx log](#transaction-log)
+0x?? | [`export`](#export)        |       _value ???_ → ø                      | Modifies [CS](#constraint-system), [tx log](#transaction-log)
+ |                                |                                            |
+ |      [**Contracts**](#contract-instructions)        |                        |
+0x?? | [`inputs:m`](#inputs)      | _snapshots... predicates..._ → _contracts_ | Modifies [CS](#constraint-system), [tx log](#transaction-log)
+0x?? | [`output:k`](#output)      | _items... predicatecommitment_ → ø         | Modifies [tx log](#transaction-log)
+0x?? | [`contract:k`](#contract)  | _items... predicate_ → _contract_          | 
+0x?? | [`nonce`](#nonce)          |          _predicate_ → _contract_          | Modifies [tx log](#transaction-log)
+0x?? | [`data`](#data)            |               _item_ → ø                   | Modifies [tx log](#transaction-log)
+0x?? | [`signtx`](#signtx)        |           _contract_ → _results..._        | Modifies [deferred verification keys](#signature)
+0x?? | [`call`](#call)            |      _contract prog_ → _results..._        | [Defers point operations](#deferred-point-operations)
+0x?? | [`left`](#left)            |       _contract A B_ → _contract’_         | [Defers point operations](#deferred-point-operations)
+0x?? | [`right`](#right)          |       _contract A B_ → _contract’_         | [Defers point operations](#deferred-point-operations)
+0x?? | [`delegate`](#delegate)    |  _contract prog sig_ → _results..._        | [Defers point operations](#deferred-point-operations)
+ |                                |                                            |
+ |     [**Stack**](#stack-instructions)               |                        | 
+0x?? | [`dup`](#dup)              |               _x_ → _x x_                  |
+0x?? | [`drop`](#drop)            |               _x_ → ø                      |
+0x?? | [`peek:k`](#peek)          |     _x[k] … x[0]_ → _x[k] ... x[0] x[k]_   |
+0x?? | [`roll:k`](#roll)          |     _x[k] … x[0]_ → _x[k-1] ... x[0] x[k]_ |
+0x?? | [`bury:k`](#bury)          |     _x[k] … x[0]_ → _x[0] x[k] ... x[1]_   |
 
 
 
@@ -1019,6 +1124,9 @@ Adds an _issuance_ entry to the [transaction log](#transaction-log).
 
 User must unlock the value using the standard contract operations: [`signtx`](#signx), [`delegate`](#delegate) or [`call`](#call).
 
+TBD: customization tag, maybe hidden via commitment? Cleartext tag is useless because it can be embedded in a predicate.
+
+
 #### borrow
 
 _qtyc flavorc_ **borrow** → _–V +V_
@@ -1031,13 +1139,15 @@ _qtyc flavorc_ **borrow** → _–V +V_
 The signed value `–V` is not a [portable type](#portable-types), and can only be consumed by a [`cloak`](#cloak) instruction
 (where it is merged with appropriate positive quantity of the same flavor).
 
+
 #### retire
 
 _value_ **retire** → ø
 
-Pops an unsigned [value](#value) from the stack.
+1. Pops a [value](#value) from the stack.
+2. Adds a _retirement_ entry to the [transaction log](#transaction-log).
 
-Adds a _retirement_ entry to the [transaction log](#transaction-log).
+Fails if the value is not of unsigned (positive) [value type](#value-type).
 
 #### qty
 
@@ -1045,11 +1155,13 @@ _signedvalue_ **qty** → _signedvalue qtyvar_
 
 Copies a [variable](#variable-type) representing quantity of a [signed value](#signed-value-type) and pushes it to the stack.
 
+
 #### flavor
 
 _signedvalue_ **flavor** → _signedvalue flavorvar_
 
 Copies a [variable](#variable-type) representing flavor of a [signed value](#signed-value-type) and pushes it to the stack.
+
 
 #### cloak
 
@@ -1064,11 +1176,13 @@ Merges and splits `m` [signed values](#signed-value-type) into `n` [values](#val
 
 Immediate data `m` and `n` are encoded as two 32-bit little-endian integers.
 
+
 #### import
 
 _..._ **import** → _value_
 
 TBD: Creates [value](#value) from the external blockchain.
+
 
 #### export
 
@@ -1093,16 +1207,16 @@ Predicates are sorted randomly vis-a-vis snapshots (to be delinked).
 Resulting contracts are sorted the same way as predicates, and have number stack items corresponding to number of stack items in the snapshots.
 
 
-
 #### output
 
 _items... predc_ **output:_k_** → ø
 
 1. Pops [predicate commitment](#predicate-commitment) `predc` from the stack.
 2. Pops `k` items from the stack.
-3. Adds [output](#output-structure) to the [transaction log](#transaction-log).
+3. Adds an [output entry](#output-entry) to the [transaction log](#transaction-log).
 
 Immediate data `k` is encoded as an unsigned byte.
+
 
 #### contract
 
@@ -1115,19 +1229,27 @@ _items... pred_ **contract:_k_** → _contract_
 
 Immediate data `k` is encoded as an unsigned byte.
 
+
 #### nonce
 
 _predicate_ **nonce** → _contract_
 
-TBD. Creates nonce based on the predicate, tx.maxtime and adds it to the txlog. Returns a contract with the predicate and empty stack that must be satisfied. Normally, with signtx.
+1. Pops [predicate](#predicate) from the stack.
+2. Pushes a new [contract](#contract-type) with an empty [payload](#contract-payload) and this predicate to the stack.
+3. Adds [nonce entry](#nonce-entry) to the [transaction log](#transaction-log) with the predicate and transaction [maxtime](#time-bounds).
+
+Fails if `predicate` is not a [point type](#point-type).
 
 
 #### data
 
 _item_ **data** → ø
 
-Pops [data type](#data-types) `item` from the stack.
-Adds _data_ entry to the [transaction log](#transaction-log).
+1. Pops `item` from the stack.
+2. Adds [data entry](#data-entry) with it to the [transaction log](#transaction-log).
+
+Fails if the item is not a [data type](#data-types).
+
 
 #### signtx
 
@@ -1160,6 +1282,7 @@ _contract(P) prog_ **call** → _results..._
 Fails if the top item is not a [string](#string-type) or
 the second-from-the-top is not a [contract](#contract-type).
 
+
 #### left
 
 _contract(P) L R_ **left** → _contract(L)_
@@ -1176,6 +1299,7 @@ _contract(P) L R_ **left** → _contract(L)_
 Fails if the top two items are not [points](#point-type),
 or if the third from the top item is not a [contract](#contract-type).
 
+
 #### right
 
 _contract(P) L R_ **left** → _contract(R)_
@@ -1191,6 +1315,7 @@ _contract(P) L R_ **left** → _contract(R)_
 
 Fails if the top two items are not [points](#point-type),
 or if the third from the top item is not a [contract](#contract-type).
+
 
 #### delegate
 
