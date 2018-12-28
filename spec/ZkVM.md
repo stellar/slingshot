@@ -482,6 +482,7 @@ and can only contain [portable types](#portable-types).
 
 Note: the [plain data](#data-types) items are encoded as VM instructions that produce the corresponding item.
 
+
 ### Constraint system
 
 The part of the [VM state](#vm-state) that implements
@@ -858,19 +859,19 @@ Each instruction defines the format for immediate data. See the reference below 
 
 Code | Instruction                | Stack diagram                              | Effects
 -----|----------------------------|--------------------------------------------|----------------------------------
- |     [**Data**](#data-instructions)                 |                        |
+ |     [**Data**](#data-instructions)                 |                        |
 0x00 | [`scalar:x`](#scalar)      |                 ø → _scalar_               | 
 0x01 | [`point:x`](#point)        |                 ø → _point_                | 
 0x02 | [`string:n:x`](#string)    |                 ø → _string_               | 
- |                                |                                            |
- |     [**Scalars**](#scalar-instructions)            |                        | 
+ |                                |                                            |
+ |     [**Scalars**](#scalar-instructions)            |                        | 
 0x?? | [`neg`](#neg)              |               _a_ → _\|G\|–a_              | 
 0x?? | [`add`](#add)              |             _a b_ → _a+b mod \|G\|_        | 
 0x?? | [`mul`](#mul)              |             _a b_ → _a·b mod \|G\|_        | 
 0x?? | [`eq`](#eq)                |             _a b_ → ø                      | Fails if _a_ ≠ _b_.
 0x?? | [`range:n`](#range)        |               _a_ → _a_                    | Fails if _a_ is not in range [0..2^64-1]
- |                                |                                            |
- |     [**Constraints**](#constraint-system-instructions)  |                   | 
+ |                                |                                            |
+ |     [**Constraints**](#constraint-system-instructions)  |                   | 
 0x?? | [`var`](#var)              |           _point_ → _var_                  | Adds an external variable to [CS](#constraint-system)
 0x?? | [`const`](#var)            |          _scalar_ → _var_                  | 
 0x?? | [`mintime`](#mintime)      |                 ø → _var_                  |
@@ -886,8 +887,8 @@ Code | Instruction                | Stack diagram                              |
 0x?? | [`verify`](#verify)        |      _constraint_ → ø                      | Modifies [CS](#constraint-system) 
 0x?? | [`encrypt`](#encrypt)      |     _X F V proof_ → _V_                    | [Defers point operations](#deferred-point-operations)
 0x?? | [`decrypt`](#decrypt)      |        _V scalar_ → _V_                    | [Defers point operations](#deferred-point-operations))
- |                                |                                            |
- |     [**Values**](#value-instructions)              |                        |
+ |                                |                                            |
+ |     [**Values**](#value-instructions)              |                        |
 0x?? | [`issue`](#issue)          |       _qtyc pred_ → _contract_             | Modifies [CS](#constraint-system), [tx log](#transaction-log)
 0x?? | [`borrow`](#borrow)        |    _qtyc flavorc_ → _–V +V_                | Modifies [CS](#constraint-system)
 0x?? | [`retire`](#retire)        |           _value_ → ø                      | Modifies [CS](#constraint-system), [tx log](#transaction-log)
@@ -896,8 +897,8 @@ Code | Instruction                | Stack diagram                              |
 0x?? | [`cloak:m:n`](#cloak)      | _signedvalues commitments_ → _values_      | Modifies [CS](#constraint-system)
 0x?? | [`import`](#import)        |             _???_ → _value_                | Modifies [CS](#constraint-system), [tx log](#transaction-log)
 0x?? | [`export`](#export)        |       _value ???_ → ø                      | Modifies [CS](#constraint-system), [tx log](#transaction-log)
- |                                |                                            |
- |      [**Contracts**](#contract-instructions)        |                        |
+ |                                |                                            |
+ |     [**Contracts**](#contract-instructions)        |                        |
 0x?? | [`inputs:m`](#inputs)      | _snapshots... predicates..._ → _contracts_ | Modifies [CS](#constraint-system), [tx log](#transaction-log)
 0x?? | [`output:k`](#output)      | _items... predicatecommitment_ → ø         | Modifies [tx log](#transaction-log)
 0x?? | [`contract:k`](#contract)  | _items... predicate_ → _contract_          | 
@@ -908,8 +909,8 @@ Code | Instruction                | Stack diagram                              |
 0x?? | [`left`](#left)            |       _contract A B_ → _contract’_         | [Defers point operations](#deferred-point-operations)
 0x?? | [`right`](#right)          |       _contract A B_ → _contract’_         | [Defers point operations](#deferred-point-operations)
 0x?? | [`delegate`](#delegate)    |  _contract prog sig_ → _results..._        | [Defers point operations](#deferred-point-operations)
- |                                |                                            |
- |     [**Stack**](#stack-instructions)               |                        | 
+ |                                |                                            |
+ |     [**Stack**](#stack-instructions)               |                        |
 0x?? | [`dup`](#dup)              |               _x_ → _x x_                  |
 0x?? | [`drop`](#drop)            |               _x_ → ø                      |
 0x?? | [`peek:k`](#peek)          |     _x[k] … x[0]_ → _x[k] ... x[0] x[k]_   |
