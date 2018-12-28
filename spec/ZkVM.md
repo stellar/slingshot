@@ -1228,16 +1228,22 @@ TBD: Retires imported [value](#value) with annotation for export.
 
 #### inputs
 
-_snapshots predicates_ **inputs:_m_** → _contracts_
+_inputs predicates_ **inputs:_m_** → _contracts_
 
-TBD.
+1. Pops `m` predicates from the stack.
+2. Pops `m` [input](#input-structure) strings from the stack.
+3. ????
 
 Claims the utxos and unpacks them into contracts.
 Snapshots are linked to the utxos being spent.
 Predicates are sorted randomly vis-a-vis snapshots (to be delinked).
 Resulting contracts are sorted the same way as predicates, and have number stack items corresponding to number of stack items in the snapshots.
 
-Immediate data `k` is encoded as [LE32](#le32).
+Immediate data `m` is encoded as [LE32](#le32).
+
+Fails if:
+1. any of the `predicates` is not a [point type](#point-type), or
+2. any of the `inputs` is not a [string type](#string-type) with exact encoding of [input structure](#input-structure).
 
 #### output
 
