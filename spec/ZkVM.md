@@ -20,18 +20,35 @@ ZkVM defines a procedural representation for blockchain transactions and the rul
     * [Value](#value-type)
     * [Signed value](#signed-value)
 * [Definitions](#definitions)
+    * [LE32](#le32)
+    * [LE64](#le64)
     * [Base points](#base-points)
     * [Pedersen commitment](#pedersen-commitment)
     * [Verification key](#verification-key)
-    * [Constraint system](#constraint-system)
     * [Time bounds](#time-bounds)
+    * [Transcript](#transcript)
     * [Predicate](#predicate)
+    * [Predicate tree](#predicate-tree)
+    * [Predicate disjunction](#predicate-disjunction)
+    * [Program predicate](#program-predicate)
+    * [Predicate commitment](#predicate-commitment)
     * [Program](#program)
     * [Contract payload](#contract-payload)
+    * [Input structure](#input-structure)
+    * [UTXO](#utxo)
+    * [Output structure](#output-structure)
+    * [Constraint system](#constraint-system)
+    * [Constraint system proof](#constraint-system-proof)
+    * [Transaction witness](#transaction-witness)
+    * [Transaction log](#transaction-log)
+    * [Transaction ID](#transaction-id)
+    * [Merkle binary tree](#merkle-binary-tree)
     * [Signature](#signature)
+    * [Aggregated transaction signature](#aggregated-transaction-signature)
 * [VM operation](#vm-operation)
     * [VM state](#vm-state)
     * [VM execution](#vm-execution)
+    * [Deferred point operations](#deferred-point-operations)
     * [Versioning](#versioning)
 * [Instructions](#instructions)
     * [Data instructions](#data-instructions)
@@ -78,27 +95,24 @@ ZkVM is the entirely new design that inherits most important insights from the T
 ### Concepts
 
 A transaction is represented by a [transaction witness](#transaction-witness) that
-contains a [program](#program) that runs in the context of a stack-based virtual machine,
-producing the [transaction ID](#transaction-id) if none of the checks failed.
+contains a [program](#program) that runs in the context of a stack-based virtual machine.
 
 When the virtual machine executes a program, it creates and manipulates data of various types:
-[data types](#data-types) (e.g. [scalars](#scalar-type) and [points](#point-type))
-and special [linear types](#linear-types) that include [values](#value-type) and
+[**plain data types**](#data-types) and [**linear types**](#linear-types), such as [values](#value-type) and
 [contracts](#contract-type).
 
-A _value_ is a specific quantity of a specific flavor that can be
+A [**value**](#value-type) is a specific quantity of a certain _flavor_ that can be
 merged or split, issued or retired, but not otherwise created or destroyed.
 
-A _contract_ encapsulates a predicate (a public key or a program),
+A [**contract**] encapsulates a predicate (a public key or a program),
 plus its runtime state, and once created must be executed to completion
 or persisted in the global state for later execution.
 
-Some ZkVM instructions (such as storing a contract for later
-execution) propose alterations to the global blockchain state. These
-proposals accumulate in the [transaction log](#transaction-log), a
-data structure in the virtual machine that is the principal result of
-executing a transaction. Hashing the transaction log gives the unique
-[transaction ID](#transaction-id).
+Some ZkVM instructions write proposed updates to the blockchain state
+to the [**transaction log**](#transaction-log), which represents the
+principal result of executing a transaction.
+
+Hashing the transaction log gives the unique [**transaction ID**](#transaction-id).
 
 A ZkVM transaction is valid if and only if it runs to completion
 without encountering failure conditions and without leaving any data
@@ -162,7 +176,7 @@ and its constraint system and therefore cannot be ported between transactions.
 
 A _scalar_ is an integer modulo [Ristretto group](https://ristretto.group) order `|G| = 2^252 + 27742317777372353535851937790883648493`.
 
-Scalars are encoded as 32-byte arrays using little-endian notation.
+Scalars are encoded as 32-byte arrays using little-endian convention.
 Every scalar in the VM is guaranteed to be in a canonical (reduced) form.
 
 
@@ -253,6 +267,17 @@ and the signed value is only used as an output of [`borrow`](#borrow) and as an 
 
 
 ## Definitions
+
+### LE32
+
+A non-negative 32-bit integer encoded using little-endian convention.
+Primarily used to encode sizes of data structures ([strings](#string-type), lists etc).
+
+### LE64
+
+A non-negative 64-bit integer encoded using little-endian convention.
+Primarily used to encode [value quantities](#value) and [timestamps](#time-bounds).
+
 
 ### Base points
 
@@ -704,31 +729,35 @@ Aggregation protocol is:
     ```
     T = Transcript("ZkVM.signtx")
     ```
-2. Commit the count `n` of deferred keys as little-endian 32-bit integer:
+2. Commit the [transaction ID](#transaction-id):
+    ```
+    T.commit("txid", txid)
+    ```
+3. Commit the count `n` of deferred keys as [LE32](#le32):
     ```
     T.commit("n", LE32(n))
     ```
-3. Commit all deferred keys `P[i]` in order, one by one:
+4. Commit all deferred keys `P[i]` in order, one by one:
     ```
     T.commit("P", P[i])
     ```
-4. For each key, generate a randomizing scalar:
+5. For each key, generate a randomizing scalar:
     ```
     x[i] = T.challenge_scalar("x")
     ```
-5. Form an aggregated key without computing it right away:
+6. Form an aggregated key without computing it right away:
     ```
     PA = x[0]·P[0] + ... + x[n-1]·P[n-1]
     ```
-6. Perform the [signature protocol](#signature) using the transcript `T`, randomized secret keys `x[i]·dlog(P[i])`, and unrolling `PA` in the final statement:
+7. Perform the [signature protocol](#signature) using the transcript `T`, randomized secret keys `x[i]·dlog(P[i])`, and unrolling `PA` in the final statement:
     ```
     s[i] = r[i] + e·x[i]·dlog(P[i])
       s  = sum{s[i]}
 
     s·B  ==  R + e·PA
-         ==  R + e·x[0]·P[0] + ... + e·x[n-1]·P[n-1]
+         ==  R + (e·x[0])·P[0] + ... + (e·x[n-1])·P[n-1]
     ```
-7. Add the statement to the list of [deferred point operations](#deferred-point-operations).
+8. Add the statement to the list of [deferred point operations](#deferred-point-operations).
 
 
 
@@ -783,16 +812,16 @@ Then, the VM executes the current program till completion:
    1. If the program stack is not empty, pop top item from the program stack and set it to the current program. Go to step 5.
    2. If the program stack is empty, the transaction is considered _finalized_ and VM successfully finishes execution.
 
-If the execution finishes successfully, VM performs the following checks (and fails if any is not satisfied):
-1. the data stack must be empty,
-2. the uniqueness flag must be set to `true`,
-3. [constraint system proof](#constraint-system-proof) must be valid,
-4. [aggregated transaction signature](#aggregated-transaction-signature) must be valid,
-5. all [deferred point operations](#deferred-point-operations) must be valid,
+If the execution finishes successfully, VM performs the finishing tasks:
+1. Checks if the stack is empty; fails otherwise.
+2. Checks if the uniqueness flag is set to `true`; fails otherwise.
+3. Computes [transaction ID](#transaction-id).
+4. Computes a verification statement for [aggregated transaction signature](#aggregated-transaction-signature).
+5. Computes a verification statement for [constraint system proof](#constraint-system-proof).
+6. Executes all [deferred point operations](#deferred-point-operations), including aggregated transaction signature and constraint system proof, using a single multi-scalar multiplication. Fails if the result is not an identity point.
 
-If VM execution succeeded, the resulting [transaction log](#transaction-log) is further
-validated against the blockchain state. That step, called _application_, is described in
-[the blockchain specification](Blockchain.md#apply-transaction-log).
+If none of the above checks failed, the resulting [transaction log](#transaction-log) is _applied_
+to the blockchain state as described in [the blockchain specification](Blockchain.md#apply-transaction-log).
 
 
 ### Deferred point operations
@@ -942,7 +971,7 @@ Fails if the point is not a valid compressed Ristretto point.
 **string:_n_:_x_** → _string_
 
 Pushes a [string](#string-type) `x` containing `n` bytes. 
-Immediate data `n` is encoded as little-endian 32-bit integer
+Immediate data `n` is encoded as [LE32](#le32)
 followed by `x` encoded as a sequence of `n` bytes.
 
 
@@ -957,7 +986,7 @@ _a_ **neg** → _(|G|–a)_
 
 Negates the [scalar](#scalar-type) `a` modulo Ristretto group order `|G|`.
 
-Fails if item `a` is not of type [Scalar](#scalar-type).
+Fails if item `a` is not a [scalar type](#scalar-type).
 
 #### add
 
@@ -965,7 +994,7 @@ _a b_ **add** → _(a+b mod |G|)_
 
 Adds [scalars](#scalar-type) `a` and `b` modulo Ristretto group order `|G|`.
 
-Fails if either `a` or `b` is not of type [Scalar](#scalar-type).
+Fails if either `a` or `b` is not a [scalar type](#scalar-type).
 
 #### mul
 
@@ -973,7 +1002,7 @@ _a b_ **mul** → _(a·b mod |G|)_
 
 Multiplies [scalars](#scalar-type) `a` and `b` modulo Ristretto group order `|G|`.
 
-Fails if either `a` or `b` is not of type [Scalar](#scalar-type).
+Fails if either `a` or `b` is not a [scalar type](#scalar-type).
 
 #### eq
 
@@ -981,17 +1010,18 @@ _a b_ **eq** → ø
 
 Checks that [scalars](#scalar-type) are equal. Fails execution if they are not.
 
-Fails if either `a` or `b` is not of type [Scalar](#scalar-type).
+Fails if either `a` or `b` is not a [scalar type](#scalar-type).
 
 #### range
 
 _a_ **range:_n_** → _a_
 
-Checks that the [scalar](#scalar-type) `a` is in `n`-bit range. Immediate data `n` is 1 byte and must be in [1,64] range.
+Checks that a [scalar](#scalar-type) `a` is in `n`-bit range. Immediate data `n` is 1 byte and must be in [1,64] range.
 
 Fails if:
-* `a` is not of type [Scalar](#scalar-type), or
-* `n` is not in range [1,64].
+* `a` is not a [scalar type](#scalar-type), or
+* `n` is not in range [1,64], or
+* any bit of `a[n..]` bits is set.
 
 
 
@@ -1004,7 +1034,7 @@ _P_ **var** → _v_
 Creates a high-level [variable](#variable-type) `v` 
 from a [Pedersen commitment](#pedersen-commitment) `P` and adds it to the [constraint system](#constraint-system).
 
-Fails if `p` is not of type [Point](#point-type).
+Fails if `p` is not a [point type](#point-type).
 
 #### const
 
@@ -1012,7 +1042,7 @@ _a_ **const** → _v_
 
 Creates a [variable](#variable-type) with weight `a` assigned to an R1CS constant `1`.
 
-Fails if `a` is not of type [Scalar](#scalar-type).
+Fails if `a` is not a [scalar type](#scalar-type).
 
 #### mintime
 
@@ -1092,7 +1122,7 @@ For each conjunction, appropriate challenges are generated after the R1CS is com
 
 _X F V proof_ **encrypt** → _V_
 
-Verifies that `{F = x*V - x*v*B, X = x*B2}` using a 128-byte proof (4 elements: s_x, s_f, RX, RF). The actual verification is delayed and batched with all point multiplications.
+Verifies that `{F = x·V - x·v·B, X = x·B2}` using a 128-byte proof (4 elements: s_x, s_f, RX, RF). The actual verification is delayed and batched with all point multiplications.
 
 Usage 1: check if blinding factor is zero (therefore, the contract can allow interaction to anyone - like a partially fillable order book).
 
@@ -1105,7 +1135,7 @@ Usage 3: embed blinding factor into the constraint system (since F is a valid un
 _V v_ **decrypt** → _V_
 
 Pops [scalar](#scalar-type) `v` and [point](#point-type) `V` from the stack.
-Verifies that `V = v*B` and pushes back `V`.
+Verifies that `V = v·B` and pushes back `V`.
 
 
 
@@ -1175,7 +1205,7 @@ Merges and splits `m` [signed values](#signed-value-type) into `n` [values](#val
 3. Creates constraints and range proofs per [Cloak protocol](https://github.com/interstellar/spacesuit/blob/master/spec.md).
 4. Pushes `n` [values](#values) to the stack in the same order as their commitments.
 
-Immediate data `m` and `n` are encoded as two 32-bit little-endian integers.
+Immediate data `m` and `n` are encoded as two [LE32](#le32)s.
 
 
 #### import
@@ -1207,6 +1237,7 @@ Snapshots are linked to the utxos being spent.
 Predicates are sorted randomly vis-a-vis snapshots (to be delinked).
 Resulting contracts are sorted the same way as predicates, and have number stack items corresponding to number of stack items in the snapshots.
 
+Immediate data `k` is encoded as [LE32](#le32).
 
 #### output
 
