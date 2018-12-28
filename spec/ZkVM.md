@@ -559,7 +559,7 @@ Signature is encoded as a 64-byte [string](#string-type).
 
 The protocol is the following:
 
-1. Prover and verifier obtain a [transcript](#transcript) `T` defined by the context in which the signature is used (see [`signtx`](#signtx), [`delegate`](#delegate)). The transcript is assumed to be already bound to the _message_ and the [verification key](#verification-key) `P`.
+1. Prover and verifier obtain a [transcript](#transcript) `T` defined by the context in which the signature is used (see [`signtx`](#signtx), [`delegate`](#delegate)). The transcript is assumed to be already bound to the _message_ and the [verification key](#verification-key) `P`.
 2. Prover creates a _secret nonce_, randomly sampled [scalar](#scalar-type) `r`.
 3. Prover commits to nonce:
     ```
@@ -583,7 +583,6 @@ The protocol is the following:
     ```
     s·B == R + e·P
     ```
-
 
 ### Aggregated transaction signature
 
