@@ -44,6 +44,7 @@ ZkVM defines a procedural representation for blockchain transactions and the rul
     * [Merkle binary tree](#merkle-binary-tree)
     * [Signature](#signature)
     * [Aggregated transaction signature](#aggregated-transaction-signature)
+    * [Blinding proof protocol](#blinding-proof-protocol)
 * [VM operation](#vm-operation)
     * [VM state](#vm-state)
     * [VM execution](#vm-execution)
@@ -677,7 +678,7 @@ Signature is encoded as a 64-byte [string](#string-type).
 The protocol is the following:
 
 1. Prover and verifier obtain a [transcript](#transcript) `T` defined by the context in which the signature is used (see [`signtx`](#signtx), [`delegate`](#delegate)). The transcript is assumed to be already bound to the _message_ and the [verification key](#verification-key) `P`.
-2. Prover creates a _secret nonce_, randomly sampled [scalar](#scalar-type) `r`.
+2. Prover creates a _secret nonce_: a randomly sampled [scalar](#scalar-type) `r`.
 3. Prover commits to nonce:
     ```
     R = r·B
@@ -745,6 +746,49 @@ Aggregation protocol is:
     ```
 8. Add the statement to the list of [deferred point operations](#deferred-point-operations).
 
+
+
+
+### Blinding proof protocol
+
+A zero-knowledge protocol that proves that a [Pedersen commitment](#pedersen-commitment) contains a 
+pre-committed blinding factor. This protocol allows proving to the network that a payment is accessible
+to the recipient (since the blinding factor is already known to the recipient), while allowing
+the sender to compute the amount on the fly.
+
+TBD: need to enable derivation, so that the blinding factor can be safely reused with randomization.
+
+The setup:
+
+1. Recipient chooses a random blinding factor `f`.
+2. 
+
+The protocol is the following:
+
+1. Prover and verifier obtain a [transcript](#transcript) `T` defined by the context in which the proof is applied (see [`encrypt`](#encrypt)).
+2. Prover creates a _secret nonce_ `r`, randomly sampled [scalar](#scalar-type) `r`.
+3. Prover commits to nonce:
+    ```
+    R = r·B
+    ```
+4. Prover sends `R` to the verifier.
+5. Prover and verifier write the nonce commitment `R` to the transcript:
+    ```
+    T.commit("R", R)
+    ```
+6. Prover and verifier compute a Fiat-Shamir challenge scalar `e` using the transcript:
+    ```
+    e = T.challenge_scalar("e")
+    ```
+7. Prover computes a signature scalar `s` using the nonce, the challenge and the secret key `dlog(P)`:
+    ```
+    s = r + e·dlog(P)
+    ```
+8. Prover sends `s` to the verifier.
+9. Verifier checks the relation:
+    ```
+    s·B == R + e·P
+    ```
 
 
 
@@ -1108,7 +1152,34 @@ For each conjunction, appropriate challenges are generated after the R1CS is com
 
 _X F V proof_ **encrypt** → _V_
 
-Verifies that `{F = x·V - x·v·B, X = x·B2}` using a 128-byte proof (4 elements: s_x, s_f, RX, RF). The actual verification is delayed and batched with all point multiplications.
+Verifies that the [Pedersen commitment](#pedersen-commitment) `V` is blinded with the discrete log of `F` to `X`.
+
+1. Pops a [string](#string-type) `proof`, and [points](#point-type) `V`, `F` and `X` from the stack.
+2. Forms two statements to verify:
+    ```
+    X == x·B2
+    F == x·V - x·v·B
+    ```
+3. Parses 2 points and 2 scalars from the 128-byte `proof` string:
+    ```
+    RX = proof[0..32]
+    RF = proof[32..64]
+    sx = proof[64..96]
+    sv = proof[96..128]
+    ```
+4. Instantiates the [transcript](#transcript):
+    ```
+    T = Transcript("ZkVM.encrypt")
+    ```
+5. Performs the verification of the [blinding proof protocol](#blinding-proof-protocol) using the transcript `T`, secrets `x = X/B2` and `f = F/X`:
+    ```
+    RX + e·X  ==  sx·B2
+    RF + e·F  ==  sx·V - sv·B
+    ```
+6. Adds the statement to the list of [deferred point operations](#deferred-point-operations).
+7. Pushes point `V` back to the stack.
+
+Fails if `proof` is not a 128-byte [string](#string-type) or if `X`, `F` and `V` are not all [point](#point-type).
 
 Usage 1: check if blinding factor is zero (therefore, the contract can allow interaction to anyone - like a partially fillable order book).
 
