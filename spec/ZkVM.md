@@ -31,7 +31,6 @@ ZkVM defines a procedural representation for blockchain transactions and the rul
     * [Predicate tree](#predicate-tree)
     * [Predicate disjunction](#predicate-disjunction)
     * [Program predicate](#program-predicate)
-    * [Predicate commitment](#predicate-commitment)
     * [Program](#program)
     * [Contract payload](#contract-payload)
     * [Input structure](#input-structure)
@@ -249,8 +248,12 @@ Only values having the same flavor can be merged.
 Values are secured by “locking them up” inside [contracts](#contract-type).
 
 Contracts can also require payments by creating outputs using _borrowed_ values.
-[`borrow`](#borrow) instruction produces two items: a positive value and a negative [signed value](#signed-value-type),
-which must be cleared using appropriate combination of positive values.
+[`borrow`](#borrow) instruction produces two items: a non-negative value and a negated [signed value](#signed-value-type),
+which must be cleared using appropriate combination of non-negative values.
+
+Each non-negative value keeps the [Pedersen commitments](#pedersen-commitment)
+for the quantity and flavor (in addition to the respective [variables](#variable-type)),
+so that they can serialized in the [`output`](#output).
 
 
 ### Signed value type
@@ -430,23 +433,6 @@ PP(prog) = h·B2
 ```
 
 Program predicate can be satisfied only via the [`call`](#call) instruction that takes a cleartext program string, verifies the commitment and evaluates the program. Use of the [secondary base point](#base-points) `B2` prevents using the predicate as a [verification key](#verification-key)) and signing with `h` without executing it.
-
-
-### Predicate commitment
-
-Predicate commitment is a [Pedersen commitment](#pedersen-commitment) to a [predicate](#predicate).
-Such commitments are used to minimize the link between the revealed predicate and the connected previous
-output in the context of the [`inputs`](#inputs) instruction.
-
-Commitment is defined using the [transcript](#transcript) protocol
-which compresses the predicate [point](#point-type) into a pseudo-random scalar `s`:
-
-```
-T  = Transcript("ZkVM.predicate")
-T.commit("pred", predicate)
-s  = T.challenge_scalar("s")
-PC = Com(s, blinding) = s·B + blinding·B2
-```
 
 
 ### Program
@@ -928,8 +914,8 @@ Code | Instruction                | Stack diagram                              |
 0x?? | [`export`](#export)        |       _value ???_ → ø                      | Modifies [CS](#constraint-system), [tx log](#transaction-log)
  |                                |                                            |
  |     [**Contracts**](#contract-instructions)        |                        |
-0x?? | [`inputs:m`](#inputs)      | _snapshots... predicates..._ → _contracts_ | Modifies [CS](#constraint-system), [tx log](#transaction-log)
-0x?? | [`output:k`](#output)      | _items... predicatecommitment_ → ø         | Modifies [tx log](#transaction-log)
+0x?? | [`input`](#input)          |           _input_ → _contract_             | Modifies [tx log](#transaction-log)
+0x?? | [`output:k`](#output)      | _items... predicate_ → ø                   | Modifies [tx log](#transaction-log)
 0x?? | [`contract:k`](#contract)  | _items... predicate_ → _contract_          | 
 0x?? | [`nonce`](#nonce)          |          _predicate_ → _contract_          | Modifies [tx log](#transaction-log)
 0x?? | [`data`](#data)            |               _item_ → ø                   | Modifies [tx log](#transaction-log)
@@ -1147,15 +1133,24 @@ Verifies that `V = v·B` and pushes back `V`.
 
 _qtyc pred_ **issue** → _contract_
 
-Creates a value with quantity represented by a [Pedersen commitment](#pedersen-commitment) _qtycommitment_ and flavor defined by the [predicate](#predicate) `pred`, locked in a contract guarded by that predicate.
+1. Pops [points](#point-type) `pred`, then `qtyc` from the stack.
+2. Creates a value with quantity represented by a [Pedersen commitment](#pedersen-commitment) _qtyc_ and flavor defined by the [predicate](#predicate) `pred` using the following [transcript-based](#transcript) protocol:
+    ```
+    T = Transcript("ZkVM.issue")
+    T.commit("predicate", pred)
+    flavor = T.challenge_scalar("flavor")
+    F = flavor·B  (non-blinded Pedersen commitment)
+    ```
+3. Adds a 64-bit range proof for the quantity variable to the [constraint system](#constraint-system) (see [Cloak protocol](https://github.com/interstellar/spacesuit/blob/master/spec.md) for the range proof definition). 
+4. Adds an [issue entry](#issue-entry) to the [transaction log](#transaction-log).
+5. Creates a [contract](#contract-type) with the value as the only [payload](#contract-payload), with the predicate `pred`.
 
-Adds variables for quantity and flavor, and adds a 64-bit range proof constraint to the quantity.
-
-Adds an _issuance_ entry to the [transaction log](#transaction-log).
-
-User must unlock the value using the standard contract operations: [`signtx`](#signx), [`delegate`](#delegate) or [`call`](#call).
+The value is now issued into the contract that must be unlocked
+using one of the contract instructions: [`signtx`](#signx), [`delegate`](#delegate) or [`call`](#call).
 
 TBD: customization tag, maybe hidden via commitment? Cleartext tag is useless because it can be embedded in a predicate.
+
+Fails if either `qtyc` or `pred` are not [point types](#point-type).
 
 
 #### borrow
@@ -1163,12 +1158,16 @@ TBD: customization tag, maybe hidden via commitment? Cleartext tag is useless be
 _qtyc flavorc_ **borrow** → _–V +V_
 
 1. Pops [points](#point-type) `flavorc`, then `qtyc` from the stack.
-2. Creates [value](#value-type) `+V`, allocating high-level variables for quantity and flavor in the [constraint system](#constraint-system).
-3. Creates [signed value](#signed-value-type) `–V`, allocating low-level variable for its negated quantity and adds a negation constraint.
-4. Pushes `–V`, then `+V` to the stack.
+2. Creates [value](#value-type) `+V`, allocating high-level variables for quantity `q1` and flavor `f` in the [constraint system](#constraint-system).
+3. Adds a 64-bit range proof for the quantity variable to the [constraint system](#constraint-system) (see [Cloak protocol](https://github.com/interstellar/spacesuit/blob/master/spec.md) for the range proof definition).
+4. Creates [signed value](#signed-value-type) `–V`, allocating low-level variable `q2` for its negated quantity and reusing variable for the flavor `f`. Note: the signed value does not have its own Pedersen commitment.
+5. Adds a constraint `q2 == -q1` to the constraint system. 
+6. Pushes `–V`, then `+V` to the stack.
 
 The signed value `–V` is not a [portable type](#portable-types), and can only be consumed by a [`cloak`](#cloak) instruction
 (where it is merged with appropriate positive quantity of the same flavor).
+
+Fails if either `qtyc` or `flavorc` are not [point types](#point-type).
 
 
 #### retire
@@ -1202,7 +1201,7 @@ Merges and splits `m` [signed values](#signed-value-type) into `n` [values](#val
 
 1. Pops `2·n` [points](#point-type) as pairs of flavor and quantity for each output value, quantity is popped first.
 2. Pops `m` [signed values](#signed-value-type) as input values.
-3. Creates constraints and range proofs per [Cloak protocol](https://github.com/interstellar/spacesuit/blob/master/spec.md).
+3. Creates constraints and 64-bit range proofs for quantities per [Cloak protocol](https://github.com/interstellar/spacesuit/blob/master/spec.md).
 4. Pushes `n` [values](#values) to the stack in the same order as their commitments.
 
 Immediate data `m` and `n` are encoded as two [LE32](#le32)s.
@@ -1213,6 +1212,15 @@ Immediate data `m` and `n` are encoded as two [LE32](#le32)s.
 _..._ **import** → _value_
 
 TBD: Creates [value](#value) from the external blockchain.
+
+The imported flavor is defined using [transcript](#transcript) protocol:
+
+```
+T = Transcript("ZkVM.import")
+T.commit("extasset", external_asset_id)
+T.commit("extaccount", pegging_account_id)
+flavor = T.challenge_scalar("flavor")
+```
 
 
 #### export
@@ -1226,34 +1234,25 @@ TBD: Retires imported [value](#value) with annotation for export.
 ### Contract instructions
 
 
-#### inputs
+#### input
 
-_inputs predicates_ **inputs:_m_** → _contracts_
+_input_ **input** → _contract_
 
-1. Pops `m` predicates from the stack.
-2. Pops `m` [input](#input-structure) strings from the stack.
-3. ????
+1. Pops an [input string](#input-structure) from the stack.
+2. Constructs a [contract](#contract-type) based on the `input` data and pushes it to the stack.
+3. Adds [input entry](#input-entry) to the [transaction log](#transaction-log).
 
-Claims the utxos and unpacks them into contracts.
-Snapshots are linked to the utxos being spent.
-Predicates are sorted randomly vis-a-vis snapshots (to be delinked).
-Resulting contracts are sorted the same way as predicates, and have number stack items corresponding to number of stack items in the snapshots.
-
-Immediate data `m` is encoded as [LE32](#le32).
-
-Fails if:
-1. any of the `predicates` is not a [point type](#point-type), or
-2. any of the `inputs` is not a [string type](#string-type) with exact encoding of [input structure](#input-structure).
+Fails if the `input` is not a [string type](#string-type) with exact encoding of an [input structure](#input-structure).
 
 #### output
 
-_items... predc_ **output:_k_** → ø
+_items... predicate_ **output:_k_** → ø
 
-1. Pops [predicate commitment](#predicate-commitment) `predc` from the stack.
+1. Pops [`predicate`](#predicate) from the stack.
 2. Pops `k` items from the stack.
 3. Adds an [output entry](#output-entry) to the [transaction log](#transaction-log).
 
-Immediate data `k` is encoded as an unsigned byte.
+Immediate data `k` is encoded as [LE32](#le32).
 
 
 #### contract
@@ -1265,7 +1264,7 @@ _items... pred_ **contract:_k_** → _contract_
 3. Creates a contract with the `k` items as a payload and the predicate.
 4. Pushes the contract onto the stack.
 
-Immediate data `k` is encoded as an unsigned byte.
+Immediate data `k` is encoded as [LE32](#le32).
 
 
 #### nonce
@@ -1416,7 +1415,7 @@ Fails if `x` is not a [data type](#data-types).
 _x[k] … x[0]_ **peek:_k_** → _x[k] ... x[0] x[k]_
 
 Copies k’th data item from the top of the stack.
-Immediate data `k` is encoded as an unsigned byte.
+Immediate data `k` is encoded as [LE32](#le32).
 
 Fails if `x[k]` is not a [data type](#data-types).
 
@@ -1427,7 +1426,7 @@ Note: `peek:0` is equivalent to `dup`.
 _x[k] x[k-1] ... x[0]_ **roll:_k_** → _x[k-1] ... x[0] x[k]_
 
 Looks past `k` items from the top, and moves the next item to the top of the stack.
-Immediate data `k` is encoded as an unsigned byte.
+Immediate data `k` is encoded as [LE32](#le32).
 
 Note: `roll:0` is a no-op, `roll:1` swaps the top two items.
 
@@ -1436,7 +1435,7 @@ Note: `roll:0` is a no-op, `roll:1` swaps the top two items.
 _x[k] ... x[1] x[0]_ **bury:_k_** → _x[0] x[k] ... x[1]_
 
 Moves the top item past the `k` items below it.
-Immediate data `k` is encoded as an unsigned byte.
+Immediate data `k` is encoded as [LE32](#le32).
 
 Note: `bury:0` is a no-op, `bury:1` swaps the top two items.
 
