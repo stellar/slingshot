@@ -1176,6 +1176,7 @@ Fails if `v` is not a [variable type](#variable-type) or if `n` is not in range 
 
 _constraint1 constraint2_ **and** → _constraint3_
 
+TBD: step-by-step spec.
 Combines two constraints using logical conjunction: both constraints must be satisfied.
 
 No changes to the [constraint system](#constraint-system) are made until [`verify`](#verify) is executed.
@@ -1184,6 +1185,7 @@ No changes to the [constraint system](#constraint-system) are made until [`verif
 
 _constraint1 constraint2_ **or** → _constraint3_
 
+TBD: step-by-step spec.
 Combines two constraints using logical disjunction: either of two constraints must be satisfied.
 
 No changes to the [constraint system](#constraint-system) are made until [`verify`](#verify) is executed.
@@ -1192,6 +1194,7 @@ No changes to the [constraint system](#constraint-system) are made until [`verif
 
 _constraint_ **verify** → ø
 
+TBD: step-by-step spec.
 Flattens the constraint and adds it to the [constraint system](#constraint-system).
 
 For each disjunction, a multiplier is allocated.
@@ -1200,11 +1203,22 @@ For each conjunction, appropriate challenges are generated after the R1CS is com
 
 #### encrypt
 
-_X F V proof_ **encrypt** → _V_
+_var P V proof_ **encrypt** → _V_
 
-TBD: change to work over variables
+Verifies that the [Pedersen commitment](#pedersen-commitment) `V` is blinded with a factor committed using `P` and an ephemeral key specified in the proof.
 
-Verifies that the [Pedersen commitment](#pedersen-commitment) `V` is blinded with the discrete log of `F` to `X`.
+```
+proof = Q || R_q || s_q || R_v || R_w || R_p || s_p || s_w (8x32 = 256 bytes)
+
+W + Q == p^{-1}·V
+    W == p^{-1}·v·B
+   B2 == p^{-1}·P
+    Q == q·B2        (separate proof)
+
+V = v·B + p·q·B2
+```
+
+TBD: rewrite the below description:
 
 1. Pops a [string](#string-type) `proof`, and [points](#point-type) `V`, `F` and `X` from the stack.
 2. Forms two statements to verify:
@@ -1241,12 +1255,26 @@ Usage 3: embed blinding factor into the constraint system (since F is a valid un
 
 #### decrypt
 
-_V v_ **decrypt** → _V_
+_v V2 proof_ **decrypt** → _v_
 
-TBD: change to work over variables
+Verifies that the [Pedersen commitment](#pedersen-commitment) `V` (in the detached variable `v`) is reblinded into commitment `V2` with a factor committed using `P` and an ephemeral key specified in the proof.
 
-Pops [scalar](#scalar-type) `v` and [point](#point-type) `V` from the stack.
-Verifies that `V = v·B` and pushes back `V`.
+```
+proof = Q || R_q || s_q || R_f || R_v || s_p || s_f (7x32 = 224 bytes)
+
+    F == p^{-1}·f·B2
+F - R == p^{-1}·(V2-V1)
+    Q == q·B2        (separate proof, copied from tx encrypted)
+
+V1 = v·B + (x + p·q)·B2
+V2 = v·B + (x + f)·B2
+```
+
+1. Pops [string](#string-type) `proof`, [point](#point-type) `V2` and [variable](#variable-type) `v`,  from the stack.
+2. Checks that the variable is detached, fails otherwise.
+3. Replaces variable commitment with V2.
+4. TBD: Runs the proof using the current commitment as V1, defers point operations.
+5. Pushes the variable back to the stack.
 
 
 
