@@ -17,10 +17,7 @@ CREATE TABLE IF NOT EXISTS pegs (
   operation_num INTEGER NOT NULL,
   ledger_num INTEGER NOT NULL,
   amount INTEGER NOT NULL,
-  asset_code BLOB NOT NULL, -- serialized xdr (?)
-  payer_account_id TEXT NOT NULL,
-  unpeg_output_id BLOB      -- NULL until sidechain issuance done
+  asset_code BLOB NOT NULL,
+  imported INTEGER NOT NULL DEFAULT 0
 );
-
-CREATE UNIQUE INDEX IF NOT EXISTS unpeg_output_ids ON pegs (unpeg_output_id) WHERE unpeg_output_id IS NOT NULL;
 `

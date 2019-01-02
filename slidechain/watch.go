@@ -1,9 +1,12 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 
+	"github.com/bobg/multichan"
 	"github.com/chain/txvm/protocol/bc"
+	"github.com/chain/txvm/protocol/txvm"
 	"github.com/interstellar/starlight/worizon"
 )
 
@@ -16,11 +19,15 @@ func watchPegs(db *sql.DB) func(worizon.Transaction) error {
 	}
 }
 
-func watchUnpegs(blocks <-chan *bc.Block) {
-	for b := range blocks {
+func watchExports(ctx context.Context, r *multichan.R) {
+	for {
+		got, ok := r.Read(ctx)
+		if !ok {
+			return
+		}
+		b := got.(*bc.Block)
 		for _, tx := range b.Transactions {
-			// TODO: Test tx to find invocations of unpeg contracts.
-			// Match those with db records and release the pegged funds on the main chain back to the originating account.
+			// TODO: Test tx to find exports of imported funds.
 		}
 	}
 }

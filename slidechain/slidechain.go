@@ -8,21 +8,13 @@ import (
 	"log"
 	"net"
 	"net/http"
-	"sync"
-	"time"
 
+	"github.com/bobg/multichan"
 	"github.com/chain/txvm/protocol"
 	"github.com/chain/txvm/protocol/bc"
 	"github.com/interstellar/starlight/worizon"
 	_ "github.com/mattn/go-sqlite3"
 )
-
-var (
-	bbmu sync.Mutex
-	bb   *protocol.BlockBuilder
-)
-
-var blockInterval = 5 * time.Second
 
 var (
 	initialBlock *bc.Block
@@ -52,7 +44,7 @@ func main() {
 	go func() {
 		err := wclient.StreamTxs(ctx, *custID, cur, watchPegs(db))
 		if err != nil {
-			// xxx
+			// TODO: error handling
 		}
 	}()
 
@@ -85,7 +77,13 @@ func main() {
 
 	log.Printf("listening on %s, initial block ID %x", listener.Addr(), initialBlockID.Bytes())
 
-	http.HandleFunc("/submit", submit)
+	// New blocks will be written to this multichan.
+	w := multichan.New((*bc.Block)(nil))
+	r := w.Reader()
+
+	go watchExports(ctx, r)
+
+	http.Handle("/submit", &submitter{w: w})
 	http.HandleFunc("/get", get)
 	http.HandleFunc("/import", doImport)
 	http.Serve(listener, nil)

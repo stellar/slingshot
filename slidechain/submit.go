@@ -4,15 +4,38 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"sync"
 	"time"
 
+	"github.com/bobg/multichan"
 	"github.com/chain/txvm/errors"
 	"github.com/chain/txvm/protocol"
 	"github.com/chain/txvm/protocol/bc"
 	"github.com/golang/protobuf/proto"
 )
 
-func submit(w http.ResponseWriter, req *http.Request) {
+// TODO: make this configurable.
+var blockInterval = 5 * time.Second
+
+type submitter struct {
+	// Protects bb.
+	bbmu sync.Mutex
+
+	// Normally nil. Once a tx is submitted, this is set to a new block
+	// builder and a timer set. Other txs that arrive during that
+	// interval are added to the block a-building. When the timer fires,
+	// the block is added to the blockchain and this field is set back to nil.
+	//
+	// This is the only way that blocks are added to the chain.
+	bb *protocol.BlockBuilder
+
+	// New blocks are written here.
+	// Anything monitoring the blockchain can create a reader and consume them.
+	// (Really, what we want here is the Sequence "pin" mechanism.)
+	w *multichan.W
+}
+
+func (s *submitter) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	ctx := req.Context()
 
 	bits, err := ioutil.ReadAll(req.Body)
@@ -34,11 +57,11 @@ func submit(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	bbmu.Lock()
-	defer bbmu.Unlock()
+	s.bbmu.Lock()
+	defer s.bbmu.Unlock()
 
-	if bb == nil {
-		bb = protocol.NewBlockBuilder()
+	if s.bb == nil {
+		s.bb = protocol.NewBlockBuilder()
 		nextBlockTime := time.Now().Add(blockInterval)
 
 		st := chain.State()
@@ -64,10 +87,14 @@ func submit(w http.ResponseWriter, req *http.Request) {
 			if err != nil {
 				log.Fatal(errors.Wrap(err, "building new block"))
 			}
-			err = chain.CommitAppliedBlock(ctx, &bc.Block{UnsignedBlock: unsignedBlock}, newSnapshot)
+			b := &bc.Block{UnsignedBlock: unsignedBlock}
+			err = chain.CommitAppliedBlock(ctx, b, newSnapshot)
 			if err != nil {
 				log.Fatal(errors.Wrap(err, "committing new block"))
 			}
+
+			s.w.Write(b)
+
 			log.Printf("committed block %d with %d transaction(s)", unsignedBlock.Height, len(unsignedBlock.Transactions))
 
 			bb = nil
