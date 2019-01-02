@@ -762,6 +762,9 @@ Aggregation protocol is:
 
 ### Blinding proof protocol
 
+TBD: this protocol is obsolete. See the encrypt/decrypt spec for up to date sketches.
+
+
 A zero-knowledge protocol that proves that a [Pedersen commitment](#pedersen-commitment) contains a 
 pre-committed blinding factor. This protocol allows proving to the network that a payment is accessible
 to the recipient (since the blinding factor is already known to the recipient), while allowing
