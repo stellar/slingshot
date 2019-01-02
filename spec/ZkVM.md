@@ -209,15 +209,26 @@ recorded in the [transaction log](#transaction-log).
 
 ### Variable type
 
-_Variable_ in ZkVM is a linear combination of high-level and low-level variables
-in the underlying [constraint system](#constraint-system).
+_Variable_ represents a secret [scalar](#scalar-type) value in the [constraint system](#constraint-system).
 
-Variables can be added and multiplied, producing new variables
-(see [`zkadd`](#zkadd) and other [constraint system instructions](#constraint-system-instructions)).
-Cleartext [scalars](#scalar-type) can be turned into a _Variable_ type using the [`const`](#const) instruction.
+A variable can be in one of two states: **detached** and **attached**.
 
-Variables can be copied and dropped at will,
-but cannot be ported across transactions via [outputs](#output-structure).
+**Detached variable** is represented by a reference to a [Pedersen commitment](#pedersen-commitment) which can be [decrypted](#decrypt)
+before the variable is added to the [constraint system](#constraint-system).
+All copies of a detached variable share the same commitment, so that once one of them is decrypted
+to use another commitment, all other copies reflect the new commitment.
+
+**Attached variable** a linear combination of underlying variables within a [constraint system](#constraint-system).
+Once the variable is attached to a constraint system, it cannot be detached.
+
+Variables can be [added](#zkadd) and [multiplied](#zkmul), producing new variables.
+Variables can also be [encrypted](#encrypt) into a [Pedersen commitment](#pedersen-commitment) with a predetermined
+blinding factor. All these operations transform each involved variable into the **attached** state.
+
+Cleartext [scalars](#scalar-type) can be turned into variables using the [`const`](#const) instruction,
+[points](#point-type) that represent commitments can be turned into variables using the [`var`](#var) instruction.
+
+Variables can be copied and dropped at will, but cannot be ported across transactions via [outputs](#output-structure).
 
 Examples of variables: [value quantities](#value-type) and [time bounds](#time-bounds).
 
@@ -225,8 +236,8 @@ Examples of variables: [value quantities](#value-type) and [time bounds](#time-b
 
 ### Constraint type
 
-_Constraint_ is a statement in the [constraint system](#constraint-system) that constrains
-a linear combination of variables to zero.
+_Constraint_ is a statement in the [constraint system](#constraint-system) that constrains one
+or more linear combination of [variables](#variable-type) to zero.
 
 Constraints are created using the [`zkeq`](#zkeq) instruction over two [variables](#variable-type).
 
@@ -813,6 +824,7 @@ The ZkVM state consists of the static attributes and the state machine attribute
 * [Transaction log](#transaction-log) (array of logged items)
 * Transaction signature verification keys (array of [points](#point-type))
 * [Deferred point operations](#deferred-point-operations)
+* High-level variables: a list of `enum{ detached(point), attached(index) }`
 * [Constraint system](#constraint-system)
 
 
@@ -1061,16 +1073,19 @@ Fails if:
 
 _P_ **var** → _v_
 
-Creates a high-level [variable](#variable-type) `v` 
-from a [Pedersen commitment](#pedersen-commitment) `P` and adds it to the [constraint system](#constraint-system).
+1. Pops a [point](#point-type) `P` from the stack.
+2. Creates a _detached_ [variable](#variable-type) `v` from a [Pedersen commitment](#pedersen-commitment) `P`.
+3. Pushes `v` to the stack.
 
-Fails if `p` is not a [point type](#point-type).
+Fails if `P` is not a [point type](#point-type).
 
 #### const
 
 _a_ **const** → _v_
 
-Creates a [variable](#variable-type) with weight `a` assigned to an R1CS constant `1`.
+1. Pops a [scalar](#scalar-type) `a` from the stack.
+2. Creates an _attached_ [variable](#variable-type) `v` with weight `a` assigned to an R1CS constant `1`.
+3. Pushes `v` to the stack.
 
 Fails if `a` is not a [scalar type](#scalar-type).
 
@@ -1078,49 +1093,84 @@ Fails if `a` is not a [scalar type](#scalar-type).
 
 **mintime** → _v_
 
-Pushes a [variable](#variable-type) `v` corresponding to the [minimum time bound](#time-bounds) of the transaction.
+Pushes an _attached_ [variable](#variable-type) `v` corresponding to the [minimum time bound](#time-bounds) of the transaction.
+
+The variable represents time bound as a weight on the R1CS constant `1` (see [`cost`](#const)).
 
 #### maxtime
 
 **maxtime** → _v_
 
-Pushes a [variable](#variable-type) `v` corresponding to the [maximum time bound](#time-bounds) of the transaction.
+Pushes an _attached_ [variable](#variable-type) `v` corresponding to the [maximum time bound](#time-bounds) of the transaction.
+
+The variable represents time bound as a weight on the R1CS constant `1` (see [`cost`](#const)).
 
 #### zkneg
 
 _var1_ **zkneg** → _var2_
 
-Negates the weights in the linear combination.
+1. Pops a [variable](#variable-type) `var1`.
+2. If the variable is detached, attaches it to the constraint system.
+3. Negates the weights in the linear combination represented by `var1` producing new variable `var2`.
+4. Pushes `var2` to the stack.
+
+Fails if `var1` is not a [variable type](#variable-type).
 
 #### zkadd
 
 _var1 var2_ **zkadd** → _var3_
 
-Adds two linear combinations, producing a new linear combination.
+1. Pops two [variables](#variable-type) `var2`, then `var1`.
+2. If any of the variables is detached, attaches that variable to the constraint system.
+3. Adds two linear combinations represented by `var1` and `var2`, producing a new linear combination `var3`.
+4. Pushes `var3` to the stack.
+
+Fails if `var1` or `var2` is not a [variable type](#variable-type).
 
 #### zkmul
 
 _var1 var2_ **zkmul** → _var3_
 
-Multiplies two variables. This creates a multiplier in R1CS, adds constraints to the left and right wires of the multiplier according to linear combinations in var1, var2, and pushes the output variable to the stack.
+1. Pops two [variables](#variable-type) `var2`, then `var1`.
+2. If any of the variables is detached, attaches that variable to the constraint system.
+3. Creates a multiplier in the constraint system. Constraints the left wire to `var1`, right wire to `var2`, creates a [variable](#variable-type) `var3` representing an output wire.
+4. Pushes `var3` to the stack.
+
+Fails if `var1` or `var2` is not a [variable type](#variable-type).
 
 #### scmul
 
-_var1 scalar_ **scmul** → _var2_
+_var1 x_ **scmul** → _var2_
 
-Multiplies all weights in a variable by a scalar.
+1. Pops [scalar](#scalar-type) `x` and [variable](#variable-type) `var1` from the stack.
+2. Multiplies all weights in `var1` by `x`.
+3. Pushes updated `var2` to the stack.
+
+Fails if `x` is not a [scalar type](#scalar-type) or if `var2` is not a [variable type](#variable-type).
 
 #### zkeq
 
 _var1 var2_ **zkeq** → _constraint_
 
-Pushes a linear constraint `var1 - var2 = 0`
+1. Pops two [variables](#variable-type) `var2`, then `var1`.
+2. If any of the variables is detached, attaches that variable to the constraint system.
+3. Creates a [constraint](#constraint-type) that represents statement `var1 - var2 = 0`.
+4. Pushes constraint to the stack.
+
+Fails if `var1` or `var2` is not a [variable type](#variable-type).
 
 #### zkrange
 
 _v_ **zkrange:_n_** → _v_
 
-Checks that variable is in n-bit range. Immediate data n is 1-byte and must be in [1,64] range.
+1. Pops a [variable](#variable-type) `v`.
+2. If `v` is detached, attaches it to the constraint system.
+3. Adds an `n`-bit range proof for `v` to the [constraint system](#constraint-system) (see [Cloak protocol](https://github.com/interstellar/spacesuit/blob/master/spec.md) for the range proof definition).
+4. Pushes `v` back to the stack.
+
+Immediate data `n` is encoded as one byte.
+
+Fails if `v` is not a [variable type](#variable-type) or if `n` is not in range [1, 64].
 
 #### and
 
@@ -1151,6 +1201,8 @@ For each conjunction, appropriate challenges are generated after the R1CS is com
 #### encrypt
 
 _X F V proof_ **encrypt** → _V_
+
+TBD: change to work over variables
 
 Verifies that the [Pedersen commitment](#pedersen-commitment) `V` is blinded with the discrete log of `F` to `X`.
 
@@ -1190,6 +1242,8 @@ Usage 3: embed blinding factor into the constraint system (since F is a valid un
 #### decrypt
 
 _V v_ **decrypt** → _V_
+
+TBD: change to work over variables
 
 Pops [scalar](#scalar-type) `v` and [point](#point-type) `V` from the stack.
 Verifies that `V = v·B` and pushes back `V`.
