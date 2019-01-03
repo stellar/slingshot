@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 
@@ -55,7 +56,7 @@ func watchExports(ctx context.Context, r *multichan.R) {
 					continue
 				}
 				retiredAmount := int64(item[2].(txvm.Int))
-				retiredAssetID := bc.HashFromBytes(item[3].(txvm.Bytes))
+				retiredAssetIDBytes := item[3].(txvm.Bytes)
 
 				stellarAssetCodeItem := tx.Log[i+1]
 				if len(stellarAssetCodeItem) != 3 {
@@ -64,12 +65,13 @@ func watchExports(ctx context.Context, r *multichan.R) {
 				if stellarAssetCodeItem[0].(txvm.Bytes)[0] != txvm.LogCode {
 					continue
 				}
-				var stellarAsset xdr.Asset
-				err := xdr.SafeUnmarshal(stellarAssetCodeItem[2].(txvm.Bytes), &stellarAsset)
-				if err != nil {
+				stellarAssetCodeXDR := stellarAssetCodeItem[2].(txvm.Bytes)
+
+				// Check this Stellar asset code corresponds to retiredAssetIDBytes.
+				gotAssetID32 := txvm.AssetID(issuanceContractSeed, stellarAssetCodeXDR)
+				if !bytes.Equal(gotAssetID32[:], retiredAssetIDBytes) {
 					continue
 				}
-				// TODO: check stellarAsset corresponds to retiredAssetID
 
 				stellarRecipientItem := tx.Log[i+2]
 				if len(stellarRecipientItem) != 3 {
