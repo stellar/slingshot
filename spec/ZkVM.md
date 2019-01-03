@@ -44,7 +44,7 @@ ZkVM defines a procedural representation for blockchain transactions and the rul
     * [Merkle binary tree](#merkle-binary-tree)
     * [Signature](#signature)
     * [Aggregated transaction signature](#aggregated-transaction-signature)
-    * [Blinding proof protocol](#blinding-proof-protocol)
+    * [Blinding protocol](#blinding-protocol)
 * [VM operation](#vm-operation)
     * [VM state](#vm-state)
     * [VM execution](#vm-execution)
@@ -326,8 +326,8 @@ where:
 
 Pedersen commitments can be used to allocate new [variables](#variable-type) using the [`var`](#var) instruction.
 
-Pedersen commitments can be proven to use a pre-determined blinding factor using [`encrypt`](#encrypt) and 
-[`decrypt`](#decrypt) instructions.
+Pedersen commitments can be proven to use a pre-determined blinding factor using [`blind`](#blind) and 
+[`reblind`](#reblind) instructions.
 
 
 ### Verification key
@@ -760,9 +760,54 @@ Aggregation protocol is:
 
 
 
-### Blinding proof protocol
+### Blinding protocol
 
-TBD: this protocol is obsolete. See the encrypt/decrypt spec for up to date sketches.
+Blinding protocol consists of three proofs about blinding factors:
+
+1. [Blinding proof](#blinding-proof): a proof that a blinding factor is formed with a pre-determined key which can be removed using [reblind](#reblind-proof) operation. Implemented by the [`blind`](#blind) instruction.
+2. [Reblinding proof](#reblinding-proof): a proof that a blinding factor is replaced with another one without affecting the committed value. Implemented by the [`reblind`](#reblind) instruction.
+3. [Unblinding proof](#unblinding-proof): demonstrates the committed value and proves that the blinding factor is zero. Implemented by the [`unblind`](#reblind) instruction.
+
+#### Blinding proof
+
+TBD. Prove `V = v*B + q*P` where `Q=q*B2` is random and `P=p*B2` is agreed on.
+
+```
+proof = Q || R_q || s_q || R_v || R_w || R_p || s_p || s_w (8x32 = 256 bytes)
+
+W + Q == p^{-1}·V
+    W == p^{-1}·v·B
+   B2 == p^{-1}·P
+    Q == q·B2        (separate proof)
+
+V = v·B + p·q·B2
+```
+
+
+#### Reblinding proof
+
+TBD. Prove `V2-V1 = f*B2 - p*Q` where `Q=q*B2` proof is copied from blinding tx, `P=p*B2` is agreed on, and `f` is the new factor.
+
+```
+proof = Q || R_q || s_q || R_f || R_v || s_p || s_f (7x32 = 224 bytes)
+
+    F == p^{-1}·f·B2
+F - R == p^{-1}·(V2-V1)
+    Q == q·B2        (separate proof, copied from tx encrypted)
+
+V1 = v·B + (x + p·q)·B2
+V2 = v·B + (x + f)·B2
+```
+
+
+#### Unblinding proof
+
+TBD. Prove `V = v*B` where `v` is provided in cleartext.
+
+
+
+
+TBD: the protocol below is obsolete and will be replaced.
 
 
 A zero-knowledge protocol that proves that a [Pedersen commitment](#pedersen-commitment) contains a 
@@ -960,8 +1005,9 @@ Code | Instruction                | Stack diagram                              |
 0x?? | [`and`](#and)              | _constr1 constr2_ → _constr3_              |
 0x?? | [`or`](#or)                | _constr1 constr2_ → _constr3_              |
 0x?? | [`verify`](#verify)        |      _constraint_ → ø                      | Modifies [CS](#constraint-system) 
-0x?? | [`encrypt`](#encrypt)      |     _X F V proof_ → _V_                    | [Defers point operations](#deferred-point-operations)
-0x?? | [`decrypt`](#decrypt)      |        _V scalar_ → _V_                    | [Defers point operations](#deferred-point-operations)
+0x?? | [`blind`](#blind)          |   _var Q V proof_ → _V_                    | [Defers point operations](#deferred-point-operations)
+0x?? | [`reblind`](#reblind)      |              _??_ → _V_                    | [Defers point operations](#deferred-point-operations)
+0x?? | [`unblind`](#unblind)      |    _var V scalar_ → _V_                    | [Defers point operations](#deferred-point-operations)
  |                                |                                            |
  |     [**Values**](#value-instructions)              |                        |
 0x?? | [`issue`](#issue)          |       _qtyc pred_ → _contract_             | Modifies [CS](#constraint-system), [tx log](#transaction-log)
@@ -1205,9 +1251,9 @@ For each disjunction, a multiplier is allocated.
 
 For each conjunction, appropriate challenges are generated after the R1CS is complete, but before it is checked.
 
-#### encrypt
+#### blind
 
-_var P V proof_ **encrypt** → _V_
+_var P V proof_ **blind** → _V_
 
 Verifies that the [Pedersen commitment](#pedersen-commitment) `V` is blinded with a factor committed using `P` and an ephemeral key specified in the proof.
 
@@ -1241,7 +1287,7 @@ TBD: rewrite the below description:
     ```
     T = Transcript("ZkVM.encrypt")
     ```
-5. Performs the verification of the [blinding proof protocol](#blinding-proof-protocol) using the transcript `T`, secrets `x = X/B2` and `f = F/X`:
+5. Performs the verification of the [blinding protocol](#blinding-protocol) using the transcript `T`, secrets `x = X/B2` and `f = F/X`:
     ```
     RX + e·X  ==  sx·B2
     RF + e·F  ==  sx·V - sv·B
@@ -1257,9 +1303,9 @@ Usage 2: commit a secret value, but allow counterparty compute the value dynamic
 
 Usage 3: embed blinding factor into the constraint system (since F is a valid unblinded commitment) and add constraints alongside other scalars.
 
-#### decrypt
+#### reblind
 
-_v V2 proof_ **decrypt** → _v_
+_var V2 proof_ **reblind** → _var_
 
 Verifies that the [Pedersen commitment](#pedersen-commitment) `V` (in the detached variable `v`) is reblinded into commitment `V2` with a factor committed using `P` and an ephemeral key specified in the proof.
 
@@ -1280,7 +1326,11 @@ V2 = v·B + (x + f)·B2
 4. TBD: Runs the proof using the current commitment as V1, defers point operations.
 5. Pushes the variable back to the stack.
 
+#### unblind
 
+_var V scalar_ **unblind** → _V_
+
+TBD: 
 
 
 
@@ -1608,15 +1658,34 @@ Note: `bury:0` is a no-op, `bury:1` swaps the top two items.
 
 ### Lock value example
 
-TBD.
+Locks value with a public key.
+
+```
+... (<value>) <pubkey> output:1
+```
 
 ### Unlock value example
 
-TBD.
+Unlocks a simple contract that locked a single value with a public key.
+The unlock is performed by claiming the [input](#input-structure) and [signing](#signtx) the transaction.
+
+```
+<serialized_input> input signtx ...
+```
 
 ### Simple payment example
 
-TBD.
+Unlocks three values from the existing [inputs](#input-structure),
+recombines them into a payment to address `A` (pubkey) and a change `C`:
+
+```
+<input1> input signtx
+<input2> input signtx
+<input3> input signtx
+<FC> <QC> <FA> <QA> cloak:3:2  # flavor and quantity commitments for A and C
+<A> output:1
+<C> output:1
+```
 
 ### Offer example
 
