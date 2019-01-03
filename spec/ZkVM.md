@@ -813,22 +813,22 @@ The protocol is the following:
 
 The ZkVM state consists of the static attributes and the state machine attributes.
 
-* [Transaction witness](#transaction-witness):
+1. [Transaction witness](#transaction-witness):
     * `version`
     * `mintime` and `maxtime`
     * `program`
     * `tx_signature`
     * `cs_proof`
-* Extension flag (boolean)
-* Uniqueness flag (boolean)
-* Data stack (array of [items](#types))
-* Program stack (array of [programs](#program) with their offsets)
-* Current [program](#program) with its offset
-* [Transaction log](#transaction-log) (array of logged items)
-* Transaction signature verification keys (array of [points](#point-type))
-* [Deferred point operations](#deferred-point-operations)
-* High-level variables: a list of `enum{ detached(point), attached(index) }`
-* [Constraint system](#constraint-system)
+2. Extension flag (boolean)
+3. Uniqueness flag (boolean)
+4. Data stack (array of [items](#types))
+5. Program stack (array of [programs](#program) with their offsets)
+6. Current [program](#program) with its offset
+7. [Transaction log](#transaction-log) (array of logged items)
+8. Transaction signature verification keys (array of [points](#point-type))
+9. [Deferred point operations](#deferred-point-operations)
+10. High-level variables: a list of `enum{ detached(point), attached(index) }`
+11. [Constraint system](#constraint-system)
 
 
 ### VM execution
@@ -844,7 +844,8 @@ The VM is initialized with the following state:
 7. Transaction log is empty.
 8. Array of signature verification keys is empty.
 9. Array of deferred point operations is empty.
-10. Constraint system is empty.
+10. High-level variables: attached variables for [mintime and maxtime](#time-bounds).
+10. Constraint system: empty (time bounds are constants that appear only within linear combinations of actual variables).
 
 Then, the VM executes the current program till completion:
 
