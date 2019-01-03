@@ -101,12 +101,18 @@ When the virtual machine executes a program, it creates and manipulates data of 
 [**plain data types**](#data-types) and [**linear types**](#linear-types), such as [values](#value-type) and
 [contracts](#contract-type).
 
-A [**value**](#value-type) is a specific quantity of a certain _flavor_ that can be
+A [**value**](#value-type) is a specific _quantity_ of a certain _flavor_ that can be
 merged or split, issued or retired, but not otherwise created or destroyed.
 
 A [**contract**] encapsulates a predicate (a public key or a program),
 plus its runtime state, and once created must be executed to completion
 or persisted in the global state for later execution.
+
+Custom logic is represented via programmable [**constraints**](#constraint-type)
+applied to [**variables**](#variable-type). Variables represent quantities and flavors of values,
+[time bounds](#time-bounds) and user-defined secret parameters. All constraints are arranged in
+a single [constraint system](#constraint-system) which is proven to be satisfied after the VM
+has finished execution.
 
 Some ZkVM instructions write proposed updates to the blockchain state
 to the [**transaction log**](#transaction-log), which represents the
@@ -1767,4 +1773,13 @@ an extension instruction “version assertion” that fails execution if
 the version is below a given number (e.g. `4 versionverify`).
 
 
+### Why cloak and borrow take variables and not commitments?
+
+1. it makes sense to reuse variable created by `blind`
+2. txbuilder can keep the secrets assigned to variable instances, so it may be more convenient than remembering preimages for commitments.
+
+
+### Why there is no AND combinator in predicate tree?
+
+The payload of a contract must be provided to the selected branch. If both predicates must be evaluated and both are programs, then which one takes the payload? To avoid ambiguity, AND can be implemented inside a program that can explicitly decide in which order and which parts of payload to process: maybe check some conditions and then delegate the whole payload to a predicate, or split the payload in two parts and apply different predicates to each part. There's [`contract`](#contract) instruction for that delegation.
 
