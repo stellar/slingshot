@@ -58,8 +58,8 @@ func start(addr, dbfile, custID, horizonURL string) (*custodian, error) {
 
 	w := multichan.New((*bc.Block)(nil))
 
+	// TODO(vniu): set custodian account seed
 	return &custodian{
-		seed:      "",
 		accountID: custAccountID,
 		db:        db,
 		w:         w,

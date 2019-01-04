@@ -42,11 +42,9 @@ func (c *custodian) pegOutFromExports(ctx context.Context) error {
 }
 
 func (c *custodian) pegOut(ctx context.Context, recipient xdr.AccountId, asset xdr.Asset, amount int) error {
-	// TOOD(vniu): get seed
-	var seed string
 	tx, err := c.buildPegOutTx(recipient, asset, amount)
 	// TODO(vniu): retry tx submission
-	txenv, err := tx.Sign(seed)
+	txenv, err := tx.Sign(c.seed)
 	if err != nil {
 		return err
 	}
