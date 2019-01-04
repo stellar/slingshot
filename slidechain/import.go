@@ -2,17 +2,19 @@ package main
 
 import (
 	"context"
-	"database/sql"
 
 	"github.com/bobg/sqlutil"
 )
 
-func importFromPegs(ctx context.Context, db *sql.DB) error {
+func (c *custodian) importFromPegs(ctx context.Context) error {
 	for {
-		const q = `SELECT txid, txhash, operation_num, amount, asset_code FROM pegs WHERE imported=0`
-		err := sqlutil.ForQueryRows(ctx, db, q, func(txid string, txhash []byte, operationNum, amount int, assetCode []byte) error {
+		c.imports.L.Lock()
+		defer c.imports.L.Unlock()
+		c.imports.Wait()
+		const q = `SELECT txid, txhash, operation_num, amount, asset FROM pegs WHERE imported=0`
+		err := sqlutil.ForQueryRows(ctx, c.db, q, func(txid string, txhash []byte, operationNum, amount int, asset []byte) error {
 			// TODO: import the specified row through issuance contract
-			_, err := db.ExecContext(ctx, `UPDATE pegs SET imported=1 WHERE txid=$1`, txid)
+			_, err := c.db.ExecContext(ctx, `UPDATE pegs SET imported=1 WHERE txid=$1`, txid)
 			if err != nil {
 				return err
 			}

@@ -2,33 +2,36 @@ package main
 
 import (
 	"context"
-	"database/sql"
-	"strings"
 
 	"github.com/bobg/sqlutil"
 	b "github.com/stellar/go/build"
-	"github.com/stellar/go/clients/horizon"
 	"github.com/stellar/go/xdr"
 )
 
 const baseFee = 10
 
-func pegOutFromExports(ctx context.Context, db *sql.DB, hclient *horizon.Client, custAccountID xdr.AccountId) error {
+func (c *custodian) pegOutFromExports(ctx context.Context) error {
 	for {
-		const q = `SELECT txid, recipient, amount, asset_code FROM exports WHERE exported=0`
-		err := sqlutil.ForQueryRows(ctx, db, q, func(txid, recipient string, amount int, assetCode string) error {
+		c.exports.L.Lock()
+		defer c.exports.L.Unlock()
+		c.exports.Wait()
+		const q = `SELECT txid, recipient, amount, asset_xdr FROM exports WHERE exported=0`
+		err := sqlutil.ForQueryRows(ctx, c.db, q, func(txid, recipient string, amount int, assetXDR []byte) error {
 			var recipientID xdr.AccountId
 			err := recipientID.SetAddress(recipient)
 			if err != nil {
 				return err
 			}
-			s := strings.Split(assetCode, "/")
-			code, issuer := s[1], s[2]
-			err = pegOut(ctx, hclient, custAccountID, recipientID, code, issuer, amount)
+			var asset xdr.Asset
+			err = xdr.SafeUnmarshal(assetXDR, &asset)
 			if err != nil {
 				return err
 			}
-			_, err = db.ExecContext(ctx, `UPDATE exports SET exported=1 WHERE txid=$1`, txid)
+			err = c.pegOut(ctx, recipientID, asset, amount)
+			if err != nil {
+				return err
+			}
+			_, err = c.db.ExecContext(ctx, `UPDATE exports SET exported=1 WHERE txid=$1`, txid)
 			return err
 		})
 		if err != nil {
@@ -38,14 +41,10 @@ func pegOutFromExports(ctx context.Context, db *sql.DB, hclient *horizon.Client,
 	return nil
 }
 
-func pegOut(ctx context.Context, hclient *horizon.Client, custAccountID, recipient xdr.AccountId, code, issuer string, amount int) error {
+func (c *custodian) pegOut(ctx context.Context, recipient xdr.AccountId, asset xdr.Asset, amount int) error {
 	// TOOD(vniu): get seed
 	var seed string
-	root, err := hclient.Root()
-	if err != nil {
-		return err
-	}
-	tx, err := buildPegOutTx(root.NetworkPassphrase, custAccountID, recipient, code, issuer, amount)
+	tx, err := c.buildPegOutTx(recipient, asset, amount)
 	// TODO(vniu): retry tx submission
 	txenv, err := tx.Sign(seed)
 	if err != nil {
@@ -55,26 +54,44 @@ func pegOut(ctx context.Context, hclient *horizon.Client, custAccountID, recipie
 	if err != nil {
 		return err
 	}
-	succ, err := hclient.SubmitTransaction(txstr)
+	succ, err := c.hclient.SubmitTransaction(txstr)
 	return err
 }
 
-func buildPegOutTx(passphrase string, custAccountID, recipient xdr.AccountId, code, issuer string, amount int) (*b.TransactionBuilder, error) {
+func (c *custodian) buildPegOutTx(recipient xdr.AccountId, asset xdr.Asset, amount int) (*b.TransactionBuilder, error) {
 	// TODO(vniu): track account seqnum
 	var seqnum xdr.SequenceNumber
-	return b.Transaction(
-		b.Network{Passphrase: passphrase},
-		b.SourceAccount{AddressOrSeed: custAccountID.Address()},
-		b.Sequence{Sequence: uint64(seqnum)},
-		b.BaseFee{Amount: baseFee},
-		b.Payment(
+	var paymentOp b.PaymentBuilder
+	switch asset.Type {
+	case xdr.AssetTypeAssetTypeNative:
+		paymentOp = b.Payment(
+			b.Destination{AddressOrSeed: recipient.Address()},
+			b.NativeAmount{Amount: string(amount)},
+		)
+	case xdr.AssetTypeAssetTypeCreditAlphanum4:
+		paymentOp = b.Payment(
 			b.Destination{AddressOrSeed: recipient.Address()},
 			b.CreditAmount{
-				Code:   code,
-				Issuer: issuer,
-				// TODO(vniu): better amount-to-string conversion
+				Code:   string(asset.AlphaNum4.AssetCode[:]),
+				Issuer: asset.AlphaNum4.Issuer.Address(),
 				Amount: string(amount),
 			},
-		),
+		)
+	case xdr.AssetTypeAssetTypeCreditAlphanum12:
+		paymentOp = b.Payment(
+			b.Destination{AddressOrSeed: recipient.Address()},
+			b.CreditAmount{
+				Code:   string(asset.AlphaNum12.AssetCode[:]),
+				Issuer: asset.AlphaNum12.Issuer.Address(),
+				Amount: string(amount),
+			},
+		)
+	}
+	return b.Transaction(
+		b.Network{Passphrase: c.network},
+		b.SourceAccount{AddressOrSeed: c.accountID.Address()},
+		b.Sequence{Sequence: uint64(seqnum)},
+		b.BaseFee{Amount: baseFee},
+		paymentOp,
 	)
 }
