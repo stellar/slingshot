@@ -1,0 +1,73 @@
+syntax = "proto3";
+option go_package = "bc";
+
+package bc;
+
+// Hash is a 32-byte hash.
+message Hash {
+  fixed64 v0 = 1;
+  fixed64 v1 = 2;
+  fixed64 v2 = 3;
+  fixed64 v3 = 4;
+}
+
+// Predicate contains the quorum and pubkeys needed to authenticate a block.
+message Predicate {
+	int64 version = 1;
+
+        // These fields apply only when version is 1.
+	int32 quorum = 2;
+	repeated bytes pubkeys = 3;
+
+	// Fields for predicate versions other than 1.
+	repeated DataItem other_fields = 4;
+}
+
+// DataItem is a txvm plain-data item: bytes, int, or tuple.
+message DataItem {
+	DataType type = 1;
+	bytes bytes = 2;
+	int64 int = 3;
+	repeated DataItem tuple = 4;
+}
+
+// DataType is the type for a DataItem.
+enum DataType {
+	BYTES = 0;
+	INT = 1;
+	TUPLE = 2;
+}
+
+// BlockHeader is the header of a Block: everything except the block's
+// transactions and predicate args.
+message BlockHeader {
+  uint64            version            = 1;
+  uint64            height             = 2;
+  Hash              previous_block_id  = 3;
+  uint64            timestamp_ms       = 4;
+  int64             runlimit           = 5;
+  int64             refs_count         = 6;
+  Hash              transactions_root  = 7;
+  Hash              contracts_root     = 8;
+  Hash              nonces_root        = 9;
+  Predicate         next_predicate     = 10;
+
+  // Fields added by future versions of the protocol.
+  repeated DataItem extra_fields       = 11;
+}
+
+// RawTx is a raw transaction, before processing through txvm.
+message RawTx {
+	int64 version  = 1;
+	int64 runlimit = 2;
+	bytes program  = 3;
+}
+
+// RawBlock is a raw block.
+message RawBlock {
+	BlockHeader header = 1;
+	repeated RawTx transactions = 2;
+	repeated DataItem arguments = 3;
+}
+
+

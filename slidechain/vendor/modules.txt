@@ -1,0 +1,82 @@
+# github.com/agl/ed25519 v0.0.0-20170116200512-5312a6153412
+github.com/agl/ed25519
+github.com/agl/ed25519/edwards25519
+# github.com/bobg/multichan v1.0.1
+github.com/bobg/multichan
+# github.com/bobg/sqlutil v0.0.0-20180406050615-9797d815c1b0
+github.com/bobg/sqlutil
+# github.com/chain/txvm v0.0.0-20181214231834-cac41849b193
+github.com/chain/txvm/errors
+github.com/chain/txvm/protocol
+github.com/chain/txvm/protocol/bc
+github.com/chain/txvm/protocol/state
+github.com/chain/txvm/protocol/txvm
+github.com/chain/txvm/crypto/ed25519
+github.com/chain/txvm/log
+github.com/chain/txvm/math/checked
+github.com/chain/txvm/protocol/merkle
+github.com/chain/txvm/protocol/patricia
+github.com/chain/txvm/crypto/sha3
+github.com/chain/txvm/protocol/txvm/op
+github.com/chain/txvm/protocol/txbuilder
+github.com/chain/txvm/protocol/txbuilder/standard
+github.com/chain/txvm/crypto/ed25519/internal/edwards25519
+github.com/chain/txvm/encoding/json
+github.com/chain/txvm/crypto/sha3pool
+github.com/chain/txvm/protocol/txvm/txvmutil
+github.com/chain/txvm/protocol/txvm/asm
+# github.com/davecgh/go-spew v1.1.1
+github.com/davecgh/go-spew/spew
+# github.com/go-errors/errors v1.0.1
+github.com/go-errors/errors
+# github.com/golang/protobuf v1.2.0
+github.com/golang/protobuf/proto
+# github.com/lib/pq v1.0.0
+github.com/lib/pq
+github.com/lib/pq/oid
+# github.com/manucorporat/sse v0.0.0-20160126180136-ee05b128a739
+github.com/manucorporat/sse
+# github.com/mattn/go-sqlite3 v1.10.0
+github.com/mattn/go-sqlite3
+# github.com/pkg/errors v0.8.0
+github.com/pkg/errors
+# github.com/pmezard/go-difflib v1.0.0
+github.com/pmezard/go-difflib/difflib
+# github.com/segmentio/go-loggly v0.5.0
+github.com/segmentio/go-loggly
+# github.com/sirupsen/logrus v1.0.6-0.20180720114135-a1f2e46d9209
+github.com/sirupsen/logrus
+github.com/sirupsen/logrus/hooks/test
+# github.com/stellar/go v0.0.0-20181029194640-da269347d7dc
+github.com/stellar/go/clients/horizon
+github.com/stellar/go/network
+github.com/stellar/go/xdr
+github.com/stellar/go/build
+github.com/stellar/go/protocols/horizon
+github.com/stellar/go/support/errors
+github.com/stellar/go/support/render/hal
+github.com/stellar/go/support/render/problem
+github.com/stellar/go/hash
+github.com/stellar/go/strkey
+github.com/stellar/go/amount
+github.com/stellar/go/keypair
+github.com/stellar/go/price
+github.com/stellar/go/protocols/horizon/base
+github.com/stellar/go/support/url
+github.com/stellar/go/support/log
+github.com/stellar/go/crc16
+github.com/stellar/go/support/http/mutil
+# github.com/stellar/go-xdr v0.0.0-20180917104419-0bc96f33a18e
+github.com/stellar/go-xdr/xdr3
+# github.com/stretchr/objx v0.1.1
+github.com/stretchr/objx
+# github.com/stretchr/testify v1.2.2
+github.com/stretchr/testify/mock
+github.com/stretchr/testify/assert
+# golang.org/x/crypto v0.0.0-20190103213133-ff983b9c42bc
+golang.org/x/crypto/ssh/terminal
+# golang.org/x/sync v0.0.0-20181221193216-37e7f081c4d4
+golang.org/x/sync/errgroup
+# golang.org/x/sys v0.0.0-20190102155601-82a175fd1598
+golang.org/x/sys/unix
+golang.org/x/sys/windows
