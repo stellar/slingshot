@@ -423,7 +423,7 @@ T.commit("L", L)
 T.commit("R", R)
 f = T.challenge_scalar("f")
 OR(L,R) = L + f·B
-```
+``` 
 
 The choice between the branches is performed using [`left`](#left) and [`right`](#right) instructions.
 
@@ -874,8 +874,6 @@ The recipient can copy the proof about the nonce `q`: `Q || R_q || s_q`
 and use it in their [reblinding proof](#reblinding-proof).
 
 #### Reblinding proof
-
-TBD. Prove `V2-V1 = f*B2 - p*Q` where `Q=q*B2` proof is copied from blinding tx, `P=p*B2` is pre-agreed on, and `f` is the new factor.
 
 Proves that a commitment `V2` retains the same committed value `v` as `V1`, but subtracts blinding factor `p·Q` and adds another blinding factor `f·B2`. 
 
@@ -1543,6 +1541,7 @@ _items... predicate_ **output:_k_** → ø
 1. Pops [`predicate`](#predicate) from the stack.
 2. Pops `k` items from the stack.
 3. Adds an [output entry](#output-entry) to the [transaction log](#transaction-log).
+4. For each [value](#value-type) in the output, if any quantity or flavor variable is detached, attaches that variable to the constraint system.
 
 Immediate data `k` is encoded as [LE32](#le32).
 
