@@ -9,19 +9,20 @@ import (
 	"github.com/chain/txvm/errors"
 	"github.com/chain/txvm/protocol/bc"
 	"github.com/chain/txvm/protocol/txvm"
-	"github.com/interstellar/starlight/worizon"
+	"github.com/stellar/go/clients/horizon"
+	"github.com/stellar/go/network"
 	"github.com/stellar/go/xdr"
 )
 
-func watchPegs(db *sql.DB) func(worizon.Transaction) error {
-	return func(tx worizon.Transaction) error {
+func watchPegs(db *sql.DB, networkPassphrase string) func(horizon.Transaction) error {
+	return func(tx horizon.Transaction) error {
 		var env xdr.TransactionEnvelope
 		err := xdr.SafeUnmarshalBase64(tx.EnvelopeXdr, &env)
 		if err != nil {
 			return errors.Wrap(err, "unmarshaling envelope XDR")
 		}
 
-		for _, op := range env.Tx.Operations {
+		for i, op := range env.Tx.Operations {
 			if op.Body.Type != xdr.OperationTypePayment {
 				continue
 			}
@@ -29,8 +30,13 @@ func watchPegs(db *sql.DB) func(worizon.Transaction) error {
 			if !payment.Destination.Equals(custAccountID) {
 				continue
 			}
-			// TODO: this operation is a payment to the custodian's account - i.e., a peg.
-			// Record it in the db and/or immediately issue imported funds on the sidechain.
+
+			// This operation is a payemtn to the custodian's account - i.e., a peg.
+			// We record it in the db and immediately issue imported funds on the sidechain.
+			var q = `INSERT INTO pegs 
+				(txhash, operation_num, amount, asset_code, imported)
+				($1, $2, $3, $4, $5, $6)`
+			db.Exec(q, network.TransactionHash(env.Tx, networkPassphrase), i, payment.Amount, payment.Asset.String(), false)
 		}
 		return nil
 	}

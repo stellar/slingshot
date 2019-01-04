@@ -8,12 +8,13 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"strings"
 
 	"github.com/bobg/multichan"
 	"github.com/chain/txvm/protocol"
 	"github.com/chain/txvm/protocol/bc"
-	"github.com/interstellar/starlight/worizon"
 	_ "github.com/mattn/go-sqlite3"
+	"github.com/stellar/go/clients/horizon"
 )
 
 var (
@@ -28,6 +29,7 @@ func main() {
 		addr   = flag.String("addr", "localhost:2423", "server listen address")
 		dbfile = flag.String("db", "", "path to db")
 		custID = flag.String("custid", "", "custodian's Stellar account ID")
+		url    = flag.String("horizon", "", "horizon server url")
 	)
 
 	flag.Parse()
@@ -38,13 +40,23 @@ func main() {
 	}
 	defer db.Close()
 
-	var cur worizon.Cursor // TODO: initialize from db (if applicable)
+	var cur horizon.Cursor // TODO: initialize from db (if applicable)
 
-	wclient := worizon.NewClient(nil, nil)
+	hclient := &horizon.Client{
+		URL: strings.TrimRight(*url, "/"),
+	}
+
 	go func() {
-		err := wclient.StreamTxs(ctx, *custID, cur, watchPegs(db))
+		err := hclient.StreamTransactions(ctx, *custID, cur, watchPegs(db, hclient.Root().NetworkPassphrase))
 		if err != nil {
 			// TODO: error handling
+		}
+	}()
+
+	go func() {
+		err := importFromPegs(ctx, db)
+		if err != nil {
+			// TODO(vniu): error handling
 		}
 	}()
 
@@ -85,7 +97,6 @@ func main() {
 
 	http.Handle("/submit", &submitter{w: w})
 	http.HandleFunc("/get", get)
-	http.HandleFunc("/import", doImport)
 	http.Serve(listener, nil)
 }
 

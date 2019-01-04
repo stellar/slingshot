@@ -1,8 +1,25 @@
 package main
 
-import "net/http"
+import (
+	"context"
+	"database/sql"
 
-func doImport(w http.ResponseWriter, req *http.Request) {
-	// TODO: Check whether the peg described by the args in req is valid.
-	// If it is, submit a transaction to the txvm chain issuing a corresponding amount and asset type.
+	"github.com/chain/chain/database/pg"
+)
+
+func importFromPegs(ctx context.Context, db *sql.DB) error {
+	for {
+		var importedIDs []string
+
+		const q = `SELECT txid, txhash, operation_num, amount, asset_code FROM pegs WHERE imported=0`
+		err := pg.ForQueryRows(ctx, db, q, func(txid string, txhash []byte, operationNum, amount int, assetCode []byte) error {
+			// TODO: import the specified row through issuance contract
+			_, err := db.ExecContext(ctx, `UPDATE pegs SET imported=1 WHERE txid=$1`, txid)
+			if err != nil {
+				return err
+			}
+		})
+		return err
+	}
+	return nil
 }
