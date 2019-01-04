@@ -1763,6 +1763,7 @@ Bytecode creating the offer:
 <value> <offer predicate> output:1 "Offer: 1 BTC for 3745 USD" data
 ```
 
+The programmatic API for creating, indexing and interacting with offers ties all parts together.
 
 ### Offer with partial lift
 
