@@ -725,7 +725,7 @@ The protocol is the following:
     ```
     e = T.challenge_scalar("e")
     ```
-7. Prover computes a signature scalar `s` using the nonce, the challenge and the secret key `dlog(P)`:
+7. Prover blinds the secret `dlog(P)` using the nonce and the challenge:
     ```
     s = r + e·dlog(P)
     ```
@@ -791,86 +791,169 @@ Blinding protocol consists of three proofs about blinding factors:
 2. [Reblinding proof](#reblinding-proof): a proof that a blinding factor is replaced with another one without affecting the committed value. Implemented by the [`reblind`](#reblind) instruction.
 3. [Unblinding proof](#unblinding-proof): demonstrates the committed value and proves that the blinding factor is zero. Implemented by the [`unblind`](#reblind) instruction.
 
+
 #### Blinding proof
 
-TBD. Prove `V = v*B + q*P` where `Q=q*B2` is random and `P=p*B2` is agreed on.
+Proves that a commitment `V = v·B + f·B2` has blinding factor `f = q·p`, while `q` and `p` are committed to via `Q=q·B2` and `P=p·B2`.
+
+This protocol solves a problem for a contract between two parties (_sender_ and _recipient_): where the sender computes the committed value `v` without cooperation with the recipient, but needs to form the commitment in a way that’s usable by the recipient. The recipient then can subtract the unknown factor by using a pre-agreed secret `p` and one-time nonce `Q`.
 
 ```
-proof = Q || R_q || s_q || R_v || R_w || R_p || s_p || s_w (8x32 = 256 bytes)
-
-W + Q == p^{-1}·V
     W == p^{-1}·v·B
+W + Q == p^{-1}·V
    B2 == p^{-1}·P
-    Q == q·B2        (separate proof)
-
-V = v·B + p·q·B2
+    Q == q·B2
 ```
 
+The proof that `Q=q·B2` is provided separately to be used in the [reblinding proof](#reblinding-proof) by a receiving party.
+
+Setup:
+
+1. Recipient generates random scalar `p` and communicates it to the sender.
+2. Sender and recipient bind their contract to `p` via commitment `P = p·B2`.
+
+Proof:
+
+1. Prover (sender) generates a random nonce `q`.
+2. Prover commits to it using [secondary base point](#base-points) `B2`: `Q = q·B2` and sends `Q` to the verifier.
+3. Prover and verifier prepare a [transcript](#transcript) for the proof of discrete log of `Q/B2`:
+    ```
+    T = Transcript("ZkVM.blind-reblind-nonce")
+    T.commit("Q", Q)
+    ```
+4. Prover and verifier perform the [signature protocol](#signature) with base point `B2` producing a 64-byte proof `R_q || s_q`.
+5. Prover makes a commitment `Com(v, q·p) = v·B + q·p·B2`.
+6. Prover commits to the value by multiplicatively blinding it (because often secret values are distributed non-uniformely) and sends `W` to the verifier:
+    ```
+    W = p^{-1}·v·B
+    ```
+7. Prover and verifier prepare a [transcript](#transcript) for the main statement:
+    ```
+    T = Transcript("ZkVM.blind")
+    T.commit("P", P)
+    T.commit("Q", Q)
+    T.commit("V", V)
+    T.commit("W", W)
+    ```
+8. Prover creates secret nonces `r_w` and `r_p`.
+9. Prover creates nonce commitments and sends them to the verifier:
+    ```
+    R_w = r_w·B
+    R_v = r_p·V
+    R_p = r_p·P
+    ```
+10. Prover and verifier write the nonce commitments to the transcript:
+    ```
+    T.commit("R_w", R_w)
+    T.commit("R_v", R_v)
+    T.commit("R_p", R_p)
+    ```
+11. Prover and verifier compute a Fiat-Shamir challenge scalar `e` using the transcript:
+    ```
+    e = T.challenge_scalar("e")
+    ```
+12. Prover blinds secrets `p^{-1}·v` and `p^{-1}` using the nonces and the challenge and sends them to the verifier:
+    ```
+    s_w = r_w + e·p^{-1}·v
+    s_p = r_p + e·p^{-1}
+    ```
+13. Verifier checks the relation:
+    ```
+    R_w + e·W     == s_w·B
+    R_v + e·(W+Q) == s_p·V
+    R_p + e·B2    == s_p·P
+    ```
+
+The total size of the proof (excluding `P` and `V`) is 256 bytes:
+
+```
+Q || R_q || s_q || R_v || R_w || R_p || s_p || s_w  (8x32)
+```
+
+The recipient can copy the proof about the nonce `q`: `Q || R_q || s_q`
+and use it in their [reblinding proof](#reblinding-proof).
 
 #### Reblinding proof
 
-TBD. Prove `V2-V1 = f*B2 - p*Q` where `Q=q*B2` proof is copied from blinding tx, `P=p*B2` is agreed on, and `f` is the new factor.
+TBD. Prove `V2-V1 = f*B2 - p*Q` where `Q=q*B2` proof is copied from blinding tx, `P=p*B2` is pre-agreed on, and `f` is the new factor.
+
+Proves that a commitment `V2` retains the same committed value `v` as `V1`, but subtracts blinding factor `p·Q` and adds another blinding factor `f·B2`. 
+
+This protocol allows the receiving party in the [blinding proof protocol](#blinding-proof) to replace the randomized blinding factor
+produced by the sender with the blinding factor of their own choice. The sender needs to randomize the commitment to avoid unsafe reuse of the blinding factor `p`. The blinding protocol forces publication of the proof for `Q == q·B2` to be reused in this protocol without the recipient knowing the secret nonce `q`.
 
 ```
-proof = Q || R_q || s_q || R_f || R_v || s_p || s_f (7x32 = 224 bytes)
-
-    F == p^{-1}·f·B2
-F - R == p^{-1}·(V2-V1)
-    Q == q·B2        (separate proof, copied from tx encrypted)
-
-V1 = v·B + (x + p·q)·B2
-V2 = v·B + (x + f)·B2
+V1 == v·B + (x + p·q)·B2
+V2 == v·B + (x + f)·B2
+F  == p^{-1}·f·B2
+Q  == q·B2      
 ```
+
+1. Prover (recipient) and verifier perform the [signature protocol](#signature) for the statement `Q == q·B2`. Prover copies the proof data `Q || R_q || s_q` from the [blinding proof](#blinding-proof):   
+    ```
+    T = Transcript("ZkVM.blind-reblind-nonce")
+    T.commit("Q", Q)
+    ...
+    [the rest of the signature protocol]
+    ```
+2. Prover chooses a random blinding factor `f` and commits to it, blinding it multiplicatively with `p^{-1}`, sending the commitment to the verifier:
+    ```
+    F = p^{-1}·f·B2
+    ```
+3. Prover and verifier prepare a [transcript](#transcript) for the main statement:
+    ```
+    T = Transcript("ZkVM.reblind")
+    T.commit("Q", Q)
+    T.commit("V1", V1)
+    T.commit("V2", V2)
+    T.commit("F", F)
+    ```
+8. Prover creates secret nonces `r_f` and `r_p`.
+9. Prover creates nonce commitments and sends them to the verifier:
+    ```
+    R_f = r_f·B2
+    R_v = r_p·(V2-V1)
+    ```
+10. Prover and verifier write the nonce commitments to the transcript:
+    ```
+    T.commit("R_f", R_f)
+    T.commit("R_v", R_v)
+    ```
+11. Prover and verifier compute a Fiat-Shamir challenge scalar `e` using the transcript:
+    ```
+    e = T.challenge_scalar("e")
+    ```
+12. Prover blinds secrets `p^{-1}·f` and `p^{-1}` using the nonces and the challenge and sends them to the verifier:
+    ```
+    s_f = r_f + e·p^{-1}·f
+    s_p = r_p + e·p^{-1}
+    ```
+13. Verifier checks the relation:
+    ```
+    R_f + e·F     == s_f·B2
+    R_v + e·(F-Q) == s_p·(V2-V1)
+    ```
+
+The total size of the proof (excluding `V1` and `V2`) is 256 bytes:
+```
+F || Q || R_q || s_q || R_f || R_v || s_p || s_f  (8x32)
+```
+
+Note: the commitment `P` is not present in the protocol because the protocol does not need to guarantee that exactly `p·Q` is subtracted.
+It is up to the recipient to decide how much to add or subtract from a blinding factor, the protocol only guarantees that they cannot modify the committed value and can subtract `p·Q` if they want (because discrete log of `Q` is not known to the recipient).
 
 
 #### Unblinding proof
 
-TBD. Prove `V = v*B` where `v` is provided in cleartext.
+Unblinding proof shows the committed value `v` and proves
+that the blinding factor in the [Pedersen commitment](#pedersen-commitment) is zero:
 
+```
+V == v·B + 0·B2
+```
 
-
-
-TBD: the protocol below is obsolete and will be replaced.
-
-
-A zero-knowledge protocol that proves that a [Pedersen commitment](#pedersen-commitment) contains a 
-pre-committed blinding factor. This protocol allows proving to the network that a payment is accessible
-to the recipient (since the blinding factor is already known to the recipient), while allowing
-the sender to compute the amount on the fly.
-
-TBD: need to enable derivation, so that the blinding factor can be safely reused with randomization.
-
-The setup:
-
-1. Recipient chooses a random blinding factor `f`.
-2. 
-
-The protocol is the following:
-
-1. Prover and verifier obtain a [transcript](#transcript) `T` defined by the context in which the proof is applied (see [`encrypt`](#encrypt)).
-2. Prover creates a _secret nonce_ `r`, randomly sampled [scalar](#scalar-type) `r`.
-3. Prover commits to nonce:
-    ```
-    R = r·B
-    ```
-4. Prover sends `R` to the verifier.
-5. Prover and verifier write the nonce commitment `R` to the transcript:
-    ```
-    T.commit("R", R)
-    ```
-6. Prover and verifier compute a Fiat-Shamir challenge scalar `e` using the transcript:
-    ```
-    e = T.challenge_scalar("e")
-    ```
-7. Prover computes a signature scalar `s` using the nonce, the challenge and the secret key `dlog(P)`:
-    ```
-    s = r + e·dlog(P)
-    ```
-8. Prover sends `s` to the verifier.
-9. Verifier checks the relation:
-    ```
-    s·B == R + e·P
-    ```
+1. Prover shows `v`.
+2. Verifier checks equality `V == v·B`.
 
 
 
@@ -1028,9 +1111,9 @@ Code | Instruction                | Stack diagram                              |
 0x?? | [`and`](#and)              | _constr1 constr2_ → _constr3_              |
 0x?? | [`or`](#or)                | _constr1 constr2_ → _constr3_              |
 0x?? | [`verify`](#verify)        |      _constraint_ → ø                      | Modifies [CS](#constraint-system) 
-0x?? | [`blind`](#blind)          |   _var Q V proof_ → _V_                    | [Defers point operations](#deferred-point-operations)
-0x?? | [`reblind`](#reblind)      |              _??_ → _V_                    | [Defers point operations](#deferred-point-operations)
-0x?? | [`unblind`](#unblind)      |    _var V scalar_ → _V_                    | [Defers point operations](#deferred-point-operations)
+0x?? | [`blind`](#blind)          |  _proof V var1 P_ → _var2_                 | Modifies [CS](#constraint-system), [defers point ops](#deferred-point-operations)
+0x?? | [`reblind`](#reblind)      |   _proof V2 var1_ → _var1_                 | [Defers point operations](#deferred-point-operations)
+0x?? | [`unblind`](#unblind)      |   _scalar V var1_ → _var2_                 | Modifies [CS](#constraint-system), [Defers point ops](#deferred-point-operations)
  |                                |                                            |
  |     [**Values**](#value-instructions)              |                        |
 0x?? | [`issue`](#issue)          |       _qtyc pred_ → _contract_             | Modifies [CS](#constraint-system), [tx log](#transaction-log)
@@ -1276,84 +1359,59 @@ For each conjunction, appropriate challenges are generated after the R1CS is com
 
 #### blind
 
-_var P V proof_ **blind** → _V_
+_proof V var1 P_ **blind** → _var2_
 
-Verifies that the [Pedersen commitment](#pedersen-commitment) `V` is blinded with a factor committed using `P` and an ephemeral key specified in the proof.
+1. Pops [point](#point-type) `P`.
+2. Pops [variable](#variable-type) `var1`.
+3. Pops [point](#point-type) `V`.
+4. Pops [string](#string-type) `proof`.
+5. Creates a new detached high-level variable `var2` with commitment `V`.
+6. If `var1` is detached, attaches it to the constraint system.
+7. Verifies the [blinding proof](#blinding-proof) for the variable `var1`, commitments `V`, `P` and proof data `proof`, [deferring all point operations](#deferred-point-operations)).
+8. Adds a [constraint](#constraints) `var1 == var2` to the [constraint system](#constraint-system).
+9. Pushes `var2` to the stack.
 
-```
-proof = Q || R_q || s_q || R_v || R_w || R_p || s_p || s_w (8x32 = 256 bytes)
+Fails if: 
+* `proof` is not a 256-byte [string](#string-type), or
+* `P`, `V` are not [points](#point-type), or
+* `var1` is not a [variable](#variable-type).
 
-W + Q == p^{-1}·V
-    W == p^{-1}·v·B
-   B2 == p^{-1}·P
-    Q == q·B2        (separate proof)
-
-V = v·B + p·q·B2
-```
-
-TBD: rewrite the below description:
-
-1. Pops a [string](#string-type) `proof`, and [points](#point-type) `V`, `F` and `X` from the stack.
-2. Forms two statements to verify:
-    ```
-    X == x·B2
-    F == x·V - x·v·B
-    ```
-3. Parses 2 points and 2 scalars from the 128-byte `proof` string:
-    ```
-    RX = proof[0..32]
-    RF = proof[32..64]
-    sx = proof[64..96]
-    sv = proof[96..128]
-    ```
-4. Instantiates the [transcript](#transcript):
-    ```
-    T = Transcript("ZkVM.encrypt")
-    ```
-5. Performs the verification of the [blinding protocol](#blinding-protocol) using the transcript `T`, secrets `x = X/B2` and `f = F/X`:
-    ```
-    RX + e·X  ==  sx·B2
-    RF + e·F  ==  sx·V - sv·B
-    ```
-6. Adds the statement to the list of [deferred point operations](#deferred-point-operations).
-7. Pushes point `V` back to the stack.
-
-Fails if `proof` is not a 128-byte [string](#string-type) or if `X`, `F` and `V` are not all [point](#point-type).
-
-Usage 1: check if blinding factor is zero (therefore, the contract can allow interaction to anyone - like a partially fillable order book).
-
-Usage 2: commit a secret value, but allow counterparty compute the value dynamically with a pre-agreed blinding factor (e.g. in a contract “collateralized loan with interest”).
-
-Usage 3: embed blinding factor into the constraint system (since F is a valid unblinded commitment) and add constraints alongside other scalars.
 
 #### reblind
 
-_var V2 proof_ **reblind** → _var_
+_proof V2 var1_ **reblind** → _var1_
 
-Verifies that the [Pedersen commitment](#pedersen-commitment) `V` (in the detached variable `v`) is reblinded into commitment `V2` with a factor committed using `P` and an ephemeral key specified in the proof.
+1. Pops [variable](#variable-type) `var1`.
+2. Pops [point](#point-type) `V2`.
+3. Pops [string](#string-type) `proof`.
+4. Checks that `var1` is a detached variable with commitment `V1`.
+5. Replaces commitment `V1` with `V2` for this variable.
+6. Verifies the [reblinding proof](#reblinding-proof) for the variable `var1`, commitments `V1`, `V2` and proof data `proof`, [deferring all point operations](#deferred-point-operations)).
+7. Pushes back the detached variable `var1`.
 
-```
-proof = Q || R_q || s_q || R_f || R_v || s_p || s_f (7x32 = 224 bytes)
+Fails if: 
+* `proof` is not a 256-byte [string](#string-type), or
+* `V2` is not a [point](#point-type), or
+* `var1` is not a [variable](#variable-type).
 
-    F == p^{-1}·f·B2
-F - R == p^{-1}·(V2-V1)
-    Q == q·B2        (separate proof, copied from tx encrypted)
-
-V1 = v·B + (x + p·q)·B2
-V2 = v·B + (x + f)·B2
-```
-
-1. Pops [string](#string-type) `proof`, [point](#point-type) `V2` and [variable](#variable-type) `v`,  from the stack.
-2. Checks that the variable is detached, fails otherwise.
-3. Replaces variable commitment with V2.
-4. TBD: Runs the proof using the current commitment as V1, defers point operations.
-5. Pushes the variable back to the stack.
 
 #### unblind
 
-_var V scalar_ **unblind** → _V_
+_v V var1_ **unblind** → _var2_
 
-TBD: 
+1. Pops [variable](#variable-type) `var1`.
+2. Pops [point](#point-type) `V`.
+3. Pops [scalar](#scalar-type) `v`.
+4. If `var1` is detached, attaches it to the constraint system.
+5. Creates a new detached high-level variable `var2` with commitment `V`.
+6. Verifies the [unblinding proof](#unblinding-proof) for the variable `var2`, commitment `V` and scalar `v`, [deferring all point operations](#deferred-point-operations)).
+7. Adds a [constraint](#constraints) `var1 == var2` to the [constraint system](#constraint-system).
+8. Pushes `var2` to the stack.
+
+Fails if: 
+* `v` is not a [scalar](#scalar-type), or
+* `V` is not a [point](#point-type), or
+* `var1` is not a [variable](#variable-type).
 
 
 
@@ -1542,7 +1600,7 @@ _contract(P) prog_ **call** → _results..._
     ```
     0 == -P + h(prog)·B2
     ```
-4. Adds the statement to the deferred point operations.
+4. Adds the statement to the [deferred point operations](#deferred-point-operations).
 5. Places the [payload](#contract-payload) on the stack (last item on top), discarding the contract.
 6. Saves the current program in the program stack, sets the `prog` as current and [runs it](#vm-execution).
 
@@ -1560,7 +1618,7 @@ _contract(P) L R_ **left** → _contract(L)_
     ```
     0 == -P + L + f(L, R)·B
     ```
-4. Adds the statement to the deferred point operations.
+4. Adds the statement to the [deferred point operations](#deferred-point-operations).
 5. Replaces the contract’s predicate with `L` and leaves the contract on stack.
 
 Fails if the top two items are not [points](#point-type),
