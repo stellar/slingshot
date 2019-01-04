@@ -47,7 +47,7 @@ func watchPegs(db *sql.DB, custAccountID xdr.AccountId, networkPassphrase string
 	}
 }
 
-func watchExports(ctx context.Context, r *multichan.R) {
+func watchExports(ctx context.Context, db *sql.DB, r *multichan.R) {
 	for {
 		got, ok := r.Read(ctx)
 		if !ok {
@@ -78,6 +78,12 @@ func watchExports(ctx context.Context, r *multichan.R) {
 				}
 				stellarAssetCodeXDR := stellarAssetCodeItem[2].(txvm.Bytes)
 
+				var stellarAsset xdr.Asset
+				err := xdr.SafeUnmarshal(stellarAssetCodeXDR, &stellarAsset)
+				if err != nil {
+					continue
+				}
+
 				// Check this Stellar asset code corresponds to retiredAssetIDBytes.
 				gotAssetID32 := txvm.AssetID(issuanceContractSeed, stellarAssetCodeXDR)
 				if !bytes.Equal(gotAssetID32[:], retiredAssetIDBytes) {
@@ -92,10 +98,17 @@ func watchExports(ctx context.Context, r *multichan.R) {
 					continue
 				}
 				var stellarRecipient xdr.AccountId
-				err := xdr.SafeUnmarshal(stellarRecipientItem[2].(txvm.Bytes), &stellarRecipient)
+				err = xdr.SafeUnmarshal(stellarRecipientItem[2].(txvm.Bytes), &stellarRecipient)
 				if err != nil {
 					continue
 				}
+
+				// Record the export in the db to be pegged out onto the main
+				const q = `
+					INSERT INTO exports 
+					(txid, recipient, amount, asset_code)
+					VALUES ($1, $2, $3, $4)`
+				db.ExecContext(ctx, q, tx.ID, stellarRecipient.Address(), retiredAmount, stellarAsset.String())
 
 				// TODO: This is an export operation.
 				// Record it in the db and/or immediately peg-out funds on the main chain.

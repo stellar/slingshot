@@ -51,14 +51,14 @@ func main() {
 		log.Fatal(err)
 	}
 
-	var custAccountId xdr.AccountId
-	err = custAccountId.SetAddress(*custID)
+	var custAccountID xdr.AccountId
+	err = custAccountID.SetAddress(*custID)
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	go func() {
-		err := hclient.StreamTransactions(ctx, *custID, &cur, watchPegs(db, custAccountId, root.NetworkPassphrase))
+		err := hclient.StreamTransactions(ctx, *custID, &cur, watchPegs(db, custAccountID, root.NetworkPassphrase))
 		if err != nil {
 			// TODO: error handling
 		}
@@ -104,7 +104,14 @@ func main() {
 	w := multichan.New((*bc.Block)(nil))
 	r := w.Reader()
 
-	go watchExports(ctx, r)
+	go watchExports(ctx, db, r)
+
+	go func() {
+		err := pegOutFromExports(ctx, db, hclient, custAccountID)
+		if err != nil {
+			// TODO(vniu): error handling
+		}
+	}()
 
 	http.Handle("/submit", &submitter{w: w})
 	http.HandleFunc("/get", get)
