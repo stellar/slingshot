@@ -1,0 +1,3 @@
+# Also run the core package tests here, since they
+# exercise the protocol packages thoroughly.
+gotest: go test -race -cover ./... i10r.io/sequence/core/...
