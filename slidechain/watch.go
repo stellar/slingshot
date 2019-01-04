@@ -6,7 +6,6 @@ import (
 	"database/sql"
 
 	"github.com/bobg/multichan"
-	"github.com/chain/txvm/errors"
 	"github.com/chain/txvm/protocol/bc"
 	"github.com/chain/txvm/protocol/txvm"
 	"github.com/stellar/go/clients/horizon"
@@ -14,12 +13,13 @@ import (
 	"github.com/stellar/go/xdr"
 )
 
-func watchPegs(db *sql.DB, networkPassphrase string) func(horizon.Transaction) error {
-	return func(tx horizon.Transaction) error {
+func watchPegs(db *sql.DB, custAccountID xdr.AccountId, networkPassphrase string) func(horizon.Transaction) {
+	return func(tx horizon.Transaction) {
 		var env xdr.TransactionEnvelope
 		err := xdr.SafeUnmarshalBase64(tx.EnvelopeXdr, &env)
 		if err != nil {
-			return errors.Wrap(err, "unmarshaling envelope XDR")
+			// TODO(vniu): error handling
+			return
 		}
 
 		for i, op := range env.Tx.Operations {
@@ -36,9 +36,14 @@ func watchPegs(db *sql.DB, networkPassphrase string) func(horizon.Transaction) e
 			var q = `INSERT INTO pegs 
 				(txhash, operation_num, amount, asset_code, imported)
 				($1, $2, $3, $4, $5, $6)`
-			db.Exec(q, network.TransactionHash(env.Tx, networkPassphrase), i, payment.Amount, payment.Asset.String(), false)
+			txhash, err := network.HashTransaction(&env.Tx, networkPassphrase)
+			if err != nil {
+				// TODO(vniu): error handling
+				return
+			}
+			db.Exec(q, txhash, i, payment.Amount, payment.Asset.String(), false)
 		}
-		return nil
+		return
 	}
 }
 
@@ -87,7 +92,7 @@ func watchExports(ctx context.Context, r *multichan.R) {
 					continue
 				}
 				var stellarRecipient xdr.AccountId
-				err = xdr.SafeUnmarshal(stellarRecipientItem[2].(txvm.Bytes), &stellarRecipient)
+				err := xdr.SafeUnmarshal(stellarRecipientItem[2].(txvm.Bytes), &stellarRecipient)
 				if err != nil {
 					continue
 				}

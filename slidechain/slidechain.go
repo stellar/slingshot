@@ -15,6 +15,7 @@ import (
 	"github.com/chain/txvm/protocol/bc"
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/stellar/go/clients/horizon"
+	"github.com/stellar/go/xdr"
 )
 
 var (
@@ -45,9 +46,19 @@ func main() {
 	hclient := &horizon.Client{
 		URL: strings.TrimRight(*url, "/"),
 	}
+	root, err := hclient.Root()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	var custAccountId xdr.AccountId
+	err = custAccountId.SetAddress(*custID)
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	go func() {
-		err := hclient.StreamTransactions(ctx, *custID, cur, watchPegs(db, hclient.Root().NetworkPassphrase))
+		err := hclient.StreamTransactions(ctx, *custID, &cur, watchPegs(db, custAccountId, root.NetworkPassphrase))
 		if err != nil {
 			// TODO: error handling
 		}

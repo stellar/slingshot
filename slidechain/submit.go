@@ -73,17 +73,17 @@ func (s *submitter) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			}
 		}
 
-		err := bb.Start(chain.State(), bc.Millis(nextBlockTime))
+		err := s.bb.Start(chain.State(), bc.Millis(nextBlockTime))
 		if err != nil {
 			httpErrf(w, http.StatusInternalServerError, "starting a new tx pool: %s", err)
 			return
 		}
 		log.Printf("starting new block, will commit at %s", nextBlockTime)
 		time.AfterFunc(blockInterval, func() {
-			bbmu.Lock()
-			defer bbmu.Unlock()
+			s.bbmu.Lock()
+			defer s.bbmu.Unlock()
 
-			unsignedBlock, newSnapshot, err := bb.Build()
+			unsignedBlock, newSnapshot, err := s.bb.Build()
 			if err != nil {
 				log.Fatal(errors.Wrap(err, "building new block"))
 			}
@@ -97,11 +97,11 @@ func (s *submitter) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 
 			log.Printf("committed block %d with %d transaction(s)", unsignedBlock.Height, len(unsignedBlock.Transactions))
 
-			bb = nil
+			s.bb = nil
 		})
 	}
 
-	err = bb.AddTx(bc.NewCommitmentsTx(tx))
+	err = s.bb.AddTx(bc.NewCommitmentsTx(tx))
 	if err != nil {
 		httpErrf(w, http.StatusBadRequest, "adding tx to pool: %s", err)
 		return
