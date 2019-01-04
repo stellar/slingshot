@@ -586,6 +586,8 @@ T.commit("tx.maxtime", LE64(maxtime))
 
 #### Input entry
 
+Input entry is added using [`input`](#input) instruction.
+
 ```
 T.commit("input", utxo_id)
 ```
@@ -593,6 +595,8 @@ T.commit("input", utxo_id)
 where `utxo_id` is the ID of the corresponding [UTXO](#utxo).
 
 #### Output entry
+
+Output entry is added using [`output`](#output) instruction.
 
 ```
 T.commit("output", output_structure)
@@ -602,6 +606,8 @@ where `output_structure` is a serialized [output](#output-structure).
 
 #### Issue entry
 
+Issue entry is added using [`issue`](#issue) instruction.
+
 ```
 T.commit("issue.q", qty_commitment)
 T.commit("issue.f", flavor_commitment)
@@ -609,12 +615,16 @@ T.commit("issue.f", flavor_commitment)
 
 #### Retire entry
 
+Retire entry is added using [`retire`](#retire) instruction.
+
 ```
 T.commit("retire.q", qty_commitment)
 T.commit("retire.f", flavor_commitment)
 ```
 
 #### Nonce entry
+
+Nonce entry is added using [`nonce`](#nonce) instruction.
 
 ```
 T.commit("nonce.p", predicate)
@@ -626,15 +636,21 @@ T.commit("nonce.t", maxtime)
 A [data type](#data-types) ([scalar](#scalar-type), [point](#point-type) or [string](#string-type)) is encoded
 as a single-instruction program that produces an item of the corresponding type (see [output structure](#output-structure)).
 
+Data entry is added using [`data`](#data) instruction.
+
 ```
 T.commit("data", prog)
 ```
 
 #### Import entry
 
+Import entry is added using [`import`](#import) instruction.
+
 TBD.
 
 #### Export entry
+
+Export entry is added using [`export`](#export) instruction.
 
 TBD.
 
@@ -727,7 +743,8 @@ is added to the array of deferred [verification keys](#verification-key) that
 are later aggregated in a single key and a Schnorr [signature](#signature) protocol
 is executed for the [transaction ID](#transaction-id).
 
-Aggregation protocol is:
+Aggregation protocol is based on the [MuSig](https://eprint.iacr.org/2018/068) scheme, but with
+Fiat-Shamir transform defined through the use of the [transcript](#transcript) instead of a composition of hash function calls.
 
 1. Instantiate the [transcript](#transcript) `TA` for transaction signature:
     ```
@@ -1693,9 +1710,59 @@ recombines them into a payment to address `A` (pubkey) and a change `C`:
 <C> output:1
 ```
 
+### Multisig
+
+Multi-signature predicate can be constructed in three ways:
+
+1. For N-of-N schemes, a set of independent public keys can be merged using a [MuSig](https://eprint.iacr.org/2018/068) scheme as described in [aggregated transaction signature](#aggregated-transaction-signature). This allows non-interactive key generation, and only a simple interactive signing protocol.
+2. For threshold schemes (M-of-N, M ≠ N), a single public key can be constructed using a variant of a Feldman-VSS scheme, but this requires interactive key generation.
+3. Small-size threshold schemes can be instantiated non-interactively using a [predicate tree](#predicate-tree). Most commonly, 2-of-3 "escrow" scheme can be implemented as 2 keys aggregated as the main branch for the "happy path" (escrow party not involved), while the other two combinations aggregated in the nested branches.
+
+Note that all three approaches minimize computational costs and metadata leaks, unlike Bitcoin, Stellar and TxVM where all keys are enumerated and checked independently.
+
+
 ### Offer example
 
-TBD.
+Offer is a cleartext contract that can be _cancelled_ by the owner or _lifted_ by an arbitrary _taker_.
+
+Offer locks the value being sold and stores the price as a pair of commitments: for the flavor and quantity.
+
+The _cancellation_ clause is simply a [predicate](#predicate) formed by the maker’s public key.
+
+The _lift_ clause when chosen by the taker, [borrows](#borrow) the payment amount according to the embedded price,
+makes an [output](#output) with the positive payment value and leaves to the taker a negative payment and the unlocked value.
+The taker than merges the negative payment and the value together with their actual payment using the [cloak](#cloak) instruction,
+and create an output for the lifted value.
+
+```
+contract Offer(value, price, maker) {
+    OR(
+        maker,
+        {
+            let (payment, negative_payment) = borrow(price.qty, price.flavor)
+            output(payment, maker)
+            return (negative_payment, value)
+        }
+    )
+}
+```
+
+Lift clause bytecode:
+
+```
+<priceqty> <priceflavor> borrow <makerpubkey> output:1
+```
+
+To make it discoverable, each transaction that creates an offer output also creates a [data entry](#data-entry)
+describing the value quantity and flavor, and the price quantity and flavor in cleartext format.
+This way the offer contract does not need to perform any additional computation or waste space for cleartext scalars.
+
+Bytecode creating the offer:
+
+```
+<value> <offer predicate> output:1 "Offer: 1 BTC for 3745 USD" data
+```
+
 
 ### Offer with partial lift
 
@@ -1773,7 +1840,21 @@ an extension instruction “version assertion” that fails execution if
 the version is below a given number (e.g. `4 versionverify`).
 
 
-### Why cloak and borrow take variables and not commitments?
+### Static arguments
+
+Some instructions ([`output`](#output), [`roll`](#roll) etc) have size or index
+parameters specified as _immediate data_ (part of the instruction code),
+which makes it impossible to compute such argument on the fly.
+
+This allows for a simpler type system (no integers, only scalars),
+while limiting programs to have pre-determined structure.
+
+In general, there are no jumps or cleartext conditionals apart from a specialized [predicate tree](#predicate-tree).
+Note, however, that with the use of [delegation](#delegate),
+program structure can be determined right before the use.
+
+
+### Should cloak and borrow take variables and not commitments?
 
 1. it makes sense to reuse variable created by `blind`
 2. txbuilder can keep the secrets assigned to variable instances, so it may be more convenient than remembering preimages for commitments.
