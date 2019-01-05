@@ -109,7 +109,8 @@ plus its runtime state, and once created must be executed to completion
 or persisted in the global state for later execution.
 
 Custom logic is represented via programmable [**constraints**](#constraint-type)
-applied to [**variables**](#variable-type). Variables represent quantities and flavors of values,
+applied to [**variables**](#variable-type) and [**expressions**](#expression-type)
+(linear combinations of variables). Variables represent quantities and flavors of values,
 [time bounds](#time-bounds) and user-defined secret parameters. All constraints are arranged in
 a single [constraint system](#constraint-system) which is proven to be satisfied after the VM
 has finished execution.
@@ -147,6 +148,7 @@ Data types can be freely created, copied, and destroyed.
 * [Point](#point-type)
 * [String](#string-type)
 * [Variable](#variable-type)
+* [Expression](#expression-type)
 * [Constraint](#constraint-type)
 
 
@@ -169,13 +171,14 @@ The items of the following types can be _ported_ across transactions via [output
 * [String](#string-type)
 * [Value](#value-type)
 
-The [Signed Value](#signed-value-type) is not portable because it is not proven to be non-negative.
+[Signed values](#signed-value-type) are not portable because it is not proven to be non-negative.
 
-The [Contract](#contract-type) is not portable because it must be satisfied within the current transaction
-or [output](#output-structure) its contents itself.
+[Contracts](#contract-type) are not portable because they must be satisfied within the current transaction
+or [output](#output-structure) their contents themselves.
 
-The [Variable](#variable-type) and [Constraint](#constraint-type) types have no meaning outside the VM state
-and its constraint system and therefore cannot be ported between transactions.
+[Variables](#variable-type), [expressions](#expression-type) and [constraints](#constraint-type) have no meaning outside the VM state
+and its constraint system and therefore cannot be meaningfully ported between transactions.
+Secret [scalar](#scalar-type) can be ported as a [point](#point-type) that encodes a [Pedersen commitment](#pedersen-commitment) to such scalar.
 
 
 ### Scalar type
@@ -215,37 +218,46 @@ recorded in the [transaction log](#transaction-log).
 
 ### Variable type
 
-_Variable_ represents a secret [scalar](#scalar-type) value in the [constraint system](#constraint-system).
+_Variable_ represents a secret [scalar](#scalar-type) value in the [constraint system](#constraint-system)
+bound to its [Pedersen commitment](#pedersen-commitment).
 
-A variable can be in one of two states: **detached** and **attached**.
-
-**Detached variable** is represented by a reference to a [Pedersen commitment](#pedersen-commitment) which can be [decrypted](#decrypt)
-before the variable is added to the [constraint system](#constraint-system).
-All copies of a detached variable share the same commitment, so that once one of them is decrypted
-to use another commitment, all other copies reflect the new commitment.
-
-**Attached variable** a linear combination of underlying variables within a [constraint system](#constraint-system).
-Once the variable is attached to a constraint system, it cannot be detached.
-
-Variables can be [added](#zkadd) and [multiplied](#zkmul), producing new variables.
-Variables can also be [encrypted](#encrypt) into a [Pedersen commitment](#pedersen-commitment) with a predetermined
-blinding factor. All these operations transform each involved variable into the **attached** state.
-
-Cleartext [scalars](#scalar-type) can be turned into variables using the [`const`](#const) instruction,
-[points](#point-type) that represent commitments can be turned into variables using the [`var`](#var) instruction.
+A [point](#point-type) that represents a commitment to a secret scalar can be turned into a variable using the [`var`](#var) instruction.
+Non-secret [scalar](#scalar-type) can be turned into a single-term [expression](#expression-type) using the [`const`](#const) instruction (which does not allocate a variable).
 
 Variables can be copied and dropped at will, but cannot be ported across transactions via [outputs](#output-structure).
 
 Examples of variables: [value quantities](#value-type) and [time bounds](#time-bounds).
+
+Constraint system also contains _low-level variables_ that are not individually bound to [Pedersen commitments](#pedersen-commitment):
+when these are exposed to the VM (for instance, from [`zkmul`](#zkmul)), they have the [expression type](#expression-type).
+
+A variable can be in one of two states: **detached** and **attached**.
+
+**Detached variable** can be [reblinded](#reblinded): all copies of a detached variable share the same commitment,
+so reblinding one of them reflects the new commitments in all the copies. When a [expression](#expression-type) is formed using detached variables, all of them transition to an _attached_ state.
+
+**Attached variable** has its commitment applied to the constraint system, so it cannot be reblinded and variable cannot be detached.
+
+
+### Expression type
+
+An expression is a linear combination of [variables](#variable-type) with cleartext [scalar](#scalar-type) weights.
+Expression is a super-type of a single variable: a variable can always be coerced to a linear combination containing one term with weight 1.
+
+Expressions can be [added](#zkadd) and [multiplied](#zkmul), producing new expressions.
+Expressions can also be [encrypted](#encrypt) into a [Pedersen commitment](#pedersen-commitment) with a predetermined
+blinding factor.
+
+Expressions can be copied and dropped at will, but cannot be ported across transactions via [outputs](#output-structure).
 
 
 
 ### Constraint type
 
 _Constraint_ is a statement in the [constraint system](#constraint-system) that constrains one
-or more linear combination of [variables](#variable-type) to zero.
+or more [expressions](#expression-type) to zero.
 
-Constraints are created using the [`zkeq`](#zkeq) instruction over two [variables](#variable-type).
+Constraints are created using the [`zkeq`](#zkeq) instruction over two [expressions](#expression-type).
 
 Constraints can be combined using logical [`and`](#and) and [`or`](#or) instructions,
 and can also be copied and dropped at will.
@@ -276,7 +288,7 @@ so that they can serialized in the [`output`](#output).
 
 ### Signed value type
 
-A signed value is an extension of the [value](#value-type) type where
+A signed value is an extension of the [value type](#value-type) where
 quantity is guaranteed to be in a 65-bit range (`[-(2^64-1)..2^64-1]`).
 
 The subtype [Value](#value-type) is most commonly used because it guarantees the non-negative quantity
@@ -332,8 +344,8 @@ where:
 
 Pedersen commitments can be used to allocate new [variables](#variable-type) using the [`var`](#var) instruction.
 
-Pedersen commitments can be proven to use a pre-determined blinding factor using [`blind`](#blind) and 
-[`reblind`](#reblind) instructions.
+Pedersen commitments can be proven to use a pre-determined blinding factor using [`blind`](#blind),
+[`reblind`](#reblind) and [`unblind`](#unblind) instructions.
 
 
 ### Verification key
@@ -347,7 +359,7 @@ Verification keys are used to construct [predicates](#predicate) and verify [sig
 
 Each transaction is explicitly bound to a range of _minimum_ and _maximum_ time.
 Each bound is in _seconds_ since Jan 1st, 1970 (UTC), represented by an unsigned 64-bit integer.
-Time bounds are available in the transaction as [variables](#variable-type) provided by the instructions
+Time bounds are available in the transaction as [expressions](#expression-type) provided by the instructions
 [`mintime`](#mintime) and [`maxtime`](#maxtime).
 
 
@@ -976,7 +988,7 @@ The ZkVM state consists of the static attributes and the state machine attribute
 7. [Transaction log](#transaction-log) (array of logged items)
 8. Transaction signature verification keys (array of [points](#point-type))
 9. [Deferred point operations](#deferred-point-operations)
-10. High-level variables: a list of `enum{ detached(point), attached(index) }`
+10. Variables: a list of allocated variables with their commitments: `enum{ detached(point), attached(point, index) }`
 11. [Constraint system](#constraint-system)
 
 
@@ -1097,21 +1109,21 @@ Code | Instruction                | Stack diagram                              |
  |                                |                                            |
  |     [**Constraints**](#constraint-system-instructions)  |                   | 
 0x?? | [`var`](#var)              |           _point_ → _var_                  | Adds an external variable to [CS](#constraint-system)
-0x?? | [`const`](#var)            |          _scalar_ → _var_                  | 
-0x?? | [`mintime`](#mintime)      |                 ø → _var_                  |
-0x?? | [`maxtime`](#maxtime)      |                 ø → _var_                  |
-0x?? | [`zkneg`](#zkneg)          |            _var1_ → _var2_                 |
-0x?? | [`zkadd`](#zkadd)          |       _var1 var2_ → _var3_                 |
-0x?? | [`zkmul`](#zkmul)          |       _var1 var2_ → _var3_                 | Adds multiplier in [CS](#constraint-system)
-0x?? | [`scmul`](#scmul)          |          _var1 x_ → _var2_                 | 
-0x?? | [`zkeq`](#zkeq)            |       _var1 var2_ → _constraint_           | 
-0x?? | [`zkrange:n`](#zkrange)    |             _var_ → _var_                  | Modifies [CS](#constraint-system)
+0x?? | [`const`](#var)            |          _scalar_ → _expr_                 | 
+0x?? | [`mintime`](#mintime)      |                 ø → _expr_                 |
+0x?? | [`maxtime`](#maxtime)      |                 ø → _expr_                 |
+0x?? | [`zkneg`](#zkneg)          |           _expr1_ → _expr2_                |
+0x?? | [`zkadd`](#zkadd)          |     _expr1 expr2_ → _expr3_                |
+0x?? | [`zkmul`](#zkmul)          |     _expr1 expr2_ → _expr3_                | Adds multiplier in [CS](#constraint-system)
+0x?? | [`scmul`](#scmul)          |         _expr1 x_ → _expr2_                | 
+0x?? | [`zkeq`](#zkeq)            |     _expr1 expr2_ → _constraint_           | 
+0x?? | [`zkrange:n`](#zkrange)    |            _expr_ → _expr_                 | Modifies [CS](#constraint-system)
 0x?? | [`and`](#and)              | _constr1 constr2_ → _constr3_              |
 0x?? | [`or`](#or)                | _constr1 constr2_ → _constr3_              |
 0x?? | [`verify`](#verify)        |      _constraint_ → ø                      | Modifies [CS](#constraint-system) 
-0x?? | [`blind`](#blind)          |  _proof V var1 P_ → _var2_                 | Modifies [CS](#constraint-system), [defers point ops](#deferred-point-operations)
+0x?? | [`blind`](#blind)          |  _proof V expr P_ → _var_                  | Modifies [CS](#constraint-system), [defers point ops](#deferred-point-operations)
 0x?? | [`reblind`](#reblind)      |   _proof V2 var1_ → _var1_                 | [Defers point operations](#deferred-point-operations)
-0x?? | [`unblind`](#unblind)      |   _scalar V var1_ → _var2_                 | Modifies [CS](#constraint-system), [Defers point ops](#deferred-point-operations)
+0x?? | [`unblind`](#unblind)      |        _v V expr_ → _var_                  | Modifies [CS](#constraint-system), [Defers point ops](#deferred-point-operations)
  |                                |                                            |
  |     [**Values**](#value-instructions)              |                        |
 0x?? | [`issue`](#issue)          |       _qtyc pred_ → _contract_             | Modifies [CS](#constraint-system), [tx log](#transaction-log)
@@ -1228,103 +1240,103 @@ Fails if:
 _P_ **var** → _v_
 
 1. Pops a [point](#point-type) `P` from the stack.
-2. Creates a _detached_ [variable](#variable-type) `v` from a [Pedersen commitment](#pedersen-commitment) `P`.
+2. Creates a [detached variable](#variable-type) `v` from a [Pedersen commitment](#pedersen-commitment) `P`.
 3. Pushes `v` to the stack.
 
 Fails if `P` is not a [point type](#point-type).
 
 #### const
 
-_a_ **const** → _v_
+_a_ **const** → _expr_
 
 1. Pops a [scalar](#scalar-type) `a` from the stack.
-2. Creates an _attached_ [variable](#variable-type) `v` with weight `a` assigned to an R1CS constant `1`.
-3. Pushes `v` to the stack.
+2. Creates an [expression](#expression-type) `expr` with weight `a` assigned to an R1CS constant `1`.
+3. Pushes `expr` to the stack.
 
 Fails if `a` is not a [scalar type](#scalar-type).
 
 #### mintime
 
-**mintime** → _v_
+**mintime** → _expr_
 
-Pushes an _attached_ [variable](#variable-type) `v` corresponding to the [minimum time bound](#time-bounds) of the transaction.
+Pushes an [expression](#expression-type) `expr` corresponding to the [minimum time bound](#time-bounds) of the transaction.
 
-The variable represents time bound as a weight on the R1CS constant `1` (see [`cost`](#const)).
+The one-term expression represents time bound as a weight on the R1CS constant `1` (see [`cost`](#const)).
 
 #### maxtime
 
-**maxtime** → _v_
+**maxtime** → _expr_
 
-Pushes an _attached_ [variable](#variable-type) `v` corresponding to the [maximum time bound](#time-bounds) of the transaction.
+Pushes an [expression](#expression-type) `expr` corresponding to the [maximum time bound](#time-bounds) of the transaction.
 
-The variable represents time bound as a weight on the R1CS constant `1` (see [`cost`](#const)).
+The one-term expression represents time bound as a weight on the R1CS constant `1` (see [`cost`](#const)).
 
 #### zkneg
 
-_var1_ **zkneg** → _var2_
+_ex1_ **zkneg** → _ex2_
 
-1. Pops a [variable](#variable-type) `var1`.
-2. If the variable is detached, attaches it to the constraint system.
-3. Negates the weights in the linear combination represented by `var1` producing new variable `var2`.
-4. Pushes `var2` to the stack.
+1. Pops an [expression](#expression-type) `ex1`.
+2. If the expression is a [detached variable](#variable-type), attaches it to the constraint system.
+3. Negates the weights in the `ex1` producing new expression `ex2`.
+4. Pushes `ex2` to the stack.
 
-Fails if `var1` is not a [variable type](#variable-type).
+Fails if `ex1` is not an [expression type](#expression-type).
 
 #### zkadd
 
-_var1 var2_ **zkadd** → _var3_
+_ex1 ex2_ **zkadd** → ex3_
 
-1. Pops two [variables](#variable-type) `var2`, then `var1`.
-2. If any of the variables is detached, attaches that variable to the constraint system.
-3. Adds two linear combinations represented by `var1` and `var2`, producing a new linear combination `var3`.
-4. Pushes `var3` to the stack.
+1. Pops two [expressions](#expression-type) `ex2`, then `ex1`.
+2. If any of `ex1` or `ex2` is a [detached variable](#variable-type), that variable is attached to the constraint system.
+3. Adds linear combinations represented by `ex1` and `ex2`, producing a new expression `ex3`.
+4. Pushes `ex3` to the stack.
 
-Fails if `var1` or `var2` is not a [variable type](#variable-type).
+Fails if `ex1` and `ex2` are not both [expression types](#expression-type).
 
 #### zkmul
 
-_var1 var2_ **zkmul** → _var3_
+_ex1 ex2_ **zkmul** → _ex3_
 
-1. Pops two [variables](#variable-type) `var2`, then `var1`.
-2. If any of the variables is detached, attaches that variable to the constraint system.
-3. Creates a multiplier in the constraint system. Constraints the left wire to `var1`, right wire to `var2`, creates a [variable](#variable-type) `var3` representing an output wire.
-4. Pushes `var3` to the stack.
+1. Pops two [variables](#variable-type) `ex2`, then `ex1`.
+2. If any of `ex1` or `ex2` is a [detached variable](#variable-type), that variable is attached to the constraint system.
+3. Creates a multiplier in the constraint system. Constraints the left wire to `ex1`, right wire to `ex2`, creates an [expression](#expression-type) `ex3` with the output wire in its single term.
+4. Pushes `ex3` to the stack.
 
-Fails if `var1` or `var2` is not a [variable type](#variable-type).
+Fails if `ex1` and `ex2` are not both [expression types](#expression-type).
 
 #### scmul
 
-_var1 x_ **scmul** → _var2_
+_ex1 x_ **scmul** → _ex2_
 
-1. Pops [scalar](#scalar-type) `x` and [variable](#variable-type) `var1` from the stack.
-2. Multiplies all weights in `var1` by `x`.
-3. Pushes updated `var2` to the stack.
+1. Pops [scalar](#scalar-type) `x` and [expression](#expression-type) `ex1` from the stack.
+2. Multiplies all weights in `ex1` by `x` producing new expression `ex2`.
+3. Pushes updated `ex2` to the stack.
 
-Fails if `x` is not a [scalar type](#scalar-type) or if `var2` is not a [variable type](#variable-type).
+Fails if `x` is not a [scalar type](#scalar-type) or if `ex1` is not an [expression type](#expression-type).
 
 #### zkeq
 
-_var1 var2_ **zkeq** → _constraint_
+_ex1 ex2_ **zkeq** → _constraint_
 
-1. Pops two [variables](#variable-type) `var2`, then `var1`.
-2. If any of the variables is detached, attaches that variable to the constraint system.
-3. Creates a [constraint](#constraint-type) that represents statement `var1 - var2 = 0`.
-4. Pushes constraint to the stack.
+1. Pops two [expressions](#expression-type) `ex2`, then `ex1`.
+2. If any of `ex1` or `ex2` is a [detached variable](#variable-type), that variable is attached to the constraint system.
+3. Creates a [constraint](#constraint-type) that represents statement `ex1 - ex2 = 0`.
+4. Pushes the constraint to the stack.
 
-Fails if `var1` or `var2` is not a [variable type](#variable-type).
+Fails if `ex1` and `ex2` are not both [expression types](#expression-type).
 
 #### zkrange
 
-_v_ **zkrange:_n_** → _v_
+_expr_ **zkrange:_n_** → _v_
 
-1. Pops a [variable](#variable-type) `v`.
-2. If `v` is detached, attaches it to the constraint system.
-3. Adds an `n`-bit range proof for `v` to the [constraint system](#constraint-system) (see [Cloak protocol](https://github.com/interstellar/spacesuit/blob/master/spec.md) for the range proof definition).
-4. Pushes `v` back to the stack.
+1. Pops an [expression](#expression-type) `expr`.
+2. If the expression is a [detached variable](#variable-type), attaches it to the constraint system.
+3. Adds an `n`-bit range proof for `expr` to the [constraint system](#constraint-system) (see [Cloak protocol](https://github.com/interstellar/spacesuit/blob/master/spec.md) for the range proof definition).
+4. Pushes `expr` back to the stack.
 
 Immediate data `n` is encoded as one byte.
 
-Fails if `v` is not a [variable type](#variable-type) or if `n` is not in range [1, 64].
+Fails if `expr` is not an [expression type](#expression-type) or if `n` is not in range [1, 64].
 
 #### and
 
@@ -1357,22 +1369,22 @@ For each conjunction, appropriate challenges are generated after the R1CS is com
 
 #### blind
 
-_proof V var1 P_ **blind** → _var2_
+_proof V expr P_ **blind** → _var_
 
 1. Pops [point](#point-type) `P`.
-2. Pops [variable](#variable-type) `var1`.
+2. Pops [expression](#expression-type) `expr`.
 3. Pops [point](#point-type) `V`.
 4. Pops [string](#string-type) `proof`.
-5. Creates a new detached high-level variable `var2` with commitment `V`.
-6. If `var1` is detached, attaches it to the constraint system.
-7. Verifies the [blinding proof](#blinding-proof) for the variable `var1`, commitments `V`, `P` and proof data `proof`, [deferring all point operations](#deferred-point-operations)).
-8. Adds a [constraint](#constraints) `var1 == var2` to the [constraint system](#constraint-system).
-9. Pushes `var2` to the stack.
+5. If `expr` is a [detached variable](#variable-type), attaches it to the constraint system.
+6. Creates a new [detached variable](#variable-type) `var` with commitment `V`.
+7. Verifies the [blinding proof](#blinding-proof) for commitments `V`, `P` and proof data `proof`, [deferring all point operations](#deferred-point-operations)).
+8. Adds an equality [constraint](#constraint-type) `expr == var` to the [constraint system](#constraint-system).
+9. Pushes `var` to the stack.
 
 Fails if: 
 * `proof` is not a 256-byte [string](#string-type), or
 * `P`, `V` are not [points](#point-type), or
-* `var1` is not a [variable](#variable-type).
+* `expr` is not an [expression](#expression-type).
 
 
 #### reblind
@@ -1382,34 +1394,35 @@ _proof V2 var1_ **reblind** → _var1_
 1. Pops [variable](#variable-type) `var1`.
 2. Pops [point](#point-type) `V2`.
 3. Pops [string](#string-type) `proof`.
-4. Checks that `var1` is a detached variable with commitment `V1`.
+4. Checks that `var1` is a [detached variable](#variable-type) with commitment `V1`.
 5. Replaces commitment `V1` with `V2` for this variable.
-6. Verifies the [reblinding proof](#reblinding-proof) for the variable `var1`, commitments `V1`, `V2` and proof data `proof`, [deferring all point operations](#deferred-point-operations)).
+6. Verifies the [reblinding proof](#reblinding-proof) for the commitments `V1`, `V2` and proof data `proof`, [deferring all point operations](#deferred-point-operations)).
 7. Pushes back the detached variable `var1`.
 
 Fails if: 
 * `proof` is not a 256-byte [string](#string-type), or
 * `V2` is not a [point](#point-type), or
-* `var1` is not a [variable](#variable-type).
+* `var1` is not a [variable](#variable-type), or
+* `var1` is already attached.
 
 
 #### unblind
 
-_v V var1_ **unblind** → _var2_
+_v V expr_ **unblind** → _var_
 
-1. Pops [variable](#variable-type) `var1`.
+1. Pops [expression](#expression-type) `expr`.
 2. Pops [point](#point-type) `V`.
 3. Pops [scalar](#scalar-type) `v`.
-4. If `var1` is detached, attaches it to the constraint system.
-5. Creates a new detached high-level variable `var2` with commitment `V`.
-6. Verifies the [unblinding proof](#unblinding-proof) for the variable `var2`, commitment `V` and scalar `v`, [deferring all point operations](#deferred-point-operations)).
-7. Adds a [constraint](#constraints) `var1 == var2` to the [constraint system](#constraint-system).
-8. Pushes `var2` to the stack.
+4. If `expr` is a [detached variable](#variable-type), attaches it to the constraint system.
+5. Creates a new [detached variable](#variable-type) `var` with commitment `V`.
+6. Verifies the [unblinding proof](#unblinding-proof) for the commitment `V` and scalar `v`, [deferring all point operations](#deferred-point-operations)).
+7. Adds an equality [constraint](#constraint-type) `expr == var` to the [constraint system](#constraint-system).
+8. Pushes `var` to the stack.
 
 Fails if: 
 * `v` is not a [scalar](#scalar-type), or
 * `V` is not a [point](#point-type), or
-* `var1` is not a [variable](#variable-type).
+* `expr` is not an [expression](#expression-type).
 
 
 
