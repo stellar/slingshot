@@ -1430,34 +1430,39 @@ Fails if:
 
 #### issue
 
-_qtyc pred_ **issue** → _contract_
+_qty flv pred_ **issue** → _contract_
 
 1. Pops [point](#point-type) `pred`.
-2. Pops [point](#point-type) `qtyc`.
-3. Creates a value with quantity represented by a [Pedersen commitment](#pedersen-commitment) _qtyc_ and flavor defined by the [predicate](#predicate) `pred` using the following [transcript-based](#transcript) protocol:
+2. Pops [variable](#variable-type) `flv`; if the variable is detached, attaches it.
+3. Pops [variable](#variable-type) `qty`; if the variable is detached, attaches it.
+4. Creates a value with quantity represented by variables `qty` and `flv` for quantity and flavor, respectively. 
+5. Computes the _flavor_ scalar defined by the [predicate](#predicate) `pred` using the following [transcript-based](#transcript) protocol:
     ```
     T = Transcript("ZkVM.issue")
     T.commit("predicate", pred)
     flavor = T.challenge_scalar("flavor")
-    F = flavor·B  (non-blinded Pedersen commitment)
     ```
-4. Adds a 64-bit range proof for the quantity variable to the [constraint system](#constraint-system) (see [Cloak protocol](https://github.com/interstellar/spacesuit/blob/master/spec.md) for the range proof definition). 
-5. Adds an [issue entry](#issue-entry) to the [transaction log](#transaction-log).
-6. Creates a [contract](#contract-type) with the value as the only [payload](#contract-payload), with the predicate `pred`.
+6. Checks that the `flv` has unblinded commitment to `flavor` by [deferring the point operation](#deferred-point-operations):
+    ```
+    F == flavor·B
+    ```
+7. Adds a 64-bit range proof for the `qty` to the [constraint system](#constraint-system) (see [Cloak protocol](https://github.com/interstellar/spacesuit/blob/master/spec.md) for the range proof definition). 
+8. Adds an [issue entry](#issue-entry) to the [transaction log](#transaction-log).
+9. Creates a [contract](#contract-type) with the value as the only [payload](#contract-payload), protected by the predicate `pred`.
 
 The value is now issued into the contract that must be unlocked
 using one of the contract instructions: [`signtx`](#signx), [`delegate`](#delegate) or [`call`](#call).
 
-TBD: the `F` must be provided by the user so the check `F == flavor*B` can be merged with deferred point ops.
-
-TBD: change to accept detached vars
-
-Fails if either `qtyc` or `pred` are not [point types](#point-type).
+Fails if:
+* `pred` is not a [point type](#point-type),
+* `flv` or `qty` are not [variable types](#variable-type).
 
 
 #### borrow
 
 _qtyc flavorc_ **borrow** → _–V +V_
+
+TBD: switch from commitments to variables
 
 1. Pops [points](#point-type) `flavorc`, then `qtyc` from the stack.
 2. Creates [value](#value-type) `+V`, allocating high-level variables for quantity `q1` and flavor `f` in the [constraint system](#constraint-system).
