@@ -669,7 +669,9 @@ T.commit("import", proof)
 
 Export entry is added using [`export`](#export) instruction.
 
-TBD.
+```
+T.commit("export", metadata)
+```
 
 
 
@@ -1560,7 +1562,7 @@ _proof qty flv_ **import** → _value_
     ```
     qty == proof.quantity·B
     ```
-8. Adds an [import entry](#import-entry) to the [transaction log](#transaction-log).
+8. Adds an [import entry](#import-entry) with `proof` to the [transaction log](#transaction-log).
 9. Pushes the imported value to the stack.
 
 Note: the `proof` string contains necessary metadata to check if the value is pegged on the external blockchain.
@@ -1576,9 +1578,29 @@ Fails if:
 
 #### export
 
-_value ..._ **export** → ø
+_metadata value_ **export** → ø
 
-TBD: Retires imported [value](#value) with annotation for export.
+1. Pops [value](#value-type).
+2. Pops [string](#string-type) `metadata`.
+3. Computes the local flavor based on the pegging metadata:
+    ```
+    T = Transcript("ZkVM.import")
+    T.commit("extflavor", metadata.external_flavor_id)
+    T.commit("extaccount", metadata.pegging_account_id)
+    flavor = T.challenge_scalar("flavor")
+    ```
+4. Adds two constraints to the constraint system using cleartext quantity and flavor in the metadata:
+    ```
+    value.qty == metadata.qty
+    value.flv == flavor
+    ```
+5. Adds an [export entry](#export-entry) with `metadata` to the [transaction log](#transaction-log).
+
+TBD: definition of the metadata string (quantity, asset id, pegging account, target address/accountid)
+
+Fails if:
+* `value` is not a [non-negative value type](#value-type),
+* `metadata` is not a [string type](#string-type).
 
 
 
