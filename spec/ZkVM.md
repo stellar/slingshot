@@ -1131,26 +1131,26 @@ Code | Instruction                | Stack diagram                              |
 0x?? | [`unblind`](#unblind)      |        _v V expr_ → _var_                  | Modifies [CS](#constraint-system), [Defers point ops](#deferred-point-operations)
  |                                |                                            |
  |     [**Values**](#value-instructions)              |                        |
-0x?? | [`issue`](#issue)          |    _qty flv pred_ → _contract_             | Modifies [CS](#constraint-system), [tx log](#transaction-log)
+0x?? | [`issue`](#issue)          |    _qty flv pred_ → _contract_             | Modifies [CS](#constraint-system), [tx log](#transaction-log), [defers point ops](#deferred-point-operations)
 0x?? | [`borrow`](#borrow)        |         _qty flv_ → _–V +V_                | Modifies [CS](#constraint-system)
 0x?? | [`retire`](#retire)        |           _value_ → ø                      | Modifies [CS](#constraint-system), [tx log](#transaction-log)
-0x?? | [`qty`](#qty)              |     _signedvalue_ → _signedvalue qtyvar_   |
-0x?? | [`flavor`](#flavor)        |     _signedvalue_ → _signedvalue flavorvar_|
+0x?? | [`qty`](#qty)              |           _value_ → _value qtyvar_         |
+0x?? | [`flavor`](#flavor)        |           _value_ → _value flavorvar_      |
 0x?? | [`cloak:m:n`](#cloak)      | _signedvalues commitments_ → _values_      | Modifies [CS](#constraint-system)
-0x?? | [`import`](#import)        |   _proof qty flv_ → _value_                | Modifies [CS](#constraint-system), [tx log](#transaction-log)
+0x?? | [`import`](#import)        |   _proof qty flv_ → _value_                | Modifies [CS](#constraint-system), [tx log](#transaction-log), [defers point ops](#deferred-point-operations)
 0x?? | [`export`](#export)        |       _value ???_ → ø                      | Modifies [CS](#constraint-system), [tx log](#transaction-log)
  |                                |                                            |
  |     [**Contracts**](#contract-instructions)        |                        |
 0x?? | [`input`](#input)          |           _input_ → _contract_             | Modifies [tx log](#transaction-log)
-0x?? | [`output:k`](#output)      | _items... predicate_ → ø                   | Modifies [tx log](#transaction-log)
-0x?? | [`contract:k`](#contract)  | _items... predicate_ → _contract_          | 
-0x?? | [`nonce`](#nonce)          |          _predicate_ → _contract_          | Modifies [tx log](#transaction-log)
-0x?? | [`data`](#data)            |               _item_ → ø                   | Modifies [tx log](#transaction-log)
-0x?? | [`signtx`](#signtx)        |           _contract_ → _results..._        | Modifies [deferred verification keys](#signature)
-0x?? | [`call`](#call)            |      _contract prog_ → _results..._        | [Defers point operations](#deferred-point-operations)
-0x?? | [`left`](#left)            |       _contract A B_ → _contract’_         | [Defers point operations](#deferred-point-operations)
-0x?? | [`right`](#right)          |       _contract A B_ → _contract’_         | [Defers point operations](#deferred-point-operations)
-0x?? | [`delegate`](#delegate)    |  _contract prog sig_ → _results..._        | [Defers point operations](#deferred-point-operations)
+0x?? | [`output:k`](#output)      |   _items... pred_ → ø                      | Modifies [tx log](#transaction-log)
+0x?? | [`contract:k`](#contract)  |   _items... pred_ → _contract_             | 
+0x?? | [`nonce`](#nonce)          |            _pred_ → _contract_             | Modifies [tx log](#transaction-log)
+0x?? | [`data`](#data)            |            _item_ → ø                      | Modifies [tx log](#transaction-log)
+0x?? | [`signtx`](#signtx)        |        _contract_ → _results..._           | Modifies [deferred verification keys](#signature)
+0x?? | [`call`](#call)            |   _contract prog_ → _results..._           | [Defers point operations](#deferred-point-operations)
+0x?? | [`left`](#left)            |    _contract A B_ → _contract’_            | [Defers point operations](#deferred-point-operations)
+0x?? | [`right`](#right)          |    _contract A B_ → _contract’_            | [Defers point operations](#deferred-point-operations)
+0x?? | [`delegate`](#delegate)    |_contract prog sig_ → _results..._          | [Defers point operations](#deferred-point-operations)
  |                                |                                            |
  |     [**Stack**](#stack-instructions)               |                        |
 0x?? | [`dup`](#dup)              |               _x_ → _x x_                  |
