@@ -16,6 +16,7 @@ ZkVM defines a procedural representation for blockchain transactions and the rul
     * [String](#string-type)
     * [Contract](#contract-type)
     * [Variable](#variable-type)
+    * [Expression](#expression-type)
     * [Constraint](#constraint-type)
     * [Value](#value-type)
     * [Signed value](#signed-value)
@@ -234,15 +235,15 @@ when these are exposed to the VM (for instance, from [`zkmul`](#zkmul)), they ha
 A variable can be in one of two states: **detached** and **attached**.
 
 **Detached variable** can be [reblinded](#reblinded): all copies of a detached variable share the same commitment,
-so reblinding one of them reflects the new commitments in all the copies. When a [expression](#expression-type) is formed using detached variables, all of them transition to an _attached_ state.
+so reblinding one of them reflects the new commitments in all the copies. When an [expression](#expression-type) is formed using detached variables, all of them transition to an _attached_ state.
 
 **Attached variable** has its commitment applied to the constraint system, so it cannot be reblinded and variable cannot be detached.
 
 
 ### Expression type
 
-An expression is a linear combination of [variables](#variable-type) with cleartext [scalar](#scalar-type) weights.
-Expression is a super-type of a single variable: a variable can always be coerced to a linear combination containing one term with weight 1.
+_Expression_ is a linear combination of [variables](#variable-type) with cleartext [scalar](#scalar-type) weights.
+Expression is a supertype of a single variable: a variable can always be coerced to a linear combination containing one term with weight 1.
 
 Expressions can be [added](#zkadd) and [multiplied](#zkmul), producing new expressions.
 Expressions can also be [encrypted](#encrypt) into a [Pedersen commitment](#pedersen-commitment) with a predetermined
