@@ -1436,7 +1436,7 @@ _qty flv pred_ **issue** → _contract_
 1. Pops [point](#point-type) `pred`.
 2. Pops [variable](#variable-type) `flv`; if the variable is detached, attaches it.
 3. Pops [variable](#variable-type) `qty`; if the variable is detached, attaches it.
-4. Creates a value with quantity represented by variables `qty` and `flv` for quantity and flavor, respectively. 
+4. Creates a [value](#value-type) with variables `qty` and `flv` for quantity and flavor, respectively. 
 5. Computes the _flavor_ scalar defined by the [predicate](#predicate) `pred` using the following [transcript-based](#transcript) protocol:
     ```
     T = Transcript("ZkVM.issue")
@@ -1461,23 +1461,21 @@ Fails if:
 
 #### borrow
 
-_qtyc flavorc_ **borrow** → _–V +V_
+_qty flv_ **borrow** → _–V +V_
 
-TBD: switch from commitments to variables
-
-1. Pops [points](#point-type) `flavorc`, then `qtyc` from the stack.
-2. Creates [value](#value-type) `+V`, allocating high-level variables for quantity `q1` and flavor `f` in the [constraint system](#constraint-system).
-3. Adds a 64-bit range proof for the quantity variable to the [constraint system](#constraint-system) (see [Cloak protocol](https://github.com/interstellar/spacesuit/blob/master/spec.md) for the range proof definition).
-4. Creates [signed value](#signed-value-type) `–V`, allocating low-level variable `q2` for its negated quantity and reusing variable for the flavor `f`. Note: the signed value does not have its own Pedersen commitment.
-5. Adds a constraint `q2 == -q1` to the constraint system. 
-6. Pushes `–V`, then `+V` to the stack.
+1. Pops [variable](#variable-type) `flv`; if the variable is detached, attaches it.
+2. Pops [variable](#variable-type) `qty`; if the variable is detached, attaches it.
+3. Creates a [value](#value-type) `+V` with variables `qty` and `flv` for quantity and flavor, respectively.
+4. Adds a 64-bit range proof for `qty` variable to the [constraint system](#constraint-system) (see [Cloak protocol](https://github.com/interstellar/spacesuit/blob/master/spec.md) for the range proof definition).
+5. Creates [signed value](#signed-value-type) `–V`, allocating a low-level variable `qty2` for the negated quantity and reusing the flavor variable `flv`.
+6. Adds a constraint `qty2 == -qty` to the constraint system.
+7. Pushes `–V`, then `+V` to the stack.
 
 The signed value `–V` is not a [portable type](#portable-types), and can only be consumed by a [`cloak`](#cloak) instruction
 (where it is merged with appropriate positive quantity of the same flavor).
 
-Fails if either `qtyc` or `flavorc` are not [point types](#point-type).
+Fails if `qty` and `flv` are not [variable types](#variable-type).
 
-TBD: change to accept detached vars
 
 #### retire
 
@@ -1486,21 +1484,23 @@ _value_ **retire** → ø
 1. Pops a [value](#value) from the stack.
 2. Adds a _retirement_ entry to the [transaction log](#transaction-log).
 
-Fails if the value is not of unsigned (positive) [value type](#value-type).
+Fails if the value is not a [non-negative value type](#value-type).
 
 #### qty
 
-_signedvalue_ **qty** → _signedvalue qtyvar_
+_value_ **qty** → _value qtyvar_
 
-Copies a [variable](#variable-type) representing quantity of a [signed value](#signed-value-type) and pushes it to the stack.
+Copies a [variable](#variable-type) representing quantity of an [unsigned value](#value-type) and pushes it to the stack.
 
+Fails if the value is not a [non-negative value type](#value-type).
 
 #### flavor
 
-_signedvalue_ **flavor** → _signedvalue flavorvar_
+_value_ **flavor** → _value flavorvar_
 
-Copies a [variable](#variable-type) representing flavor of a [signed value](#signed-value-type) and pushes it to the stack.
+Copies a [variable](#variable-type) representing flavor of an [unsigned value](#value-type) and pushes it to the stack.
 
+Fails if the value is not a [non-negative value type](#value-type).
 
 #### cloak
 
@@ -1508,10 +1508,10 @@ _signedvalues commitments_ **cloak:_m_:_n_** → _values_
 
 Merges and splits `m` [signed values](#signed-value-type) into `n` [values](#values).
 
-1. Pops `2·n` [points](#point-type) as pairs of flavor and quantity for each output value, quantity is popped first.
+1. Pops `2·n` [points](#point-type) as pairs of _flavor_ and _quantity_ for each output value, flavor is popped first in each pair.
 2. Pops `m` [signed values](#signed-value-type) as input values.
 3. Creates constraints and 64-bit range proofs for quantities per [Cloak protocol](https://github.com/interstellar/spacesuit/blob/master/spec.md).
-4. Pushes `n` [values](#values) to the stack in the same order as their commitments.
+4. Pushes `n` [values](#values) to the stack, placing them in the same order as their corresponding commitments.
 
 Immediate data `m` and `n` are encoded as two [LE32](#le32)s.
 
@@ -1676,7 +1676,7 @@ _contract prog sig_ **delegate** → _results..._
 3. Commits the contract’s [predicate](#predicate) to the transcript:
     ```
     P = contract.predicate
-    T.commit("P", P)
+    T.commit("pred", P)
     ```
 4. Commits the program `prog` to the transcript:
     ```
