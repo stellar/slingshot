@@ -255,13 +255,15 @@ Expressions can be copied and dropped at will, but cannot be ported across trans
 
 ### Constraint type
 
-_Constraint_ is a statement in the [constraint system](#constraint-system) that constrains one
-or more [expressions](#expression-type) to zero.
+_Constraint_ is a statement within the [constraint system](#constraint-system). Constraints are formed using [expressions](#expression-type)
+and can be combined using logical operators [`and`](#and) and [`or`](#or).
 
-Constraints are created using the [`zkeq`](#zkeq) instruction over two [expressions](#expression-type).
+There are three kinds of constraints:
+1. **Linear constraint** is created using the [`zkeq`](#zkeq) instruction over two [expressions](#expression-type).
+2. **Conjunction constraint** is created using the [`and`](#and) instruction over two constraints of any type.
+3. **Disjunction constraint** is created using the [`or`](#or) instruction over two constraints of any type.
 
-Constraints can be combined using logical [`and`](#and) and [`or`](#or) instructions,
-and can also be copied and dropped at will.
+Constraints and can be copied and dropped at will.
 
 Constraints only have an effect if added to the constraint system using the [`verify`](#verify) instruction.
 
@@ -1328,7 +1330,7 @@ Fails if `ex1` and `ex2` are not both [expression types](#expression-type).
 
 #### zkrange
 
-_expr_ **zkrange:_n_** → _v_
+_expr_ **zkrange:_n_** → _expr_
 
 1. Pops an [expression](#expression-type) `expr`.
 2. If the expression is a [detached variable](#variable-type), attaches it to the constraint system.
@@ -1341,32 +1343,49 @@ Fails if `expr` is not an [expression type](#expression-type) or if `n` is not i
 
 #### and
 
-_constraint1 constraint2_ **and** → _constraint3_
+_c1 c2_ **and** → _c3_
 
-TBD: step-by-step spec.
-Combines two constraints using logical conjunction: both constraints must be satisfied.
+1. Pops [constraints](#constraints-type) `c2`, then `c1`.
+2. Creates a _conjunction constraint_ `c3` containing `c1` and `c2`.
+3. Pushes `c3` to the stack.
 
 No changes to the [constraint system](#constraint-system) are made until [`verify`](#verify) is executed.
+
+Fails if `c1` and `c2` are not [constraints](#constraints-type).
 
 #### or
 
 _constraint1 constraint2_ **or** → _constraint3_
 
-TBD: step-by-step spec.
-Combines two constraints using logical disjunction: either of two constraints must be satisfied.
+1. Pops [constraints](#constraints-type) `c2`, then `c1`.
+2. Creates a _disjunction constraint_ `c3` containing `c1` and `c2`.
+3. Pushes `c3` to the stack.
 
 No changes to the [constraint system](#constraint-system) are made until [`verify`](#verify) is executed.
 
+Fails if `c1` and `c2` are not [constraints](#constraints-type).
+
 #### verify
 
-_constraint_ **verify** → ø
+_constr_ **verify** → ø
 
-TBD: step-by-step spec.
-Flattens the constraint and adds it to the [constraint system](#constraint-system).
+1. Pops [constraint](#constraints-type) `constr`.
+2. Transforms the constraint `constr` recursively using the following rules:
+    1. Replace conjunction of two _linear constraints_ `a` and `b` with a linear constraint `c` by combining both constraints with a random challenge `z`:
+        ```
+        c = a + z·b
+        ```
+    2. Replace disjunction of two _linear constraints_ `a` and `b` by constrainting an output `o` of a newly allocated multiplier `{r,l,o}` to zero, while adding constraints `r == a` and `l == b` to the constraint system.
+        ```
+        r == a # added to CS
+        l == b # added to CS
+        o == 0 # replaces OR(a,b)
+        ```
+    3. Conjunctions and disjunctions of non-linear constraints are transformed via rules (1) and (2) using depth-first recursion.
+3. The resulting single linear constraint is added to the constraint system.
 
-For each disjunction, a multiplier is allocated.
+Fails if `constr` is not a [constraint](#constraints-type).
 
-For each conjunction, appropriate challenges are generated after the R1CS is complete, but before it is checked.
 
 #### blind
 
