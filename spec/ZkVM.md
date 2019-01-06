@@ -661,7 +661,9 @@ T.commit("data", prog)
 
 Import entry is added using [`import`](#import) instruction.
 
-TBD.
+```
+T.commit("import", proof)
+```
 
 #### Export entry
 
@@ -1129,13 +1131,13 @@ Code | Instruction                | Stack diagram                              |
 0x?? | [`unblind`](#unblind)      |        _v V expr_ → _var_                  | Modifies [CS](#constraint-system), [Defers point ops](#deferred-point-operations)
  |                                |                                            |
  |     [**Values**](#value-instructions)              |                        |
-0x?? | [`issue`](#issue)          |       _qtyc pred_ → _contract_             | Modifies [CS](#constraint-system), [tx log](#transaction-log)
-0x?? | [`borrow`](#borrow)        |    _qtyc flavorc_ → _–V +V_                | Modifies [CS](#constraint-system)
+0x?? | [`issue`](#issue)          |    _qty flv pred_ → _contract_             | Modifies [CS](#constraint-system), [tx log](#transaction-log)
+0x?? | [`borrow`](#borrow)        |         _qty flv_ → _–V +V_                | Modifies [CS](#constraint-system)
 0x?? | [`retire`](#retire)        |           _value_ → ø                      | Modifies [CS](#constraint-system), [tx log](#transaction-log)
 0x?? | [`qty`](#qty)              |     _signedvalue_ → _signedvalue qtyvar_   |
 0x?? | [`flavor`](#flavor)        |     _signedvalue_ → _signedvalue flavorvar_|
 0x?? | [`cloak:m:n`](#cloak)      | _signedvalues commitments_ → _values_      | Modifies [CS](#constraint-system)
-0x?? | [`import`](#import)        |             _???_ → _value_                | Modifies [CS](#constraint-system), [tx log](#transaction-log)
+0x?? | [`import`](#import)        |   _proof qty flv_ → _value_                | Modifies [CS](#constraint-system), [tx log](#transaction-log)
 0x?? | [`export`](#export)        |       _value ???_ → ø                      | Modifies [CS](#constraint-system), [tx log](#transaction-log)
  |                                |                                            |
  |     [**Contracts**](#contract-instructions)        |                        |
@@ -1464,7 +1466,7 @@ _qty flv pred_ **issue** → _contract_
     ```
 6. Checks that the `flv` has unblinded commitment to `flavor` by [deferring the point operation](#deferred-point-operations):
     ```
-    F == flavor·B
+    flv == flavor·B
     ```
 7. Adds a 64-bit range proof for the `qty` to the [constraint system](#constraint-system) (see [Cloak protocol](https://github.com/interstellar/spacesuit/blob/master/spec.md) for the range proof definition). 
 8. Adds an [issue entry](#issue-entry) to the [transaction log](#transaction-log).
@@ -1537,18 +1539,39 @@ Immediate data `m` and `n` are encoded as two [LE32](#le32)s.
 
 #### import
 
-_..._ **import** → _value_
+_proof qty flv_ **import** → _value_
 
-TBD: Creates [value](#value) from the external blockchain.
+1. Pops [variable](#variable-type) `flv`; if the variable is detached, attaches it.
+2. Pops [variable](#variable-type) `qty`; if the variable is detached, attaches it.
+3. Pops [string](#string-type) `proof`.
+4. Creates a [value](#value-type) with variables `qty` and `flv` for quantity and flavor, respectively. 
+5. Computes the _flavor_ scalar defined by the [predicate](#predicate) `pred` using the following [transcript-based](#transcript) protocol:
+    ```
+    T = Transcript("ZkVM.import")
+    T.commit("extflavor", proof.external_flavor_id)
+    T.commit("extaccount", proof.pegging_account_id)
+    flavor = T.challenge_scalar("flavor")
+    ```
+6. Checks that the `flv` has unblinded commitment to `flavor` by [deferring the point operation](#deferred-point-operations):
+    ```
+    flv == flavor·B
+    ```
+7. Checks that the `qty` has unblinded commitment to `quantity` by [deferring the point operation](#deferred-point-operations):
+    ```
+    qty == proof.quantity·B
+    ```
+8. Adds an [import entry](#import-entry) to the [transaction log](#transaction-log).
+9. Pushes the imported value to the stack.
 
-The imported flavor is defined using [transcript](#transcript) protocol:
+Note: the `proof` string contains necessary metadata to check if the value is pegged on the external blockchain.
+It is verified when the transaction is applied to the blockchain state.
 
-```
-T = Transcript("ZkVM.import")
-T.commit("extasset", external_asset_id)
-T.commit("extaccount", pegging_account_id)
-flavor = T.challenge_scalar("flavor")
-```
+TBD: definition of the proof string (quantity, asset id, pegging account, identifier of the pegging transaction)
+
+Fails if:
+* `flv` or `qty` are not [variable types](#variable-type),
+* `proof` is not a [string type](#string-type).
+
 
 
 #### export
