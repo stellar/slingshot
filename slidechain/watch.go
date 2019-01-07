@@ -3,9 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
-	"database/sql"
 
-	"github.com/bobg/multichan"
 	"github.com/chain/txvm/protocol/bc"
 	"github.com/chain/txvm/protocol/txvm"
 	"github.com/stellar/go/clients/horizon"
@@ -13,7 +11,10 @@ import (
 	"github.com/stellar/go/xdr"
 )
 
-func watchPegs(db *sql.DB, custAccountID xdr.AccountId, networkPassphrase string) func(horizon.Transaction) {
+// TODO(vniu): pass in real issuance contract seed
+var issuanceContractSeed []byte
+
+func (c *custodian) watchPegs() func(horizon.Transaction) {
 	return func(tx horizon.Transaction) {
 		var env xdr.TransactionEnvelope
 		err := xdr.SafeUnmarshalBase64(tx.EnvelopeXdr, &env)
@@ -27,27 +28,34 @@ func watchPegs(db *sql.DB, custAccountID xdr.AccountId, networkPassphrase string
 				continue
 			}
 			payment := op.Body.PaymentOp
-			if !payment.Destination.Equals(custAccountID) {
+			if !payment.Destination.Equals(c.accountID) {
 				continue
 			}
 
 			// This operation is a payemtn to the custodian's account - i.e., a peg.
 			// We record it in the db and immediately issue imported funds on the sidechain.
 			var q = `INSERT INTO pegs 
-				(txhash, operation_num, amount, asset_code, imported)
+				(txhash, operation_num, amount, asset_xdr, imported)
 				($1, $2, $3, $4, $5, $6)`
-			txhash, err := network.HashTransaction(&env.Tx, networkPassphrase)
+			txhash, err := network.HashTransaction(&env.Tx, c.network)
 			if err != nil {
 				// TODO(vniu): error handling
 				return
 			}
-			db.Exec(q, txhash, i, payment.Amount, payment.Asset.String(), false)
+			assetXDR, err := payment.Asset.MarshalBinary()
+			if err != nil {
+				// TODO(vniu): error handling
+				return
+			}
+			c.db.Exec(q, txhash, i, payment.Amount, assetXDR, false)
+			c.imports.Broadcast()
 		}
 		return
 	}
 }
 
-func watchExports(ctx context.Context, r *multichan.R) {
+func (c *custodian) watchExports(ctx context.Context) {
+	r := c.w.Reader()
 	for {
 		got, ok := r.Read(ctx)
 		if !ok {
@@ -78,6 +86,12 @@ func watchExports(ctx context.Context, r *multichan.R) {
 				}
 				stellarAssetCodeXDR := stellarAssetCodeItem[2].(txvm.Bytes)
 
+				var stellarAsset xdr.Asset
+				err := xdr.SafeUnmarshal(stellarAssetCodeXDR, &stellarAsset)
+				if err != nil {
+					continue
+				}
+
 				// Check this Stellar asset code corresponds to retiredAssetIDBytes.
 				gotAssetID32 := txvm.AssetID(issuanceContractSeed, stellarAssetCodeXDR)
 				if !bytes.Equal(gotAssetID32[:], retiredAssetIDBytes) {
@@ -92,10 +106,18 @@ func watchExports(ctx context.Context, r *multichan.R) {
 					continue
 				}
 				var stellarRecipient xdr.AccountId
-				err := xdr.SafeUnmarshal(stellarRecipientItem[2].(txvm.Bytes), &stellarRecipient)
+				err = xdr.SafeUnmarshal(stellarRecipientItem[2].(txvm.Bytes), &stellarRecipient)
 				if err != nil {
 					continue
 				}
+
+				// Record the export in the db to be pegged out onto the main
+				const q = `
+					INSERT INTO exports 
+					(txid, recipient, amount, asset_xdr)
+					VALUES ($1, $2, $3, $4)`
+				c.db.ExecContext(ctx, q, tx.ID, stellarRecipient.Address(), retiredAmount, stellarAssetCodeXDR)
+				c.exports.Broadcast()
 
 				// TODO: This is an export operation.
 				// Record it in the db and/or immediately peg-out funds on the main chain.

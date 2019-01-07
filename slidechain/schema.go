@@ -17,7 +17,15 @@ CREATE TABLE IF NOT EXISTS pegs (
   txhash BLOB NOT NULL,
   operation_num INTEGER NOT NULL,
   amount INTEGER NOT NULL,
-  asset_code BLOB NOT NULL,
+  asset_xdr BLOB NOT NULL,
   imported INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS exports (
+  txid TEXT NOT NULL,
+  recipient TEXT NOT NULL,
+  amount INTEGER NOT NULL,
+  asset_xdr BLOB NOT NULL,
+  exported INTEGER NOT NULL DEFAULT 0
 );
 `

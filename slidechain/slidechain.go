@@ -9,8 +9,10 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"sync"
 
 	"github.com/bobg/multichan"
+	"github.com/chain/txvm/errors"
 	"github.com/chain/txvm/protocol"
 	"github.com/chain/txvm/protocol/bc"
 	_ "github.com/mattn/go-sqlite3"
@@ -22,6 +24,49 @@ var (
 	initialBlock *bc.Block
 	chain        *protocol.Chain
 )
+
+type custodian struct {
+	seed      string
+	accountID xdr.AccountId
+	db        *sql.DB
+	w         *multichan.W
+	hclient   *horizon.Client
+	imports   *sync.Cond
+	exports   *sync.Cond
+	network   string
+}
+
+func start(addr, dbfile, custID, horizonURL string) (*custodian, error) {
+	db, err := sql.Open("sqlite3", dbfile)
+	if err != nil {
+		return nil, errors.Wrap(err, "error opening db")
+	}
+
+	hclient := &horizon.Client{
+		URL: strings.TrimRight(horizonURL, "/"),
+	}
+	root, err := hclient.Root()
+	if err != nil {
+		return nil, errors.Wrap(err, "error getting horizon client root")
+	}
+
+	var custAccountID xdr.AccountId
+	err = custAccountID.SetAddress(custID)
+	if err != nil {
+		return nil, errors.Wrap(err, "error setting custodian account ID")
+	}
+
+	// TODO(vniu): set custodian account seed
+	return &custodian{
+		accountID: custAccountID,
+		db:        db,
+		w:         multichan.New((*bc.Block)(nil)),
+		hclient:   hclient,
+		imports:   sync.NewCond(new(sync.Mutex)),
+		exports:   sync.NewCond(new(sync.Mutex)),
+		network:   root.NetworkPassphrase,
+	}, nil
+}
 
 func main() {
 	ctx := context.Background()
@@ -35,44 +80,16 @@ func main() {
 
 	flag.Parse()
 
-	db, err := sql.Open("sqlite3", *dbfile)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer db.Close()
-
 	var cur horizon.Cursor // TODO: initialize from db (if applicable)
 
-	hclient := &horizon.Client{
-		URL: strings.TrimRight(*url, "/"),
-	}
-	root, err := hclient.Root()
+	c, err := start(*addr, *dbfile, *custID, *url)
+	defer c.db.Close()
 	if err != nil {
 		log.Fatal(err)
 	}
-
-	var custAccountId xdr.AccountId
-	err = custAccountId.SetAddress(*custID)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	go func() {
-		err := hclient.StreamTransactions(ctx, *custID, &cur, watchPegs(db, custAccountId, root.NetworkPassphrase))
-		if err != nil {
-			// TODO: error handling
-		}
-	}()
-
-	go func() {
-		err := importFromPegs(ctx, db)
-		if err != nil {
-			// TODO(vniu): error handling
-		}
-	}()
 
 	heights := make(chan uint64)
-	bs, err := newBlockStore(db, heights)
+	bs, err := newBlockStore(c.db, heights)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -100,13 +117,33 @@ func main() {
 
 	log.Printf("listening on %s, initial block ID %x", listener.Addr(), initialBlockID.Bytes())
 
-	// New blocks will be written to this multichan.
-	w := multichan.New((*bc.Block)(nil))
-	r := w.Reader()
+	s := &submitter{w: c.w}
 
-	go watchExports(ctx, r)
+	// Start streaming txs, importing, and exporting
+	go func() {
+		err := c.hclient.StreamTransactions(ctx, *custID, &cur, c.watchPegs())
+		if err != nil {
+			// TODO: error handling
+		}
+	}()
 
-	http.Handle("/submit", &submitter{w: w})
+	go func() {
+		err := c.importFromPegs(ctx, s)
+		if err != nil {
+			// TODO(vniu): error handling
+		}
+	}()
+
+	go c.watchExports(ctx)
+
+	go func() {
+		err := c.pegOutFromExports(ctx)
+		if err != nil {
+			// TODO(vniu): error handling
+		}
+	}()
+
+	http.Handle("/submit", s)
 	http.HandleFunc("/get", get)
 	http.Serve(listener, nil)
 }
