@@ -43,8 +43,10 @@ func start(addr, dbfile, custID, horizonURL string) (*custodian, error) {
 	}
 
 	hclient := &horizon.Client{
-		URL: strings.TrimRight(horizonURL, "/"),
+		URL:  strings.TrimRight(horizonURL, "/"),
+		HTTP: new(http.Client),
 	}
+
 	root, err := hclient.Root()
 	if err != nil {
 		return nil, errors.Wrap(err, "error getting horizon client root")
@@ -73,9 +75,9 @@ func main() {
 
 	var (
 		addr   = flag.String("addr", "localhost:2423", "server listen address")
-		dbfile = flag.String("db", "", "path to db")
+		dbfile = flag.String("db", "slidechain.db", "path to db")
 		custID = flag.String("custid", "", "custodian's Stellar account ID")
-		url    = flag.String("horizon", "", "horizon server url")
+		url    = flag.String("horizon", "https://horizon-testnet.stellar.org", "horizon server url")
 	)
 
 	flag.Parse()
@@ -83,10 +85,10 @@ func main() {
 	var cur horizon.Cursor // TODO: initialize from db (if applicable)
 
 	c, err := start(*addr, *dbfile, *custID, *url)
-	defer c.db.Close()
 	if err != nil {
 		log.Fatal(err)
 	}
+	defer c.db.Close()
 
 	heights := make(chan uint64)
 	bs, err := newBlockStore(c.db, heights)
