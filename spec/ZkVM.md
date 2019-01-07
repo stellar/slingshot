@@ -105,9 +105,10 @@ When the virtual machine executes a program, it creates and manipulates data of 
 A [**value**](#value-type) is a specific _quantity_ of a certain _flavor_ that can be
 merged or split, issued or retired, but not otherwise created or destroyed.
 
-A [**contract**] encapsulates a predicate (a public key or a program),
-plus its runtime state, and once created must be executed to completion
-or persisted in the global state for later execution.
+A [**contract**](#contract-type) encapsulates a list of data and value items
+protected by a [predicate](#predicate) (a public key or a program) which must be satisfied
+during the VM execution. The contract can be stored in and loaded from the global state
+using [`output`](#output) and [`input`](#input) instructions.
 
 Custom logic is represented via programmable [**constraints**](#constraint-type)
 applied to [**variables**](#variable-type) and [**expressions**](#expression-type)
@@ -1911,7 +1912,20 @@ The programmatic API for creating, indexing and interacting with offers ties all
 
 ### Offer with partial lift
 
-TBD.
+TBD: 
+
+Sketch:
+price = rational X/Y, total value = V, payment: P, change: C;  
+constraint: `(V - C)*X == Y*P`.
+contract unlocks V, `borrow`s and `unblind`s C, outputs C into the same contract,
+borrows P per provided scalar amount, outputs P into recipient's address.
+Returns V, -C and -P to the user. User merges V+(-C) and outputs V-C to its address, provides P into the cloak.
+
+What about zero remainder or dust? Contract can have two branches: partial or full lift,
+and partial lift has minimum remainder to prevent dust.
+
+
+
 
 ### Loan example
 
@@ -2008,4 +2022,14 @@ program structure can be determined right before the use.
 ### Why there is no AND combinator in predicate tree?
 
 The payload of a contract must be provided to the selected branch. If both predicates must be evaluated and both are programs, then which one takes the payload? To avoid ambiguity, AND can be implemented inside a program that can explicitly decide in which order and which parts of payload to process: maybe check some conditions and then delegate the whole payload to a predicate, or split the payload in two parts and apply different predicates to each part. There's [`contract`](#contract) instruction for that delegation.
+
+
+## Open questions
+
+### Do we really need qty/flavor introspection ops?
+
+We currently need them to reblind the received value, but we normally use `borrow` instead of receiving some value and then placing bounds on it.
+
+If we only ever mix all values and borrow necessary payments, then we may reconsider whether we expose these variables at all. 
+
 
