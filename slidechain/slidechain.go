@@ -56,13 +56,11 @@ func start(addr, dbfile, custID, horizonURL string) (*custodian, error) {
 		return nil, errors.Wrap(err, "error setting custodian account ID")
 	}
 
-	w := multichan.New((*bc.Block)(nil))
-
 	// TODO(vniu): set custodian account seed
 	return &custodian{
 		accountID: custAccountID,
 		db:        db,
-		w:         w,
+		w:         multichan.New((*bc.Block)(nil)),
 		hclient:   hclient,
 		imports:   sync.NewCond(new(sync.Mutex)),
 		exports:   sync.NewCond(new(sync.Mutex)),
@@ -119,6 +117,8 @@ func main() {
 
 	log.Printf("listening on %s, initial block ID %x", listener.Addr(), initialBlockID.Bytes())
 
+	s := &submitter{w: c.w}
+
 	// Start streaming txs, importing, and exporting
 	go func() {
 		err := c.hclient.StreamTransactions(ctx, *custID, &cur, c.watchPegs())
@@ -128,7 +128,7 @@ func main() {
 	}()
 
 	go func() {
-		err := c.importFromPegs(ctx)
+		err := c.importFromPegs(ctx, s)
 		if err != nil {
 			// TODO(vniu): error handling
 		}
@@ -143,7 +143,7 @@ func main() {
 		}
 	}()
 
-	http.Handle("/submit", &submitter{w: c.w})
+	http.Handle("/submit", s)
 	http.HandleFunc("/get", get)
 	http.Serve(listener, nil)
 }

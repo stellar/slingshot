@@ -11,6 +11,9 @@ import (
 	"github.com/stellar/go/xdr"
 )
 
+// TODO(vniu): pass in real issuance contract seed
+var issuanceContractSeed []byte
+
 func (c *custodian) watchPegs() func(horizon.Transaction) {
 	return func(tx horizon.Transaction) {
 		var env xdr.TransactionEnvelope

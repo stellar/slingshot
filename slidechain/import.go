@@ -6,10 +6,10 @@ import (
 	"github.com/bobg/sqlutil"
 )
 
-func (c *custodian) importFromPegs(ctx context.Context) error {
+func (c *custodian) importFromPegs(ctx context.Context, s *submitter) error {
+	c.imports.L.Lock()
+	defer c.imports.L.Unlock()
 	for {
-		c.imports.L.Lock()
-		defer c.imports.L.Unlock()
 		c.imports.Wait()
 		const q = `SELECT txid, txhash, operation_num, amount, asset FROM pegs WHERE imported=0`
 		err := sqlutil.ForQueryRows(ctx, c.db, q, func(txid string, txhash []byte, operationNum, amount int, asset []byte) error {

@@ -11,9 +11,9 @@ import (
 const baseFee = 10
 
 func (c *custodian) pegOutFromExports(ctx context.Context) error {
+	c.exports.L.Lock()
+	defer c.exports.L.Unlock()
 	for {
-		c.exports.L.Lock()
-		defer c.exports.L.Unlock()
 		c.exports.Wait()
 		const q = `SELECT txid, recipient, amount, asset_xdr FROM exports WHERE exported=0`
 		err := sqlutil.ForQueryRows(ctx, c.db, q, func(txid, recipient string, amount int, assetXDR []byte) error {
@@ -27,6 +27,7 @@ func (c *custodian) pegOutFromExports(ctx context.Context) error {
 			if err != nil {
 				return err
 			}
+			// TODO(vniu): flag txs that fail with unretriable errors in the db
 			err = c.pegOut(ctx, recipientID, asset, amount)
 			if err != nil {
 				return err
@@ -43,7 +44,6 @@ func (c *custodian) pegOutFromExports(ctx context.Context) error {
 
 func (c *custodian) pegOut(ctx context.Context, recipient xdr.AccountId, asset xdr.Asset, amount int) error {
 	tx, err := c.buildPegOutTx(recipient, asset, amount)
-	// TODO(vniu): retry tx submission
 	txenv, err := tx.Sign(c.seed)
 	if err != nil {
 		return err
@@ -52,13 +52,11 @@ func (c *custodian) pegOut(ctx context.Context, recipient xdr.AccountId, asset x
 	if err != nil {
 		return err
 	}
-	succ, err := c.hclient.SubmitTransaction(txstr)
+	_, err = c.hclient.SubmitTransaction(txstr)
 	return err
 }
 
 func (c *custodian) buildPegOutTx(recipient xdr.AccountId, asset xdr.Asset, amount int) (*b.TransactionBuilder, error) {
-	// TODO(vniu): track account seqnum
-	var seqnum xdr.SequenceNumber
 	var paymentOp b.PaymentBuilder
 	switch asset.Type {
 	case xdr.AssetTypeAssetTypeNative:
@@ -88,7 +86,7 @@ func (c *custodian) buildPegOutTx(recipient xdr.AccountId, asset xdr.Asset, amou
 	return b.Transaction(
 		b.Network{Passphrase: c.network},
 		b.SourceAccount{AddressOrSeed: c.accountID.Address()},
-		b.Sequence{Sequence: uint64(seqnum)},
+		b.AutoSequence{SequenceProvider: c.hclient},
 		b.BaseFee{Amount: baseFee},
 		paymentOp,
 	)
