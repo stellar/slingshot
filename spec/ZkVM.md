@@ -1116,8 +1116,9 @@ Code | Instruction                | Stack diagram                              |
 0x?? | [`range:n`](#range)        |               _a_ → _a_                    | Fails if _a_ is not in range [0..2^64-1]
  |                                |                                            |
  |     [**Constraints**](#constraint-system-instructions)  |                   | 
-0x?? | [`var`](#var)              |           _point_ → _var_                  | Adds an external variable to [CS](#constraint-system)
 0x?? | [`const`](#var)            |          _scalar_ → _expr_                 | 
+0x?? | [`var`](#var)              |           _point_ → _var_                  | Adds an external variable to [CS](#constraint-system)
+0x?? | [`alloc`](#alloc)          |                 ø → _expr_                 | Allocates a low-level variable in [CS](#constraint-system)
 0x?? | [`mintime`](#mintime)      |                 ø → _expr_                 |
 0x?? | [`maxtime`](#maxtime)      |                 ø → _expr_                 |
 0x?? | [`zkneg`](#zkneg)          |           _expr1_ → _expr2_                |
@@ -1243,6 +1244,16 @@ Fails if:
 
 ### Constraint system instructions
 
+#### const
+
+_a_ **const** → _expr_
+
+1. Pops a [scalar](#scalar-type) `a` from the stack.
+2. Creates an [expression](#expression-type) `expr` with weight `a` assigned to an R1CS constant `1`.
+3. Pushes `expr` to the stack.
+
+Fails if `a` is not a [scalar type](#scalar-type).
+
 #### var
 
 _P_ **var** → _v_
@@ -1253,15 +1264,15 @@ _P_ **var** → _v_
 
 Fails if `P` is not a [point type](#point-type).
 
-#### const
+#### alloc
 
-_a_ **const** → _expr_
+**alloc** → _expr_
 
-1. Pops a [scalar](#scalar-type) `a` from the stack.
-2. Creates an [expression](#expression-type) `expr` with weight `a` assigned to an R1CS constant `1`.
-3. Pushes `expr` to the stack.
+1. Allocates a low-level variable in the [constraint system](#constraint-system) and wraps it in the [expression](#expression-type) with weight 1.
+2. Pushes the resulting expression to the stack.
 
-Fails if `a` is not a [scalar type](#scalar-type).
+This is different from [`var`](#var) in that the variable is not represented by an individual commitment and therefore can be chosen freely when the transaction is formed.
+
 
 #### mintime
 
