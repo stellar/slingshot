@@ -2024,6 +2024,23 @@ program structure can be determined right before the use.
 The payload of a contract must be provided to the selected branch. If both predicates must be evaluated and both are programs, then which one takes the payload? To avoid ambiguity, AND can be implemented inside a program that can explicitly decide in which order and which parts of payload to process: maybe check some conditions and then delegate the whole payload to a predicate, or split the payload in two parts and apply different predicates to each part. There's [`contract`](#contract) instruction for that delegation.
 
 
+### Why we need Signed Value and `borrow`?
+
+Imagine your contract is "pay $X to address A in order to unlock £Y".
+
+You can write this contract as "give me the value V, i'll check if V == $X, and lock it with address A, then unlock my payload £Y". Then you don't need any negative values or "borrowing".
+
+However, this is not flexible: what if $X comes from another contract that takes Z£ and part of Z is supposed to be paid by £Y? You have a circular dependency which you can only resolve if you have excess of £ from somewhere to resolve both contracts and then given these funds back.
+
+Also, it's not private enough: the contract now not only reveals its logic, but also requires you to link the whole tx graph where the $X is coming from.
+
+Now let’s see how [`borrow`](#borrow) simplifies things: it allows you to make $X out of thin air, "borrowing" it from void for the duration of the transaction.
+
+`borrow` gives you a positive $X as requested, but it also needs to require you to repay $X from some other source before tx is finalized. This is represented by creating a *negative –$X* as a less powerful type SignedValue.
+
+Signed values are less powerful (they are super-types of Values) because they are not _portable_. You cannot just stash such value away in some output. You have to actually repay it using the `cloak` instruction.
+
+
 ## Open questions
 
 ### Do we really need qty/flavor introspection ops?
