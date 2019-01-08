@@ -14,43 +14,44 @@ import (
 // TODO(vniu): pass in real issuance contract seed
 var issuanceContractSeed []byte
 
-func (c *custodian) watchPegs() func(horizon.Transaction) {
-	return func(tx horizon.Transaction) {
-		var env xdr.TransactionEnvelope
-		err := xdr.SafeUnmarshalBase64(tx.EnvelopeXdr, &env)
+func (c *custodian) watchPegs(tx horizon.Transaction) {
+	var env xdr.TransactionEnvelope
+	err := xdr.SafeUnmarshalBase64(tx.EnvelopeXdr, &env)
+	if err != nil {
+		// TODO(vniu): error handling
+		return
+	}
+
+	for i, op := range env.Tx.Operations {
+		if op.Body.Type != xdr.OperationTypePayment {
+			continue
+		}
+		payment := op.Body.PaymentOp
+		if !payment.Destination.Equals(c.accountID) {
+			continue
+		}
+
+		// This operation is a payment to the custodian's account - i.e., a peg.
+		// We record it in the db, then wake up a goroutine that executes imports for not-yet-imported pegs.
+		var q = `INSERT INTO pegs 
+				(txhash, operation_num, amount, asset_xdr, imported)
+				($1, $2, $3, $4, $5, $6)`
+		txhash, err := network.HashTransaction(&env.Tx, c.network)
 		if err != nil {
 			// TODO(vniu): error handling
 			return
 		}
-
-		for i, op := range env.Tx.Operations {
-			if op.Body.Type != xdr.OperationTypePayment {
-				continue
-			}
-			payment := op.Body.PaymentOp
-			if !payment.Destination.Equals(c.accountID) {
-				continue
-			}
-
-			// This operation is a payemtn to the custodian's account - i.e., a peg.
-			// We record it in the db and immediately issue imported funds on the sidechain.
-			var q = `INSERT INTO pegs 
-				(txhash, operation_num, amount, asset_xdr, imported)
-				($1, $2, $3, $4, $5, $6)`
-			txhash, err := network.HashTransaction(&env.Tx, c.network)
-			if err != nil {
-				// TODO(vniu): error handling
-				return
-			}
-			assetXDR, err := payment.Asset.MarshalBinary()
-			if err != nil {
-				// TODO(vniu): error handling
-				return
-			}
-			c.db.Exec(q, txhash, i, payment.Amount, assetXDR, false)
-			c.imports.Broadcast()
+		assetXDR, err := payment.Asset.MarshalBinary()
+		if err != nil {
+			// TODO(vniu): error handling
+			return
 		}
-		return
+		_, err = c.db.Exec(q, txhash, i, payment.Amount, assetXDR, false)
+		if err != nil {
+			// TODO(vniu): error handling
+			return
+		}
+		c.imports.Broadcast()
 	}
 }
 
@@ -111,16 +112,17 @@ func (c *custodian) watchExports(ctx context.Context) {
 					continue
 				}
 
-				// Record the export in the db to be pegged out onto the main
+				// Record the export in the db,
+				// then wake up a goroutine that executes peg-outs on the main chain.
 				const q = `
 					INSERT INTO exports 
 					(txid, recipient, amount, asset_xdr)
 					VALUES ($1, $2, $3, $4)`
-				c.db.ExecContext(ctx, q, tx.ID, stellarRecipient.Address(), retiredAmount, stellarAssetCodeXDR)
+				_, err = c.db.ExecContext(ctx, q, tx.ID, stellarRecipient.Address(), retiredAmount, stellarAssetCodeXDR)
+				if err != nil {
+					// TODO(vniu): error handling
+				}
 				c.exports.Broadcast()
-
-				// TODO: This is an export operation.
-				// Record it in the db and/or immediately peg-out funds on the main chain.
 
 				i += 2
 			}

@@ -123,7 +123,7 @@ func main() {
 
 	// Start streaming txs, importing, and exporting
 	go func() {
-		err := c.hclient.StreamTransactions(ctx, *custID, &cur, c.watchPegs())
+		err := c.hclient.StreamTransactions(ctx, *custID, &cur, c.watchPegs)
 		if err != nil {
 			// TODO: error handling
 		}
