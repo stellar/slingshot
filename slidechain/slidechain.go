@@ -38,10 +38,14 @@ type custodian struct {
 	network   string
 }
 
-func start(addr, dbfile, custID, horizonURL string) (*custodian, error) {
+func start(ctx context.Context, addr, dbfile, horizonURL string) (*custodian, error) {
 	db, err := sql.Open("sqlite3", dbfile)
 	if err != nil {
 		return nil, errors.Wrap(err, "error opening db")
+	}
+	err = setSchema(db)
+	if err != nil {
+		return nil, errors.Wrap(err, "error creating schema")
 	}
 
 	hclient := &horizon.Client{
@@ -54,15 +58,14 @@ func start(addr, dbfile, custID, horizonURL string) (*custodian, error) {
 		return nil, errors.Wrap(err, "error getting horizon client root")
 	}
 
-	var custAccountID xdr.AccountId
-	err = custAccountID.SetAddress(custID)
+	custAccountID, err := custodianAccount(ctx, db)
 	if err != nil {
-		return nil, errors.Wrap(err, "error setting custodian account ID")
+		return nil, errors.Wrap(err, "error creating/fetching custodian account")
 	}
 
 	// TODO(vniu): set custodian account seed
 	return &custodian{
-		accountID: custAccountID,
+		accountID: *custAccountID, // TODO(tessr): should this field be a pointer to an xdr.AccountID?
 		db:        db,
 		w:         multichan.New((*bc.Block)(nil)),
 		hclient:   hclient,
@@ -96,7 +99,7 @@ func main() {
 
 	var cur horizon.Cursor // TODO: initialize from db (if applicable)
 
-	c, err := start(*addr, *dbfile, *custID, *url)
+	c, err := start(ctx, *addr, *dbfile, *url)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -160,6 +163,11 @@ func main() {
 	http.Handle("/submit", s)
 	http.HandleFunc("/get", get)
 	http.Serve(listener, nil)
+}
+
+func setSchema(db *sql.DB) error {
+	_, err := db.Exec(schema)
+	return errors.Wrap(err, "creating db schema")
 }
 
 func httpErrf(w http.ResponseWriter, code int, msgfmt string, args ...interface{}) {
