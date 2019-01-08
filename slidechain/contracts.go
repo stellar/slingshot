@@ -1,6 +1,8 @@
 package main
 
 import (
+	"fmt"
+
 	"github.com/chain/txvm/protocol/txvm"
 	"github.com/chain/txvm/protocol/txvm/asm"
 )
@@ -13,18 +15,18 @@ func mustAssemble(src string) []byte {
 	return res
 }
 
-const slidechainIssueProgSrc = `
+// TODO(debnil): Use a more general-purpose sig checker, i.e. an exported `multisigProgCheckSrc`.
+const issueProgFmt = `
                                                             #  con stack                    arg stack                        log
                                                             #  ---------                    ---------                        ---                                             
-                                                            #                               asset code, amount, zeroval
-        [txid <pubkey> get 0 checksig verify] contract put  #                               sigcheck contract
-        get get get                                         #  zeroval, amount, asset code
+															#                               asset code, amount, zeroval
+		get get get                                         #  zeroval, amount, asset code
+        [txid x'%x' get 0 checksig verify] contract put     #  zeroval, amount, asset code  sigcheck contract
         issue put                                           #                               sigcheck contract, issued value  {"A", vm.caller, v.amount, v.assetid, v.anchor}
 `
 
 var (
-	// SlidechainIssueProg is the txvm bytecode of the issuance contract.
-	SlidechainIssueProg = mustAssemble(slidechainIssueProgSrc)
-	// SlidechainIssueSeed is the seed of the issuance contract.
-	SlidechainIssueSeed = txvm.ContractSeed(SlidechainIssueProg)
+	issueProgSrc = fmt.Sprintf(issueProgFmt, *custPubkey)
+	issueProg    = mustAssemble(issueProgSrc)
+	issueSeed    = txvm.ContractSeed(issueProg)
 )

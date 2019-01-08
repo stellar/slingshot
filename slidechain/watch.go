@@ -11,9 +11,6 @@ import (
 	"github.com/stellar/go/xdr"
 )
 
-// TODO(vniu): pass in real issuance contract seed
-var issuanceContractSeed []byte
-
 func (c *custodian) watchPegs() func(horizon.Transaction) {
 	return func(tx horizon.Transaction) {
 		var env xdr.TransactionEnvelope
@@ -93,7 +90,7 @@ func (c *custodian) watchExports(ctx context.Context) {
 				}
 
 				// Check this Stellar asset code corresponds to retiredAssetIDBytes.
-				gotAssetID32 := txvm.AssetID(issuanceContractSeed, stellarAssetCodeXDR)
+				gotAssetID32 := txvm.AssetID(issueSeed[:], stellarAssetCodeXDR)
 				if !bytes.Equal(gotAssetID32[:], retiredAssetIDBytes) {
 					continue
 				}

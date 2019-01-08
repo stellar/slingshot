@@ -23,6 +23,7 @@ import (
 var (
 	initialBlock *bc.Block
 	chain        *protocol.Chain
+	custPubkey   = flag.String("custpubkey", "", "custodian txvm pubkey")
 )
 
 type custodian struct {
