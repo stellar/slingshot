@@ -15,6 +15,7 @@ import (
 	"github.com/chain/txvm/errors"
 	"github.com/chain/txvm/protocol"
 	"github.com/chain/txvm/protocol/bc"
+	"github.com/chain/txvm/protocol/txvm"
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/stellar/go/clients/horizon"
 	"github.com/stellar/go/xdr"
@@ -23,7 +24,6 @@ import (
 var (
 	initialBlock *bc.Block
 	chain        *protocol.Chain
-	custPubkey   = flag.String("custpubkey", "", "custodian txvm pubkey")
 )
 
 type custodian struct {
@@ -75,13 +75,19 @@ func main() {
 	ctx := context.Background()
 
 	var (
-		addr   = flag.String("addr", "localhost:2423", "server listen address")
-		dbfile = flag.String("db", "slidechain.db", "path to db")
-		custID = flag.String("custid", "", "custodian's Stellar account ID")
-		url    = flag.String("horizon", "https://horizon-testnet.stellar.org", "horizon server url")
+		addr          = flag.String("addr", "localhost:2423", "server listen address")
+		dbfile        = flag.String("db", "slidechain.db", "path to db")
+		custID        = flag.String("custid", "", "custodian's Stellar account ID")
+		url           = flag.String("horizon", "https://horizon-testnet.stellar.org", "horizon server url")
+		custPubkeyHex = flag.String("custpubkey", "", "custodian txvm public key (hex string)")
 	)
 
 	flag.Parse()
+
+	// Assemble issuance TxVM program for custodian.
+	issueProgSrc = fmt.Sprintf(issueProgFmt, *custPubkeyHex)
+	issueProg = mustAssemble(issueProgSrc)
+	issueSeed = txvm.ContractSeed(issueProg)
 
 	var cur horizon.Cursor // TODO: initialize from db (if applicable)
 
