@@ -58,7 +58,7 @@ func start(ctx context.Context, addr, dbfile, horizonURL string) (*custodian, er
 		return nil, errors.Wrap(err, "error getting horizon client root")
 	}
 
-	custAccountID, err := custodianAccount(ctx, db)
+	custAccountID, err := custodianAccount(ctx, db, hclient)
 	if err != nil {
 		return nil, errors.Wrap(err, "error creating/fetching custodian account")
 	}

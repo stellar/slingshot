@@ -14,11 +14,11 @@ import (
 	"i10r.io/errors"
 )
 
-func custodianAccount(ctx context.Context, db *sql.DB) (*xdr.AccountId, error) {
+func custodianAccount(ctx context.Context, db *sql.DB, hclient *horizon.Client) (*xdr.AccountId, error) {
 	var accountID string
 	err := db.QueryRow("SELECT account_id FROM custodian_account").Scan(&accountID)
 	if err == sql.ErrNoRows {
-		return makeNewCustodianAccount(ctx, db)
+		return makeNewCustodianAccount(ctx, db, hclient)
 	}
 
 	if err != nil {
@@ -32,7 +32,7 @@ func custodianAccount(ctx context.Context, db *sql.DB) (*xdr.AccountId, error) {
 	return &custAccountID, err
 }
 
-func makeNewCustodianAccount(ctx context.Context, db *sql.DB) (*xdr.AccountId, error) {
+func makeNewCustodianAccount(ctx context.Context, db *sql.DB, hclient *horizon.Client) (*xdr.AccountId, error) {
 	pair, err := keypair.Random()
 	if err != nil {
 		return nil, errors.Wrap(err, "generating new keypair")
@@ -51,7 +51,7 @@ func makeNewCustodianAccount(ctx context.Context, db *sql.DB) (*xdr.AccountId, e
 	}
 	log.Println("account successfully funded")
 
-	account, err := horizon.DefaultTestNetClient.LoadAccount(pair.Address())
+	account, err := hclient.LoadAccount(pair.Address())
 	if err != nil {
 		return nil, errors.Wrap(err, "loading testnet account")
 	}
