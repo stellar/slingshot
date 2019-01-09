@@ -87,7 +87,8 @@ func main() {
 
 	// Assemble issuance TxVM program for custodian.
 	issueProgSrc = fmt.Sprintf(issueProgFmt, *custPubkeyHex)
-	issueProg, err := asm.Assemble(issueProgSrc)
+	var err error
+	issueProg, err = asm.Assemble(issueProgSrc)
 	if err != nil {
 		log.Fatal(err)
 	}
