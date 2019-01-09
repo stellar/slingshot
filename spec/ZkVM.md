@@ -19,7 +19,7 @@ ZkVM defines a procedural representation for blockchain transactions and the rul
     * [Expression](#expression-type)
     * [Constraint](#constraint-type)
     * [Value](#value-type)
-    * [Signed value](#signed-value)
+    * [Wide value](#wide-value-type)
 * [Definitions](#definitions)
     * [LE32](#le32)
     * [LE64](#le64)
@@ -160,7 +160,7 @@ Linear types are subject to special rules as to when and how they may be created
 and destroyed, and may never be copied.
 
 * [Contract](#contract-type)
-* [Signed Value](#signed-value-type)
+* [Wide value](#wide-value-type)
 * [Value](#value-type)
 
 
@@ -173,7 +173,7 @@ The items of the following types can be _ported_ across transactions via [output
 * [String](#string-type)
 * [Value](#value-type)
 
-[Signed values](#signed-value-type) are not portable because it is not proven to be non-negative.
+[Wide values](#wide-value-type) are not portable because it is not proven to be non-negative.
 
 [Contracts](#contract-type) are not portable because they must be satisfied within the current transaction
 or [output](#output-structure) their contents themselves.
@@ -282,7 +282,7 @@ Only values having the same flavor can be merged.
 Values are secured by “locking them up” inside [contracts](#contract-type).
 
 Contracts can also require payments by creating outputs using _borrowed_ values.
-[`borrow`](#borrow) instruction produces two items: a non-negative value and a negated [signed value](#signed-value-type),
+[`borrow`](#borrow) instruction produces two items: a non-negative value and a negated [wide value](#wide-value-type),
 which must be cleared using appropriate combination of non-negative values.
 
 Each non-negative value keeps the [Pedersen commitments](#pedersen-commitment)
@@ -290,14 +290,14 @@ for the quantity and flavor (in addition to the respective [variables](#variable
 so that they can serialized in the [`output`](#output).
 
 
-### Signed value type
+### Wide value type
 
-A signed value is an extension of the [value type](#value-type) where
-quantity is guaranteed to be in a 65-bit range (`[-(2^64-1)..2^64-1]`).
+_Wide value_ is an extension of the [value type](#value-type) where
+quantity is guaranteed to be in a wider, 65-bit range `[-(2^64-1) .. 2^64-1]`.
 
 The subtype [Value](#value-type) is most commonly used because it guarantees the non-negative quantity
 (for instance, [`output`](#output) instruction only permits positive [values](#value-type)),
-and the signed value is only used as an output of [`borrow`](#borrow) and as an input to [`cloak`](#cloak).
+and the wide value is only used as an output of [`borrow`](#borrow) and as an input to [`cloak`](#cloak).
 
 
 
@@ -1140,7 +1140,7 @@ Code | Instruction                | Stack diagram                              |
 0x?? | [`retire`](#retire)        |           _value_ → ø                      | Modifies [CS](#constraint-system), [tx log](#transaction-log)
 0x?? | [`qty`](#qty)              |           _value_ → _value qtyvar_         |
 0x?? | [`flavor`](#flavor)        |           _value_ → _value flavorvar_      |
-0x?? | [`cloak:m:n`](#cloak)      | _signedvalues commitments_ → _values_      | Modifies [CS](#constraint-system)
+0x?? | [`cloak:m:n`](#cloak)      | _widevalues commitments_ → _values_        | Modifies [CS](#constraint-system)
 0x?? | [`import`](#import)        |   _proof qty flv_ → _value_                | Modifies [CS](#constraint-system), [tx log](#transaction-log), [defers point ops](#deferred-point-operations)
 0x?? | [`export`](#export)        |       _value ???_ → ø                      | Modifies [CS](#constraint-system), [tx log](#transaction-log)
  |                                |                                            |
@@ -1502,11 +1502,11 @@ _qty flv_ **borrow** → _–V +V_
 2. Pops [variable](#variable-type) `qty`; if the variable is detached, attaches it.
 3. Creates a [value](#value-type) `+V` with variables `qty` and `flv` for quantity and flavor, respectively.
 4. Adds a 64-bit range proof for `qty` variable to the [constraint system](#constraint-system) (see [Cloak protocol](https://github.com/interstellar/spacesuit/blob/master/spec.md) for the range proof definition).
-5. Creates [signed value](#signed-value-type) `–V`, allocating a low-level variable `qty2` for the negated quantity and reusing the flavor variable `flv`.
+5. Creates [wide value](#wide-value-type) `–V`, allocating a low-level variable `qty2` for the negated quantity and reusing the flavor variable `flv`.
 6. Adds a constraint `qty2 == -qty` to the constraint system.
 7. Pushes `–V`, then `+V` to the stack.
 
-The signed value `–V` is not a [portable type](#portable-types), and can only be consumed by a [`cloak`](#cloak) instruction
+The wide value `–V` is not a [portable type](#portable-types), and can only be consumed by a [`cloak`](#cloak) instruction
 (where it is merged with appropriate positive quantity of the same flavor).
 
 Fails if `qty` and `flv` are not [variable types](#variable-type).
@@ -1525,7 +1525,7 @@ Fails if the value is not a [non-negative value type](#value-type).
 
 _value_ **qty** → _value qtyvar_
 
-Copies a [variable](#variable-type) representing quantity of an [unsigned value](#value-type) and pushes it to the stack.
+Copies a [variable](#variable-type) representing quantity of an [unwide value](#value-type) and pushes it to the stack.
 
 Fails if the value is not a [non-negative value type](#value-type).
 
@@ -1533,18 +1533,18 @@ Fails if the value is not a [non-negative value type](#value-type).
 
 _value_ **flavor** → _value flavorvar_
 
-Copies a [variable](#variable-type) representing flavor of an [unsigned value](#value-type) and pushes it to the stack.
+Copies a [variable](#variable-type) representing flavor of an [unwide value](#value-type) and pushes it to the stack.
 
 Fails if the value is not a [non-negative value type](#value-type).
 
 #### cloak
 
-_signedvalues commitments_ **cloak:_m_:_n_** → _values_
+_widevalues commitments_ **cloak:_m_:_n_** → _values_
 
-Merges and splits `m` [signed values](#signed-value-type) into `n` [values](#values).
+Merges and splits `m` [wide values](#wide-value-type) into `n` [values](#values).
 
 1. Pops `2·n` [points](#point-type) as pairs of _flavor_ and _quantity_ for each output value, flavor is popped first in each pair.
-2. Pops `m` [signed values](#signed-value-type) as input values.
+2. Pops `m` [wide values](#wide-value-type) as input values.
 3. Creates constraints and 64-bit range proofs for quantities per [Cloak protocol](https://github.com/interstellar/spacesuit/blob/master/spec.md).
 4. Pushes `n` [values](#values) to the stack, placing them in the same order as their corresponding commitments.
 
@@ -2035,7 +2035,7 @@ program structure can be determined right before the use.
 The payload of a contract must be provided to the selected branch. If both predicates must be evaluated and both are programs, then which one takes the payload? To avoid ambiguity, AND can be implemented inside a program that can explicitly decide in which order and which parts of payload to process: maybe check some conditions and then delegate the whole payload to a predicate, or split the payload in two parts and apply different predicates to each part. There's [`contract`](#contract) instruction for that delegation.
 
 
-### Why we need Signed Value and `borrow`?
+### Why we need Wide value and `borrow`?
 
 Imagine your contract is "pay $X to address A in order to unlock £Y".
 
@@ -2047,9 +2047,9 @@ Also, it's not private enough: the contract now not only reveals its logic, but 
 
 Now let’s see how [`borrow`](#borrow) simplifies things: it allows you to make $X out of thin air, "borrowing" it from void for the duration of the transaction.
 
-`borrow` gives you a positive $X as requested, but it also needs to require you to repay $X from some other source before tx is finalized. This is represented by creating a *negative –$X* as a less powerful type Signed Value.
+`borrow` gives you a positive $X as requested, but it also needs to require you to repay $X from some other source before tx is finalized. This is represented by creating a *negative –$X* as a less powerful type Wide Value.
 
-Signed values are less powerful (they are super-types of Values) because they are not _portable_. You cannot just stash such value away in some output. You have to actually repay it using the `cloak` instruction.
+Wide values are less powerful (they are super-types of Values) because they are not _portable_. You cannot just stash such value away in some output. You have to actually repay it using the `cloak` instruction.
 
 
 ## Open questions
