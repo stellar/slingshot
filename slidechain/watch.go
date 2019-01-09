@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 
 	"github.com/chain/txvm/protocol/bc"
 	"github.com/chain/txvm/protocol/txvm"
@@ -61,10 +62,11 @@ func (c *custodian) watchExports(ctx context.Context) {
 		}
 		b := got.(*bc.Block)
 		for _, tx := range b.Transactions {
-			// Look for a retire-type ("X") entry followed by two log-type
-			// ("L") entries, one specifying the Stellar asset code to peg
-			// out and one specifying the Stellar recipient account ID.
-			for i := 0; i < len(tx.Log)-3; i++ {
+			// Look for a retire-type ("X") entry
+			// followed by a specially formatted log ("L") entry
+			// that specifies the Stellar asset code to peg out and the Stellar recipient account ID.
+
+			for i := 0; i < len(tx.Log)-2; i++ {
 				item := tx.Log[i]
 				if len(item) != 5 {
 					continue
@@ -75,36 +77,27 @@ func (c *custodian) watchExports(ctx context.Context) {
 				retiredAmount := int64(item[2].(txvm.Int))
 				retiredAssetIDBytes := item[3].(txvm.Bytes)
 
-				stellarAssetCodeItem := tx.Log[i+1]
-				if len(stellarAssetCodeItem) != 3 {
+				infoItem := tx.Log[i+1]
+				if infoItem[0].(txvm.Bytes)[0] != txvm.LogCode {
 					continue
 				}
-				if stellarAssetCodeItem[0].(txvm.Bytes)[0] != txvm.LogCode {
-					continue
+				var info struct {
+					AssetXDR   []byte `json:"asset"`
+					AccountXDR []byte `json:"account"`
 				}
-				stellarAssetCodeXDR := stellarAssetCodeItem[2].(txvm.Bytes)
-
-				var stellarAsset xdr.Asset
-				err := xdr.SafeUnmarshal(stellarAssetCodeXDR, &stellarAsset)
+				err := json.Unmarshal(infoItem[2].(txvm.Bytes), &info)
 				if err != nil {
 					continue
 				}
 
 				// Check this Stellar asset code corresponds to retiredAssetIDBytes.
-				gotAssetID32 := txvm.AssetID(issueSeed[:], stellarAssetCodeXDR)
+				gotAssetID32 := txvm.AssetID(issueSeed[:], info.AssetXDR)
 				if !bytes.Equal(gotAssetID32[:], retiredAssetIDBytes) {
 					continue
 				}
 
-				stellarRecipientItem := tx.Log[i+2]
-				if len(stellarRecipientItem) != 3 {
-					continue
-				}
-				if stellarRecipientItem[0].(txvm.Bytes)[0] != txvm.LogCode {
-					continue
-				}
 				var stellarRecipient xdr.AccountId
-				err = xdr.SafeUnmarshal(stellarRecipientItem[2].(txvm.Bytes), &stellarRecipient)
+				err = xdr.SafeUnmarshal(info.AccountXDR, &stellarRecipient)
 				if err != nil {
 					continue
 				}
@@ -115,13 +108,13 @@ func (c *custodian) watchExports(ctx context.Context) {
 					INSERT INTO exports 
 					(txid, recipient, amount, asset_xdr)
 					VALUES ($1, $2, $3, $4)`
-				_, err = c.db.ExecContext(ctx, q, tx.ID, stellarRecipient.Address(), retiredAmount, stellarAssetCodeXDR)
+				_, err = c.db.ExecContext(ctx, q, tx.ID, stellarRecipient.Address(), retiredAmount, info.AssetXDR)
 				if err != nil {
 					// TODO(vniu): error handling
 				}
 				c.exports.Broadcast()
 
-				i += 2
+				i++ // advance past the consumed log ("L") entry
 			}
 		}
 	}
