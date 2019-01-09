@@ -39,7 +39,6 @@ func (c *custodian) pegOutFromExports(ctx context.Context) error {
 			return err
 		}
 	}
-	return nil
 }
 
 func (c *custodian) pegOut(ctx context.Context, recipient xdr.AccountId, asset xdr.Asset, amount int) error {
