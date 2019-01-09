@@ -1,19 +1,8 @@
 package main
 
 import (
-	"fmt"
-
-	"github.com/chain/txvm/protocol/txvm"
 	"github.com/chain/txvm/protocol/txvm/asm"
 )
-
-func mustAssemble(src string) []byte {
-	res, err := asm.Assemble(src)
-	if err != nil {
-		panic(err)
-	}
-	return res
-}
 
 // TODO(debnil): Use a more general-purpose sig checker, i.e. an exported `multisigProgCheckSrc`.
 const issueProgFmt = `
@@ -26,7 +15,15 @@ const issueProgFmt = `
 `
 
 var (
-	issueProgSrc = fmt.Sprintf(issueProgFmt, *custPubkey)
-	issueProg    = mustAssemble(issueProgSrc)
-	issueSeed    = txvm.ContractSeed(issueProg)
+	issueProgSrc string
+	issueProg    []byte
+	issueSeed    [32]byte
 )
+
+func mustAssemble(src string) []byte {
+	res, err := asm.Assemble(src)
+	if err != nil {
+		panic(err)
+	}
+	return res
+}
