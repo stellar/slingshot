@@ -16,6 +16,7 @@ import (
 	"github.com/chain/txvm/protocol"
 	"github.com/chain/txvm/protocol/bc"
 	"github.com/chain/txvm/protocol/txvm"
+	"github.com/chain/txvm/protocol/txvm/asm"
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/stellar/go/clients/horizon"
 	"github.com/stellar/go/xdr"
@@ -86,7 +87,10 @@ func main() {
 
 	// Assemble issuance TxVM program for custodian.
 	issueProgSrc = fmt.Sprintf(issueProgFmt, *custPubkeyHex)
-	issueProg = mustAssemble(issueProgSrc)
+	issueProg, err := asm.Assemble(issueProgSrc)
+	if err != nil {
+		log.Fatal(err)
+	}
 	issueSeed = txvm.ContractSeed(issueProg)
 
 	var cur horizon.Cursor // TODO: initialize from db (if applicable)
