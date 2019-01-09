@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/bobg/multichan"
 	"github.com/chain/txvm/crypto/ed25519"
 	"github.com/chain/txvm/errors"
 	"github.com/chain/txvm/protocol"
@@ -59,8 +60,10 @@ func TestServer(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	w := multichan.New((*bc.Block)(nil))
+
 	http.HandleFunc("/get", get)
-	http.HandleFunc("/submit", submit)
+	http.Handle("/submit", &submitter{w: w})
 	server := httptest.NewServer(nil)
 	defer server.Close()
 

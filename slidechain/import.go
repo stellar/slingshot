@@ -22,5 +22,4 @@ func (c *custodian) importFromPegs(ctx context.Context, s *submitter) error {
 		})
 		return err
 	}
-	return nil
 }
