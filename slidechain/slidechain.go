@@ -81,7 +81,6 @@ func main() {
 	var (
 		addr          = flag.String("addr", "localhost:2423", "server listen address")
 		dbfile        = flag.String("db", "slidechain.db", "path to db")
-		custID        = flag.String("custid", "", "custodian's Stellar account ID")
 		url           = flag.String("horizon", "https://horizon-testnet.stellar.org", "horizon server url")
 		custPubkeyHex = flag.String("custpubkey", "", "custodian txvm public key (hex string)")
 	)
@@ -138,7 +137,7 @@ func main() {
 
 	// Start streaming txs, importing, and exporting
 	go func() {
-		err := c.hclient.StreamTransactions(ctx, *custID, &cur, c.watchPegs)
+		err := c.hclient.StreamTransactions(ctx, c.accountID.Address(), &cur, c.watchPegs)
 		if err != nil {
 			// TODO: error handling
 		}
