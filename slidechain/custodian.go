@@ -65,7 +65,7 @@ func makeNewCustodianAccount(ctx context.Context, db *sql.DB, hclient *horizon.C
 		}
 	}
 
-	_, err = db.Exec("INSERT INTO custodian (account_id, cursor) VALUES ($1, $2)", pair.Address(), "")
+	_, err = db.Exec("INSERT INTO custodian (account_id) VALUES ($1)", pair.Address())
 	if err != nil {
 		return nil, errors.Wrapf(err, "storing new custodian account")
 	}

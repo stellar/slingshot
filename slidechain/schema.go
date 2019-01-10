@@ -30,6 +30,6 @@ CREATE TABLE IF NOT EXISTS exports (
 
 CREATE TABLE IF NOT EXISTS custodian (
   account_id TEXT NOT NULL PRIMARY KEY,
-  cursor TEXT NOT NULL
+  cursor TEXT NOT NULL DEFAULT ''
 );
 `
