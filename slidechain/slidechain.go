@@ -41,13 +41,9 @@ type custodian struct {
 }
 
 func start(ctx context.Context, addr, dbfile, horizonURL string) (*custodian, error) {
-	db, err := sql.Open("sqlite3", dbfile)
+	db, err := startdb(dbfile)
 	if err != nil {
-		return nil, errors.Wrap(err, "opening db")
-	}
-	err = setSchema(db)
-	if err != nil {
-		return nil, errors.Wrap(err, "creating schema")
+		return nil, errors.Wrap(err, "starting db")
 	}
 
 	hclient := &horizon.Client{
@@ -75,6 +71,15 @@ func start(ctx context.Context, addr, dbfile, horizonURL string) (*custodian, er
 		exports:   sync.NewCond(new(sync.Mutex)),
 		network:   root.NetworkPassphrase,
 	}, nil
+}
+
+func startdb(dbfile string) (*sql.DB, error) {
+	db, err := sql.Open("sqlite3", dbfile)
+	if err != nil {
+		return nil, errors.Wrap(err, "opening db")
+	}
+	err = setSchema(db)
+	return db, errors.Wrap(err, "creating schema")
 }
 
 func main() {
