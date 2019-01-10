@@ -18,12 +18,11 @@ func (c *custodian) importFromPegs(ctx context.Context, s *submitter) error {
 			assets                 [][]byte
 		)
 		const q = `SELECT txid, txhash, operation_num, amount, asset FROM pegs WHERE imported=0`
-		err := sqlutil.ForQueryRows(ctx, c.db, q, func(txid string, txhash []byte, operationNum, amount int, asset []byte) error {
+		err := sqlutil.ForQueryRows(ctx, c.db, q, func(txid string, txhash []byte, operationNum, amount int, asset []byte) {
 			txids = append(txids, txid)
 			operationNums = append(operationNums, operationNum)
 			amounts = append(amounts, amount)
 			assets = append(assets, asset)
-			return nil
 		})
 		// TODO: import the specified row through issuance contract
 		for _, txid := range txids {
