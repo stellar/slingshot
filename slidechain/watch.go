@@ -45,6 +45,12 @@ func (c *custodian) watchPegs(tx horizon.Transaction) {
 			log.Fatal("error recording peg-in tx: ", err)
 			return
 		}
+		// Update cursor after successfully processing transaction
+		_, err = c.db.Exec(`UPDATE custodian SET cursor=$1 WHERE account_id=$2`, tx.PT, c.accountID.Address())
+		if err != nil {
+			log.Fatal("error updating cursor", err)
+			return
+		}
 		c.imports.Broadcast()
 	}
 	return
