@@ -141,7 +141,7 @@ func main() {
 	go func() {
 		backoff := i10rnet.Backoff{Base: 100 * time.Millisecond}
 		for {
-			err := c.hclient.StreamTransactions(ctx, *custID, &cur, c.watchPegs)
+			err := c.hclient.StreamTransactions(ctx, c.accountID.Address(), &cur, c.watchPegs)
 			if err != nil {
 				log.Println("error streaming from horizon: ", err)
 			}
