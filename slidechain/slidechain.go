@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/bobg/multichan"
 	"github.com/chain/txvm/errors"
@@ -137,25 +138,34 @@ func main() {
 
 	// Start streaming txs, importing, and exporting
 	go func() {
-		err := c.hclient.StreamTransactions(ctx, c.accountID.Address(), &cur, c.watchPegs)
-		if err != nil {
-			log.Println("error streaming from horizon: ", err)
+		for {
+			err := c.hclient.StreamTransactions(ctx, *custID, &cur, c.watchPegs)
+			if err != nil {
+				log.Println("error streaming from horizon: ", err)
+			}
+			// Wait before retrying
+			time.Sleep(1 * time.Second)
 		}
 	}()
 
 	go func() {
 		err := c.importFromPegs(ctx, s)
 		if err != nil {
-			log.Println("error importing from pegs: ", err)
+			log.Fatal("error importing from pegs: ", err)
 		}
 	}()
 
-	go c.watchExports(ctx)
+	go func() {
+		err := c.watchExports(ctx)
+		if err != nil {
+			log.Fatal("error watching for export txs: ", err)
+		}
+	}()
 
 	go func() {
 		err := c.pegOutFromExports(ctx)
 		if err != nil {
-			log.Println("error pegging out from exports: ", err)
+			log.Fatal("error pegging out from exports: ", err)
 		}
 	}()
 
