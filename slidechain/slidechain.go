@@ -41,11 +41,11 @@ type custodian struct {
 func start(ctx context.Context, addr, dbfile, horizonURL string) (*custodian, error) {
 	db, err := sql.Open("sqlite3", dbfile)
 	if err != nil {
-		return nil, errors.Wrap(err, "error opening db")
+		return nil, errors.Wrap(err, "opening db")
 	}
 	err = setSchema(db)
 	if err != nil {
-		return nil, errors.Wrap(err, "error creating schema")
+		return nil, errors.Wrap(err, "creating schema")
 	}
 
 	hclient := &horizon.Client{
@@ -55,12 +55,12 @@ func start(ctx context.Context, addr, dbfile, horizonURL string) (*custodian, er
 
 	root, err := hclient.Root()
 	if err != nil {
-		return nil, errors.Wrap(err, "error getting horizon client root")
+		return nil, errors.Wrap(err, "getting horizon client root")
 	}
 
 	custAccountID, err := custodianAccount(ctx, db, hclient)
 	if err != nil {
-		return nil, errors.Wrap(err, "error creating/fetching custodian account")
+		return nil, errors.Wrap(err, "creating/fetching custodian account")
 	}
 
 	// TODO(vniu): set custodian account seed
