@@ -17,13 +17,8 @@ type blockStore struct {
 }
 
 func newBlockStore(db *sql.DB, heights chan<- uint64) (*blockStore, error) {
-	_, err := db.Exec(schema)
-	if err != nil {
-		return nil, errors.Wrap(err, "creating db schema")
-	}
-
 	var height uint64
-	err = db.QueryRow("SELECT height FROM blocks ORDER BY height DESC LIMIT 1").Scan(&height)
+	err := db.QueryRow("SELECT height FROM blocks ORDER BY height DESC LIMIT 1").Scan(&height)
 	if err == sql.ErrNoRows {
 		initialBlock, err := protocol.NewInitialBlock(nil, 0, time.Now())
 		if err != nil {

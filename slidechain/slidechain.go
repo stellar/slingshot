@@ -38,10 +38,14 @@ type custodian struct {
 	network   string
 }
 
-func start(addr, dbfile, custID, horizonURL string) (*custodian, error) {
+func start(ctx context.Context, addr, dbfile, horizonURL string) (*custodian, error) {
 	db, err := sql.Open("sqlite3", dbfile)
 	if err != nil {
-		return nil, errors.Wrap(err, "error opening db")
+		return nil, errors.Wrap(err, "opening db")
+	}
+	err = setSchema(db)
+	if err != nil {
+		return nil, errors.Wrap(err, "creating schema")
 	}
 
 	hclient := &horizon.Client{
@@ -51,18 +55,17 @@ func start(addr, dbfile, custID, horizonURL string) (*custodian, error) {
 
 	root, err := hclient.Root()
 	if err != nil {
-		return nil, errors.Wrap(err, "error getting horizon client root")
+		return nil, errors.Wrap(err, "getting horizon client root")
 	}
 
-	var custAccountID xdr.AccountId
-	err = custAccountID.SetAddress(custID)
+	custAccountID, err := custodianAccount(ctx, db, hclient)
 	if err != nil {
-		return nil, errors.Wrap(err, "error setting custodian account ID")
+		return nil, errors.Wrap(err, "creating/fetching custodian account")
 	}
 
 	// TODO(vniu): set custodian account seed
 	return &custodian{
-		accountID: custAccountID,
+		accountID: *custAccountID, // TODO(tessr): should this field be a pointer to an xdr.AccountID?
 		db:        db,
 		w:         multichan.New((*bc.Block)(nil)),
 		hclient:   hclient,
@@ -78,7 +81,6 @@ func main() {
 	var (
 		addr          = flag.String("addr", "localhost:2423", "server listen address")
 		dbfile        = flag.String("db", "slidechain.db", "path to db")
-		custID        = flag.String("custid", "", "custodian's Stellar account ID")
 		url           = flag.String("horizon", "https://horizon-testnet.stellar.org", "horizon server url")
 		custPubkeyHex = flag.String("custpubkey", "", "custodian txvm public key (hex string)")
 	)
@@ -96,7 +98,7 @@ func main() {
 
 	var cur horizon.Cursor // TODO: initialize from db (if applicable)
 
-	c, err := start(*addr, *dbfile, *custID, *url)
+	c, err := start(ctx, *addr, *dbfile, *url)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -135,7 +137,7 @@ func main() {
 
 	// Start streaming txs, importing, and exporting
 	go func() {
-		err := c.hclient.StreamTransactions(ctx, *custID, &cur, c.watchPegs)
+		err := c.hclient.StreamTransactions(ctx, c.accountID.Address(), &cur, c.watchPegs)
 		if err != nil {
 			// TODO: error handling
 		}
@@ -160,6 +162,11 @@ func main() {
 	http.Handle("/submit", s)
 	http.HandleFunc("/get", get)
 	http.Serve(listener, nil)
+}
+
+func setSchema(db *sql.DB) error {
+	_, err := db.Exec(schema)
+	return errors.Wrap(err, "creating db schema")
 }
 
 func httpErrf(w http.ResponseWriter, code int, msgfmt string, args ...interface{}) {

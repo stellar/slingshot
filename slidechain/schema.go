@@ -28,4 +28,8 @@ CREATE TABLE IF NOT EXISTS exports (
   asset_xdr BLOB NOT NULL,
   exported INTEGER NOT NULL DEFAULT 0
 );
+
+CREATE TABLE IF NOT EXISTS custodian_account (
+  account_id TEXT NOT NULL PRIMARY KEY
+);
 `
