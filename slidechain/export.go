@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/bobg/sqlutil"
 	"github.com/chain/txvm/errors"
@@ -22,12 +21,12 @@ func (c *custodian) pegOutFromExports(ctx context.Context) error {
 			var recipientID xdr.AccountId
 			err := recipientID.SetAddress(recipient)
 			if err != nil {
-				return errors.Wrap(err, fmt.Sprintf("setting recipient account ID %s", recipient))
+				return errors.Wrapf(err, "setting recipient account ID %s", recipient)
 			}
 			var asset xdr.Asset
 			err = xdr.SafeUnmarshal(assetXDR, &asset)
 			if err != nil {
-				return errors.Wrap(err, fmt.Sprintf("unmarshalling asset XDR from asset %s", asset.String()))
+				return errors.Wrapf(err, "unmarshalling asset XDR from asset %s", asset.String())
 			}
 			// TODO(vniu): flag txs that fail with unretriable errors in the db
 			err = c.pegOut(ctx, recipientID, asset, amount)

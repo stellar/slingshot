@@ -17,7 +17,7 @@ func (c *custodian) watchPegs(tx horizon.Transaction) {
 	var env xdr.TransactionEnvelope
 	err := xdr.SafeUnmarshalBase64(tx.EnvelopeXdr, &env)
 	if err != nil {
-		log.Println("error unmarshaling tx: ", err)
+		log.Fatal("error unmarshaling tx: ", err)
 		return
 	}
 
@@ -37,12 +37,12 @@ func (c *custodian) watchPegs(tx horizon.Transaction) {
 				($1, $2, $3, $4, $5, $6)`
 		assetXDR, err := payment.Asset.MarshalBinary()
 		if err != nil {
-			log.Printf("error unmarshaling XDR from asset %s: %s", payment.Asset.String(), err)
+			log.Fatalf("error marshaling asset to XDR %s: %s", payment.Asset.String(), err)
 			return
 		}
 		_, err = c.db.Exec(q, tx.Hash, i, payment.Amount, assetXDR, false)
 		if err != nil {
-			log.Println("error recording peg-in tx: ", err)
+			log.Fatal("error recording peg-in tx: ", err)
 			return
 		}
 		c.imports.Broadcast()
