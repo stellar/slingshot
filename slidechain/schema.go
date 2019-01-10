@@ -14,7 +14,6 @@ CREATE TABLE IF NOT EXISTS snapshots (
 
 CREATE TABLE IF NOT EXISTS pegs (
   txid TEXT NOT NULL,
-  txhash BLOB NOT NULL,
   operation_num INTEGER NOT NULL,
   amount INTEGER NOT NULL,
   asset_xdr BLOB NOT NULL,
