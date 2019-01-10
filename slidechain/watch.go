@@ -33,14 +33,14 @@ func (c *custodian) watchPegs(tx horizon.Transaction) {
 		// This operation is a payment to the custodian's account - i.e., a peg.
 		// We record it in the db, then wake up a goroutine that executes imports for not-yet-imported pegs.
 		var q = `INSERT INTO pegs 
-				(txhash, operation_num, amount, asset_xdr, imported)
-				($1, $2, $3, $4, $5, $6)`
+				(txid, operation_num, amount, asset_xdr, imported)
+				VALUES ($1, $2, $3, $4, $5)`
 		assetXDR, err := payment.Asset.MarshalBinary()
 		if err != nil {
 			log.Fatalf("error marshaling asset to XDR %s: %s", payment.Asset.String(), err)
 			return
 		}
-		_, err = c.db.Exec(q, tx.Hash, i, payment.Amount, assetXDR, false)
+		_, err = c.db.Exec(q, tx.ID, i, payment.Amount, assetXDR, false)
 		if err != nil {
 			log.Fatal("error recording peg-in tx: ", err)
 			return
