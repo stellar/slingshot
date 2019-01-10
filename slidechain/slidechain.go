@@ -139,14 +139,14 @@ func main() {
 	go func() {
 		err := c.hclient.StreamTransactions(ctx, c.accountID.Address(), &cur, c.watchPegs)
 		if err != nil {
-			// TODO: error handling
+			log.Println("error streaming from horizon: ", err)
 		}
 	}()
 
 	go func() {
 		err := c.importFromPegs(ctx, s)
 		if err != nil {
-			// TODO(vniu): error handling
+			log.Println("error importing from pegs: ", err)
 		}
 	}()
 
@@ -155,7 +155,7 @@ func main() {
 	go func() {
 		err := c.pegOutFromExports(ctx)
 		if err != nil {
-			// TODO(vniu): error handling
+			log.Println("error pegging out from exports: ", err)
 		}
 	}()
 

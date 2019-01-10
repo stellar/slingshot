@@ -2,8 +2,10 @@ package main
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/bobg/sqlutil"
+	"github.com/chain/txvm/errors"
 	b "github.com/stellar/go/build"
 	"github.com/stellar/go/xdr"
 )
@@ -20,12 +22,12 @@ func (c *custodian) pegOutFromExports(ctx context.Context) error {
 			var recipientID xdr.AccountId
 			err := recipientID.SetAddress(recipient)
 			if err != nil {
-				return err
+				return errors.Wrap(err, fmt.Sprintf("setting recipient account ID %s", recipient))
 			}
 			var asset xdr.Asset
 			err = xdr.SafeUnmarshal(assetXDR, &asset)
 			if err != nil {
-				return err
+				return errors.Wrap(err, fmt.Sprintf("unmarshalling asset XDR from asset %s", asset.String()))
 			}
 			// TODO(vniu): flag txs that fail with unretriable errors in the db
 			err = c.pegOut(ctx, recipientID, asset, amount)
@@ -45,14 +47,14 @@ func (c *custodian) pegOut(ctx context.Context, recipient xdr.AccountId, asset x
 	tx, err := c.buildPegOutTx(recipient, asset, amount)
 	txenv, err := tx.Sign(c.seed)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "signing tx")
 	}
 	txstr, err := xdr.MarshalBase64(txenv.E)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "marshaling tx to base64")
 	}
 	_, err = c.hclient.SubmitTransaction(txstr)
-	return err
+	return errors.Wrap(err, "submitting tx")
 }
 
 func (c *custodian) buildPegOutTx(recipient xdr.AccountId, asset xdr.Asset, amount int) (*b.TransactionBuilder, error) {

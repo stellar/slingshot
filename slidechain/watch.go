@@ -4,11 +4,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"log"
 
+	"github.com/chain/txvm/errors"
 	"github.com/chain/txvm/protocol/bc"
 	"github.com/chain/txvm/protocol/txvm"
 	"github.com/stellar/go/clients/horizon"
-	"github.com/stellar/go/network"
 	"github.com/stellar/go/xdr"
 )
 
@@ -16,7 +17,7 @@ func (c *custodian) watchPegs(tx horizon.Transaction) {
 	var env xdr.TransactionEnvelope
 	err := xdr.SafeUnmarshalBase64(tx.EnvelopeXdr, &env)
 	if err != nil {
-		// TODO(vniu): error handling
+		log.Println("error unmarshaling tx: ", err)
 		return
 	}
 
@@ -34,31 +35,27 @@ func (c *custodian) watchPegs(tx horizon.Transaction) {
 		var q = `INSERT INTO pegs 
 				(txhash, operation_num, amount, asset_xdr, imported)
 				($1, $2, $3, $4, $5, $6)`
-		txhash, err := network.HashTransaction(&env.Tx, c.network)
-		if err != nil {
-			// TODO(vniu): error handling
-			return
-		}
 		assetXDR, err := payment.Asset.MarshalBinary()
 		if err != nil {
-			// TODO(vniu): error handling
+			log.Printf("error unmarshaling XDR from asset %s: %s", payment.Asset.String(), err)
 			return
 		}
-		_, err = c.db.Exec(q, txhash, i, payment.Amount, assetXDR, false)
+		_, err = c.db.Exec(q, tx.Hash, i, payment.Amount, assetXDR, false)
 		if err != nil {
-			// TODO(vniu): error handling
+			log.Println("error recording peg-in tx: ", err)
 			return
 		}
 		c.imports.Broadcast()
 	}
+	return
 }
 
-func (c *custodian) watchExports(ctx context.Context) {
+func (c *custodian) watchExports(ctx context.Context) error {
 	r := c.w.Reader()
 	for {
 		got, ok := r.Read(ctx)
 		if !ok {
-			return
+			return errors.New("error reading block from multichan")
 		}
 		b := got.(*bc.Block)
 		for _, tx := range b.Transactions {
@@ -110,7 +107,7 @@ func (c *custodian) watchExports(ctx context.Context) {
 					VALUES ($1, $2, $3, $4)`
 				_, err = c.db.ExecContext(ctx, q, tx.ID, stellarRecipient.Address(), retiredAmount, info.AssetXDR)
 				if err != nil {
-					// TODO(vniu): error handling
+					return errors.Wrap(err, "recording export tx")
 				}
 				c.exports.Broadcast()
 
