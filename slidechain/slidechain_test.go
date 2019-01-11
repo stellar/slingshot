@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/hex"
 	"fmt"
 	"io/ioutil"
@@ -11,6 +12,7 @@ import (
 	"net/url"
 	"os"
 	"reflect"
+	"sync"
 	"testing"
 	"time"
 
@@ -24,10 +26,12 @@ import (
 	"github.com/davecgh/go-spew/spew"
 	"github.com/golang/protobuf/proto"
 	_ "github.com/mattn/go-sqlite3"
+
+	"i10r.io/txapi/xdr"
 )
 
 func TestServer(t *testing.T) {
-	withTestServer(context.Background(), t, func(ctx context.Context, server *httptest.Server) {
+	withTestServer(context.Background(), t, func(ctx context.Context, _ *sql.DB, _ *submitter, server *httptest.Server) {
 		resp, err := http.Get(server.URL + "/get")
 		if err != nil {
 			t.Fatalf("getting initial block from new server: %s", err)
@@ -153,10 +157,40 @@ func TestServer(t *testing.T) {
 }
 
 func TestImport(t *testing.T) {
+	stellarAsset := xdr.Asset{Type: xdr.AssetTypeAssetTypeNative} // TODO(bobg): other cases with other asset types
+	assetXDR, err := stellarAsset.MarshalBinary()
+	if err != nil {
+		t.Fatal(err)
+	}
 
+	withTestServer(context.Background(), t, func(ctx context.Context, db *sql.DB, s *submitter, server *httptest.Server) {
+		r := s.w.Reader()
+		c := &custodian{
+			imports: sync.NewCond(new(sync.Mutex)),
+			db:      db,
+		}
+		go c.importFromPegs(ctx, s)
+		_, err := db.Exec("INSERT INTO pegs (txid, operation_num, amount, asset_xdr) VALUES ('txid', 1, 1, $1)", assetXDR)
+		if err != nil {
+			t.Fatal(err)
+		}
+		c.imports.Broadcast()
+		for {
+			item, ok := r.Read(ctx)
+			if !ok {
+				t.Fatal("cannot read a block")
+			}
+			block := item.(*bc.Block)
+			for _, tx := range block.Transactions {
+				if isImportTx(tx, 1, assetXDR, recipient) {
+					// xxx
+				}
+			}
+		}
+	})
 }
 
-func withTestServer(ctx context.Context, t *testing.T, fn func(context.Context, *httptest.Server)) {
+func withTestServer(ctx context.Context, t *testing.T, fn func(context.Context, *sql.DB, *submitter, *httptest.Server)) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -191,13 +225,14 @@ func withTestServer(ctx context.Context, t *testing.T, fn func(context.Context, 
 	}
 
 	w := multichan.New((*bc.Block)(nil))
+	s := &submitter{w: w}
 
 	http.HandleFunc("/get", get)
-	http.Handle("/submit", &submitter{w: w})
+	http.Handle("/submit", s)
 	server := httptest.NewServer(nil)
 	defer server.Close()
 
-	fn(ctx, server)
+	fn(ctx, db, s, server)
 }
 
 func unwraperr(err error) error {

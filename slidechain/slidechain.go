@@ -154,12 +154,7 @@ func main() {
 		}
 	}()
 
-	go func() {
-		err := c.importFromPegs(ctx, s)
-		if err != nil {
-			log.Fatal("error importing from pegs: ", err)
-		}
-	}()
+	go c.importFromPegs(ctx, s)
 
 	go func() {
 		err := c.watchExports(ctx)
