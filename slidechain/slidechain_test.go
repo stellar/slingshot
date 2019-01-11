@@ -163,6 +163,8 @@ func TestImport(t *testing.T) {
 
 	withTestServer(context.Background(), t, func(ctx context.Context, db *sql.DB, s *submitter, server *httptest.Server) {
 		r := s.w.Reader()
+		defer r.Dispose()
+
 		c := &custodian{
 			imports: sync.NewCond(new(sync.Mutex)),
 			db:      db,
