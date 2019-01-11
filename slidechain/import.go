@@ -66,7 +66,7 @@ func (c *custodian) buildImportTx(
 	}
 	sig := ed25519.Sign(c.privkey, vm.TxID[:])
 	buf = new(bytes.Buffer)
-	fmt.Fprintf(buf, "get x'%x' put put call\n", sig)
+	fmt.Fprintf(buf, "get x'%x' put call\n", sig)
 	tx2, err := asm.Assemble(buf.String())
 	if err != nil {
 		return nil, errors.Wrap(err, "assembling signature section")
