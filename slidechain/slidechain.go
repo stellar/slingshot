@@ -12,6 +12,7 @@ import (
 	"sync"
 
 	"github.com/bobg/multichan"
+	"github.com/chain/txvm/crypto/ed25519"
 	"github.com/chain/txvm/errors"
 	"github.com/chain/txvm/protocol"
 	"github.com/chain/txvm/protocol/bc"
@@ -36,6 +37,8 @@ type custodian struct {
 	imports   *sync.Cond
 	exports   *sync.Cond
 	network   string
+	pubkey    ed25519.PublicKey
+	privkey   ed25519.PrivateKey
 }
 
 func start(addr, dbfile, custID, horizonURL string) (*custodian, error) {
