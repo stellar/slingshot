@@ -29,16 +29,16 @@ var (
 )
 
 type custodian struct {
-	seed      string
-	accountID xdr.AccountId
-	db        *sql.DB
-	w         *multichan.W
-	hclient   *horizon.Client
-	imports   *sync.Cond
-	exports   *sync.Cond
-	network   string
-	pubkey    ed25519.PublicKey
-	privkey   ed25519.PrivateKey
+	seed          string
+	accountID     xdr.AccountId
+	db            *sql.DB
+	w             *multichan.W
+	hclient       *horizon.Client
+	imports       *sync.Cond
+	exports       *sync.Cond
+	network       string
+	privkey       ed25519.PrivateKey
+	initBlockHash bc.Hash
 }
 
 func start(addr, dbfile, custID, horizonURL string) (*custodian, error) {
@@ -63,6 +63,8 @@ func start(addr, dbfile, custID, horizonURL string) (*custodian, error) {
 		return nil, errors.Wrap(err, "error setting custodian account ID")
 	}
 
+	privkey := ed25519.PrivateKey([]byte("508c64dfa1522aba45219495bf484ee4d1edb6c2051bf2a4356b43b24084db1637235cf548300f400b9afd671b8f701175c6d2549b96415743ae61a58bb437d7"))
+
 	// TODO(vniu): set custodian account seed
 	return &custodian{
 		accountID: custAccountID,
@@ -72,6 +74,7 @@ func start(addr, dbfile, custID, horizonURL string) (*custodian, error) {
 		imports:   sync.NewCond(new(sync.Mutex)),
 		exports:   sync.NewCond(new(sync.Mutex)),
 		network:   root.NetworkPassphrase,
+		privkey:   privkey,
 	}, nil
 }
 
@@ -126,6 +129,7 @@ func main() {
 	}
 
 	initialBlockID := initialBlock.Hash()
+	c.initBlockHash = initialBlockID
 
 	listener, err := net.Listen("tcp", *addr)
 	if err != nil {
