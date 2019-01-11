@@ -103,13 +103,17 @@ func main() {
 	}
 	issueSeed = txvm.ContractSeed(issueProg)
 
-	var cur horizon.Cursor // TODO: initialize from db (if applicable)
-
 	c, err := start(ctx, *addr, *dbfile, *url)
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer c.db.Close()
+
+	var cur horizon.Cursor
+	err = c.db.QueryRow("SELECT cursor FROM custodian").Scan(&cur)
+	if err != nil && err != sql.ErrNoRows {
+		log.Fatal(err)
+	}
 
 	heights := make(chan uint64)
 	bs, err := newBlockStore(c.db, heights)

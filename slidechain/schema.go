@@ -14,11 +14,12 @@ CREATE TABLE IF NOT EXISTS snapshots (
 
 CREATE TABLE IF NOT EXISTS pegs (
   txid TEXT NOT NULL,
-  txhash BLOB NOT NULL,
   operation_num INTEGER NOT NULL,
   amount INTEGER NOT NULL,
   asset_xdr BLOB NOT NULL,
-  imported INTEGER NOT NULL DEFAULT 0
+  recipient_pubkey BLOB NOT NULL,
+  imported INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (txid, operation_num)
 );
 
 CREATE TABLE IF NOT EXISTS exports (
@@ -29,7 +30,8 @@ CREATE TABLE IF NOT EXISTS exports (
   exported INTEGER NOT NULL DEFAULT 0
 );
 
-CREATE TABLE IF NOT EXISTS custodian_account (
-  account_id TEXT NOT NULL PRIMARY KEY
+CREATE TABLE IF NOT EXISTS custodian (
+  account_id TEXT NOT NULL PRIMARY KEY,
+  cursor TEXT NOT NULL DEFAULT ''
 );
 `

@@ -14,7 +14,7 @@ import (
 
 func custodianAccount(ctx context.Context, db *sql.DB, hclient *horizon.Client) (*xdr.AccountId, error) {
 	var accountID string
-	err := db.QueryRow("SELECT account_id FROM custodian_account").Scan(&accountID)
+	err := db.QueryRow("SELECT account_id FROM custodian").Scan(&accountID)
 	if err == sql.ErrNoRows {
 		return makeNewCustodianAccount(ctx, db, hclient)
 	}
@@ -65,7 +65,7 @@ func makeNewCustodianAccount(ctx context.Context, db *sql.DB, hclient *horizon.C
 		}
 	}
 
-	_, err = db.Exec("INSERT OR IGNORE INTO custodian_account (account_id) VALUES ($1)", pair.Address())
+	_, err = db.Exec("INSERT INTO custodian (account_id) VALUES ($1)", pair.Address())
 	if err != nil {
 		return nil, errors.Wrapf(err, "storing new custodian account")
 	}

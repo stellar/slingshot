@@ -26,8 +26,6 @@ import (
 	"github.com/davecgh/go-spew/spew"
 	"github.com/golang/protobuf/proto"
 	_ "github.com/mattn/go-sqlite3"
-
-	"i10r.io/txapi/xdr"
 )
 
 func TestServer(t *testing.T) {
