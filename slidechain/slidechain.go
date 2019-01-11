@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	"encoding/hex"
 	"flag"
 	"fmt"
 	"log"
@@ -27,6 +28,8 @@ var (
 	initialBlock *bc.Block
 	chain        *protocol.Chain
 )
+
+const privkeyHexStr string = "508c64dfa1522aba45219495bf484ee4d1edb6c2051bf2a4356b43b24084db1637235cf548300f400b9afd671b8f701175c6d2549b96415743ae61a58bb437d7"
 
 type custodian struct {
 	seed          string
@@ -63,7 +66,11 @@ func start(addr, dbfile, custID, horizonURL string) (*custodian, error) {
 		return nil, errors.Wrap(err, "error setting custodian account ID")
 	}
 
-	privkey := ed25519.PrivateKey([]byte("508c64dfa1522aba45219495bf484ee4d1edb6c2051bf2a4356b43b24084db1637235cf548300f400b9afd671b8f701175c6d2549b96415743ae61a58bb437d7"))
+	privkeyStr, err := hex.DecodeString(privkeyHexStr)
+	if err != nil {
+		return nil, errors.Wrap(err, "error decoding custodian private key (hex)")
+	}
+	privkey := ed25519.PrivateKey([]byte(privkeyStr))
 
 	// TODO(vniu): set custodian account seed
 	return &custodian{
@@ -128,15 +135,14 @@ func main() {
 		log.Fatal(err)
 	}
 
-	initialBlockID := initialBlock.Hash()
-	c.initBlockHash = initialBlockID
+	c.initBlockHash = initialBlock.Hash()
 
 	listener, err := net.Listen("tcp", *addr)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	log.Printf("listening on %s, initial block ID %x", listener.Addr(), initialBlockID.Bytes())
+	log.Printf("listening on %s, initial block ID %x", listener.Addr(), c.initBlockHash.Bytes())
 
 	s := &submitter{w: c.w}
 

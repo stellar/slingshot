@@ -22,28 +22,28 @@ func (c *custodian) buildImportTx(
 	assetXDR []byte,
 	recipPubkey []byte,
 ) ([]byte, error) {
-	// Push recipient pubkey, quorum size (1), asset code,
+	// Push quorum size (1), recipient pubkey, refdata, asset code,
 	// amount, exp, blockid onto the arg stack.
 	buf := new(bytes.Buffer)
-	fmt.Fprintf(buf, "{x'%x'} put\n", recipPubkey)
 	fmt.Fprintf(buf, "1 put\n") // fixed quorum size, since only 1 signer
+	fmt.Fprintf(buf, "{x'%x'} put\n", recipPubkey)
+	fmt.Fprintf(buf, "'' put\n") // empty string, refdata input for PayToMultisigProg1
 	fmt.Fprintf(buf, "x'%x' put\n", assetXDR)
 	fmt.Fprintf(buf, "%d put\n", amount)
 	exp := int64(bc.Millis(time.Now().Add(5 * time.Minute)))
-	fmt.Fprintf(buf, "%d put\n", exp)
-	fmt.Fprintf(buf, "x'%x' put\n", c.initBlockHash.Bytes())
 
 	// now arg stack is set up, empty con stack
-	fmt.Fprintf(buf, "get get\n")                      // con stack: blockid, exp
-	fmt.Fprintf(buf, "nonce put\n")                    // empty con stack, ..., nonce on arg stack
-	fmt.Fprintf(buf, "x'%x' contract call", issueProg) // empty con stack, arg stack: ..., sigchecker, issuedval
+	fmt.Fprintf(buf, "x'%x' %d\n", c.initBlockHash.Bytes(), exp) // con stack: blockid, exp
+	fmt.Fprintf(buf, "nonce put\n")                              // empty con stack, ..., nonce on arg stack
+	fmt.Fprintf(buf, "x'%x' contract call", issueProg)           // empty con stack, arg stack: ..., sigchecker, issuedval
 
 	// pay issued value
-	fmt.Fprintf(buf, "get 0 split\n") // con stack: split issued value, zero issued val
-	fmt.Fprintf(buf, "swap\n")        // con stack: zero issued val, split issued val
-	fmt.Fprintf(buf, "get get get\n") // con stack: zero issued val, split issued val, sigchecker, {recippubkey}, 1
-	fmt.Fprintf(buf, "4 reverse\n")   // con stack: zero issued val, 1, {recippubkey}, sigchecker, split issued val
-	fmt.Fprintf(buf, "swap put put put put\n")
+	// TODO(debnil): Optimize item order and moves to reduce swap/reverse instructions.
+	fmt.Fprintf(buf, "get splitzero\n")        // con stack: split issued value, zero issued val
+	fmt.Fprintf(buf, "swap\n")                 // con stack: zero issued val, split issued val
+	fmt.Fprintf(buf, "get get get get\n")      // con stack: zero issued val, split issued val, sigchecker, refdata, {recippubkey}, 1
+	fmt.Fprintf(buf, "5 reverse\n")            // con stack: zero issued val, 1, {recippubkey}, refdata, sigchecker, split issued val
+	fmt.Fprintf(buf, "swap put put put put\n") // arg stack: sigchecker, split issued val, {recippubkey}, 1; con stack: zero issued val
 	fmt.Fprintf(buf, "x'%x' contract call\n", standard.PayToMultisigProg1)
 	fmt.Fprintf(buf, "finalize\n")
 	tx1, err := asm.Assemble(buf.String())
