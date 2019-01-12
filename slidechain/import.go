@@ -30,8 +30,8 @@ func (c *custodian) buildImportTx(
 
 	// now arg stack is set up, empty con stack
 	fmt.Fprintf(buf, "x'%x' %d\n", c.initBlockHash.Bytes(), exp) // con stack: blockid, exp
-	fmt.Fprintf(buf, "nonce put\n")                              // empty con stack, ..., nonce on arg stack
-	fmt.Fprintf(buf, "x'%x' contract call", issueProg)           // empty con stack, arg stack: ..., sigcheck, issuedval
+	fmt.Fprintf(buf, "nonce put\n")                              // empty con stack; ..., nonce on arg stack
+	fmt.Fprintf(buf, "x'%x' contract call", issueProg)           // empty con stack; arg stack: ..., sigcheck, issuedval
 
 	// pay issued value
 	fmt.Fprintf(buf, "get splitzero swap put\n")                           // con stack: zeroval; arg stack: sigcheck, issuedval
