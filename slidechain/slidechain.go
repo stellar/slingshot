@@ -29,7 +29,7 @@ var (
 	chain        *protocol.Chain
 )
 
-const privkeyHexStr string = "508c64dfa1522aba45219495bf484ee4d1edb6c2051bf2a4356b43b24084db1637235cf548300f400b9afd671b8f701175c6d2549b96415743ae61a58bb437d7"
+const privkeyHexStr = "508c64dfa1522aba45219495bf484ee4d1edb6c2051bf2a4356b43b24084db1637235cf548300f400b9afd671b8f701175c6d2549b96415743ae61a58bb437d7"
 
 type custodian struct {
 	seed          string
@@ -89,23 +89,13 @@ func main() {
 	ctx := context.Background()
 
 	var (
-		addr          = flag.String("addr", "localhost:2423", "server listen address")
-		dbfile        = flag.String("db", "slidechain.db", "path to db")
-		custID        = flag.String("custid", "", "custodian's Stellar account ID")
-		url           = flag.String("horizon", "https://horizon-testnet.stellar.org", "horizon server url")
-		custPubkeyHex = flag.String("custpubkey", "", "custodian txvm public key (hex string)")
+		addr   = flag.String("addr", "localhost:2423", "server listen address")
+		dbfile = flag.String("db", "slidechain.db", "path to db")
+		custID = flag.String("custid", "", "custodian's Stellar account ID")
+		url    = flag.String("horizon", "https://horizon-testnet.stellar.org", "horizon server url")
 	)
 
 	flag.Parse()
-
-	// Assemble issuance TxVM program for custodian.
-	issueProgSrc = fmt.Sprintf(issueProgFmt, *custPubkeyHex)
-	var err error
-	issueProg, err = asm.Assemble(issueProgSrc)
-	if err != nil {
-		log.Fatal(err)
-	}
-	issueSeed = txvm.ContractSeed(issueProg)
 
 	var cur horizon.Cursor // TODO: initialize from db (if applicable)
 
@@ -114,6 +104,25 @@ func main() {
 		log.Fatal(err)
 	}
 	defer c.db.Close()
+
+	// Assemble issuance TxVM program for custodian.
+	// TODO(debnil): Move this logic to the declaration site.
+	privkeyStr, err := hex.DecodeString(privkeyHexStr)
+	if err != nil {
+		log.Fatal("error decoding custodian private key (hex): ", err)
+	}
+	privkey := ed25519.PrivateKey([]byte(privkeyStr))
+	pubkey, ok := privkey.Public().([]byte)
+	if !ok {
+		log.Fatal("error converting custodian public key to byteslice")
+	}
+	pubkeyHex := hex.EncodeToString(pubkey)
+	issueProgSrc = fmt.Sprintf(issueProgFmt, pubkeyHex)
+	issueProg, err = asm.Assemble(issueProgSrc)
+	if err != nil {
+		log.Fatal(err)
+	}
+	issueSeed = txvm.ContractSeed(issueProg)
 
 	heights := make(chan uint64)
 	bs, err := newBlockStore(c.db, heights)

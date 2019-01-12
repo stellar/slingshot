@@ -10,7 +10,7 @@ const issueProgFmt = `
 	issue put                                        #                            sigchecker issuedval             {"A", vm.caller, issuedval.amount, issuedval.assetid, issuedval.anchor}
 `
 
-// These are initialized in main, after flag.Parse.
+// These are initialized in main.
 var (
 	issueProgSrc string
 	issueProg    []byte
