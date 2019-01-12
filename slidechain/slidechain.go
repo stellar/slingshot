@@ -97,14 +97,6 @@ func main() {
 
 	flag.Parse()
 
-	var cur horizon.Cursor // TODO: initialize from db (if applicable)
-
-	c, err := start(*addr, *dbfile, *custID, *url)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer c.db.Close()
-
 	// Assemble issuance TxVM program for custodian.
 	// TODO(debnil): Move this logic to the declaration site.
 	privkeyStr, err := hex.DecodeString(privkeyHexStr)
@@ -123,6 +115,14 @@ func main() {
 		log.Fatal(err)
 	}
 	issueSeed = txvm.ContractSeed(issueProg)
+
+	var cur horizon.Cursor // TODO: initialize from db (if applicable)
+
+	c, err := start(*addr, *dbfile, *custID, *url)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer c.db.Close()
 
 	heights := make(chan uint64)
 	bs, err := newBlockStore(c.db, heights)
