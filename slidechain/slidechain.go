@@ -115,8 +115,7 @@ func main() {
 	if !ok {
 		log.Fatal("error converting custodian public key to byteslice")
 	}
-	pubkeyHex := hex.EncodeToString(pubkey)
-	issueProgSrc = fmt.Sprintf(issueProgFmt, pubkeyHex)
+	issueProgSrc = fmt.Sprintf(issueProgFmt, pubkey)
 	issueProg, err = asm.Assemble(issueProgSrc)
 	if err != nil {
 		log.Fatal(err)
