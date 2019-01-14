@@ -34,10 +34,12 @@ func (c *custodian) buildImportTx(
 	fmt.Fprintf(buf, "x'%x' contract call", issueProg)           // empty con stack; arg stack: ..., sigcheck, issuedval
 
 	// pay issued value
-	fmt.Fprintf(buf, "get splitzero swap put\n")                           // con stack: zeroval; arg stack: sigcheck, issuedval
-	fmt.Fprintf(buf, "get 1 {x'%x'} ''\n", recipPubkey)                    // con stack: zeroval, 1, {recippubkey}, refdata
-	fmt.Fprintf(buf, "put put put\n")                                      // arg stack: sigchecker, issuedval, refdata, {recippubkey}, 1; con stack: zeroval
-	fmt.Fprintf(buf, "x'%x' contract call\n", standard.PayToMultisigProg1) // arg stack: sigcheck
+	fmt.Fprintf(buf, "get splitzero\n")                                    // con stack: issuedval, zeroval; arg stack: sigcheck
+	fmt.Fprintf(buf, "'' put\n")                                           // con stack: issuedval, zeroval; arg stack: sigcheck, refdata
+	fmt.Fprintf(buf, "swap put\n")                                         // con stack: zeroval; arg stack: sigcheck, refdata, issuedval
+	fmt.Fprintf(buf, "{x'%x'} put\n", recipPubkey)                         // con stack: zeroval; arg stack: sigcheck, refdata, issuedval, {recippubkey}
+	fmt.Fprintf(buf, "1 put\n")                                            // con stack: zeroval; arg stack: sigcheck, refdata, issuedval, {recippubkey}, quorum
+	fmt.Fprintf(buf, "x'%x' contract call\n", standard.PayToMultisigProg1) // con stack: zeroval; arg stack: sigcheck
 	fmt.Fprintf(buf, "finalize\n")
 	tx1, err := asm.Assemble(buf.String())
 	if err != nil {

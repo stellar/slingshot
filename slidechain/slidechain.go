@@ -98,7 +98,7 @@ func main() {
 	flag.Parse()
 
 	// Assemble issuance TxVM program for custodian.
-	// TODO(debnil): Move this logic to the declaration site.
+	// TODO(debnil): Move this logic to the issueProgFmt declaration site.
 	privkeyStr, err := hex.DecodeString(privkeyHexStr)
 	if err != nil {
 		log.Fatal("error decoding custodian private key (hex): ", err)
