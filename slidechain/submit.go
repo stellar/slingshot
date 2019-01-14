@@ -35,6 +35,54 @@ type submitter struct {
 	w *multichan.W
 }
 
+func (s *submitter) submitTx(tx bc.RawTx) error {
+	s.bbmu.Lock()
+	defer s.bbmu.Unlock()
+
+	if s.bb == nil {
+		s.bb = protocol.NewBlockBuilder()
+		nextBlockTime := time.Now().Add(blockInterval)
+
+		st := chain.State()
+		if st.Header == nil {
+			err = st.ApplyBlockHeader(initialBlock.BlockHeader)
+			if err != nil {
+				return errors.Wrap(err, "initializing empty state")
+			}
+		}
+
+		err := s.bb.Start(chain.State(), bc.Millis(nextBlockTime))
+		if err != nil {
+			return errors.Wrap(err, "starting a new tx pool")
+		}
+		log.Printf("starting new block, will commit at %s", nextBlockTime)
+		time.AfterFunc(blockInterval, func() {
+			s.bbmu.Lock()
+			defer s.bbmu.Unlock()
+
+			unsignedBlock, newSnapshot, err := s.bb.Build()
+			if err != nil {
+				return errors.Wrap(err, "building new block")
+			}
+			b := &bc.Block{UnsignedBlock: unsignedBlock}
+			err = chain.CommitAppliedBlock(ctx, b, newSnapshot)
+			if err != nil {
+				return errors.Wrap(err, "committing new block")
+			}
+
+			s.w.Write(b)
+			log.Printf("committed block %d with %d transaction(s)", unsignedBlock.Height, len(unsignedBlock.Transactions))
+			s.bb = nil
+		})
+	}
+
+	err = s.bb.AddTx(bc.NewCommitmentsTx(tx))
+	if err != nil {
+		return errors.Wrap(err, "adding tx to pool")
+	}
+	log.Printf("added tx %x to the pending block", tx.ID.Bytes())
+}
+
 func (s *submitter) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	ctx := req.Context()
 
@@ -57,55 +105,10 @@ func (s *submitter) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	s.bbmu.Lock()
-	defer s.bbmu.Unlock()
-
-	if s.bb == nil {
-		s.bb = protocol.NewBlockBuilder()
-		nextBlockTime := time.Now().Add(blockInterval)
-
-		st := chain.State()
-		if st.Header == nil {
-			err = st.ApplyBlockHeader(initialBlock.BlockHeader)
-			if err != nil {
-				httpErrf(w, http.StatusInternalServerError, "initializing empty state: %s", err)
-				return
-			}
-		}
-
-		err := s.bb.Start(chain.State(), bc.Millis(nextBlockTime))
-		if err != nil {
-			httpErrf(w, http.StatusInternalServerError, "starting a new tx pool: %s", err)
-			return
-		}
-		log.Printf("starting new block, will commit at %s", nextBlockTime)
-		time.AfterFunc(blockInterval, func() {
-			s.bbmu.Lock()
-			defer s.bbmu.Unlock()
-
-			unsignedBlock, newSnapshot, err := s.bb.Build()
-			if err != nil {
-				log.Fatal(errors.Wrap(err, "building new block"))
-			}
-			b := &bc.Block{UnsignedBlock: unsignedBlock}
-			err = chain.CommitAppliedBlock(ctx, b, newSnapshot)
-			if err != nil {
-				log.Fatal(errors.Wrap(err, "committing new block"))
-			}
-
-			s.w.Write(b)
-
-			log.Printf("committed block %d with %d transaction(s)", unsignedBlock.Height, len(unsignedBlock.Transactions))
-
-			s.bb = nil
-		})
-	}
-
-	err = s.bb.AddTx(bc.NewCommitmentsTx(tx))
+	err = s.submitTx(tx)
 	if err != nil {
-		httpErrf(w, http.StatusBadRequest, "adding tx to pool: %s", err)
+		httpErrf(w, http.StatusBadRequest, "submitting tx: %s", err)
 		return
 	}
-	log.Printf("added tx %x to the pending block", tx.ID.Bytes())
 	w.WriteHeader(http.StatusNoContent)
 }
