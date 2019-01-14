@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"log"
 
 	"github.com/bobg/sqlutil"
 	"github.com/chain/txvm/errors"
@@ -11,11 +12,23 @@ import (
 
 const baseFee = 10
 
-func (c *custodian) pegOutFromExports(ctx context.Context) error {
+// Runs as a goroutine.
+func (c *custodian) pegOutFromExports(ctx context.Context) {
 	c.exports.L.Lock()
 	defer c.exports.L.Unlock()
 	for {
-		c.exports.Wait()
+		ch := make(chan struct{})
+		go func() {
+			c.exports.Wait()
+			close(ch)
+		}()
+
+		select {
+		case <-ctx.Done():
+			return
+		case <-ch:
+		}
+
 		const q = `SELECT txid, recipient, amount, asset_xdr FROM exports WHERE exported=0`
 		err := sqlutil.ForQueryRows(ctx, c.db, q, func(txid, recipient string, amount int, assetXDR []byte) error {
 			var recipientID xdr.AccountId
@@ -37,7 +50,7 @@ func (c *custodian) pegOutFromExports(ctx context.Context) error {
 			return err
 		})
 		if err != nil {
-			return err
+			log.Fatalf("processing exports: %s", err)
 		}
 	}
 }

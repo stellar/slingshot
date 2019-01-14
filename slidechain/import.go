@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"log"
 	"math"
 	"time"
 
@@ -63,7 +64,18 @@ func (c *custodian) importFromPegs(ctx context.Context, s *submitter) error {
 	c.imports.L.Lock()
 	defer c.imports.L.Unlock()
 	for {
-		c.imports.Wait()
+		ch := make(chan struct{})
+		go func() {
+			c.imports.Wait()
+			close(ch)
+		}()
+
+		select {
+		case <-ctx.Done():
+			return
+		case <-ch:
+		}
+
 		var (
 			txids          []string
 			opNums         []int
@@ -78,6 +90,12 @@ func (c *custodian) importFromPegs(ctx context.Context, s *submitter) error {
 			assets = append(assets, asset)
 			recips = append(recips, recip)
 		})
+		if err == context.Canceled {
+			return
+		}
+		if err != nil {
+			log.Fatalf("querying pegs: %s", err)
+		}
 		for i, txid := range txids {
 			var (
 				opNum  = opNums[i]
@@ -87,7 +105,7 @@ func (c *custodian) importFromPegs(ctx context.Context, s *submitter) error {
 			)
 			err = c.doImport(ctx, s, txid, opNum, amount, asset, recip) // TODO(bobg): probably s should be a field in the custodian object
 			if err != nil {
-				return errors.Wrapf(err, "importing from tx %s, operation %d", txid, opNum)
+				log.Fatalf("importing from tx %s, operation %d: %s", txid, opNum, err)
 			}
 		}
 	}
