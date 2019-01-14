@@ -3,70 +3,106 @@ package main
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"log"
+	"time"
 
-	"github.com/chain/txvm/errors"
 	"github.com/chain/txvm/protocol/bc"
 	"github.com/chain/txvm/protocol/txvm"
+	i10rnet "github.com/interstellar/starlight/net"
 	"github.com/stellar/go/clients/horizon"
 	"github.com/stellar/go/xdr"
 )
 
-func (c *custodian) watchPegs(tx horizon.Transaction) {
-	var env xdr.TransactionEnvelope
-	err := xdr.SafeUnmarshalBase64(tx.EnvelopeXdr, &env)
-	if err != nil {
-		log.Fatal("error unmarshaling tx: ", err)
-		return
+// Runs as a goroutine until ctx is canceled.
+func (c *custodian) watchPegs(ctx context.Context) {
+	backoff := i10rnet.Backoff{Base: 100 * time.Millisecond}
+
+	var cur horizon.Cursor
+	err := c.db.QueryRow("SELECT cursor FROM custodian").Scan(&cur)
+	if err != nil && err != sql.ErrNoRows {
+		log.Fatal(err)
 	}
 
-	if env.Tx.Memo.Type != xdr.MemoTypeMemoHash {
-		return
-	}
-	recipientPubkey := (*env.Tx.Memo.Hash)[:]
+	for {
+		err := c.hclient.StreamTransactions(ctx, c.accountID.Address(), &cur, func(tx horizon.Transaction) {
+			var env xdr.TransactionEnvelope
+			err := xdr.SafeUnmarshalBase64(tx.EnvelopeXdr, &env)
+			if err != nil {
+				log.Fatal("error unmarshaling tx: ", err)
+			}
 
-	for i, op := range env.Tx.Operations {
-		if op.Body.Type != xdr.OperationTypePayment {
-			continue
-		}
-		payment := op.Body.PaymentOp
-		if !payment.Destination.Equals(c.accountID) {
-			continue
-		}
+			if env.Tx.Memo.Type != xdr.MemoTypeMemoHash {
+				return
+			}
+			recipientPubkey := (*env.Tx.Memo.Hash)[:]
 
-		// This operation is a payment to the custodian's account - i.e., a peg.
-		// We record it in the db, then wake up a goroutine that executes imports for not-yet-imported pegs.
-		var q = `INSERT INTO pegs 
-				(txid, operation_num, amount, asset_xdr, recipient_pubkey)
-				VALUES ($1, $2, $3, $4, $5)`
-		assetXDR, err := payment.Asset.MarshalBinary()
-		if err != nil {
-			log.Fatalf("error marshaling asset to XDR %s: %s", payment.Asset.String(), err)
+			for i, op := range env.Tx.Operations {
+				if op.Body.Type != xdr.OperationTypePayment {
+					continue
+				}
+				payment := op.Body.PaymentOp
+				if !payment.Destination.Equals(c.accountID) {
+					continue
+				}
+
+				// This operation is a payment to the custodian's account - i.e., a peg.
+				// We record it in the db, then wake up a goroutine that executes imports for not-yet-imported pegs.
+				const q = `INSERT INTO pegs 
+					(txid, operation_num, amount, asset_xdr, recipient_pubkey)
+					VALUES ($1, $2, $3, $4, $5)`
+				assetXDR, err := payment.Asset.MarshalBinary()
+				if err != nil {
+					log.Fatalf("error marshaling asset to XDR %s: %s", payment.Asset.String(), err)
+					return
+				}
+				_, err = c.db.Exec(q, tx.ID, i, payment.Amount, assetXDR, recipientPubkey)
+				if err != nil {
+					log.Fatal("error recording peg-in tx: ", err)
+					return
+				}
+				// Update cursor after successfully processing transaction
+				_, err = c.db.Exec(`UPDATE custodian SET cursor=$1 WHERE account_id=$2`, tx.PT, c.accountID.Address())
+				if err != nil {
+					log.Fatal("error updating cursor", err)
+					return
+				}
+				c.imports.Broadcast()
+			}
+		})
+		if err == context.Canceled {
 			return
 		}
-		_, err = c.db.Exec(q, tx.ID, i, payment.Amount, assetXDR, recipientPubkey)
 		if err != nil {
-			log.Fatal("error recording peg-in tx: ", err)
+			log.Fatal("error streaming from horizon: ", err)
+		}
+		if err = ctx.Err(); err != nil {
 			return
 		}
-		// Update cursor after successfully processing transaction
-		_, err = c.db.Exec(`UPDATE custodian SET cursor=$1 WHERE account_id=$2`, tx.PT, c.accountID.Address())
-		if err != nil {
-			log.Fatal("error updating cursor", err)
+		ch := make(chan struct{})
+		go func() {
+			time.Sleep(backoff.Next())
+			close(ch)
+		}()
+		select {
+		case <-ctx.Done():
 			return
+		case <-ch:
 		}
-		c.imports.Broadcast()
 	}
-	return
 }
 
-func (c *custodian) watchExports(ctx context.Context) error {
+// Runs as a goroutine.
+func (c *custodian) watchExports(ctx context.Context) {
 	r := c.w.Reader()
 	for {
 		got, ok := r.Read(ctx)
 		if !ok {
-			return errors.New("error reading block from multichan")
+			if ctx.Err() == context.Canceled {
+				return
+			}
+			log.Fatal("error reading block from multichan")
 		}
 		b := got.(*bc.Block)
 		for _, tx := range b.Transactions {
@@ -118,7 +154,7 @@ func (c *custodian) watchExports(ctx context.Context) error {
 					VALUES ($1, $2, $3, $4)`
 				_, err = c.db.ExecContext(ctx, q, tx.ID, stellarRecipient.Address(), retiredAmount, info.AssetXDR)
 				if err != nil {
-					return errors.Wrap(err, "recording export tx")
+					log.Fatalf("recording export tx: %s", err)
 				}
 				c.exports.Broadcast()
 

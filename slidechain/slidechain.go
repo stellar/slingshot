@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/bobg/multichan"
 	"github.com/chain/txvm/errors"
@@ -18,7 +17,6 @@ import (
 	"github.com/chain/txvm/protocol/bc"
 	"github.com/chain/txvm/protocol/txvm"
 	"github.com/chain/txvm/protocol/txvm/asm"
-	i10rnet "github.com/interstellar/starlight/net"
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/stellar/go/clients/horizon"
 	"github.com/stellar/go/xdr"
@@ -109,12 +107,6 @@ func main() {
 	}
 	defer c.db.Close()
 
-	var cur horizon.Cursor
-	err = c.db.QueryRow("SELECT cursor FROM custodian").Scan(&cur)
-	if err != nil && err != sql.ErrNoRows {
-		log.Fatal(err)
-	}
-
 	heights := make(chan uint64)
 	bs, err := newBlockStore(c.db, heights)
 	if err != nil {
@@ -147,37 +139,10 @@ func main() {
 	s := &submitter{w: c.w}
 
 	// Start streaming txs, importing, and exporting
-	go func() {
-		backoff := i10rnet.Backoff{Base: 100 * time.Millisecond}
-		for {
-			err := c.hclient.StreamTransactions(ctx, c.accountID.Address(), &cur, c.watchPegs)
-			if err != nil {
-				log.Println("error streaming from horizon: ", err)
-			}
-			time.Sleep(backoff.Next())
-		}
-	}()
-
-	go func() {
-		err := c.importFromPegs(ctx, s)
-		if err != nil {
-			log.Fatal("error importing from pegs: ", err)
-		}
-	}()
-
-	go func() {
-		err := c.watchExports(ctx)
-		if err != nil {
-			log.Fatal("error watching for export txs: ", err)
-		}
-	}()
-
-	go func() {
-		err := c.pegOutFromExports(ctx)
-		if err != nil {
-			log.Fatal("error pegging out from exports: ", err)
-		}
-	}()
+	go c.watchPegs(ctx)
+	go c.importFromPegs(ctx, s)
+	go c.watchExports(ctx)
+	go c.pegOutFromExports(ctx)
 
 	http.Handle("/submit", s)
 	http.HandleFunc("/get", get)
