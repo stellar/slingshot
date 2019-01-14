@@ -17,17 +17,10 @@ func (c *custodian) pegOutFromExports(ctx context.Context) {
 	c.exports.L.Lock()
 	defer c.exports.L.Unlock()
 	for {
-		ch := make(chan struct{})
-		go func() {
-			c.exports.Wait()
-			close(ch)
-		}()
-
-		select {
-		case <-ctx.Done():
+		if err := ctx.Err(); err != nil {
 			return
-		case <-ch:
 		}
+		c.exports.Wait()
 
 		const q = `SELECT txid, recipient, amount, asset_xdr FROM exports WHERE exported=0`
 		err := sqlutil.ForQueryRows(ctx, c.db, q, func(txid, recipient string, amount int, assetXDR []byte) error {

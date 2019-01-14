@@ -65,18 +65,12 @@ func (c *custodian) importFromPegs(ctx context.Context, s *submitter) {
 
 	c.imports.L.Lock()
 	defer c.imports.L.Unlock()
-	for {
-		ch := make(chan struct{})
-		go func() {
-			c.imports.Wait()
-			close(ch)
-		}()
 
-		select {
-		case <-ctx.Done():
+	for {
+		if err := ctx.Err(); err != nil {
 			return
-		case <-ch:
 		}
+		c.imports.Wait()
 
 		var (
 			txids             []string

@@ -192,6 +192,7 @@ func TestImport(t *testing.T) {
 			block := item.(*bc.Block)
 			for _, tx := range block.Transactions {
 				if isImportTx(tx, 1, assetXDR, testRecipPubKey) {
+					log.Printf("found import tx %x", tx.Program)
 					return
 				}
 			}
@@ -201,33 +202,45 @@ func TestImport(t *testing.T) {
 
 // Expected log is:
 //   {"N", ...}
+//   {"R", ...}
 //   {"A", contextID, amount, assetID, anchor}
 //   {"L", ...}
 //   {"O", caller, outputID}
 //   {"F", ...}
 func isImportTx(tx *bc.Tx, amount int64, assetXDR []byte, recipPubKey ed25519.PublicKey) bool {
-	if len(tx.Log) != 5 {
+	if len(tx.Log) != 6 {
+		// log.Printf("len(tx.Log) = %d", len(tx.Log))
 		return false
 	}
 	if tx.Log[0][0].(txvm.Bytes)[0] != txvm.NonceCode {
+		// log.Printf("tx.Log[0][0] = %s", string(tx.Log[0][0].(txvm.Bytes)[0]))
 		return false
 	}
-	if tx.Log[1][0].(txvm.Bytes)[0] != txvm.IssueCode {
+	if tx.Log[1][0].(txvm.Bytes)[0] != txvm.TimerangeCode {
+		// log.Printf("tx.Log[1][0] = %s", string(tx.Log[1][0].(txvm.Bytes)[0]))
 		return false
 	}
-	if int64(tx.Log[1][2].(txvm.Int)) != amount {
+	if tx.Log[2][0].(txvm.Bytes)[0] != txvm.IssueCode {
+		// log.Printf("tx.Log[2][0] = %s", string(tx.Log[2][0].(txvm.Bytes)[0]))
+		return false
+	}
+	if int64(tx.Log[2][2].(txvm.Int)) != amount {
+		// log.Printf("tx.Log[2][2] = %d (want %d)", tx.Log[2][2].(txvm.Int), amount)
 		return false
 	}
 	wantAssetID := txvm.AssetID(issueSeed[:], assetXDR)
-	if !bytes.Equal(wantAssetID[:], tx.Log[1][3].(txvm.Bytes)) {
+	if !bytes.Equal(wantAssetID[:], tx.Log[2][3].(txvm.Bytes)) {
+		// log.Printf("tx.Log[2][3] = %x (want %x)", tx.Log[2][3].(txvm.Bytes), wantAssetID[:])
 		return false
 	}
 	issueAnchor := tx.Log[2][4].(txvm.Bytes)
 	splitAnchor := txvm.VMHash("Split1", issueAnchor) // the anchor of the issued value after a zeroval is split off of it
-	if tx.Log[2][0].(txvm.Bytes)[0] != txvm.LogCode {
+	if tx.Log[3][0].(txvm.Bytes)[0] != txvm.LogCode {
+		// log.Printf("tx.Log[3][0] = %s", string(tx.Log[3][0].(txvm.Bytes)))
 		return false
 	}
-	if tx.Log[3][0].(txvm.Bytes)[0] != txvm.OutputCode {
+	if tx.Log[4][0].(txvm.Bytes)[0] != txvm.OutputCode {
+		// log.Printf("tx.Log[4][0] = %s", string(tx.Log[4][0].(txvm.Bytes)))
 		return false
 	}
 
@@ -235,10 +248,11 @@ func isImportTx(tx *bc.Tx, amount int64, assetXDR []byte, recipPubKey ed25519.Pu
 	standard.Snapshot(b, 1, []ed25519.PublicKey{testRecipPubKey}, 1, bc.NewHash(wantAssetID), splitAnchor[:], standard.PayToMultisigSeed1[:])
 	snapshotBytes := b.Build()
 	wantOutputID := txvm.VMHash("SnapshotID", snapshotBytes)
-	if !bytes.Equal(wantOutputID[:], tx.Log[3][2].(txvm.Bytes)) {
+	if !bytes.Equal(wantOutputID[:], tx.Log[4][2].(txvm.Bytes)) {
+		// log.Printf("tx.Log[4][2] = %x (want %x)", tx.Log[4][2].(txvm.Bytes), wantOutputID[:])
 		return false
 	}
-	// No need to test tx.Log[4], it has to be a finalize entry.
+	// No need to test tx.Log[5], it has to be a finalize entry.
 	return true
 }
 
