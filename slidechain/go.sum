@@ -8,12 +8,16 @@ github.com/chain/chain v0.0.0-20180621232336-4e9b90d76fe9 h1:u49VY8yGWqWk0suKVdl
 github.com/chain/chain v0.0.0-20180621232336-4e9b90d76fe9/go.mod h1:2lnWnp7UXzOy3JOWa3mlgrVqrrmPf3btNHciGsrfZf8=
 github.com/chain/txvm v0.0.0-20181214231834-cac41849b193 h1:DAPi5RAwFy731jLN68boetrgLn88M7NthvmoHJRD6Pg=
 github.com/chain/txvm v0.0.0-20181214231834-cac41849b193/go.mod h1:JCKwpchmBscMk5RkqAaiLojePlECHCVh+eESgm4Nsp8=
+github.com/chain/txvm v0.0.0-20190114205213-d4707728bddc h1:5xAPjQkdSf3CJIViBkX9dRNbx8Clxqrq7e1YCTJiR5s=
+github.com/chain/txvm v0.0.0-20190114205213-d4707728bddc/go.mod h1:JCKwpchmBscMk5RkqAaiLojePlECHCVh+eESgm4Nsp8=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/go-errors/errors v1.0.1 h1:LUHzmkK3GUKUrL/1gfBUxAHzcev3apQlezX/+O7ma6w=
 github.com/go-errors/errors v1.0.1/go.mod h1:f4zRHt4oKfwPJE5k8C9vpYG+aDHdBFUsgrm6/TyX73Q=
 github.com/golang/protobuf v1.2.0 h1:P3YflyNX/ehuJFLhxviNdFxQPkGK5cDcApsge1SqnvM=
 github.com/golang/protobuf v1.2.0/go.mod h1:6lQm79b+lXiMfvg/cZm0SGofjICqVBUtrP5yJMmIC1U=
+github.com/interstellar/starlight v0.1.0-alpha h1:7IUbIgb5uCbVlCzYGc41tCE9sPPzD5zMLUcQBagJWMY=
+github.com/interstellar/starlight v0.1.0-alpha/go.mod h1:9mN4SPb4EDIv1vdTx+LjPf4imkmDePd5ixnAP/QXgh8=
 github.com/lib/pq v1.0.0 h1:X5PMW56eZitiTeO7tKzZxFCSpbFZJtkMMooicw2us9A=
 github.com/lib/pq v1.0.0/go.mod h1:5WUZQaWbwv1U+lTReE5YruASi9Al49XbQIvNi/34Woo=
 github.com/manucorporat/sse v0.0.0-20160126180136-ee05b128a739 h1:ykXz+pRRTibcSjG1yRhpdSHInF8yZY/mfn+Rz2Nd1rE=
