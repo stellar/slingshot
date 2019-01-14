@@ -24,6 +24,7 @@ import (
 	"github.com/chain/txvm/protocol/txbuilder"
 	"github.com/chain/txvm/protocol/txbuilder/standard"
 	"github.com/chain/txvm/protocol/txvm"
+	"github.com/chain/txvm/protocol/txvm/txvmutil"
 	"github.com/davecgh/go-spew/spew"
 	"github.com/golang/protobuf/proto"
 	_ "github.com/mattn/go-sqlite3"
@@ -223,13 +224,22 @@ func isImportTx(tx *bc.Tx, amount int64, assetXDR []byte, recipPubKey ed25519.Pu
 	if !bytes.Equal(wantAssetID[:], tx.Log[1][3].(txvm.Bytes)) {
 		return false
 	}
+	issueAnchor := tx.Log[2][4].(txvm.Bytes)
+	splitAnchor := txvm.VMHash("Split1", issueAnchor) // the anchor of the issued value after a zeroval is split off of it
 	if tx.Log[2][0].(txvm.Bytes)[0] != txvm.LogCode {
 		return false
 	}
 	if tx.Log[3][0].(txvm.Bytes)[0] != txvm.OutputCode {
 		return false
 	}
-	// xxx compute wantOutputID, compare it with txvm.Log[3][2]
+
+	b := new(txvmutil.Builder)
+	snapshotBuilder := standard.Snapshot(b, 1, []ed25519.PublicKey{testRecipPubKey}, 1, bc.NewHash(wantAssetID), splitAnchor[:], standard.PayToMultisigSeed1[:])
+	snapshotBytes := b.Build()
+	wantOutputID := txvm.VMHash("SnapshotID", snapshotBytes)
+	if !bytes.Equal(wantOutputID[:], txvm.Log[3][2]) {
+		return false
+	}
 	// No need to test tx.Log[4], it has to be a finalize entry.
 	return true
 }
