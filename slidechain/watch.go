@@ -57,13 +57,13 @@ func (c *custodian) watchPegs(ctx context.Context) {
 					log.Fatalf("error marshaling asset to XDR %s: %s", payment.Asset.String(), err)
 					return
 				}
-				_, err = c.db.Exec(q, tx.ID, i, payment.Amount, assetXDR, recipientPubkey)
+				_, err = c.db.ExecContext(ctx, q, tx.ID, i, payment.Amount, assetXDR, recipientPubkey)
 				if err != nil {
 					log.Fatal("error recording peg-in tx: ", err)
 					return
 				}
 				// Update cursor after successfully processing transaction
-				_, err = c.db.Exec(`UPDATE custodian SET cursor=$1 WHERE account_id=$2`, tx.PT, c.accountID.Address())
+				_, err = c.db.ExecContext(ctx, `UPDATE custodian SET cursor=$1 WHERE account_id=$2`, tx.PT, c.accountID.Address())
 				if err != nil {
 					log.Fatal("error updating cursor", err)
 					return
@@ -76,9 +76,6 @@ func (c *custodian) watchPegs(ctx context.Context) {
 		}
 		if err != nil {
 			log.Fatal("error streaming from horizon: ", err)
-		}
-		if err = ctx.Err(); err != nil {
-			return
 		}
 		ch := make(chan struct{})
 		go func() {
