@@ -25,8 +25,6 @@ var (
 )
 
 func mustAssemble(inp string) []byte {
-	log.Printf("assembling %s", inp)
-
 	result, err := asm.Assemble(inp)
 	if err != nil {
 		log.Fatal(err)

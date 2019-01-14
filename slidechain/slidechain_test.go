@@ -33,7 +33,7 @@ import (
 )
 
 func TestServer(t *testing.T) {
-	withTestServer(context.Background(), t, func(ctx context.Context, _ *sql.DB, _ *submitter, server *httptest.Server) {
+	withTestServer(context.Background(), t, func(ctx context.Context, _ *sql.DB, _ *submitter, server *httptest.Server, _ *protocol.Chain) {
 		resp, err := http.Get(server.URL + "/get")
 		if err != nil {
 			t.Fatalf("getting initial block from new server: %s", err)
@@ -167,14 +167,15 @@ func TestImport(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	withTestServer(context.Background(), t, func(ctx context.Context, db *sql.DB, s *submitter, server *httptest.Server) {
+	withTestServer(context.Background(), t, func(ctx context.Context, db *sql.DB, s *submitter, server *httptest.Server, chain *protocol.Chain) {
 		r := s.w.Reader()
 		defer r.Dispose()
 
 		c := &custodian{
-			imports: sync.NewCond(new(sync.Mutex)),
-			db:      db,
-			privkey: custodianPrv,
+			imports:       sync.NewCond(new(sync.Mutex)),
+			db:            db,
+			privkey:       custodianPrv,
+			initBlockHash: chain.InitialBlockHash,
 		}
 		go c.importFromPegs(ctx, s)
 		_, err := db.Exec("INSERT INTO pegs (txid, operation_num, amount, asset_xdr, recipient_pubkey) VALUES ('txid', 1, 1, $1, $2)", assetXDR, testRecipPubKey)
@@ -254,7 +255,7 @@ func isImportTx(tx *bc.Tx, amount int64, assetXDR []byte, recipPubKey ed25519.Pu
 	return true
 }
 
-func withTestServer(ctx context.Context, t *testing.T, fn func(context.Context, *sql.DB, *submitter, *httptest.Server)) {
+func withTestServer(ctx context.Context, t *testing.T, fn func(context.Context, *sql.DB, *submitter, *httptest.Server, *protocol.Chain)) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -297,7 +298,7 @@ func withTestServer(ctx context.Context, t *testing.T, fn func(context.Context, 
 	server := httptest.NewServer(mux)
 	defer server.Close()
 
-	fn(ctx, db, s, server)
+	fn(ctx, db, s, server, chain)
 }
 
 func unwraperr(err error) error {
