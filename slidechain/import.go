@@ -112,7 +112,20 @@ func (c *custodian) importFromPegs(ctx context.Context, s *submitter) {
 }
 
 func (c *custodian) doImport(ctx context.Context, s *submitter, txid string, opNum int, amount int64, assetXDR, recip []byte) error {
-	// TODO: build and submit import transaction
+	importTxBytes, err := c.buildImportTx(amount, assetXdr, recip)
+	if err != nil {
+		return errors.Wrap(err, "building import tx")
+	}
+	var runlimit int64
+	importTx, err := bc.NewTx(importTxBytes, 3, math.MaxInt64, txvm.GetRunlimit(&runlimit))
+	if err != nil {
+		return errors.Wrap(err, "computing transaction ID")
+	}
+	importTx.Runlimit = math.MaxInt64 - runlimit
+	err = s.submitTx(importTx)
+	if err != nil {
+		return errors.Wrap(err, "submitting import tx")
+	}
 	_, err := c.db.ExecContext(ctx, `UPDATE pegs SET imported=1 WHERE txid = $1 AND operation_num = $2`, txid, opNum)
 	return errors.Wrapf(err, "setting imported=1 for txid %s, operation %d", txid, opNum)
 }
