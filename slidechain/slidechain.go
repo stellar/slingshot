@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/bobg/multichan"
 	"github.com/chain/txvm/crypto/ed25519"
@@ -19,6 +20,7 @@ import (
 	"github.com/chain/txvm/protocol/bc"
 	"github.com/chain/txvm/protocol/txvm"
 	"github.com/chain/txvm/protocol/txvm/asm"
+	i10rnet "github.com/interstellar/starlight/net"
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/stellar/go/clients/horizon"
 	"github.com/stellar/go/xdr"
@@ -44,10 +46,10 @@ type custodian struct {
 	initBlockHash bc.Hash
 }
 
-func start(addr, dbfile, custID, horizonURL string) (*custodian, error) {
-	db, err := sql.Open("sqlite3", dbfile)
+func start(ctx context.Context, addr, dbfile, horizonURL string) (*custodian, error) {
+	db, err := startdb(dbfile)
 	if err != nil {
-		return nil, errors.Wrap(err, "error opening db")
+		return nil, errors.Wrap(err, "starting db")
 	}
 
 	hclient := &horizon.Client{
@@ -57,13 +59,12 @@ func start(addr, dbfile, custID, horizonURL string) (*custodian, error) {
 
 	root, err := hclient.Root()
 	if err != nil {
-		return nil, errors.Wrap(err, "error getting horizon client root")
+		return nil, errors.Wrap(err, "getting horizon client root")
 	}
 
-	var custAccountID xdr.AccountId
-	err = custAccountID.SetAddress(custID)
+	custAccountID, err := custodianAccount(ctx, db, hclient)
 	if err != nil {
-		return nil, errors.Wrap(err, "error setting custodian account ID")
+		return nil, errors.Wrap(err, "creating/fetching custodian account")
 	}
 
 	privkeyStr, err := hex.DecodeString(privkeyHexStr)
@@ -74,7 +75,7 @@ func start(addr, dbfile, custID, horizonURL string) (*custodian, error) {
 
 	// TODO(vniu): set custodian account seed
 	return &custodian{
-		accountID: custAccountID,
+		accountID: *custAccountID, // TODO(tessr): should this field be a pointer to an xdr.AccountID?
 		db:        db,
 		w:         multichan.New((*bc.Block)(nil)),
 		hclient:   hclient,
@@ -83,6 +84,15 @@ func start(addr, dbfile, custID, horizonURL string) (*custodian, error) {
 		network:   root.NetworkPassphrase,
 		privkey:   privkey,
 	}, nil
+}
+
+func startdb(dbfile string) (*sql.DB, error) {
+	db, err := sql.Open("sqlite3", dbfile)
+	if err != nil {
+		return nil, errors.Wrap(err, "opening db")
+	}
+	err = setSchema(db)
+	return db, errors.Wrap(err, "creating schema")
 }
 
 func main() {
@@ -116,13 +126,17 @@ func main() {
 	}
 	issueSeed = txvm.ContractSeed(issueProg)
 
-	var cur horizon.Cursor // TODO: initialize from db (if applicable)
-
-	c, err := start(*addr, *dbfile, *custID, *url)
+	c, err := start(ctx, *addr, *dbfile, *url)
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer c.db.Close()
+
+	var cur horizon.Cursor
+	err = c.db.QueryRow("SELECT cursor FROM custodian").Scan(&cur)
+	if err != nil && err != sql.ErrNoRows {
+		log.Fatal(err)
+	}
 
 	heights := make(chan uint64)
 	bs, err := newBlockStore(c.db, heights)
@@ -157,31 +171,45 @@ func main() {
 
 	// Start streaming txs, importing, and exporting
 	go func() {
-		err := c.hclient.StreamTransactions(ctx, *custID, &cur, c.watchPegs)
-		if err != nil {
-			// TODO: error handling
+		backoff := i10rnet.Backoff{Base: 100 * time.Millisecond}
+		for {
+			err := c.hclient.StreamTransactions(ctx, c.accountID.Address(), &cur, c.watchPegs)
+			if err != nil {
+				log.Println("error streaming from horizon: ", err)
+			}
+			time.Sleep(backoff.Next())
 		}
 	}()
 
 	go func() {
 		err := c.importFromPegs(ctx, s)
 		if err != nil {
-			// TODO(vniu): error handling
+			log.Fatal("error importing from pegs: ", err)
 		}
 	}()
 
-	go c.watchExports(ctx)
+	go func() {
+		err := c.watchExports(ctx)
+		if err != nil {
+			log.Fatal("error watching for export txs: ", err)
+		}
+	}()
 
 	go func() {
 		err := c.pegOutFromExports(ctx)
 		if err != nil {
-			// TODO(vniu): error handling
+			log.Fatal("error pegging out from exports: ", err)
 		}
 	}()
 
 	http.Handle("/submit", s)
 	http.HandleFunc("/get", get)
 	http.Serve(listener, nil)
+}
+
+func setSchema(db *sql.DB) error {
+	_, err := db.Exec(schema)
+	return errors.Wrap(err, "creating db schema")
 }
 
 func httpErrf(w http.ResponseWriter, code int, msgfmt string, args ...interface{}) {
