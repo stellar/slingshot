@@ -129,7 +129,7 @@ func (c *custodian) doImport(ctx context.Context, s *submitter, txid string, opN
 		return errors.Wrap(err, "computing transaction ID")
 	}
 	importTx.Runlimit = math.MaxInt64 - runlimit
-	err = s.submitTx(importTx.RawTx)
+	err = s.submitTx(ctx, importTx)
 	if err != nil {
 		return errors.Wrap(err, "submitting import tx")
 	}
