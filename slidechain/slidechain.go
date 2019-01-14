@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	"encoding/hex"
 	"flag"
 	"fmt"
 	"log"
@@ -86,28 +87,30 @@ func main() {
 	ctx := context.Background()
 
 	var (
-		addr          = flag.String("addr", "localhost:2423", "server listen address")
-		dbfile        = flag.String("db", "slidechain.db", "path to db")
-		url           = flag.String("horizon", "https://horizon-testnet.stellar.org", "horizon server url")
-		custPubkeyHex = flag.String("custpubkey", "", "custodian txvm public key (hex string)")
+		addr   = flag.String("addr", "localhost:2423", "server listen address")
+		dbfile = flag.String("db", "slidechain.db", "path to db")
+		url    = flag.String("horizon", "https://horizon-testnet.stellar.org", "horizon server url")
 	)
 
 	flag.Parse()
-
-	// Assemble issuance TxVM program for custodian.
-	issueProgSrc = fmt.Sprintf(issueProgFmt, *custPubkeyHex)
-	var err error
-	issueProg, err = asm.Assemble(issueProgSrc)
-	if err != nil {
-		log.Fatal(err)
-	}
-	issueSeed = txvm.ContractSeed(issueProg)
 
 	c, err := start(ctx, *addr, *dbfile, *url)
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer c.db.Close()
+
+	// Assemble issuance TxVM program for custodian.
+	hexpubkey, err := convertToHex(c.accountID)
+	if err != nil {
+		log.Fatal(err)
+	}
+	issueProgSrc = fmt.Sprintf(issueProgFmt, hexpubkey)
+	issueProg, err = asm.Assemble(issueProgSrc)
+	if err != nil {
+		log.Fatal(err)
+	}
+	issueSeed = txvm.ContractSeed(issueProg)
 
 	var cur horizon.Cursor
 	err = c.db.QueryRow("SELECT cursor FROM custodian").Scan(&cur)
@@ -182,6 +185,14 @@ func main() {
 	http.Handle("/submit", s)
 	http.HandleFunc("/get", get)
 	http.Serve(listener, nil)
+}
+
+func convertToHex(accountID xdr.AccountId) (string, error) {
+	bytes, err := accountID.MarshalBinary()
+	if err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(bytes), nil
 }
 
 func setSchema(db *sql.DB) error {
