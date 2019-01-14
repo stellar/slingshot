@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -35,7 +36,7 @@ type submitter struct {
 	w *multichan.W
 }
 
-func (s *submitter) submitTx(tx bc.RawTx) error {
+func (s *submitter) submitTx(ctx context.Context, tx *bc.Tx) error {
 	s.bbmu.Lock()
 	defer s.bbmu.Unlock()
 
@@ -45,7 +46,7 @@ func (s *submitter) submitTx(tx bc.RawTx) error {
 
 		st := chain.State()
 		if st.Header == nil {
-			err = st.ApplyBlockHeader(initialBlock.BlockHeader)
+			err := st.ApplyBlockHeader(initialBlock.BlockHeader)
 			if err != nil {
 				return errors.Wrap(err, "initializing empty state")
 			}
@@ -62,12 +63,12 @@ func (s *submitter) submitTx(tx bc.RawTx) error {
 
 			unsignedBlock, newSnapshot, err := s.bb.Build()
 			if err != nil {
-				return errors.Wrap(err, "building new block")
+				log.Fatalf("building new block: %s", err)
 			}
 			b := &bc.Block{UnsignedBlock: unsignedBlock}
 			err = chain.CommitAppliedBlock(ctx, b, newSnapshot)
 			if err != nil {
-				return errors.Wrap(err, "committing new block")
+				log.Fatalf("committing new block: %s", err)
 			}
 
 			s.w.Write(b)
@@ -76,11 +77,12 @@ func (s *submitter) submitTx(tx bc.RawTx) error {
 		})
 	}
 
-	err = s.bb.AddTx(bc.NewCommitmentsTx(tx))
+	err := s.bb.AddTx(bc.NewCommitmentsTx(tx))
 	if err != nil {
 		return errors.Wrap(err, "adding tx to pool")
 	}
 	log.Printf("added tx %x to the pending block", tx.ID.Bytes())
+	return nil
 }
 
 func (s *submitter) ServeHTTP(w http.ResponseWriter, req *http.Request) {
@@ -105,7 +107,7 @@ func (s *submitter) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	err = s.submitTx(tx)
+	err = s.submitTx(ctx, tx)
 	if err != nil {
 		httpErrf(w, http.StatusBadRequest, "submitting tx: %s", err)
 		return
