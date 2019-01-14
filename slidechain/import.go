@@ -119,7 +119,7 @@ func (c *custodian) importFromPegs(ctx context.Context, s *submitter) {
 func (c *custodian) doImport(ctx context.Context, s *submitter, txid string, opNum int, amount int64, assetXDR, recip []byte) error {
 	log.Printf("doing import from tx %s, op %d: %d of asset %x for recipient %x", txid, opNum, amount, assetXDR, recip)
 
-	importTxBytes, err := c.buildImportTx(amount, assetXdr, recip)
+	importTxBytes, err := c.buildImportTx(amount, assetXDR, recip)
 	if err != nil {
 		return errors.Wrap(err, "building import tx")
 	}
@@ -129,10 +129,10 @@ func (c *custodian) doImport(ctx context.Context, s *submitter, txid string, opN
 		return errors.Wrap(err, "computing transaction ID")
 	}
 	importTx.Runlimit = math.MaxInt64 - runlimit
-	err = s.submitTx(importTx)
+	err = s.submitTx(importTx.RawTx)
 	if err != nil {
 		return errors.Wrap(err, "submitting import tx")
 	}
-	_, err := c.db.ExecContext(ctx, `UPDATE pegs SET imported=1 WHERE txid = $1 AND operation_num = $2`, txid, opNum)
+	_, err = c.db.ExecContext(ctx, `UPDATE pegs SET imported=1 WHERE txid = $1 AND operation_num = $2`, txid, opNum)
 	return errors.Wrapf(err, "setting imported=1 for txid %s, operation %d", txid, opNum)
 }
