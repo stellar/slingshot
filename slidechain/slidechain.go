@@ -99,7 +99,6 @@ func main() {
 	var (
 		addr   = flag.String("addr", "localhost:2423", "server listen address")
 		dbfile = flag.String("db", "slidechain.db", "path to db")
-		custID = flag.String("custid", "", "custodian's Stellar account ID")
 		url    = flag.String("horizon", "https://horizon-testnet.stellar.org", "horizon server url")
 	)
 

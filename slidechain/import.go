@@ -60,7 +60,7 @@ func (c *custodian) buildImportTx(
 	return tx2, nil
 }
 
-func (c *custodian) importFromPegs(ctx context.Context, s *submitter) error {
+func (c *custodian) importFromPegs(ctx context.Context, s *submitter) {
 	c.imports.L.Lock()
 	defer c.imports.L.Unlock()
 	for {
