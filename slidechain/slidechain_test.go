@@ -7,11 +7,13 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"os"
 	"reflect"
+	"sync"
 	"testing"
 	"time"
 
@@ -22,13 +24,16 @@ import (
 	"github.com/chain/txvm/protocol/bc"
 	"github.com/chain/txvm/protocol/txbuilder"
 	"github.com/chain/txvm/protocol/txbuilder/standard"
+	"github.com/chain/txvm/protocol/txvm"
+	"github.com/chain/txvm/protocol/txvm/txvmutil"
 	"github.com/davecgh/go-spew/spew"
 	"github.com/golang/protobuf/proto"
 	_ "github.com/mattn/go-sqlite3"
+	"github.com/stellar/go/xdr"
 )
 
 func TestServer(t *testing.T) {
-	withTestServer(context.Background(), t, func(ctx context.Context, _ *sql.DB, _ *submitter, server *httptest.Server) {
+	withTestServer(context.Background(), t, func(ctx context.Context, _ *sql.DB, _ *submitter, server *httptest.Server, _ *protocol.Chain) {
 		resp, err := http.Get(server.URL + "/get")
 		if err != nil {
 			t.Fatalf("getting initial block from new server: %s", err)
@@ -153,7 +158,95 @@ func TestServer(t *testing.T) {
 	})
 }
 
-func withTestServer(ctx context.Context, t *testing.T, fn func(context.Context, *sql.DB, *submitter, *httptest.Server)) {
+var testRecipPubKey = mustDecodeHex("cca6ae12527fcb3f8d5648868a757ebb085a973b0fd518a5580a6ee29b72f8c1")
+
+func TestImport(t *testing.T) {
+	stellarAsset := xdr.Asset{Type: xdr.AssetTypeAssetTypeNative} // TODO(bobg): other cases with other asset types
+	assetXDR, err := stellarAsset.MarshalBinary()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	withTestServer(context.Background(), t, func(ctx context.Context, db *sql.DB, s *submitter, server *httptest.Server, chain *protocol.Chain) {
+		r := s.w.Reader()
+		defer r.Dispose()
+
+		c := &custodian{
+			imports:       sync.NewCond(new(sync.Mutex)),
+			db:            db,
+			privkey:       custodianPrv,
+			initBlockHash: chain.InitialBlockHash,
+		}
+		go c.importFromPegs(ctx, s)
+		_, err := db.Exec("INSERT INTO pegs (txid, operation_num, amount, asset_xdr, recipient_pubkey) VALUES ('txid', 1, 1, $1, $2)", assetXDR, testRecipPubKey)
+		if err != nil {
+			t.Fatal(err)
+		}
+		c.imports.Broadcast()
+		for {
+			item, ok := r.Read(ctx)
+			if !ok {
+				t.Fatal("cannot read a block")
+			}
+			block := item.(*bc.Block)
+			for _, tx := range block.Transactions {
+				if isImportTx(tx, 1, assetXDR, testRecipPubKey) {
+					log.Printf("found import tx %x", tx.Program)
+					return
+				}
+			}
+		}
+	})
+}
+
+// Expected log is:
+//   {"N", ...}
+//   {"R", ...}
+//   {"A", contextID, amount, assetID, anchor}
+//   {"L", ...}
+//   {"O", caller, outputID}
+//   {"F", ...}
+func isImportTx(tx *bc.Tx, amount int64, assetXDR []byte, recipPubKey ed25519.PublicKey) bool {
+	if len(tx.Log) != 6 {
+		return false
+	}
+	if tx.Log[0][0].(txvm.Bytes)[0] != txvm.NonceCode {
+		return false
+	}
+	if tx.Log[1][0].(txvm.Bytes)[0] != txvm.TimerangeCode {
+		return false
+	}
+	if tx.Log[2][0].(txvm.Bytes)[0] != txvm.IssueCode {
+		return false
+	}
+	if int64(tx.Log[2][2].(txvm.Int)) != amount {
+		return false
+	}
+	wantAssetID := txvm.AssetID(issueSeed[:], assetXDR)
+	if !bytes.Equal(wantAssetID[:], tx.Log[2][3].(txvm.Bytes)) {
+		return false
+	}
+	issueAnchor := tx.Log[2][4].(txvm.Bytes)
+	splitAnchor := txvm.VMHash("Split1", issueAnchor) // the anchor of the issued value after a zeroval is split off of it
+	if tx.Log[3][0].(txvm.Bytes)[0] != txvm.LogCode {
+		return false
+	}
+	if tx.Log[4][0].(txvm.Bytes)[0] != txvm.OutputCode {
+		return false
+	}
+
+	b := new(txvmutil.Builder)
+	standard.Snapshot(b, 1, []ed25519.PublicKey{testRecipPubKey}, 1, bc.NewHash(wantAssetID), splitAnchor[:], standard.PayToMultisigSeed1[:])
+	snapshotBytes := b.Build()
+	wantOutputID := txvm.VMHash("SnapshotID", snapshotBytes)
+	if !bytes.Equal(wantOutputID[:], tx.Log[4][2].(txvm.Bytes)) {
+		return false
+	}
+	// No need to test tx.Log[5], it has to be a finalize entry.
+	return true
+}
+
+func withTestServer(ctx context.Context, t *testing.T, fn func(context.Context, *sql.DB, *submitter, *httptest.Server, *protocol.Chain)) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -190,12 +283,13 @@ func withTestServer(ctx context.Context, t *testing.T, fn func(context.Context, 
 	w := multichan.New((*bc.Block)(nil))
 	s := &submitter{w: w}
 
-	http.HandleFunc("/get", get)
-	http.Handle("/submit", s)
-	server := httptest.NewServer(nil)
+	mux := http.NewServeMux()
+	mux.HandleFunc("/get", get)
+	mux.Handle("/submit", s)
+	server := httptest.NewServer(mux)
 	defer server.Close()
 
-	fn(ctx, db, s, server)
+	fn(ctx, db, s, server, chain)
 }
 
 func unwraperr(err error) error {

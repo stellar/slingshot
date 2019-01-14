@@ -32,7 +32,7 @@ func (c *custodian) buildImportTx(
 	// now arg stack is set up, empty con stack
 	fmt.Fprintf(buf, "x'%x' %d\n", c.initBlockHash.Bytes(), exp) // con stack: blockid, exp
 	fmt.Fprintf(buf, "nonce put\n")                              // empty con stack; ..., nonce on arg stack
-	fmt.Fprintf(buf, "x'%x' contract call", issueProg)           // empty con stack; arg stack: ..., sigcheck, issuedval
+	fmt.Fprintf(buf, "x'%x' contract call\n", issueProg)         // empty con stack; arg stack: ..., sigcheck, issuedval
 
 	// pay issued value
 	fmt.Fprintf(buf, "get splitzero\n")                                    // con stack: issuedval, zeroval; arg stack: sigcheck
@@ -61,33 +61,29 @@ func (c *custodian) buildImportTx(
 }
 
 func (c *custodian) importFromPegs(ctx context.Context, s *submitter) {
+	defer log.Print("importFromPegs exiting")
+
 	c.imports.L.Lock()
 	defer c.imports.L.Unlock()
-	for {
-		ch := make(chan struct{})
-		go func() {
-			c.imports.Wait()
-			close(ch)
-		}()
 
-		select {
-		case <-ctx.Done():
+	for {
+		if err := ctx.Err(); err != nil {
 			return
-		case <-ch:
 		}
+		c.imports.Wait()
 
 		var (
-			txids          []string
-			opNums         []int
-			amounts        []int64
-			assets, recips [][]byte
+			txids             []string
+			opNums            []int
+			amounts           []int64
+			assetXDRs, recips [][]byte
 		)
-		const q = `SELECT txid, txhash, operation_num, amount, asset, recipient_pubkey FROM pegs WHERE imported=0`
-		err := sqlutil.ForQueryRows(ctx, c.db, q, func(txid string, txhash []byte, opNum int, amount int64, asset, recip []byte) {
+		const q = `SELECT txid, operation_num, amount, asset_xdr, recipient_pubkey FROM pegs WHERE imported=0`
+		err := sqlutil.ForQueryRows(ctx, c.db, q, func(txid string, opNum int, amount int64, assetXDR, recip []byte) {
 			txids = append(txids, txid)
 			opNums = append(opNums, opNum)
 			amounts = append(amounts, amount)
-			assets = append(assets, asset)
+			assetXDRs = append(assetXDRs, assetXDR)
 			recips = append(recips, recip)
 		})
 		if err == context.Canceled {
@@ -98,20 +94,25 @@ func (c *custodian) importFromPegs(ctx context.Context, s *submitter) {
 		}
 		for i, txid := range txids {
 			var (
-				opNum  = opNums[i]
-				amount = amounts[i]
-				asset  = assets[i]
-				recip  = recips[i]
+				opNum    = opNums[i]
+				amount   = amounts[i]
+				assetXDR = assetXDRs[i]
+				recip    = recips[i]
 			)
-			err = c.doImport(ctx, s, txid, opNum, amount, asset, recip) // TODO(bobg): probably s should be a field in the custodian object
+			err = c.doImport(ctx, s, txid, opNum, amount, assetXDR, recip) // TODO(bobg): probably s should be a field in the custodian object
 			if err != nil {
-				log.Fatalf("importing from tx %s, operation %d: %s", txid, opNum, err)
+				if err == context.Canceled {
+					return
+				}
+				log.Fatal(err)
 			}
 		}
 	}
 }
 
 func (c *custodian) doImport(ctx context.Context, s *submitter, txid string, opNum int, amount int64, assetXDR, recip []byte) error {
+	log.Printf("doing import from tx %s, op %d: %d of asset %x for recipient %x", txid, opNum, amount, assetXDR, recip)
+
 	importTxBytes, err := c.buildImportTx(amount, assetXDR, recip)
 	if err != nil {
 		return errors.Wrap(err, "building import tx")
