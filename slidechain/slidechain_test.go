@@ -23,6 +23,7 @@ import (
 	"github.com/chain/txvm/protocol/bc"
 	"github.com/chain/txvm/protocol/txbuilder"
 	"github.com/chain/txvm/protocol/txbuilder/standard"
+	"github.com/chain/txvm/protocol/txvm"
 	"github.com/davecgh/go-spew/spew"
 	"github.com/golang/protobuf/proto"
 	_ "github.com/mattn/go-sqlite3"
@@ -155,12 +156,20 @@ func TestServer(t *testing.T) {
 	})
 }
 
+const testRecipPrivKeyHex = "ed3c129e6207ce1b0ba5bf288598723e3ad7a9ac4d84ca91acf86ae25a9f0900cca6ae12527fcb3f8d5648868a757ebb085a973b0fd518a5580a6ee29b72f8c1"
+
 func TestImport(t *testing.T) {
 	stellarAsset := xdr.Asset{Type: xdr.AssetTypeAssetTypeNative} // TODO(bobg): other cases with other asset types
 	assetXDR, err := stellarAsset.MarshalBinary()
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	testRecipPrivKeyBytes, err := hex.DecodeString(testRecipPrivKeyHex)
+	if err != nil {
+		t.Fatal(err)
+	}
+	testRecipPubKey := ed25519.PrivateKey(testRecipPrivKeyBytes).Public().(ed25519.PublicKey)
 
 	withTestServer(context.Background(), t, func(ctx context.Context, db *sql.DB, s *submitter, server *httptest.Server) {
 		r := s.w.Reader()
@@ -171,7 +180,7 @@ func TestImport(t *testing.T) {
 			db:      db,
 		}
 		go c.importFromPegs(ctx, s)
-		_, err := db.Exec("INSERT INTO pegs (txid, operation_num, amount, asset_xdr) VALUES ('txid', 1, 1, $1)", assetXDR)
+		_, err := db.Exec("INSERT INTO pegs (txid, operation_num, amount, asset_xdr, recipient_pubkey) VALUES ('txid', 1, 1, $1, $2)", assetXDR, testRecipPubKey)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -183,12 +192,46 @@ func TestImport(t *testing.T) {
 			}
 			block := item.(*bc.Block)
 			for _, tx := range block.Transactions {
-				if isImportTx(tx, 1, assetXDR, recipient) {
-					// xxx
+				if isImportTx(tx, 1, assetXDR, testRecipPubKey) {
+					return
 				}
 			}
 		}
 	})
+}
+
+// Expected log is:
+//   {"N", ...}
+//   {"A", contextID, amount, assetID, anchor}
+//   {"L", ...}
+//   {"O", caller, outputID}
+//   {"F", ...}
+func isImportTx(tx *bc.Tx, amount int64, assetXDR []byte, recipPubKey ed25519.PublicKey) bool {
+	if len(tx.Log) != 5 {
+		return false
+	}
+	if tx.Log[0][0].(txvm.Bytes)[0] != txvm.NonceCode {
+		return false
+	}
+	if tx.Log[1][0].(txvm.Bytes)[0] != txvm.IssueCode {
+		return false
+	}
+	if int64(tx.Log[1][2].(txvm.Int)) != amount {
+		return false
+	}
+	wantAssetID := txvm.AssetID(issueSeed[:], assetXDR)
+	if !bytes.Equal(wantAssetID[:], tx.Log[1][3].(txvm.Bytes)) {
+		return false
+	}
+	if tx.Log[2][0].(txvm.Bytes)[0] != txvm.LogCode {
+		return false
+	}
+	if tx.Log[3][0].(txvm.Bytes)[0] != txvm.OutputCode {
+		return false
+	}
+	// xxx compute wantOutputID, compare it with txvm.Log[3][2]
+	// No need to test tx.Log[4], it has to be a finalize entry.
+	return true
 }
 
 func withTestServer(ctx context.Context, t *testing.T, fn func(context.Context, *sql.DB, *submitter, *httptest.Server)) {
@@ -228,9 +271,10 @@ func withTestServer(ctx context.Context, t *testing.T, fn func(context.Context, 
 	w := multichan.New((*bc.Block)(nil))
 	s := &submitter{w: w}
 
-	http.HandleFunc("/get", get)
-	http.Handle("/submit", s)
-	server := httptest.NewServer(nil)
+	mux := http.NewServeMux()
+	mux.HandleFunc("/get", get)
+	mux.Handle("/submit", s)
+	server := httptest.NewServer(mux)
 	defer server.Close()
 
 	fn(ctx, db, s, server)
