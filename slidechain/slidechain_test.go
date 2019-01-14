@@ -158,9 +158,7 @@ func TestServer(t *testing.T) {
 	})
 }
 
-const testRecipPrivKeyHex = "ed3c129e6207ce1b0ba5bf288598723e3ad7a9ac4d84ca91acf86ae25a9f0900cca6ae12527fcb3f8d5648868a757ebb085a973b0fd518a5580a6ee29b72f8c1"
-
-var testRecipPubKey ed25519.PublicKey
+var testRecipPubKey = mustDecodeHex("cca6ae12527fcb3f8d5648868a757ebb085a973b0fd518a5580a6ee29b72f8c1")
 
 func TestImport(t *testing.T) {
 	stellarAsset := xdr.Asset{Type: xdr.AssetTypeAssetTypeNative} // TODO(bobg): other cases with other asset types
@@ -308,12 +306,4 @@ func unwraperr(err error) error {
 		return unwraperr(err.Err)
 	}
 	return err
-}
-
-func init() {
-	testRecipPrivKeyBytes, err := hex.DecodeString(testRecipPrivKeyHex)
-	if err != nil {
-		log.Fatal(err)
-	}
-	testRecipPubKey = ed25519.PrivateKey(testRecipPrivKeyBytes).Public().(ed25519.PublicKey)
 }
