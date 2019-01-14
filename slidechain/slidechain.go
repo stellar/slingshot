@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"database/sql"
-	"encoding/hex"
 	"flag"
 	"fmt"
 	"log"
@@ -13,36 +12,17 @@ import (
 	"sync"
 
 	"github.com/bobg/multichan"
-	"github.com/chain/txvm/crypto/ed25519"
 	"github.com/chain/txvm/errors"
 	"github.com/chain/txvm/protocol"
 	"github.com/chain/txvm/protocol/bc"
-	"github.com/chain/txvm/protocol/txvm"
-	"github.com/chain/txvm/protocol/txvm/asm"
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/stellar/go/clients/horizon"
-	"github.com/stellar/go/xdr"
 )
 
 var (
 	initialBlock *bc.Block
 	chain        *protocol.Chain
 )
-
-const privkeyHexStr = "508c64dfa1522aba45219495bf484ee4d1edb6c2051bf2a4356b43b24084db1637235cf548300f400b9afd671b8f701175c6d2549b96415743ae61a58bb437d7"
-
-type custodian struct {
-	seed          string
-	accountID     xdr.AccountId
-	db            *sql.DB
-	w             *multichan.W
-	hclient       *horizon.Client
-	imports       *sync.Cond
-	exports       *sync.Cond
-	network       string
-	privkey       ed25519.PrivateKey
-	initBlockHash bc.Hash
-}
 
 func start(ctx context.Context, addr, dbfile, horizonURL string) (*custodian, error) {
 	db, err := startdb(dbfile)
@@ -65,13 +45,6 @@ func start(ctx context.Context, addr, dbfile, horizonURL string) (*custodian, er
 		return nil, errors.Wrap(err, "creating/fetching custodian account")
 	}
 
-	privkeyStr, err := hex.DecodeString(privkeyHexStr)
-	if err != nil {
-		return nil, errors.Wrap(err, "error decoding custodian private key (hex)")
-	}
-	privkey := ed25519.PrivateKey([]byte(privkeyStr))
-
-	// TODO(vniu): set custodian account seed
 	return &custodian{
 		accountID: *custAccountID, // TODO(tessr): should this field be a pointer to an xdr.AccountID?
 		db:        db,
@@ -80,7 +53,7 @@ func start(ctx context.Context, addr, dbfile, horizonURL string) (*custodian, er
 		imports:   sync.NewCond(new(sync.Mutex)),
 		exports:   sync.NewCond(new(sync.Mutex)),
 		network:   root.NetworkPassphrase,
-		privkey:   privkey,
+		privkey:   custodianPrv,
 	}, nil
 }
 
@@ -103,24 +76,6 @@ func main() {
 	)
 
 	flag.Parse()
-
-	// Assemble issuance TxVM program for custodian.
-	// TODO(debnil): Move this logic to the issueProgFmt declaration site.
-	privkeyStr, err := hex.DecodeString(privkeyHexStr)
-	if err != nil {
-		log.Fatal("error decoding custodian private key (hex): ", err)
-	}
-	privkey := ed25519.PrivateKey([]byte(privkeyStr))
-	pubkey, ok := privkey.Public().([]byte)
-	if !ok {
-		log.Fatal("error converting custodian public key to byteslice")
-	}
-	issueProgSrc = fmt.Sprintf(issueProgFmt, pubkey)
-	issueProg, err = asm.Assemble(issueProgSrc)
-	if err != nil {
-		log.Fatal(err)
-	}
-	issueSeed = txvm.ContractSeed(issueProg)
 
 	c, err := start(ctx, *addr, *dbfile, *url)
 	if err != nil {

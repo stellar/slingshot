@@ -1,5 +1,13 @@
 package main
 
+import (
+	"fmt"
+	"log"
+
+	"github.com/chain/txvm/protocol/txvm"
+	"github.com/chain/txvm/protocol/txvm/asm"
+)
+
 // TODO(debnil): Use a more general-purpose sig checker, i.e. an exported `multisigProgCheckSrc`.
 const issueProgFmt = `
 	                                                 #  con stack                 arg stack                        log
@@ -10,9 +18,18 @@ const issueProgFmt = `
 	issue put                                        #                            sigchecker issuedval             {"A", vm.caller, issuedval.amount, issuedval.assetid, issuedval.anchor}
 `
 
-// These are initialized in main.
 var (
-	issueProgSrc string
-	issueProg    []byte
-	issueSeed    [32]byte
+	issueProgSrc = fmt.Sprintf(issueProgFmt, custodianPub)
+	issueProg    = mustAssemble(issueProgSrc)
+	issueSeed    = txvm.ContractSeed(issueProg)
 )
+
+func mustAssemble(inp string) []byte {
+	log.Printf("assembling %s", inp)
+
+	result, err := asm.Assemble(inp)
+	if err != nil {
+		log.Fatal(err)
+	}
+	return result
+}

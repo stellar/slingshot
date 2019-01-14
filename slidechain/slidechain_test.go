@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -159,18 +160,14 @@ func TestServer(t *testing.T) {
 
 const testRecipPrivKeyHex = "ed3c129e6207ce1b0ba5bf288598723e3ad7a9ac4d84ca91acf86ae25a9f0900cca6ae12527fcb3f8d5648868a757ebb085a973b0fd518a5580a6ee29b72f8c1"
 
+var testRecipPubKey ed25519.PublicKey
+
 func TestImport(t *testing.T) {
 	stellarAsset := xdr.Asset{Type: xdr.AssetTypeAssetTypeNative} // TODO(bobg): other cases with other asset types
 	assetXDR, err := stellarAsset.MarshalBinary()
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	testRecipPrivKeyBytes, err := hex.DecodeString(testRecipPrivKeyHex)
-	if err != nil {
-		t.Fatal(err)
-	}
-	testRecipPubKey := ed25519.PrivateKey(testRecipPrivKeyBytes).Public().(ed25519.PublicKey)
 
 	withTestServer(context.Background(), t, func(ctx context.Context, db *sql.DB, s *submitter, server *httptest.Server) {
 		r := s.w.Reader()
@@ -179,6 +176,7 @@ func TestImport(t *testing.T) {
 		c := &custodian{
 			imports: sync.NewCond(new(sync.Mutex)),
 			db:      db,
+			privkey: custodianPrv,
 		}
 		go c.importFromPegs(ctx, s)
 		_, err := db.Exec("INSERT INTO pegs (txid, operation_num, amount, asset_xdr, recipient_pubkey) VALUES ('txid', 1, 1, $1, $2)", assetXDR, testRecipPubKey)
@@ -234,10 +232,10 @@ func isImportTx(tx *bc.Tx, amount int64, assetXDR []byte, recipPubKey ed25519.Pu
 	}
 
 	b := new(txvmutil.Builder)
-	snapshotBuilder := standard.Snapshot(b, 1, []ed25519.PublicKey{testRecipPubKey}, 1, bc.NewHash(wantAssetID), splitAnchor[:], standard.PayToMultisigSeed1[:])
+	standard.Snapshot(b, 1, []ed25519.PublicKey{testRecipPubKey}, 1, bc.NewHash(wantAssetID), splitAnchor[:], standard.PayToMultisigSeed1[:])
 	snapshotBytes := b.Build()
 	wantOutputID := txvm.VMHash("SnapshotID", snapshotBytes)
-	if !bytes.Equal(wantOutputID[:], txvm.Log[3][2]) {
+	if !bytes.Equal(wantOutputID[:], tx.Log[3][2].(txvm.Bytes)) {
 		return false
 	}
 	// No need to test tx.Log[4], it has to be a finalize entry.
@@ -296,4 +294,12 @@ func unwraperr(err error) error {
 		return unwraperr(err.Err)
 	}
 	return err
+}
+
+func init() {
+	testRecipPrivKeyBytes, err := hex.DecodeString(testRecipPrivKeyHex)
+	if err != nil {
+		log.Fatal(err)
+	}
+	testRecipPubKey = ed25519.PrivateKey(testRecipPrivKeyBytes).Public().(ed25519.PublicKey)
 }
