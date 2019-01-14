@@ -1,0 +1,3 @@
+# setup is required to run guardian tests
+setup: $I10R/libexec/testbot-cargo-build $I10R/enclave/client/Cargo.toml
+gotest: go test -race -cover ./...

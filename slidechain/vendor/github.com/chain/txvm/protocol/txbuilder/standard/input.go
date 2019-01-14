@@ -47,6 +47,19 @@ func SpendMultisig(
 	anchor []byte,
 	seed []byte, // PayToMultisigSeed1[:] or PayToMultisigSeed2[:]
 ) {
+	Snapshot(b, quorum, pubkeys, amount, assetID, anchor, seed)
+	b.Op(op.Input).Op(op.Call)
+}
+
+// Snapshot adds to b the snapshot of a pay-to-multisig-program contract as it appears in the UTXO set.
+func Snapshot(b *txvmutil.Builder,
+	quorum int,
+	pubkeys []ed25519.PublicKey,
+	amount int64,
+	assetID bc.Hash,
+	anchor []byte,
+	seed []byte, // PayToMultisigSeed1[:] or PayToMultisigSeed2[:]
+) {
 	b.Tuple(func(contract *txvmutil.TupleBuilder) {
 		contract.PushdataByte(txvm.ContractCode)          // 'C'
 		contract.PushdataBytes(seed)                      // <seed>
@@ -70,5 +83,4 @@ func SpendMultisig(
 			tup.PushdataBytes(anchor)
 		})
 	})
-	b.Op(op.Input).Op(op.Call)
 }

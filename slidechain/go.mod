@@ -8,6 +8,7 @@ require (
 	github.com/davecgh/go-spew v1.1.1
 	github.com/go-errors/errors v1.0.1 // indirect
 	github.com/golang/protobuf v1.2.0
+	github.com/interstellar/starlight v0.1.0-alpha
 	github.com/lib/pq v1.0.0 // indirect
 	github.com/manucorporat/sse v0.0.0-20160126180136-ee05b128a739 // indirect
 	github.com/mattn/go-sqlite3 v1.10.0
@@ -23,3 +24,5 @@ require (
 	golang.org/x/sync v0.0.0-20181221193216-37e7f081c4d4 // indirect
 	golang.org/x/sys v0.0.0-20190102155601-82a175fd1598 // indirect
 )
+
+replace github.com/chain/txvm => github.com/chain/txvm v0.0.0-20190114205213-d4707728bddc
