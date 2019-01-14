@@ -7,10 +7,10 @@ const issueProgFmt = `
 	                                                 #                            assetcode amount zeroval
 	get get get                                      #  zeroval amount assetcode
 	[txid x"%x" get 0 checksig verify] contract put  #  zeroval amount assetcode  sigchecker
-	issue put                                        #                            sigchecker issuedval             {"A", vm.caller, v.amount, v.assetid, v.anchor}
+	issue put                                        #                            sigchecker issuedval             {"A", vm.caller, issuedval.amount, issuedval.assetid, issuedval.anchor}
 `
 
-// These are initialized in main, after flag.Parse.
+// These are initialized in main.
 var (
 	issueProgSrc string
 	issueProg    []byte
