@@ -37,28 +37,31 @@ type custodian struct {
 	initBlockHash bc.Hash
 }
 
-func custodianAccount(ctx context.Context, db *sql.DB, hclient *horizon.Client) (*xdr.AccountId, error) {
-	var accountID string
-	err := db.QueryRow("SELECT account_id FROM custodian").Scan(&accountID)
+func custodianAccount(ctx context.Context, db *sql.DB, hclient *horizon.Client) (*xdr.AccountId, string, error) {
+	var seed string
+	err := db.QueryRow("SELECT seed FROM custodian").Scan(&seed)
 	if err == sql.ErrNoRows {
 		return makeNewCustodianAccount(ctx, db, hclient)
 	}
-
 	if err != nil {
-		return nil, err
+		return nil, "", errors.Wrap(err, "reading seed from db")
 	}
 
-	log.Printf("using preexisting custodian account %s", accountID)
+	kp, err := keypair.Parse(seed)
+	if err != nil {
+		return nil, "", errors.Wrap(err, "parsing keypair from seed")
+	}
+	log.Printf("using preexisting custodian account %s", kp.Address())
 
 	var custAccountID xdr.AccountId
-	err = custAccountID.SetAddress(accountID)
-	return &custAccountID, err
+	err = custAccountID.SetAddress(kp.Address())
+	return &custAccountID, seed, err
 }
 
-func makeNewCustodianAccount(ctx context.Context, db *sql.DB, hclient *horizon.Client) (*xdr.AccountId, error) {
+func makeNewCustodianAccount(ctx context.Context, db *sql.DB, hclient *horizon.Client) (*xdr.AccountId, string, error) {
 	pair, err := keypair.Random()
 	if err != nil {
-		return nil, errors.Wrap(err, "generating new keypair")
+		return nil, "", errors.Wrap(err, "generating new keypair")
 	}
 
 	log.Printf("seed: %s", pair.Seed())
@@ -66,19 +69,19 @@ func makeNewCustodianAccount(ctx context.Context, db *sql.DB, hclient *horizon.C
 
 	resp, err := http.Get("https://friendbot.stellar.org/?addr=" + pair.Address())
 	if err != nil {
-		return nil, errors.Wrap(err, "requesting lumens through friendbot")
+		return nil, "", errors.Wrap(err, "requesting lumens through friendbot")
 	}
 
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, errors.Wrap(err, "funding address through friendbot")
+		return nil, "", errors.Wrap(err, "funding address through friendbot")
 	}
 	log.Println("account successfully funded")
 
 	account, err := hclient.LoadAccount(pair.Address())
 	if err != nil {
-		return nil, errors.Wrap(err, "loading testnet account")
+		return nil, "", errors.Wrap(err, "loading testnet account")
 	}
 	log.Printf("balances for account: %s", pair.Address())
 
@@ -90,14 +93,14 @@ func makeNewCustodianAccount(ctx context.Context, db *sql.DB, hclient *horizon.C
 		}
 	}
 
-	_, err = db.Exec("INSERT INTO custodian (account_id) VALUES ($1)", pair.Address())
+	_, err = db.Exec("INSERT INTO custodian (seed) VALUES ($1)", pair.Seed())
 	if err != nil {
-		return nil, errors.Wrapf(err, "storing new custodian account")
+		return nil, "", errors.Wrapf(err, "storing new custodian account")
 	}
 
 	var custAccountID xdr.AccountId
 	err = custAccountID.SetAddress(pair.Address())
-	return &custAccountID, err
+	return &custAccountID, pair.Seed(), err
 }
 
 func mustDecodeHex(inp string) []byte {
