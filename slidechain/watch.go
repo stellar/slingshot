@@ -10,6 +10,7 @@ import (
 
 	"github.com/chain/txvm/protocol/bc"
 	"github.com/chain/txvm/protocol/txvm"
+	"github.com/davecgh/go-spew/spew"
 	i10rnet "github.com/interstellar/starlight/net"
 	"github.com/stellar/go/clients/horizon"
 	"github.com/stellar/go/xdr"
@@ -63,9 +64,9 @@ func (c *custodian) watchPegs(ctx context.Context) {
 					return
 				}
 				// Update cursor after successfully processing transaction
-				_, err = c.db.ExecContext(ctx, `UPDATE custodian SET cursor=$1 WHERE account_id=$2`, tx.PT, c.accountID.Address())
+				_, err = c.db.ExecContext(ctx, `UPDATE custodian SET cursor=$1 WHERE seed = $2`, tx.PT, c.seed)
 				if err != nil {
-					log.Fatal("error updating cursor", err)
+					log.Fatalf("updating cursor: %s", err)
 					return
 				}
 				c.imports.Broadcast()
@@ -76,6 +77,9 @@ func (c *custodian) watchPegs(ctx context.Context) {
 		}
 		if err != nil {
 			log.Fatal("error streaming from horizon: ", err)
+		}
+		if err = ctx.Err(); err != nil {
+			return
 		}
 		ch := make(chan struct{})
 		go func() {
@@ -109,37 +113,42 @@ func (c *custodian) watchExports(ctx context.Context) {
 
 			for i := 0; i < len(tx.Log)-2; i++ {
 				item := tx.Log[i]
-				if len(item) != 5 {
-					continue
-				}
 				if item[0].(txvm.Bytes)[0] != txvm.RetireCode {
 					continue
 				}
 				retiredAmount := int64(item[2].(txvm.Int))
-				retiredAssetIDBytes := item[3].(txvm.Bytes)
+				retiredAssetIDBytes := []byte(item[3].(txvm.Bytes))
+
+				log.Printf("found retirement: %d of %x", retiredAmount, retiredAssetIDBytes)
 
 				infoItem := tx.Log[i+1]
 				if infoItem[0].(txvm.Bytes)[0] != txvm.LogCode {
+					log.Print("...never mind, retirement not followed by info log item")
 					continue
 				}
 				var info struct {
-					AssetXDR   []byte `json:"asset"`
-					AccountXDR []byte `json:"account"`
+					AssetXDR []byte `json:"asset"`
+					Account  string `json:"account"`
 				}
 				err := json.Unmarshal(infoItem[2].(txvm.Bytes), &info)
 				if err != nil {
+					log.Printf("...never mind, unmarshaling info item produces %s", err)
 					continue
 				}
+
+				log.Printf("unmarshaling JSON produced this info:\n%s", spew.Sdump(info))
 
 				// Check this Stellar asset code corresponds to retiredAssetIDBytes.
 				gotAssetID32 := txvm.AssetID(issueSeed[:], info.AssetXDR)
 				if !bytes.Equal(gotAssetID32[:], retiredAssetIDBytes) {
+					log.Printf("...never mind, info asset XDR is %x which gives asset ID %x", info.AssetXDR, gotAssetID32[:])
 					continue
 				}
 
 				var stellarRecipient xdr.AccountId
-				err = xdr.SafeUnmarshal(info.AccountXDR, &stellarRecipient)
+				err = stellarRecipient.SetAddress(info.Account)
 				if err != nil {
+					log.Printf("...never mind, setting address of recipient to %s produces %s", info.Account, err)
 					continue
 				}
 
@@ -149,10 +158,13 @@ func (c *custodian) watchExports(ctx context.Context) {
 					INSERT INTO exports 
 					(txid, recipient, amount, asset_xdr)
 					VALUES ($1, $2, $3, $4)`
-				_, err = c.db.ExecContext(ctx, q, tx.ID, stellarRecipient.Address(), retiredAmount, info.AssetXDR)
+				_, err = c.db.ExecContext(ctx, q, tx.ID.Bytes(), stellarRecipient.Address(), retiredAmount, info.AssetXDR)
 				if err != nil {
 					log.Fatalf("recording export tx: %s", err)
 				}
+
+				log.Printf("recorded export: %d of txvm asset %x (Stellar %x) for %s", retiredAmount, retiredAssetIDBytes, info.AssetXDR, info.Account)
+
 				c.exports.Broadcast()
 
 				i++ // advance past the consumed log ("L") entry

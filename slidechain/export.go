@@ -27,41 +27,41 @@ func (c *custodian) pegOutFromExports(ctx context.Context) {
 		const q = `SELECT txid, recipient, amount, asset_xdr FROM exports WHERE exported=0`
 
 		var (
-			txids      []string
+			txids      [][]byte
 			recipients []string
 			amounts    []int
 			assetXDRs  [][]byte
 		)
-		err := sqlutil.ForQueryRows(ctx, c.db, q, func(txid, recipient string, amount int, assetXDR []byte) {
+		err := sqlutil.ForQueryRows(ctx, c.db, q, func(txid []byte, recipient string, amount int, assetXDR []byte) {
 			txids = append(txids, txid)
 			recipients = append(recipients, recipient)
 			amounts = append(amounts, amount)
 			assetXDRs = append(assetXDRs, assetXDR)
 		})
 		if err != nil {
-			log.Fatal(err, "reading export rows")
+			log.Fatalf("reading export rows: %s", err)
 		}
 		for i, txid := range txids {
 			var recipientID xdr.AccountId
 			err := recipientID.SetAddress(recipients[i])
 			if err != nil {
-				log.Fatal(err, "setting recipient account ID", recipients[i])
+				log.Fatalf("setting recipient to %s: %s", recipients[i], err)
 			}
 			var asset xdr.Asset
 			err = xdr.SafeUnmarshal(assetXDRs[i], &asset)
 			if err != nil {
-				log.Fatal(err, "unmarshalling asset XDR from asset", asset.String())
+				log.Fatalf("unmarshalling asset from XDR %x: %s", assetXDRs[i], err)
 			}
 
-			log.Printf("pegging out export %s: %d of %s to %s", txid, amounts[i], asset.String(), recipients[i])
+			log.Printf("pegging out export %x: %d of %s to %s", txid, amounts[i], asset.String(), recipients[i])
 			// TODO(vniu): flag txs that fail with unretriable errors in the db
 			err = c.pegOut(ctx, recipientID, asset, xlm.Amount(amounts[i]))
 			if err != nil {
-				log.Fatal(err, "pegging out tx")
+				log.Fatalf("pegging out tx: %s", err)
 			}
 			_, err = c.db.ExecContext(ctx, `UPDATE exports SET exported=1 WHERE txid=$1`, txid)
 			if err != nil {
-				log.Fatal(err, "updating export table")
+				log.Fatalf("updating export table: %s", err)
 			}
 		}
 	}
