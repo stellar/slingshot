@@ -23,7 +23,7 @@ CREATE TABLE IF NOT EXISTS pegs (
 );
 
 CREATE TABLE IF NOT EXISTS exports (
-  txid TEXT NOT NULL,
+  txid BLOB NOT NULL PRIMARY KEY,
   recipient TEXT NOT NULL,
   amount INTEGER NOT NULL,
   asset_xdr BLOB NOT NULL,

@@ -61,9 +61,15 @@ func (s *submitter) submitTx(ctx context.Context, tx *bc.Tx) error {
 			s.bbmu.Lock()
 			defer s.bbmu.Unlock()
 
+			defer func() { s.bb = nil }()
+
 			unsignedBlock, newSnapshot, err := s.bb.Build()
 			if err != nil {
 				log.Fatalf("building new block: %s", err)
+			}
+			if len(unsignedBlock.Transactions) == 0 {
+				log.Print("skipping commit of empty block")
+				return
 			}
 			b := &bc.Block{UnsignedBlock: unsignedBlock}
 			err = chain.CommitAppliedBlock(ctx, b, newSnapshot)
@@ -73,7 +79,6 @@ func (s *submitter) submitTx(ctx context.Context, tx *bc.Tx) error {
 
 			s.w.Write(b)
 			log.Printf("committed block %d with %d transaction(s)", unsignedBlock.Height, len(unsignedBlock.Transactions))
-			s.bb = nil
 		})
 	}
 
