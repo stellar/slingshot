@@ -35,6 +35,7 @@ import (
 func makeAsset(typ xdr.AssetType, code string, issuer string) xdr.Asset {
 	var issuerAccountID xdr.AccountId
 	issuerAccountID.SetAddress(issuer)
+	byteArray := []byte(code)
 
 	var asset xdr.Asset
 	switch typ {
@@ -42,12 +43,10 @@ func makeAsset(typ xdr.AssetType, code string, issuer string) xdr.Asset {
 		asset, _ = xdr.NewAsset(typ, nil)
 	case xdr.AssetTypeAssetTypeCreditAlphanum4:
 		var codeArray [4]byte
-		byteArray := []byte(code)
 		copy(codeArray[:], byteArray)
 		asset, _ = xdr.NewAsset(typ, xdr.AssetAlphaNum4{AssetCode: codeArray, Issuer: issuerAccountID})
 	case xdr.AssetTypeAssetTypeCreditAlphanum12:
 		var codeArray [12]byte
-		byteArray := []byte(code)
 		copy(codeArray[:], byteArray)
 		asset, _ = xdr.NewAsset(typ, xdr.AssetAlphaNum12{AssetCode: codeArray, Issuer: issuerAccountID})
 	}
