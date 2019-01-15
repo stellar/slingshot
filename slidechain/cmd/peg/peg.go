@@ -4,6 +4,7 @@ import (
 	"flag"
 	"log"
 	"net/http"
+	"strings"
 
 	b "github.com/stellar/go/build"
 	"github.com/stellar/go/clients/horizon"
@@ -14,11 +15,11 @@ import (
 
 func main() {
 	var (
-		basefee    = flag.Int("fee", 100, "tx base fee, in stroops")
 		custodian  = flag.String("custodian", "", "Stellar account ID of custodian account")
 		amount     = flag.Int("amount", 0, "amount to peg, in lumens")
 		seed       = flag.String("seed", "", "seed of Stellar source account")
 		horizonURL = flag.String("horizon", "https://horizon-testnet.stellar.org", "horizon URL")
+		basefee    = flag.Int("fee", 100, "tx base fee, in stroops")
 	)
 	flag.Parse()
 
@@ -29,7 +30,7 @@ func main() {
 		log.Fatal("must specify custodian account")
 	}
 	if *seed == "" {
-		// No seed specified, must generate and fund a new account
+		log.Print("no seed specified, generating and funding a new account...")
 		kp, err := keypair.Random()
 		if err != nil {
 			log.Fatal(err, "generating random keypair")
@@ -43,10 +44,12 @@ func main() {
 		if resp.StatusCode != http.StatusOK {
 			log.Fatalf("got bad status code %d requesting friendbot lumens", resp.StatusCode)
 		}
+		log.Printf("successfully funded %s", kp.Address())
 	}
 
 	hclient := &horizon.Client{
-		URL: *horizonURL,
+		URL:  strings.TrimRight(*horizonURL, "/"),
+		HTTP: new(http.Client),
 	}
 	root, err := hclient.Root()
 	if err != nil {
