@@ -1,0 +1,9 @@
+language: go
+go:
+  - '1.11'
+branches:
+  only:
+    - main
+install: true
+script:
+  - go test -v ./slidechain/... -timeout 60m # only slidechain
