@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/hex"
 	"flag"
 	"log"
 	"net/http"
@@ -17,6 +18,7 @@ func main() {
 	var (
 		custodian  = flag.String("custodian", "", "Stellar account ID of custodian account")
 		amount     = flag.String("amount", "", "amount to peg, in lumens")
+		recipient  = flag.String("recipient", "", "hex-encoded txvm public key for the recipient of the pegged funds")
 		seed       = flag.String("seed", "", "seed of Stellar source account")
 		horizonURL = flag.String("horizon", "https://horizon-testnet.stellar.org", "horizon URL")
 		basefee    = flag.Int("fee", 100, "tx base fee, in stroops")
@@ -28,6 +30,9 @@ func main() {
 	}
 	if *custodian == "" {
 		log.Fatal("must specify custodian account")
+	}
+	if *recipient == "" {
+		log.Fatal("must specify recipient")
 	}
 	if *seed == "" {
 		log.Print("no seed specified, generating and funding a new account...")
@@ -52,6 +57,15 @@ func main() {
 		log.Fatal(err, "parsing payment amount")
 	}
 
+	var recipientPubkey [32]byte
+	if len(*recipient) != 64 {
+		log.Fatalf("invalid recipient length: got %d want 64", len(*recipient))
+	}
+	_, err = hex.Decode(recipientPubkey[:], []byte(*recipient))
+	if err != nil {
+		log.Fatal(err, "decoding recipient")
+	}
+
 	hclient := &horizon.Client{
 		URL:  strings.TrimRight(*horizonURL, "/"),
 		HTTP: new(http.Client),
@@ -65,6 +79,7 @@ func main() {
 		b.SourceAccount{AddressOrSeed: *seed},
 		b.AutoSequence{SequenceProvider: hclient},
 		b.BaseFee{Amount: uint64(*basefee)},
+		b.MemoHash{Value: xdr.Hash(recipientPubkey)},
 		b.Payment(
 			b.Destination{AddressOrSeed: *custodian},
 			b.NativeAmount{Amount: xlmAmount.HorizonString()},
