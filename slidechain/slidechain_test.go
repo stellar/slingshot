@@ -160,43 +160,53 @@ func TestServer(t *testing.T) {
 
 var testRecipPubKey = mustDecodeHex("cca6ae12527fcb3f8d5648868a757ebb085a973b0fd518a5580a6ee29b72f8c1")
 
+var importtests = []struct {
+	asset xdr.Asset
+}{
+	{xdr.Asset{Type: xdr.AssetTypeAssetTypeNative}},
+	{xdr.Asset{Type: xdr.AssetTypeAssetTypeCreditAlphanum4}},
+	{xdr.Asset{Type: xdr.AssetTypeAssetTypeCreditAlphanum12}},
+}
+
 func TestImport(t *testing.T) {
-	stellarAsset := xdr.Asset{Type: xdr.AssetTypeAssetTypeNative} // TODO(bobg): other cases with other asset types
-	assetXDR, err := stellarAsset.MarshalBinary()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	withTestServer(context.Background(), t, func(ctx context.Context, db *sql.DB, s *submitter, server *httptest.Server, chain *protocol.Chain) {
-		r := s.w.Reader()
-		defer r.Dispose()
-
-		c := &custodian{
-			imports:       sync.NewCond(new(sync.Mutex)),
-			db:            db,
-			privkey:       custodianPrv,
-			initBlockHash: chain.InitialBlockHash,
-		}
-		go c.importFromPegs(ctx, s)
-		_, err := db.Exec("INSERT INTO pegs (txid, operation_num, amount, asset_xdr, recipient_pubkey) VALUES ('txid', 1, 1, $1, $2)", assetXDR, testRecipPubKey)
+	for _, tt := range importtests {
+		stellarAsset := tt.asset
+		assetXDR, err := stellarAsset.MarshalBinary()
 		if err != nil {
 			t.Fatal(err)
 		}
-		c.imports.Broadcast()
-		for {
-			item, ok := r.Read(ctx)
-			if !ok {
-				t.Fatal("cannot read a block")
+
+		withTestServer(context.Background(), t, func(ctx context.Context, db *sql.DB, s *submitter, server *httptest.Server, chain *protocol.Chain) {
+			r := s.w.Reader()
+			defer r.Dispose()
+
+			c := &custodian{
+				imports:       sync.NewCond(new(sync.Mutex)),
+				db:            db,
+				privkey:       custodianPrv,
+				initBlockHash: chain.InitialBlockHash,
 			}
-			block := item.(*bc.Block)
-			for _, tx := range block.Transactions {
-				if isImportTx(tx, 1, assetXDR, testRecipPubKey) {
-					log.Printf("found import tx %x", tx.Program)
-					return
+			go c.importFromPegs(ctx, s)
+			_, err := db.Exec("INSERT INTO pegs (txid, operation_num, amount, asset_xdr, recipient_pubkey) VALUES ('txid', 1, 1, $1, $2)", assetXDR, testRecipPubKey)
+			if err != nil {
+				t.Fatal(err)
+			}
+			c.imports.Broadcast()
+			for {
+				item, ok := r.Read(ctx)
+				if !ok {
+					t.Fatal("cannot read a block")
+				}
+				block := item.(*bc.Block)
+				for _, tx := range block.Transactions {
+					if isImportTx(tx, 1, assetXDR, testRecipPubKey) {
+						log.Printf("found import tx %x", tx.Program)
+						return
+					}
 				}
 			}
-		}
-	})
+		})
+	}
 }
 
 // Expected log is:
