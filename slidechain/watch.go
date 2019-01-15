@@ -10,7 +10,6 @@ import (
 
 	"github.com/chain/txvm/protocol/bc"
 	"github.com/chain/txvm/protocol/txvm"
-	"github.com/davecgh/go-spew/spew"
 	i10rnet "github.com/interstellar/starlight/net"
 	"github.com/stellar/go/clients/horizon"
 	"github.com/stellar/go/xdr"
