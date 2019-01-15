@@ -7,3 +7,4 @@ branches:
 install: true
 script:
   - go test -v ./slidechain/... -timeout 60m # only slidechain
+
