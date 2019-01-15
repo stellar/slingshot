@@ -122,11 +122,8 @@ func (c *custodian) watchExports(ctx context.Context) {
 				retiredAmount := int64(item[2].(txvm.Int))
 				retiredAssetIDBytes := []byte(item[3].(txvm.Bytes))
 
-				log.Printf("found retirement: %d of %x", retiredAmount, retiredAssetIDBytes)
-
 				infoItem := tx.Log[i+1]
 				if infoItem[0].(txvm.Bytes)[0] != txvm.LogCode {
-					log.Print("...never mind, retirement not followed by info log item")
 					continue
 				}
 				var info struct {
@@ -135,23 +132,18 @@ func (c *custodian) watchExports(ctx context.Context) {
 				}
 				err := json.Unmarshal(infoItem[2].(txvm.Bytes), &info)
 				if err != nil {
-					log.Printf("...never mind, unmarshaling info item produces %s", err)
 					continue
 				}
-
-				log.Printf("unmarshaling JSON produced this info:\n%s", spew.Sdump(info))
 
 				// Check this Stellar asset code corresponds to retiredAssetIDBytes.
 				gotAssetID32 := txvm.AssetID(issueSeed[:], info.AssetXDR)
 				if !bytes.Equal(gotAssetID32[:], retiredAssetIDBytes) {
-					log.Printf("...never mind, info asset XDR is %x which gives asset ID %x", info.AssetXDR, gotAssetID32[:])
 					continue
 				}
 
 				var stellarRecipient xdr.AccountId
 				err = stellarRecipient.SetAddress(info.Account)
 				if err != nil {
-					log.Printf("...never mind, setting address of recipient to %s produces %s", info.Account, err)
 					continue
 				}
 
