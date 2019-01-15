@@ -27,6 +27,8 @@ func (c *custodian) watchPegs(ctx context.Context) {
 
 	for {
 		err := c.hclient.StreamTransactions(ctx, c.accountID.Address(), &cur, func(tx horizon.Transaction) {
+			log.Printf("handling tx %s", tx.ID)
+
 			var env xdr.TransactionEnvelope
 			err := xdr.SafeUnmarshalBase64(tx.EnvelopeXdr, &env)
 			if err != nil {
@@ -63,11 +65,12 @@ func (c *custodian) watchPegs(ctx context.Context) {
 					return
 				}
 				// Update cursor after successfully processing transaction
-				_, err = c.db.ExecContext(ctx, `UPDATE custodian SET cursor=$1 WHERE account_id=$2`, tx.PT, c.accountID.Address())
+				_, err = c.db.ExecContext(ctx, `UPDATE custodian SET cursor=$1 WHERE seed=$2`, tx.PT, c.seed)
 				if err != nil {
 					log.Fatal("error updating cursor", err)
 					return
 				}
+				log.Printf("recorded peg-in tx %s", tx.ID)
 				c.imports.Broadcast()
 			}
 		})
