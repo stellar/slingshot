@@ -29,8 +29,33 @@ import (
 	"github.com/davecgh/go-spew/spew"
 	"github.com/golang/protobuf/proto"
 	_ "github.com/mattn/go-sqlite3"
+	"github.com/stellar/go/strkey"
 	"github.com/stellar/go/xdr"
 )
+
+func makeAsset(typ xdr.AssetType, code string, issuer string) xdr.Asset {
+	raw := strkey.MustDecode(strkey.VersionByteAccountID, issuer)
+	var key xdr.Uint256
+	copy(key[:], raw)
+	issuerAccountID, _ := xdr.NewAccountId(xdr.PublicKeyTypePublicKeyTypeEd25519, key)
+
+	var asset xdr.Asset
+	switch typ {
+	case xdr.AssetTypeAssetTypeNative:
+		asset, _ = xdr.NewAsset(typ, nil)
+	case xdr.AssetTypeAssetTypeCreditAlphanum4:
+		var codeArray [4]byte
+		byteArray := []byte(code)
+		copy(codeArray[:], byteArray[0:len(code)])
+		asset, _ = xdr.NewAsset(typ, xdr.AssetAlphaNum4{AssetCode: codeArray, Issuer: issuerAccountID})
+	case xdr.AssetTypeAssetTypeCreditAlphanum12:
+		var codeArray [12]byte
+		byteArray := []byte(code)
+		copy(codeArray[:], byteArray[0:len(code)])
+		asset, _ = xdr.NewAsset(typ, xdr.AssetAlphaNum12{AssetCode: codeArray, Issuer: issuerAccountID})
+	}
+	return asset
+}
 
 func TestServer(t *testing.T) {
 	withTestServer(context.Background(), t, func(ctx context.Context, _ *sql.DB, _ *submitter, server *httptest.Server, _ *protocol.Chain) {
@@ -160,17 +185,22 @@ func TestServer(t *testing.T) {
 
 var testRecipPubKey = mustDecodeHex("cca6ae12527fcb3f8d5648868a757ebb085a973b0fd518a5580a6ee29b72f8c1")
 
+const importTestAccountID = "GDSBCQO34HWPGUGQSP3QBFEXVTSR2PW46UIGTHVWGWJGQKH3AFNHXHXN"
+
 var importtests = []struct {
-	asset xdr.Asset
+	assetType xdr.AssetType
+	code      string
+	issuer    string
 }{
-	{xdr.Asset{Type: xdr.AssetTypeAssetTypeNative}},
-	{xdr.Asset{Type: xdr.AssetTypeAssetTypeCreditAlphanum4}},
-	{xdr.Asset{Type: xdr.AssetTypeAssetTypeCreditAlphanum12}},
+	{xdr.AssetTypeAssetTypeNative, "", importTestAccountID},
+	{xdr.AssetTypeAssetTypeCreditAlphanum4, "USD", importTestAccountID},
+	{xdr.AssetTypeAssetTypeCreditAlphanum12, "USDUSD", importTestAccountID},
 }
 
 func TestImport(t *testing.T) {
 	for _, tt := range importtests {
-		stellarAsset := tt.asset
+		t.Logf("testing asset %s", tt.assetType)
+		stellarAsset := makeAsset(tt.assetType, tt.code, tt.issuer)
 		assetXDR, err := stellarAsset.MarshalBinary()
 		if err != nil {
 			t.Fatal(err)
