@@ -38,7 +38,6 @@ type custodian struct {
 }
 
 func custodianAccount(ctx context.Context, db *sql.DB, hclient *horizon.Client) (*xdr.AccountId, string, error) {
-	// var accountID string
 	var seed string
 	err := db.QueryRow("SELECT seed FROM custodian").Scan(&seed)
 	if err == sql.ErrNoRows {
