@@ -44,9 +44,8 @@ func custodianAccount(ctx context.Context, db *sql.DB, hclient *horizon.Client) 
 	if err == sql.ErrNoRows {
 		return makeNewCustodianAccount(ctx, db, hclient)
 	}
-
 	if err != nil {
-		return nil, "", err
+		return nil, "", errors.Wrap(err, "reading seed from db")
 	}
 
 	kp, err := keypair.Parse(seed)

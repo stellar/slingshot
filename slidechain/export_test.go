@@ -11,12 +11,11 @@ import (
 	"time"
 
 	"github.com/stellar/go/clients/horizon"
-
 	"github.com/stellar/go/keypair"
 	"github.com/stellar/go/xdr"
 )
 
-func TestExports(t *testing.T) {
+func TestPegOut(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	testdir, err := ioutil.TempDir("", t.Name())
@@ -65,8 +64,7 @@ func TestExports(t *testing.T) {
 	go func() {
 		var cursor horizon.Cursor
 		err := c.hclient.StreamTransactions(ctx, destination, &cursor, func(tx horizon.Transaction) {
-			log.Println("read a tx!")
-			log.Println(tx.EnvelopeXdr)
+			log.Printf("received tx: %s", tx.EnvelopeXdr)
 			var env xdr.TransactionEnvelope
 			err := xdr.SafeUnmarshalBase64(tx.EnvelopeXdr, &env)
 			if err != nil {
@@ -100,5 +98,9 @@ func TestExports(t *testing.T) {
 		}
 	}()
 
-	<-ch
+	select {
+	case <-ctx.Done():
+		t.Fatal("context timed out: no peg-out tx seen")
+	case <-ch:
+	}
 }

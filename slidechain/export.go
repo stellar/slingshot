@@ -42,7 +42,6 @@ func (c *custodian) pegOutFromExports(ctx context.Context) {
 			log.Fatal(err, "reading export rows")
 		}
 		for i, txid := range txids {
-			log.Printf("pegging out export %s", txid)
 			var recipientID xdr.AccountId
 			err := recipientID.SetAddress(recipients[i])
 			if err != nil {
@@ -53,6 +52,8 @@ func (c *custodian) pegOutFromExports(ctx context.Context) {
 			if err != nil {
 				log.Fatal(err, "unmarshalling asset XDR from asset", asset.String())
 			}
+
+			log.Printf("pegging out export %s: %d of %s to %s", txid, amounts[i], asset.String(), recipients[i])
 			// TODO(vniu): flag txs that fail with unretriable errors in the db
 			err = c.pegOut(ctx, recipientID, asset, xlm.Amount(amounts[i]))
 			if err != nil {
