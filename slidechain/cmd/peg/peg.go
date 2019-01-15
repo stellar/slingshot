@@ -16,14 +16,14 @@ import (
 func main() {
 	var (
 		custodian  = flag.String("custodian", "", "Stellar account ID of custodian account")
-		amount     = flag.Int("amount", 0, "amount to peg, in lumens")
+		amount     = flag.String("amount", "", "amount to peg, in lumens")
 		seed       = flag.String("seed", "", "seed of Stellar source account")
 		horizonURL = flag.String("horizon", "https://horizon-testnet.stellar.org", "horizon URL")
 		basefee    = flag.Int("fee", 100, "tx base fee, in stroops")
 	)
 	flag.Parse()
 
-	if *amount == 0 {
+	if *amount == "" {
 		log.Fatal("must specify peg-in amount")
 	}
 	if *custodian == "" {
@@ -47,6 +47,11 @@ func main() {
 		log.Printf("successfully funded %s", kp.Address())
 	}
 
+	xlmAmount, err := xlm.Parse(*amount)
+	if err != nil {
+		log.Fatal(err, "parsing payment amount")
+	}
+
 	hclient := &horizon.Client{
 		URL:  strings.TrimRight(*horizonURL, "/"),
 		HTTP: new(http.Client),
@@ -55,7 +60,6 @@ func main() {
 	if err != nil {
 		log.Fatal(err, "getting horizon client root")
 	}
-	lumenAmount := xlm.Amount(*amount) * xlm.Lumen
 	tx, err := b.Transaction(
 		b.Network{Passphrase: root.NetworkPassphrase},
 		b.SourceAccount{AddressOrSeed: *seed},
@@ -63,7 +67,7 @@ func main() {
 		b.BaseFee{Amount: uint64(*basefee)},
 		b.Payment(
 			b.Destination{AddressOrSeed: *custodian},
-			b.NativeAmount{Amount: lumenAmount.HorizonString()},
+			b.NativeAmount{Amount: xlmAmount.HorizonString()},
 		),
 	)
 	if err != nil {
@@ -77,9 +81,9 @@ func main() {
 	if err != nil {
 		log.Fatal(err, "marshaling tx to base64")
 	}
-	_, err = hclient.SubmitTransaction(txstr)
+	succ, err := hclient.SubmitTransaction(txstr)
 	if err != nil {
 		log.Fatalf("%s: submitting tx %s", err, txstr)
 	}
-	log.Print("successfully submitted peg-in tx")
+	log.Printf("successfully submitted peg-in tx hash %s on ledger %d", succ.Hash, succ.Ledger)
 }
