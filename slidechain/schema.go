@@ -32,6 +32,7 @@ CREATE TABLE IF NOT EXISTS exports (
 
 CREATE TABLE IF NOT EXISTS custodian (
   account_id TEXT NOT NULL PRIMARY KEY,
+  seed TEXT NOT NULL,
   cursor TEXT NOT NULL DEFAULT ''
 );
 `

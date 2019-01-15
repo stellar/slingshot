@@ -24,7 +24,7 @@ var (
 	chain        *protocol.Chain
 )
 
-func start(ctx context.Context, addr, dbfile, horizonURL string) (*custodian, error) {
+func start(ctx context.Context, dbfile, horizonURL string) (*custodian, error) {
 	db, err := startdb(dbfile)
 	if err != nil {
 		return nil, errors.Wrap(err, "starting db")
@@ -40,13 +40,14 @@ func start(ctx context.Context, addr, dbfile, horizonURL string) (*custodian, er
 		return nil, errors.Wrap(err, "getting horizon client root")
 	}
 
-	custAccountID, err := custodianAccount(ctx, db, hclient)
+	custAccountID, seed, err := custodianAccount(ctx, db, hclient)
 	if err != nil {
 		return nil, errors.Wrap(err, "creating/fetching custodian account")
 	}
 
 	return &custodian{
 		accountID: *custAccountID, // TODO(tessr): should this field be a pointer to an xdr.AccountID?
+		seed:      seed,
 		db:        db,
 		w:         multichan.New((*bc.Block)(nil)),
 		hclient:   hclient,
@@ -77,7 +78,7 @@ func main() {
 
 	flag.Parse()
 
-	c, err := start(ctx, *addr, *dbfile, *url)
+	c, err := start(ctx, *dbfile, *url)
 	if err != nil {
 		log.Fatal(err)
 	}
