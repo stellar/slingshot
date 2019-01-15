@@ -32,6 +32,27 @@ import (
 	"github.com/stellar/go/xdr"
 )
 
+func makeAsset(typ xdr.AssetType, code string, issuer string) xdr.Asset {
+	var issuerAccountID xdr.AccountId
+	issuerAccountID.SetAddress(issuer)
+	byteArray := []byte(code)
+
+	var asset xdr.Asset
+	switch typ {
+	case xdr.AssetTypeAssetTypeNative:
+		asset, _ = xdr.NewAsset(typ, nil)
+	case xdr.AssetTypeAssetTypeCreditAlphanum4:
+		var codeArray [4]byte
+		copy(codeArray[:], byteArray)
+		asset, _ = xdr.NewAsset(typ, xdr.AssetAlphaNum4{AssetCode: codeArray, Issuer: issuerAccountID})
+	case xdr.AssetTypeAssetTypeCreditAlphanum12:
+		var codeArray [12]byte
+		copy(codeArray[:], byteArray)
+		asset, _ = xdr.NewAsset(typ, xdr.AssetAlphaNum12{AssetCode: codeArray, Issuer: issuerAccountID})
+	}
+	return asset
+}
+
 func TestServer(t *testing.T) {
 	withTestServer(context.Background(), t, func(ctx context.Context, _ *sql.DB, _ *submitter, server *httptest.Server, _ *protocol.Chain) {
 		resp, err := http.Get(server.URL + "/get")
@@ -160,43 +181,57 @@ func TestServer(t *testing.T) {
 
 var testRecipPubKey = mustDecodeHex("cca6ae12527fcb3f8d5648868a757ebb085a973b0fd518a5580a6ee29b72f8c1")
 
+const importTestAccountID = "GDSBCQO34HWPGUGQSP3QBFEXVTSR2PW46UIGTHVWGWJGQKH3AFNHXHXN"
+
 func TestImport(t *testing.T) {
-	stellarAsset := xdr.Asset{Type: xdr.AssetTypeAssetTypeNative} // TODO(bobg): other cases with other asset types
-	assetXDR, err := stellarAsset.MarshalBinary()
-	if err != nil {
-		t.Fatal(err)
+	var importtests = []struct {
+		assetType xdr.AssetType
+		code      string
+		issuer    string
+	}{
+		{xdr.AssetTypeAssetTypeNative, "", ""},
+		{xdr.AssetTypeAssetTypeCreditAlphanum4, "USD", importTestAccountID},
+		{xdr.AssetTypeAssetTypeCreditAlphanum12, "USDUSD", importTestAccountID},
 	}
-
-	withTestServer(context.Background(), t, func(ctx context.Context, db *sql.DB, s *submitter, server *httptest.Server, chain *protocol.Chain) {
-		r := s.w.Reader()
-		defer r.Dispose()
-
-		c := &custodian{
-			imports:       sync.NewCond(new(sync.Mutex)),
-			db:            db,
-			privkey:       custodianPrv,
-			initBlockHash: chain.InitialBlockHash,
-		}
-		go c.importFromPegs(ctx, s)
-		_, err := db.Exec("INSERT INTO pegs (txid, operation_num, amount, asset_xdr, recipient_pubkey) VALUES ('txid', 1, 1, $1, $2)", assetXDR, testRecipPubKey)
+	for _, tt := range importtests {
+		t.Logf("testing asset %s", tt.assetType)
+		stellarAsset := makeAsset(tt.assetType, tt.code, tt.issuer)
+		assetXDR, err := stellarAsset.MarshalBinary()
 		if err != nil {
 			t.Fatal(err)
 		}
-		c.imports.Broadcast()
-		for {
-			item, ok := r.Read(ctx)
-			if !ok {
-				t.Fatal("cannot read a block")
+
+		withTestServer(context.Background(), t, func(ctx context.Context, db *sql.DB, s *submitter, server *httptest.Server, chain *protocol.Chain) {
+			r := s.w.Reader()
+			defer r.Dispose()
+
+			c := &custodian{
+				imports:       sync.NewCond(new(sync.Mutex)),
+				db:            db,
+				privkey:       custodianPrv,
+				initBlockHash: chain.InitialBlockHash,
 			}
-			block := item.(*bc.Block)
-			for _, tx := range block.Transactions {
-				if isImportTx(tx, 1, assetXDR, testRecipPubKey) {
-					log.Printf("found import tx %x", tx.Program)
-					return
+			go c.importFromPegs(ctx, s)
+			_, err := db.Exec("INSERT INTO pegs (txid, operation_num, amount, asset_xdr, recipient_pubkey) VALUES ('txid', 1, 1, $1, $2)", assetXDR, testRecipPubKey)
+			if err != nil {
+				t.Fatal(err)
+			}
+			c.imports.Broadcast()
+			for {
+				item, ok := r.Read(ctx)
+				if !ok {
+					t.Fatal("cannot read a block")
+				}
+				block := item.(*bc.Block)
+				for _, tx := range block.Transactions {
+					if isImportTx(tx, 1, assetXDR, testRecipPubKey) {
+						log.Printf("found import tx %x", tx.Program)
+						return
+					}
 				}
 			}
-		}
-	})
+		})
+	}
 }
 
 // Expected log is:
