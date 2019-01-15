@@ -58,11 +58,13 @@ func main() {
 	}
 
 	var recipientPubkey [32]byte
-	bytes, err := hex.DecodeString(*recipient)
+	if len(*recipient) != 64 {
+		log.Fatalf("invalid recipient length: got %d want 64", len(*recipient))
+	}
+	_, err = hex.Decode(recipientPubkey[:], []byte(*recipient))
 	if err != nil {
 		log.Fatal(err, "decoding recipient")
 	}
-	copy(recipientPubkey[:], bytes)
 
 	hclient := &horizon.Client{
 		URL:  strings.TrimRight(*horizonURL, "/"),
