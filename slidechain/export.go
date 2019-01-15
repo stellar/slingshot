@@ -3,13 +3,13 @@ package main
 import (
 	"context"
 	"log"
-	"strconv"
 
 	"github.com/bobg/sqlutil"
 	"github.com/chain/txvm/errors"
 	b "github.com/stellar/go/build"
 	"github.com/stellar/go/clients/horizon"
 	"github.com/stellar/go/xdr"
+	"i10r.io/worizon/xlm"
 )
 
 const baseFee = 100
@@ -54,7 +54,7 @@ func (c *custodian) pegOutFromExports(ctx context.Context) {
 				log.Fatal(err, "unmarshalling asset XDR from asset", asset.String())
 			}
 			// TODO(vniu): flag txs that fail with unretriable errors in the db
-			err = c.pegOut(ctx, recipientID, asset, amounts[i])
+			err = c.pegOut(ctx, recipientID, asset, xlm.Amount(amounts[i]))
 			if err != nil {
 				log.Fatal(err, "pegging out tx")
 			}
@@ -66,7 +66,7 @@ func (c *custodian) pegOutFromExports(ctx context.Context) {
 	}
 }
 
-func (c *custodian) pegOut(ctx context.Context, recipient xdr.AccountId, asset xdr.Asset, amount int) error {
+func (c *custodian) pegOut(ctx context.Context, recipient xdr.AccountId, asset xdr.Asset, amount xlm.Amount) error {
 	tx, err := c.buildPegOutTx(recipient, asset, amount)
 	if err != nil {
 		return errors.Wrap(err, "building tx")
@@ -108,13 +108,13 @@ func (c *custodian) pegOut(ctx context.Context, recipient xdr.AccountId, asset x
 	return errors.Wrap(err, "submitting tx")
 }
 
-func (c *custodian) buildPegOutTx(recipient xdr.AccountId, asset xdr.Asset, amount int) (*b.TransactionBuilder, error) {
+func (c *custodian) buildPegOutTx(recipient xdr.AccountId, asset xdr.Asset, amount xlm.Amount) (*b.TransactionBuilder, error) {
 	var paymentOp b.PaymentBuilder
 	switch asset.Type {
 	case xdr.AssetTypeAssetTypeNative:
 		paymentOp = b.Payment(
 			b.Destination{AddressOrSeed: recipient.Address()},
-			b.NativeAmount{Amount: strconv.Itoa(amount)},
+			b.NativeAmount{Amount: amount.HorizonString()},
 		)
 	case xdr.AssetTypeAssetTypeCreditAlphanum4:
 		paymentOp = b.Payment(
@@ -122,7 +122,7 @@ func (c *custodian) buildPegOutTx(recipient xdr.AccountId, asset xdr.Asset, amou
 			b.CreditAmount{
 				Code:   string(asset.AlphaNum4.AssetCode[:]),
 				Issuer: asset.AlphaNum4.Issuer.Address(),
-				Amount: strconv.Itoa(amount),
+				Amount: amount.HorizonString(),
 			},
 		)
 	case xdr.AssetTypeAssetTypeCreditAlphanum12:
@@ -131,7 +131,7 @@ func (c *custodian) buildPegOutTx(recipient xdr.AccountId, asset xdr.Asset, amou
 			b.CreditAmount{
 				Code:   string(asset.AlphaNum12.AssetCode[:]),
 				Issuer: asset.AlphaNum12.Issuer.Address(),
-				Amount: strconv.Itoa(amount),
+				Amount: amount.HorizonString(),
 			},
 		)
 	}

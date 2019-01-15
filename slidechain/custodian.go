@@ -38,9 +38,9 @@ type custodian struct {
 }
 
 func custodianAccount(ctx context.Context, db *sql.DB, hclient *horizon.Client) (*xdr.AccountId, string, error) {
-	var accountID string
+	// var accountID string
 	var seed string
-	err := db.QueryRow("SELECT account_id, seed FROM custodian").Scan(&accountID, &seed)
+	err := db.QueryRow("SELECT seed FROM custodian").Scan(&seed)
 	if err == sql.ErrNoRows {
 		return makeNewCustodianAccount(ctx, db, hclient)
 	}
@@ -49,10 +49,14 @@ func custodianAccount(ctx context.Context, db *sql.DB, hclient *horizon.Client) 
 		return nil, "", err
 	}
 
-	log.Printf("using preexisting custodian account %s", accountID)
+	kp, err := keypair.Parse(seed)
+	if err != nil {
+		return nil, "", errors.Wrap(err, "parsing keypair from seed")
+	}
+	log.Printf("using preexisting custodian account %s", kp.Address())
 
 	var custAccountID xdr.AccountId
-	err = custAccountID.SetAddress(accountID)
+	err = custAccountID.SetAddress(kp.Address())
 	return &custAccountID, seed, err
 }
 
@@ -91,7 +95,7 @@ func makeNewCustodianAccount(ctx context.Context, db *sql.DB, hclient *horizon.C
 		}
 	}
 
-	_, err = db.Exec("INSERT INTO custodian (account_id, seed) VALUES ($1, $2)", pair.Address(), pair.Seed())
+	_, err = db.Exec("INSERT INTO custodian (seed) VALUES ($1)", pair.Seed())
 	if err != nil {
 		return nil, "", errors.Wrapf(err, "storing new custodian account")
 	}
