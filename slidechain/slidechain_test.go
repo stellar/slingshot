@@ -29,15 +29,12 @@ import (
 	"github.com/davecgh/go-spew/spew"
 	"github.com/golang/protobuf/proto"
 	_ "github.com/mattn/go-sqlite3"
-	"github.com/stellar/go/strkey"
 	"github.com/stellar/go/xdr"
 )
 
 func makeAsset(typ xdr.AssetType, code string, issuer string) xdr.Asset {
-	raw := strkey.MustDecode(strkey.VersionByteAccountID, issuer)
-	var key xdr.Uint256
-	copy(key[:], raw)
-	issuerAccountID, _ := xdr.NewAccountId(xdr.PublicKeyTypePublicKeyTypeEd25519, key)
+	var issuerAccountID xdr.AccountId
+	issuerAccountID.SetAddress(issuer)
 
 	var asset xdr.Asset
 	switch typ {
@@ -46,12 +43,12 @@ func makeAsset(typ xdr.AssetType, code string, issuer string) xdr.Asset {
 	case xdr.AssetTypeAssetTypeCreditAlphanum4:
 		var codeArray [4]byte
 		byteArray := []byte(code)
-		copy(codeArray[:], byteArray[0:len(code)])
+		copy(codeArray[:], byteArray)
 		asset, _ = xdr.NewAsset(typ, xdr.AssetAlphaNum4{AssetCode: codeArray, Issuer: issuerAccountID})
 	case xdr.AssetTypeAssetTypeCreditAlphanum12:
 		var codeArray [12]byte
 		byteArray := []byte(code)
-		copy(codeArray[:], byteArray[0:len(code)])
+		copy(codeArray[:], byteArray)
 		asset, _ = xdr.NewAsset(typ, xdr.AssetAlphaNum12{AssetCode: codeArray, Issuer: issuerAccountID})
 	}
 	return asset
@@ -187,17 +184,16 @@ var testRecipPubKey = mustDecodeHex("cca6ae12527fcb3f8d5648868a757ebb085a973b0fd
 
 const importTestAccountID = "GDSBCQO34HWPGUGQSP3QBFEXVTSR2PW46UIGTHVWGWJGQKH3AFNHXHXN"
 
-var importtests = []struct {
-	assetType xdr.AssetType
-	code      string
-	issuer    string
-}{
-	{xdr.AssetTypeAssetTypeNative, "", importTestAccountID},
-	{xdr.AssetTypeAssetTypeCreditAlphanum4, "USD", importTestAccountID},
-	{xdr.AssetTypeAssetTypeCreditAlphanum12, "USDUSD", importTestAccountID},
-}
-
 func TestImport(t *testing.T) {
+	var importtests = []struct {
+		assetType xdr.AssetType
+		code      string
+		issuer    string
+	}{
+		{xdr.AssetTypeAssetTypeNative, "", ""},
+		{xdr.AssetTypeAssetTypeCreditAlphanum4, "USD", importTestAccountID},
+		{xdr.AssetTypeAssetTypeCreditAlphanum12, "USDUSD", importTestAccountID},
+	}
 	for _, tt := range importtests {
 		t.Logf("testing asset %s", tt.assetType)
 		stellarAsset := makeAsset(tt.assetType, tt.code, tt.issuer)
