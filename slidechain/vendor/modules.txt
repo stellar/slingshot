@@ -12,6 +12,7 @@ github.com/chain/txvm/protocol
 github.com/chain/txvm/protocol/bc
 github.com/chain/txvm/protocol/state
 github.com/chain/txvm/protocol/txbuilder/standard
+github.com/chain/txvm/protocol/txbuilder/txresult
 github.com/chain/txvm/protocol/txvm
 github.com/chain/txvm/protocol/txvm/asm
 github.com/chain/txvm/crypto/ed25519/internal/edwards25519
