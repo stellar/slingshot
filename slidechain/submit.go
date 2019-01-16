@@ -9,13 +9,12 @@ import (
 	"sync"
 	"time"
 
-	"slingshot/slidechain/net"
-
 	"github.com/bobg/multichan"
 	"github.com/chain/txvm/errors"
 	"github.com/chain/txvm/protocol"
 	"github.com/chain/txvm/protocol/bc"
 	"github.com/golang/protobuf/proto"
+	"github.com/interstellar/slingshot/slidechain/net"
 )
 
 // TODO: make this configurable.

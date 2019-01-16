@@ -17,8 +17,6 @@ import (
 	"testing"
 	"time"
 
-	"slingshot/slidechain/store"
-
 	"github.com/bobg/multichan"
 	"github.com/chain/txvm/crypto/ed25519"
 	"github.com/chain/txvm/errors"
@@ -30,6 +28,7 @@ import (
 	"github.com/chain/txvm/protocol/txvm/txvmutil"
 	"github.com/davecgh/go-spew/spew"
 	"github.com/golang/protobuf/proto"
+	"github.com/interstellar/slingshot/slidechain/store"
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/stellar/go/xdr"
 )

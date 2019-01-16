@@ -9,13 +9,12 @@ import (
 	"strings"
 	"sync"
 
-	"slingshot/slidechain/store"
-
 	"github.com/bobg/multichan"
 	"github.com/chain/txvm/crypto/ed25519"
 	"github.com/chain/txvm/errors"
 	"github.com/chain/txvm/protocol"
 	"github.com/chain/txvm/protocol/bc"
+	"github.com/interstellar/slingshot/slidechain/store"
 	"github.com/stellar/go/clients/horizon"
 	"github.com/stellar/go/keypair"
 	"github.com/stellar/go/xdr"

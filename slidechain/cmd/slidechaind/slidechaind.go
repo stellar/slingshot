@@ -7,10 +7,9 @@ import (
 	"net"
 	"net/http"
 
-	"slingshot/slidechain"
-
 	"github.com/chain/txvm/protocol"
 	"github.com/chain/txvm/protocol/bc"
+	"github.com/interstellar/slingshot/slidechain"
 	_ "github.com/mattn/go-sqlite3"
 )
 
