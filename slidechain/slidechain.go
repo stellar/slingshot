@@ -46,10 +46,10 @@ func start(ctx context.Context, dbfile, horizonURL string) (*custodian, error) {
 	}
 
 	return &custodian{
-		accountID: *custAccountID, // TODO(tessr): should this field be a pointer to an xdr.AccountID?
 		seed:      seed,
+		accountID: *custAccountID, // TODO(tessr): should this field be a pointer to an xdr.AccountID?
+		s:         &submitter{w: multichan.New((*bc.Block)(nil))},
 		db:        db,
-		w:         multichan.New((*bc.Block)(nil)),
 		hclient:   hclient,
 		imports:   sync.NewCond(new(sync.Mutex)),
 		exports:   sync.NewCond(new(sync.Mutex)),
@@ -113,15 +113,13 @@ func main() {
 
 	log.Printf("listening on %s, initial block ID %x", listener.Addr(), c.initBlockHash.Bytes())
 
-	s := &submitter{w: c.w}
-
 	// Start streaming txs, importing, and exporting
 	go c.watchPegs(ctx)
 	go c.importFromPegs(ctx)
 	go c.watchExports(ctx)
 	go c.pegOutFromExports(ctx)
 
-	http.Handle("/submit", s)
+	http.Handle("/submit", c.s)
 	http.HandleFunc("/get", get)
 	http.Serve(listener, nil)
 }
