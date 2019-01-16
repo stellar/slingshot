@@ -13,10 +13,11 @@ import (
 	"net/url"
 	"os"
 	"reflect"
-	"slingshot/slidechain/store"
 	"sync"
 	"testing"
 	"time"
+
+	"slingshot/slidechain/store"
 
 	"github.com/bobg/multichan"
 	"github.com/chain/txvm/crypto/ed25519"

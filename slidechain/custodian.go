@@ -6,9 +6,10 @@ import (
 	"encoding/hex"
 	"log"
 	"net/http"
-	"slingshot/slidechain/store"
 	"strings"
 	"sync"
+
+	"slingshot/slidechain/store"
 
 	"github.com/bobg/multichan"
 	"github.com/chain/txvm/crypto/ed25519"

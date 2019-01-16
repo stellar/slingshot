@@ -5,8 +5,9 @@ import (
 	"flag"
 	"log"
 	"net/http"
-	"slingshot/slidechain/stellar"
 	"strings"
+
+	"slingshot/slidechain/stellar"
 
 	"github.com/chain/txvm/crypto/ed25519"
 	"github.com/interstellar/starlight/worizon/xlm"
