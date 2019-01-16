@@ -3,13 +3,17 @@
 use super::mix;
 use bulletproofs::r1cs::{ConstraintSystem, R1CSError};
 use curve25519_dalek::scalar::Scalar;
-use std::iter::once;
+use std::iter;
 use subtle::{ConditionallySelectable, ConstantTimeEq};
 use value::{AllocatedValue, Value};
 
-/// Enforces that the outputs are either a merge of the inputs: `D = A + B && C = 0`,
-/// or the outputs are equal to the inputs `C = A && D = B`. See spec for more details.
-/// Works for `k` inputs and `k` outputs.
+/// Takes:
+/// * a vector of `k` input `AllocatedValue`s provided in arbitrary order.
+///
+/// Returns:
+/// * a vector of `k` sorted `AllocatedValue`s that are the inputs to the `mix` gadget
+/// * a vector of `k` `AllocatedValue`s that are the outputs to the `mix` gadget,
+///   such that each output is either zero, or the sum of all of the `Values` of one type.
 pub fn fill_cs<CS: ConstraintSystem>(
     cs: &mut CS,
     inputs: Vec<AllocatedValue>,
@@ -42,13 +46,13 @@ fn call_mix_gadget<CS: ConstraintSystem>(
     // For each 2-mix, constrain A, B, C, D:
     for (((A, B), C), D) in
         // A = (first_in||mix_mid)[i]
-        once(&first_in).chain(mix_mid.iter())
+        iter::once(&first_in).chain(mix_mid.iter())
         // B = mix_in[i+1]
         .zip(mix_in.iter().skip(1))
         // C = mix_out[i]
         .zip(mix_out.iter())
         // D = (mix_mid||last_out)[i]
-        .zip(mix_mid.iter().chain(once(&last_out)))
+        .zip(mix_mid.iter().chain(iter::once(&last_out)))
     {
         mix::fill_cs(cs, *A, *B, *C, *D)?
     }
