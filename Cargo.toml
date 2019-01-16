@@ -12,7 +12,7 @@ failure = "0.1"
 
 [dependencies.bulletproofs]
 git = "https://github.com/dalek-cryptography/bulletproofs"
-branch = "oleg/two-phase-impl"
+branch = "develop"
 features = ["yoloproofs"]
 
 [dev-dependencies]
