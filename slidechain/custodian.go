@@ -27,6 +27,7 @@ var (
 type custodian struct {
 	seed          string
 	accountID     xdr.AccountId
+	s             *submitter
 	db            *sql.DB
 	w             *multichan.W
 	hclient       *horizon.Client

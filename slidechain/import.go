@@ -60,7 +60,7 @@ func (c *custodian) buildImportTx(
 	return tx2, nil
 }
 
-func (c *custodian) importFromPegs(ctx context.Context, s *submitter) {
+func (c *custodian) importFromPegs(ctx context.Context) {
 	defer log.Print("importFromPegs exiting")
 
 	c.imports.L.Lock()
@@ -99,7 +99,7 @@ func (c *custodian) importFromPegs(ctx context.Context, s *submitter) {
 				assetXDR = assetXDRs[i]
 				recip    = recips[i]
 			)
-			err = c.doImport(ctx, s, txid, opNum, amount, assetXDR, recip) // TODO(bobg): probably s should be a field in the custodian object
+			err = c.doImport(ctx, txid, opNum, amount, assetXDR, recip)
 			if err != nil {
 				if err == context.Canceled {
 					return
@@ -110,7 +110,7 @@ func (c *custodian) importFromPegs(ctx context.Context, s *submitter) {
 	}
 }
 
-func (c *custodian) doImport(ctx context.Context, s *submitter, txid string, opNum int, amount int64, assetXDR, recip []byte) error {
+func (c *custodian) doImport(ctx context.Context, txid string, opNum int, amount int64, assetXDR, recip []byte) error {
 	log.Printf("doing import from tx %s, op %d: %d of asset %x for recipient %x", txid, opNum, amount, assetXDR, recip)
 
 	importTxBytes, err := c.buildImportTx(amount, assetXDR, recip)
@@ -123,7 +123,7 @@ func (c *custodian) doImport(ctx context.Context, s *submitter, txid string, opN
 		return errors.Wrap(err, "computing transaction ID")
 	}
 	importTx.Runlimit = math.MaxInt64 - runlimit
-	err = s.submitTx(ctx, importTx)
+	err = c.s.submitTx(ctx, importTx)
 	if err != nil {
 		return errors.Wrap(err, "submitting import tx")
 	}

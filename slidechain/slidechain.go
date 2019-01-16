@@ -117,7 +117,7 @@ func main() {
 
 	// Start streaming txs, importing, and exporting
 	go c.watchPegs(ctx)
-	go c.importFromPegs(ctx, s)
+	go c.importFromPegs(ctx)
 	go c.watchExports(ctx)
 	go c.pegOutFromExports(ctx)
 
