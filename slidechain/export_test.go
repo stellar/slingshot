@@ -2,6 +2,7 @@ package slidechain
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -23,11 +24,12 @@ func TestPegOut(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer os.RemoveAll(testdir)
-	c, err := NewCustodian(ctx, fmt.Sprintf("%s/testdb", testdir), "https://horizon-testnet.stellar.org")
+	db, err := sql.Open("sqlite3", fmt.Sprintf("%s/testdb", testdir))
+	c, err := GetCustodian(ctx, db, "https://horizon-testnet.stellar.org")
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer c.DB.Close()
+	defer db.Close()
 
 	go c.pegOutFromExports(ctx)
 

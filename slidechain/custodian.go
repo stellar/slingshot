@@ -44,13 +44,13 @@ type Custodian struct {
 	InitBlockHash bc.Hash
 }
 
-// NewCustodian returns a new Custodian object, loading the preset
+// GetCustodian returns a Custodian object, loading the preset
 // account ID and seed from the db if it exists, otherwise generating
 // a new keypair and funding the account.
-func NewCustodian(ctx context.Context, dbfile, horizonURL string) (*Custodian, error) {
-	db, err := startdb(dbfile)
+func GetCustodian(ctx context.Context, db *sql.DB, horizonURL string) (*Custodian, error) {
+	err := setSchema(db)
 	if err != nil {
-		return nil, errors.Wrap(err, "starting db")
+		return nil, errors.Wrap(err, "setting db schema")
 	}
 
 	hclient := &horizon.Client{
@@ -187,15 +187,6 @@ func mustDecodeHex(inp string) []byte {
 		log.Fatal(err)
 	}
 	return result
-}
-
-func startdb(dbfile string) (*sql.DB, error) {
-	db, err := sql.Open("sqlite3", dbfile)
-	if err != nil {
-		return nil, errors.Wrap(err, "opening db")
-	}
-	err = setSchema(db)
-	return db, errors.Wrap(err, "creating schema")
 }
 
 func setSchema(db *sql.DB) error {

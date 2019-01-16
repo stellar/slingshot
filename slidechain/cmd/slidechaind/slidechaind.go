@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"flag"
 	"log"
 	"net"
@@ -29,11 +30,15 @@ func main() {
 
 	flag.Parse()
 
-	c, err := slidechain.NewCustodian(ctx, *dbfile, *url)
+	db, err := sql.Open("sqlite3", *dbfile)
+	if err != nil {
+		log.Fatalf("error opening db: %s", err)
+	}
+	c, err := slidechain.GetCustodian(ctx, db, *url)
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer c.DB.Close()
+	defer db.Close()
 
 	listener, err := net.Listen("tcp", *addr)
 	if err != nil {

@@ -77,14 +77,12 @@ func (c *Custodian) watchPegs(ctx context.Context) {
 		if err == context.Canceled {
 			return
 		}
-		var dur time.Duration
 		if err != nil {
-			dur = backoff.Next()
-			log.Printf("error streaming from horizon: %s, retrying in %s...", err, dur)
+			log.Printf("error streaming from horizon: %s, retrying...", err)
 		}
 		ch := make(chan struct{})
 		go func() {
-			time.Sleep(dur)
+			time.Sleep(backoff.Next())
 			close(ch)
 		}()
 		select {

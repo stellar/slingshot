@@ -295,7 +295,11 @@ func withTestServer(ctx context.Context, t *testing.T, fn func(context.Context, 
 	f.Close()
 	defer os.Remove(tmpfile)
 
-	db, err := startdb(tmpfile)
+	db, err := sql.Open("sqlite3", tmpfile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = setSchema(db)
 	if err != nil {
 		t.Fatal(err)
 	}
