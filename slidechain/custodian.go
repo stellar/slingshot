@@ -88,7 +88,7 @@ func GetCustodian(ctx context.Context, db *sql.DB, horizonURL string) (*Custodia
 		log.Fatal(err)
 	}
 
-	return &Custodian{
+	c := &Custodian{
 		seed:      seed,
 		accountID: *custAccountID,
 		S: &submitter{
@@ -103,7 +103,9 @@ func GetCustodian(ctx context.Context, db *sql.DB, horizonURL string) (*Custodia
 		network:       root.NetworkPassphrase,
 		privkey:       custodianPrv,
 		InitBlockHash: initialBlock.Hash(),
-	}, nil
+	}
+	c.launch(ctx)
+	return c, nil
 }
 
 func custodianAccount(ctx context.Context, db *sql.DB, hclient *horizon.Client) (*xdr.AccountId, string, error) {
@@ -172,9 +174,9 @@ func makeNewCustodianAccount(ctx context.Context, db *sql.DB, hclient *horizon.C
 	return &custAccountID, pair.Seed(), err
 }
 
-// Launch kicks off the Custodian's long-running goroutines
+// launch kicks off the Custodian's long-running goroutines
 // that stream txs, import, and export.
-func (c *Custodian) Launch(ctx context.Context) {
+func (c *Custodian) launch(ctx context.Context) {
 	go c.watchPegs(ctx)
 	go c.importFromPegs(ctx)
 	go c.watchExports(ctx)

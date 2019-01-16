@@ -299,11 +299,11 @@ func withTestServer(ctx context.Context, t *testing.T, fn func(context.Context, 
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer db.Close()
 	err = setSchema(db)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer db.Close()
 
 	heights := make(chan uint64)
 	bs, err := store.New(db, heights)

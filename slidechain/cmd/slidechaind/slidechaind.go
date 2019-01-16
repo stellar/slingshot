@@ -34,11 +34,11 @@ func main() {
 	if err != nil {
 		log.Fatalf("error opening db: %s", err)
 	}
+	defer db.Close()
 	c, err := slidechain.GetCustodian(ctx, db, *url)
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer db.Close()
 
 	listener, err := net.Listen("tcp", *addr)
 	if err != nil {
@@ -46,8 +46,6 @@ func main() {
 	}
 
 	log.Printf("listening on %s, initial block ID %x", listener.Addr(), c.InitBlockHash.Bytes())
-
-	c.Launch(ctx)
 
 	http.Handle("/submit", c.S)
 	http.HandleFunc("/get", c.S.Get)

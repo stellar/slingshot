@@ -25,11 +25,14 @@ func TestPegOut(t *testing.T) {
 	}
 	defer os.RemoveAll(testdir)
 	db, err := sql.Open("sqlite3", fmt.Sprintf("%s/testdb", testdir))
-	c, err := GetCustodian(ctx, db, "https://horizon-testnet.stellar.org")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer db.Close()
+	c, err := GetCustodian(ctx, db, "https://horizon-testnet.stellar.org")
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	go c.pegOutFromExports(ctx)
 
