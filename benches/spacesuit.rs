@@ -82,21 +82,11 @@ fn verify_spacesuit_proof_helper(n: usize, c: &mut Criterion) {
         let mut outputs = inputs.clone();
         rand::thread_rng().shuffle(&mut outputs);
         let mut rng: rand::ThreadRng = rand::thread_rng();
-        let (
-            proof,
-            tx_in_com,
-            tx_out_com,
-        ) = prove(&bp_gens, &pc_gens, &inputs, &outputs, &mut rng).unwrap();
+        let (proof, tx_in_com, tx_out_com) =
+            prove(&bp_gens, &pc_gens, &inputs, &outputs, &mut rng).unwrap();
 
         b.iter(|| {
-            verify(
-                &bp_gens,
-                &pc_gens,
-                &proof,
-                &tx_in_com,
-                &tx_out_com,
-            )
-            .unwrap();
+            verify(&bp_gens, &pc_gens, &proof, &tx_in_com, &tx_out_com).unwrap();
         })
     });
 }
