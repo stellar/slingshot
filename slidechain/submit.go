@@ -1,12 +1,15 @@
-package main
+package slidechain
 
 import (
 	"context"
 	"io/ioutil"
 	"log"
 	"net/http"
+	"strconv"
 	"sync"
 	"time"
+
+	"slingshot/slidechain/net"
 
 	"github.com/bobg/multichan"
 	"github.com/chain/txvm/errors"
@@ -34,6 +37,10 @@ type submitter struct {
 	// Anything monitoring the blockchain can create a reader and consume them.
 	// (Really, what we want here is the Sequence "pin" mechanism.)
 	w *multichan.W
+
+	initialBlock *bc.Block
+
+	chain *protocol.Chain
 }
 
 func (s *submitter) submitTx(ctx context.Context, tx *bc.Tx) error {
@@ -44,15 +51,15 @@ func (s *submitter) submitTx(ctx context.Context, tx *bc.Tx) error {
 		s.bb = protocol.NewBlockBuilder()
 		nextBlockTime := time.Now().Add(blockInterval)
 
-		st := chain.State()
+		st := s.chain.State()
 		if st.Header == nil {
-			err := st.ApplyBlockHeader(initialBlock.BlockHeader)
+			err := st.ApplyBlockHeader(s.initialBlock.BlockHeader)
 			if err != nil {
 				return errors.Wrap(err, "initializing empty state")
 			}
 		}
 
-		err := s.bb.Start(chain.State(), bc.Millis(nextBlockTime))
+		err := s.bb.Start(s.chain.State(), bc.Millis(nextBlockTime))
 		if err != nil {
 			return errors.Wrap(err, "starting a new tx pool")
 		}
@@ -72,7 +79,7 @@ func (s *submitter) submitTx(ctx context.Context, tx *bc.Tx) error {
 				return
 			}
 			b := &bc.Block{UnsignedBlock: unsignedBlock}
-			err = chain.CommitAppliedBlock(ctx, b, newSnapshot)
+			err = s.chain.CommitAppliedBlock(ctx, b, newSnapshot)
 			if err != nil {
 				log.Fatalf("committing new block: %s", err)
 			}
@@ -95,27 +102,79 @@ func (s *submitter) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 
 	bits, err := ioutil.ReadAll(req.Body)
 	if err != nil {
-		httpErrf(w, http.StatusInternalServerError, "reading request body: %s", err)
+		net.Errorf(w, http.StatusInternalServerError, "reading request body: %s", err)
 		return
 	}
 
 	var rawTx bc.RawTx
 	err = proto.Unmarshal(bits, &rawTx)
 	if err != nil {
-		httpErrf(w, http.StatusBadRequest, "parsing request body: %s", err)
+		net.Errorf(w, http.StatusBadRequest, "parsing request body: %s", err)
 		return
 	}
 
 	tx, err := bc.NewTx(rawTx.Program, rawTx.Version, rawTx.Runlimit)
 	if err != nil {
-		httpErrf(w, http.StatusBadRequest, "building tx: %s", err)
+		net.Errorf(w, http.StatusBadRequest, "building tx: %s", err)
 		return
 	}
 
 	err = s.submitTx(ctx, tx)
 	if err != nil {
-		httpErrf(w, http.StatusBadRequest, "submitting tx: %s", err)
+		net.Errorf(w, http.StatusBadRequest, "submitting tx: %s", err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *submitter) Get(w http.ResponseWriter, req *http.Request) {
+	wantStr := req.FormValue("height")
+	var (
+		want uint64 = 1
+		err  error
+	)
+	if wantStr != "" {
+		want, err = strconv.ParseUint(wantStr, 10, 64)
+		if err != nil {
+			net.Errorf(w, http.StatusBadRequest, "parsing height: %s", err)
+			return
+		}
+	}
+
+	height := s.chain.Height()
+	if want == 0 {
+		want = height
+	}
+	if want > height {
+		ctx := req.Context()
+		waiter := s.chain.BlockWaiter(want)
+		select {
+		case <-waiter:
+			// ok
+		case <-ctx.Done():
+			net.Errorf(w, http.StatusRequestTimeout, "timed out")
+			return
+		}
+	}
+
+	ctx := req.Context()
+
+	b, err := s.chain.GetBlock(ctx, want)
+	if err != nil {
+		net.Errorf(w, http.StatusInternalServerError, "getting block %d: %s", want, err)
+		return
+	}
+
+	bits, err := b.Bytes()
+	if err != nil {
+		net.Errorf(w, http.StatusInternalServerError, "serializing block %d: %s", want, err)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/octet-stream")
+	_, err = w.Write(bits)
+	if err != nil {
+		net.Errorf(w, http.StatusInternalServerError, "sending response: %s", err)
+		return
+	}
 }

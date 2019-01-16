@@ -1,4 +1,4 @@
-package main
+package slidechain
 
 import (
 	"context"
@@ -6,10 +6,14 @@ import (
 	"encoding/hex"
 	"log"
 	"net/http"
+	"slingshot/slidechain/store"
+	"strings"
 	"sync"
 
+	"github.com/bobg/multichan"
 	"github.com/chain/txvm/crypto/ed25519"
 	"github.com/chain/txvm/errors"
+	"github.com/chain/txvm/protocol"
 	"github.com/chain/txvm/protocol/bc"
 	"github.com/stellar/go/clients/horizon"
 	"github.com/stellar/go/keypair"
@@ -23,17 +27,83 @@ var (
 	custodianPub = custodianPrv.Public().(ed25519.PublicKey)
 )
 
-type custodian struct {
-	seed          string
-	accountID     xdr.AccountId
-	s             *submitter
-	db            *sql.DB
-	hclient       *horizon.Client
-	imports       *sync.Cond
-	exports       *sync.Cond
-	network       string
-	privkey       ed25519.PrivateKey
-	initBlockHash bc.Hash
+// Custodian manages a Slidechain custodian, responsible
+// for importing pegged-in values and pegging out exported
+// values.
+type Custodian struct {
+	seed      string
+	accountID xdr.AccountId
+	hclient   *horizon.Client
+	imports   *sync.Cond
+	exports   *sync.Cond
+	network   string
+	privkey   ed25519.PrivateKey
+
+	DB            *sql.DB
+	S             *submitter
+	InitBlockHash bc.Hash
+}
+
+// NewCustodian returns a new Custodian object, loading the preset
+// account ID and seed from the db if it exists, otherwise generating
+// a new keypair and funding the account.
+func NewCustodian(ctx context.Context, dbfile, horizonURL string) (*Custodian, error) {
+	db, err := startdb(dbfile)
+	if err != nil {
+		return nil, errors.Wrap(err, "starting db")
+	}
+
+	hclient := &horizon.Client{
+		URL:  strings.TrimRight(horizonURL, "/"),
+		HTTP: new(http.Client),
+	}
+
+	root, err := hclient.Root()
+	if err != nil {
+		return nil, errors.Wrap(err, "getting horizon client root")
+	}
+
+	custAccountID, seed, err := custodianAccount(ctx, db, hclient)
+	if err != nil {
+		return nil, errors.Wrap(err, "creating/fetching custodian account")
+	}
+
+	heights := make(chan uint64)
+	bs, err := store.New(db, heights)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	initialBlock, err := bs.GetBlock(ctx, 1)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	chain, err := protocol.NewChain(ctx, initialBlock, bs, heights)
+	if err != nil {
+		log.Fatal("initializing Chain: ", err)
+	}
+	_, err = chain.Recover(ctx)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	return &Custodian{
+		seed:      seed,
+		accountID: *custAccountID,
+		S: &submitter{
+			w:            multichan.New((*bc.Block)(nil)),
+			chain:        chain,
+			initialBlock: initialBlock,
+		},
+		DB:            db,
+		hclient:       hclient,
+		imports:       sync.NewCond(new(sync.Mutex)),
+		exports:       sync.NewCond(new(sync.Mutex)),
+		network:       root.NetworkPassphrase,
+		privkey:       custodianPrv,
+		InitBlockHash: initialBlock.Hash(),
+	}, nil
 }
 
 func custodianAccount(ctx context.Context, db *sql.DB, hclient *horizon.Client) (*xdr.AccountId, string, error) {
@@ -102,10 +172,33 @@ func makeNewCustodianAccount(ctx context.Context, db *sql.DB, hclient *horizon.C
 	return &custAccountID, pair.Seed(), err
 }
 
+// Launch kicks off the Custodian's long-running goroutines
+// that stream txs, import, and export.
+func (c *Custodian) Launch(ctx context.Context) {
+	go c.watchPegs(ctx)
+	go c.importFromPegs(ctx)
+	go c.watchExports(ctx)
+	go c.pegOutFromExports(ctx)
+}
+
 func mustDecodeHex(inp string) []byte {
 	result, err := hex.DecodeString(inp)
 	if err != nil {
 		log.Fatal(err)
 	}
 	return result
+}
+
+func startdb(dbfile string) (*sql.DB, error) {
+	db, err := sql.Open("sqlite3", dbfile)
+	if err != nil {
+		return nil, errors.Wrap(err, "opening db")
+	}
+	err = setSchema(db)
+	return db, errors.Wrap(err, "creating schema")
+}
+
+func setSchema(db *sql.DB) error {
+	_, err := db.Exec(schema)
+	return errors.Wrap(err, "creating db schema")
 }

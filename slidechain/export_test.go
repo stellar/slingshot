@@ -1,4 +1,4 @@
-package main
+package slidechain
 
 import (
 	"context"
@@ -23,11 +23,11 @@ func TestPegOut(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer os.RemoveAll(testdir)
-	c, err := start(ctx, fmt.Sprintf("%s/testdb", testdir), "https://horizon-testnet.stellar.org")
+	c, err := NewCustodian(ctx, fmt.Sprintf("%s/testdb", testdir), "https://horizon-testnet.stellar.org")
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer c.db.Close()
+	defer c.DB.Close()
 
 	go c.pegOutFromExports(ctx)
 
@@ -52,7 +52,7 @@ func TestPegOut(t *testing.T) {
 	}
 	log.Printf("successfully funded destination account %s", destination)
 
-	_, err = c.db.Exec("INSERT INTO exports (txid, recipient, amount, asset_xdr) VALUES ($1, $2, $3, $4)", "", destination, 50, lumenXDR)
+	_, err = c.DB.Exec("INSERT INTO exports (txid, recipient, amount, asset_xdr) VALUES ($1, $2, $3, $4)", "", destination, 50, lumenXDR)
 	if err != nil && err != context.Canceled {
 		t.Fatal(err)
 	}
@@ -63,38 +63,41 @@ func TestPegOut(t *testing.T) {
 
 	go func() {
 		var cursor horizon.Cursor
-		err := c.hclient.StreamTransactions(ctx, destination, &cursor, func(tx horizon.Transaction) {
-			log.Printf("received tx: %s", tx.EnvelopeXdr)
-			var env xdr.TransactionEnvelope
-			err := xdr.SafeUnmarshalBase64(tx.EnvelopeXdr, &env)
+		for {
+			err := c.hclient.StreamTransactions(ctx, destination, &cursor, func(tx horizon.Transaction) {
+				log.Printf("received tx: %s", tx.EnvelopeXdr)
+				var env xdr.TransactionEnvelope
+				err := xdr.SafeUnmarshalBase64(tx.EnvelopeXdr, &env)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if env.Tx.SourceAccount.Address() != c.accountID.Address() {
+					log.Println("source accounts don't match, skipping...")
+					return
+				}
+				if len(env.Tx.Operations) != 1 {
+					t.Fatalf("too many operations got %d, want 1", len(env.Tx.Operations))
+				}
+				op := env.Tx.Operations[0]
+				if op.Body.Type != xdr.OperationTypePayment {
+					t.Fatalf("wrong operation type: got %s, want %s", op.Body.Type, xdr.OperationTypePayment)
+				}
+				paymentOp := op.Body.PaymentOp
+				if paymentOp.Destination.Address() != destination {
+					t.Fatalf("incorrect payment destination got %s, want %s", paymentOp.Destination.Address(), destination)
+				}
+				if paymentOp.Amount != 50 {
+					t.Fatalf("got incorrect payment amount %d, want %d", paymentOp.Amount, 50)
+				}
+				if paymentOp.Asset.Type != xdr.AssetTypeAssetTypeNative {
+					t.Fatalf("got incorrect payment asset %s, want lumens", paymentOp.Asset.String())
+				}
+				close(ch)
+			})
 			if err != nil {
-				t.Fatal(err)
+				log.Printf("error streaming from Horizon: %s, retrying in 1s", err)
+				time.Sleep(time.Second)
 			}
-			if env.Tx.SourceAccount.Address() != c.accountID.Address() {
-				log.Println("source accounts don't match, skipping...")
-				return
-			}
-			if len(env.Tx.Operations) != 1 {
-				t.Fatalf("too many operations got %d, want 1", len(env.Tx.Operations))
-			}
-			op := env.Tx.Operations[0]
-			if op.Body.Type != xdr.OperationTypePayment {
-				t.Fatalf("wrong operation type: got %s, want %s", op.Body.Type, xdr.OperationTypePayment)
-			}
-			paymentOp := op.Body.PaymentOp
-			if paymentOp.Destination.Address() != destination {
-				t.Fatalf("incorrect payment destination got %s, want %s", paymentOp.Destination.Address(), destination)
-			}
-			if paymentOp.Amount != 50 {
-				t.Fatalf("got incorrect payment amount %d, want %d", paymentOp.Amount, 50)
-			}
-			if paymentOp.Asset.Type != xdr.AssetTypeAssetTypeNative {
-				t.Fatalf("got incorrect payment asset %s, want lumens", paymentOp.Asset.String())
-			}
-			close(ch)
-		})
-		if err != nil {
-			t.Fatal(err)
 		}
 	}()
 

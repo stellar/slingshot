@@ -1,4 +1,4 @@
-package main
+package store
 
 import (
 	"context"
@@ -11,12 +11,12 @@ import (
 	"github.com/chain/txvm/protocol/state"
 )
 
-type blockStore struct {
+type BlockStore struct {
 	db      *sql.DB
 	heights chan<- uint64
 }
 
-func newBlockStore(db *sql.DB, heights chan<- uint64) (*blockStore, error) {
+func New(db *sql.DB, heights chan<- uint64) (*BlockStore, error) {
 	var height uint64
 	err := db.QueryRow("SELECT height FROM blocks ORDER BY height DESC LIMIT 1").Scan(&height)
 	if err == sql.ErrNoRows {
@@ -36,19 +36,19 @@ func newBlockStore(db *sql.DB, heights chan<- uint64) (*blockStore, error) {
 	} else if err != nil {
 		return nil, errors.Wrap(err, "getting blockchain height")
 	}
-	return &blockStore{
+	return &BlockStore{
 		db:      db,
 		heights: heights,
 	}, nil
 }
 
-func (s *blockStore) Height(context.Context) (uint64, error) {
+func (s *BlockStore) Height(context.Context) (uint64, error) {
 	var height uint64
 	err := s.db.QueryRow("SELECT MAX(height) FROM blocks").Scan(&height)
 	return height, err
 }
 
-func (s *blockStore) GetBlock(_ context.Context, height uint64) (*bc.Block, error) {
+func (s *BlockStore) GetBlock(_ context.Context, height uint64) (*bc.Block, error) {
 	var bits []byte
 	err := s.db.QueryRow("SELECT bits FROM blocks WHERE height = $1", height).Scan(&bits)
 	if err != nil {
@@ -59,7 +59,7 @@ func (s *blockStore) GetBlock(_ context.Context, height uint64) (*bc.Block, erro
 	return b, errors.Wrapf(err, "parsing block %d", height)
 }
 
-func (s *blockStore) LatestSnapshot(context.Context) (*state.Snapshot, error) {
+func (s *BlockStore) LatestSnapshot(context.Context) (*state.Snapshot, error) {
 	var bits []byte
 	err := s.db.QueryRow("SELECT bits FROM snapshots ORDER BY height DESC LIMIT 1").Scan(&bits)
 	if err == sql.ErrNoRows {
@@ -73,7 +73,7 @@ func (s *blockStore) LatestSnapshot(context.Context) (*state.Snapshot, error) {
 	return st, errors.Wrap(err, "parsing latest snapshot")
 }
 
-func (s *blockStore) SaveBlock(_ context.Context, b *bc.Block) error {
+func (s *BlockStore) SaveBlock(_ context.Context, b *bc.Block) error {
 	h := b.Hash().Bytes()
 	bits, err := b.Bytes()
 	if err != nil {
@@ -83,12 +83,12 @@ func (s *blockStore) SaveBlock(_ context.Context, b *bc.Block) error {
 	return errors.Wrapf(err, "writing block %d to db", b.Height)
 }
 
-func (s *blockStore) FinalizeHeight(_ context.Context, height uint64) error {
+func (s *BlockStore) FinalizeHeight(_ context.Context, height uint64) error {
 	s.heights <- height
 	return nil
 }
 
-func (s *blockStore) SaveSnapshot(_ context.Context, snapshot *state.Snapshot) error {
+func (s *BlockStore) SaveSnapshot(_ context.Context, snapshot *state.Snapshot) error {
 	bits, err := snapshot.Bytes()
 	if err != nil {
 		return errors.Wrapf(err, "marshaling snapshot at height %d for writing to db", snapshot.Height())

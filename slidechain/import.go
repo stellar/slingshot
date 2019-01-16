@@ -1,4 +1,4 @@
-package main
+package slidechain
 
 import (
 	"bytes"
@@ -13,12 +13,13 @@ import (
 	"github.com/chain/txvm/errors"
 	"github.com/chain/txvm/protocol/bc"
 	"github.com/chain/txvm/protocol/txbuilder/standard"
+	"github.com/chain/txvm/protocol/txbuilder/txresult"
 	"github.com/chain/txvm/protocol/txvm"
 	"github.com/chain/txvm/protocol/txvm/asm"
 )
 
 // buildImportTx builds the import transaction.
-func (c *custodian) buildImportTx(
+func (c *Custodian) buildImportTx(
 	amount int64,
 	assetXDR []byte,
 	recipPubkey []byte,
@@ -30,7 +31,7 @@ func (c *custodian) buildImportTx(
 	exp := int64(bc.Millis(time.Now().Add(5 * time.Minute)))
 
 	// now arg stack is set up, empty con stack
-	fmt.Fprintf(buf, "x'%x' %d\n", c.initBlockHash.Bytes(), exp) // con stack: blockid, exp
+	fmt.Fprintf(buf, "x'%x' %d\n", c.InitBlockHash.Bytes(), exp) // con stack: blockid, exp
 	fmt.Fprintf(buf, "nonce put\n")                              // empty con stack; ..., nonce on arg stack
 	fmt.Fprintf(buf, "x'%x' contract call\n", issueProg)         // empty con stack; arg stack: ..., sigcheck, issuedval
 
@@ -60,8 +61,8 @@ func (c *custodian) buildImportTx(
 	return tx2, nil
 }
 
-func (c *custodian) importFromPegs(ctx context.Context) {
-	defer log.Print("importFromPegs exiting")
+func (c *Custodian) importFromPegs(ctx context.Context) {
+	defer log.Print("ImportFromPegs exiting")
 
 	c.imports.L.Lock()
 	defer c.imports.L.Unlock()
@@ -79,7 +80,7 @@ func (c *custodian) importFromPegs(ctx context.Context) {
 			assetXDRs, recips [][]byte
 		)
 		const q = `SELECT txid, operation_num, amount, asset_xdr, recipient_pubkey FROM pegs WHERE imported=0`
-		err := sqlutil.ForQueryRows(ctx, c.db, q, func(txid string, opNum int, amount int64, assetXDR, recip []byte) {
+		err := sqlutil.ForQueryRows(ctx, c.DB, q, func(txid string, opNum int, amount int64, assetXDR, recip []byte) {
 			txids = append(txids, txid)
 			opNums = append(opNums, opNum)
 			amounts = append(amounts, amount)
@@ -110,7 +111,7 @@ func (c *custodian) importFromPegs(ctx context.Context) {
 	}
 }
 
-func (c *custodian) doImport(ctx context.Context, txid string, opNum int, amount int64, assetXDR, recip []byte) error {
+func (c *Custodian) doImport(ctx context.Context, txid string, opNum int, amount int64, assetXDR, recip []byte) error {
 	log.Printf("doing import from tx %s, op %d: %d of asset %x for recipient %x", txid, opNum, amount, assetXDR, recip)
 
 	importTxBytes, err := c.buildImportTx(amount, assetXDR, recip)
@@ -123,10 +124,13 @@ func (c *custodian) doImport(ctx context.Context, txid string, opNum int, amount
 		return errors.Wrap(err, "computing transaction ID")
 	}
 	importTx.Runlimit = math.MaxInt64 - runlimit
-	err = c.s.submitTx(ctx, importTx)
+	err = c.S.submitTx(ctx, importTx)
 	if err != nil {
 		return errors.Wrap(err, "submitting import tx")
 	}
-	_, err = c.db.ExecContext(ctx, `UPDATE pegs SET imported=1 WHERE txid = $1 AND operation_num = $2`, txid, opNum)
+	txresult := txresult.New(importTx)
+	log.Printf("asset id: %x", txresult.Issuances[0].Value.AssetID)
+	log.Printf("output anchor: %x", txresult.Outputs[0].Value.Anchor)
+	_, err = c.DB.ExecContext(ctx, `UPDATE pegs SET imported=1 WHERE txid = $1 AND operation_num = $2`, txid, opNum)
 	return errors.Wrapf(err, "setting imported=1 for txid %s, operation %d", txid, opNum)
 }
