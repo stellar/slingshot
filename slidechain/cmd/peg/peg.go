@@ -7,11 +7,11 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/interstellar/starlight/worizon/xlm"
 	b "github.com/stellar/go/build"
 	"github.com/stellar/go/clients/horizon"
 	"github.com/stellar/go/keypair"
 	"github.com/stellar/go/xdr"
-	"i10r.io/worizon/xlm"
 )
 
 func main() {
