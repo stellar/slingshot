@@ -85,12 +85,6 @@ fn verify_spacesuit_proof_helper(n: usize, c: &mut Criterion) {
         let (
             proof,
             tx_in_com,
-            merge_in_com,
-            merge_mid_com,
-            merge_out_com,
-            split_in_com,
-            split_mid_com,
-            split_out_com,
             tx_out_com,
         ) = prove(&bp_gens, &pc_gens, &inputs, &outputs, &mut rng).unwrap();
 
@@ -100,12 +94,6 @@ fn verify_spacesuit_proof_helper(n: usize, c: &mut Criterion) {
                 &pc_gens,
                 &proof,
                 &tx_in_com,
-                &merge_in_com,
-                &merge_mid_com,
-                &merge_out_com,
-                &split_in_com,
-                &split_mid_com,
-                &split_out_com,
                 &tx_out_com,
             )
             .unwrap();
