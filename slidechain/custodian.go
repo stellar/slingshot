@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"sync"
 
-	"github.com/bobg/multichan"
 	"github.com/chain/txvm/crypto/ed25519"
 	"github.com/chain/txvm/errors"
 	"github.com/chain/txvm/protocol/bc"
@@ -27,8 +26,8 @@ var (
 type custodian struct {
 	seed          string
 	accountID     xdr.AccountId
+	s             *submitter
 	db            *sql.DB
-	w             *multichan.W
 	hclient       *horizon.Client
 	imports       *sync.Cond
 	exports       *sync.Cond

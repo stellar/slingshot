@@ -98,7 +98,7 @@ func (c *custodian) watchPegs(ctx context.Context) {
 
 // Runs as a goroutine.
 func (c *custodian) watchExports(ctx context.Context) {
-	r := c.w.Reader()
+	r := c.s.w.Reader()
 	for {
 		got, ok := r.Read(ctx)
 		if !ok {

@@ -207,11 +207,12 @@ func TestImport(t *testing.T) {
 
 			c := &custodian{
 				imports:       sync.NewCond(new(sync.Mutex)),
+				s:             s,
 				db:            db,
 				privkey:       custodianPrv,
 				initBlockHash: chain.InitialBlockHash,
 			}
-			go c.importFromPegs(ctx, s)
+			go c.importFromPegs(ctx)
 			_, err := db.Exec("INSERT INTO pegs (txid, operation_num, amount, asset_xdr, recipient_pubkey) VALUES ('txid', 1, 1, $1, $2)", assetXDR, testRecipPubKey)
 			if err != nil {
 				t.Fatal(err)
