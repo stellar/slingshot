@@ -33,6 +33,7 @@ github.com/go-errors/errors
 github.com/golang/protobuf/proto
 # github.com/interstellar/starlight v0.1.0-alpha
 github.com/interstellar/starlight/net
+github.com/interstellar/starlight/worizon/xlm
 github.com/interstellar/starlight/env
 # github.com/lib/pq v1.0.0
 github.com/lib/pq
