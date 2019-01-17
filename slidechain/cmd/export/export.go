@@ -58,6 +58,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("error submitting tx to slidechaind: %s", err)
 	}
+	defer resp.Body.Close()
 	if resp.StatusCode/100 != 2 {
 		log.Fatalf("status code %d from POST /submit", resp.StatusCode)
 	}
