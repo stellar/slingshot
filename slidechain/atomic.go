@@ -26,15 +26,14 @@ var (
 
 // InputAtomic writes txvm bytecode to b, calling the atomicity-guarantee contract
 // to confirm that the desired recipient pubkey is present.
-func InputAtomic(b *txvmutil.Builder, pubkey ed25519.PublicKey) {
-	Snapshot(b, pubkey)
+func InputAtomic(b *txvmutil.Builder, pubkey ed25519.PublicKey, bcid []byte) {
+	Snapshot(b, pubkey, bcid)
 	b.Op(op.Input).Op(op.Call)
 }
 
 // Snapshot adds to b the snapshot of an atomicity-guarantee contract as it appears in the UTXO set.
-func Snapshot(b *txvmutil.Builder, pubkey ed25519.PublicKey) {
-	var bcid []byte // TODO(debnil): Put actual block ID.
-	contractSeed := standard.AssetContractSeed[3]
+func Snapshot(b *txvmutil.Builder, pubkey ed25519.PublicKey, bcid []byte) {
+	contractSeed := standard.AssetContractSeed[3] // Hardcoded TxVM version ID.
 	nonce := txvm.NonceTuple(atomicGuaranteeSeed[:], contractSeed[:], bcid, int64(bc.Millis(time.Now().Add(5*time.Minute))))
 	hash := txvm.NonceHash(nonce)
 	b.Tuple(func(contract *txvmutil.TupleBuilder) {
