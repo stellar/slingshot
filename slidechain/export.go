@@ -16,13 +16,27 @@ const baseFee = 100
 
 // Runs as a goroutine.
 func (c *Custodian) pegOutFromExports(ctx context.Context) {
-	c.exports.L.Lock()
-	defer c.exports.L.Unlock()
-	for {
-		if err := ctx.Err(); err != nil {
-			return
+	defer log.Print("pegOutFromExports exiting")
+
+	ch := make(chan struct{})
+	go func() {
+		c.exports.L.Lock()
+		defer c.exports.L.Unlock()
+		for {
+			if ctx.Err() != nil {
+				return
+			}
+			c.exports.Wait()
+			ch <- struct{}{}
 		}
-		c.exports.Wait()
+	}()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ch:
+		}
 
 		const q = `SELECT txid, recipient, amount, asset_xdr FROM exports WHERE exported=0`
 

@@ -17,6 +17,7 @@ import (
 
 // Runs as a goroutine until ctx is canceled.
 func (c *Custodian) watchPegs(ctx context.Context) {
+	defer log.Println("watchPegs exiting")
 	backoff := i10rnet.Backoff{Base: 100 * time.Millisecond}
 
 	var cur horizon.Cursor
@@ -95,6 +96,7 @@ func (c *Custodian) watchPegs(ctx context.Context) {
 
 // Runs as a goroutine.
 func (c *Custodian) watchExports(ctx context.Context) {
+	defer log.Println("watchExports exiting")
 	r := c.S.w.Reader()
 	for {
 		got, ok := r.Read(ctx)

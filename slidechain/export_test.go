@@ -29,10 +29,12 @@ func TestPegOut(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	c, err := GetCustodian(ctx, db, "https://horizon-testnet.stellar.org")
+	c, err := newCustodian(ctx, db, "https://horizon-testnet.stellar.org")
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	go c.pegOutFromExports(ctx)
 
 	var lumen xdr.Asset
 	lumen.Type = xdr.AssetTypeAssetTypeNative
