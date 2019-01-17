@@ -34,8 +34,6 @@ func TestPegOut(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	go c.pegOutFromExports(ctx)
-
 	var lumen xdr.Asset
 	lumen.Type = xdr.AssetTypeAssetTypeNative
 	lumenXDR, err := lumen.MarshalBinary()
