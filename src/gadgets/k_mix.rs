@@ -34,23 +34,33 @@ pub fn fill_cs<CS: ConstraintSystem>(
     Ok((mix_in, mix_out))
 }
 
+// Calls `k` mix gadgets, using mix_in and mix_mid as inputs, and mix_mid and mix_out as outputs.
 fn call_mix_gadget<CS: ConstraintSystem>(
     cs: &mut CS,
     mix_in: &Vec<AllocatedValue>,
     mix_mid: &Vec<AllocatedValue>,
     mix_out: &Vec<AllocatedValue>,
 ) -> Result<(), R1CSError> {
+    let k = mix_out.len() - 1;
+    if mix_in.len() != k + 1 || mix_mid.len() != k - 1 {
+        return Err(R1CSError::GadgetError {
+            description: "Lengths of inputs are incorrect for call_mix_gadget in k_mix".to_string(),
+        });
+    }
+
+    // The first value of mix_in, to prepend to mix_mid for creating A inputs.
     let first_in = mix_in[0].clone();
+    // The last value of mix_out, to append to mix_mid for creating D outputs.
     let last_out = mix_out[mix_out.len() - 1].clone();
 
-    // For each 2-mix, constrain A, B, C, D:
+    // For each of the `k` mix gadget calls, constrain A, B, C, D (where i is in 0..k):
     for (((A, B), C), D) in
         // A = (first_in||mix_mid)[i]
         iter::once(&first_in).chain(mix_mid.iter())
         // B = mix_in[i+1]
         .zip(mix_in.iter().skip(1))
         // C = mix_out[i]
-        .zip(mix_out.iter())
+        .zip(mix_out.iter().take(k))
         // D = (mix_mid||last_out)[i]
         .zip(mix_mid.iter().chain(iter::once(&last_out)))
     {
@@ -87,13 +97,13 @@ fn make_intermediate_values<CS: ConstraintSystem>(
         }
         None => {
             let mix_in = (0..inputs.len())
-                .map(|_| Value::allocate_empty(cs))
+                .map(|_| Value::allocate_unassigned(cs))
                 .collect::<Result<Vec<_>, _>>()?;
             let mix_mid = (0..inputs.len() - 2)
-                .map(|_| Value::allocate_empty(cs))
+                .map(|_| Value::allocate_unassigned(cs))
                 .collect::<Result<Vec<_>, _>>()?;
             let mix_out = (0..inputs.len())
-                .map(|_| Value::allocate_empty(cs))
+                .map(|_| Value::allocate_unassigned(cs))
                 .collect::<Result<Vec<_>, _>>()?;
             Ok((mix_in, mix_mid, mix_out))
         }

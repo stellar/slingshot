@@ -56,7 +56,7 @@ impl Value {
         })
     }
 
-    pub fn allocate_empty<CS: ConstraintSystem>(cs: &mut CS) -> Result<AllocatedValue, R1CSError> {
+    pub fn allocate_unassigned<CS: ConstraintSystem>(cs: &mut CS) -> Result<AllocatedValue, R1CSError> {
         let (q_var, _, _) = cs.allocate(|| {
             Err(R1CSError::GadgetError {
                 description: "Tried to allocate variable q_var from function".to_string(),
@@ -94,7 +94,7 @@ impl AllocatedValue {
     ) -> Result<AllocatedValue, R1CSError> {
         match self.assignment {
             Some(value) => value.allocate(cs),
-            None => Value::allocate_empty(cs),
+            None => Value::allocate_unassigned(cs),
         }
     }
 }
