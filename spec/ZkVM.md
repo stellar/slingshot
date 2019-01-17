@@ -21,6 +21,8 @@ ZkVM defines a procedural representation for blockchain transactions and the rul
 * [Definitions](#definitions)
     * [LE32](#le32)
     * [LE64](#le64)
+    * [Scalar](#scalar)
+    * [Point](#point)
     * [Base points](#base-points)
     * [Pedersen commitment](#pedersen-commitment)
     * [Verification key](#verification-key)
@@ -304,6 +306,7 @@ Used to encode lengths of [data types](#data-type), sizes of [contract payloads]
 A non-negative 64-bit integer encoded using little-endian convention.
 Used to encode [value quantities](#value) and [timestamps](#time-bounds).
 
+
 ### Scalar
 
 A _scalar_ is an integer modulo [Ristretto group](https://ristretto.group) order `|G| = 2^252 + 27742317777372353535851937790883648493`.
@@ -321,7 +324,6 @@ A _point_ is an element in the [Ristretto group](https://ristretto.group).
 Points are encoded as 32-byte [data types](#data-type) in _compressed Ristretto form_.
 
 Each point in the VM is guaranteed to be a valid Ristretto point.
-
 
 
 ### Base points
