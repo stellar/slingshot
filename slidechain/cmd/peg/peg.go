@@ -63,7 +63,8 @@ func main() {
 		URL:  strings.TrimRight(*horizonURL, "/"),
 		HTTP: new(http.Client),
 	}
-	tx, err := stellar.BuildPegInTx(*seed, recipientPubkey, xlmAmount, *custodian, hclient)
+	var atomicTxID string // TODO(debnil): Run TxVM atomicity-guarantee program to get output ID.
+	tx, err := stellar.BuildPegInTx(*seed, recipientPubkey, xlmAmount, *custodian, atomicTxID, hclient)
 	if err != nil {
 		log.Fatal(err, "building transaction")
 	}
