@@ -1111,7 +1111,6 @@ Code | Instruction                | Stack diagram                              |
 0x?? | [`drop`](#drop)            |               _x_ → ø                      |
 0x?? | [`dup:k`](#dup)            |     _x[k] … x[0]_ → _x[k] ... x[0] x[k]_   |
 0x?? | [`roll:k`](#roll)          |     _x[k] … x[0]_ → _x[k-1] ... x[0] x[k]_ |
-0x?? | [`bury:k`](#bury)          |     _x[k] … x[0]_ → _x[0] x[k] ... x[1]_   |
  |                                |                                            |
  |     [**Constraints**](#constraint-system-instructions)  |                   | 
 0x?? | [`const`](#var)            |          _scalar_ → _expr_                 | 
@@ -1194,15 +1193,6 @@ Looks past `k` items from the top, and moves the next item to the top of the sta
 Immediate data `k` is encoded as [LE32](#le32).
 
 Note: `roll:0` is a no-op, `roll:1` swaps the top two items.
-
-#### bury
-
-_x[k] ... x[1] x[0]_ **bury:_k_** → _x[0] x[k] ... x[1]_
-
-Moves the top item past the `k` items below it.
-Immediate data `k` is encoded as [LE32](#le32).
-
-Note: `bury:0` is a no-op, `bury:1` swaps the top two items.
 
 
 
