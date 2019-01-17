@@ -45,6 +45,7 @@ func main() {
 		*seed = kp.Seed()
 	}
 
+	// TODO(vniu): peg-in non-XLM assets
 	xlmAmount, err := xlm.Parse(*amount)
 	if err != nil {
 		log.Fatal(err, "parsing payment amount")

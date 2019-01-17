@@ -310,8 +310,8 @@ func TestEndToEnd(t *testing.T) {
 		// Check to verify import
 		var anchor []byte
 		found := false
+		r := c.S.w.Reader()
 		for {
-			r := c.S.w.Reader()
 			item, ok := r.Read(ctx)
 			if !ok {
 				t.Fatal("cannot read a block")
@@ -332,7 +332,7 @@ func TestEndToEnd(t *testing.T) {
 		}
 
 		// Build + submit export tx
-		exportTx, err := BuildExportTx(ctx, native, int64(amount), kp.Address(), anchor, recipientPrv, recipientPub)
+		exportTx, err := BuildExportTx(ctx, native, int64(amount), kp.Address(), anchor, recipientPrv)
 		if err != nil {
 			t.Fatalf("error building retirement tx %s", err)
 		}

@@ -153,7 +153,7 @@ func (c *Custodian) buildPegOutTx(recipient xdr.AccountId, asset xdr.Asset, amou
 
 // BuildExportTx builds a txvm retirement tx for an asset issued
 // onto slidechain.
-func BuildExportTx(ctx context.Context, asset xdr.Asset, amount int64, addr string, anchor []byte, prv ed25519.PrivateKey, pub ed25519.PublicKey) (*bc.Tx, error) {
+func BuildExportTx(ctx context.Context, asset xdr.Asset, amount int64, addr string, anchor []byte, prv ed25519.PrivateKey) (*bc.Tx, error) {
 	assetXDR, err := xdr.MarshalBase64(asset)
 	if err != nil {
 		return nil, err
@@ -164,9 +164,9 @@ func BuildExportTx(ctx context.Context, asset xdr.Asset, amount int64, addr stri
 	}
 	refdata := []byte(fmt.Sprintf(`{"asset":"%s","account":"%s"}`, assetXDR, addr))
 	assetIDBytes := txvm.AssetID(issueSeed[:], assetBytes)
-	assetID := bc.HashFromBytes(assetIDBytes[:])
+	assetID := bc.NewHash(assetIDBytes)
 	tpl := txbuilder.NewTemplate(time.Now().Add(time.Minute), nil)
-	tpl.AddInput(1, [][]byte{prv}, nil, []ed25519.PublicKey{pub}, amount, assetID, anchor, nil, 1)
+	tpl.AddInput(1, [][]byte{prv}, nil, []ed25519.PublicKey{prv.Public().(ed25519.PublicKey)}, amount, assetID, anchor, nil, 1)
 	tpl.AddRetirement(int64(amount), assetID, refdata)
 	err = tpl.Sign(ctx, func(_ context.Context, msg []byte, prv []byte, path [][]byte) ([]byte, error) {
 		return ed25519.Sign(prv, msg), nil
