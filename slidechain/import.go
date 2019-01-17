@@ -13,6 +13,7 @@ import (
 	"github.com/chain/txvm/errors"
 	"github.com/chain/txvm/protocol/bc"
 	"github.com/chain/txvm/protocol/txbuilder/standard"
+	"github.com/chain/txvm/protocol/txbuilder/txresult"
 	"github.com/chain/txvm/protocol/txvm"
 	"github.com/chain/txvm/protocol/txvm/asm"
 )
@@ -127,6 +128,9 @@ func (c *Custodian) doImport(ctx context.Context, txid string, opNum int, amount
 	if err != nil {
 		return errors.Wrap(err, "submitting import tx")
 	}
+	txresult := txresult.New(importTx)
+	log.Printf("asset id: %x", txresult.Issuances[0].Value.AssetID)
+	log.Printf("output anchor: %x", txresult.Outputs[0].Value.Anchor)
 	_, err = c.DB.ExecContext(ctx, `UPDATE pegs SET imported=1 WHERE txid = $1 AND operation_num = $2`, txid, opNum)
 	return errors.Wrapf(err, "setting imported=1 for txid %s, operation %d", txid, opNum)
 }
