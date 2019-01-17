@@ -51,7 +51,7 @@ fn call_mix_gadget<CS: ConstraintSystem>(
     // The first value of mix_in, to prepend to mix_mid for creating A inputs.
     let first_in = mix_in[0].clone();
     // The last value of mix_out, to append to mix_mid for creating D outputs.
-    let last_out = mix_out[mix_out.len() - 1].clone();
+    let last_out = mix_out[k - 1].clone();
 
     // For each of the `k-1` mix gadget calls, constrain A, B, C, D:
     for (((A, B), C), D) in
