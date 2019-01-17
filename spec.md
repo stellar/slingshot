@@ -53,11 +53,11 @@ An integer mod `l` where `l` is a Ristretto group order (`l = 2^252 + 2774231777
 
 ### Value
 
-The _value_ `v` is the tuple `(q, a, t)`, consisting of both an untyped [quantity](#quantity) `q` as well as
-type information `a, t` that we call [flavor](#flavor).
+The _value_ `v` is the tuple `(q, f)`, consisting of both an untyped [quantity](#quantity) `q` as well as
+type information `f` that we call [flavor](#flavor).
 
 In the rest of this specification, we will always use the word _value_
-to denote the typed quantity `(q, a, t)` and the word _quantity_ to denote an untyped quantity `q`.
+to denote the typed quantity `(q, f)` and the word _quantity_ to denote an untyped quantity `q`.
 
 Values are encrypted using Pedersen commitments, one per component.
 
@@ -67,26 +67,9 @@ A [scalar](#scalar) `q` representing a numeric amount of a given [value](#value)
 
 ### Flavor
 
-A pair of [issuer](#issuer) and [tag](#tag) scalars representing a unique asset type:
-
-`f = (a, t)`
+A [scalar](#scalar) `f` representing a unique asset type of a given [value](#value).
 
 [Values](#value) of different flavors cannot be merged. One flavor cannot be transmuted to another.
-
-### Issuer
-
-A [scalar](#scalar) `a` representing an issuer.
-
-For example, a hash of an issuance program in
-[TxVM](https://github.com/chain/txvm/blob/main/specifications/txvm.md#asset-id).
-
-### Tag
-
-A [scalar](#scalar) `t` representing a customization value used by a single issuer
-to distinguish between different [flavors](#flavor) of assets from the same issuer.
-
-Tag can also be used for confidential issuance, where [issuer](#issuer) is a publicly known program
-reused by various _actual_ issuers, and _tags_ are unique secret keys known to respective issuers.
 
 ### Gadget
 
@@ -189,14 +172,14 @@ For K = 1:
 
 Represents a permutation of tuples ([quantity](#quantity), [issuer](#issuer), [tag](#tag)).
 
-Each tuple of [scalars](#scalar) `(q, a, t)` is combined into a single scalar using a free variable `w`:
+Each tuple of [scalars](#scalar) `(q, f)` is combined into a single scalar using a free variable `w`:
 
-    x = q  + w*a  + w*w*t
+    x = q  + w*f
 
 Then, the combined scalars are permuted using [K-scalar shuffle](#k-scalar-shuffle) gadget. 
 
 If `w` is chosen unpredictably to a prover, any `x` scalar can be equal to a `y` scalar (computed in the same way)
-iff their corresponding [quantities](#quantity) `q` and [flavors](#flavor) `(a,t)` are equal.
+iff their corresponding [quantities](#quantity) `q` and [flavors](#flavor) `f` are equal.
 
 Note: for K = 1, no compression is necessary as the input variables can be constrained to be equal
 to the output variables (or the same variables reused for adjacent gadgets).
@@ -204,8 +187,8 @@ to the output variables (or the same variables reused for adjacent gadgets).
 
 ### Pad
 
-Represents an all-zero [value](#value) `(q, a, t) = (0, 0, 0)`.
-It is implemented as allocation of three variables and three constraints enforcing zero value for each variable.
+Represents an all-zero [value](#value) `(q, f) = (0, 0)`.
+It is implemented as allocation of two variables and two constraints enforcing zero value for each variable.
 
 In case `M == N`, no padding is required as all shuffles have the same number of inputs and outputs.
 
@@ -228,8 +211,8 @@ or are _redistributed_ with one value being zero.
 
 _Mix_ is a building block for [K-mix](#k-mix) gadget which is itself a building block for [K-merge](#k-merge) and [K-split](#k-split) gadgets.
 
-In case of redistribution, the verifier allows flavor of `C` to be anything.
-However, the prover must set the whole tuple `C=(q,a,t)` to zeroes in
+In case of redistribution, the verifier allows the flavor of `C` to be anything.
+However, the prover must set the whole tuple `C = (q, f)` to zeroes in
 order to match the [padding](#pad) that might be necessary in the middle of a [transaction](#transaction).
 
 Boolean expression:
@@ -237,19 +220,15 @@ Boolean expression:
     Mix(A,B,C,D) = OR(
         AND( // move
             A.q == C.q,
-            A.a == C.a,
-            A.t == C.t,
+            A.f == C.f,
             B.q == D.q,
-            B.a == D.a,
-            B.t == D.t,
+            B.f == D.f,
         ),
         AND( // distribute
             C.q == 0,
-            A.a == B.a,
-            A.t == B.t,
+            A.f == B.f,
             D.q == A.q + B.q,
-            D.a == A.a,
-            D.t == A.t,
+            D.f == A.f,
         )
     )
 
@@ -257,17 +236,13 @@ Mix requires a single challenge variable `w` to combine 6 statements in one (in 
 and one multiplier for `OR` statement.
 
     mul_left  = (A.q - C.q) +
-                (A.a - C.a) * w^1 +
-                (A.t - C.t) * w^2 +
-                (B.q - D.q) * w^3 +
-                (B.a - D.a) * w^4 +
-                (B.t - D.t) * w^5
+                (A.f - C.f) * w^1 +
+                (B.q - D.q) * w^2 +
+                (B.f - D.f) * w^3 +
     mul_right = (C.q - 0) +
-                (A.a - B.a) * w^1 +
-                (A.t - B.t) * w^2 +
-                (D.q - A.q - B.q) * w^3 +
-                (D.a - A.a) * w^4
-                (D.t - A.t) * w^5
+                (A.f - B.f) * w^1 +
+                (D.q - A.q - B.q) * w^2 +
+                (D.f - A.f) * w^3
     mul_out   = 0
     --------------------------------------
     1 multiplier, 3 constraints
