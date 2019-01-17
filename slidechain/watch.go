@@ -17,6 +17,7 @@ import (
 
 // Runs as a goroutine until ctx is canceled.
 func (c *Custodian) watchPegs(ctx context.Context) {
+	defer log.Println("watchPegs exiting")
 	backoff := i10rnet.Backoff{Base: 100 * time.Millisecond}
 
 	var cur horizon.Cursor
@@ -71,7 +72,7 @@ func (c *Custodian) watchPegs(ctx context.Context) {
 					return
 				}
 				log.Printf("recorded peg-in tx %s", tx.ID)
-				c.imports.Broadcast()
+				c.imports <- struct{}{}
 			}
 		})
 		if err == context.Canceled {
@@ -95,6 +96,7 @@ func (c *Custodian) watchPegs(ctx context.Context) {
 
 // Runs as a goroutine.
 func (c *Custodian) watchExports(ctx context.Context) {
+	defer log.Println("watchExports exiting")
 	r := c.S.w.Reader()
 	for {
 		got, ok := r.Read(ctx)
@@ -156,7 +158,7 @@ func (c *Custodian) watchExports(ctx context.Context) {
 
 				log.Printf("recorded export: %d of txvm asset %x (Stellar %x) for %s", retiredAmount, retiredAssetIDBytes, info.AssetXDR, info.Account)
 
-				c.exports.Broadcast()
+				c.exports <- struct{}{}
 
 				i++ // advance past the consumed log ("L") entry
 			}

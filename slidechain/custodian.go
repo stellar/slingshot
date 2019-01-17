@@ -7,7 +7,6 @@ import (
 	"log"
 	"net/http"
 	"strings"
-	"sync"
 
 	"github.com/bobg/multichan"
 	"github.com/chain/txvm/crypto/ed25519"
@@ -34,8 +33,8 @@ type Custodian struct {
 	seed      string
 	accountID xdr.AccountId
 	hclient   *horizon.Client
-	imports   *sync.Cond
-	exports   *sync.Cond
+	imports   chan struct{}
+	exports   chan struct{}
 	network   string
 	privkey   ed25519.PrivateKey
 
@@ -98,8 +97,8 @@ func GetCustodian(ctx context.Context, db *sql.DB, horizonURL string) (*Custodia
 		},
 		DB:            db,
 		hclient:       hclient,
-		imports:       sync.NewCond(new(sync.Mutex)),
-		exports:       sync.NewCond(new(sync.Mutex)),
+		imports:       make(chan struct{}, 1),
+		exports:       make(chan struct{}, 1),
 		network:       root.NetworkPassphrase,
 		privkey:       custodianPrv,
 		InitBlockHash: initialBlock.Hash(),
