@@ -26,7 +26,7 @@ func (c *Custodian) buildImportTx(
 ) ([]byte, error) {
 	buf := new(bytes.Buffer)
 	// Call the atomicity guarantee contract.
-	// TODO(debnil): Convert atomicGuaranteeSnapshot to fprintf-assembly for consistency.
+	// TODO(debnil): Should we convert atomicGuaranteeSnapshot to fprintf-assembly for consistency?
 	b := new(txvm.Builder)
 	inputAtomicGuarantee(b, recipPubkey, c.InitBlockHash)
 	fmt.Fprintf(buf, "x'%x' contract call\n", b.Build())
@@ -36,12 +36,12 @@ func (c *Custodian) buildImportTx(
 	fmt.Fprintf(buf, "%d put\n", amount)
 	exp := int64(bc.Millis(time.Now().Add(5 * time.Minute)))
 
-	// now arg stack is set up, empty con stack
+	// Arg stack is set up; empty con stack.
 	fmt.Fprintf(buf, "x'%x' %d\n", c.InitBlockHash.Bytes(), exp) // con stack: blockid, exp
 	fmt.Fprintf(buf, "nonce put\n")                              // empty con stack; ..., nonce on arg stack
 	fmt.Fprintf(buf, "x'%x' contract call\n", issueProg)         // empty con stack; arg stack: ..., sigcheck, issuedval
 
-	// pay issued value
+	// Pay issued value.
 	fmt.Fprintf(buf, "get splitzero\n")                                    // con stack: issuedval, zeroval; arg stack: sigcheck
 	fmt.Fprintf(buf, "'' put\n")                                           // con stack: issuedval, zeroval; arg stack: sigcheck, refdata
 	fmt.Fprintf(buf, "swap put\n")                                         // con stack: zeroval; arg stack: sigcheck, refdata, issuedval

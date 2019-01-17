@@ -49,7 +49,7 @@ func atomicGuaranteeSnapshot(b *txvmutil.Builder, pubkey ed25519.PublicKey, bcid
 		contract.Tuple(func(tup *txvmutil.TupleBuilder) {
 			tup.PushdataByte(txvm.ValueCode)
 			tup.PushdataInt64(0)
-			// TODO(debnil): Add zero hex string.
+			tup.PushdataBytes("x'0000000000000000000000000000000000000000000000000000000000000000'")
 			tup.PushdataBytes(nonceHash[:])
 		})
 	})
