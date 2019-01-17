@@ -41,8 +41,8 @@ fn call_mix_gadget<CS: ConstraintSystem>(
     mix_mid: &Vec<AllocatedValue>,
     mix_out: &Vec<AllocatedValue>,
 ) -> Result<(), R1CSError> {
-    let k = mix_out.len() - 1;
-    if mix_in.len() != k + 1 || mix_mid.len() != k - 1 {
+    let k = mix_out.len();
+    if mix_in.len() != k || mix_mid.len() != k - 2 {
         return Err(R1CSError::GadgetError {
             description: "Lengths of inputs are incorrect for call_mix_gadget in k_mix".to_string(),
         });
@@ -53,14 +53,14 @@ fn call_mix_gadget<CS: ConstraintSystem>(
     // The last value of mix_out, to append to mix_mid for creating D outputs.
     let last_out = mix_out[mix_out.len() - 1].clone();
 
-    // For each of the `k` mix gadget calls, constrain A, B, C, D (where i is in 0..k):
+    // For each of the `k-1` mix gadget calls, constrain A, B, C, D:
     for (((A, B), C), D) in
         // A = (first_in||mix_mid)[i]
         iter::once(&first_in).chain(mix_mid.iter())
         // B = mix_in[i+1]
         .zip(mix_in.iter().skip(1))
         // C = mix_out[i]
-        .zip(mix_out.iter().take(k))
+        .zip(mix_out.iter().take(k-1))
         // D = (mix_mid||last_out)[i]
         .zip(mix_mid.iter().chain(iter::once(&last_out)))
     {
