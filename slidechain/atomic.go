@@ -1,8 +1,8 @@
 package main
 
 import (
-	"txvm/protocol/txvm/op"
-	"txvm/protocol/txvm/txvmutil"
+	"github.com/chain/txvm/protocol/txvm/op"
+	"github.com/chain/txvm/protocol/txvm/txvmutil"
 
 	"github.com/chain/txvm/crypto/ed25519"
 	"github.com/chain/txvm/protocol/txvm"
