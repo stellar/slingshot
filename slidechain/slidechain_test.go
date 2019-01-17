@@ -281,7 +281,7 @@ func TestEndToEnd(t *testing.T) {
 		copy(recipientPubkeyBytes[:], recipientPub)
 
 		// Build + submit transaction to peg-in funds
-		pegInTx, err := stellar.BuildPegInTx(kp.Address(), recipientPubkeyBytes, amount, c.accountID.Address(), hclient)
+		pegInTx, err := stellar.BuildPegInTx(kp.Address(), recipientPubkeyBytes, amount.HorizonString(), "", "", c.accountID.Address(), hclient)
 		if err != nil {
 			t.Fatalf("error building peg-in tx: %s", err)
 		}
