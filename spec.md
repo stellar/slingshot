@@ -67,7 +67,7 @@ A [scalar](#scalar) `q` representing a numeric amount of a given [value](#value)
 
 ### Flavor
 
-A [scalar](#scalar) `f` representing a unique asset type.
+A [scalar](#scalar) `f` representing a unique asset type of a given [value](#value).
 
 [Values](#value) of different flavors cannot be merged. One flavor cannot be transmuted to another.
 
@@ -211,7 +211,7 @@ or are _redistributed_ with one value being zero.
 
 _Mix_ is a building block for [K-mix](#k-mix) gadget which is itself a building block for [K-merge](#k-merge) and [K-split](#k-split) gadgets.
 
-In case of redistribution, the verifier allows flavor of `C` to be anything.
+In case of redistribution, the verifier allows the flavor of `C` to be anything.
 However, the prover must set the whole tuple `C = (q, f)` to zeroes in
 order to match the [padding](#pad) that might be necessary in the middle of a [transaction](#transaction).
 
