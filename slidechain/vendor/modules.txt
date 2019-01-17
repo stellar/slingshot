@@ -12,6 +12,7 @@ github.com/chain/txvm/protocol
 github.com/chain/txvm/protocol/bc
 github.com/chain/txvm/protocol/state
 github.com/chain/txvm/protocol/txbuilder/standard
+github.com/chain/txvm/protocol/txbuilder/txresult
 github.com/chain/txvm/protocol/txvm
 github.com/chain/txvm/protocol/txvm/asm
 github.com/chain/txvm/crypto/ed25519/internal/edwards25519
@@ -33,6 +34,7 @@ github.com/go-errors/errors
 github.com/golang/protobuf/proto
 # github.com/interstellar/starlight v0.1.0-alpha
 github.com/interstellar/starlight/net
+github.com/interstellar/starlight/worizon/xlm
 github.com/interstellar/starlight/env
 # github.com/lib/pq v1.0.0
 github.com/lib/pq
