@@ -1,4 +1,4 @@
-package main
+package slidechain
 
 import (
 	"bytes"
@@ -19,7 +19,7 @@ import (
 )
 
 // buildImportTx builds the import transaction.
-func (c *custodian) buildImportTx(
+func (c *Custodian) buildImportTx(
 	amount int64,
 	assetXDR []byte,
 	recipPubkey []byte,
@@ -31,7 +31,7 @@ func (c *custodian) buildImportTx(
 	exp := int64(bc.Millis(time.Now().Add(5 * time.Minute)))
 
 	// now arg stack is set up, empty con stack
-	fmt.Fprintf(buf, "x'%x' %d\n", c.initBlockHash.Bytes(), exp) // con stack: blockid, exp
+	fmt.Fprintf(buf, "x'%x' %d\n", c.InitBlockHash.Bytes(), exp) // con stack: blockid, exp
 	fmt.Fprintf(buf, "nonce put\n")                              // empty con stack; ..., nonce on arg stack
 	fmt.Fprintf(buf, "x'%x' contract call\n", issueProg)         // empty con stack; arg stack: ..., sigcheck, issuedval
 
@@ -61,7 +61,7 @@ func (c *custodian) buildImportTx(
 	return tx2, nil
 }
 
-func (c *custodian) importFromPegs(ctx context.Context) {
+func (c *Custodian) importFromPegs(ctx context.Context) {
 	defer log.Print("importFromPegs exiting")
 
 	c.imports.L.Lock()
@@ -80,7 +80,7 @@ func (c *custodian) importFromPegs(ctx context.Context) {
 			assetXDRs, recips [][]byte
 		)
 		const q = `SELECT txid, operation_num, amount, asset_xdr, recipient_pubkey FROM pegs WHERE imported=0`
-		err := sqlutil.ForQueryRows(ctx, c.db, q, func(txid string, opNum int, amount int64, assetXDR, recip []byte) {
+		err := sqlutil.ForQueryRows(ctx, c.DB, q, func(txid string, opNum int, amount int64, assetXDR, recip []byte) {
 			txids = append(txids, txid)
 			opNums = append(opNums, opNum)
 			amounts = append(amounts, amount)
@@ -111,7 +111,7 @@ func (c *custodian) importFromPegs(ctx context.Context) {
 	}
 }
 
-func (c *custodian) doImport(ctx context.Context, txid string, opNum int, amount int64, assetXDR, recip []byte) error {
+func (c *Custodian) doImport(ctx context.Context, txid string, opNum int, amount int64, assetXDR, recip []byte) error {
 	log.Printf("doing import from tx %s, op %d: %d of asset %x for recipient %x", txid, opNum, amount, assetXDR, recip)
 
 	importTxBytes, err := c.buildImportTx(amount, assetXDR, recip)
@@ -124,7 +124,7 @@ func (c *custodian) doImport(ctx context.Context, txid string, opNum int, amount
 		return errors.Wrap(err, "computing transaction ID")
 	}
 	importTx.Runlimit = math.MaxInt64 - runlimit
-	err = c.s.submitTx(ctx, importTx)
+	err = c.S.submitTx(ctx, importTx)
 	if err != nil {
 		return errors.Wrap(err, "submitting import tx")
 	}
