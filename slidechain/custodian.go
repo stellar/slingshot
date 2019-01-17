@@ -47,6 +47,15 @@ type Custodian struct {
 // account ID and seed from the db if it exists, otherwise generating
 // a new keypair and funding the account.
 func GetCustodian(ctx context.Context, db *sql.DB, horizonURL string) (*Custodian, error) {
+	c, err := newCustodian(ctx, db, horizonURL)
+	if err != nil {
+		return nil, err
+	}
+	c.launch(ctx)
+	return c, nil
+}
+
+func newCustodian(ctx context.Context, db *sql.DB, horizonURL string) (*Custodian, error) {
 	err := setSchema(db)
 	if err != nil {
 		return nil, errors.Wrap(err, "setting db schema")
@@ -87,7 +96,7 @@ func GetCustodian(ctx context.Context, db *sql.DB, horizonURL string) (*Custodia
 		log.Fatal(err)
 	}
 
-	c := &Custodian{
+	return &Custodian{
 		seed:      seed,
 		accountID: *custAccountID,
 		S: &submitter{
@@ -102,9 +111,7 @@ func GetCustodian(ctx context.Context, db *sql.DB, horizonURL string) (*Custodia
 		network:       root.NetworkPassphrase,
 		privkey:       custodianPrv,
 		InitBlockHash: initialBlock.Hash(),
-	}
-	c.launch(ctx)
-	return c, nil
+	}, nil
 }
 
 func custodianAccount(ctx context.Context, db *sql.DB, hclient *horizon.Client) (*xdr.AccountId, string, error) {
