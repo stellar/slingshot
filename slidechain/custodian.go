@@ -153,7 +153,7 @@ func makeNewCustodianAccount(ctx context.Context, db *sql.DB, hclient *horizon.C
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, "", errors.New(fmt.Sprintf("bad status code %d funding address through friendbot", resp.StatusCode))
+		return nil, "", fmt.Errorf("bad status code %d funding address through friendbot", resp.StatusCode)
 	}
 	log.Println("account successfully funded")
 
