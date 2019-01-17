@@ -8,12 +8,10 @@ ZkVM defines a procedural representation for blockchain transactions and the rul
     * [Motivation](#motivation)
     * [Concepts](#concepts)
 * [Types](#types)
-    * [Data types](#data-types)
+    * [Copyable types](#copyable-types)
     * [Linear types](#linear-types)
     * [Portable types](#portable-types)
-    * [Scalar](#scalar-type)
-    * [Point](#point-type)
-    * [String](#string-type)
+    * [Data](#data-type)
     * [Contract](#contract-type)
     * [Variable](#variable-type)
     * [Expression](#expression-type)
@@ -99,7 +97,7 @@ A transaction is represented by a [transaction witness](#transaction-witness) th
 contains a [program](#program) that runs in the context of a stack-based virtual machine.
 
 When the virtual machine executes a program, it creates and manipulates data of various types:
-[**plain data types**](#data-types) and [**linear types**](#linear-types), such as [values](#value-type) and
+[**copyable types**](#copyable-types) and [**linear types**](#linear-types), such as [values](#value-type) and
 [contracts](#contract-type).
 
 A [**value**](#value-type) is a specific _quantity_ of a certain _flavor_ that can be
@@ -139,16 +137,14 @@ transaction’s applicability to the [blockchain](Blockchain.md).
 
 ## Types
 
-The items on the ZkVM stack are typed. The available types fall into two
-broad categories: [data types](#data-types) and [linear types](#linear-types).
+The items on the ZkVM stack are typed. The available types fall into two 
+categories: [copyable types](#copyable-types) and [linear types](#linear-types).
 
-### Data types
+### Copyable types
 
-Data types can be freely created, copied, and destroyed.
+Copyable types can be freely created, copied ([`dup`](#dup)), and destroyed ([`drop`](#drop)).
 
-* [Scalar](#scalar-type)
-* [Point](#point-type)
-* [String](#string-type)
+* [Data](#data-type)
 * [Variable](#variable-type)
 * [Expression](#expression-type)
 * [Constraint](#constraint-type)
@@ -166,44 +162,23 @@ and destroyed, and may never be copied.
 
 ### Portable types
 
-The items of the following types can be _ported_ across transactions via [outputs](#output-structure):
+Only the [data](#data-type) and [value](#value-type) types can be _ported_ across transactions via [outputs](#output-structure).
 
-* [Scalar](#scalar-type)
-* [Point](#point-type)
-* [String](#string-type)
-* [Value](#value-type)
+Notes:
 
-[Wide values](#wide-value-type) are not portable because it is not proven to be non-negative.
-
-[Contracts](#contract-type) are not portable because they must be satisfied within the current transaction
+* [Wide values](#wide-value-type) are not portable because it is not proven to be non-negative.
+* [Contracts](#contract-type) are not portable because they must be satisfied within the current transaction
 or [output](#output-structure) their contents themselves.
-
-[Variables](#variable-type), [expressions](#expression-type) and [constraints](#constraint-type) have no meaning outside the VM state
+* [Variables](#variable-type), [expressions](#expression-type) and [constraints](#constraint-type) have no meaning outside the VM state
 and its constraint system and therefore cannot be meaningfully ported between transactions.
-Secret [scalar](#scalar-type) can be ported as a [point](#point-type) that encodes a [Pedersen commitment](#pedersen-commitment) to such scalar.
+* Secret [scalar](#scalar) can be ported as a [point](#point) representing a [Pedersen commitment](#pedersen-commitment) to such scalar.
 
 
-### Scalar type
+### Data type
 
-A _scalar_ is an integer modulo [Ristretto group](https://ristretto.group) order `|G| = 2^252 + 27742317777372353535851937790883648493`.
+A _data type_ is a variable-length byte array used to represent signatures, proofs and programs.
 
-Scalars are encoded as 32-byte arrays using little-endian convention.
-Every scalar in the VM is guaranteed to be in a canonical (reduced) form.
-
-
-### Point type
-
-A _point_ is an element in the [Ristretto group](https://ristretto.group).
-
-Points are encoded as 32-byte arrays in _compressed Ristretto form_.
-Each point in the VM is guaranteed to be a valid Ristretto point.
-
-
-### String type
-
-A _string_ is a variable-length byte array used to represent signatures, proofs and programs.
-
-Strings cannot be larger than the entire transaction program and cannot be longer than `2^32-1`.
+Data cannot be larger than the entire transaction program and cannot be longer than `2^32-1` (see [LE32](#le32)).
 
 
 ### Contract type
@@ -220,20 +195,22 @@ recorded in the [transaction log](#transaction-log).
 
 ### Variable type
 
-_Variable_ represents a secret [scalar](#scalar-type) value in the [constraint system](#constraint-system)
+_Variable_ represents a secret [scalar](#scalar) value in the [constraint system](#constraint-system)
 bound to its [Pedersen commitment](#pedersen-commitment).
 
-A [point](#point-type) that represents a commitment to a secret scalar can be turned into a variable using the [`var`](#var) instruction.
-Non-secret [scalar](#scalar-type) can be turned into a single-term [expression](#expression-type) using the [`const`](#const) instruction (which does not allocate a variable).
+A [point](#point) that represents a commitment to a secret scalar can be turned into a variable using the [`var`](#var) instruction.
+Non-secret [scalar](#scalar) can be turned into a single-term [expression](#expression-type) using the [`const`](#const) instruction (which does not allocate a variable).
 
 Variables can be copied and dropped at will, but cannot be ported across transactions via [outputs](#output-structure).
 
 Examples of variables: [value quantities](#value-type) and [time bounds](#time-bounds).
 
 Constraint system also contains _low-level variables_ that are not individually bound to [Pedersen commitments](#pedersen-commitment):
-when these are exposed to the VM (for instance, from [`zkmul`](#zkmul)), they have the [expression type](#expression-type).
+when these are exposed to the VM (for instance, from [`mul`](#mul)), they have the [expression type](#expression-type).
 
-A variable can be in one of two states: **detached** and **attached**.
+### Attached and detached variables
+
+A [variable](#variable-type) can be in one of two states: **detached** and **attached**.
 
 **Detached variable** can be [reblinded](#reblinded): all copies of a detached variable share the same commitment,
 so reblinding one of them reflects the new commitments in all the copies. When an [expression](#expression-type) is formed using detached variables, all of them transition to an _attached_ state.
@@ -243,15 +220,27 @@ so reblinding one of them reflects the new commitments in all the copies. When a
 
 ### Expression type
 
-_Expression_ is a linear combination of [variables](#variable-type) with cleartext [scalar](#scalar-type) weights.
+_Expression_ is a linear combination of [variables](#variable-type) with cleartext [scalar](#scalar) weights.
+
+    expr = { (weight0, var0), (weight1, var1), ...  }
+
 Expression is a supertype of a single variable: a variable can always be coerced to a linear combination containing one term with weight 1.
 
-Expressions can be [added](#zkadd) and [multiplied](#zkmul), producing new expressions.
+Expressions can be [added](#add) and [multiplied](#mul), producing new expressions.
 Expressions can also be [encrypted](#encrypt) into a [Pedersen commitment](#pedersen-commitment) with a predetermined
 blinding factor.
 
 Expressions can be copied and dropped at will, but cannot be ported across transactions via [outputs](#output-structure).
 
+### Constant expression
+
+An [expression](#expression-type) that contains one term with the [scalar](#scalar) weight assigned to the R1CS `1` is considered
+a _constant expression_:
+
+    const_expr = { (weight, 1) }
+
+Instructions [`add`](#add) and [`mul`](#mul) are preserving constant expressions as an optimization in order to avoid
+allocating unnecessary multipliers in the [constraint system](#constraint-system).
 
 
 ### Constraint type
@@ -260,7 +249,7 @@ _Constraint_ is a statement within the [constraint system](#constraint-system). 
 and can be combined using logical operators [`and`](#and) and [`or`](#or).
 
 There are three kinds of constraints:
-1. **Linear constraint** is created using the [`zkeq`](#zkeq) instruction over two [expressions](#expression-type).
+1. **Linear constraint** is created using the [`eq`](#eq) instruction over two [expressions](#expression-type).
 2. **Conjunction constraint** is created using the [`and`](#and) instruction over two constraints of any type.
 3. **Disjunction constraint** is created using the [`or`](#or) instruction over two constraints of any type.
 
@@ -272,7 +261,7 @@ Constraints only have an effect if added to the constraint system using the [`ve
 ### Value type
 
 A value is a [linear type](#linear-types) representing a pair of *quantity* and *flavor*.
-Both quantity and flavor are represented as [scalars](#scalar-type).
+Both quantity and flavor are represented as [scalars](#scalar).
 Quantity is guaranteed to be in a 64-bit range (`[0..2^64-1]`).
 
 Values are created with [`issue`](#issue) and destroyed with [`retire`](#retire).
@@ -308,12 +297,31 @@ and the wide value is only used as an output of [`borrow`](#borrow) and as an in
 ### LE32
 
 A non-negative 32-bit integer encoded using little-endian convention.
-Primarily used to encode sizes of data structures ([strings](#string-type), lists etc).
+Used to encode lengths of [data types](#data-type), sizes of [contract payloads](#contract-payload) and stack indices.
 
 ### LE64
 
 A non-negative 64-bit integer encoded using little-endian convention.
-Primarily used to encode [value quantities](#value) and [timestamps](#time-bounds).
+Used to encode [value quantities](#value) and [timestamps](#time-bounds).
+
+### Scalar
+
+A _scalar_ is an integer modulo [Ristretto group](https://ristretto.group) order `|G| = 2^252 + 27742317777372353535851937790883648493`.
+
+Scalars are encoded as 32-byte [data types](#data-type) using little-endian convention.
+
+Every scalar in the VM is guaranteed to be in a canonical (reduced) form: an instruction that operates on a scalar
+checks if the scalar is canonical.
+
+
+### Point
+
+A _point_ is an element in the [Ristretto group](https://ristretto.group).
+
+Points are encoded as 32-byte [data types](#data-type) in _compressed Ristretto form_.
+
+Each point in the VM is guaranteed to be a valid Ristretto point.
+
 
 
 ### Base points
@@ -332,7 +340,7 @@ and used in [Pedersen commitments](#pedersen-commitment),
 
 ### Pedersen commitment
 
-Pedersen commitment to a secret [scalar](#scalar-type)
+Pedersen commitment to a secret [scalar](#scalar)
 is defined as a point with the following structure:
 
 ```
@@ -354,7 +362,7 @@ Pedersen commitments can be proven to use a pre-determined blinding factor using
 
 ### Verification key
 
-A _verification key_ `P` is a commitment to a secret [scalar](#scalar-type) `x` (_signing key_)
+A _verification key_ `P` is a commitment to a secret [scalar](#scalar) `x` (_signing key_)
 using the primary [base point](#base-points) `B`: `P = x·B`.
 Verification keys are used to construct [predicates](#predicate) and verify [signatures](#signature).
 
@@ -374,7 +382,7 @@ Transcript is an instance of the [Merlin](https://doc.dalek.rs/merlin/) construc
 which is itself based on [STROBE](https://strobe.sourceforge.io/) and [Keccak-f](https://keccak.team/keccak.html)
 with 128-bit security parameter.
 
-Transcript is used throughout ZkVM to generate challenge [scalars](#scalar-type) and commitments.
+Transcript is used throughout ZkVM to generate challenge [scalars](#scalar) and commitments.
 
 Transcripts have the following operations, each taking a label for domain separation:
 
@@ -403,7 +411,7 @@ to reduce number of Keccak-f permutations to just one per challenge.
 ### Predicate
 
 A _predicate_ is a representation of a condition that unlocks the [contract](#contract-type).
-Predicate is encoded as a [point](#point-type) representing a node
+Predicate is encoded as a [point](#point) representing a node
 of a [predicate tree](#predicate-tree).
 
 
@@ -457,7 +465,7 @@ PP(prog) = h(prog)·B2
 ```
 
 Commitment scheme is defined using the [transcript](#transcript) protocol
-by committing the program string and squeezing a scalar that is bound to it:
+by committing the program data and squeezing a scalar that is bound to it:
 
 ```
 T = Transcript("ZkVM.predicate")
@@ -471,7 +479,7 @@ Program predicate can be satisfied only via the [`call`](#call) instruction that
 
 ### Program
 
-A program is a string containing a sequence of ZkVM [instructions](#instructions).
+A program is a [data](#data-type) containing a sequence of ZkVM [instructions](#instructions).
 
 
 ### Contract payload
@@ -518,14 +526,10 @@ and can only contain [portable types](#portable-types).
 ```
        Input  =  LE32(k)  ||  Item[0]  || ... ||  Item[k-1]  ||  Predicate
    Predicate  =  <32 bytes>
-        Item  =  enum { Scalar, Point, String, Value }
-      Scalar  =  0x00  ||  <32 bytes>
-       Point  =  0x01  ||  <32 bytes>
-      String  =  0x02  ||  LE32(len)  ||  <bytes>
-       Value  =  0x03  ||  <32 bytes> ||  <32 bytes>
+        Item  =  enum { Data, Value }
+        Data  =  0x00  ||  LE32(len)  ||  <bytes>
+       Value  =  0x01  ||  <32 bytes> ||  <32 bytes>
 ```
-
-Note: the [plain data](#data-types) items are encoded as VM instructions that produce the corresponding item.
 
 
 ### Constraint system
@@ -550,8 +554,8 @@ Transaction witness is a structure that contains all data and logic
 required to produce a unique [transaction ID](#transaction-id):
 
 * Version (uint64)
-* [Time bounds](#time-bounds) (pair of uint64)
-* [Program](#program) (variable-length string)
+* [Time bounds](#time-bounds) (pair of [LE64](#le64)s)
+* [Program](#program) (variable-length [data](#data-type))
 * [Transaction signature](#signature) (64 bytes)
 * [Constraint system proof](#constraint-system-proof) (variable-length array of points and scalars)
 
@@ -569,7 +573,7 @@ following instructions:
 * [`issue`](#issue)
 * [`retire`](#retire)
 * [`nonce`](#nonce)
-* [`data`](#data)
+* [`log`](#log)
 * [`import`](#import)
 * [`export`](#export)
 
@@ -582,8 +586,7 @@ during the [transaction ID](#transaction-id) computation.
 ### Transaction ID
 
 Transaction ID is defined as a [merkle hash](#merkle-binary-tree) of a list consisting of 
-a _header entry_ (transaction version and [time bounds](#time-bounds)),
-followed by all the entries from the [transaction log](#transaction-log):
+a [header entry](#header-entry) followed by all the entries from the [transaction log](#transaction-log):
 
 ```
 T = Transcript("ZkVM.txid")
@@ -593,6 +596,8 @@ txid = MerkleHash(T, {header} || txlog )
 Entries are committed to the [transcript](#transcript) using the following schema.
 
 #### Header entry
+
+Header commits the transaction version and [time bounds](#time-bounds) using the [LE64](#le64) encoding.
 
 ```
 T.commit("tx.version", LE64(version))
@@ -649,13 +654,10 @@ T.commit("nonce.t", maxtime)
 
 #### Data entry
 
-A [data type](#data-types) ([scalar](#scalar-type), [point](#point-type) or [string](#string-type)) is encoded
-as a single-instruction program that produces an item of the corresponding type (see [output structure](#output-structure)).
-
-Data entry is added using [`data`](#data) instruction.
+Data entry is added using [`log`](#log) instruction.
 
 ```
-T.commit("data", prog)
+T.commit("data", data)
 ```
 
 #### Import entry
@@ -723,16 +725,16 @@ its shape is uniquely determined by the number of leaves.
 
 ### Signature
 
-Signature is a Schnorr proof of knowledge of a secret [scalar](#scalar-type) corresponding
+Signature is a Schnorr proof of knowledge of a secret [scalar](#scalar) corresponding
 to a [verification key](#verification-key) in a context of some _message_.
 
-Signature is encoded as a 64-byte [string](#string-type).
+Signature is encoded as a 64-byte [data](#data-type).
 
 The protocol is the following:
 
 1. Prover and verifier obtain a [transcript](#transcript) `T` defined by the context in which the signature is used (see [`signtx`](#signtx), [`delegate`](#delegate)). The transcript is assumed to be already bound to the _message_ and the [verification key](#verification-key) `P`.
-2. Prover creates a _secret nonce_: a randomly sampled [scalar](#scalar-type) `r`.
-3. Prover commits to nonce:
+2. Prover creates a _secret nonce_: a randomly sampled [scalar](#scalar) `r`.
+3. Prover commits to its nonce:
     ```
     R = r·B
     ```
@@ -763,7 +765,7 @@ is added to the array of deferred [verification keys](#verification-key) that
 are later aggregated in a single key and a Schnorr [signature](#signature) protocol
 is executed for the [transaction ID](#transaction-id).
 
-Aggregation protocol is based on the [MuSig](https://eprint.iacr.org/2018/068) scheme, but with
+Aggregated signature verification protocol is based on the [MuSig](https://eprint.iacr.org/2018/068) scheme, but with
 Fiat-Shamir transform defined through the use of the [transcript](#transcript) instead of a composition of hash function calls.
 
 1. Instantiate the [transcript](#transcript) `TA` for transaction signature:
@@ -800,7 +802,8 @@ Fiat-Shamir transform defined through the use of the [transcript](#transcript) i
     ```
 8. Add the statement to the list of [deferred point operations](#deferred-point-operations).
 
-
+Note: if the signing is performed by independent mistrusting parties, it should use pre-commitments to the nonces.
+The MPC protocol for safe aggregated signing is outside the scope of this specification because it does not affect the verification protocol.
 
 
 ### Blinding protocol
@@ -994,7 +997,7 @@ The ZkVM state consists of the static attributes and the state machine attribute
 5. Program stack (array of [programs](#program) with their offsets)
 6. Current [program](#program) with its offset
 7. [Transaction log](#transaction-log) (array of logged items)
-8. Transaction signature verification keys (array of [points](#point-type))
+8. Transaction signature verification keys (array of [points](#point))
 9. [Deferred point operations](#deferred-point-operations)
 10. Variables: a list of allocated variables with their commitments: `enum{ detached(point), attached(point, index) }`
 11. [Constraint system](#constraint-system)
@@ -1041,7 +1044,7 @@ to the blockchain state as described in [the blockchain specification](Blockchai
 
 ### Deferred point operations
 
-VM defers operations on [points](#point-type) till the end of the transaction in order
+VM defers operations on [points](#point) till the end of the transaction in order
 to batch them with the verification of [transaction signature](#signature) and
 [constraint system proof](#constraint-system-proof).
 
@@ -1050,13 +1053,13 @@ Each deferred operation at index `i` represents a statement:
 0  ==  sum{s[i,j]·P[i,j], for all j}  +  a[i]·B  +  b[i]·B2
 ```
 where:
-1. `{s[i,j],P[i,j]}` is an array of ([scalar](#scalar-type),[point](#point-type)) tuples,
-2. `a[i]` is a [scalar](#scalar-type) weight of a [primary base point](#base-points) `B`,
-3. `b[i]` is a [scalar](#scalar-type) weight of a [secondary base point](#base-points) `B2`.
+1. `{s[i,j],P[i,j]}` is an array of ([scalar](#scalar),[point](#point)) tuples,
+2. `a[i]` is a [scalar](#scalar) weight of a [primary base point](#base-points) `B`,
+3. `b[i]` is a [scalar](#scalar) weight of a [secondary base point](#base-points) `B2`.
 
 All such statements are combined using the following method:
 
-1. For each statement, a random [scalar](#scalar-type) `x[i]` is sampled.
+1. For each statement, a random [scalar](#scalar) `x[i]` is sampled.
 2. Each weight `s[i,j]` is multiplied by `x[i]` for all weights per statement `i`:
     ```
     z[i,j] = x[i]·s[i,j]
@@ -1103,30 +1106,24 @@ Each instruction defines the format for immediate data. See the reference below 
 
 Code | Instruction                | Stack diagram                              | Effects
 -----|----------------------------|--------------------------------------------|----------------------------------
- |     [**Data**](#data-instructions)                 |                        |
-0x00 | [`scalar:x`](#scalar)      |                 ø → _scalar_               | 
-0x01 | [`point:x`](#point)        |                 ø → _point_                | 
-0x02 | [`string:n:x`](#string)    |                 ø → _string_               | 
- |                                |                                            |
- |     [**Scalars**](#scalar-instructions)            |                        | 
-0x?? | [`neg`](#neg)              |               _a_ → _\|G\|–a_              | 
-0x?? | [`add`](#add)              |             _a b_ → _a+b mod \|G\|_        | 
-0x?? | [`mul`](#mul)              |             _a b_ → _a·b mod \|G\|_        | 
-0x?? | [`eq`](#eq)                |             _a b_ → ø                      | Fails if _a_ ≠ _b_.
-0x?? | [`range:n`](#range)        |               _a_ → _a_                    | Fails if _a_ is not in range [0..2^64-1]
- |                                |                                            |
+ |     [**Stack**](#stack-instructions)               |                        |
+0x?? | [`push:n:x`](#push)        |                 ø → _data_                 |
+0x?? | [`drop`](#drop)            |               _x_ → ø                      |
+0x?? | [`dup:k`](#dup)            |     _x[k] … x[0]_ → _x[k] ... x[0] x[k]_   |
+0x?? | [`roll:k`](#roll)          |     _x[k] … x[0]_ → _x[k-1] ... x[0] x[k]_ |
+0x?? | [`bury:k`](#bury)          |     _x[k] … x[0]_ → _x[0] x[k] ... x[1]_   |
+ |                                |                                            |
  |     [**Constraints**](#constraint-system-instructions)  |                   | 
 0x?? | [`const`](#var)            |          _scalar_ → _expr_                 | 
 0x?? | [`var`](#var)              |           _point_ → _var_                  | Adds an external variable to [CS](#constraint-system)
 0x?? | [`alloc`](#alloc)          |                 ø → _expr_                 | Allocates a low-level variable in [CS](#constraint-system)
 0x?? | [`mintime`](#mintime)      |                 ø → _expr_                 |
 0x?? | [`maxtime`](#maxtime)      |                 ø → _expr_                 |
-0x?? | [`zkneg`](#zkneg)          |           _expr1_ → _expr2_                |
-0x?? | [`zkadd`](#zkadd)          |     _expr1 expr2_ → _expr3_                |
-0x?? | [`zkmul`](#zkmul)          |     _expr1 expr2_ → _expr3_                | Adds multiplier in [CS](#constraint-system)
-0x?? | [`scmul`](#scmul)          |         _expr1 x_ → _expr2_                | 
-0x?? | [`zkeq`](#zkeq)            |     _expr1 expr2_ → _constraint_           | 
-0x?? | [`zkrange:n`](#zkrange)    |            _expr_ → _expr_                 | Modifies [CS](#constraint-system)
+0x?? | [`neg`](#neg)              |           _expr1_ → _expr2_                |
+0x?? | [`add`](#add)              |     _expr1 expr2_ → _expr3_                |
+0x?? | [`mul`](#mul)              |     _expr1 expr2_ → _expr3_                | Potentially adds multiplier in [CS](#constraint-system)
+0x?? | [`eq`](#eq)                |     _expr1 expr2_ → _constraint_           | 
+0x?? | [`range:n`](#range)        |            _expr_ → _expr_                 | Modifies [CS](#constraint-system)
 0x?? | [`and`](#and)              | _constr1 constr2_ → _constr3_              |
 0x?? | [`or`](#or)                | _constr1 constr2_ → _constr3_              |
 0x?? | [`verify`](#verify)        |      _constraint_ → ø                      | Modifies [CS](#constraint-system) 
@@ -1149,96 +1146,64 @@ Code | Instruction                | Stack diagram                              |
 0x?? | [`output:k`](#output)      |   _items... pred_ → ø                      | Modifies [tx log](#transaction-log)
 0x?? | [`contract:k`](#contract)  |   _items... pred_ → _contract_             | 
 0x?? | [`nonce`](#nonce)          |            _pred_ → _contract_             | Modifies [tx log](#transaction-log)
-0x?? | [`data`](#data)            |            _item_ → ø                      | Modifies [tx log](#transaction-log)
+0x?? | [`log`](#log)              |            _data_ → ø                      | Modifies [tx log](#transaction-log)
 0x?? | [`signtx`](#signtx)        |        _contract_ → _results..._           | Modifies [deferred verification keys](#signature)
 0x?? | [`call`](#call)            |   _contract prog_ → _results..._           | [Defers point operations](#deferred-point-operations)
 0x?? | [`left`](#left)            |    _contract A B_ → _contract’_            | [Defers point operations](#deferred-point-operations)
 0x?? | [`right`](#right)          |    _contract A B_ → _contract’_            | [Defers point operations](#deferred-point-operations)
 0x?? | [`delegate`](#delegate)    |_contract prog sig_ → _results..._          | [Defers point operations](#deferred-point-operations)
- |                                |                                            |
- |     [**Stack**](#stack-instructions)               |                        |
-0x?? | [`dup`](#dup)              |               _x_ → _x x_                  |
-0x?? | [`drop`](#drop)            |               _x_ → ø                      |
-0x?? | [`peek:k`](#peek)          |     _x[k] … x[0]_ → _x[k] ... x[0] x[k]_   |
-0x?? | [`roll:k`](#roll)          |     _x[k] … x[0]_ → _x[k-1] ... x[0] x[k]_ |
-0x?? | [`bury:k`](#bury)          |     _x[k] … x[0]_ → _x[0] x[k] ... x[1]_   |
 
 
 
-### Data instructions
 
-#### scalar
+### Stack instructions
 
-**scalar:_x_** → _scalar_
+#### push
 
-Pushes a [scalar](#scalar-type) `x` to the stack. `x` is a 32-byte immediate data.
+**push:_n_:_x_** → _data_
 
-Fails if the scalar is not canonically encoded (reduced modulo Ristretto group order).
-
-#### point
-
-**point:_x_** → _point_
-
-Pushes a [point](#point-type) `x` to the stack. `x` is a 32-byte immediate data.
-
-Fails if the point is not a valid compressed Ristretto point.
-
-#### string
-
-**string:_n_:_x_** → _string_
-
-Pushes a [string](#string-type) `x` containing `n` bytes. 
+Pushes a [data](#data-type) `x` containing `n` bytes. 
 Immediate data `n` is encoded as [LE32](#le32)
 followed by `x` encoded as a sequence of `n` bytes.
 
 
+#### drop
 
+_x_ **drop** → ø
 
+Drops `x` from the stack.
 
-### Scalar instructions
+Fails if `x` is not a [copyable type](#copyable-types).
 
-#### neg
+#### dup
 
-_a_ **neg** → _(|G|–a)_
+_x[k] … x[0]_ **dup:_k_** → _x[k] ... x[0] x[k]_
 
-Negates the [scalar](#scalar-type) `a` modulo Ristretto group order `|G|`.
+Copies k’th data item from the top of the stack.
+Immediate data `k` is encoded as [LE32](#le32).
 
-Fails if item `a` is not a [scalar type](#scalar-type).
+Fails if `x[k]` is not a [copyable type](#copyable-types).
 
-#### add
+Note: `dup:0` is equivalent to `dup`.
 
-_a b_ **add** → _(a+b mod |G|)_
+#### roll
 
-Adds [scalars](#scalar-type) `a` and `b` modulo Ristretto group order `|G|`.
+_x[k] x[k-1] ... x[0]_ **roll:_k_** → _x[k-1] ... x[0] x[k]_
 
-Fails if either `a` or `b` is not a [scalar type](#scalar-type).
+Looks past `k` items from the top, and moves the next item to the top of the stack.
+Immediate data `k` is encoded as [LE32](#le32).
 
-#### mul
+Note: `roll:0` is a no-op, `roll:1` swaps the top two items.
 
-_a b_ **mul** → _(a·b mod |G|)_
+#### bury
 
-Multiplies [scalars](#scalar-type) `a` and `b` modulo Ristretto group order `|G|`.
+_x[k] ... x[1] x[0]_ **bury:_k_** → _x[0] x[k] ... x[1]_
 
-Fails if either `a` or `b` is not a [scalar type](#scalar-type).
+Moves the top item past the `k` items below it.
+Immediate data `k` is encoded as [LE32](#le32).
 
-#### eq
+Note: `bury:0` is a no-op, `bury:1` swaps the top two items.
 
-_a b_ **eq** → ø
-
-Checks that [scalars](#scalar-type) are equal. Fails execution if they are not.
-
-Fails if either `a` or `b` is not a [scalar type](#scalar-type).
-
-#### range
-
-_a_ **range:_n_** → _a_
-
-Checks that a [scalar](#scalar-type) `a` is in `n`-bit range. Immediate data `n` is 1 byte and must be in [1,64] range.
-
-Fails if:
-* `a` is not a [scalar type](#scalar-type), or
-* `n` is not in range [1,64], or
-* any bit of `a[n..]` bits is set.
 
 
 
@@ -1248,21 +1213,21 @@ Fails if:
 
 _a_ **const** → _expr_
 
-1. Pops a [scalar](#scalar-type) `a` from the stack.
+1. Pops a [scalar](#scalar) `a` from the stack.
 2. Creates an [expression](#expression-type) `expr` with weight `a` assigned to an R1CS constant `1`.
 3. Pushes `expr` to the stack.
 
-Fails if `a` is not a [scalar type](#scalar-type).
+Fails if `a` is not a valid [scalar](#scalar).
 
 #### var
 
 _P_ **var** → _v_
 
-1. Pops a [point](#point-type) `P` from the stack.
+1. Pops a [point](#point) `P` from the stack.
 2. Creates a [detached variable](#variable-type) `v` from a [Pedersen commitment](#pedersen-commitment) `P`.
 3. Pushes `v` to the stack.
 
-Fails if `P` is not a [point type](#point-type).
+Fails if `P` is not a valid [point](#point).
 
 #### alloc
 
@@ -1290,9 +1255,9 @@ Pushes an [expression](#expression-type) `expr` corresponding to the [maximum ti
 
 The one-term expression represents time bound as a weight on the R1CS constant `1` (see [`cost`](#const)).
 
-#### zkneg
+#### neg
 
-_ex1_ **zkneg** → _ex2_
+_ex1_ **neg** → _ex2_
 
 1. Pops an [expression](#expression-type) `ex1`.
 2. If the expression is a [detached variable](#variable-type), attaches it to the constraint system.
@@ -1301,41 +1266,46 @@ _ex1_ **zkneg** → _ex2_
 
 Fails if `ex1` is not an [expression type](#expression-type).
 
-#### zkadd
+#### add
 
-_ex1 ex2_ **zkadd** → ex3_
+_ex1 ex2_ **add** → ex3_
 
 1. Pops two [expressions](#expression-type) `ex2`, then `ex1`.
 2. If any of `ex1` or `ex2` is a [detached variable](#variable-type), that variable is attached to the constraint system.
-3. Adds linear combinations represented by `ex1` and `ex2`, producing a new expression `ex3`.
+3. If both expressions are [constant expressions](#constant-expression):
+    1. Creates a new [constant expression](#constant-expression) `ex3` with the weight equal to the sum of weights in `ex1` and `ex2`.
+4. Otherwise, createes a new expression `ex3` by concatenating terms in `ex1` and `ex2`.
 4. Pushes `ex3` to the stack.
 
 Fails if `ex1` and `ex2` are not both [expression types](#expression-type).
 
-#### zkmul
+#### mul
 
-_ex1 ex2_ **zkmul** → _ex3_
+_ex1 ex2_ **mul** → _ex3_
 
-1. Pops two [variables](#variable-type) `ex2`, then `ex1`.
+Multiplies two [expressions](#expression-type) producing another [expression](#expression-type) representing the result of multiplication.
+
+This performs an optimization: if one of the expressions `ex1` or `ex2` contains only one term and this term is for the variable representing the R1CS constant `1` (in other words, the statement is a cleartext constant), then the other expression is multiplied by that constant in-place without allocating a multiplier in the [constraint system](#constraint-system).
+
+1. Pops two [expressions](#expression-type) `ex2`, then `ex1`.
 2. If any of `ex1` or `ex2` is a [detached variable](#variable-type), that variable is attached to the constraint system.
-3. Creates a multiplier in the constraint system. Constraints the left wire to `ex1`, right wire to `ex2`, creates an [expression](#expression-type) `ex3` with the output wire in its single term.
-4. Pushes `ex3` to the stack.
+3. If either `ex1` or `ex2` is a [constant expression](#constant-expression):
+    1. The other expression is multiplied in place by the scalar from that expression.
+    2. The resulting expression is pushed to the stack.
+4. Otherwise:
+    1. Creates a multiplier in the constraint system.
+    2. Constrains the left wire to `ex1`, and the right wire to `ex2`.
+    3. Creates an [expression](#expression-type) `ex3` with the output wire in its single term.
+    4. Pushes `ex3` to the stack.
 
 Fails if `ex1` and `ex2` are not both [expression types](#expression-type).
 
-#### scmul
+Note: if both `ex1` and `ex2` are [constant expressions](#constant-expression),
+the result does not depend on which one treated as a constant.
 
-_ex1 x_ **scmul** → _ex2_
+#### eq
 
-1. Pops [scalar](#scalar-type) `x` and [expression](#expression-type) `ex1` from the stack.
-2. Multiplies all weights in `ex1` by `x` producing new expression `ex2`.
-3. Pushes updated `ex2` to the stack.
-
-Fails if `x` is not a [scalar type](#scalar-type) or if `ex1` is not an [expression type](#expression-type).
-
-#### zkeq
-
-_ex1 ex2_ **zkeq** → _constraint_
+_ex1 ex2_ **eq** → _constraint_
 
 1. Pops two [expressions](#expression-type) `ex2`, then `ex1`.
 2. If any of `ex1` or `ex2` is a [detached variable](#variable-type), that variable is attached to the constraint system.
@@ -1344,9 +1314,9 @@ _ex1 ex2_ **zkeq** → _constraint_
 
 Fails if `ex1` and `ex2` are not both [expression types](#expression-type).
 
-#### zkrange
+#### range
 
-_expr_ **zkrange:_n_** → _expr_
+_expr_ **range:_n_** → _expr_
 
 1. Pops an [expression](#expression-type) `expr`.
 2. If the expression is a [detached variable](#variable-type), attaches it to the constraint system.
@@ -1407,10 +1377,10 @@ Fails if `constr` is not a [constraint](#constraints-type).
 
 _proof V expr P_ **blind** → _var_
 
-1. Pops [point](#point-type) `P`.
+1. Pops [point](#point) `P`.
 2. Pops [expression](#expression-type) `expr`.
-3. Pops [point](#point-type) `V`.
-4. Pops [string](#string-type) `proof`.
+3. Pops [point](#point) `V`.
+4. Pops [data](data-type) `proof`.
 5. If `expr` is a [detached variable](#variable-type), attaches it to the constraint system.
 6. Creates a new [detached variable](#variable-type) `var` with commitment `V`.
 7. Verifies the [blinding proof](#blinding-proof) for commitments `V`, `P` and proof data `proof`, [deferring all point operations](#deferred-point-operations)).
@@ -1418,8 +1388,8 @@ _proof V expr P_ **blind** → _var_
 9. Pushes `var` to the stack.
 
 Fails if: 
-* `proof` is not a 256-byte [string](#string-type), or
-* `P`, `V` are not [points](#point-type), or
+* `proof` is not a 256-byte [data](data-type), or
+* `P`, `V` are not valid [points](#point), or
 * `expr` is not an [expression](#expression-type).
 
 
@@ -1428,16 +1398,16 @@ Fails if:
 _proof V2 var1_ **reblind** → _var1_
 
 1. Pops [variable](#variable-type) `var1`.
-2. Pops [point](#point-type) `V2`.
-3. Pops [string](#string-type) `proof`.
+2. Pops [point](#point) `V2`.
+3. Pops [data](#data-type) `proof`.
 4. Checks that `var1` is a [detached variable](#variable-type) with commitment `V1`.
 5. Replaces commitment `V1` with `V2` for this variable.
 6. Verifies the [reblinding proof](#reblinding-proof) for the commitments `V1`, `V2` and proof data `proof`, [deferring all point operations](#deferred-point-operations)).
 7. Pushes back the detached variable `var1`.
 
 Fails if: 
-* `proof` is not a 256-byte [string](#string-type), or
-* `V2` is not a [point](#point-type), or
+* `proof` is not a 256-byte [data](#data-type), or
+* `V2` is not a valid [point](#point), or
 * `var1` is not a [variable](#variable-type), or
 * `var1` is already attached.
 
@@ -1447,8 +1417,8 @@ Fails if:
 _v V expr_ **unblind** → _var_
 
 1. Pops [expression](#expression-type) `expr`.
-2. Pops [point](#point-type) `V`.
-3. Pops [scalar](#scalar-type) `v`.
+2. Pops [point](#point) `V`.
+3. Pops [scalar](#scalar) `v`.
 4. If `expr` is a [detached variable](#variable-type), attaches it to the constraint system.
 5. Creates a new [detached variable](#variable-type) `var` with commitment `V`.
 6. Verifies the [unblinding proof](#unblinding-proof) for the commitment `V` and scalar `v`, [deferring all point operations](#deferred-point-operations)).
@@ -1456,8 +1426,8 @@ _v V expr_ **unblind** → _var_
 8. Pushes `var` to the stack.
 
 Fails if: 
-* `v` is not a [scalar](#scalar-type), or
-* `V` is not a [point](#point-type), or
+* `v` is not a valid [scalar](#scalar), or
+* `V` is not a valid [point](#point), or
 * `expr` is not an [expression](#expression-type).
 
 
@@ -1468,7 +1438,7 @@ Fails if:
 
 _qty flv pred_ **issue** → _contract_
 
-1. Pops [point](#point-type) `pred`.
+1. Pops [point](#point) `pred`.
 2. Pops [variable](#variable-type) `flv`; if the variable is detached, attaches it.
 3. Pops [variable](#variable-type) `qty`; if the variable is detached, attaches it.
 4. Creates a [value](#value-type) with variables `qty` and `flv` for quantity and flavor, respectively. 
@@ -1490,7 +1460,7 @@ The value is now issued into the contract that must be unlocked
 using one of the contract instructions: [`signtx`](#signx), [`delegate`](#delegate) or [`call`](#call).
 
 Fails if:
-* `pred` is not a [point type](#point-type),
+* `pred` is not a valid [point](#point),
 * `flv` or `qty` are not [variable types](#variable-type).
 
 
@@ -1543,7 +1513,7 @@ _widevalues commitments_ **cloak:_m_:_n_** → _values_
 
 Merges and splits `m` [wide values](#wide-value-type) into `n` [values](#values).
 
-1. Pops `2·n` [points](#point-type) as pairs of _flavor_ and _quantity_ for each output value, flavor is popped first in each pair.
+1. Pops `2·n` [points](#point) as pairs of _flavor_ and _quantity_ for each output value, flavor is popped first in each pair.
 2. Pops `m` [wide values](#wide-value-type) as input values.
 3. Creates constraints and 64-bit range proofs for quantities per [Cloak protocol](https://github.com/interstellar/spacesuit/blob/master/spec.md).
 4. Pushes `n` [values](#values) to the stack, placing them in the same order as their corresponding commitments.
@@ -1557,7 +1527,7 @@ _proof qty flv_ **import** → _value_
 
 1. Pops [variable](#variable-type) `flv`; if the variable is detached, attaches it.
 2. Pops [variable](#variable-type) `qty`; if the variable is detached, attaches it.
-3. Pops [string](#string-type) `proof`.
+3. Pops [data](#data-type) `proof`.
 4. Creates a [value](#value-type) with variables `qty` and `flv` for quantity and flavor, respectively. 
 5. Computes the _flavor_ scalar defined by the [predicate](#predicate) `pred` using the following [transcript-based](#transcript) protocol:
     ```
@@ -1577,14 +1547,14 @@ _proof qty flv_ **import** → _value_
 8. Adds an [import entry](#import-entry) with `proof` to the [transaction log](#transaction-log).
 9. Pushes the imported value to the stack.
 
-Note: the `proof` string contains necessary metadata to check if the value is pegged on the external blockchain.
+Note: the `proof` data contains necessary metadata to check if the value is pegged on the external blockchain.
 It is verified when the transaction is applied to the blockchain state.
 
-TBD: definition of the proof string (quantity, asset id, pegging account, identifier of the pegging transaction)
+TBD: definition of the proof data (quantity, asset id, pegging account, identifier of the pegging transaction)
 
 Fails if:
 * `flv` or `qty` are not [variable types](#variable-type),
-* `proof` is not a [string type](#string-type).
+* `proof` is not a [data type](#data-type).
 
 
 
@@ -1593,7 +1563,7 @@ Fails if:
 _metadata value_ **export** → ø
 
 1. Pops [value](#value-type).
-2. Pops [string](#string-type) `metadata`.
+2. Pops [data](#data-type) `metadata`.
 3. Computes the local flavor based on the pegging metadata:
     ```
     T = Transcript("ZkVM.import")
@@ -1608,11 +1578,11 @@ _metadata value_ **export** → ø
     ```
 5. Adds an [export entry](#export-entry) with `metadata` to the [transaction log](#transaction-log).
 
-TBD: definition of the metadata string (quantity, asset id, pegging account, target address/accountid)
+TBD: definition of the metadata data (quantity, asset id, pegging account, target address/accountid)
 
 Fails if:
 * `value` is not a [non-negative value type](#value-type),
-* `metadata` is not a [string type](#string-type).
+* `metadata` is not a [data type](#data-type).
 
 
 
@@ -1623,11 +1593,11 @@ Fails if:
 
 _input_ **input** → _contract_
 
-1. Pops an [input string](#input-structure) from the stack.
+1. Pops a [data](#data) `input` representing the [input structure](#input-structure) from the stack.
 2. Constructs a [contract](#contract-type) based on the `input` data and pushes it to the stack.
 3. Adds [input entry](#input-entry) to the [transaction log](#transaction-log).
 
-Fails if the `input` is not a [string type](#string-type) with exact encoding of an [input structure](#input-structure).
+Fails if the `input` is not a [data type](#data-type) with exact encoding of an [input structure](#input-structure).
 
 #### output
 
@@ -1661,17 +1631,17 @@ _predicate_ **nonce** → _contract_
 2. Pushes a new [contract](#contract-type) with an empty [payload](#contract-payload) and this predicate to the stack.
 3. Adds [nonce entry](#nonce-entry) to the [transaction log](#transaction-log) with the predicate and transaction [maxtime](#time-bounds).
 
-Fails if `predicate` is not a [point type](#point-type).
+Fails if `predicate` is not a valid [point](#point).
 
 
-#### data
+#### log
 
-_item_ **data** → ø
+_data_ **log** → ø
 
-1. Pops `item` from the stack.
+1. Pops `data` from the stack.
 2. Adds [data entry](#data-entry) with it to the [transaction log](#transaction-log).
 
-Fails if the item is not a [data type](#data-types).
+Fails if the item is not a [data type](#data-type).
 
 
 #### signtx
@@ -1692,7 +1662,7 @@ is deferred until the end of VM execution.
 
 _contract(P) prog_ **call** → _results..._
 
-1. Pops the [string](#string-type) `prog` and a [contract](#contract-type) `contract`.
+1. Pops the [data](#data-type) `prog` and a [contract](#contract-type) `contract`.
 2. Reads the [predicate](#predicate) `P` from the contract.
 3. Forms a statement for [program predicate](#program-predicate) of `prog` being equal to `P`:
     ```
@@ -1702,7 +1672,7 @@ _contract(P) prog_ **call** → _results..._
 5. Places the [payload](#contract-payload) on the stack (last item on top), discarding the contract.
 6. Saves the current program in the program stack, sets the `prog` as current and [runs it](#vm-execution).
 
-Fails if the top item is not a [string](#string-type) or
+Fails if the top item is not a [data](#data-type) or
 the second-from-the-top is not a [contract](#contract-type).
 
 
@@ -1719,7 +1689,7 @@ _contract(P) L R_ **left** → _contract(L)_
 4. Adds the statement to the [deferred point operations](#deferred-point-operations).
 5. Replaces the contract’s predicate with `L` and leaves the contract on stack.
 
-Fails if the top two items are not [points](#point-type),
+Fails if the top two items are not valid [points](#point),
 or if the third from the top item is not a [contract](#contract-type).
 
 
@@ -1736,7 +1706,7 @@ _contract(P) L R_ **left** → _contract(R)_
 4. Adds the statement to the deferred point operations.
 5. Replaces the contract’s predicate with `R` and leaves the contract on stack.
 
-Fails if the top two items are not [points](#point-type),
+Fails if the top two items are not valid [points](#point),
 or if the third from the top item is not a [contract](#contract-type).
 
 
@@ -1744,7 +1714,7 @@ or if the third from the top item is not a [contract](#contract-type).
 
 _contract prog sig_ **delegate** → _results..._
 
-1. Pops [strings](#string-type) `sig`, [string](#string-type) `prog` and the [contract](#contract-type) from the stack.
+1. Pops [data](#data-type) `sig`, [data](#data-type) `prog` and the [contract](#contract-type) from the stack.
 2. Instantiates the [transcript](#transcript):
     ```
     T = Transcript("ZkVM.delegate")
@@ -1758,7 +1728,7 @@ _contract prog sig_ **delegate** → _results..._
     ```
     T.commit("prog", prog)
     ```
-5. Extracts nonce commitment `R` and scalar `s` from a 64-byte string `sig`:
+5. Extracts nonce commitment `R` and scalar `s` from a 64-byte data `sig`:
     ```
     R = sig[ 0..32]
     s = sig[32..64]
@@ -1772,58 +1742,9 @@ _contract prog sig_ **delegate** → _results..._
 8. Saves the current program in the program stack, sets the `prog` as current and [runs it](#vm-execution).
 
 Fails if:
-1. the `sig` is not a 64-byte long [string](#string-type),
-2. or `prog` is not a string,
+1. the `sig` is not a 64-byte long [data](#data-type),
+2. or `prog` is not a [data type](#data-type),
 3. or `contract` is not a [contract type](#contract-type).
-
-
-
-### Stack instructions
-
-#### dup
-
-_x_ **dup** → _x x_
-
-Pushes a copy of `x` to the stack.
-
-Fails if `x` is not a [data type](#data-types).
-
-#### drop
-
-_x_ **drop** → ø
-
-Drops `x` from the stack.
-
-Fails if `x` is not a [data type](#data-types).
-
-#### peek
-
-_x[k] … x[0]_ **peek:_k_** → _x[k] ... x[0] x[k]_
-
-Copies k’th data item from the top of the stack.
-Immediate data `k` is encoded as [LE32](#le32).
-
-Fails if `x[k]` is not a [data type](#data-types).
-
-Note: `peek:0` is equivalent to `dup`.
-
-#### roll
-
-_x[k] x[k-1] ... x[0]_ **roll:_k_** → _x[k-1] ... x[0] x[k]_
-
-Looks past `k` items from the top, and moves the next item to the top of the stack.
-Immediate data `k` is encoded as [LE32](#le32).
-
-Note: `roll:0` is a no-op, `roll:1` swaps the top two items.
-
-#### bury
-
-_x[k] ... x[1] x[0]_ **bury:_k_** → _x[0] x[k] ... x[1]_
-
-Moves the top item past the `k` items below it.
-Immediate data `k` is encoded as [LE32](#le32).
-
-Note: `bury:0` is a no-op, `bury:1` swaps the top two items.
 
 
 
