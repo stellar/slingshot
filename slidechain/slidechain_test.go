@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"os"
 	"reflect"
+	"sync"
 	"testing"
 	"time"
 
@@ -206,7 +207,7 @@ func TestImport(t *testing.T) {
 			defer r.Dispose()
 
 			c := &Custodian{
-				imports:       make(chan struct{}, 1),
+				imports:       sync.NewCond(new(sync.Mutex)),
 				S:             s,
 				DB:            db,
 				privkey:       custodianPrv,
@@ -217,7 +218,7 @@ func TestImport(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			c.imports <- struct{}{}
+			c.imports.Broadcast()
 			for {
 				item, ok := r.Read(ctx)
 				if !ok {

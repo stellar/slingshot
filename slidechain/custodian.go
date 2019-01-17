@@ -4,9 +4,11 @@ import (
 	"context"
 	"database/sql"
 	"encoding/hex"
+	"fmt"
 	"log"
 	"net/http"
 	"strings"
+	"sync"
 
 	"github.com/bobg/multichan"
 	"github.com/chain/txvm/crypto/ed25519"
@@ -33,8 +35,8 @@ type Custodian struct {
 	seed      string
 	accountID xdr.AccountId
 	hclient   *horizon.Client
-	imports   chan struct{}
-	exports   chan struct{}
+	imports   *sync.Cond
+	exports   *sync.Cond
 	network   string
 	privkey   ed25519.PrivateKey
 
@@ -106,8 +108,8 @@ func newCustodian(ctx context.Context, db *sql.DB, horizonURL string) (*Custodia
 		},
 		DB:            db,
 		hclient:       hclient,
-		imports:       make(chan struct{}, 1),
-		exports:       make(chan struct{}, 1),
+		imports:       sync.NewCond(new(sync.Mutex)),
+		exports:       sync.NewCond(new(sync.Mutex)),
 		network:       root.NetworkPassphrase,
 		privkey:       custodianPrv,
 		InitBlockHash: initialBlock.Hash(),
@@ -148,11 +150,10 @@ func makeNewCustodianAccount(ctx context.Context, db *sql.DB, hclient *horizon.C
 	if err != nil {
 		return nil, "", errors.Wrap(err, "requesting lumens through friendbot")
 	}
-
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, "", errors.Wrap(err, "funding address through friendbot")
+		return nil, "", errors.New(fmt.Sprintf("bad status code %d funding address through friendbot", resp.StatusCode))
 	}
 	log.Println("account successfully funded")
 
@@ -187,7 +188,6 @@ func (c *Custodian) launch(ctx context.Context) {
 	go c.importFromPegs(ctx)
 	go c.watchExports(ctx)
 	go c.pegOutFromExports(ctx)
-
 }
 
 func mustDecodeHex(inp string) []byte {

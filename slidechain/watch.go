@@ -72,7 +72,7 @@ func (c *Custodian) watchPegs(ctx context.Context) {
 					return
 				}
 				log.Printf("recorded peg-in tx %s", tx.ID)
-				c.imports <- struct{}{}
+				c.imports.Broadcast()
 			}
 		})
 		if err == context.Canceled {
@@ -158,7 +158,7 @@ func (c *Custodian) watchExports(ctx context.Context) {
 
 				log.Printf("recorded export: %d of txvm asset %x (Stellar %x) for %s", retiredAmount, retiredAssetIDBytes, info.AssetXDR, info.Account)
 
-				c.exports <- struct{}{}
+				c.exports.Broadcast()
 
 				i++ // advance past the consumed log ("L") entry
 			}

@@ -62,7 +62,7 @@ func TestPegOut(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	c.exports <- struct{}{}
+	c.exports.Broadcast()
 
 	ch := make(chan struct{})
 
