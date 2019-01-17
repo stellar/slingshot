@@ -1,7 +1,6 @@
 #![allow(non_snake_case)]
 
-use bulletproofs::r1cs::ConstraintSystem;
-use error::SpacesuitError;
+use bulletproofs::r1cs::{ConstraintSystem, R1CSError, RandomizedConstraintSystem};
 use value::AllocatedValue;
 
 /// Enforces that the outputs are either a merge of the inputs :`D = A + B && C = 0`,
@@ -13,37 +12,39 @@ pub fn fill_cs<CS: ConstraintSystem>(
     B: AllocatedValue,
     C: AllocatedValue,
     D: AllocatedValue,
-) -> Result<(), SpacesuitError> {
-    let w = cs.challenge_scalar(b"mix challenge");
-    let w2 = w * w;
-    let w3 = w2 * w;
-    let w4 = w3 * w;
-    let w5 = w4 * w;
+) -> Result<(), R1CSError> {
+    cs.specify_randomized_constraints(move |cs| {
+        let w = cs.challenge_scalar(b"mix challenge");
+        let w2 = w * w;
+        let w3 = w2 * w;
+        let w4 = w3 * w;
+        let w5 = w4 * w;
 
-    let (_, _, mul_out) = cs.multiply(
-        (A.q - C.q)
-            + (A.a - C.a) * w
-            + (A.t - C.t) * w2
-            + (B.q - D.q) * w3
-            + (B.a - D.a) * w4
-            + (B.t - D.t) * w5,
-        C.q + (A.a - B.a) * w
-            + (A.t - B.t) * w2
-            + (D.q - A.q - B.q) * w3
-            + (D.a - A.a) * w4
-            + (D.t - A.t) * w5,
-    );
+        let (_, _, mul_out) = cs.multiply(
+            (A.q - C.q)
+                + (A.a - C.a) * w
+                + (A.t - C.t) * w2
+                + (B.q - D.q) * w3
+                + (B.a - D.a) * w4
+                + (B.t - D.t) * w5,
+            C.q + (A.a - B.a) * w
+                + (A.t - B.t) * w2
+                + (D.q - A.q - B.q) * w3
+                + (D.a - A.a) * w4
+                + (D.t - A.t) * w5,
+        );
 
-    // multiplication output is zero
-    cs.constrain(mul_out.into());
+        // multiplication output is zero
+        cs.constrain(mul_out.into());
 
-    Ok(())
+        Ok(())
+    })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use bulletproofs::r1cs::{Prover, Verifier};
+    use bulletproofs::r1cs::{Prover, R1CSError, Verifier};
     use bulletproofs::{BulletproofGens, PedersenGens};
     use merlin::Transcript;
 
@@ -77,7 +78,7 @@ mod tests {
         B: (u64, u64, u64),
         C: (u64, u64, u64),
         D: (u64, u64, u64),
-    ) -> Result<(), SpacesuitError> {
+    ) -> Result<(), R1CSError> {
         // Common
         let pc_gens = PedersenGens::default();
         let bp_gens = BulletproofGens::new(128, 1);
@@ -115,10 +116,9 @@ mod tests {
             let (C_com, C_var) = C.commit(&mut prover, &mut rng);
             let (D_com, D_var) = D.commit(&mut prover, &mut rng);
 
-            let mut prover_cs = prover.finalize_inputs();
-            assert!(fill_cs(&mut prover_cs, A_var, B_var, C_var, D_var).is_ok());
+            fill_cs(&mut prover, A_var, B_var, C_var, D_var)?;
 
-            let proof = prover_cs.prove()?;
+            let proof = prover.prove()?;
             (proof, A_com, B_com, C_com, D_com)
         };
 
@@ -131,9 +131,8 @@ mod tests {
         let C_var = C_com.commit(&mut verifier);
         let D_var = D_com.commit(&mut verifier);
 
-        let mut verifier_cs = verifier.finalize_inputs();
-        assert!(fill_cs(&mut verifier_cs, A_var, B_var, C_var, D_var).is_ok());
+        fill_cs(&mut verifier, A_var, B_var, C_var, D_var)?;
 
-        Ok(verifier_cs.verify(&proof)?)
+        Ok(verifier.verify(&proof)?)
     }
 }

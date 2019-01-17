@@ -1,37 +1,49 @@
-use bulletproofs::r1cs::{ConstraintSystem, Variable};
+use bulletproofs::r1cs::{ConstraintSystem, R1CSError, RandomizedConstraintSystem, Variable};
 
 /// Enforces that the output variables `y` are a valid reordering of the inputs variables `x`.
-pub fn fill_cs<CS: ConstraintSystem>(cs: &mut CS, x: &[Variable], y: &[Variable]) {
-    let z = cs.challenge_scalar(b"k-scalar shuffle challenge");
-
-    assert_eq!(x.len(), y.len());
+pub fn fill_cs<CS: ConstraintSystem>(
+    cs: &mut CS,
+    x: Vec<Variable>,
+    y: Vec<Variable>,
+) -> Result<(), R1CSError> {
+    if x.len() != y.len() {
+        return Err(R1CSError::GadgetError {
+            description: "x and y vector lengths do not match in scalar shuffle".to_string(),
+        });
+    }
 
     let k = x.len();
     if k == 1 {
         cs.constrain(y[0] - x[0]);
-        return;
+        return Ok(());
     }
 
-    // Make last x multiplier for i = k-1 and k-2
-    let (_, _, last_mulx_out) = cs.multiply(x[k - 1] - z, x[k - 2] - z);
+    cs.specify_randomized_constraints(move |cs| {
+        let z = cs.challenge_scalar(b"shuffle challenge");
 
-    // Make multipliers for x from i == [0, k-3]
-    let first_mulx_out = (0..k - 2).rev().fold(last_mulx_out, |prev_out, i| {
-        let (_, _, o) = cs.multiply(prev_out.into(), x[i] - z);
-        o
-    });
+        // Make last x multiplier for i = k-1 and k-2
+        let (_, _, last_mulx_out) = cs.multiply(x[k - 1] - z, x[k - 2] - z);
 
-    // Make last y multiplier for i = k-1 and k-2
-    let (_, _, last_muly_out) = cs.multiply(y[k - 1] - z, y[k - 2] - z);
+        // Make multipliers for x from i == [0, k-3]
+        let first_mulx_out = (0..k - 2).rev().fold(last_mulx_out, |prev_out, i| {
+            let (_, _, o) = cs.multiply(prev_out.into(), x[i] - z);
+            o
+        });
 
-    // Make multipliers for y from i == [0, k-3]
-    let first_muly_out = (0..k - 2).rev().fold(last_muly_out, |prev_out, i| {
-        let (_, _, o) = cs.multiply(prev_out.into(), y[i] - z);
-        o
-    });
+        // Make last y multiplier for i = k-1 and k-2
+        let (_, _, last_muly_out) = cs.multiply(y[k - 1] - z, y[k - 2] - z);
 
-    // Check equality between last x mul output and last y mul output
-    cs.constrain(first_muly_out - first_mulx_out)
+        // Make multipliers for y from i == [0, k-3]
+        let first_muly_out = (0..k - 2).rev().fold(last_muly_out, |prev_out, i| {
+            let (_, _, o) = cs.multiply(prev_out.into(), y[i] - z);
+            o
+        });
+
+        // Constrain last x mul output and last y mul output to be equal
+        cs.constrain(first_mulx_out - first_muly_out);
+
+        Ok(())
+    })
 }
 
 #[cfg(test)]
@@ -43,10 +55,8 @@ mod tests {
     use curve25519_dalek::scalar::Scalar;
     use merlin::Transcript;
 
-    use error::SpacesuitError;
-
     #[test]
-    fn scalar_shuffle_gadget() {
+    fn scalar_shuffle() {
         // k=1
         assert!(scalar_shuffle_helper(vec![3], vec![3]).is_ok());
         assert!(scalar_shuffle_helper(vec![6], vec![6]).is_ok());
@@ -78,15 +88,10 @@ mod tests {
 
     // This test allocates variables for the high-level variables, to check that high-level
     // variable allocation and commitment works.
-    fn scalar_shuffle_helper(input: Vec<u64>, output: Vec<u64>) -> Result<(), SpacesuitError> {
+    fn scalar_shuffle_helper(input: Vec<u64>, output: Vec<u64>) -> Result<(), R1CSError> {
         // Common
         let pc_gens = PedersenGens::default();
         let bp_gens = BulletproofGens::new(128, 1);
-
-        let k = input.len();
-        if k != output.len() {
-            return Err(SpacesuitError::InvalidR1CSConstruction);
-        }
 
         // Prover's scope
         let (proof, input_com, output_com) = {
@@ -105,10 +110,9 @@ mod tests {
                 .map(|v| prover.commit(Scalar::from(*v), Scalar::random(&mut rng)))
                 .unzip();
 
-            let mut prover_cs = prover.finalize_inputs();
-            fill_cs(&mut prover_cs, &input_vars, &output_vars);
+            fill_cs(&mut prover, input_vars, output_vars)?;
+            let proof = prover.prove()?;
 
-            let proof = prover_cs.prove()?;
             (proof, input_com, output_com)
         };
 
@@ -120,11 +124,9 @@ mod tests {
         let output_vars: Vec<Variable> =
             output_com.iter().map(|com| verifier.commit(*com)).collect();
 
-        let mut verifier_cs = verifier.finalize_inputs();
-
         // Verifier adds constraints to the constraint system
-        fill_cs(&mut verifier_cs, &input_vars, &output_vars);
+        fill_cs(&mut verifier, input_vars, output_vars)?;
 
-        Ok(verifier_cs.verify(&proof)?)
+        Ok(verifier.verify(&proof)?)
     }
 }

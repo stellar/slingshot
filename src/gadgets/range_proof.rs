@@ -1,6 +1,5 @@
 use bulletproofs::r1cs::{ConstraintSystem, R1CSError};
 use curve25519_dalek::scalar::Scalar;
-use error::SpacesuitError;
 use value::AllocatedQuantity;
 
 /// Enforces that the quantity of v is in the range [0, 2^n).
@@ -8,7 +7,7 @@ pub fn fill_cs<CS: ConstraintSystem>(
     cs: &mut CS,
     v: AllocatedQuantity,
     n: usize,
-) -> Result<(), SpacesuitError> {
+) -> Result<(), R1CSError> {
     let mut constraint = vec![(v.variable, -Scalar::one())];
     let mut exp_2 = Scalar::one();
     for i in 0..n {
@@ -60,7 +59,7 @@ mod tests {
         }
     }
 
-    fn range_proof_helper(v_val: u64, n: usize) -> Result<(), SpacesuitError> {
+    fn range_proof_helper(v_val: u64, n: usize) -> Result<(), R1CSError> {
         // Common
         let pc_gens = PedersenGens::default();
         let bp_gens = BulletproofGens::new(128, 1);
@@ -78,10 +77,9 @@ mod tests {
                 variable: var,
                 assignment: Some(v_val),
             };
-            let mut prover_cs = prover.finalize_inputs();
-            assert!(fill_cs(&mut prover_cs, quantity, n).is_ok());
+            assert!(fill_cs(&mut prover, quantity, n).is_ok());
 
-            let proof = prover_cs.prove()?;
+            let proof = prover.prove()?;
 
             (proof, com)
         };
@@ -96,12 +94,10 @@ mod tests {
             assignment: None,
         };
 
-        let mut verifier_cs = verifier.finalize_inputs();
-
         // Verifier adds constraints to the constraint system
-        assert!(fill_cs(&mut verifier_cs, quantity, n).is_ok());
+        assert!(fill_cs(&mut verifier, quantity, n).is_ok());
 
         // Verifier verifies proof
-        Ok(verifier_cs.verify(&proof)?)
+        Ok(verifier.verify(&proof)?)
     }
 }

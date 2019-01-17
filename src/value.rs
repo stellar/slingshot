@@ -1,4 +1,4 @@
-use bulletproofs::r1cs::{Prover, Variable, Verifier};
+use bulletproofs::r1cs::{ConstraintSystem, Prover, R1CSError, Variable, Verifier};
 use curve25519_dalek::ristretto::CompressedRistretto;
 use curve25519_dalek::scalar::Scalar;
 use rand::{CryptoRng, Rng};
@@ -42,6 +42,42 @@ impl Value {
             t: Scalar::zero(),
         }
     }
+
+    /// Creates variables for the fields in `Value`, and packages them in an `AllocatedValue`.
+    pub fn allocate<CS: ConstraintSystem>(&self, cs: &mut CS) -> Result<AllocatedValue, R1CSError> {
+        let (q_var, _, _) = cs.allocate(|| Ok((self.q.into(), Scalar::zero(), Scalar::zero())))?;
+        let (a_var, t_var, _) = cs.allocate(|| Ok((self.a, self.t, self.a * self.t)))?;
+
+        Ok(AllocatedValue {
+            q: q_var,
+            a: a_var,
+            t: t_var,
+            assignment: Some(*self),
+        })
+    }
+
+    pub fn allocate_unassigned<CS: ConstraintSystem>(
+        cs: &mut CS,
+    ) -> Result<AllocatedValue, R1CSError> {
+        let (q_var, _, _) = cs.allocate(|| {
+            Err(R1CSError::GadgetError {
+                description: "Tried to allocate variable q_var from function".to_string(),
+            })
+        })?;
+        let (a_var, t_var, _) = cs.allocate(|| {
+            Err(R1CSError::GadgetError {
+                description: "Tried to allocate variables a_var and t_var from function"
+                    .to_string(),
+            })
+        })?;
+
+        Ok(AllocatedValue {
+            q: q_var,
+            a: a_var,
+            t: t_var,
+            assignment: None,
+        })
+    }
 }
 
 impl AllocatedValue {
@@ -50,6 +86,17 @@ impl AllocatedValue {
         AllocatedQuantity {
             variable: self.q,
             assignment: self.assignment.map(|v| v.q),
+        }
+    }
+
+    // /// Make another `AllocatedValue`, with the same assignment and newly allocated variables.
+    pub fn reallocate<CS: ConstraintSystem>(
+        &self,
+        cs: &mut CS,
+    ) -> Result<AllocatedValue, R1CSError> {
+        match self.assignment {
+            Some(value) => value.allocate(cs),
+            None => Value::allocate_unassigned(cs),
         }
     }
 }

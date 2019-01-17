@@ -1,7 +1,5 @@
 use super::value_shuffle;
-use bulletproofs::r1cs::ConstraintSystem;
-use curve25519_dalek::scalar::Scalar;
-use error::SpacesuitError;
+use bulletproofs::r1cs::{ConstraintSystem, R1CSError};
 use std::cmp::{max, min};
 use value::{AllocatedValue, Value};
 
@@ -11,7 +9,7 @@ pub fn fill_cs<CS: ConstraintSystem>(
     cs: &mut CS,
     mut x: Vec<AllocatedValue>,
     mut y: Vec<AllocatedValue>,
-) -> Result<(), SpacesuitError> {
+) -> Result<(), R1CSError> {
     let m = x.len();
     let n = y.len();
 
@@ -20,17 +18,16 @@ pub fn fill_cs<CS: ConstraintSystem>(
     let mut values = Vec::with_capacity(pad_count);
 
     for _ in 0..pad_count {
-        // We need three independent variables constrained to be zeroes.
-        // We can do that with a single multiplier and two linear constraints for the inputs only.
-        // The multiplication constraint is enough to ensure that the third wire is also zero.
-        let (q, a, t) = cs.multiply(Scalar::zero().into(), Scalar::zero().into());
-        let assignment = Some(Value::zero());
-        values.push(AllocatedValue {
-            q,
-            a,
-            t,
-            assignment,
-        });
+        // Make an allocated value whose fields are all zero.
+        // Note: We could also create the 3 allocated variables using one multiplier
+        // (since the output multiplier is also zero),
+        // but instead we use the `Value` API for clarity (uses two multipliers).
+        let zero_val = Value::zero().allocate(cs)?;
+        // Constrain each of the variables to be equal to zero.
+        cs.constrain(zero_val.q.into());
+        cs.constrain(zero_val.a.into());
+        cs.constrain(zero_val.t.into());
+        values.push(zero_val);
     }
 
     if m > n {
@@ -39,9 +36,7 @@ pub fn fill_cs<CS: ConstraintSystem>(
         x.append(&mut values);
     }
 
-    value_shuffle::fill_cs(cs, x, y)?;
-
-    Ok(())
+    value_shuffle::fill_cs(cs, x, y)
 }
 
 #[cfg(test)]
@@ -134,7 +129,7 @@ mod tests {
         Value::zero()
     }
 
-    fn padded_shuffle_helper(input: Vec<Value>, output: Vec<Value>) -> Result<(), SpacesuitError> {
+    fn padded_shuffle_helper(input: Vec<Value>, output: Vec<Value>) -> Result<(), R1CSError> {
         // Common
         let pc_gens = PedersenGens::default();
         let bp_gens = BulletproofGens::new(128, 1);
@@ -148,10 +143,9 @@ mod tests {
             let (input_com, input_vars) = input.commit(&mut prover, &mut rng);
             let (output_com, output_vars) = output.commit(&mut prover, &mut rng);
 
-            let mut prover_cs = prover.finalize_inputs();
-            assert!(fill_cs(&mut prover_cs, input_vars, output_vars).is_ok());
+            assert!(fill_cs(&mut prover, input_vars, output_vars).is_ok());
 
-            let proof = prover_cs.prove()?;
+            let proof = prover.prove()?;
             (proof, input_com, output_com)
         };
 
@@ -162,12 +156,10 @@ mod tests {
         let input_vars = input_com.commit(&mut verifier);
         let output_vars = output_com.commit(&mut verifier);
 
-        let mut verifier_cs = verifier.finalize_inputs();
-
         // Verifier adds constraints to the constraint system
-        assert!(fill_cs(&mut verifier_cs, input_vars, output_vars).is_ok());
+        assert!(fill_cs(&mut verifier, input_vars, output_vars).is_ok());
 
         // Verifier verifies proof
-        Ok(verifier_cs.verify(&proof)?)
+        Ok(verifier.verify(&proof)?)
     }
 }

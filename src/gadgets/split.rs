@@ -1,6 +1,5 @@
 use super::k_mix;
-use bulletproofs::r1cs::ConstraintSystem;
-use error::SpacesuitError;
+use bulletproofs::r1cs::{ConstraintSystem, R1CSError};
 use value::AllocatedValue;
 
 /// Enforces that the outputs are either a split of the inputs :`A = C + D && B = 0`,
@@ -13,11 +12,7 @@ use value::AllocatedValue;
 pub fn fill_cs<CS: ConstraintSystem>(
     cs: &mut CS,
     mut inputs: Vec<AllocatedValue>,
-    mut intermediates: Vec<AllocatedValue>,
-    mut outputs: Vec<AllocatedValue>,
-) -> Result<(), SpacesuitError> {
+) -> Result<(Vec<AllocatedValue>, Vec<AllocatedValue>), R1CSError> {
     inputs.reverse();
-    intermediates.reverse();
-    outputs.reverse();
-    k_mix::fill_cs(cs, outputs, intermediates, inputs)
+    k_mix::fill_cs(cs, inputs)
 }

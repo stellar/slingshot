@@ -1,6 +1,5 @@
 use super::scalar_shuffle;
-use bulletproofs::r1cs::ConstraintSystem;
-use error::SpacesuitError;
+use bulletproofs::r1cs::{ConstraintSystem, R1CSError, RandomizedConstraintSystem};
 use value::AllocatedValue;
 
 /// Enforces that the output values `y` are a valid reordering of the inputs values `x`.
@@ -10,9 +9,11 @@ pub fn fill_cs<CS: ConstraintSystem>(
     cs: &mut CS,
     x: Vec<AllocatedValue>,
     y: Vec<AllocatedValue>,
-) -> Result<(), SpacesuitError> {
+) -> Result<(), R1CSError> {
     if x.len() != y.len() {
-        return Err(SpacesuitError::InvalidR1CSConstruction);
+        return Err(R1CSError::GadgetError {
+            description: "x and y vector lengths do not match in value shuffle".to_string(),
+        });
     }
     let k = x.len();
     if k == 1 {
@@ -24,20 +25,23 @@ pub fn fill_cs<CS: ConstraintSystem>(
         return Ok(());
     }
 
-    let w = cs.challenge_scalar(b"k-value shuffle challenge");
-    let w2 = w * w;
-    let mut x_scalars = Vec::with_capacity(k);
-    let mut y_scalars = Vec::with_capacity(k);
-    for i in 0..k {
-        let (x_i_var, y_i_var, _) = cs.multiply(
-            x[i].q + x[i].a * w + x[i].t * w2,
-            y[i].q + y[i].a * w + y[i].t * w2,
-        );
+    cs.specify_randomized_constraints(move |cs| {
+        let w = cs.challenge_scalar(b"k-value shuffle challenge");
+        let w2 = w * w;
+        let mut x_scalars = Vec::with_capacity(k);
+        let mut y_scalars = Vec::with_capacity(k);
 
-        x_scalars.push(x_i_var);
-        y_scalars.push(y_i_var);
-    }
-    Ok(scalar_shuffle::fill_cs(cs, &x_scalars, &y_scalars))
+        for i in 0..k {
+            let (x_i_var, y_i_var, _) = cs.multiply(
+                x[i].q + x[i].a * w + x[i].t * w2,
+                y[i].q + y[i].a * w + y[i].t * w2,
+            );
+            x_scalars.push(x_i_var);
+            y_scalars.push(y_i_var);
+        }
+
+        scalar_shuffle::fill_cs(cs, x_scalars, y_scalars)
+    })
 }
 
 #[cfg(test)]
@@ -171,7 +175,7 @@ mod tests {
         );
     }
 
-    fn value_shuffle_helper(input: Vec<Value>, output: Vec<Value>) -> Result<(), SpacesuitError> {
+    fn value_shuffle_helper(input: Vec<Value>, output: Vec<Value>) -> Result<(), R1CSError> {
         // Common
         let pc_gens = PedersenGens::default();
         let bp_gens = BulletproofGens::new(128, 1);
@@ -185,10 +189,9 @@ mod tests {
             let (input_com, input_vars) = input.commit(&mut prover, &mut rng);
             let (output_com, output_vars) = output.commit(&mut prover, &mut rng);
 
-            let mut prover_cs = prover.finalize_inputs();
-            assert!(fill_cs(&mut prover_cs, input_vars, output_vars).is_ok());
+            assert!(fill_cs(&mut prover, input_vars, output_vars).is_ok());
 
-            let proof = prover_cs.prove()?;
+            let proof = prover.prove()?;
             (proof, input_com, output_com)
         };
 
@@ -199,12 +202,10 @@ mod tests {
         let input_vars = input_com.commit(&mut verifier);
         let output_vars = output_com.commit(&mut verifier);
 
-        let mut verifier_cs = verifier.finalize_inputs();
-
         // Verifier adds constraints to the constraint system
-        assert!(fill_cs(&mut verifier_cs, input_vars, output_vars).is_ok());
+        assert!(fill_cs(&mut verifier, input_vars, output_vars).is_ok());
 
         // Verifier verifies proof
-        Ok(verifier_cs.verify(&proof)?)
+        Ok(verifier.verify(&proof)?)
     }
 }

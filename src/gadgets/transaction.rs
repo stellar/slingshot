@@ -1,7 +1,5 @@
-use bulletproofs::r1cs::ConstraintSystem;
-use error::SpacesuitError;
+use bulletproofs::r1cs::{ConstraintSystem, R1CSError};
 use gadgets::{merge, padded_shuffle, range_proof, split, value_shuffle};
-use std::cmp::max;
 use value::AllocatedValue;
 
 /// Enforces that the outputs are a valid rearrangement of the inputs, following the
@@ -10,47 +8,23 @@ use value::AllocatedValue;
 pub fn fill_cs<CS: ConstraintSystem>(
     cs: &mut CS,
     inputs: Vec<AllocatedValue>,
-    merge_in: Vec<AllocatedValue>,
-    merge_mid: Vec<AllocatedValue>,
-    merge_out: Vec<AllocatedValue>,
-    split_in: Vec<AllocatedValue>,
-    split_mid: Vec<AllocatedValue>,
-    split_out: Vec<AllocatedValue>,
     outputs: Vec<AllocatedValue>,
-) -> Result<(), SpacesuitError> {
-    let m = inputs.len();
-    let n = outputs.len();
-    let inner_merge_count = max(m, 2) - 2; // max(m - 2, 0)
-    let inner_split_count = max(n, 2) - 2; // max(n - 2, 0)
-    if inputs.len() != merge_in.len()
-        || merge_in.len() != merge_out.len()
-        || split_in.len() != split_out.len()
-        || split_out.len() != outputs.len()
-        || merge_mid.len() != inner_merge_count
-        || split_mid.len() != inner_split_count
-    {
-        return Err(SpacesuitError::InvalidR1CSConstruction);
-    }
+) -> Result<(), R1CSError> {
+    // Merge
+    let (merge_in, merge_out) = merge::fill_cs(cs, inputs.clone())?;
+
+    // Split
+    let (split_out, split_in) = split::fill_cs(cs, outputs.clone())?;
 
     // Shuffle 1
     // Check that `merge_in` is a valid reordering of `inputs`
     // when `inputs` are grouped by flavor.
-    value_shuffle::fill_cs(cs, inputs, merge_in.clone())?;
-
-    // Merge
-    // Check that `merge_out` is a valid combination of `merge_in`,
-    // when all values of the same flavor in `merge_in` are combined.
-    merge::fill_cs(cs, merge_in, merge_mid, merge_out.clone())?;
+    value_shuffle::fill_cs(cs, inputs, merge_in)?;
 
     // Shuffle 2
     // Check that `split_in` is a valid reordering of `merge_out`, allowing for
     // the adding or dropping of padding values (quantity = 0) if m != n.
-    padded_shuffle::fill_cs(cs, merge_out, split_in.clone())?;
-
-    // Split
-    // Check that `split_in` is a valid combination of `split_out`,
-    // when all values of the same flavor in `split_out` are combined.
-    split::fill_cs(cs, split_in, split_mid, split_out.clone())?;
+    padded_shuffle::fill_cs(cs, merge_out, split_in)?;
 
     // Shuffle 3
     // Check that `split_out` is a valid reordering of `outputs`
