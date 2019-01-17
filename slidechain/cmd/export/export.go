@@ -6,9 +6,8 @@ import (
 	"flag"
 	"log"
 
-	"slingshot/slidechain"
-
 	"github.com/golang/protobuf/proto"
+	"github.com/interstellar/slingshot/slidechain"
 	"github.com/stellar/go/xdr"
 )
 

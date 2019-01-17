@@ -13,8 +13,6 @@ import (
 	"net/url"
 	"os"
 	"reflect"
-	"slingshot/slidechain/stellar"
-	"slingshot/slidechain/store"
 	"sync"
 	"testing"
 	"time"
@@ -31,11 +29,12 @@ import (
 	"github.com/chain/txvm/protocol/txvm/txvmutil"
 	"github.com/davecgh/go-spew/spew"
 	"github.com/golang/protobuf/proto"
+	"github.com/interstellar/slingshot/slidechain/stellar"
 	"github.com/interstellar/slingshot/slidechain/store"
+	"github.com/interstellar/starlight/worizon/xlm"
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/stellar/go/clients/horizon"
 	"github.com/stellar/go/xdr"
-	"i10r.io/worizon/xlm"
 )
 
 func makeAsset(typ xdr.AssetType, code string, issuer string) xdr.Asset {
@@ -269,7 +268,7 @@ func TestEndToEnd(t *testing.T) {
 			network:       root.NetworkPassphrase,
 			privkey:       custodianPrv,
 		}
-		c.Launch(ctx)
+		c.launch(ctx)
 
 		// Prepare Stellar account to peg-in funds and txvm account to receive funds
 		amount := 5 * xlm.Lumen

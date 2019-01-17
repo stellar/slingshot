@@ -1,17 +1,10 @@
 package stellar
 
 import (
-<<<<<<< HEAD
 	"github.com/interstellar/starlight/worizon/xlm"
 	b "github.com/stellar/go/build"
 	"github.com/stellar/go/clients/horizon"
 	"github.com/stellar/go/xdr"
-=======
-	b "github.com/stellar/go/build"
-	"github.com/stellar/go/clients/horizon"
-	"github.com/stellar/go/xdr"
-	"i10r.io/worizon/xlm"
->>>>>>> 9eaa820... big refactor to share logic between tests and slidechaind
 )
 
 // BuildPegInTx builds a slidechain peg-in transaction
