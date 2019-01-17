@@ -180,6 +180,7 @@ func (c *Custodian) launch(ctx context.Context) {
 	go c.importFromPegs(ctx)
 	go c.watchExports(ctx)
 	go c.pegOutFromExports(ctx)
+
 }
 
 func mustDecodeHex(inp string) []byte {

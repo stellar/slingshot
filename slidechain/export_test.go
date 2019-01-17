@@ -11,6 +11,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/bobg/multichan"
+	"github.com/chain/txvm/protocol"
+	"github.com/chain/txvm/protocol/bc"
+	"github.com/interstellar/slingshot/slidechain/store"
 	"github.com/stellar/go/clients/horizon"
 	"github.com/stellar/go/keypair"
 	"github.com/stellar/go/xdr"
@@ -29,10 +33,9 @@ func TestPegOut(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	c, err := GetCustodian(ctx, db, "https://horizon-testnet.stellar.org")
-	if err != nil {
-		t.Fatal(err)
-	}
+	c := testCustodian(ctx, t, db)
+
+	go c.pegOutFromExports(ctx)
 
 	var lumen xdr.Asset
 	lumen.Type = xdr.AssetTypeAssetTypeNative
@@ -108,5 +111,64 @@ func TestPegOut(t *testing.T) {
 	case <-ctx.Done():
 		t.Fatal("context timed out: no peg-out tx seen")
 	case <-ch:
+	}
+}
+
+func testCustodian(ctx context.Context, t *testing.T, db *sql.DB) *Custodian {
+	err := setSchema(db)
+	if err != nil {
+		t.Fatalf("error setting db schema: %s", err)
+	}
+
+	hclient := &horizon.Client{
+		URL:  "https://horizon-testnet.stellar.org",
+		HTTP: new(http.Client),
+	}
+
+	root, err := hclient.Root()
+	if err != nil {
+		t.Fatalf("error getting horizon client root: %s", err)
+	}
+
+	custAccountID, seed, err := custodianAccount(ctx, db, hclient)
+	if err != nil {
+		t.Fatalf("error creating/fetching custodian account: %s", err)
+	}
+
+	heights := make(chan uint64)
+	bs, err := store.New(db, heights)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	initialBlock, err := bs.GetBlock(ctx, 1)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	chain, err := protocol.NewChain(ctx, initialBlock, bs, heights)
+	if err != nil {
+		log.Fatal("initializing Chain: ", err)
+	}
+	_, err = chain.Recover(ctx)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	return &Custodian{
+		seed:      seed,
+		accountID: *custAccountID,
+		S: &submitter{
+			w:            multichan.New((*bc.Block)(nil)),
+			chain:        chain,
+			initialBlock: initialBlock,
+		},
+		DB:            db,
+		hclient:       hclient,
+		imports:       make(chan struct{}, 1),
+		exports:       make(chan struct{}, 1),
+		network:       root.NetworkPassphrase,
+		privkey:       custodianPrv,
+		InitBlockHash: initialBlock.Hash(),
 	}
 }
