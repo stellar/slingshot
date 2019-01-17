@@ -24,12 +24,16 @@ import (
 	"github.com/chain/txvm/protocol/bc"
 	"github.com/chain/txvm/protocol/txbuilder"
 	"github.com/chain/txvm/protocol/txbuilder/standard"
+	"github.com/chain/txvm/protocol/txbuilder/txresult"
 	"github.com/chain/txvm/protocol/txvm"
 	"github.com/chain/txvm/protocol/txvm/txvmutil"
 	"github.com/davecgh/go-spew/spew"
 	"github.com/golang/protobuf/proto"
+	"github.com/interstellar/slingshot/slidechain/stellar"
 	"github.com/interstellar/slingshot/slidechain/store"
+	"github.com/interstellar/starlight/worizon/xlm"
 	_ "github.com/mattn/go-sqlite3"
+	"github.com/stellar/go/clients/horizon"
 	"github.com/stellar/go/xdr"
 )
 
@@ -234,6 +238,161 @@ func TestImport(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestEndToEnd(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
+	defer cancel()
+	withTestServer(ctx, t, func(ctx context.Context, db *sql.DB, s *submitter, sv *httptest.Server, ch *protocol.Chain) {
+		hclient := &horizon.Client{
+			URL:  "https://horizon-testnet.stellar.org",
+			HTTP: new(http.Client),
+		}
+		root, err := hclient.Root()
+		if err != nil {
+			t.Fatalf("error getting horizon client root: %s", err)
+		}
+		accountID, seed, err := custodianAccount(ctx, db, hclient)
+		if err != nil {
+			t.Fatalf("error creating custodian account: %s", err)
+		}
+		c := &Custodian{
+			seed:          seed,
+			accountID:     *accountID,
+			S:             s,
+			DB:            db,
+			hclient:       hclient,
+			InitBlockHash: ch.InitialBlockHash,
+			imports:       sync.NewCond(new(sync.Mutex)),
+			exports:       sync.NewCond(new(sync.Mutex)),
+			network:       root.NetworkPassphrase,
+			privkey:       custodianPrv,
+		}
+		c.launch(ctx)
+
+		// Prepare Stellar account to peg-in funds and txvm account to receive funds
+		amount := 5 * xlm.Lumen
+		kp := stellar.NewFundedAccount()
+		recipientPub, recipientPrv, err := ed25519.GenerateKey(nil)
+		if err != nil {
+			t.Fatalf("error generating txvm recipient keypair: %s", err)
+		}
+		var recipientPubkeyBytes [32]byte
+		copy(recipientPubkeyBytes[:], recipientPub)
+
+		// Build + submit transaction to peg-in funds
+		pegInTx, err := stellar.BuildPegInTx(kp.Address(), recipientPubkeyBytes, amount, c.accountID.Address(), hclient)
+		if err != nil {
+			t.Fatalf("error building peg-in tx: %s", err)
+		}
+		txenv, err := pegInTx.Sign(kp.Seed())
+		if err != nil {
+			t.Fatalf("error signing tx: %s", err)
+		}
+		txstr, err := xdr.MarshalBase64(txenv.E)
+		if err != nil {
+			t.Fatalf("error marshaling tx to base64: %s", err)
+		}
+		succ, err := hclient.SubmitTransaction(txstr)
+		if err != nil {
+			t.Fatalf("error submitting tx: %s", err)
+		}
+		log.Printf("successfully submitted peg-in tx: id %s, ledger %d", succ.Hash, succ.Ledger)
+
+		native := xdr.Asset{
+			Type: xdr.AssetTypeAssetTypeNative,
+		}
+		nativeAssetBytes, err := native.MarshalBinary()
+		if err != nil {
+			t.Fatalf("error marshaling native asset to xdr: %s", err)
+		}
+
+		// Check to verify import
+		var anchor []byte
+		found := false
+		r := c.S.w.Reader()
+		for {
+			item, ok := r.Read(ctx)
+			if !ok {
+				t.Fatal("cannot read a block")
+			}
+			block := item.(*bc.Block)
+			for _, tx := range block.Transactions {
+				if isImportTx(tx, int64(amount), nativeAssetBytes, recipientPub) {
+					log.Printf("found import tx %x", tx.Program)
+					found = true
+					txresult := txresult.New(tx)
+					anchor = txresult.Outputs[0].Value.Anchor
+					break
+				}
+			}
+			if found == true {
+				break
+			}
+		}
+
+		// Build + submit export tx
+		exportTx, err := BuildExportTx(ctx, native, int64(amount), kp.Address(), anchor, recipientPrv)
+		if err != nil {
+			t.Fatalf("error building retirement tx %s", err)
+		}
+		txbits, err := proto.Marshal(&exportTx.RawTx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp, err := http.Post(sv.URL+"/submit", "application/octet-stream", bytes.NewReader(txbits))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if resp.StatusCode/100 != 2 {
+			t.Fatalf("status code %d from POST /submit", resp.StatusCode)
+		}
+
+		// Check for successful retirement
+		retire := make(chan struct{})
+		go func() {
+			var cur horizon.Cursor
+			err := c.hclient.StreamTransactions(ctx, kp.Address(), &cur, func(tx horizon.Transaction) {
+				log.Printf("received tx: %s", tx.EnvelopeXdr)
+				var env xdr.TransactionEnvelope
+				err := xdr.SafeUnmarshalBase64(tx.EnvelopeXdr, &env)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if env.Tx.SourceAccount.Address() != c.accountID.Address() {
+					log.Println("source accounts don't match, skipping...")
+					return
+				}
+				defer close(retire)
+				if len(env.Tx.Operations) != 1 {
+					t.Fatalf("too many operations got %d, want 1", len(env.Tx.Operations))
+				}
+				op := env.Tx.Operations[0]
+				if op.Body.Type != xdr.OperationTypePayment {
+					t.Fatalf("wrong operation type: got %s, want %s", op.Body.Type, xdr.OperationTypePayment)
+				}
+				paymentOp := op.Body.PaymentOp
+				if paymentOp.Destination.Address() != kp.Address() {
+					t.Fatalf("incorrect payment destination got %s, want %s", paymentOp.Destination.Address(), kp.Address())
+				}
+				if paymentOp.Amount != xdr.Int64(amount) {
+					t.Fatalf("got incorrect payment amount %d, want %d", paymentOp.Amount, 50)
+				}
+				if paymentOp.Asset.Type != xdr.AssetTypeAssetTypeNative {
+					t.Fatalf("got incorrect payment asset %s, want lumens", paymentOp.Asset.String())
+				}
+			})
+			if err != nil {
+				t.Fatalf("error streaming from Horizon: %s", err)
+			}
+		}()
+
+		select {
+		case <-ctx.Done():
+			t.Fatal("context timed out: no peg-out tx seen")
+		case <-retire:
+		}
+	})
 }
 
 // Expected log is:

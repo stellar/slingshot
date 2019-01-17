@@ -2,10 +2,16 @@ package slidechain
 
 import (
 	"context"
+	"fmt"
 	"log"
+	"time"
 
 	"github.com/bobg/sqlutil"
+	"github.com/chain/txvm/crypto/ed25519"
 	"github.com/chain/txvm/errors"
+	"github.com/chain/txvm/protocol/bc"
+	"github.com/chain/txvm/protocol/txbuilder"
+	"github.com/chain/txvm/protocol/txvm"
 	"github.com/interstellar/starlight/worizon/xlm"
 	b "github.com/stellar/go/build"
 	"github.com/stellar/go/clients/horizon"
@@ -157,4 +163,30 @@ func (c *Custodian) buildPegOutTx(recipient xdr.AccountId, asset xdr.Asset, amou
 		b.BaseFee{Amount: baseFee},
 		paymentOp,
 	)
+}
+
+// BuildExportTx builds a txvm retirement tx for an asset issued
+// onto slidechain.
+func BuildExportTx(ctx context.Context, asset xdr.Asset, amount int64, addr string, anchor []byte, prv ed25519.PrivateKey) (*bc.Tx, error) {
+	assetXDR, err := xdr.MarshalBase64(asset)
+	if err != nil {
+		return nil, err
+	}
+	assetBytes, err := asset.MarshalBinary()
+	if err != nil {
+		return nil, err
+	}
+	refdata := []byte(fmt.Sprintf(`{"asset":"%s","account":"%s"}`, assetXDR, addr))
+	assetIDBytes := txvm.AssetID(issueSeed[:], assetBytes)
+	assetID := bc.NewHash(assetIDBytes)
+	tpl := txbuilder.NewTemplate(time.Now().Add(time.Minute), nil)
+	tpl.AddInput(1, [][]byte{prv}, nil, []ed25519.PublicKey{prv.Public().(ed25519.PublicKey)}, amount, assetID, anchor, nil, 1)
+	tpl.AddRetirement(int64(amount), assetID, refdata)
+	err = tpl.Sign(ctx, func(_ context.Context, msg []byte, prv []byte, path [][]byte) ([]byte, error) {
+		return ed25519.Sign(prv, msg), nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return tpl.Tx()
 }

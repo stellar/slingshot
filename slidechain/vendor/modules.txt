@@ -25,6 +25,7 @@ github.com/chain/txvm/crypto/sha3
 github.com/chain/txvm/protocol/txvm/op
 github.com/chain/txvm/protocol/txvm/txvmutil
 github.com/chain/txvm/protocol/txbuilder
+github.com/chain/txvm/protocol/txbuilder/txresult
 github.com/chain/txvm/crypto/sha3pool
 # github.com/davecgh/go-spew v1.1.1
 github.com/davecgh/go-spew/spew
