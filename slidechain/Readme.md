@@ -62,7 +62,7 @@ or use the automatically-generated account from our `peg` command earlier.
 
 ```sh
 $ go build ./cmd/export
-$ ./export -dest [destination account ID] -amount 100 -anchor [import anchor] -prv [txvm prv key]
+$ ./export -destination [destination account ID] -amount 100 -anchor [import anchor] -prv [txvm prv key]
 ```
 
 `slidechaind` will print logs that it is retiring the funds and building a peg-out transaction.
