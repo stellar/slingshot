@@ -1,4 +1,4 @@
-package main
+package slidechain
 
 import (
 	"context"
@@ -15,7 +15,7 @@ import (
 const baseFee = 100
 
 // Runs as a goroutine.
-func (c *custodian) pegOutFromExports(ctx context.Context) {
+func (c *Custodian) pegOutFromExports(ctx context.Context) {
 	c.exports.L.Lock()
 	defer c.exports.L.Unlock()
 	for {
@@ -32,7 +32,7 @@ func (c *custodian) pegOutFromExports(ctx context.Context) {
 			amounts    []int
 			assetXDRs  [][]byte
 		)
-		err := sqlutil.ForQueryRows(ctx, c.db, q, func(txid []byte, recipient string, amount int, assetXDR []byte) {
+		err := sqlutil.ForQueryRows(ctx, c.DB, q, func(txid []byte, recipient string, amount int, assetXDR []byte) {
 			txids = append(txids, txid)
 			recipients = append(recipients, recipient)
 			amounts = append(amounts, amount)
@@ -59,7 +59,7 @@ func (c *custodian) pegOutFromExports(ctx context.Context) {
 			if err != nil {
 				log.Fatalf("pegging out tx: %s", err)
 			}
-			_, err = c.db.ExecContext(ctx, `UPDATE exports SET exported=1 WHERE txid=$1`, txid)
+			_, err = c.DB.ExecContext(ctx, `UPDATE exports SET exported=1 WHERE txid=$1`, txid)
 			if err != nil {
 				log.Fatalf("updating export table: %s", err)
 			}
@@ -67,7 +67,7 @@ func (c *custodian) pegOutFromExports(ctx context.Context) {
 	}
 }
 
-func (c *custodian) pegOut(ctx context.Context, recipient xdr.AccountId, asset xdr.Asset, amount xlm.Amount) error {
+func (c *Custodian) pegOut(ctx context.Context, recipient xdr.AccountId, asset xdr.Asset, amount xlm.Amount) error {
 	tx, err := c.buildPegOutTx(recipient, asset, amount)
 	if err != nil {
 		return errors.Wrap(err, "building tx")
@@ -109,7 +109,7 @@ func (c *custodian) pegOut(ctx context.Context, recipient xdr.AccountId, asset x
 	return errors.Wrap(err, "submitting tx")
 }
 
-func (c *custodian) buildPegOutTx(recipient xdr.AccountId, asset xdr.Asset, amount xlm.Amount) (*b.TransactionBuilder, error) {
+func (c *Custodian) buildPegOutTx(recipient xdr.AccountId, asset xdr.Asset, amount xlm.Amount) (*b.TransactionBuilder, error) {
 	var paymentOp b.PaymentBuilder
 	switch asset.Type {
 	case xdr.AssetTypeAssetTypeNative:

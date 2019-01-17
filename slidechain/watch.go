@@ -1,4 +1,4 @@
-package main
+package slidechain
 
 import (
 	"bytes"
@@ -16,23 +16,23 @@ import (
 )
 
 // Runs as a goroutine until ctx is canceled.
-func (c *custodian) watchPegs(ctx context.Context) {
+func (c *Custodian) watchPegs(ctx context.Context) {
 	backoff := i10rnet.Backoff{Base: 100 * time.Millisecond}
 
 	var cur horizon.Cursor
-	err := c.db.QueryRow("SELECT cursor FROM custodian").Scan(&cur)
+	err := c.DB.QueryRow("SELECT cursor FROM custodian").Scan(&cur)
 	if err != nil && err != sql.ErrNoRows {
 		log.Fatal(err)
 	}
 
 	for {
 		err := c.hclient.StreamTransactions(ctx, c.accountID.Address(), &cur, func(tx horizon.Transaction) {
-			log.Printf("handling tx %s", tx.ID)
+			log.Printf("handling Stellar tx %s", tx.ID)
 
 			var env xdr.TransactionEnvelope
 			err := xdr.SafeUnmarshalBase64(tx.EnvelopeXdr, &env)
 			if err != nil {
-				log.Fatal("error unmarshaling tx: ", err)
+				log.Fatal("error unmarshaling Stellar tx: ", err)
 			}
 
 			if env.Tx.Memo.Type != xdr.MemoTypeMemoHash {
@@ -59,13 +59,13 @@ func (c *custodian) watchPegs(ctx context.Context) {
 					log.Fatalf("error marshaling asset to XDR %s: %s", payment.Asset.String(), err)
 					return
 				}
-				_, err = c.db.ExecContext(ctx, q, tx.ID, i, payment.Amount, assetXDR, recipientPubkey)
+				_, err = c.DB.ExecContext(ctx, q, tx.ID, i, payment.Amount, assetXDR, recipientPubkey)
 				if err != nil {
 					log.Fatal("error recording peg-in tx: ", err)
 					return
 				}
 				// Update cursor after successfully processing transaction
-				_, err = c.db.ExecContext(ctx, `UPDATE custodian SET cursor=$1 WHERE seed=$2`, tx.PT, c.seed)
+				_, err = c.DB.ExecContext(ctx, `UPDATE custodian SET cursor=$1 WHERE seed=$2`, tx.PT, c.seed)
 				if err != nil {
 					log.Fatalf("updating cursor: %s", err)
 					return
@@ -78,10 +78,7 @@ func (c *custodian) watchPegs(ctx context.Context) {
 			return
 		}
 		if err != nil {
-			log.Fatal("error streaming from horizon: ", err)
-		}
-		if err = ctx.Err(); err != nil {
-			return
+			log.Printf("error streaming from horizon: %s, retrying...", err)
 		}
 		ch := make(chan struct{})
 		go func() {
@@ -97,8 +94,8 @@ func (c *custodian) watchPegs(ctx context.Context) {
 }
 
 // Runs as a goroutine.
-func (c *custodian) watchExports(ctx context.Context) {
-	r := c.s.w.Reader()
+func (c *Custodian) watchExports(ctx context.Context) {
+	r := c.S.w.Reader()
 	for {
 		got, ok := r.Read(ctx)
 		if !ok {
@@ -152,7 +149,7 @@ func (c *custodian) watchExports(ctx context.Context) {
 					INSERT INTO exports 
 					(txid, recipient, amount, asset_xdr)
 					VALUES ($1, $2, $3, $4)`
-				_, err = c.db.ExecContext(ctx, q, tx.ID.Bytes(), stellarRecipient.Address(), retiredAmount, info.AssetXDR)
+				_, err = c.DB.ExecContext(ctx, q, tx.ID.Bytes(), stellarRecipient.Address(), retiredAmount, info.AssetXDR)
 				if err != nil {
 					log.Fatalf("recording export tx: %s", err)
 				}

@@ -1,4 +1,4 @@
-package main
+package slidechain
 
 import (
 	"bytes"
@@ -28,6 +28,7 @@ import (
 	"github.com/chain/txvm/protocol/txvm/txvmutil"
 	"github.com/davecgh/go-spew/spew"
 	"github.com/golang/protobuf/proto"
+	"github.com/interstellar/slingshot/slidechain/store"
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/stellar/go/xdr"
 )
@@ -142,7 +143,7 @@ func TestServer(t *testing.T) {
 		pub := prv.Public().(ed25519.PublicKey)
 
 		tpl := txbuilder.NewTemplate(time.Now().Add(time.Minute), nil)
-		tpl.AddIssuance(2, initialBlock.Hash().Bytes(), nil, 1, [][]byte{prv}, nil, []ed25519.PublicKey{pub}, 10, nil, nil)
+		tpl.AddIssuance(2, b1.Hash().Bytes(), nil, 1, [][]byte{prv}, nil, []ed25519.PublicKey{pub}, 10, nil, nil)
 		assetID := standard.AssetID(2, 1, []ed25519.PublicKey{pub}, nil)
 		tpl.AddOutput(1, []ed25519.PublicKey{pub}, 10, bc.NewHash(assetID), nil, nil)
 		tpl.Sign(ctx, func(_ context.Context, msg []byte, keyID []byte, path [][]byte) ([]byte, error) {
@@ -205,12 +206,12 @@ func TestImport(t *testing.T) {
 			r := s.w.Reader()
 			defer r.Dispose()
 
-			c := &custodian{
+			c := &Custodian{
 				imports:       sync.NewCond(new(sync.Mutex)),
-				s:             s,
-				db:            db,
+				S:             s,
+				DB:            db,
 				privkey:       custodianPrv,
-				initBlockHash: chain.InitialBlockHash,
+				InitBlockHash: chain.InitialBlockHash,
 			}
 			go c.importFromPegs(ctx)
 			_, err := db.Exec("INSERT INTO pegs (txid, operation_num, amount, asset_xdr, recipient_pubkey) VALUES ('txid', 1, 1, $1, $2)", assetXDR, testRecipPubKey)
@@ -272,7 +273,7 @@ func isImportTx(tx *bc.Tx, amount int64, assetXDR []byte, recipPubKey ed25519.Pu
 	}
 
 	b := new(txvmutil.Builder)
-	standard.Snapshot(b, 1, []ed25519.PublicKey{testRecipPubKey}, 1, bc.NewHash(wantAssetID), splitAnchor[:], standard.PayToMultisigSeed1[:])
+	standard.Snapshot(b, 1, []ed25519.PublicKey{recipPubKey}, amount, bc.NewHash(wantAssetID), splitAnchor[:], standard.PayToMultisigSeed1[:])
 	snapshotBytes := b.Build()
 	wantOutputID := txvm.VMHash("SnapshotID", snapshotBytes)
 	if !bytes.Equal(wantOutputID[:], tx.Log[4][2].(txvm.Bytes)) {
@@ -294,33 +295,41 @@ func withTestServer(ctx context.Context, t *testing.T, fn func(context.Context, 
 	f.Close()
 	defer os.Remove(tmpfile)
 
-	db, err := startdb(tmpfile)
+	db, err := sql.Open("sqlite3", tmpfile)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer db.Close()
+	err = setSchema(db)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	heights := make(chan uint64)
-	bs, err := newBlockStore(db, heights)
+	bs, err := store.New(db, heights)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	initialBlock, err = bs.GetBlock(ctx, 1)
+	initialBlock, err := bs.GetBlock(ctx, 1)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	chain, err = protocol.NewChain(ctx, initialBlock, bs, heights)
+	chain, err := protocol.NewChain(ctx, initialBlock, bs, heights)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	w := multichan.New((*bc.Block)(nil))
-	s := &submitter{w: w}
+	s := &submitter{
+		w:            w,
+		chain:        chain,
+		initialBlock: initialBlock,
+	}
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/get", get)
+	mux.HandleFunc("/get", s.Get)
 	mux.Handle("/submit", s)
 	server := httptest.NewServer(mux)
 	defer server.Close()

@@ -1,4 +1,4 @@
-package main
+package slidechain
 
 const schema = `
 CREATE TABLE IF NOT EXISTS blocks (
