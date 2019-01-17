@@ -24,8 +24,14 @@ func (c *Custodian) buildImportTx(
 	assetXDR []byte,
 	recipPubkey []byte,
 ) ([]byte, error) {
-	// Push asset code, amount, exp, blockid onto the arg stack.
 	buf := new(bytes.Buffer)
+	// Call the atomicity guarantee contract.
+	// TODO(debnil): Convert atomicGuaranteeSnapshot to fprintf-assembly for consistency.
+	b := new(txvm.Builder)
+	inputAtomicGuarantee(b, recipPubkey, c.InitBlockHash)
+	fmt.Fprintf(buf, "x'%x' contract call\n", b.Build())
+
+	// Push asset code and amount onto the arg stack.
 	fmt.Fprintf(buf, "x'%x' put\n", assetXDR)
 	fmt.Fprintf(buf, "%d put\n", amount)
 	exp := int64(bc.Millis(time.Now().Add(5 * time.Minute)))
