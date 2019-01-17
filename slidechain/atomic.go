@@ -1,6 +1,10 @@
 package main
 
 import (
+	"time"
+	"txvm/protocol/txbuilder/standard"
+
+	"github.com/chain/txvm/protocol/bc"
 	"github.com/chain/txvm/protocol/txvm/op"
 	"github.com/chain/txvm/protocol/txvm/txvmutil"
 
@@ -28,8 +32,11 @@ func InputAtomic(b *txvmutil.Builder, pubkey ed25519.PublicKey) {
 }
 
 // Snapshot adds to b the snapshot of an atomicity-guarantee contract as it appears in the UTXO set.
-// TODO(debnil): Add anchor parameter.
 func Snapshot(b *txvmutil.Builder, pubkey ed25519.PublicKey) {
+	var bcid []byte // TODO(debnil): Put actual block ID.
+	contractSeed := standard.AssetContractSeed[3]
+	nonce := txvm.NonceTuple(atomicGuaranteeSeed[:], contractSeed[:], bcid, int64(bc.Millis(time.Now().Add(5*time.Minute))))
+	hash := txvm.NonceHash(nonce)
 	b.Tuple(func(contract *txvmutil.TupleBuilder) {
 		contract.PushdataByte(txvm.ContractCode)          // 'C'
 		contract.PushdataBytes(atomicGuaranteeSeed[:])    // <atomic guarantee seed>
@@ -43,7 +50,8 @@ func Snapshot(b *txvmutil.Builder, pubkey ed25519.PublicKey) {
 		contract.Tuple(func(tup *txvmutil.TupleBuilder) {
 			tup.PushdataByte(txvm.ValueCode)
 			tup.PushdataInt64(0)
-			// TODO(debnil): Add zero hex string and anchor.
+			// TODO(debnil): Add zero hex string.
+			tup.PushdataBytes(hash[:])
 		})
 	})
 }
