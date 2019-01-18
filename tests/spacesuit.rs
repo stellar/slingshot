@@ -21,22 +21,19 @@ fn spacesuit_helper(
 fn yuan(q: u64) -> Value {
     Value {
         q,
-        a: 888u64.into(),
-        t: 999u64.into(),
+        f: 888u64.into(),
     }
 }
 fn peso(q: u64) -> Value {
     Value {
         q,
-        a: 666u64.into(),
-        t: 777u64.into(),
+        f: 666u64.into(),
     }
 }
 fn euro(q: u64) -> Value {
     Value {
         q,
-        a: 444u64.into(),
-        t: 555u64.into(),
+        f: 444u64.into(),
     }
 }
 fn zero() -> Value {

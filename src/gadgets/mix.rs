@@ -17,21 +17,10 @@ pub fn fill_cs<CS: ConstraintSystem>(
         let w = cs.challenge_scalar(b"mix challenge");
         let w2 = w * w;
         let w3 = w2 * w;
-        let w4 = w3 * w;
-        let w5 = w4 * w;
 
         let (_, _, mul_out) = cs.multiply(
-            (A.q - C.q)
-                + (A.a - C.a) * w
-                + (A.t - C.t) * w2
-                + (B.q - D.q) * w3
-                + (B.a - D.a) * w4
-                + (B.t - D.t) * w5,
-            C.q + (A.a - B.a) * w
-                + (A.t - B.t) * w2
-                + (D.q - A.q - B.q) * w3
-                + (D.a - A.a) * w4
-                + (D.t - A.t) * w5,
+            (A.q - C.q) + (A.f - C.f) * w + (B.q - D.q) * w2 + (B.f - D.f) * w3,
+            C.q + (A.f - B.f) * w + (D.q - A.q - B.q) * w2 + (D.f - A.f) * w3,
         );
 
         // multiplication output is zero
@@ -56,28 +45,28 @@ mod tests {
         let yuan = 88;
 
         // no merge, same asset types
-        assert!(mix_helper((6, peso, 0), (6, peso, 0), (6, peso, 0), (6, peso, 0),).is_ok());
+        assert!(mix_helper((6, peso), (6, peso), (6, peso), (6, peso),).is_ok());
         // no merge, different asset types
-        assert!(mix_helper((3, peso, 0), (6, yuan, 0), (3, peso, 0), (6, yuan, 0),).is_ok());
+        assert!(mix_helper((3, peso), (6, yuan), (3, peso), (6, yuan),).is_ok());
         // merge, same asset types
-        assert!(mix_helper((3, peso, 0), (6, peso, 0), (0, peso, 0), (9, peso, 0),).is_ok());
+        assert!(mix_helper((3, peso), (6, peso), (0, peso), (9, peso),).is_ok());
         // merge, zero value is different asset type
-        assert!(mix_helper((3, peso, 0), (6, peso, 0), (0, yuan, 0), (9, peso, 0),).is_ok());
+        assert!(mix_helper((3, peso), (6, peso), (0, yuan), (9, peso),).is_ok());
         // error when merging different asset types
-        assert!(mix_helper((3, peso, 0), (3, yuan, 0), (0, peso, 0), (6, yuan, 0),).is_err());
+        assert!(mix_helper((3, peso), (3, yuan), (0, peso), (6, yuan),).is_err());
         // error when not merging, but asset type changes
-        assert!(mix_helper((3, peso, 0), (3, yuan, 0), (3, peso, 0), (3, peso, 0),).is_err());
+        assert!(mix_helper((3, peso), (3, yuan), (3, peso), (3, peso),).is_err());
         // error when creating more value (same asset types)
-        assert!(mix_helper((3, peso, 0), (3, peso, 0), (3, peso, 0), (6, peso, 0),).is_err());
+        assert!(mix_helper((3, peso), (3, peso), (3, peso), (6, peso),).is_err());
         // error when creating more value (different asset types)
-        assert!(mix_helper((3, peso, 0), (3, yuan, 0), (3, peso, 0), (6, yuan, 0),).is_err());
+        assert!(mix_helper((3, peso), (3, yuan), (3, peso), (6, yuan),).is_err());
     }
 
     fn mix_helper(
-        A: (u64, u64, u64),
-        B: (u64, u64, u64),
-        C: (u64, u64, u64),
-        D: (u64, u64, u64),
+        A: (u64, u64),
+        B: (u64, u64),
+        C: (u64, u64),
+        D: (u64, u64),
     ) -> Result<(), R1CSError> {
         // Common
         let pc_gens = PedersenGens::default();
@@ -85,23 +74,19 @@ mod tests {
 
         let A = Value {
             q: A.0,
-            a: A.1.into(),
-            t: A.2.into(),
+            f: A.1.into(),
         };
         let B = Value {
             q: B.0,
-            a: B.1.into(),
-            t: B.2.into(),
+            f: B.1.into(),
         };
         let C = Value {
             q: C.0,
-            a: C.1.into(),
-            t: C.2.into(),
+            f: C.1.into(),
         };
         let D = Value {
             q: D.0,
-            a: D.1.into(),
-            t: D.2.into(),
+            f: D.1.into(),
         };
 
         // Prover's scope

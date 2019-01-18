@@ -24,8 +24,7 @@ pub fn fill_cs<CS: ConstraintSystem>(
         let i = inputs[0];
         let o = i.reallocate(cs)?;
         cs.constrain(i.q - o.q);
-        cs.constrain(i.a - o.a);
-        cs.constrain(i.t - o.t);
+        cs.constrain(i.f - o.f);
         return Ok((vec![i], vec![o]));
     }
 
@@ -135,12 +134,11 @@ fn order_by_flavor<CS: ConstraintSystem>(
             // Iterate over all following tuples, assigning them to `comp`.
             let mut comp = outputs[j];
             // Check if `flav` and `comp` have the same flavor.
-            let same_flavor = flav.a.ct_eq(&comp.a) & flav.t.ct_eq(&comp.t);
+            let same_flavor = flav.f.ct_eq(&comp.f);
 
             // If same_flavor, then swap `comp` and `swap`. Else, keep the same.
             u64::conditional_swap(&mut swap.q, &mut comp.q, same_flavor);
-            Scalar::conditional_swap(&mut swap.a, &mut comp.a, same_flavor);
-            Scalar::conditional_swap(&mut swap.t, &mut comp.t, same_flavor);
+            Scalar::conditional_swap(&mut swap.f, &mut comp.f, same_flavor);
             outputs[i + 1] = swap;
             outputs[j] = comp;
         }
@@ -172,22 +170,20 @@ fn combine_by_flavor<CS: ConstraintSystem>(
     let mut A = inputs[0];
     for B in inputs.into_iter().skip(1) {
         // Check if A and B have the same flavors
-        let same_flavor = A.a.ct_eq(&B.a) & A.t.ct_eq(&B.t);
+        let same_flavor = A.f.ct_eq(&B.f);
 
         // If same_flavor, merge: C.0, C.1, C.2 = 0.
         // Else, move: C = A.
         let mut C = A.clone();
         C.q.conditional_assign(&0u64, same_flavor);
-        C.a.conditional_assign(&Scalar::zero(), same_flavor);
-        C.t.conditional_assign(&Scalar::zero(), same_flavor);
+        C.f.conditional_assign(&Scalar::zero(), same_flavor);
         outputs.push(C);
 
         // If same_flavor, merge: D.0 = A.0 + B.0, D.1 = A.1, D.2 = A.2.
         // Else, move: D = B.
         let mut D = B.clone();
         D.q.conditional_assign(&(A.q + B.q), same_flavor);
-        D.a.conditional_assign(&A.a, same_flavor);
-        D.t.conditional_assign(&A.t, same_flavor);
+        D.f.conditional_assign(&A.f, same_flavor);
         mid.push(D);
 
         A = D;
@@ -228,15 +224,13 @@ mod tests {
     fn yuan(q: u64) -> Value {
         Value {
             q,
-            a: 888u64.into(),
-            t: 999u64.into(),
+            f: 888u64.into(),
         }
     }
     fn peso(q: u64) -> Value {
         Value {
             q,
-            a: 666u64.into(),
-            t: 777u64.into(),
+            f: 666u64.into(),
         }
     }
     fn zero() -> Value {

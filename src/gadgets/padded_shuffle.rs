@@ -19,14 +19,10 @@ pub fn fill_cs<CS: ConstraintSystem>(
 
     for _ in 0..pad_count {
         // Make an allocated value whose fields are all zero.
-        // Note: We could also create the 3 allocated variables using one multiplier
-        // (since the output multiplier is also zero),
-        // but instead we use the `Value` API for clarity (uses two multipliers).
         let zero_val = Value::zero().allocate(cs)?;
         // Constrain each of the variables to be equal to zero.
         cs.constrain(zero_val.q.into());
-        cs.constrain(zero_val.a.into());
-        cs.constrain(zero_val.t.into());
+        cs.constrain(zero_val.f.into());
         values.push(zero_val);
     }
 
@@ -98,8 +94,7 @@ mod tests {
                     zero(),
                     Value {
                         q: 1,
-                        a: 0u64.into(),
-                        t: 0u64.into()
+                        f: 0u64.into(),
                     },
                     yuan(4),
                     yuan(1),
@@ -114,15 +109,13 @@ mod tests {
     fn yuan(q: u64) -> Value {
         Value {
             q,
-            a: 888u64.into(),
-            t: 999u64.into(),
+            f: 888u64.into(),
         }
     }
     fn peso(q: u64) -> Value {
         Value {
             q,
-            a: 666u64.into(),
-            t: 777u64.into(),
+            f: 666u64.into(),
         }
     }
     fn zero() -> Value {

@@ -20,22 +20,17 @@ pub fn fill_cs<CS: ConstraintSystem>(
         let x = x[0];
         let y = y[0];
         cs.constrain(y.q - x.q);
-        cs.constrain(y.a - x.a);
-        cs.constrain(y.t - x.t);
+        cs.constrain(y.f - x.f);
         return Ok(());
     }
 
     cs.specify_randomized_constraints(move |cs| {
         let w = cs.challenge_scalar(b"k-value shuffle challenge");
-        let w2 = w * w;
         let mut x_scalars = Vec::with_capacity(k);
         let mut y_scalars = Vec::with_capacity(k);
 
         for i in 0..k {
-            let (x_i_var, y_i_var, _) = cs.multiply(
-                x[i].q + x[i].a * w + x[i].t * w2,
-                y[i].q + y[i].a * w + y[i].t * w2,
-            );
+            let (x_i_var, y_i_var, _) = cs.multiply(x[i].q + x[i].f * w, y[i].q + y[i].f * w);
             x_scalars.push(x_i_var);
             y_scalars.push(y_i_var);
         }
@@ -56,29 +51,25 @@ mod tests {
     fn yuan(q: u64) -> Value {
         Value {
             q,
-            a: 888u64.into(),
-            t: 999u64.into(),
+            f: 888u64.into(),
         }
     }
     fn peso(q: u64) -> Value {
         Value {
             q,
-            a: 666u64.into(),
-            t: 777u64.into(),
+            f: 666u64.into(),
         }
     }
     fn euro(q: u64) -> Value {
         Value {
             q,
-            a: 444u64.into(),
-            t: 555u64.into(),
+            f: 444u64.into(),
         }
     }
     fn wrong() -> Value {
         Value {
-            q: 9991u64,
-            a: 9992u64.into(),
-            t: 9993u64.into(),
+            q: 999u64,
+            f: 222u64.into(),
         }
     }
 
@@ -155,21 +146,6 @@ mod tests {
             value_shuffle_helper(
                 vec![peso(1), yuan(4), euro(8)],
                 vec![peso(1), yuan(4), wrong()]
-            )
-            .is_err()
-        );
-        assert!(
-            value_shuffle_helper(
-                vec![Value {
-                    q: 0,
-                    a: 0u64.into(),
-                    t: 0u64.into(),
-                }],
-                vec![Value {
-                    q: 0,
-                    a: 0u64.into(),
-                    t: 1u64.into(),
-                }]
             )
             .is_err()
         );

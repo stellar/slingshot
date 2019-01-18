@@ -27,8 +27,7 @@ fn create_spacesuit_proof_helper(n: usize, c: &mut Criterion) {
         let inputs: Vec<Value> = (0..n)
             .map(|_| Value {
                 q: rng.gen_range(min, max),
-                a: Scalar::random(&mut rng),
-                t: Scalar::random(&mut rng),
+                f: Scalar::random(&mut rng),
             })
             .collect();
         let mut outputs = inputs.clone();
@@ -75,8 +74,7 @@ fn verify_spacesuit_proof_helper(n: usize, c: &mut Criterion) {
         let inputs: Vec<Value> = (0..n)
             .map(|_| Value {
                 q: rng.gen_range(min, max),
-                a: Scalar::random(&mut rng),
-                t: Scalar::random(&mut rng),
+                f: Scalar::random(&mut rng),
             })
             .collect();
         let mut outputs = inputs.clone();

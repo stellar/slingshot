@@ -6,23 +6,20 @@ use rand::{CryptoRng, Rng};
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub struct Value {
     pub q: u64,    // quantity
-    pub a: Scalar, // issuer
-    pub t: Scalar, // tag
+    pub f: Scalar, // flavor
 }
 
 pub struct CommittedValue {
     pub q: CompressedRistretto,
-    pub a: CompressedRistretto,
-    pub t: CompressedRistretto,
+    pub f: CompressedRistretto,
 }
 
 /// Helper struct for ease of working with
-/// 3-tuples of variables and assignments
+/// 2-tuples of variables and assignments
 #[derive(Copy, Clone, Debug)]
 pub struct AllocatedValue {
     pub q: Variable, // quantity
-    pub a: Variable, // issuer
-    pub t: Variable, // tag
+    pub f: Variable, // flavor
     pub assignment: Option<Value>,
 }
 
@@ -38,20 +35,18 @@ impl Value {
     pub fn zero() -> Value {
         Value {
             q: 0,
-            a: Scalar::zero(),
-            t: Scalar::zero(),
+            f: Scalar::zero(),
         }
     }
 
     /// Creates variables for the fields in `Value`, and packages them in an `AllocatedValue`.
     pub fn allocate<CS: ConstraintSystem>(&self, cs: &mut CS) -> Result<AllocatedValue, R1CSError> {
-        let (q_var, _, _) = cs.allocate(|| Ok((self.q.into(), Scalar::zero(), Scalar::zero())))?;
-        let (a_var, t_var, _) = cs.allocate(|| Ok((self.a, self.t, self.a * self.t)))?;
+        let q_u64 = self.q.into();
+        let (q_var, f_var, _) = cs.allocate(|| Ok((q_u64, self.f, q_u64 * self.f)))?;
 
         Ok(AllocatedValue {
             q: q_var,
-            a: a_var,
-            t: t_var,
+            f: f_var,
             assignment: Some(*self),
         })
     }
@@ -59,22 +54,16 @@ impl Value {
     pub fn allocate_unassigned<CS: ConstraintSystem>(
         cs: &mut CS,
     ) -> Result<AllocatedValue, R1CSError> {
-        let (q_var, _, _) = cs.allocate(|| {
+        let (q_var, f_var, _) = cs.allocate(|| {
             Err(R1CSError::GadgetError {
-                description: "Tried to allocate variable q_var from function".to_string(),
-            })
-        })?;
-        let (a_var, t_var, _) = cs.allocate(|| {
-            Err(R1CSError::GadgetError {
-                description: "Tried to allocate variables a_var and t_var from function"
+                description: "Tried to allocate variables q_var and f_var from function"
                     .to_string(),
             })
         })?;
 
         Ok(AllocatedValue {
             q: q_var,
-            a: a_var,
-            t: t_var,
+            f: f_var,
             assignment: None,
         })
     }
@@ -112,17 +101,14 @@ impl ProverCommittable for Value {
 
     fn commit<R: Rng + CryptoRng>(&self, prover: &mut Prover, rng: &mut R) -> Self::Output {
         let (q_commit, q_var) = prover.commit(self.q.into(), Scalar::random(rng));
-        let (a_commit, a_var) = prover.commit(self.a, Scalar::random(rng));
-        let (t_commit, t_var) = prover.commit(self.t, Scalar::random(rng));
+        let (f_commit, f_var) = prover.commit(self.f, Scalar::random(rng));
         let commitments = CommittedValue {
             q: q_commit,
-            a: a_commit,
-            t: t_commit,
+            f: f_commit,
         };
         let vars = AllocatedValue {
             q: q_var,
-            a: a_var,
-            t: t_var,
+            f: f_var,
             assignment: Some(*self),
         };
         (commitments, vars)
@@ -148,8 +134,7 @@ impl VerifierCommittable for CommittedValue {
     fn commit(&self, verifier: &mut Verifier) -> Self::Output {
         AllocatedValue {
             q: verifier.commit(self.q),
-            a: verifier.commit(self.a),
-            t: verifier.commit(self.t),
+            f: verifier.commit(self.f),
             assignment: None,
         }
     }
