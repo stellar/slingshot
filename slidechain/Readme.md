@@ -51,7 +51,7 @@ $ ./peg -custodian [custodian account ID] -amount 100
 This will peg-in 100 lumens to slidechain,
 generating and funding a Stellar account from which to send the funds,
 and also generating a TxVM keypair to send the funds to on slidechain.
-Both the Stellar account ID and the TxVM keypair will be logged by `peg`.
+Both the Stellar account ID and the TxVM keypair will be printed to `stderr` by `peg`.
 
 To peg in non-Lumen assets,
 you will need to either peg in an asset already issued on the Stellar network,
@@ -80,8 +80,8 @@ $ go build ./cmd/export
 $ ./export -destination [destination account ID] -amount 100 -anchor [import anchor] -prv [txvm prv key]
 ```
 
-If you only want to export part of the imported funds,
-then you need to specify the total input amount.
+If you want to export only part of the imported funds,
+you need to specify the total amount of the import with `-inputamt` in addition to the amount you want to export with `-amount`.
 Then,
 any leftover funds will be output back to the initial owner.
 
