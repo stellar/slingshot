@@ -5,22 +5,14 @@ import (
 	"flag"
 	"log"
 	"net/http"
-<<<<<<< HEAD
 	"slingshot/slidechain"
 	"slingshot/slidechain/stellar"
-=======
 	"strconv"
->>>>>>> main
 	"strings"
 	"time"
 	"txvm/protocol/bc"
 
 	"github.com/chain/txvm/crypto/ed25519"
-<<<<<<< HEAD
-	"github.com/interstellar/starlight/worizon/xlm"
-=======
-	"github.com/interstellar/slingshot/slidechain/stellar"
->>>>>>> main
 	"github.com/stellar/go/clients/horizon"
 	"github.com/stellar/go/xdr"
 )
@@ -78,16 +70,12 @@ func main() {
 		URL:  strings.TrimRight(*horizonURL, "/"),
 		HTTP: new(http.Client),
 	}
-<<<<<<< HEAD
 
 	// TODO(debnil): Get initial blockid.
 	var bcid []byte
 	exp := int64(bc.Millis(time.Now().Add(10 * time.Minute)))
 	nonceHash := slidechain.AtomicNonceHash(bcid, exp)
-	tx, err := stellar.BuildPegInTx(*seed, recipientPubkey, nonceHash, exp, xlmAmount, *custodian, hclient)
-=======
-	tx, err := stellar.BuildPegInTx(*seed, recipientPubkey, *amount, *code, *issuer, *custodian, hclient)
->>>>>>> main
+	tx, err := stellar.BuildPegInTx(*seed, recipientPubkey, nonceHash, exp, *amount, *code, *issuer, *custodian, hclient)
 	if err != nil {
 		log.Fatal(err, "building transaction")
 	}

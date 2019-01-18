@@ -15,6 +15,7 @@ import (
 	"github.com/chain/txvm/protocol/txbuilder/txresult"
 	"github.com/chain/txvm/protocol/txvm"
 	"github.com/chain/txvm/protocol/txvm/asm"
+	"github.com/chain/txvm/protocol/txvm/txvmutil"
 )
 
 // buildImportTx builds the import transaction.
@@ -27,8 +28,8 @@ func (c *Custodian) buildImportTx(
 	buf := new(bytes.Buffer)
 	// Call the atomicity guarantee contract.
 	// TODO(debnil): Should we convert atomicGuaranteeSnapshot to fprintf-assembly for consistency?
-	b := new(txvm.Builder)
-	inputAtomicGuarantee(b, recipPubkey, c.InitBlockHash, exp)
+	b := new(txvmutil.Builder)
+	inputAtomicGuarantee(b, recipPubkey, c.InitBlockHash.Bytes(), exp)
 	fmt.Fprintf(buf, "x'%x' contract call\n", b.Build())
 
 	// Push asset code and amount onto the arg stack.
