@@ -8,8 +8,6 @@ import (
 	"slingshot/slidechain/stellar"
 	"strconv"
 	"strings"
-	"time"
-	"txvm/protocol/bc"
 
 	"github.com/chain/txvm/crypto/ed25519"
 	"github.com/stellar/go/clients/horizon"
@@ -25,7 +23,6 @@ func main() {
 		horizonURL = flag.String("horizon", "https://horizon-testnet.stellar.org", "horizon URL")
 		code       = flag.String("code", "", "asset code for non-Lumen asset")
 		issuer     = flag.String("issuer", "", "asset issuer for non-Lumen asset")
-		dbfile     = flag.String("db", "slidechain.db", "path to db")
 	)
 	flag.Parse()
 
@@ -71,8 +68,7 @@ func main() {
 		HTTP: new(http.Client),
 	}
 
-	exp := int64(bc.Millis(time.Now().Add(10 * time.Minute)))
-	tx, err := stellar.BuildPegInTx(*seed, recipientPubkey, exp, *amount, *code, *issuer, *custodian, hclient)
+	tx, err := stellar.BuildPegInTx(*seed, recipientPubkey, *amount, *code, *issuer, *custodian, hclient)
 	if err != nil {
 		log.Fatal(err, "building transaction")
 	}

@@ -39,8 +39,8 @@ func (c *Custodian) watchPegs(ctx context.Context) {
 			if env.Tx.Memo.Type != xdr.MemoTypeMemoHash {
 				return
 			}
-			// TODO(debnil): Get exp and nonce from env.Tx.Memo. Is there a Memo array?
-			var exp int64
+			// TODO(debnil): Confirm that it's fine to get exp here, rather than as a Memo on the streamed tx.
+			exp := int64(bc.Millis(time.Now().Add(10 * time.Minute)))
 			recipientPubkey := (*env.Tx.Memo.Hash)[:]
 
 			for i, op := range env.Tx.Operations {
