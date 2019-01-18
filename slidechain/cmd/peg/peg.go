@@ -67,7 +67,6 @@ func main() {
 		URL:  strings.TrimRight(*horizonURL, "/"),
 		HTTP: new(http.Client),
 	}
-
 	tx, err := stellar.BuildPegInTx(*seed, recipientPubkey, *amount, *code, *issuer, *custodian, hclient)
 	if err != nil {
 		log.Fatal(err, "building transaction")
