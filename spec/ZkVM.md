@@ -171,7 +171,6 @@ Notes:
 or [output](#output-structure) their contents themselves.
 * [Variables](#variable-type), [expressions](#expression-type) and [constraints](#constraint-type) have no meaning outside the VM state
 and its constraint system and therefore cannot be meaningfully ported between transactions.
-* [Scalars](#scalar) can be ported secretly by wrapping them into [Pedersen commitments](#pedersen-commitment) which are represented as [points](#point) and could be added to the constraint system using the [`var`](#var) instruction.
 
 
 ### Data type
