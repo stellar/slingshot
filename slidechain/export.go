@@ -11,6 +11,7 @@ import (
 	"github.com/chain/txvm/errors"
 	"github.com/chain/txvm/protocol/bc"
 	"github.com/chain/txvm/protocol/txbuilder"
+	"github.com/chain/txvm/protocol/txbuilder/txresult"
 	"github.com/chain/txvm/protocol/txvm"
 	"github.com/interstellar/starlight/worizon/xlm"
 	b "github.com/stellar/go/build"
@@ -166,8 +167,12 @@ func (c *Custodian) buildPegOutTx(recipient xdr.AccountId, asset xdr.Asset, amou
 }
 
 // BuildExportTx builds a txvm retirement tx for an asset issued
-// onto slidechain.
-func BuildExportTx(ctx context.Context, asset xdr.Asset, amount int64, addr string, anchor []byte, prv ed25519.PrivateKey) (*bc.Tx, error) {
+// onto slidechain. It will retire `amount` of the asset, and the
+// remaining input will be output back to the original account.
+func BuildExportTx(ctx context.Context, asset xdr.Asset, amount, inputAmt int64, addr string, anchor []byte, prv ed25519.PrivateKey) (*bc.Tx, error) {
+	if inputAmt < amount {
+		return nil, fmt.Errorf("cannot have input amount %d less than export amount %d", inputAmt, amount)
+	}
 	assetXDR, err := xdr.MarshalBase64(asset)
 	if err != nil {
 		return nil, err
@@ -179,14 +184,27 @@ func BuildExportTx(ctx context.Context, asset xdr.Asset, amount int64, addr stri
 	refdata := []byte(fmt.Sprintf(`{"asset":"%s","account":"%s"}`, assetXDR, addr))
 	assetIDBytes := txvm.AssetID(issueSeed[:], assetBytes)
 	assetID := bc.NewHash(assetIDBytes)
+	pubkey := prv.Public().(ed25519.PublicKey)
 	tpl := txbuilder.NewTemplate(time.Now().Add(time.Minute), nil)
-	tpl.AddInput(1, [][]byte{prv}, nil, []ed25519.PublicKey{prv.Public().(ed25519.PublicKey)}, amount, assetID, anchor, nil, 1)
+	tpl.AddInput(1, [][]byte{prv}, nil, []ed25519.PublicKey{pubkey}, inputAmt, assetID, anchor, nil, 1)
 	tpl.AddRetirement(int64(amount), assetID, refdata)
+	if inputAmt > amount {
+		tpl.AddOutput(1, []ed25519.PublicKey{pubkey}, inputAmt-amount, assetID, nil, nil)
+	}
 	err = tpl.Sign(ctx, func(_ context.Context, msg []byte, prv []byte, path [][]byte) ([]byte, error) {
 		return ed25519.Sign(prv, msg), nil
 	})
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "signing tx")
 	}
-	return tpl.Tx()
+	tx, err := tpl.Tx()
+	if err != nil {
+		return nil, errors.Wrap(err, "building tx")
+	}
+	if inputAmt > amount {
+		txresult := txresult.New(tx)
+		output := txresult.Outputs[0].Value
+		log.Printf("output: assetid %x amount %x anchor %x", output.AssetID.Bytes(), output.Amount, output.Anchor)
+	}
+	return tx, nil
 }

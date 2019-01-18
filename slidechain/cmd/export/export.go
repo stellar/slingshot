@@ -22,6 +22,7 @@ func main() {
 		dest        = flag.String("destination", "", "Stellar address to peg funds out to")
 		amount      = flag.String("amount", "", "amount to export")
 		anchor      = flag.String("anchor", "", "txvm anchor of input to consume")
+		input       = flag.String("input", "", "total amount of input")
 		prv         = flag.String("prv", "", "private key of txvm account")
 		slidechaind = flag.String("slidechaind", "http://127.0.0.1:2423", "url of slidechaind server")
 		code        = flag.String("code", "", "asset code if exporting non-lumen Stellar asset")
@@ -44,31 +45,44 @@ func main() {
 	if (*code != "" && *issuer == "") || (*code == "" && *issuer != "") {
 		log.Fatal("must specify both code and issuer for non-lumen Stellar asset")
 	}
+	if *input == "" {
+		log.Printf("no input amount specified, default to export amount %s", *amount)
+		*input = *amount
+	}
 	ctx := context.Background()
 	var (
-		asset       xdr.Asset
-		assetAmount int64
-		err         error
+		asset        xdr.Asset
+		exportAmount int64
+		inputAmount  int64
+		err          error
 	)
 	if *code != "" {
 		asset, err = stellar.NewAsset(*code, *issuer)
 		if err != nil {
 			log.Fatalf("error creating asset from code %s and issuer %s: %s", *code, *issuer, err)
 		}
-		assetAmount, err = strconv.ParseInt(*amount, 10, 64)
+		exportAmount, err = strconv.ParseInt(*amount, 10, 64)
 		if err != nil {
-			log.Fatalf("error parsing amount %s: %s", *amount, err)
+			log.Fatalf("error parsing export amount %s: %s", *amount, err)
+		}
+		inputAmount, err = strconv.ParseInt(*input, 10, 64)
+		if err != nil {
+			log.Fatalf("error parsing input amount %s: %s", *input, err)
 		}
 	} else {
 		asset = stellar.NativeAsset()
-		xlmAmount, err := xlm.Parse(*amount)
+		exportXlm, err := xlm.Parse(*amount)
 		if err != nil {
-			log.Fatalf("error parsing amount %s: %s", *amount, err)
+			log.Fatalf("error parsing export amount %s: %s", *amount, err)
 		}
-		assetAmount = int64(xlmAmount)
+		exportAmount = int64(exportXlm)
+		inputXlm, err := xlm.Parse(*input)
+		if err != nil {
+			log.Fatalf("error parsing input amount %s: %s", *input, err)
+		}
+		inputAmount = int64(inputXlm)
 	}
-	// TODO(vniu): add functionality to only export a portion of the given utxo, and pay back the change to the utxo owner.
-	tx, err := slidechain.BuildExportTx(ctx, asset, assetAmount, *dest, mustDecode(*anchor), mustDecode(*prv))
+	tx, err := slidechain.BuildExportTx(ctx, asset, exportAmount, inputAmount, *dest, mustDecode(*anchor), mustDecode(*prv))
 	if err != nil {
 		log.Fatalf("error building export tx: %s", err)
 	}
