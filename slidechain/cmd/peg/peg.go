@@ -5,10 +5,13 @@ import (
 	"flag"
 	"log"
 	"net/http"
+	"slingshot/slidechain"
+	"slingshot/slidechain/stellar"
 	"strings"
+	"time"
+	"txvm/protocol/bc"
 
 	"github.com/chain/txvm/crypto/ed25519"
-	"github.com/interstellar/slingshot/slidechain/stellar"
 	"github.com/interstellar/starlight/worizon/xlm"
 	"github.com/stellar/go/clients/horizon"
 	"github.com/stellar/go/xdr"
@@ -63,8 +66,12 @@ func main() {
 		URL:  strings.TrimRight(*horizonURL, "/"),
 		HTTP: new(http.Client),
 	}
-	var atomicTxID string // TODO(debnil): Run TxVM atomicity-guarantee program to get output ID.
-	tx, err := stellar.BuildPegInTx(*seed, recipientPubkey, xlmAmount, *custodian, atomicTxID, hclient)
+
+	// TODO(debnil): Get initial blockid.
+	var bcid []byte
+	exp := int64(bc.Millis(time.Now().Add(10 * time.Minute)))
+	nonceHash := slidechain.AtomicNonceHash(bcid, exp)
+	tx, err := stellar.BuildPegInTx(*seed, recipientPubkey, nonceHash, exp, xlmAmount, *custodian, hclient)
 	if err != nil {
 		log.Fatal(err, "building transaction")
 	}

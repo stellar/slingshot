@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log"
 	"math"
-	"time"
 
 	"github.com/bobg/sqlutil"
 	"github.com/chain/txvm/crypto/ed25519"
@@ -23,18 +22,18 @@ func (c *Custodian) buildImportTx(
 	amount int64,
 	assetXDR []byte,
 	recipPubkey []byte,
+	exp int64,
 ) ([]byte, error) {
 	buf := new(bytes.Buffer)
 	// Call the atomicity guarantee contract.
 	// TODO(debnil): Should we convert atomicGuaranteeSnapshot to fprintf-assembly for consistency?
 	b := new(txvm.Builder)
-	inputAtomicGuarantee(b, recipPubkey, c.InitBlockHash)
+	inputAtomicGuarantee(b, recipPubkey, c.InitBlockHash, exp)
 	fmt.Fprintf(buf, "x'%x' contract call\n", b.Build())
 
 	// Push asset code and amount onto the arg stack.
 	fmt.Fprintf(buf, "x'%x' put\n", assetXDR)
 	fmt.Fprintf(buf, "%d put\n", amount)
-	exp := int64(bc.Millis(time.Now().Add(5 * time.Minute)))
 
 	// Arg stack is set up; empty con stack.
 	fmt.Fprintf(buf, "x'%x' %d\n", c.InitBlockHash.Bytes(), exp) // con stack: blockid, exp
@@ -84,14 +83,16 @@ func (c *Custodian) importFromPegs(ctx context.Context) {
 			opNums            []int
 			amounts           []int64
 			assetXDRs, recips [][]byte
+			exps              []int64
 		)
 		const q = `SELECT txid, operation_num, amount, asset_xdr, recipient_pubkey FROM pegs WHERE imported=0`
-		err := sqlutil.ForQueryRows(ctx, c.DB, q, func(txid string, opNum int, amount int64, assetXDR, recip []byte) {
+		err := sqlutil.ForQueryRows(ctx, c.DB, q, func(txid string, opNum int, amount int64, assetXDR, recip []byte, exp int64) {
 			txids = append(txids, txid)
 			opNums = append(opNums, opNum)
 			amounts = append(amounts, amount)
 			assetXDRs = append(assetXDRs, assetXDR)
 			recips = append(recips, recip)
+			exps = append(exps, exp)
 		})
 		if err == context.Canceled {
 			return
@@ -105,8 +106,9 @@ func (c *Custodian) importFromPegs(ctx context.Context) {
 				amount   = amounts[i]
 				assetXDR = assetXDRs[i]
 				recip    = recips[i]
+				exp      = exps[i]
 			)
-			err = c.doImport(ctx, txid, opNum, amount, assetXDR, recip)
+			err = c.doImport(ctx, txid, opNum, amount, assetXDR, recip, exp)
 			if err != nil {
 				if err == context.Canceled {
 					return
@@ -117,10 +119,10 @@ func (c *Custodian) importFromPegs(ctx context.Context) {
 	}
 }
 
-func (c *Custodian) doImport(ctx context.Context, txid string, opNum int, amount int64, assetXDR, recip []byte) error {
-	log.Printf("doing import from tx %s, op %d: %d of asset %x for recipient %x", txid, opNum, amount, assetXDR, recip)
+func (c *Custodian) doImport(ctx context.Context, txid string, opNum int, amount int64, assetXDR, recip []byte, exp int64) error {
+	log.Printf("doing import from tx %s, op %d: %d of asset %x for recipient %x with expiration time %d", txid, opNum, amount, assetXDR, recip, exp)
 
-	importTxBytes, err := c.buildImportTx(amount, assetXDR, recip)
+	importTxBytes, err := c.buildImportTx(amount, assetXDR, recip, exp)
 	if err != nil {
 		return errors.Wrap(err, "building import tx")
 	}

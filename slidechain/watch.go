@@ -52,14 +52,14 @@ func (c *Custodian) watchPegs(ctx context.Context) {
 				// This operation is a payment to the custodian's account - i.e., a peg.
 				// We record it in the db, then wake up a goroutine that executes imports for not-yet-imported pegs.
 				const q = `INSERT INTO pegs 
-					(txid, operation_num, amount, asset_xdr, recipient_pubkey)
-					VALUES ($1, $2, $3, $4, $5)`
+					(txid, operation_num, amount, asset_xdr, recipient_pubkey, expiration_time)
+					VALUES ($1, $2, $3, $4, $5, $6)`
 				assetXDR, err := payment.Asset.MarshalBinary()
 				if err != nil {
 					log.Fatalf("error marshaling asset to XDR %s: %s", payment.Asset.String(), err)
 					return
 				}
-				_, err = c.DB.ExecContext(ctx, q, tx.ID, i, payment.Amount, assetXDR, recipientPubkey)
+				_, err = c.DB.ExecContext(ctx, q, tx.ID, i, payment.Amount, assetXDR, recipientPubkey, exp)
 				if err != nil {
 					log.Fatal("error recording peg-in tx: ", err)
 					return
