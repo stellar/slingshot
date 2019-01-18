@@ -69,14 +69,25 @@ func (c *Custodian) buildImportTx(
 func (c *Custodian) importFromPegs(ctx context.Context) {
 	defer log.Print("importFromPegs exiting")
 
-	c.imports.L.Lock()
-	defer c.imports.L.Unlock()
+	ch := make(chan struct{})
+	go func() {
+		c.imports.L.Lock()
+		defer c.imports.L.Unlock()
+		for {
+			if ctx.Err() != nil {
+				return
+			}
+			c.imports.Wait()
+			ch <- struct{}{}
+		}
+	}()
 
 	for {
-		if err := ctx.Err(); err != nil {
+		select {
+		case <-ctx.Done():
 			return
+		case <-ch:
 		}
-		c.imports.Wait()
 
 		var (
 			txids             []string
