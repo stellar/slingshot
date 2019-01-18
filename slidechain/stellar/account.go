@@ -31,7 +31,7 @@ func NewFundedAccount() *keypair.Full {
 	return kp
 }
 
-// IssueAsset issues an asset from the seed account with the specified
+// IssueAsset issues an asset from the specified seed account
 // to the destination account.
 func IssueAsset(hclient *horizon.Client, seed, code, amount, destination string) error {
 	kp, err := keypair.Parse(seed)
