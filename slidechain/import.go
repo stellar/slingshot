@@ -93,9 +93,8 @@ func (c *Custodian) importFromPegs(ctx context.Context) {
 		var (
 			txids             []string
 			opNums            []int
-			amounts           []int64
+			amounts, exps     []int64
 			assetXDRs, recips [][]byte
-			exps              []int64
 		)
 		const q = `SELECT txid, operation_num, amount, asset_xdr, recipient_pubkey, expiration_time FROM pegs WHERE imported=0`
 		err := sqlutil.ForQueryRows(ctx, c.DB, q, func(txid string, opNum int, amount int64, assetXDR, recip []byte, exp int64) {
