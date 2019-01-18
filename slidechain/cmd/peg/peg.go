@@ -5,11 +5,11 @@ import (
 	"flag"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/chain/txvm/crypto/ed25519"
 	"github.com/interstellar/slingshot/slidechain/stellar"
-	"github.com/interstellar/starlight/worizon/xlm"
 	"github.com/stellar/go/clients/horizon"
 	"github.com/stellar/go/xdr"
 )
@@ -21,6 +21,8 @@ func main() {
 		recipient  = flag.String("recipient", "", "hex-encoded txvm public key for the recipient of the pegged funds")
 		seed       = flag.String("seed", "", "seed of Stellar source account")
 		horizonURL = flag.String("horizon", "https://horizon-testnet.stellar.org", "horizon URL")
+		code       = flag.String("code", "", "asset code for non-Lumen asset")
+		issuer     = flag.String("issuer", "", "asset issuer for non-Lumen asset")
 	)
 	flag.Parse()
 
@@ -29,6 +31,9 @@ func main() {
 	}
 	if *custodian == "" {
 		log.Fatal("must specify custodian account")
+	}
+	if (*code == "" && *issuer != "") || (*code != "" && *issuer == "") {
+		log.Fatal("must specify both code and issuer for non-Lumen asset")
 	}
 	if *recipient == "" {
 		log.Print("no recipient specified, generating txvm keypair...")
@@ -45,17 +50,15 @@ func main() {
 		*seed = kp.Seed()
 	}
 
-	// TODO(vniu): peg-in non-XLM assets
-	xlmAmount, err := xlm.Parse(*amount)
-	if err != nil {
-		log.Fatal(err, "parsing payment amount")
+	if _, err := strconv.ParseFloat(*amount, 64); err != nil {
+		log.Printf("invalid amount string %s: %s", *amount, err)
 	}
 
 	var recipientPubkey [32]byte
 	if len(*recipient) != 64 {
 		log.Fatalf("invalid recipient length: got %d want 64", len(*recipient))
 	}
-	_, err = hex.Decode(recipientPubkey[:], []byte(*recipient))
+	_, err := hex.Decode(recipientPubkey[:], []byte(*recipient))
 	if err != nil {
 		log.Fatal(err, "decoding recipient")
 	}
@@ -64,7 +67,7 @@ func main() {
 		URL:  strings.TrimRight(*horizonURL, "/"),
 		HTTP: new(http.Client),
 	}
-	tx, err := stellar.BuildPegInTx(*seed, recipientPubkey, xlmAmount, *custodian, hclient)
+	tx, err := stellar.BuildPegInTx(*seed, recipientPubkey, *amount, *code, *issuer, *custodian, hclient)
 	if err != nil {
 		log.Fatal(err, "building transaction")
 	}

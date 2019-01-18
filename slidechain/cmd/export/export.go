@@ -7,10 +7,12 @@ import (
 	"flag"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/golang/protobuf/proto"
 	"github.com/interstellar/slingshot/slidechain"
+	"github.com/interstellar/slingshot/slidechain/stellar"
 	"github.com/interstellar/starlight/worizon/xlm"
 	"github.com/stellar/go/xdr"
 )
@@ -22,6 +24,8 @@ func main() {
 		anchor      = flag.String("anchor", "", "txvm anchor of input to consume")
 		prv         = flag.String("prv", "", "private key of txvm account")
 		slidechaind = flag.String("slidechaind", "http://127.0.0.1:2423", "url of slidechaind server")
+		code        = flag.String("code", "", "asset code if exporting non-lumen Stellar asset")
+		issuer      = flag.String("issuer", "", "issuer of asset if exporting non-lumen Stellar asset")
 	)
 
 	flag.Parse()
@@ -37,16 +41,34 @@ func main() {
 	if *prv == "" {
 		log.Fatal("must specify txvm account keypair")
 	}
-	ctx := context.Background()
-	native := xdr.Asset{
-		Type: xdr.AssetTypeAssetTypeNative,
+	if (*code != "" && *issuer == "") || (*code == "" && *issuer != "") {
+		log.Fatal("must specify both code and issuer for non-lumen Stellar asset")
 	}
-	xlmAmount, err := xlm.Parse(*amount)
-	if err != nil {
-		log.Fatalf("error parsing amount %s", *amount)
+	ctx := context.Background()
+	var (
+		asset       xdr.Asset
+		assetAmount int64
+		err         error
+	)
+	if *code != "" {
+		asset, err = stellar.NewAsset(*code, *issuer)
+		if err != nil {
+			log.Fatalf("error creating asset from code %s and issuer %s: %s", *code, *issuer, err)
+		}
+		assetAmount, err = strconv.ParseInt(*amount, 10, 64)
+		if err != nil {
+			log.Fatalf("error parsing amount %s: %s", *amount, err)
+		}
+	} else {
+		asset = stellar.NativeAsset()
+		xlmAmount, err := xlm.Parse(*amount)
+		if err != nil {
+			log.Fatalf("error parsing amount %s: %s", *amount, err)
+		}
+		assetAmount = int64(xlmAmount)
 	}
 	// TODO(vniu): add functionality to only export a portion of the given utxo, and pay back the change to the utxo owner.
-	tx, err := slidechain.BuildExportTx(ctx, native, int64(xlmAmount), *dest, mustDecode(*anchor), mustDecode(*prv))
+	tx, err := slidechain.BuildExportTx(ctx, asset, assetAmount, *dest, mustDecode(*anchor), mustDecode(*prv))
 	if err != nil {
 		log.Fatalf("error building export tx: %s", err)
 	}
