@@ -171,7 +171,7 @@ Notes:
 or [output](#output-structure) their contents themselves.
 * [Variables](#variable-type), [expressions](#expression-type) and [constraints](#constraint-type) have no meaning outside the VM state
 and its constraint system and therefore cannot be meaningfully ported between transactions.
-* Secret [scalar](#scalar) can be ported as a [point](#point) representing a [Pedersen commitment](#pedersen-commitment) to such scalar.
+* [Scalars](#scalar) can be ported secretly by wrapping them into [Pedersen commitments](#pedersen-commitment) which are represented as [points](#point) and could be added to the constraint system using the [`var`](#var) instruction.
 
 
 ### Data type
@@ -1016,8 +1016,8 @@ The VM is initialized with the following state:
 7. Transaction log is empty.
 8. Array of signature verification keys is empty.
 9. Array of deferred point operations is empty.
-10. High-level variables: attached variables for [mintime and maxtime](#time-bounds).
-10. Constraint system: empty (time bounds are constants that appear only within linear combinations of actual variables).
+10. High-level variables: empty.
+11. Constraint system: empty (time bounds are constants that appear only within linear combinations of actual variables).
 
 Then, the VM executes the current program till completion:
 
@@ -1586,6 +1586,7 @@ _input_ **input** → _contract_
 1. Pops a [data](#data) `input` representing the [input structure](#input-structure) from the stack.
 2. Constructs a [contract](#contract-type) based on the `input` data and pushes it to the stack.
 3. Adds [input entry](#input-entry) to the [transaction log](#transaction-log).
+4. Sets the [VM uniqueness flag](#vm-state) to `true`.
 
 Fails if the `input` is not a [data type](#data-type) with exact encoding of an [input structure](#input-structure).
 
@@ -1620,6 +1621,7 @@ _predicate_ **nonce** → _contract_
 1. Pops [predicate](#predicate) from the stack.
 2. Pushes a new [contract](#contract-type) with an empty [payload](#contract-payload) and this predicate to the stack.
 3. Adds [nonce entry](#nonce-entry) to the [transaction log](#transaction-log) with the predicate and transaction [maxtime](#time-bounds).
+4. Sets the [VM uniqueness flag](#vm-state) to `true`.
 
 Fails if `predicate` is not a valid [point](#point).
 
