@@ -1,6 +1,8 @@
 package main
 
 import (
+	"context"
+	"database/sql"
 	"encoding/hex"
 	"flag"
 	"log"
@@ -18,6 +20,7 @@ import (
 )
 
 func main() {
+	ctx := context.Background()
 	var (
 		custodian  = flag.String("custodian", "", "Stellar account ID of custodian account")
 		amount     = flag.String("amount", "", "amount to peg, in lumens")
@@ -26,6 +29,7 @@ func main() {
 		horizonURL = flag.String("horizon", "https://horizon-testnet.stellar.org", "horizon URL")
 		code       = flag.String("code", "", "asset code for non-Lumen asset")
 		issuer     = flag.String("issuer", "", "asset issuer for non-Lumen asset")
+		dbfile     = flag.String("db", "slidechain.db", "path to db")
 	)
 	flag.Parse()
 
@@ -52,8 +56,12 @@ func main() {
 		kp := stellar.NewFundedAccount()
 		*seed = kp.Seed()
 	}
+	db, err := sql.Open("sqlite3", *dbfile)
+	if err != nil {
+		log.Fatalf("error opening db: %s", err)
+	}
 
-	if _, err := strconv.ParseFloat(*amount, 64); err != nil {
+	if _, err = strconv.ParseFloat(*amount, 64); err != nil {
 		log.Printf("invalid amount string %s: %s", *amount, err)
 	}
 
@@ -61,7 +69,7 @@ func main() {
 	if len(*recipient) != 64 {
 		log.Fatalf("invalid recipient length: got %d want 64", len(*recipient))
 	}
-	_, err := hex.Decode(recipientPubkey[:], []byte(*recipient))
+	_, err = hex.Decode(recipientPubkey[:], []byte(*recipient))
 	if err != nil {
 		log.Fatal(err, "decoding recipient")
 	}
@@ -71,8 +79,11 @@ func main() {
 		HTTP: new(http.Client),
 	}
 
-	// TODO(debnil): Get initial blockid.
-	var bcid []byte
+	c, err := slidechain.GetCustodian(ctx, db, *horizonURL)
+	if err != nil {
+		log.Fatalf("error getting custodian: %s", err)
+	}
+	bcid := c.InitBlockHash.Bytes()
 	exp := int64(bc.Millis(time.Now().Add(10 * time.Minute)))
 	nonceHash := slidechain.AtomicNonceHash(bcid, exp)
 	tx, err := stellar.BuildPegInTx(*seed, recipientPubkey, nonceHash, exp, *amount, *code, *issuer, *custodian, hclient)
