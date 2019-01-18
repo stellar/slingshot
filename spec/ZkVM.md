@@ -239,7 +239,7 @@ a _constant expression_:
 
     const_expr = { (weight, 1) }
 
-Instructions [`add`](#add) and [`mul`](#mul) are preserving constant expressions as an optimization in order to avoid
+Instructions [`add`](#add) and [`mul`](#mul) preserve constant expressions as an optimization in order to avoid
 allocating unnecessary multipliers in the [constraint system](#constraint-system).
 
 
@@ -1174,6 +1174,7 @@ Drops `x` from the stack.
 
 Fails if `x` is not a [copyable type](#copyable-types).
 
+
 #### dup
 
 _x[k] … x[0]_ **dup:_k_** → _x[k] ... x[0] x[k]_
@@ -1183,7 +1184,6 @@ Immediate data `k` is encoded as [LE32](#le32).
 
 Fails if `x[k]` is not a [copyable type](#copyable-types).
 
-Note: `dup:0` is equivalent to `dup`.
 
 #### roll
 
