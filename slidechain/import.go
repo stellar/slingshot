@@ -140,8 +140,7 @@ func (c *Custodian) doImport(ctx context.Context, txid string, opNum int, amount
 		return errors.Wrap(err, "submitting import tx")
 	}
 	txresult := txresult.New(importTx)
-	log.Printf("asset id: %x", txresult.Issuances[0].Value.AssetID)
-	log.Printf("output anchor: %x", txresult.Outputs[0].Value.Anchor)
+	log.Printf("assetID %x amount %d anchor %x\n", txresult.Issuances[0].Value.AssetID.Bytes(), txresult.Issuances[0].Value.Amount, txresult.Issuances[0].Value.Anchor)
 	_, err = c.DB.ExecContext(ctx, `UPDATE pegs SET imported=1 WHERE txid = $1 AND operation_num = $2`, txid, opNum)
 	return errors.Wrapf(err, "setting imported=1 for txid %s, operation %d", txid, opNum)
 }

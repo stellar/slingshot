@@ -332,7 +332,7 @@ func TestEndToEnd(t *testing.T) {
 		}
 
 		// Build + submit export tx
-		exportTx, err := BuildExportTx(ctx, native, int64(amount), kp.Address(), anchor, recipientPrv)
+		exportTx, err := BuildExportTx(ctx, native, int64(amount), int64(amount), kp.Address(), anchor, recipientPrv)
 		if err != nil {
 			t.Fatalf("error building retirement tx %s", err)
 		}
@@ -376,7 +376,7 @@ func TestEndToEnd(t *testing.T) {
 					t.Fatalf("incorrect payment destination got %s, want %s", paymentOp.Destination.Address(), kp.Address())
 				}
 				if paymentOp.Amount != xdr.Int64(amount) {
-					t.Fatalf("got incorrect payment amount %d, want %d", paymentOp.Amount, 50)
+					t.Fatalf("got incorrect payment amount %d, want %d", paymentOp.Amount, amount)
 				}
 				if paymentOp.Asset.Type != xdr.AssetTypeAssetTypeNative {
 					t.Fatalf("got incorrect payment asset %s, want lumens", paymentOp.Asset.String())
