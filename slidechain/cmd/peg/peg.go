@@ -5,11 +5,11 @@ import (
 	"flag"
 	"log"
 	"net/http"
-	"slingshot/slidechain/stellar"
 	"strconv"
 	"strings"
 
 	"github.com/chain/txvm/crypto/ed25519"
+	"github.com/interstellar/slingshot/slidechain/stellar"
 	"github.com/stellar/go/clients/horizon"
 	"github.com/stellar/go/xdr"
 )

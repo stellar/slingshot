@@ -5,7 +5,6 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
-	"slingshot/slidechain/net"
 	"strconv"
 	"sync"
 	"time"
@@ -15,6 +14,7 @@ import (
 	"github.com/chain/txvm/protocol"
 	"github.com/chain/txvm/protocol/bc"
 	"github.com/golang/protobuf/proto"
+	"github.com/interstellar/slingshot/slidechain/net"
 )
 
 // TODO: make this configurable.
