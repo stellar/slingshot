@@ -217,8 +217,9 @@ func TestImport(t *testing.T) {
 				privkey:       custodianPrv,
 				InitBlockHash: chain.InitialBlockHash,
 			}
+			expMS := time.Now().Add(5 * time.Minute)
 			go c.importFromPegs(ctx)
-			_, err := db.Exec("INSERT INTO pegs (txid, operation_num, amount, asset_xdr, recipient_pubkey) VALUES ('txid', 1, 1, $1, $2)", assetXDR, testRecipPubKey)
+			_, err := db.Exec("INSERT INTO pegs (txid, operation_num, amount, asset_xdr, recipient_pubkey, expiration_ms) VALUES ('txid', 1, 1, $1, $2, $3)", assetXDR, testRecipPubKey, expMS)
 			if err != nil {
 				t.Fatal(err)
 			}
