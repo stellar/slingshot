@@ -40,7 +40,7 @@ func (c *Custodian) watchPegs(ctx context.Context) {
 				return
 			}
 			// TODO(debnil): Confirm that it's fine to get exp here, rather than as a Memo on the streamed tx.
-			exp := int64(bc.Millis(time.Now().Add(10 * time.Minute)))
+			expMS := int64(bc.Millis(time.Now().Add(10 * time.Minute)))
 			recipientPubkey := (*env.Tx.Memo.Hash)[:]
 
 			for i, op := range env.Tx.Operations {
@@ -55,14 +55,14 @@ func (c *Custodian) watchPegs(ctx context.Context) {
 				// This operation is a payment to the custodian's account - i.e., a peg.
 				// We record it in the db, then wake up a goroutine that executes imports for not-yet-imported pegs.
 				const q = `INSERT INTO pegs 
-					(txid, operation_num, amount, asset_xdr, recipient_pubkey, expiration_time)
+					(txid, operation_num, amount, asset_xdr, recipient_pubkey, expiration_ms)
 					VALUES ($1, $2, $3, $4, $5, $6)`
 				assetXDR, err := payment.Asset.MarshalBinary()
 				if err != nil {
 					log.Fatalf("error marshaling asset to XDR %s: %s", payment.Asset.String(), err)
 					return
 				}
-				_, err = c.DB.ExecContext(ctx, q, tx.ID, i, payment.Amount, assetXDR, recipientPubkey, exp)
+				_, err = c.DB.ExecContext(ctx, q, tx.ID, i, payment.Amount, assetXDR, recipientPubkey, expMS)
 				if err != nil {
 					log.Fatal("error recording peg-in tx: ", err)
 					return

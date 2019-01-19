@@ -18,7 +18,7 @@ CREATE TABLE IF NOT EXISTS pegs (
   amount INTEGER NOT NULL,
   asset_xdr BLOB NOT NULL,
   recipient_pubkey BLOB NOT NULL,
-  expiration_time BLOB NOT NULL,
+  expiration_ms INTEGER NOT NULL,
   imported INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (txid, operation_num)
 );
