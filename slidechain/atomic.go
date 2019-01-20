@@ -14,11 +14,10 @@ const atomicGuaranteeSrc = `
         get get [drop drop] output           #  recip, zeroval                  {"O", vm.caller, outputid}
 `
 
-const zeroSeed [32]byte = make([]byte, 32, 32)
-
 var (
 	atomicGuaranteeProg = mustAssemble(atomicGuaranteeSrc)
 	atomicGuaranteeSeed = txvm.ContractSeed(atomicGuaranteeProg)
+	zeroSeed            = make([]byte, 32, 32)
 )
 
 // AtomicNonceHash generates a nonce hash for the atomicity-guarantee contract.
