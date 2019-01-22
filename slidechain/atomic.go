@@ -40,12 +40,15 @@ func atomicGuaranteeSnapshot(b *txvmutil.Builder, pubkey ed25519.PublicKey, bcid
 		contract.PushdataByte(txvm.ContractCode)          // 'C'
 		contract.PushdataBytes(atomicGuaranteeSeed[:])    // <atomic guarantee seed>
 		contract.PushdataBytes(atomicGuaranteeProg)       // [<atomicity guarantee prog>]
-		contract.PushdataBytes(pubkey)                    // pubkey
 		contract.Tuple(func(tup *txvmutil.TupleBuilder) { // {'V', 0, assetID, anchor}
 			tup.PushdataByte(txvm.ValueCode)
 			tup.PushdataInt64(0)
 			tup.PushdataBytes(zeroSeed[:])
 			tup.PushdataBytes(nonceHash[:])
+		})
+		contract.Tuple(func(tup *txvmutil.TupleBuilder) { // {'S', pubkey}
+			tup.PushdataByte(txvm.BytesCode)
+			tup.PushdataBytes(pubkey)
 		})
 	})
 }
