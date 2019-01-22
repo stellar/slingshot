@@ -37,11 +37,11 @@ func inputAtomicGuarantee(b *txvmutil.Builder, pubkey ed25519.PublicKey, bcid []
 func atomicGuaranteeSnapshot(b *txvmutil.Builder, pubkey ed25519.PublicKey, bcid []byte, expMS int64) {
 	nonceHash := AtomicNonceHash(bcid, expMS)
 	b.Tuple(func(contract *txvmutil.TupleBuilder) {
-		contract.PushdataByte(txvm.ContractCode)       // 'C'
-		contract.PushdataBytes(atomicGuaranteeSeed[:]) // <atomic guarantee seed>
-		contract.PushdataBytes(atomicGuaranteeProg)    // [<atomicity guarantee prog>]
-		contract.PushdataBytes(pubkey)                 // pubkey
-		contract.Tuple(func(tup *txvmutil.TupleBuilder) {
+		contract.PushdataByte(txvm.ContractCode)          // 'C'
+		contract.PushdataBytes(atomicGuaranteeSeed[:])    // <atomic guarantee seed>
+		contract.PushdataBytes(atomicGuaranteeProg)       // [<atomicity guarantee prog>]
+		contract.PushdataBytes(pubkey)                    // pubkey
+		contract.Tuple(func(tup *txvmutil.TupleBuilder) { // {'V', 0, assetID, anchor}
 			tup.PushdataByte(txvm.ValueCode)
 			tup.PushdataInt64(0)
 			tup.PushdataBytes(zeroSeed[:])
