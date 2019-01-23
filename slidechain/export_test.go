@@ -76,7 +76,7 @@ func TestPegOut(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				if env.Tx.SourceAccount.Address() != c.accountID.Address() {
+				if env.Tx.SourceAccount.Address() != c.AccountID.Address() {
 					log.Println("source accounts don't match, skipping...")
 					return
 				}

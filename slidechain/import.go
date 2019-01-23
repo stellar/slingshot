@@ -26,10 +26,9 @@ func (c *Custodian) buildImportTx(
 	expMS int64,
 ) ([]byte, error) {
 	buf := new(bytes.Buffer)
-	// Call the atomicity guarantee contract.
-	// TODO(debnil): Should we convert atomicGuaranteeSnapshot to fprintf-assembly for consistency?
+	// Call the atomicity guarantee import contract.
 	b := new(txvmutil.Builder)
-	inputAtomicGuarantee(b, recipPubkey, c.InitBlockHash.Bytes(), expMS)
+	c.ImportAtomicGuarantee(b, recipPubkey, expMS)
 	// TODO(debnil): Inline inputAtomicGuarantee instructions here.
 	fmt.Fprintf(buf, "x'%x' exec\n", b.Build())
 
@@ -57,7 +56,7 @@ func (c *Custodian) buildImportTx(
 
 	vm, err := txvm.Validate(tx1, 3, math.MaxInt64, txvm.StopAfterFinalize)
 	if err != nil {
-		return nil, errors.Wrap(err, "computing transaction ID")
+		return nil, errors.Wrap(err, "computing payment tx ID")
 	}
 	sig := ed25519.Sign(c.privkey, vm.TxID[:])
 	fmt.Fprintf(buf, "get x'%x' put call\n", sig) // check sig

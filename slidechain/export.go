@@ -158,7 +158,7 @@ func (c *Custodian) buildPegOutTx(recipient xdr.AccountId, asset xdr.Asset, amou
 	}
 	return b.Transaction(
 		b.Network{Passphrase: c.network},
-		b.SourceAccount{AddressOrSeed: c.accountID.Address()},
+		b.SourceAccount{AddressOrSeed: c.AccountID.Address()},
 		b.AutoSequence{SequenceProvider: c.hclient},
 		b.BaseFee{Amount: baseFee},
 		paymentOp,

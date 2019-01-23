@@ -1,12 +1,17 @@
 package main
 
 import (
+	"context"
+	"database/sql"
 	"encoding/hex"
 	"flag"
 	"log"
 	"net/http"
+	"slingshot/slidechain"
 	"strconv"
 	"strings"
+	"time"
+	"txvm/protocol/bc"
 
 	"github.com/chain/txvm/crypto/ed25519"
 	"github.com/interstellar/slingshot/slidechain/stellar"
@@ -23,6 +28,7 @@ func main() {
 		horizonURL = flag.String("horizon", "https://horizon-testnet.stellar.org", "horizon URL")
 		code       = flag.String("code", "", "asset code for non-Lumen asset")
 		issuer     = flag.String("issuer", "", "asset issuer for non-Lumen asset")
+		dbfile     = flag.String("db", "slidechain.db", "path to db")
 	)
 	flag.Parse()
 
@@ -62,10 +68,26 @@ func main() {
 	if err != nil {
 		log.Fatal(err, "decoding recipient")
 	}
+	db, err := sql.Open("sqlite3", *dbfile)
+	if err != nil {
+		log.Fatalf("error opening db: %s", err)
+	}
+	defer db.Close()
 
 	hclient := &horizon.Client{
 		URL:  strings.TrimRight(*horizonURL, "/"),
 		HTTP: new(http.Client),
+	}
+	ctx := context.Background()
+	c, err := slidechain.GetCustodian(ctx, db, *horizonURL)
+	if err != nil {
+		log.Fatalf("error getting custodian: %s", err)
+	}
+	expMS := int64(bc.Millis(time.Now().Add(10 * time.Minute)))
+	// TODO(debnil): Should we launch this concurrently and wait?
+	err = c.PrePegAtomicGuarantee(expMS, recipientPubkey[:])
+	if err != nil {
+		log.Fatalf("error submitting pre-peg atomicity tx: %s", err)
 	}
 	tx, err := stellar.BuildPegInTx(*seed, recipientPubkey, *amount, *code, *issuer, *custodian, hclient)
 	if err != nil {
@@ -84,4 +106,27 @@ func main() {
 		log.Fatalf("%s: submitting tx %s", err, txstr)
 	}
 	log.Printf("successfully submitted peg-in tx hash %s on ledger %d", succ.Hash, succ.Ledger)
+	for i, op := range txenv.E.Tx.Operations {
+		if op.Body.Type != xdr.OperationTypePayment {
+			continue
+		}
+		payment := op.Body.PaymentOp
+		if !payment.Destination.Equals(c.AccountID) {
+			continue
+		}
+		// This operation is a payment to the custodian's account - i.e., a peg.
+		// We record it in the db.
+		const q = `INSERT INTO pegs 
+			(txid, operation_num, amount, asset_xdr, recipient_pubkey, expiration_ms)
+			VALUES ($1, $2, $3, $4, $5, $6)`
+		assetXDR, err := payment.Asset.MarshalBinary()
+		if err != nil {
+			log.Fatalf("error marshaling asset to XDR %s: %s", payment.Asset.String(), err)
+		}
+		_, err = c.DB.ExecContext(ctx, q, succ.Hash, i, payment.Amount, assetXDR, recipientPubkey, expMS)
+		if err != nil {
+			log.Fatal("error recording peg-in tx: ", err)
+		}
+	}
+	log.Printf("successfully inserted peg with tx id %s into db", succ.Hash)
 }

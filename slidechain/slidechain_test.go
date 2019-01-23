@@ -259,7 +259,7 @@ func TestEndToEnd(t *testing.T) {
 		}
 		c := &Custodian{
 			seed:          seed,
-			accountID:     *accountID,
+			AccountID:     *accountID,
 			S:             s,
 			DB:            db,
 			hclient:       hclient,
@@ -282,7 +282,7 @@ func TestEndToEnd(t *testing.T) {
 		copy(recipientPubkeyBytes[:], recipientPub)
 
 		// Build + submit transaction to peg-in funds
-		pegInTx, err := stellar.BuildPegInTx(kp.Address(), recipientPubkeyBytes, amount.HorizonString(), "", "", c.accountID.Address(), hclient)
+		pegInTx, err := stellar.BuildPegInTx(kp.Address(), recipientPubkeyBytes, amount.HorizonString(), "", "", c.AccountID.Address(), hclient)
 		if err != nil {
 			t.Fatalf("error building peg-in tx: %s", err)
 		}
@@ -360,7 +360,7 @@ func TestEndToEnd(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				if env.Tx.SourceAccount.Address() != c.accountID.Address() {
+				if env.Tx.SourceAccount.Address() != c.AccountID.Address() {
 					log.Println("source accounts don't match, skipping...")
 					return
 				}

@@ -32,17 +32,17 @@ var (
 // for importing pegged-in values and pegging out exported
 // values.
 type Custodian struct {
-	seed      string
-	accountID xdr.AccountId
-	hclient   *horizon.Client
-	imports   *sync.Cond
-	exports   *sync.Cond
-	network   string
-	privkey   ed25519.PrivateKey
+	seed    string
+	hclient *horizon.Client
+	imports *sync.Cond
+	exports *sync.Cond
+	network string
+	privkey ed25519.PrivateKey
 
 	DB            *sql.DB
 	S             *submitter
 	InitBlockHash bc.Hash
+	AccountID     xdr.AccountId
 }
 
 // GetCustodian returns a Custodian object, loading the preset
@@ -99,8 +99,7 @@ func newCustodian(ctx context.Context, db *sql.DB, horizonURL string) (*Custodia
 	}
 
 	return &Custodian{
-		seed:      seed,
-		accountID: *custAccountID,
+		seed: seed,
 		S: &submitter{
 			w:            multichan.New((*bc.Block)(nil)),
 			chain:        chain,
@@ -113,6 +112,7 @@ func newCustodian(ctx context.Context, db *sql.DB, horizonURL string) (*Custodia
 		network:       root.NetworkPassphrase,
 		privkey:       custodianPrv,
 		InitBlockHash: initialBlock.Hash(),
+		AccountID:     *custAccountID,
 	}, nil
 }
 

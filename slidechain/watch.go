@@ -27,7 +27,7 @@ func (c *Custodian) watchPegs(ctx context.Context) {
 	}
 
 	for {
-		err := c.hclient.StreamTransactions(ctx, c.accountID.Address(), &cur, func(tx horizon.Transaction) {
+		err := c.hclient.StreamTransactions(ctx, c.AccountID.Address(), &cur, func(tx horizon.Transaction) {
 			log.Printf("handling Stellar tx %s", tx.ID)
 
 			var env xdr.TransactionEnvelope
@@ -39,35 +39,18 @@ func (c *Custodian) watchPegs(ctx context.Context) {
 			if env.Tx.Memo.Type != xdr.MemoTypeMemoHash {
 				return
 			}
-			// TODO(debnil): Confirm that it's fine to get exp here, rather than as a Memo on the streamed tx.
-			expMS := int64(bc.Millis(time.Now().Add(10 * time.Minute)))
-			recipientPubkey := (*env.Tx.Memo.Hash)[:]
 
-			for i, op := range env.Tx.Operations {
+			for _, op := range env.Tx.Operations {
 				if op.Body.Type != xdr.OperationTypePayment {
 					continue
 				}
 				payment := op.Body.PaymentOp
-				if !payment.Destination.Equals(c.accountID) {
+				if !payment.Destination.Equals(c.AccountID) {
 					continue
 				}
 
 				// This operation is a payment to the custodian's account - i.e., a peg.
-				// We record it in the db, then wake up a goroutine that executes imports for not-yet-imported pegs.
-				const q = `INSERT INTO pegs 
-					(txid, operation_num, amount, asset_xdr, recipient_pubkey, expiration_ms)
-					VALUES ($1, $2, $3, $4, $5, $6)`
-				assetXDR, err := payment.Asset.MarshalBinary()
-				if err != nil {
-					log.Fatalf("error marshaling asset to XDR %s: %s", payment.Asset.String(), err)
-					return
-				}
-				_, err = c.DB.ExecContext(ctx, q, tx.ID, i, payment.Amount, assetXDR, recipientPubkey, expMS)
-				if err != nil {
-					log.Fatal("error recording peg-in tx: ", err)
-					return
-				}
-				// Update cursor after successfully processing transaction
+				// We update the cursor and wake up a goroutine that executes imports for not-yet-imported pegs.
 				_, err = c.DB.ExecContext(ctx, `UPDATE custodian SET cursor=$1 WHERE seed=$2`, tx.PT, c.seed)
 				if err != nil {
 					log.Fatalf("updating cursor: %s", err)
