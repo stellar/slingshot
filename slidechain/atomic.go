@@ -2,11 +2,15 @@ package slidechain
 
 import (
 	"bytes"
+	"context"
 	"fmt"
+	"log"
 	"math"
 
 	"github.com/chain/txvm/crypto/ed25519"
 	"github.com/chain/txvm/errors"
+	"github.com/chain/txvm/protocol/bc"
+	"github.com/chain/txvm/protocol/txbuilder/txresult"
 	"github.com/chain/txvm/protocol/txvm"
 	"github.com/chain/txvm/protocol/txvm/asm"
 	"github.com/chain/txvm/protocol/txvm/op"
@@ -58,35 +62,57 @@ func importAtomicGuaranteeSnapshot(b *txvmutil.Builder, pubkey ed25519.PublicKey
 		contract.PushdataByte(txvm.ContractCode)             // 'C'
 		contract.PushdataBytes(atomicGuaranteeImportSeed[:]) // <atomic guarantee import seed>
 		contract.PushdataBytes(atomicGuaranteeImportProg)    // [<atomicity guarantee import prog>]
-		contract.Tuple(func(tup *txvmutil.TupleBuilder) {    // {'V', 0, assetID, anchor}
+		contract.Tuple(func(tup *txvmutil.TupleBuilder) {    // {'S', pubkey}
+			tup.PushdataByte(txvm.BytesCode)
+			tup.PushdataBytes(pubkey)
+		})
+		contract.Tuple(func(tup *txvmutil.TupleBuilder) { // {'V', 0, assetID, anchor}
 			tup.PushdataByte(txvm.ValueCode)
 			tup.PushdataInt64(0)
 			tup.PushdataBytes(zeroSeed[:])
 			tup.PushdataBytes(nonceHash[:])
-		})
-		contract.Tuple(func(tup *txvmutil.TupleBuilder) { // {'S', pubkey}
-			tup.PushdataByte(txvm.BytesCode)
-			tup.PushdataBytes(pubkey)
 		})
 	})
 }
 
 // PrePegAtomicGuarantee calls the atomicity-guarantee pre-peg contract to set up the recipient
 // pubkey and zeroval, the items needed to test utxo uniqueness.
-func (c *Custodian) PrePegAtomicGuarantee(expMS int64, pubkey ed25519.PublicKey) error {
+func (c *Custodian) buildPrepegTx(expMS int64, pubkey ed25519.PublicKey) ([]byte, error) {
 	nonceHash := AtomicNonceHash(c.InitBlockHash.Bytes(), expMS)
 	buf := new(bytes.Buffer)
-	fmt.Fprintf(buf, "x'%x' put\n", pubkey)
 	fmt.Fprintf(buf, "x'%x' put\n", nonceHash)
+	fmt.Fprintf(buf, "x'%x' put\n", pubkey)
 	fmt.Fprintf(buf, "x'%x' contract call\n", atomicGuaranteePrePegProg)
 	fmt.Fprintf(buf, "finalize\n")
 	tx, err := asm.Assemble(buf.String())
 	if err != nil {
-		return errors.Wrap(err, "assembling pre-peg atomicity tx")
+		return nil, errors.Wrap(err, "assembling pre-peg atomicity tx")
 	}
 	_, err = txvm.Validate(tx, 3, math.MaxInt64, txvm.StopAfterFinalize)
 	if err != nil {
-		return errors.Wrap(err, "computing pre-peg atomicity tx ID")
+		return nil, errors.Wrap(err, "computing pre-peg atomicity tx ID")
 	}
+	return tx, nil
+}
+
+func (c *Custodian) DoPrePegTx(ctx context.Context, expMS int64, pubkey ed25519.PublicKey) error {
+	// TODO(debnil): Top of function log.
+	prepegTxBytes, err := c.buildPrepegTx(expMS, pubkey)
+	if err != nil {
+		return errors.Wrap(err, "building pre-peg tx")
+	}
+	var runlimit int64
+	prepegTx, err := bc.NewTx(prepegTxBytes, 3, math.MaxInt64, txvm.GetRunlimit(&runlimit))
+	if err != nil {
+		return errors.Wrap(err, "computing prepeg tx ID")
+	}
+	prepegTx.Runlimit = math.MaxInt64 - runlimit
+	err = c.S.submitTx(ctx, prepegTx)
+	if err != nil {
+		return errors.Wrap(err, "submitting prepeg tx")
+	}
+	txresult := txresult.New(prepegTx)
+	log.Printf("asset id: %x", txresult.Issuances[0].Value.AssetID)
+	log.Printf("output anchor: %x", txresult.Outputs[0].Value.Anchor)
 	return nil
 }

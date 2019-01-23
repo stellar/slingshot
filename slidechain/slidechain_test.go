@@ -281,6 +281,12 @@ func TestEndToEnd(t *testing.T) {
 		var recipientPubkeyBytes [32]byte
 		copy(recipientPubkeyBytes[:], recipientPub)
 
+		// Do pre-peg TxVM transaction
+		expMS := int64(bc.Millis(time.Now().Add(10 * time.Minute)))
+		err = c.DoPrePegTx(ctx, expMS, recipientPubkeyBytes[:])
+		if err != nil {
+			log.Fatalf("error with pre-peg tx: %s", err)
+		}
 		// Build + submit transaction to peg-in funds
 		pegInTx, err := stellar.BuildPegInTx(kp.Address(), recipientPubkeyBytes, amount.HorizonString(), "", "", c.AccountID.Address(), hclient)
 		if err != nil {

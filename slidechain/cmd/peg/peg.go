@@ -85,9 +85,9 @@ func main() {
 	}
 	expMS := int64(bc.Millis(time.Now().Add(10 * time.Minute)))
 	// TODO(debnil): Should we launch this concurrently and wait?
-	err = c.PrePegAtomicGuarantee(expMS, recipientPubkey[:])
+	err = c.DoPrePegTx(ctx, expMS, recipientPubkey[:])
 	if err != nil {
-		log.Fatalf("error submitting pre-peg atomicity tx: %s", err)
+		log.Fatalf("error with pre-peg tx: %s", err)
 	}
 	tx, err := stellar.BuildPegInTx(*seed, recipientPubkey, *amount, *code, *issuer, *custodian, hclient)
 	if err != nil {
