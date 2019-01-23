@@ -34,6 +34,7 @@ import (
 	"github.com/interstellar/starlight/worizon/xlm"
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/stellar/go/clients/horizon"
+	"github.com/stellar/go/keypair"
 	"github.com/stellar/go/xdr"
 )
 
@@ -271,12 +272,21 @@ func TestEndToEnd(t *testing.T) {
 		c.launch(ctx)
 
 		// Prepare Stellar account to peg-in funds and txvm account to receive funds
+		// TODO(vniu): make the peg-in account and the txvm account the same
 		amount := 5 * xlm.Lumen
-		kp := stellar.NewFundedAccount()
+		// kp := stellar.NewFundedAccount()
 		recipientPub, recipientPrv, err := ed25519.GenerateKey(nil)
 		if err != nil {
 			t.Fatalf("error generating txvm recipient keypair: %s", err)
 		}
+		var recipientSeed [32]byte
+		copy(recipientSeed[:], recipientPrv)
+		kp, err := keypair.FromRawSeed(recipientSeed)
+		err = stellar.FundAccount(kp.Address())
+		if err != nil {
+			t.Fatalf("error funding account %s: %s", kp.Address(), err)
+		}
+
 		var recipientPubkeyBytes [32]byte
 		copy(recipientPubkeyBytes[:], recipientPub)
 
@@ -332,7 +342,11 @@ func TestEndToEnd(t *testing.T) {
 		}
 
 		// Build + submit export tx
-		exportTx, err := BuildExportTx(ctx, native, int64(amount), int64(amount), kp.Address(), anchor, recipientPrv)
+		temp, seqnum, err := PreExportTx(ctx, hclient, c.accountID.Address(), kp)
+		if err != nil {
+			t.Fatalf("pre-submit tx error: %s", err)
+		}
+		exportTx, err := BuildExportTx(ctx, native, int64(amount), int64(amount), kp.Address(), temp, anchor, recipientPrv, seqnum)
 		if err != nil {
 			t.Fatalf("error building retirement tx %s", err)
 		}
@@ -359,15 +373,22 @@ func TestEndToEnd(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				if env.Tx.SourceAccount.Address() != c.accountID.Address() {
+				if env.Tx.SourceAccount.Address() != temp {
 					log.Println("source accounts don't match, skipping...")
 					return
 				}
 				defer close(retire)
-				if len(env.Tx.Operations) != 1 {
-					t.Fatalf("too many operations got %d, want 1", len(env.Tx.Operations))
+				if len(env.Tx.Operations) != 2 {
+					t.Fatalf("too many operations got %d, want 2", len(env.Tx.Operations))
 				}
 				op := env.Tx.Operations[0]
+				if op.Body.Type != xdr.OperationTypeAccountMerge {
+					t.Fatalf("wrong operation type: got %s, want %s", op.Body.Type, xdr.OperationTypeAccountMerge)
+				}
+				if op.Body.Destination.Address() != kp.Address() {
+					t.Fatalf("wrong account merge destination: got %s, want %s", op.Body.Destination.Address(), kp.Address())
+				}
+				op = env.Tx.Operations[1]
 				if op.Body.Type != xdr.OperationTypePayment {
 					t.Fatalf("wrong operation type: got %s, want %s", op.Body.Type, xdr.OperationTypePayment)
 				}

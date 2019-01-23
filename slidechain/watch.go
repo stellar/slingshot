@@ -108,6 +108,7 @@ func (c *Custodian) watchExports(ctx context.Context) {
 		}
 		b := got.(*bc.Block)
 		for _, tx := range b.Transactions {
+			log.Println("reading a tx...")
 			// Look for a retire-type ("X") entry
 			// followed by a specially formatted log ("L") entry
 			// that specifies the Stellar asset code to peg out and the Stellar recipient account ID.
@@ -127,9 +128,13 @@ func (c *Custodian) watchExports(ctx context.Context) {
 				var info struct {
 					AssetXDR []byte `json:"asset"`
 					Account  string `json:"account"`
+					Temp     string `json:"temp"`
+					Seqnum   int64  `json:"seqnum"`
+					Exporter string `json:"exporter"`
 				}
 				err := json.Unmarshal(infoItem[2].(txvm.Bytes), &info)
 				if err != nil {
+					log.Println("error unmarshaling export tx info: ", err)
 					continue
 				}
 
@@ -149,9 +154,9 @@ func (c *Custodian) watchExports(ctx context.Context) {
 				// then wake up a goroutine that executes peg-outs on the main chain.
 				const q = `
 					INSERT INTO exports 
-					(txid, recipient, amount, asset_xdr)
-					VALUES ($1, $2, $3, $4)`
-				_, err = c.DB.ExecContext(ctx, q, tx.ID.Bytes(), stellarRecipient.Address(), retiredAmount, info.AssetXDR)
+					(txid, exporter, recipient, amount, asset_xdr, temp, seqnum)
+					VALUES ($1, $2, $3, $4, $5, $6, $7)`
+				_, err = c.DB.ExecContext(ctx, q, tx.ID.Bytes(), info.Exporter, stellarRecipient.Address(), retiredAmount, info.AssetXDR, info.Temp, info.Seqnum)
 				if err != nil {
 					log.Fatalf("recording export tx: %s", err)
 				}

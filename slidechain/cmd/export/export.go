@@ -14,6 +14,8 @@ import (
 	"github.com/interstellar/slingshot/slidechain"
 	"github.com/interstellar/slingshot/slidechain/stellar"
 	"github.com/interstellar/starlight/worizon/xlm"
+	"github.com/stellar/go/clients/horizon"
+	"github.com/stellar/go/keypair"
 	"github.com/stellar/go/xdr"
 )
 
@@ -82,7 +84,39 @@ func main() {
 		}
 		inputAmount = int64(inputXlm)
 	}
-	tx, err := slidechain.BuildExportTx(ctx, asset, exportAmount, inputAmount, *dest, mustDecode(*anchor), mustDecode(*prv))
+	*slidechaind = strings.TrimRight(*slidechaind, "/")
+	// Build + submit pre-export tx
+
+	// Check that stellar account exists
+	var seed [32]byte
+	rawbytes := mustDecode(*prv)
+	copy(seed[:], rawbytes)
+	kp, err := keypair.FromRawSeed(seed)
+	hclient := horizon.DefaultTestNetClient
+	if _, err := hclient.SequenceForAccount(kp.Address()); err != nil {
+		// create account
+		err := stellar.FundAccount(kp.Address())
+		if err != nil {
+			log.Fatalf("error funding Stellar account %s: %s", kp.Address(), err)
+		}
+	}
+	var custodian xdr.AccountId
+	resp, err := http.Get(*slidechaind + "/account")
+	if err != nil {
+		log.Fatalf("error getting custodian address: %s", err)
+	}
+	defer resp.Body.Close()
+	_, err = xdr.Unmarshal(resp.Body, &custodian)
+	if err != nil {
+		log.Fatalf("error unmarshaling custodian account id: %s", err)
+	}
+	temp, seqnum, err := slidechain.PreExportTx(ctx, hclient, custodian.Address(), kp)
+	if err != nil {
+		log.Fatalf("error submitting pre-export tx: %s", err)
+	}
+
+	// Export funds from slidechain
+	tx, err := slidechain.BuildExportTx(ctx, asset, exportAmount, inputAmount, *dest, temp, mustDecode(*anchor), mustDecode(*prv), seqnum)
 	if err != nil {
 		log.Fatalf("error building export tx: %s", err)
 	}
@@ -90,7 +124,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	resp, err := http.Post(strings.TrimRight(*slidechaind, "/")+"/submit", "application/octet-stream", bytes.NewReader(txbits))
+	resp, err = http.Post(*slidechaind+"/submit", "application/octet-stream", bytes.NewReader(txbits))
 	if err != nil {
 		log.Fatalf("error submitting tx to slidechaind: %s", err)
 	}

@@ -16,6 +16,7 @@ import (
 	"github.com/interstellar/starlight/worizon/xlm"
 	b "github.com/stellar/go/build"
 	"github.com/stellar/go/clients/horizon"
+	"github.com/stellar/go/keypair"
 	"github.com/stellar/go/xdr"
 )
 
@@ -45,19 +46,25 @@ func (c *Custodian) pegOutFromExports(ctx context.Context) {
 		case <-ch:
 		}
 
-		const q = `SELECT txid, recipient, amount, asset_xdr FROM exports WHERE exported=0`
+		const q = `SELECT txid, recipient, amount, asset_xdr, exporter, temp, seqnum FROM exports WHERE exported=0`
 
 		var (
 			txids      [][]byte
 			recipients []string
 			amounts    []int
 			assetXDRs  [][]byte
+			temps      []string
+			seqnums    []int
+			exporters  []string
 		)
-		err := sqlutil.ForQueryRows(ctx, c.DB, q, func(txid []byte, recipient string, amount int, assetXDR []byte) {
+		err := sqlutil.ForQueryRows(ctx, c.DB, q, func(txid []byte, recipient string, amount int, assetXDR []byte, exporter string, temp string, seqnum int) {
 			txids = append(txids, txid)
 			recipients = append(recipients, recipient)
 			amounts = append(amounts, amount)
 			assetXDRs = append(assetXDRs, assetXDR)
+			temps = append(temps, temp)
+			seqnums = append(seqnums, seqnum)
+			exporters = append(exporters, exporter)
 		})
 		if err != nil {
 			log.Fatalf("reading export rows: %s", err)
@@ -73,10 +80,20 @@ func (c *Custodian) pegOutFromExports(ctx context.Context) {
 			if err != nil {
 				log.Fatalf("unmarshalling asset from XDR %x: %s", assetXDRs[i], err)
 			}
+			var tempID xdr.AccountId
+			err = tempID.SetAddress(temps[i])
+			if err != nil {
+				log.Fatalf("setting temp address to %s: %s", temps[i], err)
+			}
+			var exporter xdr.AccountId
+			err = exporter.SetAddress(exporters[i])
+			if err != nil {
+				log.Fatalf("setting exporter address to %s: %s", exporters[i], err)
+			}
 
 			log.Printf("pegging out export %x: %d of %s to %s", txid, amounts[i], asset.String(), recipients[i])
 			// TODO(vniu): flag txs that fail with unretriable errors in the db
-			err = c.pegOut(ctx, recipientID, asset, xlm.Amount(amounts[i]))
+			err = c.pegOut(ctx, recipientID, exporter, asset, xlm.Amount(amounts[i]), tempID, xdr.SequenceNumber(seqnums[i]))
 			if err != nil {
 				log.Fatalf("pegging out tx: %s", err)
 			}
@@ -88,8 +105,8 @@ func (c *Custodian) pegOutFromExports(ctx context.Context) {
 	}
 }
 
-func (c *Custodian) pegOut(ctx context.Context, recipient xdr.AccountId, asset xdr.Asset, amount xlm.Amount) error {
-	tx, err := c.buildPegOutTx(recipient, asset, amount)
+func (c *Custodian) pegOut(ctx context.Context, recipient, exporter xdr.AccountId, asset xdr.Asset, amount xlm.Amount, temp xdr.AccountId, seqnum xdr.SequenceNumber) error {
+	tx, err := c.buildPegOutTx(recipient, exporter, asset, amount, temp, seqnum)
 	if err != nil {
 		return errors.Wrap(err, "building tx")
 	}
@@ -130,16 +147,18 @@ func (c *Custodian) pegOut(ctx context.Context, recipient xdr.AccountId, asset x
 	return errors.Wrap(err, "submitting tx")
 }
 
-func (c *Custodian) buildPegOutTx(recipient xdr.AccountId, asset xdr.Asset, amount xlm.Amount) (*b.TransactionBuilder, error) {
+func (c *Custodian) buildPegOutTx(recipient, exporter xdr.AccountId, asset xdr.Asset, amount xlm.Amount, temp xdr.AccountId, seqnum xdr.SequenceNumber) (*b.TransactionBuilder, error) {
 	var paymentOp b.PaymentBuilder
 	switch asset.Type {
 	case xdr.AssetTypeAssetTypeNative:
 		paymentOp = b.Payment(
+			b.SourceAccount{AddressOrSeed: c.accountID.Address()},
 			b.Destination{AddressOrSeed: recipient.Address()},
 			b.NativeAmount{Amount: amount.HorizonString()},
 		)
 	case xdr.AssetTypeAssetTypeCreditAlphanum4:
 		paymentOp = b.Payment(
+			b.SourceAccount{AddressOrSeed: c.accountID.Address()},
 			b.Destination{AddressOrSeed: recipient.Address()},
 			b.CreditAmount{
 				Code:   string(asset.AlphaNum4.AssetCode[:]),
@@ -149,6 +168,7 @@ func (c *Custodian) buildPegOutTx(recipient xdr.AccountId, asset xdr.Asset, amou
 		)
 	case xdr.AssetTypeAssetTypeCreditAlphanum12:
 		paymentOp = b.Payment(
+			b.SourceAccount{AddressOrSeed: c.accountID.Address()},
 			b.Destination{AddressOrSeed: recipient.Address()},
 			b.CreditAmount{
 				Code:   string(asset.AlphaNum12.AssetCode[:]),
@@ -157,19 +177,73 @@ func (c *Custodian) buildPegOutTx(recipient xdr.AccountId, asset xdr.Asset, amou
 			},
 		)
 	}
+	mergeAccountOp := b.AccountMerge(
+		b.Destination{AddressOrSeed: exporter.Address()},
+	)
 	return b.Transaction(
 		b.Network{Passphrase: c.network},
-		b.SourceAccount{AddressOrSeed: c.accountID.Address()},
-		b.AutoSequence{SequenceProvider: c.hclient},
+		b.SourceAccount{AddressOrSeed: temp.Address()},
+		b.Sequence{Sequence: uint64(seqnum) + 1},
 		b.BaseFee{Amount: baseFee},
+		mergeAccountOp,
 		paymentOp,
 	)
+}
+
+// PreExportTx builds and submits a pre-export transaction to the Stellar
+// network that creates a new temporary account, and sets the custodian as the
+// sole signer. It returns the temporary account ID and sequence number
+func PreExportTx(ctx context.Context, hclient *horizon.Client, custodian string, kp *keypair.Full) (string, xdr.SequenceNumber, error) {
+	root, err := hclient.Root()
+	if err != nil {
+		return "", 0, errors.Wrap(err, "getting Horizon root")
+	}
+	temp, err := keypair.Random()
+	if err != nil {
+		return "", 0, errors.Wrap(err, "generating random account")
+	}
+	createAccountOp := b.CreateAccount(
+		b.Destination{AddressOrSeed: temp.Address()},
+		b.NativeAmount{Amount: (2 * xlm.Lumen).HorizonString()},
+	)
+	tx, err := b.Transaction(
+		b.Network{Passphrase: root.NetworkPassphrase},
+		b.SourceAccount{AddressOrSeed: kp.Address()},
+		b.AutoSequence{SequenceProvider: hclient},
+		b.BaseFee{Amount: baseFee},
+		createAccountOp,
+		b.SetOptions(
+			b.SourceAccount{AddressOrSeed: temp.Address()},
+			b.MasterWeight(0),
+			b.AddSigner(custodian, 1),
+		),
+	)
+	if err != nil {
+		return "", 0, errors.Wrap(err, "building pre-export tx")
+	}
+	txenv, err := tx.Sign(kp.Seed(), temp.Seed())
+	if err != nil {
+		return "", 0, errors.Wrap(err, "signing pre-export tx")
+	}
+	txstr, err := xdr.MarshalBase64(txenv.E)
+	if err != nil {
+		return "", 0, errors.Wrap(err, "marshaling pre-export txenv")
+	}
+	_, err = hclient.SubmitTransaction(txstr)
+	if err != nil {
+		return "", 0, errors.Wrapf(err, "submitting pre-export tx: %s", txstr)
+	}
+	seqnum, err := hclient.SequenceForAccount(temp.Address())
+	if err != nil {
+		return "", 0, errors.Wrapf(err, "getting sequence number for temp account %s", temp.Address())
+	}
+	return temp.Address(), seqnum, nil
 }
 
 // BuildExportTx builds a txvm retirement tx for an asset issued
 // onto slidechain. It will retire `amount` of the asset, and the
 // remaining input will be output back to the original account.
-func BuildExportTx(ctx context.Context, asset xdr.Asset, amount, inputAmt int64, addr string, anchor []byte, prv ed25519.PrivateKey) (*bc.Tx, error) {
+func BuildExportTx(ctx context.Context, asset xdr.Asset, amount, inputAmt int64, addr, temp string, anchor []byte, prv ed25519.PrivateKey, seqnum xdr.SequenceNumber) (*bc.Tx, error) {
 	if inputAmt < amount {
 		return nil, fmt.Errorf("cannot have input amount %d less than export amount %d", inputAmt, amount)
 	}
@@ -181,10 +255,16 @@ func BuildExportTx(ctx context.Context, asset xdr.Asset, amount, inputAmt int64,
 	if err != nil {
 		return nil, err
 	}
-	refdata := []byte(fmt.Sprintf(`{"asset":"%s","account":"%s"}`, assetXDR, addr))
 	assetIDBytes := txvm.AssetID(issueSeed[:], assetBytes)
 	assetID := bc.NewHash(assetIDBytes)
+	var rawSeed [32]byte
+	copy(rawSeed[:], prv)
+	kp, err := keypair.FromRawSeed(rawSeed)
+	if err != nil {
+		return nil, err
+	}
 	pubkey := prv.Public().(ed25519.PublicKey)
+	refdata := []byte(fmt.Sprintf(`{"asset":"%s","account":"%s","temp":"%s","seqnum":%d,"exporter":"%s"}`, assetXDR, addr, temp, int64(seqnum), kp.Address()))
 	tpl := txbuilder.NewTemplate(time.Now().Add(time.Minute), nil)
 	tpl.AddInput(1, [][]byte{prv}, nil, []ed25519.PublicKey{pubkey}, inputAmt, assetID, anchor, nil, 1)
 	tpl.AddRetirement(int64(amount), assetID, refdata)

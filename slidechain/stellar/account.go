@@ -1,6 +1,7 @@
 package stellar
 
 import (
+	"fmt"
 	"log"
 	"net/http"
 
@@ -19,16 +20,25 @@ func NewFundedAccount() *keypair.Full {
 	if err != nil {
 		log.Fatal(err, "generating random keypair")
 	}
-	resp, err := http.Get("https://friendbot.stellar.org/?addr=" + kp.Address())
+	err = FundAccount(kp.Address())
 	if err != nil {
-		log.Fatal(err, "requesting friendbot lumens")
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		log.Fatalf("got bad status code %d requesting friendbot lumens", resp.StatusCode)
+		log.Fatal(err)
 	}
 	log.Printf("successfully funded %s", kp.Address())
 	return kp
+}
+
+// FundAccount gets friendbot funds for an account on the Stellar testnet
+func FundAccount(address string) error {
+	resp, err := http.Get("https://friendbot.stellar.org/?addr=" + address)
+	if err != nil {
+		return errors.Wrap(err, "requesting friendbot lumens")
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("got bad status code %d requesting friendbot lumens", resp.StatusCode)
+	}
+	return nil
 }
 
 // IssueAsset issues an asset from the specified seed account
