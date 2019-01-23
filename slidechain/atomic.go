@@ -10,7 +10,6 @@ import (
 	"github.com/chain/txvm/crypto/ed25519"
 	"github.com/chain/txvm/errors"
 	"github.com/chain/txvm/protocol/bc"
-	"github.com/chain/txvm/protocol/txbuilder/txresult"
 	"github.com/chain/txvm/protocol/txvm"
 	"github.com/chain/txvm/protocol/txvm/asm"
 	"github.com/chain/txvm/protocol/txvm/op"
@@ -83,12 +82,11 @@ func (c *Custodian) buildPrepegTx(expMS int64, pubkey ed25519.PublicKey) ([]byte
 	fmt.Fprintf(buf, "x'%x' put\n", nonceHash)
 	fmt.Fprintf(buf, "x'%x' put\n", pubkey)
 	fmt.Fprintf(buf, "x'%x' contract call\n", atomicGuaranteePrePegProg)
-	fmt.Fprintf(buf, "finalize\n")
 	tx, err := asm.Assemble(buf.String())
 	if err != nil {
 		return nil, errors.Wrap(err, "assembling pre-peg atomicity tx")
 	}
-	_, err = txvm.Validate(tx, 3, math.MaxInt64, txvm.StopAfterFinalize)
+	_, err = txvm.Validate(tx, 3, math.MaxInt64)
 	if err != nil {
 		return nil, errors.Wrap(err, "computing pre-peg atomicity tx ID")
 	}
@@ -104,15 +102,13 @@ func (c *Custodian) DoPrePegTx(ctx context.Context, expMS int64, pubkey ed25519.
 	var runlimit int64
 	prepegTx, err := bc.NewTx(prepegTxBytes, 3, math.MaxInt64, txvm.GetRunlimit(&runlimit))
 	if err != nil {
-		return errors.Wrap(err, "computing prepeg tx ID")
+		return errors.Wrap(err, "computing pre-peg tx ID")
 	}
 	prepegTx.Runlimit = math.MaxInt64 - runlimit
 	err = c.S.submitTx(ctx, prepegTx)
 	if err != nil {
 		return errors.Wrap(err, "submitting prepeg tx")
 	}
-	txresult := txresult.New(prepegTx)
-	log.Printf("asset id: %x", txresult.Issuances[0].Value.AssetID)
-	log.Printf("output anchor: %x", txresult.Outputs[0].Value.Anchor)
+	log.Print("submitted pre-peg txvm tx")
 	return nil
 }
