@@ -57,7 +57,12 @@ func TestPegOut(t *testing.T) {
 	}
 	log.Printf("successfully funded destination account %s", destination)
 
-	_, err = c.DB.Exec("INSERT INTO exports (txid, recipient, amount, asset_xdr) VALUES ($1, $2, $3, $4)", "", destination, 50, lumenXDR)
+	temp, seqnum, err := PreExportTx(ctx, c.hclient, c.accountID.Address(), kp)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = c.DB.Exec("INSERT INTO exports (txid, recipient, amount, asset_xdr, temp, seqnum, exporter) VALUES ($1, $2, $3, $4, $5, $6, $7)", "", destination, 50, lumenXDR, temp, seqnum, kp.Address())
 	if err != nil && err != context.Canceled {
 		t.Fatal(err)
 	}
@@ -76,14 +81,22 @@ func TestPegOut(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				if env.Tx.SourceAccount.Address() != c.accountID.Address() {
+				if env.Tx.SourceAccount.Address() != temp {
 					log.Println("source accounts don't match, skipping...")
 					return
 				}
-				if len(env.Tx.Operations) != 1 {
-					t.Fatalf("too many operations got %d, want 1", len(env.Tx.Operations))
+				if len(env.Tx.Operations) != 2 {
+					t.Fatalf("too many operations got %d, want 2", len(env.Tx.Operations))
 				}
 				op := env.Tx.Operations[0]
+				if op.Body.Type != xdr.OperationTypeAccountMerge {
+					t.Fatalf("wrong operation type: got %s, want %s", op.Body.Type, xdr.OperationTypeAccountMerge)
+				}
+				if op.Body.Destination.Address() != kp.Address() {
+					t.Fatalf("wrong account merge destinatino: got %s, want %s", op.Body.Destination.Address(), kp.Address())
+				}
+
+				op = env.Tx.Operations[1]
 				if op.Body.Type != xdr.OperationTypePayment {
 					t.Fatalf("wrong operation type: got %s, want %s", op.Body.Type, xdr.OperationTypePayment)
 				}

@@ -272,30 +272,28 @@ func TestEndToEnd(t *testing.T) {
 		c.launch(ctx)
 
 		// Prepare Stellar account to peg-in funds and txvm account to receive funds
-		// TODO(vniu): make the peg-in account and the txvm account the same
 		amount := 5 * xlm.Lumen
-		// kp := stellar.NewFundedAccount()
 		recipientPub, recipientPrv, err := ed25519.GenerateKey(nil)
 		if err != nil {
 			t.Fatalf("error generating txvm recipient keypair: %s", err)
 		}
 		var recipientSeed [32]byte
 		copy(recipientSeed[:], recipientPrv)
-		kp, err := keypair.FromRawSeed(recipientSeed)
-		err = stellar.FundAccount(kp.Address())
+		recipient, err := keypair.FromRawSeed(recipientSeed)
+		err = stellar.FundAccount(recipient.Address())
 		if err != nil {
-			t.Fatalf("error funding account %s: %s", kp.Address(), err)
+			t.Fatalf("error funding account %s: %s", recipient.Address(), err)
 		}
 
 		var recipientPubkeyBytes [32]byte
 		copy(recipientPubkeyBytes[:], recipientPub)
 
 		// Build + submit transaction to peg-in funds
-		pegInTx, err := stellar.BuildPegInTx(kp.Address(), recipientPubkeyBytes, amount.HorizonString(), "", "", c.accountID.Address(), hclient)
+		pegInTx, err := stellar.BuildPegInTx(recipient.Address(), recipientPubkeyBytes, amount.HorizonString(), "", "", c.accountID.Address(), hclient)
 		if err != nil {
 			t.Fatalf("error building peg-in tx: %s", err)
 		}
-		txenv, err := pegInTx.Sign(kp.Seed())
+		txenv, err := pegInTx.Sign(recipient.Seed())
 		if err != nil {
 			t.Fatalf("error signing tx: %s", err)
 		}
@@ -342,11 +340,11 @@ func TestEndToEnd(t *testing.T) {
 		}
 
 		// Build + submit export tx
-		temp, seqnum, err := PreExportTx(ctx, hclient, c.accountID.Address(), kp)
+		temp, seqnum, err := PreExportTx(ctx, hclient, c.accountID.Address(), recipient)
 		if err != nil {
 			t.Fatalf("pre-submit tx error: %s", err)
 		}
-		exportTx, err := BuildExportTx(ctx, native, int64(amount), int64(amount), kp.Address(), temp, anchor, recipientPrv, seqnum)
+		exportTx, err := BuildExportTx(ctx, native, int64(amount), int64(amount), recipient.Address(), temp, anchor, recipientPrv, seqnum)
 		if err != nil {
 			t.Fatalf("error building retirement tx %s", err)
 		}
@@ -366,7 +364,7 @@ func TestEndToEnd(t *testing.T) {
 		retire := make(chan struct{})
 		go func() {
 			var cur horizon.Cursor
-			err := c.hclient.StreamTransactions(ctx, kp.Address(), &cur, func(tx horizon.Transaction) {
+			err := c.hclient.StreamTransactions(ctx, recipient.Address(), &cur, func(tx horizon.Transaction) {
 				log.Printf("received tx: %s", tx.EnvelopeXdr)
 				var env xdr.TransactionEnvelope
 				err := xdr.SafeUnmarshalBase64(tx.EnvelopeXdr, &env)
@@ -385,16 +383,16 @@ func TestEndToEnd(t *testing.T) {
 				if op.Body.Type != xdr.OperationTypeAccountMerge {
 					t.Fatalf("wrong operation type: got %s, want %s", op.Body.Type, xdr.OperationTypeAccountMerge)
 				}
-				if op.Body.Destination.Address() != kp.Address() {
-					t.Fatalf("wrong account merge destination: got %s, want %s", op.Body.Destination.Address(), kp.Address())
+				if op.Body.Destination.Address() != recipient.Address() {
+					t.Fatalf("wrong account merge destination: got %s, want %s", op.Body.Destination.Address(), recipient.Address())
 				}
 				op = env.Tx.Operations[1]
 				if op.Body.Type != xdr.OperationTypePayment {
 					t.Fatalf("wrong operation type: got %s, want %s", op.Body.Type, xdr.OperationTypePayment)
 				}
 				paymentOp := op.Body.PaymentOp
-				if paymentOp.Destination.Address() != kp.Address() {
-					t.Fatalf("incorrect payment destination got %s, want %s", paymentOp.Destination.Address(), kp.Address())
+				if paymentOp.Destination.Address() != recipient.Address() {
+					t.Fatalf("incorrect payment destination got %s, want %s", paymentOp.Destination.Address(), recipient.Address())
 				}
 				if paymentOp.Amount != xdr.Int64(amount) {
 					t.Fatalf("got incorrect payment amount %d, want %d", paymentOp.Amount, amount)

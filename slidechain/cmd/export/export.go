@@ -94,7 +94,6 @@ func main() {
 	kp, err := keypair.FromRawSeed(seed)
 	hclient := horizon.DefaultTestNetClient
 	if _, err := hclient.SequenceForAccount(kp.Address()); err != nil {
-		// create account
 		err := stellar.FundAccount(kp.Address())
 		if err != nil {
 			log.Fatalf("error funding Stellar account %s: %s", kp.Address(), err)

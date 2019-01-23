@@ -108,7 +108,6 @@ func (c *Custodian) watchExports(ctx context.Context) {
 		}
 		b := got.(*bc.Block)
 		for _, tx := range b.Transactions {
-			log.Println("reading a tx...")
 			// Look for a retire-type ("X") entry
 			// followed by a specially formatted log ("L") entry
 			// that specifies the Stellar asset code to peg out and the Stellar recipient account ID.
@@ -134,7 +133,6 @@ func (c *Custodian) watchExports(ctx context.Context) {
 				}
 				err := json.Unmarshal(infoItem[2].(txvm.Bytes), &info)
 				if err != nil {
-					log.Println("error unmarshaling export tx info: ", err)
 					continue
 				}
 
