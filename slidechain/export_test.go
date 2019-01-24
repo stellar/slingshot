@@ -6,11 +6,11 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
-	"net/http"
 	"os"
 	"testing"
 	"time"
 
+	"github.com/interstellar/slingshot/slidechain/stellar"
 	"github.com/stellar/go/clients/horizon"
 	"github.com/stellar/go/keypair"
 	"github.com/stellar/go/xdr"
@@ -46,23 +46,17 @@ func TestPegOut(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	destination := kp.Address()
-	resp, err := http.Get("https://friendbot.stellar.org/?addr=" + destination)
+	err = stellar.FundAccount(kp.Address())
 	if err != nil {
-		t.Fatal(err, "requesting lumens through friendbot")
+		t.Fatalf("error funding account %s: %s", kp.Address(), err)
 	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("got bad status code %d funding destination address through friendbot", resp.StatusCode)
-	}
-	log.Printf("successfully funded destination account %s", destination)
 
-	temp, seqnum, err := PreExportTx(ctx, c.hclient, c.accountID.Address(), kp)
+	temp, seqnum, err := SubmitPreExportTx(ctx, c.hclient, c.accountID.Address(), kp)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	_, err = c.DB.Exec("INSERT INTO exports (txid, recipient, amount, asset_xdr, temp, seqnum, exporter) VALUES ($1, $2, $3, $4, $5, $6, $7)", "", destination, 50, lumenXDR, temp, seqnum, kp.Address())
+	_, err = c.DB.Exec("INSERT INTO exports (txid, amount, asset_xdr, temp, seqnum, exporter) VALUES ($1, $2, $3, $4, $5, $6)", "", 50, lumenXDR, temp, seqnum, kp.Address())
 	if err != nil && err != context.Canceled {
 		t.Fatal(err)
 	}
@@ -74,7 +68,7 @@ func TestPegOut(t *testing.T) {
 	go func() {
 		var cursor horizon.Cursor
 		for {
-			err := c.hclient.StreamTransactions(ctx, destination, &cursor, func(tx horizon.Transaction) {
+			err := c.hclient.StreamTransactions(ctx, kp.Address(), &cursor, func(tx horizon.Transaction) {
 				log.Printf("received tx: %s", tx.EnvelopeXdr)
 				var env xdr.TransactionEnvelope
 				err := xdr.SafeUnmarshalBase64(tx.EnvelopeXdr, &env)
@@ -101,8 +95,8 @@ func TestPegOut(t *testing.T) {
 					t.Fatalf("wrong operation type: got %s, want %s", op.Body.Type, xdr.OperationTypePayment)
 				}
 				paymentOp := op.Body.PaymentOp
-				if paymentOp.Destination.Address() != destination {
-					t.Fatalf("incorrect payment destination got %s, want %s", paymentOp.Destination.Address(), destination)
+				if paymentOp.Destination.Address() != kp.Address() {
+					t.Fatalf("incorrect payment destination got %s, want %s", paymentOp.Destination.Address(), kp.Address())
 				}
 				if paymentOp.Amount != 50 {
 					t.Fatalf("got incorrect payment amount %d, want %d", paymentOp.Amount, 50)

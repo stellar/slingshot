@@ -21,20 +21,20 @@ import (
 
 func main() {
 	var (
-		dest        = flag.String("destination", "", "Stellar address to peg funds out to")
+		// dest        = flag.String("destination", "", "Stellar address to peg funds out to")
+		prv         = flag.String("prv", "", "hex encoding of ed25519 key for txvm and Stellar account")
 		amount      = flag.String("amount", "", "amount to export")
 		anchor      = flag.String("anchor", "", "txvm anchor of input to consume")
 		input       = flag.String("input", "", "total amount of input")
-		prv         = flag.String("prv", "", "private key of txvm account")
 		slidechaind = flag.String("slidechaind", "http://127.0.0.1:2423", "url of slidechaind server")
 		code        = flag.String("code", "", "asset code if exporting non-lumen Stellar asset")
 		issuer      = flag.String("issuer", "", "issuer of asset if exporting non-lumen Stellar asset")
 	)
 
 	flag.Parse()
-	if *dest == "" {
-		log.Fatal("must specify peg-out destination")
-	}
+	// if *dest == "" {
+	// 	log.Fatal("must specify peg-out destination")
+	// }
 	if *amount == "" {
 		log.Fatal("must specify amount to peg-out")
 	}
@@ -85,6 +85,7 @@ func main() {
 		inputAmount = int64(inputXlm)
 	}
 	*slidechaind = strings.TrimRight(*slidechaind, "/")
+
 	// Build + submit pre-export tx
 
 	// Check that stellar account exists
@@ -109,13 +110,13 @@ func main() {
 	if err != nil {
 		log.Fatalf("error unmarshaling custodian account id: %s", err)
 	}
-	temp, seqnum, err := slidechain.PreExportTx(ctx, hclient, custodian.Address(), kp)
+	temp, seqnum, err := slidechain.SubmitPreExportTx(ctx, hclient, custodian.Address(), kp)
 	if err != nil {
 		log.Fatalf("error submitting pre-export tx: %s", err)
 	}
 
 	// Export funds from slidechain
-	tx, err := slidechain.BuildExportTx(ctx, asset, exportAmount, inputAmount, *dest, temp, mustDecode(*anchor), mustDecode(*prv), seqnum)
+	tx, err := slidechain.BuildExportTx(ctx, asset, exportAmount, inputAmount, temp, mustDecode(*anchor), mustDecode(*prv), seqnum)
 	if err != nil {
 		log.Fatalf("error building export tx: %s", err)
 	}
@@ -123,6 +124,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	// TODO(vniu): have command wait until export tx hits the txvm chain
 	resp, err = http.Post(*slidechaind+"/submit", "application/octet-stream", bytes.NewReader(txbits))
 	if err != nil {
 		log.Fatalf("error submitting tx to slidechaind: %s", err)

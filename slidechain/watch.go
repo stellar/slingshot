@@ -126,7 +126,6 @@ func (c *Custodian) watchExports(ctx context.Context) {
 				}
 				var info struct {
 					AssetXDR []byte `json:"asset"`
-					Account  string `json:"account"`
 					Temp     string `json:"temp"`
 					Seqnum   int64  `json:"seqnum"`
 					Exporter string `json:"exporter"`
@@ -142,8 +141,8 @@ func (c *Custodian) watchExports(ctx context.Context) {
 					continue
 				}
 
-				var stellarRecipient xdr.AccountId
-				err = stellarRecipient.SetAddress(info.Account)
+				var exporter xdr.AccountId
+				err = exporter.SetAddress(info.Exporter)
 				if err != nil {
 					continue
 				}
@@ -152,14 +151,14 @@ func (c *Custodian) watchExports(ctx context.Context) {
 				// then wake up a goroutine that executes peg-outs on the main chain.
 				const q = `
 					INSERT INTO exports 
-					(txid, exporter, recipient, amount, asset_xdr, temp, seqnum)
-					VALUES ($1, $2, $3, $4, $5, $6, $7)`
-				_, err = c.DB.ExecContext(ctx, q, tx.ID.Bytes(), info.Exporter, stellarRecipient.Address(), retiredAmount, info.AssetXDR, info.Temp, info.Seqnum)
+					(txid, exporter, amount, asset_xdr, temp, seqnum)
+					VALUES ($1, $2, $3, $4, $5, $6)`
+				_, err = c.DB.ExecContext(ctx, q, tx.ID.Bytes(), exporter.Address(), retiredAmount, info.AssetXDR, info.Temp, info.Seqnum)
 				if err != nil {
 					log.Fatalf("recording export tx: %s", err)
 				}
 
-				log.Printf("recorded export: %d of txvm asset %x (Stellar %x) for %s", retiredAmount, retiredAssetIDBytes, info.AssetXDR, info.Account)
+				log.Printf("recorded export: %d of txvm asset %x (Stellar %x) for %s", retiredAmount, retiredAssetIDBytes, info.AssetXDR, exporter.Address())
 
 				c.exports.Broadcast()
 
