@@ -9,7 +9,7 @@ import (
 )
 
 // BuildPegInTx builds a slidechain peg-in transaction
-func BuildPegInTx(source string, txvmPubkey [32]byte, amount, code, issuer, destination string, hclient *horizon.Client) (*b.TransactionBuilder, error) {
+func BuildPegInTx(source string, amount, code, issuer, destination string, hclient *horizon.Client) (*b.TransactionBuilder, error) {
 	root, err := hclient.Root()
 	if err != nil {
 		return nil, err
@@ -35,7 +35,6 @@ func BuildPegInTx(source string, txvmPubkey [32]byte, amount, code, issuer, dest
 		b.SourceAccount{AddressOrSeed: source},
 		b.AutoSequence{SequenceProvider: hclient},
 		b.BaseFee{Amount: 100},
-		b.MemoHash{Value: xdr.Hash(txvmPubkey)},
 		paymentOp,
 	)
 }

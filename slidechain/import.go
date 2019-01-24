@@ -92,15 +92,12 @@ func (c *Custodian) importFromPegs(ctx context.Context) {
 		}
 
 		var (
-			txids             []string
-			opNums            []int
-			amounts, expMSs   []int64
-			assetXDRs, recips [][]byte
+			amounts, expMSs               []int64
+			nonceHashs, assetXDRs, recips [][]byte
 		)
-		const q = `SELECT txid, operation_num, amount, asset_xdr, recipient_pubkey, expiration_ms FROM pegs WHERE imported=0`
-		err := sqlutil.ForQueryRows(ctx, c.DB, q, func(txid string, opNum int, amount int64, assetXDR, recip []byte, expMS int64) {
-			txids = append(txids, txid)
-			opNums = append(opNums, opNum)
+		const q = `SELECT nonce_hash, amount, asset_xdr, recipient_pubkey, expiration_ms FROM pegs WHERE imported=0`
+		err := sqlutil.ForQueryRows(ctx, c.DB, q, func(nonceHash []byte, amount int64, assetXDR, recip []byte, expMS int64) {
+			nonceHashs = append(nonceHashs, nonceHash)
 			amounts = append(amounts, amount)
 			assetXDRs = append(assetXDRs, assetXDR)
 			recips = append(recips, recip)
@@ -112,15 +109,14 @@ func (c *Custodian) importFromPegs(ctx context.Context) {
 		if err != nil {
 			log.Fatalf("querying pegs: %s", err)
 		}
-		for i, txid := range txids {
+		for i, nonceHash := range nonceHashs {
 			var (
-				opNum    = opNums[i]
 				amount   = amounts[i]
 				assetXDR = assetXDRs[i]
-				recip    = recips[i]
 				expMS    = expMSs[i]
+				recip    = recips[i]
 			)
-			err = c.doImport(ctx, txid, opNum, amount, assetXDR, recip, expMS)
+			err = c.doImport(ctx, amount, nonceHash, assetXDR, recip, expMS)
 			if err != nil {
 				if err == context.Canceled {
 					return
@@ -131,8 +127,8 @@ func (c *Custodian) importFromPegs(ctx context.Context) {
 	}
 }
 
-func (c *Custodian) doImport(ctx context.Context, txid string, opNum int, amount int64, assetXDR, recip []byte, expMS int64) error {
-	log.Printf("doing import from tx %s, op %d: %d of asset %x for recipient %x with expiration time %d", txid, opNum, amount, assetXDR, recip, expMS)
+func (c *Custodian) doImport(ctx context.Context, amount int64, nonceHash, assetXDR, recip []byte, expMS int64) error {
+	log.Printf("doing import of tx with uniqueness hash %x: %d of asset %x for recipient %x with expiration time %d", nonceHash, amount, assetXDR, recip, expMS)
 
 	importTxBytes, err := c.buildImportTx(amount, assetXDR, recip, expMS)
 	if err != nil {
@@ -151,14 +147,14 @@ func (c *Custodian) doImport(ctx context.Context, txid string, opNum int, amount
 	txresult := txresult.New(importTx)
 	log.Printf("asset id: %x", txresult.Issuances[0].Value.AssetID)
 	log.Printf("output anchor: %x", txresult.Outputs[0].Value.Anchor)
-	_, err = c.DB.ExecContext(ctx, `UPDATE pegs SET imported=1 WHERE txid = $1 AND operation_num = $2`, txid, opNum)
-	return errors.Wrapf(err, "setting imported=1 for txid %s, operation %d", txid, opNum)
+	_, err = c.DB.ExecContext(ctx, `UPDATE pegs SET imported=1 WHERE nonce_hash = $1`, nonceHash)
+	return errors.Wrapf(err, "setting imported=1 for tx with uniqueness hash %x", nonceHash)
 }
 
 // RecordPegs records the pegs-in for a transaction.
 // TODO(debnil): Create a new file for this method.
-func (c *Custodian) RecordPegs(ctx context.Context, tx xdr.Transaction, txid string, recipientPubkey []byte, expMS int64) error {
-	for i, op := range tx.Operations {
+func (c *Custodian) RecordPegs(ctx context.Context, tx xdr.Transaction, recipientPubkey []byte, expMS int64) error {
+	for _, op := range tx.Operations {
 		if op.Body.Type != xdr.OperationTypePayment {
 			continue
 		}
@@ -168,18 +164,18 @@ func (c *Custodian) RecordPegs(ctx context.Context, tx xdr.Transaction, txid str
 		}
 		// This operation is a payment to the custodian's account - i.e., a peg.
 		// We record it in the db.
+		nonceHash := AtomicNonceHash(c.InitBlockHash.Bytes(), expMS)
 		const q = `INSERT INTO pegs 
-			(txid, operation_num, amount, asset_xdr, recipient_pubkey, expiration_ms)
-			VALUES ($1, $2, $3, $4, $5, $6)`
+			(nonce_hash, amount, asset_xdr, recipient_pubkey, expiration_ms)
+			VALUES ($1, $2, $3, $4, $5)`
 		assetXDR, err := payment.Asset.MarshalBinary()
 		if err != nil {
 			return errors.Wrap(err, fmt.Sprintf("marshaling asset to XDR %s", payment.Asset.String()))
 		}
-		_, err = c.DB.ExecContext(ctx, q, txid, i, payment.Amount, assetXDR, recipientPubkey, expMS)
+		_, err = c.DB.ExecContext(ctx, q, nonceHash[:], payment.Amount, assetXDR, recipientPubkey, expMS)
 		if err != nil {
 			return errors.Wrap(err, "recording peg-in tx")
 		}
 	}
-	log.Printf("successfully recorded pegs for tx with id %s", txid)
 	return nil
 }

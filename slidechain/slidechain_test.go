@@ -288,7 +288,7 @@ func TestEndToEnd(t *testing.T) {
 			log.Fatalf("error with pre-peg tx: %s", err)
 		}
 		// Build + submit transaction to peg-in funds
-		pegInTx, err := stellar.BuildPegInTx(kp.Address(), recipientPubkeyBytes, amount.HorizonString(), "", "", c.AccountID.Address(), hclient)
+		pegInTx, err := stellar.BuildPegInTx(kp.Address(), amount.HorizonString(), "", "", c.AccountID.Address(), hclient)
 		if err != nil {
 			t.Fatalf("error building peg-in tx: %s", err)
 		}
@@ -305,10 +305,11 @@ func TestEndToEnd(t *testing.T) {
 			t.Fatalf("error submitting tx: %s", err)
 		}
 		log.Printf("successfully submitted peg-in tx: id %s, ledger %d", succ.Hash, succ.Ledger)
-		err = c.RecordPegs(ctx, txenv.E.Tx, succ.Hash, recipientPubkeyBytes[:], expMS)
+		err = c.RecordPegs(ctx, txenv.E.Tx, recipientPubkeyBytes[:], expMS)
 		if err != nil {
 			t.Fatalf("error recording pegs: %s", err)
 		}
+		log.Printf("successfully recorded pegs for tx id %s", succ.Hash)
 		native := xdr.Asset{
 			Type: xdr.AssetTypeAssetTypeNative,
 		}

@@ -84,12 +84,11 @@ func main() {
 		log.Fatalf("error getting custodian: %s", err)
 	}
 	expMS := int64(bc.Millis(time.Now().Add(10 * time.Minute)))
-	// TODO(debnil): Should we launch this concurrently and wait?
 	err = c.DoPrePegTx(ctx, expMS, recipientPubkey[:])
 	if err != nil {
 		log.Fatalf("error with pre-peg tx: %s", err)
 	}
-	tx, err := stellar.BuildPegInTx(*seed, recipientPubkey, *amount, *code, *issuer, *custodian, hclient)
+	tx, err := stellar.BuildPegInTx(*seed, *amount, *code, *issuer, *custodian, hclient)
 	if err != nil {
 		log.Fatal(err, "building transaction")
 	}
@@ -106,8 +105,9 @@ func main() {
 		log.Fatalf("%s: submitting tx %s", err, txstr)
 	}
 	log.Printf("successfully submitted peg-in tx hash %s on ledger %d", succ.Hash, succ.Ledger)
-	err = c.RecordPegs(ctx, txenv.E.Tx, succ.Hash, recipientPubkey[:], expMS)
+	err = c.RecordPegs(ctx, txenv.E.Tx, recipientPubkey[:], expMS)
 	if err != nil {
 		log.Fatal(err, "recording pegs")
 	}
+	log.Printf("successfully recorded pegs for tx hash %s", succ.Hash)
 }

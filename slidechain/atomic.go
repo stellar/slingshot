@@ -104,6 +104,7 @@ func (c *Custodian) DoPrePegTx(ctx context.Context, expMS int64, pubkey ed25519.
 		return errors.Wrap(err, "computing pre-peg tx ID")
 	}
 	prepegTx.Runlimit = math.MaxInt64 - runlimit
+	// TODO(debnil): This should not return until the pre-peg tx hits the blockchain.
 	err = c.S.submitTx(ctx, prepegTx)
 	if err != nil {
 		return errors.Wrap(err, "submitting prepeg tx")
