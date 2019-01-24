@@ -305,7 +305,10 @@ func TestEndToEnd(t *testing.T) {
 			t.Fatalf("error submitting tx: %s", err)
 		}
 		log.Printf("successfully submitted peg-in tx: id %s, ledger %d", succ.Hash, succ.Ledger)
-
+		err = c.RecordPegs(ctx, txenv.E.Tx, succ.Hash, recipientPubkeyBytes[:], expMS)
+		if err != nil {
+			t.Fatalf("error recording pegs: %s", err)
+		}
 		native := xdr.Asset{
 			Type: xdr.AssetTypeAssetTypeNative,
 		}

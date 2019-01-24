@@ -74,8 +74,7 @@ func importAtomicGuaranteeSnapshot(b *txvmutil.Builder, pubkey ed25519.PublicKey
 	})
 }
 
-// PrePegAtomicGuarantee calls the atomicity-guarantee pre-peg contract to set up the recipient
-// pubkey and zeroval, the items needed to test utxo uniqueness.
+// buildPrepegTx calls the atomicity-guarantee pre-peg contract to test utxo uniqueness.
 func (c *Custodian) buildPrepegTx(expMS int64, pubkey ed25519.PublicKey) ([]byte, error) {
 	nonceHash := AtomicNonceHash(c.InitBlockHash.Bytes(), expMS)
 	buf := new(bytes.Buffer)
@@ -93,8 +92,8 @@ func (c *Custodian) buildPrepegTx(expMS int64, pubkey ed25519.PublicKey) ([]byte
 	return tx, nil
 }
 
+// DoPrePegTx builds and submits the pre-peg txvm transaction.
 func (c *Custodian) DoPrePegTx(ctx context.Context, expMS int64, pubkey ed25519.PublicKey) error {
-	// TODO(debnil): Top of function log.
 	prepegTxBytes, err := c.buildPrepegTx(expMS, pubkey)
 	if err != nil {
 		return errors.Wrap(err, "building pre-peg tx")

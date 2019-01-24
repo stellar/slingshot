@@ -16,6 +16,7 @@ import (
 	"github.com/chain/txvm/protocol/txvm"
 	"github.com/chain/txvm/protocol/txvm/asm"
 	"github.com/chain/txvm/protocol/txvm/txvmutil"
+	"github.com/stellar/go/xdr"
 )
 
 // buildImportTx builds the import transaction.
@@ -152,4 +153,33 @@ func (c *Custodian) doImport(ctx context.Context, txid string, opNum int, amount
 	log.Printf("output anchor: %x", txresult.Outputs[0].Value.Anchor)
 	_, err = c.DB.ExecContext(ctx, `UPDATE pegs SET imported=1 WHERE txid = $1 AND operation_num = $2`, txid, opNum)
 	return errors.Wrapf(err, "setting imported=1 for txid %s, operation %d", txid, opNum)
+}
+
+// RecordPegs records the pegs-in for a transaction.
+// TODO(debnil): Create a new file for this method.
+func (c *Custodian) RecordPegs(ctx context.Context, tx xdr.Transaction, txid string, recipientPubkey []byte, expMS int64) error {
+	for i, op := range tx.Operations {
+		if op.Body.Type != xdr.OperationTypePayment {
+			continue
+		}
+		payment := op.Body.PaymentOp
+		if !payment.Destination.Equals(c.AccountID) {
+			continue
+		}
+		// This operation is a payment to the custodian's account - i.e., a peg.
+		// We record it in the db.
+		const q = `INSERT INTO pegs 
+			(txid, operation_num, amount, asset_xdr, recipient_pubkey, expiration_ms)
+			VALUES ($1, $2, $3, $4, $5, $6)`
+		assetXDR, err := payment.Asset.MarshalBinary()
+		if err != nil {
+			return errors.Wrap(err, fmt.Sprintf("marshaling asset to XDR %s", payment.Asset.String()))
+		}
+		_, err = c.DB.ExecContext(ctx, q, txid, i, payment.Amount, assetXDR, recipientPubkey, expMS)
+		if err != nil {
+			return errors.Wrap(err, "recording peg-in tx")
+		}
+	}
+	log.Printf("successfully recorded pegs for tx with id %s", txid)
+	return nil
 }

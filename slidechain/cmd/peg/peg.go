@@ -106,27 +106,8 @@ func main() {
 		log.Fatalf("%s: submitting tx %s", err, txstr)
 	}
 	log.Printf("successfully submitted peg-in tx hash %s on ledger %d", succ.Hash, succ.Ledger)
-	for i, op := range txenv.E.Tx.Operations {
-		if op.Body.Type != xdr.OperationTypePayment {
-			continue
-		}
-		payment := op.Body.PaymentOp
-		if !payment.Destination.Equals(c.AccountID) {
-			continue
-		}
-		// This operation is a payment to the custodian's account - i.e., a peg.
-		// We record it in the db.
-		const q = `INSERT INTO pegs 
-			(txid, operation_num, amount, asset_xdr, recipient_pubkey, expiration_ms)
-			VALUES ($1, $2, $3, $4, $5, $6)`
-		assetXDR, err := payment.Asset.MarshalBinary()
-		if err != nil {
-			log.Fatalf("error marshaling asset to XDR %s: %s", payment.Asset.String(), err)
-		}
-		_, err = c.DB.ExecContext(ctx, q, succ.Hash, i, payment.Amount, assetXDR, recipientPubkey, expMS)
-		if err != nil {
-			log.Fatal("error recording peg-in tx: ", err)
-		}
+	err = c.RecordPegs(ctx, txenv.E.Tx, succ.Hash, recipientPubkey[:], expMS)
+	if err != nil {
+		log.Fatal(err, "recording pegs")
 	}
-	log.Printf("successfully inserted peg with tx id %s into db", succ.Hash)
 }
