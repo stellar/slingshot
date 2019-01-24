@@ -6,7 +6,9 @@ sidechain.
 
 The mechanism described here depends on a _trusted custodian_.
 There are other pegging techniques not discussed here.
-[xxx external cross-reference]
+You can read more about them
+[here](https://medium.com/blockchain-musings/pegged-sidechains-cafe1d8c7023),
+among other places.
 
 ## Terminology
 
@@ -136,7 +138,7 @@ together with a signature-checking contract that requires the custodian’s sign
 Exporting funds from TxVM for peg-out to Stellar requires two steps:
 
 1. Create a _temporary account_ in Stellar,
-   funded with xxx lumens,
+   funded with 2 lumens,
    with the custodian as the sole signer;
 2. [Retire](https://github.com/chain/txvm/blob/main/specifications/txvm.md#retire)
    some imported funds in a transaction where the `retire` instruction is immediately followed by a
@@ -155,6 +157,11 @@ The temporary account will be closed
 (merged back to the exporter’s account)
 in the peg-out step.
 It exists to ensure the peg-out step for this particular export can happen only once.
+The 2 lumens it contains are enough to cover the temp account’s
+[minimum balance](https://www.stellar.org/developers/guides/concepts/fees.html#minimum-account-balance)
+plus the cost of the peg-out transaction,
+below.
+Any excess is paid back to the recipient of the peg-out when the temp account is merged.
 
 Note:
 A temporary account at a given sequence number is not sufficiently unique to defend against concerted attack.
