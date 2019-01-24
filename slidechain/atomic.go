@@ -114,12 +114,12 @@ func (c *Custodian) DoPrePegTx(ctx context.Context, expMS int64, pubkey ed25519.
 }
 
 func (c *Custodian) submitPrePegTx(ctx context.Context, prepegTx *bc.Tx) error {
-	checkHeight := c.S.chain.Height()
+	checkHeight := c.S.chain.Height() + 1
 	err := c.S.submitTx(ctx, prepegTx)
 	if err != nil {
 		return errors.Wrap(err, "submitting pre-peg tx")
 	}
-	for { // TODO(debnil): What should the exit condition be here?
+	for {
 		var b *bc.Block
 		for i := 0; i < 10; i++ {
 			b, err = c.S.chain.GetBlock(ctx, checkHeight)
