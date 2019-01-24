@@ -71,13 +71,16 @@ and submit them to the `slidechaind` server's `/submit` endpoint.
 
 To retire funds back out to the Stellar network,
 we can use the slidechain `export` command.
+The `export` command
+will peg out the specified funds to the exporter's Stellar account,
+which shares an ed25519 private key with the exporter's txvm account.
 
 You can create a new Stellar account to receive the pegged-out funds using the `account new` command,
 or use the automatically-generated account from our `peg` command earlier.
 
 ```sh
 $ go build ./cmd/export
-$ ./export -destination [destination account ID] -amount 100 -anchor [import anchor] -prv [txvm prv key]
+$ ./export -prv [exporter prv key] -amount 100 -anchor [import anchor]
 ```
 
 If you want to export only part of the imported funds,
@@ -86,7 +89,7 @@ Then,
 any leftover funds will be output back to the initial owner.
 
 ```sh
-$ ./export -destination [destination account ID] -amount 50 -inputamt 100 -anchor [import anchor] -prv [txvm prv key]
+$ ./export -prv [exporter prv key] -amount 50 -inputamt 100 -anchor [import anchor]
 ```
 
 `slidechaind` will print logs that it is retiring the funds and building a peg-out transaction.

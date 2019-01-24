@@ -32,9 +32,6 @@ func main() {
 	)
 
 	flag.Parse()
-	// if *dest == "" {
-	// 	log.Fatal("must specify peg-out destination")
-	// }
 	if *amount == "" {
 		log.Fatal("must specify amount to peg-out")
 	}
