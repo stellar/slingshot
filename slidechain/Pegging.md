@@ -1,6 +1,8 @@
 # The Slidechain pegging mechanism
 
-This document describes the mechanism by which Stellar funds are _pegged_ to values on a TxVM sidechain.
+This document describes the mechanism by which Stellar funds are _pegged_ to values on a
+[TxVM](https://github.com/chain/txvm/)
+sidechain.
 
 The mechanism described here depends on a _trusted custodian_.
 There are other pegging techniques not discussed here.
@@ -11,7 +13,7 @@ There are other pegging techniques not discussed here.
 Some funds exist on a _main chain_.
 
 These may be _pegged in_.
-This means the funds are immobilized and may not be used in any way until they are _pegged out_.
+This means the funds are immobilized and may not be used in any way on the main chain until they are _pegged out_.
 
 Once funds are _pegged in_,
 they are _imported_ to the sidechain.
@@ -140,14 +142,14 @@ Exporting funds from TxVM for peg-out to Stellar requires two steps:
    some imported funds in a transaction where the `retire` instruction is immediately followed by a
    [log](https://github.com/chain/txvm/blob/main/specifications/txvm.md#log)
    of this JSON string:
-   `{"asset":ASSET,"account":ACCOUNT,"seqnum":SEQNUM,"exporter":EXPORTER}`,
+   `{"asset":ASSET,"temp":TEMP,"seqnum":SEQNUM,"exporter":EXPORTER}`,
    where
    - ASSET is the Stellar asset code
      (as base64-encoded XDR)
      of the funds to peg out;
-   - ACCOUNT is the destination for the peg-out payment;
+   - TEMP is the temporary account created in step 1;
    - SEQNUM is the sequence number of the temporary account;
-   - EXPORTER is the creator of the temporary account.
+   - EXPORTER is the creator of the temporary account and the intended recipient of the peg-out funds.
 
 The temporary account will be closed
 (merged back to the exporter’s account)
@@ -169,9 +171,7 @@ looking for export transactions.
 When it finds one,
 it parses the information in the JSON string and verifies that the TxVM asset ID of the value being retired corresponds to the given Stellar asset code.
 It then builds a Stellar transaction whose “Source” is the temp account and that does the following:
-- Pays N units of the given Stellar asset from the custodian’s account to the destination account;
+- Pays N units of the given Stellar asset from the custodian’s account to the exporter account;
 - Merges the temp account back to the exporter account.
-
-[xxx should exporter always == recipient?]
 
 The custodian’s signature is added to the transaction and it is published to the Stellar network.
