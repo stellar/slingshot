@@ -21,7 +21,6 @@ import (
 
 func main() {
 	var (
-		// dest        = flag.String("destination", "", "Stellar address to peg funds out to")
 		prv         = flag.String("prv", "", "hex encoding of ed25519 key for txvm and Stellar account")
 		amount      = flag.String("amount", "", "amount to export")
 		anchor      = flag.String("anchor", "", "txvm anchor of input to consume")
