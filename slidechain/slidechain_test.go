@@ -34,6 +34,7 @@ import (
 	"github.com/interstellar/starlight/worizon/xlm"
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/stellar/go/clients/horizon"
+	"github.com/stellar/go/keypair"
 	"github.com/stellar/go/xdr"
 )
 
@@ -241,7 +242,7 @@ func TestImport(t *testing.T) {
 }
 
 func TestEndToEnd(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 	withTestServer(ctx, t, func(ctx context.Context, db *sql.DB, s *submitter, sv *httptest.Server, ch *protocol.Chain) {
 		hclient := &horizon.Client{
@@ -272,20 +273,27 @@ func TestEndToEnd(t *testing.T) {
 
 		// Prepare Stellar account to peg-in funds and txvm account to receive funds
 		amount := 5 * xlm.Lumen
-		kp := stellar.NewFundedAccount()
-		recipientPub, recipientPrv, err := ed25519.GenerateKey(nil)
+		exporterPub, exporterPrv, err := ed25519.GenerateKey(nil)
 		if err != nil {
 			t.Fatalf("error generating txvm recipient keypair: %s", err)
 		}
-		var recipientPubkeyBytes [32]byte
-		copy(recipientPubkeyBytes[:], recipientPub)
+		var exporterSeed [32]byte
+		copy(exporterSeed[:], exporterPrv)
+		exporter, err := keypair.FromRawSeed(exporterSeed)
+		err = stellar.FundAccount(exporter.Address())
+		if err != nil {
+			t.Fatalf("error funding account %s: %s", exporter.Address(), err)
+		}
+
+		var exporterPubKeyBytes [32]byte
+		copy(exporterPubKeyBytes[:], exporterPub)
 
 		// Build + submit transaction to peg-in funds
-		pegInTx, err := stellar.BuildPegInTx(kp.Address(), recipientPubkeyBytes, amount.HorizonString(), "", "", c.accountID.Address(), hclient)
+		pegInTx, err := stellar.BuildPegInTx(exporter.Address(), exporterPubKeyBytes, amount.HorizonString(), "", "", c.accountID.Address(), hclient)
 		if err != nil {
 			t.Fatalf("error building peg-in tx: %s", err)
 		}
-		txenv, err := pegInTx.Sign(kp.Seed())
+		txenv, err := pegInTx.Sign(exporter.Seed())
 		if err != nil {
 			t.Fatalf("error signing tx: %s", err)
 		}
@@ -318,7 +326,7 @@ func TestEndToEnd(t *testing.T) {
 			}
 			block := item.(*bc.Block)
 			for _, tx := range block.Transactions {
-				if isImportTx(tx, int64(amount), nativeAssetBytes, recipientPub) {
+				if isImportTx(tx, int64(amount), nativeAssetBytes, exporterPub) {
 					log.Printf("found import tx %x", tx.Program)
 					found = true
 					txresult := txresult.New(tx)
@@ -331,8 +339,13 @@ func TestEndToEnd(t *testing.T) {
 			}
 		}
 
-		// Build + submit export tx
-		exportTx, err := BuildExportTx(ctx, native, int64(amount), int64(amount), kp.Address(), anchor, recipientPrv)
+		log.Println("submitting pre-export tx...")
+		temp, seqnum, err := SubmitPreExportTx(ctx, hclient, c.accountID.Address(), exporter)
+		if err != nil {
+			t.Fatalf("pre-submit tx error: %s", err)
+		}
+		log.Println("building export tx...")
+		exportTx, err := BuildExportTx(ctx, native, int64(amount), int64(amount), temp, anchor, exporterPrv, seqnum)
 		if err != nil {
 			t.Fatalf("error building retirement tx %s", err)
 		}
@@ -348,32 +361,41 @@ func TestEndToEnd(t *testing.T) {
 			t.Fatalf("status code %d from POST /submit", resp.StatusCode)
 		}
 
+		log.Println("checking for successful retirement...")
+
 		// Check for successful retirement
 		retire := make(chan struct{})
 		go func() {
 			var cur horizon.Cursor
-			err := c.hclient.StreamTransactions(ctx, kp.Address(), &cur, func(tx horizon.Transaction) {
+			err := c.hclient.StreamTransactions(ctx, exporter.Address(), &cur, func(tx horizon.Transaction) {
 				log.Printf("received tx: %s", tx.EnvelopeXdr)
 				var env xdr.TransactionEnvelope
 				err := xdr.SafeUnmarshalBase64(tx.EnvelopeXdr, &env)
 				if err != nil {
 					t.Fatal(err)
 				}
-				if env.Tx.SourceAccount.Address() != c.accountID.Address() {
+				if env.Tx.SourceAccount.Address() != temp {
 					log.Println("source accounts don't match, skipping...")
 					return
 				}
 				defer close(retire)
-				if len(env.Tx.Operations) != 1 {
-					t.Fatalf("too many operations got %d, want 1", len(env.Tx.Operations))
+				if len(env.Tx.Operations) != 2 {
+					t.Fatalf("too many operations got %d, want 2", len(env.Tx.Operations))
 				}
 				op := env.Tx.Operations[0]
+				if op.Body.Type != xdr.OperationTypeAccountMerge {
+					t.Fatalf("wrong operation type: got %s, want %s", op.Body.Type, xdr.OperationTypeAccountMerge)
+				}
+				if op.Body.Destination.Address() != exporter.Address() {
+					t.Fatalf("wrong account merge destination: got %s, want %s", op.Body.Destination.Address(), exporter.Address())
+				}
+				op = env.Tx.Operations[1]
 				if op.Body.Type != xdr.OperationTypePayment {
 					t.Fatalf("wrong operation type: got %s, want %s", op.Body.Type, xdr.OperationTypePayment)
 				}
 				paymentOp := op.Body.PaymentOp
-				if paymentOp.Destination.Address() != kp.Address() {
-					t.Fatalf("incorrect payment destination got %s, want %s", paymentOp.Destination.Address(), kp.Address())
+				if paymentOp.Destination.Address() != exporter.Address() {
+					t.Fatalf("incorrect payment destination got %s, want %s", paymentOp.Destination.Address(), exporter.Address())
 				}
 				if paymentOp.Amount != xdr.Int64(amount) {
 					t.Fatalf("got incorrect payment amount %d, want %d", paymentOp.Amount, amount)

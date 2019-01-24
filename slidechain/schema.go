@@ -24,9 +24,11 @@ CREATE TABLE IF NOT EXISTS pegs (
 
 CREATE TABLE IF NOT EXISTS exports (
   txid BLOB NOT NULL PRIMARY KEY,
-  recipient TEXT NOT NULL,
+  exporter TEXT NOT NULL,
   amount INTEGER NOT NULL,
   asset_xdr BLOB NOT NULL,
+  temp TEXT NOT NULL,
+  seqnum INTEGER NOT NULL,
   exported INTEGER NOT NULL DEFAULT 0
 );
 

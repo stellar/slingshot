@@ -49,5 +49,6 @@ func main() {
 
 	http.Handle("/submit", c.S)
 	http.HandleFunc("/get", c.S.Get)
+	http.HandleFunc("/account", c.Account)
 	http.Serve(listener, nil)
 }

@@ -15,6 +15,7 @@ import (
 	"github.com/chain/txvm/errors"
 	"github.com/chain/txvm/protocol"
 	"github.com/chain/txvm/protocol/bc"
+	"github.com/interstellar/slingshot/slidechain/net"
 	"github.com/interstellar/slingshot/slidechain/store"
 	"github.com/stellar/go/clients/horizon"
 	"github.com/stellar/go/keypair"
@@ -179,6 +180,16 @@ func makeNewCustodianAccount(ctx context.Context, db *sql.DB, hclient *horizon.C
 	var custAccountID xdr.AccountId
 	err = custAccountID.SetAddress(pair.Address())
 	return &custAccountID, pair.Seed(), err
+}
+
+// Account returns the Stellar account ID of the custodian.
+func (c *Custodian) Account(w http.ResponseWriter, req *http.Request) {
+	_, err := xdr.Marshal(w, c.accountID)
+	if err != nil {
+		net.Errorf(w, http.StatusInternalServerError, "sending response: %s", err)
+		return
+	}
+	return
 }
 
 // launch kicks off the Custodian's long-running goroutines
