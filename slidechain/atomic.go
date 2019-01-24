@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"math"
+	"time"
 
 	"github.com/chain/txvm/crypto/ed25519"
 	"github.com/chain/txvm/errors"
@@ -104,11 +105,38 @@ func (c *Custodian) DoPrePegTx(ctx context.Context, expMS int64, pubkey ed25519.
 		return errors.Wrap(err, "computing pre-peg tx ID")
 	}
 	prepegTx.Runlimit = math.MaxInt64 - runlimit
-	// TODO(debnil): This should not return until the pre-peg tx hits the blockchain.
-	err = c.S.submitTx(ctx, prepegTx)
+	err = c.submitPrePegTx(ctx, prepegTx)
 	if err != nil {
-		return errors.Wrap(err, "submitting prepeg tx")
+		return errors.Wrap(err, "submitting pre-peg tx and waiting")
 	}
 	log.Print("submitted pre-peg txvm tx")
 	return nil
+}
+
+func (c *Custodian) submitPrePegTx(ctx context.Context, prepegTx *bc.Tx) error {
+	checkHeight := c.S.chain.Height()
+	err := c.S.submitTx(ctx, prepegTx)
+	if err != nil {
+		return errors.Wrap(err, "submitting pre-peg tx")
+	}
+	for { // TODO(debnil): What should the exit condition be here?
+		var b *bc.Block
+		for i := 0; i < 10; i++ {
+			b, err = c.S.chain.GetBlock(ctx, checkHeight)
+			if err != nil {
+				log.Printf("error getting block at height %d, retrying in 5s", checkHeight)
+				time.Sleep(5 * time.Second)
+			}
+		}
+		if err != nil {
+			return errors.New(fmt.Sprintf("error getting block at height %d, exiting", checkHeight))
+		}
+		for _, tx := range b.UnsignedBlock.Transactions {
+			if tx.ID == prepegTx.ID {
+				return nil
+			}
+		}
+		checkHeight++
+	}
+	return errors.New("pre-peg tx not found on txvm chain")
 }
