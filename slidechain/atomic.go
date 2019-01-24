@@ -109,7 +109,7 @@ func (c *Custodian) DoPrePegTx(ctx context.Context, expMS int64, pubkey ed25519.
 	if err != nil {
 		return errors.Wrap(err, "submitting pre-peg tx and waiting")
 	}
-	log.Print("submitted pre-peg txvm tx")
+	log.Print("submitted pre-peg txvm tx and confirmed on-chain")
 	return nil
 }
 
@@ -126,6 +126,8 @@ func (c *Custodian) submitPrePegTx(ctx context.Context, prepegTx *bc.Tx) error {
 			if err != nil {
 				log.Printf("error getting block at height %d, retrying in 5s", checkHeight)
 				time.Sleep(5 * time.Second)
+			} else {
+				break
 			}
 		}
 		if err != nil {
@@ -136,6 +138,7 @@ func (c *Custodian) submitPrePegTx(ctx context.Context, prepegTx *bc.Tx) error {
 				return nil
 			}
 		}
+		log.Printf("could not find tx with id %s in block at height %d; incrementing block height", prepegTx.ID, checkHeight)
 		checkHeight++
 	}
 	return errors.New("pre-peg tx not found on txvm chain")

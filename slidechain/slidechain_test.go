@@ -220,7 +220,7 @@ func TestImport(t *testing.T) {
 			expMS := int64(bc.Millis(time.Now().Add(10 * time.Minute)))
 			nonceHash := AtomicNonceHash(c.InitBlockHash.Bytes(), expMS)
 			go c.importFromPegs(ctx)
-			_, err := db.Exec("INSERT INTO pegs (nonce_hash, amount, asset_xdr, recipient_pubkey, expiration_ms) VALUES ($1, 1, $2, $3, $4)", nonceHash, assetXDR, testRecipPubKey, expMS)
+			_, err := db.Exec("INSERT INTO pegs (nonce_hash, amount, asset_xdr, recipient_pubkey, expiration_ms) VALUES ($1, 1, $2, $3, $4)", nonceHash[:], assetXDR, testRecipPubKey, expMS)
 			if err != nil {
 				t.Fatal(err)
 			}
