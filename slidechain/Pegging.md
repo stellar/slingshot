@@ -139,7 +139,13 @@ Exporting funds from TxVM for peg-out to Stellar requires two steps:
 
 1. Create a _temporary account_ in Stellar,
    funded with 2 lumens,
-   with the custodian as the sole signer;
+   with a multisig setup described below;
+
+   with two
+   [signers]()
+        a
+        [signing threshold](https://www.stellar.org/developers/guides/concepts/accounts.html#thresholds)
+        of 2
 2. [Retire](https://github.com/chain/txvm/blob/main/specifications/txvm.md#retire)
    some imported funds in a transaction where the `retire` instruction is immediately followed by a
    [log](https://github.com/chain/txvm/blob/main/specifications/txvm.md#log)
@@ -163,13 +169,26 @@ plus the cost of the peg-out transaction,
 below.
 Any excess is paid back to the recipient of the peg-out when the temp account is merged.
 
-Note:
-A temporary account at a given sequence number is not sufficiently unique to defend against concerted attack.
-Once an account is merged,
-it is possible to recreate it at the same sequence number
-(using
-[the BumpSequence operation](https://www.stellar.org/developers/guides/concepts/list-of-operations.html#bump-sequence)).
-The replay protection scheme described here will need further refinement.
+The pre-export Stellar transaction that creates the temp account must simultaneously set the weight of its master key to zero,
+add two signers
+(weight 1 each),
+and set the signing threshold to 2.
+The two signers are:
+- the custodian’s public key;
+  and
+- a
+  [preauthorized transaction](https://www.stellar.org/developers/guides/concepts/multi-sig.html#pre-authorized-transaction)
+  that
+  (a)
+  merges the temp account to the exporter’s account and
+  (b)
+  pays the pegged-out funds from the custodian’s account to the exporter’s.
+
+With this
+[multisig](https://www.stellar.org/developers/guides/concepts/multi-sig.html)
+setup,
+the only thing it is possible to do with the temp account is to merge it,
+and the only one who can do that is the custodian.
 
 ### Pegging out
 
@@ -177,8 +196,21 @@ The custodian monitors the TxVM blockchain,
 looking for export transactions.
 When it finds one,
 it parses the information in the JSON string and verifies that the TxVM asset ID of the value being retired corresponds to the given Stellar asset code.
-It then builds a Stellar transaction whose “Source” is the temp account and that does the following:
-- Pays N units of the given Stellar asset from the custodian’s account to the exporter account;
-- Merges the temp account back to the exporter account.
+It then publishes the preauthorized transaction described above that closes
+(merges)
+the temp account and pays the pegged-out funds to the recipient.
 
-The custodian’s signature is added to the transaction and it is published to the Stellar network.
+Note:
+it is possible for the TxVM export transaction to succeed and the preauthorized peg-out transaction to fail
+(e.g.
+if the destination account no longer exists or does not have the correct
+[trustline](https://www.stellar.org/developers/guides/concepts/assets.html#trustlines)).
+This is a loss-of-funds scenario that requires further refinement for improved safety.
+For example,
+the export transaction could lock the exported funds in a smart contract that can either
+(a)
+`retire` those funds or
+(b)
+repay them to the exporter,
+at the custodian’s discretion,
+depending on whether the peg-out transaction succeeds.
