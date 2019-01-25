@@ -135,18 +135,14 @@ together with a signature-checking contract that requires the custodian’s sign
 
 ### Exporting
 
-Exporting funds from TxVM for peg-out to Stellar requires two steps:
+Exporting funds from TxVM for peg-out to Stellar requires three steps:
 
-1. Create a _temporary account_ in Stellar,
-   funded with 2 lumens,
-   with a multisig setup described below;
-
-   with two
-   [signers]()
-        a
-        [signing threshold](https://www.stellar.org/developers/guides/concepts/accounts.html#thresholds)
-        of 2
-2. [Retire](https://github.com/chain/txvm/blob/main/specifications/txvm.md#retire)
+1. Create a new _temporary account_ in Stellar,
+   funded with 2 lumens;
+2. Change the temporary account’s
+   [options](https://www.stellar.org/developers/guides/concepts/list-of-operations.html#set-options)
+   as described below;
+3. [Retire](https://github.com/chain/txvm/blob/main/specifications/txvm.md#retire)
    some imported funds in a transaction where the `retire` instruction is immediately followed by a
    [log](https://github.com/chain/txvm/blob/main/specifications/txvm.md#log)
    of this JSON string:
@@ -165,24 +161,21 @@ in the peg-out step.
 It exists to ensure the peg-out step for this particular export can happen only once.
 The 2 lumens it contains are enough to cover the temp account’s
 [minimum balance](https://www.stellar.org/developers/guides/concepts/fees.html#minimum-account-balance)
-plus the cost of the peg-out transaction,
-below.
+plus the costs of the SetOptions and the peg-out transactions,
+both described below.
 Any excess is paid back to the recipient of the peg-out when the temp account is merged.
 
-The pre-export Stellar transaction that creates the temp account must simultaneously set the weight of its master key to zero,
-add two signers
-(weight 1 each),
-and set the signing threshold to 2.
-The two signers are:
-- the custodian’s public key;
-  and
-- a
-  [preauthorized transaction](https://www.stellar.org/developers/guides/concepts/multi-sig.html#pre-authorized-transaction)
-  that
-  (a)
-  merges the temp account to the exporter’s account and
-  (b)
-  pays the pegged-out funds from the custodian’s account to the exporter’s.
+After the temporary account is created,
+another Stellar transaction must set its options:
+- the weight of its master key must be set to zero;
+- the signing threshold must be set to 2;
+- two signers must be added:
+  - the custodian’s public key;
+    and
+  - a preauth transaction that merges the temp account and pays the peg-out funds from the custodian,
+    both with the peg-out recipient as the destination.
+
+(This `SetOptions` step must follow the temp-account-creation step separately since creating the preauth transaction requires knowing the temp account’s sequence number.)
 
 With this
 [multisig](https://www.stellar.org/developers/guides/concepts/multi-sig.html)
