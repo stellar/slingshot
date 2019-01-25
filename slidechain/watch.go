@@ -136,7 +136,7 @@ func (c *Custodian) watchExports(ctx context.Context) {
 				}
 
 				// Check this Stellar asset code corresponds to retiredAssetIDBytes.
-				gotAssetID32 := txvm.AssetID(IssueSeed[:], info.AssetXDR)
+				gotAssetID32 := txvm.AssetID(issueSeed[:], info.AssetXDR)
 				if !bytes.Equal(gotAssetID32[:], retiredAssetIDBytes) {
 					continue
 				}
