@@ -35,7 +35,8 @@ pub fn cloak<CS: ConstraintSystem>(
     // Range Proof
     // Check that each of the quantities in `outputs` lies in [0, 2^64).
     for output in outputs {
-        range_proof(cs, output.quantity(), 64)?;
+        let qty = output.quantity();
+        range_proof(cs, qty.variable.into(), qty.assignment, 64)?;
     }
 
     Ok(())

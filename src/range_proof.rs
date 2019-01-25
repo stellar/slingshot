@@ -1,19 +1,18 @@
-use bulletproofs::r1cs::{ConstraintSystem, R1CSError};
+use bulletproofs::r1cs::{ConstraintSystem, LinearCombination, R1CSError};
 use curve25519_dalek::scalar::Scalar;
-use value::AllocatedQuantity;
 
 /// Enforces that the quantity of v is in the range [0, 2^n).
 pub fn range_proof<CS: ConstraintSystem>(
     cs: &mut CS,
-    v: AllocatedQuantity,
+    mut v: LinearCombination,
+    v_assignment: Option<u64>,
     n: usize,
 ) -> Result<(), R1CSError> {
-    let mut constraint = vec![(v.variable, -Scalar::one())];
     let mut exp_2 = Scalar::one();
     for i in 0..n {
         // Create low-level variables and add them to constraints
         let (a, b, o) = cs.allocate(|| {
-            let q: u64 = v.assignment.ok_or(R1CSError::MissingAssignment)?;
+            let q: u64 = v_assignment.ok_or(R1CSError::MissingAssignment)?;
             let bit: u64 = (q >> i) & 1;
             Ok(((1 - bit).into(), bit.into(), Scalar::zero()))
         })?;
@@ -24,12 +23,16 @@ pub fn range_proof<CS: ConstraintSystem>(
         // Enforce that a = 1 - b, so they both are 1 or 0.
         cs.constrain(a + (b - 1u64));
 
-        constraint.push((b, exp_2));
+        // Add `-b_i*2^i` to the linear combination
+        // in order to form the following constraint by the end of the loop:
+        // v = Sum(b_i * 2^i, i = 0..n-1)
+        v = v - b * exp_2;
+
         exp_2 = exp_2 + exp_2;
     }
 
     // Enforce that v = Sum(b_i * 2^i, i = 0..n-1)
-    cs.constrain(constraint.iter().collect());
+    cs.constrain(v);
 
     Ok(())
 }
@@ -73,11 +76,7 @@ mod tests {
             let mut prover = Prover::new(&bp_gens, &pc_gens, &mut prover_transcript);
 
             let (com, var) = prover.commit(v_val.into(), Scalar::random(&mut rng));
-            let quantity = AllocatedQuantity {
-                variable: var,
-                assignment: Some(v_val),
-            };
-            assert!(range_proof(&mut prover, quantity, n).is_ok());
+            assert!(range_proof(&mut prover, var.into(), Some(v_val), n).is_ok());
 
             let proof = prover.prove()?;
 
@@ -89,13 +88,9 @@ mod tests {
         let mut verifier = Verifier::new(&bp_gens, &pc_gens, &mut verifier_transcript);
 
         let var = verifier.commit(commitment);
-        let quantity = AllocatedQuantity {
-            variable: var,
-            assignment: None,
-        };
 
         // Verifier adds constraints to the constraint system
-        assert!(range_proof(&mut verifier, quantity, n).is_ok());
+        assert!(range_proof(&mut verifier, var.into(), None, n).is_ok());
 
         // Verifier verifies proof
         Ok(verifier.verify(&proof)?)
