@@ -147,13 +147,13 @@ func (c *Custodian) buildPegOutTx(exporter xdr.AccountId, asset xdr.Asset, amoun
 	switch asset.Type {
 	case xdr.AssetTypeAssetTypeNative:
 		paymentOp = b.Payment(
-			b.SourceAccount{AddressOrSeed: c.accountID.Address()},
+			b.SourceAccount{AddressOrSeed: c.AccountID.Address()},
 			b.Destination{AddressOrSeed: exporter.Address()},
 			b.NativeAmount{Amount: amount.HorizonString()},
 		)
 	case xdr.AssetTypeAssetTypeCreditAlphanum4:
 		paymentOp = b.Payment(
-			b.SourceAccount{AddressOrSeed: c.accountID.Address()},
+			b.SourceAccount{AddressOrSeed: c.AccountID.Address()},
 			b.Destination{AddressOrSeed: exporter.Address()},
 			b.CreditAmount{
 				Code:   string(asset.AlphaNum4.AssetCode[:]),
@@ -163,7 +163,7 @@ func (c *Custodian) buildPegOutTx(exporter xdr.AccountId, asset xdr.Asset, amoun
 		)
 	case xdr.AssetTypeAssetTypeCreditAlphanum12:
 		paymentOp = b.Payment(
-			b.SourceAccount{AddressOrSeed: c.accountID.Address()},
+			b.SourceAccount{AddressOrSeed: c.AccountID.Address()},
 			b.Destination{AddressOrSeed: exporter.Address()},
 			b.CreditAmount{
 				Code:   string(asset.AlphaNum12.AssetCode[:]),

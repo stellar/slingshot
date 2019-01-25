@@ -258,7 +258,7 @@ func TestEndToEnd(t *testing.T) {
 		}
 		c := &Custodian{
 			seed:          seed,
-			accountID:     *accountID,
+			AccountID:     *accountID,
 			S:             s,
 			DB:            db,
 			hclient:       hclient,
@@ -288,7 +288,7 @@ func TestEndToEnd(t *testing.T) {
 		copy(exporterPubKeyBytes[:], exporterPub)
 
 		// Build + submit transaction to peg-in funds
-		pegInTx, err := stellar.BuildPegInTx(exporter.Address(), exporterPubKeyBytes, amount.HorizonString(), "", "", c.accountID.Address(), hclient)
+		pegInTx, err := stellar.BuildPegInTx(exporter.Address(), exporterPubKeyBytes, amount.HorizonString(), "", "", c.AccountID.Address(), hclient)
 		if err != nil {
 			t.Fatalf("error building peg-in tx: %s", err)
 		}
@@ -339,7 +339,7 @@ func TestEndToEnd(t *testing.T) {
 		}
 
 		t.Log("submitting pre-export tx...")
-		temp, seqnum, err := SubmitPreExportTx(ctx, hclient, c.accountID.Address(), exporter)
+		temp, seqnum, err := SubmitPreExportTx(ctx, hclient, c.AccountID.Address(), exporter)
 		if err != nil {
 			t.Fatalf("pre-submit tx error: %s", err)
 		}
