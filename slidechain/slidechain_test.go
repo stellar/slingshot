@@ -7,7 +7,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -232,7 +231,7 @@ func TestImport(t *testing.T) {
 				block := item.(*bc.Block)
 				for _, tx := range block.Transactions {
 					if isImportTx(tx, 1, assetXDR, testRecipPubKey) {
-						log.Printf("found import tx %x", tx.Program)
+						t.Logf("found import tx %x", tx.Program)
 						return
 					}
 				}
@@ -305,7 +304,7 @@ func TestEndToEnd(t *testing.T) {
 		if err != nil {
 			t.Fatalf("error submitting tx: %s", err)
 		}
-		log.Printf("successfully submitted peg-in tx: id %s, ledger %d", succ.Hash, succ.Ledger)
+		t.Logf("successfully submitted peg-in tx: id %s, ledger %d", succ.Hash, succ.Ledger)
 
 		native := xdr.Asset{
 			Type: xdr.AssetTypeAssetTypeNative,
@@ -327,7 +326,7 @@ func TestEndToEnd(t *testing.T) {
 			block := item.(*bc.Block)
 			for _, tx := range block.Transactions {
 				if isImportTx(tx, int64(amount), nativeAssetBytes, exporterPub) {
-					log.Printf("found import tx %x", tx.Program)
+					t.Logf("found import tx %x", tx.Program)
 					found = true
 					txresult := txresult.New(tx)
 					anchor = txresult.Outputs[0].Value.Anchor
@@ -339,12 +338,12 @@ func TestEndToEnd(t *testing.T) {
 			}
 		}
 
-		log.Println("submitting pre-export tx...")
+		t.Log("submitting pre-export tx...")
 		temp, seqnum, err := SubmitPreExportTx(ctx, hclient, c.accountID.Address(), exporter)
 		if err != nil {
 			t.Fatalf("pre-submit tx error: %s", err)
 		}
-		log.Println("building export tx...")
+		t.Log("building export tx...")
 		exportTx, err := BuildExportTx(ctx, native, int64(amount), int64(amount), temp, anchor, exporterPrv, seqnum)
 		if err != nil {
 			t.Fatalf("error building retirement tx %s", err)
@@ -361,7 +360,7 @@ func TestEndToEnd(t *testing.T) {
 			t.Fatalf("status code %d from POST /submit", resp.StatusCode)
 		}
 
-		log.Println("checking for retirement tx on txvm...")
+		t.Log("checking for retirement tx on txvm...")
 
 		found = false
 		for {
@@ -373,7 +372,7 @@ func TestEndToEnd(t *testing.T) {
 			for _, tx := range block.Transactions {
 				// Look for export transaction
 				if IsExportTx(tx, native, int64(amount), temp, exporter.Address(), int64(seqnum)) {
-					log.Printf("found export tx %x", tx.Program)
+					t.Logf("found export tx %x", tx.Program)
 					found = true
 					break
 				}
@@ -383,21 +382,21 @@ func TestEndToEnd(t *testing.T) {
 			}
 		}
 
-		log.Println("checking for successful retirement...")
+		t.Log("checking for successful retirement...")
 
 		// Check for successful retirement
 		retire := make(chan struct{})
 		go func() {
 			var cur horizon.Cursor
 			err := c.hclient.StreamTransactions(ctx, exporter.Address(), &cur, func(tx horizon.Transaction) {
-				log.Printf("received tx: %s", tx.EnvelopeXdr)
+				t.Logf("received tx: %s", tx.EnvelopeXdr)
 				var env xdr.TransactionEnvelope
 				err := xdr.SafeUnmarshalBase64(tx.EnvelopeXdr, &env)
 				if err != nil {
 					t.Fatal(err)
 				}
 				if env.Tx.SourceAccount.Address() != temp {
-					log.Println("source accounts don't match, skipping...")
+					t.Log("source accounts don't match, skipping...")
 					return
 				}
 				defer close(retire)

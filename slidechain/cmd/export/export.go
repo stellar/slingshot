@@ -144,7 +144,6 @@ func main() {
 	if err != nil {
 		log.Fatalf("error unmarshaling block: %s", err)
 	}
-	height := block.Height
 
 	resp, err = http.Post(*slidechaind+"/submit", "application/octet-stream", bytes.NewReader(txbits))
 	if err != nil {
@@ -156,12 +155,14 @@ func main() {
 	}
 	log.Printf("successfully submitted export transaction: %x", tx.ID)
 
-	for {
-		if ctx.Err() != nil {
-			log.Println("command timed out, export tx not found")
-			return
+	client := http.DefaultClient
+	for height := block.Height + 1; ; height++ {
+		req, err := http.NewRequest("GET", fmt.Sprintf(*slidechaind+"/get?height=%d", height), nil)
+		if err != nil {
+			log.Fatalf("error building request for latest block: %s", err)
 		}
-		resp, err = http.Get(fmt.Sprintf(*slidechaind+"/get?height=%d", height))
+		req = req.WithContext(ctx)
+		resp, err = client.Do(req)
 		if err != nil {
 			log.Fatalf("error getting block at height %d: %s", height, err)
 		}
@@ -185,7 +186,6 @@ func main() {
 				return
 			}
 		}
-		height++
 	}
 }
 
