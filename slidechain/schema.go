@@ -14,13 +14,12 @@ CREATE TABLE IF NOT EXISTS snapshots (
 
 CREATE TABLE IF NOT EXISTS pegs (
   nonce_hash BLOB NOT NULL,
-  operation_num INTEGER NOT NULL,
   amount INTEGER NOT NULL,
   asset_xdr BLOB NOT NULL,
   recipient_pubkey BLOB NOT NULL,
   imported INTEGER NOT NULL DEFAULT 0,
   expiration_ms INTEGER NOT NULL,
-  PRIMARY KEY nonce_hash
+  PRIMARY KEY (nonce_hash)
 );
 
 CREATE TABLE IF NOT EXISTS exports (

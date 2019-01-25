@@ -121,7 +121,7 @@ func (c *Custodian) importFromPegs(ctx context.Context) {
 }
 
 func (c *Custodian) doImport(ctx context.Context, nonceHash []byte, amount int64, assetXDR, recip []byte, expMS int64) error {
-	log.Printf("doing import from tx with hash %x, op %d: %d of asset %x for recipient %x with expiration %d", nonceHash, amount, assetXDR, recip, expMS)
+	log.Printf("doing import from tx with hash %x: %d of asset %x for recipient %x with expiration %d", nonceHash, amount, assetXDR, recip, expMS)
 
 	importTxBytes, err := c.buildImportTx(amount, assetXDR, recip)
 	if err != nil {
