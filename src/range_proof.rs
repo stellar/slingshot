@@ -3,7 +3,7 @@ use curve25519_dalek::scalar::Scalar;
 use value::AllocatedQuantity;
 
 /// Enforces that the quantity of v is in the range [0, 2^n).
-pub fn fill_cs<CS: ConstraintSystem>(
+pub fn range_proof<CS: ConstraintSystem>(
     cs: &mut CS,
     v: AllocatedQuantity,
     n: usize,
@@ -77,7 +77,7 @@ mod tests {
                 variable: var,
                 assignment: Some(v_val),
             };
-            assert!(fill_cs(&mut prover, quantity, n).is_ok());
+            assert!(range_proof(&mut prover, quantity, n).is_ok());
 
             let proof = prover.prove()?;
 
@@ -95,7 +95,7 @@ mod tests {
         };
 
         // Verifier adds constraints to the constraint system
-        assert!(fill_cs(&mut verifier, quantity, n).is_ok());
+        assert!(range_proof(&mut verifier, quantity, n).is_ok());
 
         // Verifier verifies proof
         Ok(verifier.verify(&proof)?)

@@ -14,8 +14,11 @@ before_script:
   - rustup component add rustfmt-preview
 
 matrix:
+  fast_finish: true
   include:
-  - rust: nightly
+  - rust: nightly-2018-12-31
+    before_script:
+    - rustup component add rustfmt-preview
     script:
     - cargo fmt --all -- --check
 

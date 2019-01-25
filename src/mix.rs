@@ -1,11 +1,37 @@
 #![allow(non_snake_case)]
 
-use super::mix;
-use bulletproofs::r1cs::{ConstraintSystem, R1CSError};
+use bulletproofs::r1cs::{ConstraintSystem, R1CSError, RandomizedConstraintSystem};
 use curve25519_dalek::scalar::Scalar;
 use std::iter;
 use subtle::{ConditionallySelectable, ConstantTimeEq};
 use value::{AllocatedValue, Value};
+
+/// Enforces that the outputs are either a merge of the inputs :`D = A + B && C = 0`,
+/// or the outputs are equal to the inputs `C = A && D = B`. See spec for more details.
+/// Works for 2 inputs and 2 outputs.
+pub fn mix<CS: ConstraintSystem>(
+    cs: &mut CS,
+    A: AllocatedValue,
+    B: AllocatedValue,
+    C: AllocatedValue,
+    D: AllocatedValue,
+) -> Result<(), R1CSError> {
+    cs.specify_randomized_constraints(move |cs| {
+        let w = cs.challenge_scalar(b"mix challenge");
+        let w2 = w * w;
+        let w3 = w2 * w;
+
+        let (_, _, mul_out) = cs.multiply(
+            (A.q - C.q) + (A.f - C.f) * w + (B.q - D.q) * w2 + (B.f - D.f) * w3,
+            C.q + (A.f - B.f) * w + (D.q - A.q - B.q) * w2 + (D.f - A.f) * w3,
+        );
+
+        // multiplication output is zero
+        cs.constrain(mul_out.into());
+
+        Ok(())
+    })
+}
 
 /// Takes:
 /// * a vector of `k` input `AllocatedValue`s provided in arbitrary order.
@@ -14,7 +40,7 @@ use value::{AllocatedValue, Value};
 /// * a vector of `k` sorted `AllocatedValue`s that are the inputs to the `mix` gadget
 /// * a vector of `k` `AllocatedValue`s that are the outputs to the `mix` gadget,
 ///   such that each output is either zero, or the sum of all of the `Values` of one type.
-pub fn fill_cs<CS: ConstraintSystem>(
+pub fn k_mix<CS: ConstraintSystem>(
     cs: &mut CS,
     inputs: Vec<AllocatedValue>,
 ) -> Result<(Vec<AllocatedValue>, Vec<AllocatedValue>), R1CSError> {
@@ -63,7 +89,7 @@ fn call_mix_gadget<CS: ConstraintSystem>(
         // D = (mix_mid||last_out)[i]
         .zip(mix_mid.iter().chain(iter::once(&last_out)))
     {
-        mix::fill_cs(cs, *A, *B, *C, *D)?
+        mix(cs, *A, *B, *C, *D)?
     }
 
     Ok(())
@@ -196,7 +222,7 @@ fn combine_by_flavor<CS: ConstraintSystem>(
             return Err(R1CSError::GadgetError {
                 description: "Last merge_mid was not popped successfully in combine_by_flavor"
                     .to_string(),
-            })
+            });
         }
     }
 
@@ -238,7 +264,89 @@ mod tests {
     }
 
     #[test]
-    fn k_mix() {
+    fn test_2x2_mix() {
+        let peso = 66;
+        let yuan = 88;
+
+        // no merge, same asset types
+        assert!(mix_helper((6, peso), (6, peso), (6, peso), (6, peso),).is_ok());
+        // no merge, different asset types
+        assert!(mix_helper((3, peso), (6, yuan), (3, peso), (6, yuan),).is_ok());
+        // merge, same asset types
+        assert!(mix_helper((3, peso), (6, peso), (0, peso), (9, peso),).is_ok());
+        // merge, zero value is different asset type
+        assert!(mix_helper((3, peso), (6, peso), (0, yuan), (9, peso),).is_ok());
+        // error when merging different asset types
+        assert!(mix_helper((3, peso), (3, yuan), (0, peso), (6, yuan),).is_err());
+        // error when not merging, but asset type changes
+        assert!(mix_helper((3, peso), (3, yuan), (3, peso), (3, peso),).is_err());
+        // error when creating more value (same asset types)
+        assert!(mix_helper((3, peso), (3, peso), (3, peso), (6, peso),).is_err());
+        // error when creating more value (different asset types)
+        assert!(mix_helper((3, peso), (3, yuan), (3, peso), (6, yuan),).is_err());
+    }
+
+    fn mix_helper(
+        A: (u64, u64),
+        B: (u64, u64),
+        C: (u64, u64),
+        D: (u64, u64),
+    ) -> Result<(), R1CSError> {
+        // Common
+        let pc_gens = PedersenGens::default();
+        let bp_gens = BulletproofGens::new(128, 1);
+
+        let A = Value {
+            q: A.0,
+            f: A.1.into(),
+        };
+        let B = Value {
+            q: B.0,
+            f: B.1.into(),
+        };
+        let C = Value {
+            q: C.0,
+            f: C.1.into(),
+        };
+        let D = Value {
+            q: D.0,
+            f: D.1.into(),
+        };
+
+        // Prover's scope
+        let (proof, A_com, B_com, C_com, D_com) = {
+            // Prover makes a `ConstraintSystem` instance representing a merge gadget
+            let mut prover_transcript = Transcript::new(b"MixTest");
+            let mut rng = rand::thread_rng();
+
+            let mut prover = Prover::new(&bp_gens, &pc_gens, &mut prover_transcript);
+            let (A_com, A_var) = A.commit(&mut prover, &mut rng);
+            let (B_com, B_var) = B.commit(&mut prover, &mut rng);
+            let (C_com, C_var) = C.commit(&mut prover, &mut rng);
+            let (D_com, D_var) = D.commit(&mut prover, &mut rng);
+
+            mix(&mut prover, A_var, B_var, C_var, D_var)?;
+
+            let proof = prover.prove()?;
+            (proof, A_com, B_com, C_com, D_com)
+        };
+
+        // Verifier makes a `ConstraintSystem` instance representing a merge gadget
+        let mut verifier_transcript = Transcript::new(b"MixTest");
+        let mut verifier = Verifier::new(&bp_gens, &pc_gens, &mut verifier_transcript);
+
+        let A_var = A_com.commit(&mut verifier);
+        let B_var = B_com.commit(&mut verifier);
+        let C_var = C_com.commit(&mut verifier);
+        let D_var = D_com.commit(&mut verifier);
+
+        mix(&mut verifier, A_var, B_var, C_var, D_var)?;
+
+        Ok(verifier.verify(&proof)?)
+    }
+
+    #[test]
+    fn test_k_mix() {
         // k=2. More extensive k=2 tests are in the MixGadget tests
         // no merge, different asset types
         assert!(k_mix_helper(vec![peso(3), yuan(6)], vec![], vec![peso(3), yuan(6)],).is_ok());
@@ -249,106 +357,84 @@ mod tests {
 
         // k=3
         // no merge, same asset types
-        assert!(
-            k_mix_helper(
-                vec![peso(3), peso(6), peso(6)],
-                vec![peso(6)],
-                vec![peso(3), peso(6), peso(6)],
-            )
-            .is_ok()
-        );
+        assert!(k_mix_helper(
+            vec![peso(3), peso(6), peso(6)],
+            vec![peso(6)],
+            vec![peso(3), peso(6), peso(6)],
+        )
+        .is_ok());
         // no merge, different asset types
-        assert!(
-            k_mix_helper(
-                vec![peso(3), yuan(6), peso(6)],
-                vec![yuan(6)],
-                vec![peso(3), yuan(6), peso(6)],
-            )
-            .is_ok()
-        );
+        assert!(k_mix_helper(
+            vec![peso(3), yuan(6), peso(6)],
+            vec![yuan(6)],
+            vec![peso(3), yuan(6), peso(6)],
+        )
+        .is_ok());
         // merge first two
-        assert!(
-            k_mix_helper(
-                vec![peso(3), peso(6), yuan(1)],
-                vec![peso(9)],
-                vec![peso(0), peso(9), yuan(1)],
-            )
-            .is_ok()
-        );
+        assert!(k_mix_helper(
+            vec![peso(3), peso(6), yuan(1)],
+            vec![peso(9)],
+            vec![peso(0), peso(9), yuan(1)],
+        )
+        .is_ok());
         // merge last two
-        assert!(
-            k_mix_helper(
-                vec![yuan(1), peso(3), peso(6)],
-                vec![peso(3)],
-                vec![yuan(1), peso(0), peso(9)],
-            )
-            .is_ok()
-        );
+        assert!(k_mix_helper(
+            vec![yuan(1), peso(3), peso(6)],
+            vec![peso(3)],
+            vec![yuan(1), peso(0), peso(9)],
+        )
+        .is_ok());
         // merge all, same asset types, zero value is different asset type
-        assert!(
-            k_mix_helper(
-                vec![peso(3), peso(6), peso(1)],
-                vec![peso(9)],
-                vec![zero(), zero(), peso(10)],
-            )
-            .is_ok()
-        );
+        assert!(k_mix_helper(
+            vec![peso(3), peso(6), peso(1)],
+            vec![peso(9)],
+            vec![zero(), zero(), peso(10)],
+        )
+        .is_ok());
         // incomplete merge, input sum does not equal output sum
-        assert!(
-            k_mix_helper(
-                vec![peso(3), peso(6), peso(1)],
-                vec![peso(9)],
-                vec![zero(), zero(), peso(9)],
-            )
-            .is_err()
-        );
+        assert!(k_mix_helper(
+            vec![peso(3), peso(6), peso(1)],
+            vec![peso(9)],
+            vec![zero(), zero(), peso(9)],
+        )
+        .is_err());
         // error when merging with different asset types
-        assert!(
-            k_mix_helper(
-                vec![peso(3), yuan(6), peso(1)],
-                vec![peso(9)],
-                vec![zero(), zero(), peso(10)],
-            )
-            .is_err()
-        );
+        assert!(k_mix_helper(
+            vec![peso(3), yuan(6), peso(1)],
+            vec![peso(9)],
+            vec![zero(), zero(), peso(10)],
+        )
+        .is_err());
 
         // k=4
         // merge each of 2 asset types
-        assert!(
-            k_mix_helper(
-                vec![peso(3), peso(6), yuan(1), yuan(2)],
-                vec![peso(9), yuan(1)],
-                vec![zero(), peso(9), zero(), yuan(3)],
-            )
-            .is_ok()
-        );
+        assert!(k_mix_helper(
+            vec![peso(3), peso(6), yuan(1), yuan(2)],
+            vec![peso(9), yuan(1)],
+            vec![zero(), peso(9), zero(), yuan(3)],
+        )
+        .is_ok());
         // merge all, same asset
-        assert!(
-            k_mix_helper(
-                vec![peso(3), peso(2), peso(2), peso(1)],
-                vec![peso(5), peso(7)],
-                vec![zero(), zero(), zero(), peso(8)],
-            )
-            .is_ok()
-        );
+        assert!(k_mix_helper(
+            vec![peso(3), peso(2), peso(2), peso(1)],
+            vec![peso(5), peso(7)],
+            vec![zero(), zero(), zero(), peso(8)],
+        )
+        .is_ok());
         // no merge, different assets
-        assert!(
-            k_mix_helper(
-                vec![peso(3), yuan(2), peso(2), yuan(1)],
-                vec![yuan(2), peso(2)],
-                vec![peso(3), yuan(2), peso(2), yuan(1)],
-            )
-            .is_ok()
-        );
+        assert!(k_mix_helper(
+            vec![peso(3), yuan(2), peso(2), yuan(1)],
+            vec![yuan(2), peso(2)],
+            vec![peso(3), yuan(2), peso(2), yuan(1)],
+        )
+        .is_ok());
         // error when merging, output sum not equal to input sum
-        assert!(
-            k_mix_helper(
-                vec![peso(3), peso(2), peso(2), peso(1)],
-                vec![peso(5), peso(7)],
-                vec![zero(), zero(), zero(), peso(9)],
-            )
-            .is_err()
-        );
+        assert!(k_mix_helper(
+            vec![peso(3), peso(2), peso(2), peso(1)],
+            vec![peso(5), peso(7)],
+            vec![zero(), zero(), zero(), peso(9)],
+        )
+        .is_err());
     }
 
     fn k_mix_helper(
