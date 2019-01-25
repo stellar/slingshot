@@ -33,17 +33,17 @@ var (
 // for importing pegged-in values and pegging out exported
 // values.
 type Custodian struct {
-	seed      string
-	accountID xdr.AccountId
-	hclient   *horizon.Client
-	imports   *sync.Cond
-	exports   *sync.Cond
-	network   string
-	privkey   ed25519.PrivateKey
+	seed    string
+	hclient *horizon.Client
+	imports *sync.Cond
+	exports *sync.Cond
+	network string
+	privkey ed25519.PrivateKey
 
 	DB            *sql.DB
 	S             *submitter
 	InitBlockHash bc.Hash
+	AccountID     xdr.AccountId
 }
 
 // GetCustodian returns a Custodian object, loading the preset
@@ -101,7 +101,7 @@ func newCustodian(ctx context.Context, db *sql.DB, horizonURL string) (*Custodia
 
 	return &Custodian{
 		seed:      seed,
-		accountID: *custAccountID,
+		AccountID: *custAccountID,
 		S: &submitter{
 			w:            multichan.New((*bc.Block)(nil)),
 			chain:        chain,
@@ -184,7 +184,7 @@ func makeNewCustodianAccount(ctx context.Context, db *sql.DB, hclient *horizon.C
 
 // Account returns the Stellar account ID of the custodian.
 func (c *Custodian) Account(w http.ResponseWriter, req *http.Request) {
-	_, err := xdr.Marshal(w, c.accountID)
+	_, err := xdr.Marshal(w, c.AccountID)
 	if err != nil {
 		net.Errorf(w, http.StatusInternalServerError, "sending response: %s", err)
 		return

@@ -27,7 +27,7 @@ func (c *Custodian) watchPegs(ctx context.Context) {
 	}
 
 	for {
-		err := c.hclient.StreamTransactions(ctx, c.accountID.Address(), &cur, func(tx horizon.Transaction) {
+		err := c.hclient.StreamTransactions(ctx, c.AccountID.Address(), &cur, func(tx horizon.Transaction) {
 			log.Printf("handling Stellar tx %s", tx.ID)
 
 			var env xdr.TransactionEnvelope
@@ -46,7 +46,7 @@ func (c *Custodian) watchPegs(ctx context.Context) {
 					continue
 				}
 				payment := op.Body.PaymentOp
-				if !payment.Destination.Equals(c.accountID) {
+				if !payment.Destination.Equals(c.AccountID) {
 					continue
 				}
 
