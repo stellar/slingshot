@@ -21,7 +21,7 @@ const issueProgFmt = `
 var (
 	issueProgSrc = fmt.Sprintf(issueProgFmt, custodianPub)
 	issueProg    = mustAssemble(issueProgSrc)
-	issueSeed    = txvm.ContractSeed(issueProg)
+	IssueSeed    = txvm.ContractSeed(issueProg)
 )
 
 func mustAssemble(inp string) []byte {

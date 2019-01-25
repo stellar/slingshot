@@ -345,7 +345,7 @@ func TestEndToEnd(t *testing.T) {
 			t.Fatalf("pre-submit tx error: %s", err)
 		}
 		log.Println("building export tx...")
-		exportTx, err := BuildExportTx(ctx, native, int64(amount), int64(amount), temp, anchor, exporterPrv, seqnum)
+		exportTx, err := BuildExportTx(ctx, native, int64(amount)-100, int64(amount), temp, anchor, exporterPrv, seqnum)
 		if err != nil {
 			t.Fatalf("error building retirement tx %s", err)
 		}
@@ -359,6 +359,45 @@ func TestEndToEnd(t *testing.T) {
 		}
 		if resp.StatusCode/100 != 2 {
 			t.Fatalf("status code %d from POST /submit", resp.StatusCode)
+		}
+
+		log.Println("checking for retirement tx on txvm...")
+
+		found = false
+		for {
+			item, ok := r.Read(ctx)
+			if !ok {
+				t.Fatal("cannot read a block")
+			}
+			block := item.(*bc.Block)
+			// resp, err = http.Get(fmt.Sprintf(*slidechaind+"/get?height=%d", height))
+			// if err != nil {
+			// 	log.Fatalf("error getting block at height %d: %s", height, err)
+			// }
+			// defer resp.Body.Close()
+			// if resp.StatusCode/100 != 2 {
+			// 	log.Fatalf("bad status code %d getting latest block height", resp.StatusCode)
+			// }
+			// b := new(bc.Block)
+			// bits, err := ioutil.ReadAll(resp.Body)
+			// if err != nil {
+			// 	log.Fatalf("error reading block from response body: %s", err)
+			// }
+			// err = b.FromBytes(bits)
+			// if err != nil {
+			// 	log.Fatalf("error unmarshaling block: %s", err)
+			// }
+			for _, tx := range block.Transactions {
+				// Look for export transaction
+				if isExportTx(tx, native, int64(amount), int64(amount), temp, exporter.Address(), int64(seqnum)) {
+					log.Println("found export tx")
+					found = true
+					break
+				}
+			}
+			if found == true {
+				break
+			}
 		}
 
 		log.Println("checking for successful retirement...")
@@ -440,7 +479,7 @@ func isImportTx(tx *bc.Tx, amount int64, assetXDR []byte, recipPubKey ed25519.Pu
 	if int64(tx.Log[2][2].(txvm.Int)) != amount {
 		return false
 	}
-	wantAssetID := txvm.AssetID(issueSeed[:], assetXDR)
+	wantAssetID := txvm.AssetID(IssueSeed[:], assetXDR)
 	if !bytes.Equal(wantAssetID[:], tx.Log[2][3].(txvm.Bytes)) {
 		return false
 	}
