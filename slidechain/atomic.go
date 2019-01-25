@@ -78,17 +78,19 @@ func importAtomicGuaranteeSnapshot(b *txvmutil.Builder, pubkey ed25519.PublicKey
 // buildPrepegTx calls the atomicity-guarantee pre-peg contract to test utxo uniqueness.
 func (c *Custodian) buildPrepegTx(expMS int64, pubkey ed25519.PublicKey) ([]byte, error) {
 	nonceHash := AtomicNonceHash(c.InitBlockHash.Bytes(), expMS)
+	finalizeExpMS := int64(bc.Millis(time.Now().Add(5 * time.Minute)))
 	buf := new(bytes.Buffer)
 	fmt.Fprintf(buf, "x'%x' put\n", nonceHash)
 	fmt.Fprintf(buf, "x'%x' put\n", pubkey)
 	fmt.Fprintf(buf, "x'%x' contract call\n", atomicGuaranteePrePegProg)
+	fmt.Fprintf(buf, "x'%x' %d nonce finalize\n", c.InitBlockHash.Bytes(), finalizeExpMS)
 	tx, err := asm.Assemble(buf.String())
 	if err != nil {
-		return nil, errors.Wrap(err, "assembling pre-peg atomicity tx")
+		return nil, errors.Wrap(err, "assembling pre-peg tx")
 	}
 	_, err = txvm.Validate(tx, 3, math.MaxInt64)
 	if err != nil {
-		return nil, errors.Wrap(err, "computing pre-peg atomicity tx ID")
+		return nil, errors.Wrap(err, "validating pre-peg tx")
 	}
 	return tx, nil
 }
@@ -102,7 +104,7 @@ func (c *Custodian) DoPrePegTx(ctx context.Context, expMS int64, pubkey ed25519.
 	var runlimit int64
 	prepegTx, err := bc.NewTx(prepegTxBytes, 3, math.MaxInt64, txvm.GetRunlimit(&runlimit))
 	if err != nil {
-		return errors.Wrap(err, "computing pre-peg tx ID")
+		return errors.Wrap(err, "populating new pre-peg tx")
 	}
 	prepegTx.Runlimit = math.MaxInt64 - runlimit
 	err = c.submitPrePegTx(ctx, prepegTx)
@@ -138,7 +140,7 @@ func (c *Custodian) submitPrePegTx(ctx context.Context, prepegTx *bc.Tx) error {
 				return nil
 			}
 		}
-		log.Printf("could not find tx with id %s in block at height %d; incrementing block height", prepegTx.ID, checkHeight)
+		log.Printf("could not find tx with id %x in block at height %d; incrementing block height", prepegTx.ID, checkHeight)
 		checkHeight++
 	}
 	return errors.New("pre-peg tx not found on txvm chain")

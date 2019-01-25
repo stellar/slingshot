@@ -218,6 +218,10 @@ func TestImport(t *testing.T) {
 				InitBlockHash: chain.InitialBlockHash,
 			}
 			expMS := int64(bc.Millis(time.Now().Add(10 * time.Minute)))
+			err = c.DoPrePegTx(ctx, expMS, testRecipPubKey)
+			if err != nil {
+				t.Fatal(err)
+			}
 			nonceHash := AtomicNonceHash(c.InitBlockHash.Bytes(), expMS)
 			go c.importFromPegs(ctx)
 			_, err := db.Exec("INSERT INTO pegs (nonce_hash, amount, asset_xdr, recipient_pubkey, expiration_ms) VALUES ($1, 1, $2, $3, $4)", nonceHash[:], assetXDR, testRecipPubKey, expMS)
