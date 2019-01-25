@@ -22,11 +22,11 @@ func SignAndSubmitTx(hclient *horizon.Client, tx *b.TransactionBuilder, seeds ..
 	}
 	resp, err := hclient.SubmitTransaction(txstr)
 	if err != nil {
+		// Attempt to extract more detailed result information
 		log.Printf("error submitting tx: %s\ntx: %s", err, txstr)
 		var (
 			resultStr string
 			err       error
-			tr        xdr.TransactionResult
 		)
 		if herr, ok := err.(*horizon.Error); ok {
 			resultStr, err = herr.ResultString()
@@ -40,10 +40,6 @@ func SignAndSubmitTx(hclient *horizon.Client, tx *b.TransactionBuilder, seeds ..
 			if resultStr == "" {
 				log.Print("cannot locate result string from failed tx submission")
 			}
-		}
-		err = xdr.SafeUnmarshalBase64(resultStr, &tr)
-		if err != nil {
-			log.Print(err, "unmarshaling TransactionResult")
 		}
 		log.Println("result string: ", resultStr)
 	}
