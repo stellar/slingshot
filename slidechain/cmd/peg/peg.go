@@ -1,12 +1,17 @@
 package main
 
 import (
+	"context"
+	"database/sql"
 	"encoding/hex"
 	"flag"
 	"log"
 	"net/http"
+	"slingshot/slidechain"
 	"strconv"
 	"strings"
+	"time"
+	"txvm/protocol/bc"
 
 	"github.com/chain/txvm/crypto/ed25519"
 	"github.com/interstellar/slingshot/slidechain/stellar"
@@ -23,6 +28,7 @@ func main() {
 		horizonURL = flag.String("horizon", "https://horizon-testnet.stellar.org", "horizon URL")
 		code       = flag.String("code", "", "asset code for non-Lumen asset")
 		issuer     = flag.String("issuer", "", "asset issuer for non-Lumen asset")
+		dbfile     = flag.String("db", "slidechain.db", "path to db")
 	)
 	flag.Parse()
 
@@ -63,9 +69,20 @@ func main() {
 		log.Fatal(err, "decoding recipient")
 	}
 
+	db, err := sql.Open("sqlite3", *dbfile)
+	if err != nil {
+		log.Fatalf("error opening db: %s", err)
+	}
+	defer db.Close()
+
 	hclient := &horizon.Client{
 		URL:  strings.TrimRight(*horizonURL, "/"),
 		HTTP: new(http.Client),
+	}
+	ctx := context.Background()
+	c, err := slidechain.GetCustodian(ctx, db, *horizonURL)
+	if err != nil {
+		log.Fatalf("error getting custodian: %s", err)
 	}
 	tx, err := stellar.BuildPegInTx(*seed, recipientPubkey, *amount, *code, *issuer, *custodian, hclient)
 	if err != nil {
@@ -84,4 +101,10 @@ func main() {
 		log.Fatalf("%s: submitting tx %s", err, txstr)
 	}
 	log.Printf("successfully submitted peg-in tx hash %s on ledger %d", succ.Hash, succ.Ledger)
+	expMS := int64(bc.Millis(time.Now().Add(10 * time.Minute)))
+	err = c.RecordPegs(ctx, txenv.E.Tx, recipientPubkey[:], expMS)
+	if err != nil {
+		log.Fatal(err, "recording pegs")
+	}
+	log.Printf("successfully record pegs for tx hash %s", succ.Hash)
 }

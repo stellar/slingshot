@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -218,7 +219,9 @@ func TestImport(t *testing.T) {
 				InitBlockHash: chain.InitialBlockHash,
 			}
 			go c.importFromPegs(ctx)
-			_, err := db.Exec("INSERT INTO pegs (txid, operation_num, amount, asset_xdr, recipient_pubkey) VALUES ('txid', 1, 1, $1, $2)", assetXDR, testRecipPubKey)
+			expMS := int64(bc.Millis(time.Now().Add(10 * time.Minute)))
+			nonceHash := UniqueNonceHash(c.InitBlockHash.Bytes(), expMS)
+			_, err := db.Exec("INSERT INTO pegs (nonce_hash, amount, asset_xdr, recipient_pubkey) VALUES ($1, 1, $2, $3, $4)", nonceHash[:], assetXDR, testRecipPubKey, expMS)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -306,6 +309,12 @@ func TestEndToEnd(t *testing.T) {
 		}
 		t.Logf("successfully submitted peg-in tx: id %s, ledger %d", succ.Hash, succ.Ledger)
 
+		expMS := int64(bc.Millis(time.Now().Add(10 * time.Minute)))
+		err = c.RecordPegs(ctx, txenv.E.Tx, exporterPubKeyBytes[:], expMS)
+		if err != nil {
+			t.Fatalf("error recording pegs: %s", err)
+		}
+		log.Printf("successfully recorded pegs for tx id %s", succ.Hash)
 		native := xdr.Asset{
 			Type: xdr.AssetTypeAssetTypeNative,
 		}

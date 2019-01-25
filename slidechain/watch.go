@@ -39,9 +39,8 @@ func (c *Custodian) watchPegs(ctx context.Context) {
 			if env.Tx.Memo.Type != xdr.MemoTypeMemoHash {
 				return
 			}
-			recipientPubkey := (*env.Tx.Memo.Hash)[:]
 
-			for i, op := range env.Tx.Operations {
+			for _, op := range env.Tx.Operations {
 				if op.Body.Type != xdr.OperationTypePayment {
 					continue
 				}
@@ -51,27 +50,13 @@ func (c *Custodian) watchPegs(ctx context.Context) {
 				}
 
 				// This operation is a payment to the custodian's account - i.e., a peg.
-				// We record it in the db, then wake up a goroutine that executes imports for not-yet-imported pegs.
-				const q = `INSERT INTO pegs 
-					(txid, operation_num, amount, asset_xdr, recipient_pubkey)
-					VALUES ($1, $2, $3, $4, $5)`
-				assetXDR, err := payment.Asset.MarshalBinary()
-				if err != nil {
-					log.Fatalf("error marshaling asset to XDR %s: %s", payment.Asset.String(), err)
-					return
-				}
-				_, err = c.DB.ExecContext(ctx, q, tx.ID, i, payment.Amount, assetXDR, recipientPubkey)
-				if err != nil {
-					log.Fatal("error recording peg-in tx: ", err)
-					return
-				}
-				// Update cursor after successfully processing transaction
+				// We update the cursor to avoid double-processing a transaction.
 				_, err = c.DB.ExecContext(ctx, `UPDATE custodian SET cursor=$1 WHERE seed=$2`, tx.PT, c.seed)
 				if err != nil {
 					log.Fatalf("updating cursor: %s", err)
 					return
 				}
-				log.Printf("recorded peg-in tx %s", tx.ID)
+				// Wake up a goroutine that executes imports for not-yet-imported pegs.
 				c.imports.Broadcast()
 			}
 		})
