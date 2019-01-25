@@ -85,18 +85,16 @@ func (c *Custodian) importFromPegs(ctx context.Context) {
 		}
 
 		var (
-			txids             []string
-			opNums            []int
-			amounts           []int64
-			assetXDRs, recips [][]byte
+			amounts, expMSs               []int64
+			nonceHashs, assetXDRs, recips [][]byte
 		)
-		const q = `SELECT txid, operation_num, amount, asset_xdr, recipient_pubkey FROM pegs WHERE imported=0`
-		err := sqlutil.ForQueryRows(ctx, c.DB, q, func(txid string, opNum int, amount int64, assetXDR, recip []byte) {
-			txids = append(txids, txid)
-			opNums = append(opNums, opNum)
+		const q = `SELECT nonce_hash, amount, asset_xdr, recipient_pubkey, expiration_ms FROM pegs WHERE imported=0`
+		err := sqlutil.ForQueryRows(ctx, c.DB, q, func(nonceHash []byte, amount int64, assetXDR, recip []byte, expMS int64) {
+			nonceHashs = append(nonceHashs, nonceHash)
 			amounts = append(amounts, amount)
 			assetXDRs = append(assetXDRs, assetXDR)
 			recips = append(recips, recip)
+			expMSs = append(expMSs, expMS)
 		})
 		if err == context.Canceled {
 			return
@@ -104,14 +102,14 @@ func (c *Custodian) importFromPegs(ctx context.Context) {
 		if err != nil {
 			log.Fatalf("querying pegs: %s", err)
 		}
-		for i, txid := range txids {
+		for i, nonceHash := range nonceHashs {
 			var (
-				opNum    = opNums[i]
 				amount   = amounts[i]
 				assetXDR = assetXDRs[i]
 				recip    = recips[i]
+				expMS    = expMSs[i]
 			)
-			err = c.doImport(ctx, txid, opNum, amount, assetXDR, recip)
+			err = c.doImport(ctx, nonceHash, amount, assetXDR, recip, expMS)
 			if err != nil {
 				if err == context.Canceled {
 					return
@@ -122,8 +120,8 @@ func (c *Custodian) importFromPegs(ctx context.Context) {
 	}
 }
 
-func (c *Custodian) doImport(ctx context.Context, txid string, opNum int, amount int64, assetXDR, recip []byte) error {
-	log.Printf("doing import from tx %s, op %d: %d of asset %x for recipient %x", txid, opNum, amount, assetXDR, recip)
+func (c *Custodian) doImport(ctx context.Context, nonceHash []byte, amount int64, assetXDR, recip []byte, expMS int64) error {
+	log.Printf("doing import from tx with hash %x, op %d: %d of asset %x for recipient %x with expiration %d", nonceHash, amount, assetXDR, recip, expMS)
 
 	importTxBytes, err := c.buildImportTx(amount, assetXDR, recip)
 	if err != nil {
@@ -141,6 +139,6 @@ func (c *Custodian) doImport(ctx context.Context, txid string, opNum int, amount
 	}
 	txresult := txresult.New(importTx)
 	log.Printf("assetID %x amount %d anchor %x\n", txresult.Issuances[0].Value.AssetID.Bytes(), txresult.Issuances[0].Value.Amount, txresult.Issuances[0].Value.Anchor)
-	_, err = c.DB.ExecContext(ctx, `UPDATE pegs SET imported=1 WHERE txid = $1 AND operation_num = $2`, txid, opNum)
-	return errors.Wrapf(err, "setting imported=1 for txid %s, operation %d", txid, opNum)
+	_, err = c.DB.ExecContext(ctx, `UPDATE pegs SET imported=1 WHERE nonce_hash = $1`, nonceHash)
+	return errors.Wrapf(err, "setting imported=1 for tx with hash %x", nonceHash)
 }
