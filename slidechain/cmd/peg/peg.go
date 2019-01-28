@@ -7,13 +7,13 @@ import (
 	"flag"
 	"log"
 	"net/http"
-	"slingshot/slidechain"
 	"strconv"
 	"strings"
 	"time"
-	"txvm/protocol/bc"
 
 	"github.com/chain/txvm/crypto/ed25519"
+	"github.com/chain/txvm/protocol/bc"
+	"github.com/interstellar/slingshot/slidechain"
 	"github.com/interstellar/slingshot/slidechain/stellar"
 	"github.com/stellar/go/clients/horizon"
 	"github.com/stellar/go/xdr"
@@ -68,7 +68,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err, "decoding recipient")
 	}
-
+	// TODO(debnil): Write a new GetCustodian RPC.
 	db, err := sql.Open("sqlite3", *dbfile)
 	if err != nil {
 		log.Fatalf("error opening db: %s", err)
