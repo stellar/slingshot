@@ -68,6 +68,15 @@ func Assemble(s string) ([]byte, error) {
 	return bytecode, err
 }
 
+// MustAssemble calls Assemble and panics on error.
+func MustAssemble(s string) []byte {
+	result, err := Assemble(s)
+	if err != nil {
+		panic(err)
+	}
+	return result
+}
+
 func assemble(s *scanner, stoptok token) ([]byte, error) {
 	// First construct a list of assembler "items," then "resolve" those
 	// into bytecode.

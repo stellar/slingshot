@@ -6,6 +6,7 @@ import (
 	"github.com/chain/txvm/crypto/ed25519"
 	"github.com/chain/txvm/protocol/bc"
 	"github.com/chain/txvm/protocol/txvm"
+	"github.com/chain/txvm/protocol/txvm/asm"
 	"github.com/chain/txvm/protocol/txvm/op"
 	"github.com/chain/txvm/protocol/txvm/txvmutil"
 )
@@ -32,7 +33,7 @@ var (
 	// contract begins with a "lock" phase that ends with "output."
 	// PayToMultisigProgUnlock is what runs after the contract is
 	// rehydrated with "input.")
-	payToMultisigProgUnlock = mustAssemble(payToMultisigProgUnlockSrc)
+	payToMultisigProgUnlock = asm.MustAssemble(payToMultisigProgUnlockSrc)
 )
 
 // SpendMultisig writes txvm bytecode to b, spending a value

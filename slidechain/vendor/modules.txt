@@ -5,16 +5,17 @@ github.com/agl/ed25519/edwards25519
 github.com/bobg/multichan
 # github.com/bobg/sqlutil v0.0.0-20180406050615-9797d815c1b0
 github.com/bobg/sqlutil
-# github.com/chain/txvm v0.0.0-20181214231834-cac41849b193 => github.com/chain/txvm v0.0.0-20190114205213-d4707728bddc
+# github.com/chain/txvm v0.0.0-20190125064935-7c38bfeddf11
 github.com/chain/txvm/crypto/ed25519
 github.com/chain/txvm/errors
 github.com/chain/txvm/protocol
 github.com/chain/txvm/protocol/bc
-github.com/chain/txvm/protocol/state
+github.com/chain/txvm/protocol/txbuilder
 github.com/chain/txvm/protocol/txbuilder/standard
 github.com/chain/txvm/protocol/txbuilder/txresult
 github.com/chain/txvm/protocol/txvm
 github.com/chain/txvm/protocol/txvm/asm
+github.com/chain/txvm/protocol/state
 github.com/chain/txvm/crypto/ed25519/internal/edwards25519
 github.com/chain/txvm/encoding/json
 github.com/chain/txvm/log
@@ -24,8 +25,6 @@ github.com/chain/txvm/protocol/patricia
 github.com/chain/txvm/crypto/sha3
 github.com/chain/txvm/protocol/txvm/op
 github.com/chain/txvm/protocol/txvm/txvmutil
-github.com/chain/txvm/protocol/txbuilder
-github.com/chain/txvm/protocol/txbuilder/txresult
 github.com/chain/txvm/crypto/sha3pool
 # github.com/davecgh/go-spew v1.1.1
 github.com/davecgh/go-spew/spew

@@ -1,6 +1,9 @@
 package standard
 
-import "github.com/chain/txvm/protocol/txvm"
+import (
+	"github.com/chain/txvm/protocol/txvm"
+	"github.com/chain/txvm/protocol/txvm/asm"
+)
 
 // expects [... refdata value] on the arg stack
 const retireSrc = `
@@ -13,7 +16,7 @@ const retireSrc = `
 var (
 	// RetireContract is the assembled txvm bytecode of the
 	// standard retirement contract.
-	RetireContract = mustAssemble(retireSrc)
+	RetireContract = asm.MustAssemble(retireSrc)
 
 	// RetireContractSeed is the seed of the standard retirement
 	// contract.
