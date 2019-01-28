@@ -16,12 +16,12 @@ const (
 	output                  #  quorum, {recip}, zeroval, amount, asset                                                                   {"O", vm.caller, outputid}  
 `
 
-	importUniquenessSrc = `
+	importUniquenessFmt = `
 						 #  con stack                                                                arg stack                                log  notes
 						 #  ---------                                                                ---------                                ---  -----
 		 				 #  quorum, {recip}, zeroval, amount, asset                                                                                
 	caller               #  quorum, {recip}, zeroval, amount, asset, callerSeed                                                                    
-	importIssuanceSeed   #  quorum, {recip}, zeroval, amount, asset, callerSeed, importIssuanceSeed                                                
+	%s					 #  quorum, {recip}, zeroval, amount, asset, callerSeed, importIssuanceSeed                                                
 	eq verify            #  quorum, {recip}, zeroval, amount, asset                                                                                
 	put put put put put  #                                                                           asset, amount, zeroval, {recip}, quorum       
 `
@@ -43,6 +43,7 @@ var (
 	prepegUniquenessSrc  = fmt.Sprintf(prepegUniquenessFmt, importUniquenessSrc)
 	prepegUniquenessProg = asm.MustAssemble(prepegUniquenessSrc)
 	prepegUniquenessSeed = txvm.ContractSeed(prepegUniquenessProg)
+	importUniquenessSrc  = fmt.Sprintf(importUniquenessFmt, importIssuanceSeed)
 	importUniquenessProg = asm.MustAssemble(importUniquenessSrc)
 	importUniquenessSeed = txvm.ContractSeed(importUniquenessProg)
 	zeroSeed             [32]byte
