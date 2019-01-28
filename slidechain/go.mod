@@ -12,7 +12,7 @@ require (
 	github.com/lib/pq v1.0.0 // indirect
 	github.com/manucorporat/sse v0.0.0-20160126180136-ee05b128a739 // indirect
 	github.com/mattn/go-sqlite3 v1.10.0
-	github.com/pkg/errors v0.8.0
+	github.com/pkg/errors v0.8.0 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/segmentio/go-loggly v0.5.0 // indirect
 	github.com/sirupsen/logrus v1.0.6-0.20180720114135-a1f2e46d9209 // indirect
