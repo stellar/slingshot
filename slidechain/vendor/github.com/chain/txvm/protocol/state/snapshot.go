@@ -115,10 +115,31 @@ func (s *Snapshot) ApplyBlockHeader(bh *bc.BlockHeader) error {
 	return nil
 }
 
+var (
+	// ErrUnfinalized means a transaction with no finalize instruction is being applied to a snapshot.
+	ErrUnfinalized = errors.New("unfinalized transaction")
+
+	// ErrEmptyState means ApplyTx was called on an uninitialized blockchain state.
+	ErrEmptyState = errors.New("empty state")
+
+	// ErrConflictingNonce means ApplyTx encountered a transaction with a nonce already in the blockchain state.
+	ErrConflictingNonce = errors.New("conflicting nonce")
+
+	// ErrNonceReference means a nonce referenced a non-recent, non-initial block ID.
+	ErrNonceReference = errors.New("nonce must refer to the initial block, a recent block, or have a zero block ID")
+
+	// ErrPrevout means a transaction tried to input a contract with an unknown ID.
+	ErrPrevout = errors.New("invalid prevout")
+)
+
 // ApplyTx updates s in place.
 func (s *Snapshot) ApplyTx(p *bc.CommitmentsTx) error {
 	if s.InitialBlockID.IsZero() {
-		return fmt.Errorf("cannot apply a transaction to an empty state")
+		return ErrEmptyState
+	}
+
+	if !p.Tx.Finalized {
+		return ErrUnfinalized
 	}
 
 	nonceTree := new(patricia.Tree)
@@ -129,7 +150,7 @@ func (s *Snapshot) ApplyTx(p *bc.CommitmentsTx) error {
 		// present.
 		nc, _ := p.NonceCommitments[n.ID]
 		if nonceTree.Contains(nc) {
-			return fmt.Errorf("conflicting nonce %x", n.ID.Bytes())
+			return errors.Wrapf(ErrConflictingNonce, "nonce %x", n.ID.Bytes())
 		}
 
 		if n.BlockID.IsZero() || n.BlockID == s.InitialBlockID {
@@ -143,7 +164,7 @@ func (s *Snapshot) ApplyTx(p *bc.CommitmentsTx) error {
 				}
 			}
 			if !found {
-				return fmt.Errorf("nonce must refer to the initial block, a recent block, or have a zero block ID")
+				return ErrNonceReference
 			}
 		}
 		nonceTree.Insert(nc)
@@ -157,14 +178,14 @@ func (s *Snapshot) ApplyTx(p *bc.CommitmentsTx) error {
 		switch con.Type {
 		case bc.InputType:
 			if !conTree.Contains(con.ID.Bytes()) {
-				return fmt.Errorf("invalid prevout %x", con.ID.Bytes())
+				return errors.Wrapf(ErrPrevout, "ID %x", con.ID.Bytes())
 			}
 			conTree.Delete(con.ID.Bytes())
 
 		case bc.OutputType:
 			err := conTree.Insert(con.ID.Bytes())
 			if err != nil {
-				return err
+				return errors.Wrapf(err, "inserting output %x", con.ID.Bytes())
 			}
 		}
 	}
