@@ -4,7 +4,7 @@ require (
 	github.com/agl/ed25519 v0.0.0-20170116200512-5312a6153412 // indirect
 	github.com/bobg/multichan v1.0.1
 	github.com/bobg/sqlutil v0.0.0-20180406050615-9797d815c1b0
-	github.com/chain/txvm v0.0.0-20181214231834-cac41849b193
+	github.com/chain/txvm v0.0.0-20190125064935-7c38bfeddf11
 	github.com/davecgh/go-spew v1.1.1
 	github.com/go-errors/errors v1.0.1 // indirect
 	github.com/golang/protobuf v1.2.0
@@ -24,5 +24,3 @@ require (
 	golang.org/x/sync v0.0.0-20181221193216-37e7f081c4d4 // indirect
 	golang.org/x/sys v0.0.0-20190102155601-82a175fd1598 // indirect
 )
-
-replace github.com/chain/txvm => github.com/chain/txvm v0.0.0-20190114205213-d4707728bddc

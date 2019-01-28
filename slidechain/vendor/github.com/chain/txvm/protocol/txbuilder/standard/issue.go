@@ -5,6 +5,7 @@ import (
 
 	"github.com/chain/txvm/crypto/ed25519"
 	"github.com/chain/txvm/protocol/txvm"
+	"github.com/chain/txvm/protocol/txvm/asm"
 	"github.com/chain/txvm/protocol/txvm/op"
 	"github.com/chain/txvm/protocol/txvm/txvmutil"
 )
@@ -88,8 +89,8 @@ var (
 		2: fmt.Sprintf(assetSrcFmt[2], multisigProgCheckSrc),
 	}
 	assetProg = map[int][]byte{
-		1: mustAssemble(assetSrc[1]),
-		2: mustAssemble(assetSrc[2]),
+		1: asm.MustAssemble(assetSrc[1]),
+		2: asm.MustAssemble(assetSrc[2]),
 	}
 
 	// AssetContractSeed is the seed of the standard asset-issuance contract.
