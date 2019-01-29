@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/chain/txvm/protocol/txvm"
+	"github.com/chain/txvm/protocol/txvm/asm"
 )
 
 const (
@@ -38,13 +39,13 @@ const (
 )
 
 var (
-	importIssuanceProg   = asm.MustAssemble(importIssuanceSrc)
-	importIssuanceSeed   = txvm.ContractSeed(importIssuanceProg)
 	prepegUniquenessSrc  = fmt.Sprintf(prepegUniquenessFmt, importUniquenessSrc)
 	prepegUniquenessProg = asm.MustAssemble(prepegUniquenessSrc)
 	prepegUniquenessSeed = txvm.ContractSeed(prepegUniquenessProg)
 	importUniquenessSrc  = fmt.Sprintf(importUniquenessFmt, importIssuanceSeed)
 	importUniquenessProg = asm.MustAssemble(importUniquenessSrc)
 	importUniquenessSeed = txvm.ContractSeed(importUniquenessProg)
+	importIssuanceProg   = asm.MustAssemble(importIssuanceSrc)
+	importIssuanceSeed   = txvm.ContractSeed(importIssuanceProg)
 	zeroSeed             [32]byte
 )
