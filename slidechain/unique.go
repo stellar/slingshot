@@ -27,13 +27,13 @@ const (
 	put put put put put  #                                                                           asset, amount, zeroval, {recip}, quorum             
 `
 
-	importIssuanceSrc = `
+	importIssuanceFmt = `
 	                                                    #  con stack                                arg stack                                log                                              notes
 	                                                    #  ---------                                ---------                                ---                                              -----
 	                                                    #                                           importUniquenessContract                                                                  
 	get call                                            #                                           asset, amount, zeroval, {recip}, quorum                                                   
 	get get get get get                                 #  quorum, {recip}, zeroval, amount, asset                                                                                            
-	[txid <pubkey> get 0 checksig verify] contract put  #  quorum, {recip}, zeroval, amount, asset  sigchecker                                                                                
+	[txid x"%x" get 0 checksig verify] contract put     #  quorum, {recip}, zeroval, amount, asset  sigchecker                                                                                
 	issue put put put                                   #                                           sigchecker, issuedval, {recip}, quorum   {"A", vm.caller, v.amount, v.assetid, v.anchor}
 `
 )
@@ -45,6 +45,7 @@ var (
 	importUniquenessSrc  = fmt.Sprintf(importUniquenessFmt, importIssuanceSeed)
 	importUniquenessProg = asm.MustAssemble(importUniquenessSrc)
 	importUniquenessSeed = txvm.ContractSeed(importUniquenessProg)
+	importIssuanceSrc    = fmt.Sprintf(importIssuanceFmt, custodianPub)
 	importIssuanceProg   = asm.MustAssemble(importIssuanceSrc)
 	importIssuanceSeed   = txvm.ContractSeed(importIssuanceProg)
 	zeroSeed             [32]byte
