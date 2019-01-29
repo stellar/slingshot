@@ -523,7 +523,7 @@ Output represents a _snapshot_ of a [contract](#contract-type)
 and can only contain [portable types](#portable-types).
 
 ```
-       Input  =  LE32(k)  ||  Item[0]  || ... ||  Item[k-1]  ||  Predicate
+      Output  =  LE32(k)  ||  Item[0]  || ... ||  Item[k-1]  ||  Predicate
    Predicate  =  <32 bytes>
         Item  =  enum { Data, Value }
         Data  =  0x00  ||  LE32(len)  ||  <bytes>
@@ -1686,7 +1686,7 @@ or if the third from the top item is not a [contract](#contract-type).
 
 #### right
 
-_contract(P) L R_ **left** → _contract(R)_
+_contract(P) L R_ **right** → _contract(R)_
 
 1. Pops the right [predicate](#predicate) `R`, then the left [predicate](#predicate) `L`.
 2. Reads the [predicate](#predicate) `P` from the contract.
