@@ -2,6 +2,7 @@
 
 #![allow(non_snake_case)]
 
+use bulletproofs::PedersenGens;
 use curve25519_dalek::ristretto::CompressedRistretto;
 use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
@@ -37,18 +38,13 @@ impl Signature {
             transcript.commit_point(b"P", p);
         }
 
-        let mut pairs: Vec<(Scalar, CompressedRistretto)> = Vec::with_capacity(pubkeys.len() + 1);
-
-        // Skip randomization factor for the first pubkey to be more efficient in a single-key case
-        if pubkeys.len() > 0 {
-            pairs.push((Scalar::one(), pubkeys[0]));
-        }
-        // Apply randomization factors to all the other pubkeys
-        let i: usize = 1;
-        while i < pubkeys.len() {
-            let x = transcript.challenge_scalar(b"x");
-            pairs.push((x, pubkeys[i]));
-        }
+        let mut pairs = pubkeys
+            .iter()
+            .map(|p| {
+                let x = transcript.challenge_scalar(b"x");
+                (x, *p)
+            })
+            .collect::<Vec<_>>();
 
         // Commit the signature's nonce commitment
         transcript.commit_point(b"R", &self.R);
@@ -74,9 +70,52 @@ impl Signature {
         }
     }
 
+    /// Creates a signature for a single private key
+    pub fn sign_single(transcript: &mut Transcript, privkey: Scalar) -> Self {
+        Signature::sign_aggregated(transcript, &[privkey])
+    }
+
     /// Creates an aggregated signature for a set of private keys
-    pub fn sign_aggregated(&self, transcript: &mut Transcript, privkeys: &[Scalar]) -> Self {
-        unimplemented!()
+    pub fn sign_aggregated(transcript: &mut Transcript, privkeys: &[Scalar]) -> Self {
+        // Derive public keys from privkeys
+        let gens = PedersenGens::default();
+        let pubkeys = privkeys
+            .iter()
+            .map(|p| (p * gens.B).compress())
+            .collect::<Vec<_>>();
+
+        // Commit pubkeys
+        let n = pubkeys.len();
+        transcript.commit_u64(b"n", n as u64);
+        for p in pubkeys.iter() {
+            transcript.commit_point(b"P", p);
+        }
+
+        // Generate aggregated private key
+        let aggregated_privkey: Scalar = privkeys
+            .iter()
+            .map(|p| {
+                let x = transcript.challenge_scalar(b"x");
+                p * x
+            })
+            .sum();
+
+        // Generate secret nonce
+        let mut rng = transcript
+            .build_rng()
+            .commit_witness_bytes(b"privkey", aggregated_privkey.as_bytes())
+            .finalize(&mut rand::thread_rng());
+        let r = Scalar::random(&mut rng);
+
+        // Commit the nonce to the transcript
+        let R = (r * gens.B).compress();
+        transcript.commit_point(b"R", &R);
+
+        // Compute challenge scalar
+        let e = transcript.challenge_scalar(b"e");
+        let s = r + e * aggregated_privkey;
+
+        Signature { R, s }
     }
 }
 
@@ -100,5 +139,101 @@ impl Signature {
         buf[..32].copy_from_slice(self.R.as_bytes());
         buf[32..].copy_from_slice(self.s.as_bytes());
         buf
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn empty() {
+        let gens = PedersenGens::default();
+        let mut transcript = Transcript::new(b"empty");
+        let sig = Signature::sign_aggregated(&mut transcript, &[]);
+        assert!(sig
+            .verify_aggregated(&mut transcript, &[])
+            .verify(&gens)
+            .is_ok());
+    }
+
+    #[test]
+    fn single_signature() {
+        let gens = PedersenGens::default();
+
+        let (pubkey, sig) = {
+            let privkey = Scalar::random(&mut rand::thread_rng());
+            let pubkey = (privkey * gens.B).compress();
+            let mut transcript = Transcript::new(b"single_signature");
+            let sig = Signature::sign_single(&mut transcript, privkey);
+            (pubkey, sig)
+        };
+
+        let mut transcript = Transcript::new(b"single_signature");
+        assert!(sig
+            .verify_single(&mut transcript, pubkey)
+            .verify(&gens)
+            .is_ok());
+    }
+
+    #[test]
+    fn single_signature_wrong_key() {
+        let gens = PedersenGens::default();
+
+        let sig = {
+            let privkey = Scalar::random(&mut rand::thread_rng());
+            let mut transcript = Transcript::new(b"single_signature");
+            let sig = Signature::sign_single(&mut transcript, privkey);
+            sig
+        };
+
+        let mut transcript = Transcript::new(b"single_signature");
+        let wrong_pubkey = (Scalar::random(&mut rand::thread_rng()) * gens.B).compress();
+        assert!(sig
+            .verify_single(&mut transcript, wrong_pubkey)
+            .verify(&gens)
+            .is_err());
+    }
+
+    #[test]
+    fn two_key_signature() {
+        let gens = PedersenGens::default();
+
+        let (pubkey1, pubkey2, sig) = {
+            let privkey1 = Scalar::random(&mut rand::thread_rng());
+            let pubkey1 = (privkey1 * gens.B).compress();
+            let privkey2 = Scalar::random(&mut rand::thread_rng());
+            let pubkey2 = (privkey2 * gens.B).compress();
+            let mut transcript = Transcript::new(b"two_key_signature");
+            let sig = Signature::sign_aggregated(&mut transcript, &[privkey1, privkey2]);
+            (pubkey1, pubkey2, sig)
+        };
+
+        let mut transcript = Transcript::new(b"two_key_signature");
+        assert!(sig
+            .verify_aggregated(&mut transcript, &[pubkey1, pubkey2])
+            .verify(&gens)
+            .is_ok());
+    }
+
+    #[test]
+    fn two_key_signature_wrong_order() {
+        let gens = PedersenGens::default();
+
+        let (pubkey1, pubkey2, sig) = {
+            let privkey1 = Scalar::random(&mut rand::thread_rng());
+            let pubkey1 = (privkey1 * gens.B).compress();
+            let privkey2 = Scalar::random(&mut rand::thread_rng());
+            let pubkey2 = (privkey2 * gens.B).compress();
+            let mut transcript = Transcript::new(b"two_key_signature");
+            let sig = Signature::sign_aggregated(&mut transcript, &[privkey1, privkey2]);
+            (pubkey1, pubkey2, sig)
+        };
+
+        let mut transcript = Transcript::new(b"two_key_signature");
+        assert!(sig
+            .verify_aggregated(&mut transcript, &[pubkey2, pubkey1])
+            .verify(&gens)
+            .is_err());
     }
 }

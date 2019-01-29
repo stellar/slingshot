@@ -43,8 +43,8 @@ ZkVM defines a procedural representation for blockchain transactions and the rul
     * [Transaction log](#transaction-log)
     * [Transaction ID](#transaction-id)
     * [Merkle binary tree](#merkle-binary-tree)
-    * [Signature](#signature)
-    * [Aggregated transaction signature](#aggregated-transaction-signature)
+    * [Aggregated signature](#aggregated-signature)
+    * [Transaction signature](#transaction-signature)
     * [Blinding protocol](#blinding-protocol)
 * [VM operation](#vm-operation)
     * [VM state](#vm-state)
@@ -363,7 +363,7 @@ Pedersen commitments can be proven to use a pre-determined blinding factor using
 
 A _verification key_ `P` is a commitment to a secret [scalar](#scalar) `x` (_signing key_)
 using the primary [base point](#base-points) `B`: `P = x·B`.
-Verification keys are used to construct [predicates](#predicate) and verify [signatures](#signature).
+Verification keys are used to construct [predicates](#predicate) and verify [signatures](#aggregated-signature).
 
 
 ### Time bounds
@@ -555,7 +555,7 @@ required to produce a unique [transaction ID](#transaction-id):
 * Version (uint64)
 * [Time bounds](#time-bounds) (pair of [LE64](#le64)s)
 * [Program](#program) (variable-length [data](#data-type))
-* [Transaction signature](#signature) (64 bytes)
+* [Transaction signature](#transction-signature) (64 bytes)
 * [Constraint system proof](#constraint-system-proof) (variable-length array of points and scalars)
 
 
@@ -722,46 +722,67 @@ The resulting merkle binary tree may thus not be balanced; however,
 its shape is uniquely determined by the number of leaves.
 
 
-### Signature
+### Aggregated Signature
 
-Signature is a Schnorr proof of knowledge of a secret [scalar](#scalar) corresponding
-to a [verification key](#verification-key) in a context of some _message_.
+Aggregated Signature is a Schnorr proof of knowledge of a set of secret [scalars](#scalar)
+corresponding
+to some [verification keys](#verification-key) in a context of some _message_.
 
-Signature is encoded as a 64-byte [data](#data-type).
+Aggregated Signature is encoded as a 64-byte [data](#data-type).
 
 The protocol is the following:
 
-1. Prover and verifier obtain a [transcript](#transcript) `T` defined by the context in which the signature is used (see [`signtx`](#signtx), [`delegate`](#delegate)). The transcript is assumed to be already bound to the _message_ and the [verification key](#verification-key) `P`.
-2. Prover creates a _secret nonce_: a randomly sampled [scalar](#scalar) `r`.
-3. Prover commits to its nonce:
+1. Prover and verifier obtain a [transcript](#transcript) `T` defined by the context in which the signature is used (see [`signtx`](#signtx), [`delegate`](#delegate)). The transcript is assumed to be already bound to the _message_ being signed.
+2. Commit the count `n` of verification keys as [LE32](#le32):
+    ```
+    T.commit("n", LE32(n))
+    ```
+3. Commit all verification keys `P[i]` in order, one by one:
+    ```
+    T.commit("P", P[i])
+    ```
+4. For each key, generate a delinearizing scalar:
+    ```
+    x[i] = T.challenge_scalar("x")
+    ```
+5. Form an aggregated key without computing it right away:
+    ```
+    PA = x[0]·P[0] + ... + x[n-1]·P[n-1]
+    ```
+6. Prover creates a _secret nonce_: a randomly sampled [scalar](#scalar) `r`.
+7. Prover commits to its nonce:
     ```
     R = r·B
     ```
-4. Prover sends `R` to the verifier.
-5. Prover and verifier write the nonce commitment `R` to the transcript:
+8. Prover sends `R` to the verifier.
+9. Prover and verifier write the nonce commitment `R` to the transcript:
     ```
     T.commit("R", R)
     ```
-6. Prover and verifier compute a Fiat-Shamir challenge scalar `e` using the transcript:
+10. Prover and verifier compute a Fiat-Shamir challenge scalar `e` using the transcript:
     ```
     e = T.challenge_scalar("e")
     ```
-7. Prover blinds the secret `dlog(P)` using the nonce and the challenge:
+11. Prover blinds the secrets `dlog(P[i])` using the nonce and the challenge:
     ```
-    s = r + e·dlog(P)
+    s = r + e·sum{x[i]·dlog(P[i])}
     ```
-8. Prover sends `s` to the verifier.
-9. Verifier checks the relation:
+12. Prover sends `s` to the verifier.
+13. Verifier checks the relation:
     ```
-    s·B == R + e·P
+    s·B  ==  R + e·PA
+         ==  R + (e·x[0])·P[0] + ... + (e·x[n-1])·P[n-1]
     ```
 
-### Aggregated transaction signature
+Note: if the signing is performed by independent mistrusting parties, it should use pre-commitments to the nonces.
+The MPC protocol for safe aggregated signing is outside the scope of this specification because it does not affect the verification protocol.
+
+### Transaction signature
 
 Instruction [`signtx`](#signtx) unlocks a contract if its [predicate](#predicate)
 correctly signs the [transaction ID](#transaction-id). The contract‘s predicate
 is added to the array of deferred [verification keys](#verification-key) that
-are later aggregated in a single key and a Schnorr [signature](#signature) protocol
+are later aggregated in a single key and a Schnorr [signature](#aggregated-signature) protocol
 is executed for the [transaction ID](#transaction-id).
 
 Aggregated signature verification protocol is based on the [MuSig](https://eprint.iacr.org/2018/068) scheme, but with
@@ -775,34 +796,8 @@ Fiat-Shamir transform defined through the use of the [transcript](#transcript) i
     ```
     T.commit("txid", txid)
     ```
-3. Commit the count `n` of deferred keys as [LE32](#le32):
-    ```
-    T.commit("n", LE32(n))
-    ```
-4. Commit all deferred keys `P[i]` in order, one by one:
-    ```
-    T.commit("P", P[i])
-    ```
-5. For each key, generate a randomizing scalar:
-    ```
-    x[i] = T.challenge_scalar("x")
-    ```
-6. Form an aggregated key without computing it right away:
-    ```
-    PA = x[0]·P[0] + ... + x[n-1]·P[n-1]
-    ```
-7. Perform the [signature protocol](#signature) using the transcript `T`, randomized secret keys `x[i]·dlog(P[i])`, and unrolling `PA` in the final statement:
-    ```
-    s[i] = r[i] + e·x[i]·dlog(P[i])
-      s  = sum{s[i]}
-
-    s·B  ==  R + e·PA
-         ==  R + (e·x[0])·P[0] + ... + (e·x[n-1])·P[n-1]
-    ```
-8. Add the statement to the list of [deferred point operations](#deferred-point-operations).
-
-Note: if the signing is performed by independent mistrusting parties, it should use pre-commitments to the nonces.
-The MPC protocol for safe aggregated signing is outside the scope of this specification because it does not affect the verification protocol.
+3. Perform the [aggregated signature protocol](#aggregated-signature) using the transcript `T`.
+4. Add the verifier's statement to the list of [deferred point operations](#deferred-point-operations).
 
 
 ### Blinding protocol
@@ -843,7 +838,7 @@ Proof:
     T = Transcript("ZkVM.blind-reblind-nonce")
     T.commit("Q", Q)
     ```
-4. Prover and verifier perform the [signature protocol](#signature) with base point `B2` producing a 64-byte proof `R_q || s_q`.
+4. Prover and verifier perform the [signature protocol](#aggregated-signature) with base point `B2` producing a 64-byte proof `R_q || s_q`.
 5. Prover makes a commitment `Com(v, q·p) = v·B + q·p·B2`.
 6. Prover commits to the value by multiplicatively blinding it (because often secret values are distributed non-uniformely) and sends `W` to the verifier:
     ```
@@ -909,7 +904,7 @@ F  == p^{-1}·f·B2
 Q  == q·B2      
 ```
 
-1. Prover (recipient) and verifier perform the [signature protocol](#signature) for the statement `Q == q·B2`. Prover copies the proof data `Q || R_q || s_q` from the [blinding proof](#blinding-proof):   
+1. Prover (recipient) and verifier perform the [signature protocol](#aggregated-signature) for the statement `Q == q·B2`. Prover copies the proof data `Q || R_q || s_q` from the [blinding proof](#blinding-proof):   
     ```
     T = Transcript("ZkVM.blind-reblind-nonce")
     T.commit("Q", Q)
@@ -1036,7 +1031,7 @@ If the execution finishes successfully, VM performs the finishing tasks:
 1. Checks if the stack is empty; fails otherwise.
 2. Checks if the uniqueness flag is set to `true`; fails otherwise.
 3. Computes [transaction ID](#transaction-id).
-4. Computes a verification statement for [aggregated transaction signature](#aggregated-transaction-signature).
+4. Computes a verification statement for [transaction signature](#transaction-signature).
 5. Computes a verification statement for [constraint system proof](#constraint-system-proof).
 6. Executes all [deferred point operations](#deferred-point-operations), including aggregated transaction signature and constraint system proof, using a single multi-scalar multiplication. Fails if the result is not an identity point.
 
@@ -1047,7 +1042,7 @@ to the blockchain state as described in [the blockchain specification](Blockchai
 ### Deferred point operations
 
 VM defers operations on [points](#point) till the end of the transaction in order
-to batch them with the verification of [transaction signature](#signature) and
+to batch them with the verification of [transaction signature](#transaction-signature) and
 [constraint system proof](#constraint-system-proof).
 
 Each deferred operation at index `i` represents a statement:
@@ -1148,7 +1143,7 @@ Code | Instruction                | Stack diagram                              |
 0x?? | [`contract:k`](#contract)  |   _items... pred_ → _contract_             | 
 0x?? | [`nonce`](#nonce)          |            _pred_ → _contract_             | Modifies [tx log](#transaction-log)
 0x?? | [`log`](#log)              |            _data_ → ø                      | Modifies [tx log](#transaction-log)
-0x?? | [`signtx`](#signtx)        |        _contract_ → _results..._           | Modifies [deferred verification keys](#signature)
+0x?? | [`signtx`](#signtx)        |        _contract_ → _results..._           | Modifies [deferred verification keys](#transaction-signature)
 0x?? | [`call`](#call)            |   _contract prog_ → _results..._           | [Defers point operations](#deferred-point-operations)
 0x?? | [`left`](#left)            |    _contract A B_ → _contract’_            | [Defers point operations](#deferred-point-operations)
 0x?? | [`right`](#right)          |    _contract A B_ → _contract’_            | [Defers point operations](#deferred-point-operations)
@@ -1644,7 +1639,7 @@ _contract_ **signtx** → _results..._
 
 1. Pops the [contract](#contract-type) from the stack.
 2. Adds the contract’s [predicate](#predicate) as a [verification key](#verification-key)
-   to the list of deferred keys for [aggregated transaction signature](#aggregated-transaction-signature)
+   to the list of deferred keys for [aggregated transaction signature](#transaction-signature)
    check at the end of the VM execution.
 3. Places the [payload](#contract-payload) on the stack (last item on top), discarding the contract.
 
@@ -1713,27 +1708,22 @@ _contract prog sig_ **delegate** → _results..._
     ```
     T = Transcript("ZkVM.delegate")
     ```
-3. Commits the contract’s [predicate](#predicate) to the transcript:
-    ```
-    P = contract.predicate
-    T.commit("pred", P)
-    ```
-4. Commits the program `prog` to the transcript:
+3. Commits the program `prog` to the transcript:
     ```
     T.commit("prog", prog)
     ```
-5. Extracts nonce commitment `R` and scalar `s` from a 64-byte data `sig`:
+4. Extracts nonce commitment `R` and scalar `s` from a 64-byte data `sig`:
     ```
     R = sig[ 0..32]
     s = sig[32..64]
     ```
-6. Performs the [signature protocol](#signature) using the transcript `T`, secret key `dlog(contract.predicate)` and the values `R` and `s`:
+5. Performs the [signature protocol](#aggregated-signature) using the transcript `T`, secret key `dlog(contract.predicate)` and the values `R` and `s`:
     ```
     (s = dlog(r) + e·dlog(P))
     s·B  ==  R + e·P
     ```
-7. Adds the statement to the list of [deferred point operations](#deferred-point-operations).
-8. Saves the current program in the program stack, sets the `prog` as current and [runs it](#vm-execution).
+6. Adds the statement to the list of [deferred point operations](#deferred-point-operations).
+7. Saves the current program in the program stack, sets the `prog` as current and [runs it](#vm-execution).
 
 Fails if:
 1. the `sig` is not a 64-byte long [data](#data-type),
@@ -1785,7 +1775,7 @@ recombines them into a payment to address `A` (pubkey) and a change `C`:
 
 Multi-signature predicate can be constructed in three ways:
 
-1. For N-of-N schemes, a set of independent public keys can be merged using a [MuSig](https://eprint.iacr.org/2018/068) scheme as described in [aggregated transaction signature](#aggregated-transaction-signature). This allows non-interactive key generation, and only a simple interactive signing protocol.
+1. For N-of-N schemes, a set of independent public keys can be merged using a [MuSig](https://eprint.iacr.org/2018/068) scheme as described in [transaction signature](#transaction-signature). This allows non-interactive key generation, and only a simple interactive signing protocol.
 2. For threshold schemes (M-of-N, M ≠ N), a single public key can be constructed using a variant of a Feldman-VSS scheme, but this requires interactive key generation.
 3. Small-size threshold schemes can be instantiated non-interactively using a [predicate tree](#predicate-tree). Most commonly, 2-of-3 "escrow" scheme can be implemented as 2 keys aggregated as the main branch for the "happy path" (escrow party not involved), while the other two combinations aggregated in the nested branches.
 
