@@ -181,17 +181,12 @@ func createTempAccount(hclient *horizon.Client, kp *keypair.Full) (*keypair.Full
 			b.Destination{AddressOrSeed: temp.Address()},
 		),
 	)
-	txenv, err := tx.Sign(kp.Seed())
 	if err != nil {
-		return nil, 0, errors.Wrap(err, "signing temp account tx")
+		return nil, 0, errors.Wrap(err, "building temp account creation tx")
 	}
-	txstr, err := xdr.MarshalBase64(txenv.E)
+	_, err = stellar.SignAndSubmitTx(hclient, tx, kp.Seed())
 	if err != nil {
-		return nil, 0, errors.Wrap(err, "marshaling temp account txenv")
-	}
-	_, err = hclient.SubmitTransaction(txstr)
-	if err != nil {
-		return nil, 0, errors.Wrapf(err, "submitting pre-export tx: %s", txstr)
+		return nil, 0, errors.Wrapf(err, "submitting temp account creation tx")
 	}
 	seqnum, err := hclient.SequenceForAccount(temp.Address())
 	if err != nil {
