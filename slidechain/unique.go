@@ -22,7 +22,7 @@ const (
 	                     #  ---------                                                                ---------                                ---  -----
 	                     #  quorum, {recip}, zeroval, amount, asset                                                                                
 	caller               #  quorum, {recip}, zeroval, amount, asset, callerSeed                                                                    
-	%s               	 #  quorum, {recip}, zeroval, amount, asset, callerSeed, importIssuanceSeed                                                
+	%s                   #  quorum, {recip}, zeroval, amount, asset, callerSeed, importIssuanceSeed                                                
 	eq verify            #  quorum, {recip}, zeroval, amount, asset                                                                                
 	put put put put put  #                                                                           asset, amount, zeroval, {recip}, quorum             
 `
