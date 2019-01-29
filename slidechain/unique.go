@@ -28,13 +28,13 @@ const (
 `
 
 	importIssuanceFmt = `
-	                                                    #  con stack                                arg stack                                log                                              notes
-	                                                    #  ---------                                ---------                                ---                                              -----
+	                                                    #  con stack                                arg stack                                log
+	                                                    #  ---------                                ---------                                ---
 	                                                    #                                           importUniquenessContract                                                                  
 	get call                                            #                                           asset, amount, zeroval, {recip}, quorum                                                   
 	get get get get get                                 #  quorum, {recip}, zeroval, amount, asset                                                                                            
 	[txid x"%x" get 0 checksig verify] contract put     #  quorum, {recip}, zeroval, amount, asset  sigchecker                                                                                
-	issue put put put                                   #                                           sigchecker, issuedval, {recip}, quorum   {"A", vm.caller, v.amount, v.assetid, v.anchor}
+	issue put put put                                   #                                           sigchecker, issuedval, {recip}, quorum   {"A", vm.caller, issuedval.amount, issuedval.assetid, issuedval.anchor}
 `
 )
 
