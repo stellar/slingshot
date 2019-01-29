@@ -9,8 +9,8 @@ import (
 
 const (
 	prepegUniquenessFmt = `
-	                        #  con stack                                                        arg stack                                log                         notes
-	                        #  ---------                                                        ---------                                ---                         -----
+	                        #  con stack                                                        arg stack                                log
+	                        #  ---------                                                        ---------                                ---
 	                        #                                                                   asset, amount, zeroval, {recip}, quorum                              
 	get get get get get     #  quorum, {recip}, zeroval, amount, asset                                                                                               
 	[%s]                    #  quorum, {recip}, zeroval, amount, asset, [importUniquenessProg]                                                                       
