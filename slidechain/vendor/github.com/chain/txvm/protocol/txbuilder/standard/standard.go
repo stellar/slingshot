@@ -3,7 +3,6 @@
 package standard
 
 import (
-	"github.com/chain/txvm/protocol/txvm/asm"
 	"github.com/chain/txvm/protocol/txvm/op"
 	"github.com/chain/txvm/protocol/txvm/txvmutil"
 )
@@ -16,12 +15,4 @@ func VerifyTxID(txid [32]byte) []byte {
 	b.PushdataBytes(txid[:])
 	b.Op(op.Eq).Op(op.Verify)
 	return b.Build()
-}
-
-func mustAssemble(src string) []byte {
-	res, err := asm.Assemble(src)
-	if err != nil {
-		panic(err)
-	}
-	return res
 }

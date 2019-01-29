@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/chain/txvm/protocol/txvm"
+	"github.com/chain/txvm/protocol/txvm/asm"
 )
 
 // payToMultisigProg1 expects:
@@ -28,7 +29,7 @@ var (
 
 	// PayToMultisigProg1 is the txvm bytecode of the first
 	// version of the standard pay-to-multisig contract.
-	PayToMultisigProg1 = mustAssemble(payToMultisigProgSrc1)
+	PayToMultisigProg1 = asm.MustAssemble(payToMultisigProgSrc1)
 
 	// PayToMultisigSeed1 is the seed of the standard pay-to-multisig-program contract.
 	PayToMultisigSeed1 = txvm.ContractSeed(PayToMultisigProg1)
@@ -55,7 +56,7 @@ var (
 
 	// PayToMultisigProg2 is the txvm bytecode of the standard
 	// pay-to-multisig contract.
-	PayToMultisigProg2 = mustAssemble(payToMultisigProgSrc2)
+	PayToMultisigProg2 = asm.MustAssemble(payToMultisigProgSrc2)
 
 	// PayToMultisigSeed2 is the seed of the standard pay-to-multisig-program contract.
 	PayToMultisigSeed2 = txvm.ContractSeed(PayToMultisigProg2)
