@@ -48,5 +48,4 @@ var (
 	importIssuanceSrc    = fmt.Sprintf(importIssuanceFmt, custodianPub)
 	importIssuanceProg   = asm.MustAssemble(importIssuanceSrc)
 	importIssuanceSeed   = txvm.ContractSeed(importIssuanceProg)
-	zeroSeed             [32]byte
 )
