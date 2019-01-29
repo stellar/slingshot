@@ -42,6 +42,7 @@ func TestPegOut(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	amount := 50
 	kp, err := keypair.Random()
 	if err != nil {
 		t.Fatal(err)
@@ -51,12 +52,12 @@ func TestPegOut(t *testing.T) {
 		t.Fatalf("error funding account %s: %s", kp.Address(), err)
 	}
 
-	temp, seqnum, err := SubmitPreExportTx(ctx, c.hclient, c.AccountID.Address(), kp)
+	temp, seqnum, err := SubmitPreExportTx(c.hclient, kp, c.AccountID.Address(), lumen, int64(amount))
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	_, err = c.DB.Exec("INSERT INTO exports (txid, amount, asset_xdr, temp, seqnum, exporter) VALUES ($1, $2, $3, $4, $5, $6)", "", 50, lumenXDR, temp, seqnum, kp.Address())
+	_, err = c.DB.Exec("INSERT INTO exports (txid, amount, asset_xdr, temp, seqnum, exporter) VALUES ($1, $2, $3, $4, $5, $6)", "", amount, lumenXDR, temp, seqnum, kp.Address())
 	if err != nil && err != context.Canceled {
 		t.Fatal(err)
 	}
@@ -87,7 +88,7 @@ func TestPegOut(t *testing.T) {
 					t.Fatalf("wrong operation type: got %s, want %s", op.Body.Type, xdr.OperationTypeAccountMerge)
 				}
 				if op.Body.Destination.Address() != kp.Address() {
-					t.Fatalf("wrong account merge destinatino: got %s, want %s", op.Body.Destination.Address(), kp.Address())
+					t.Fatalf("wrong account merge destination: got %s, want %s", op.Body.Destination.Address(), kp.Address())
 				}
 
 				op = env.Tx.Operations[1]
