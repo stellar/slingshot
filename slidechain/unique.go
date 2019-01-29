@@ -18,8 +18,8 @@ const (
 `
 
 	importUniquenessFmt = `
-	                     #  con stack                                                                arg stack                                log  notes
-	                     #  ---------                                                                ---------                                ---  -----
+	                     #  con stack                                                                arg stack                                log
+	                     #  ---------                                                                ---------                                ---
 	                     #  quorum, {recip}, zeroval, amount, asset                                                                                
 	caller               #  quorum, {recip}, zeroval, amount, asset, callerSeed                                                                    
 	x"%x"                #  quorum, {recip}, zeroval, amount, asset, callerSeed, importIssuanceSeed                                                
