@@ -111,7 +111,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("error unmarshaling custodian account id: %s", err)
 	}
-	temp, seqnum, err := slidechain.SubmitPreExportTx(hclient, kp, custodian.Address(), asset, int(exportAmount))
+	temp, seqnum, err := slidechain.SubmitPreExportTx(hclient, kp, custodian.Address(), asset, exportAmount)
 	if err != nil {
 		log.Fatalf("error submitting pre-export tx: %s", err)
 	}

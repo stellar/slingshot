@@ -90,7 +90,7 @@ func (c *Custodian) pegOutFromExports(ctx context.Context) {
 
 			log.Printf("pegging out export %x: %d of %s to %s", txid, amounts[i], asset.String(), exporters[i])
 			// TODO(vniu): flag txs that fail with unretriable errors in the db
-			err = c.pegOut(ctx, exporter, asset, amounts[i], tempID, xdr.SequenceNumber(seqnums[i]))
+			err = c.pegOut(ctx, exporter, asset, int64(amounts[i]), tempID, xdr.SequenceNumber(seqnums[i]))
 			if err != nil {
 				log.Fatalf("pegging out tx: %s", err)
 			}
@@ -102,7 +102,7 @@ func (c *Custodian) pegOutFromExports(ctx context.Context) {
 	}
 }
 
-func (c *Custodian) pegOut(ctx context.Context, exporter xdr.AccountId, asset xdr.Asset, amount int, temp xdr.AccountId, seqnum xdr.SequenceNumber) error {
+func (c *Custodian) pegOut(ctx context.Context, exporter xdr.AccountId, asset xdr.Asset, amount int64, temp xdr.AccountId, seqnum xdr.SequenceNumber) error {
 	tx, err := buildPegOutTx(c.AccountID.Address(), exporter.Address(), temp.Address(), c.network, asset, amount, seqnum)
 	if err != nil {
 		return errors.Wrap(err, "building tx")
@@ -144,7 +144,7 @@ func (c *Custodian) pegOut(ctx context.Context, exporter xdr.AccountId, asset xd
 	return errors.Wrap(err, "submitting tx")
 }
 
-func buildPegOutTx(custodian, exporter, temp, network string, asset xdr.Asset, amount int, seqnum xdr.SequenceNumber) (*b.TransactionBuilder, error) {
+func buildPegOutTx(custodian, exporter, temp, network string, asset xdr.Asset, amount int64, seqnum xdr.SequenceNumber) (*b.TransactionBuilder, error) {
 	var paymentOp b.PaymentBuilder
 	switch asset.Type {
 	case xdr.AssetTypeAssetTypeNative:
@@ -161,7 +161,7 @@ func buildPegOutTx(custodian, exporter, temp, network string, asset xdr.Asset, a
 			b.CreditAmount{
 				Code:   string(asset.AlphaNum4.AssetCode[:]),
 				Issuer: asset.AlphaNum4.Issuer.Address(),
-				Amount: strconv.Itoa(amount),
+				Amount: strconv.FormatInt(amount, 10),
 			},
 		)
 	case xdr.AssetTypeAssetTypeCreditAlphanum12:
@@ -171,7 +171,7 @@ func buildPegOutTx(custodian, exporter, temp, network string, asset xdr.Asset, a
 			b.CreditAmount{
 				Code:   string(asset.AlphaNum12.AssetCode[:]),
 				Issuer: asset.AlphaNum12.Issuer.Address(),
-				Amount: strconv.Itoa(amount),
+				Amount: strconv.FormatInt(amount, 10),
 			},
 		)
 	}
@@ -229,11 +229,14 @@ func createTempAccount(hclient *horizon.Client, kp *keypair.Full) (*keypair.Full
 	return temp, seqnum, nil
 }
 
-// SubmitPreExportTx builds and submits a pre-export transaction to the Stellar network.
-// It creates a new temporary account,
-// and sets the signers to the peg-out tx as a preauth transaction.
-// It returns the temporary account ID and sequence number.
-func SubmitPreExportTx(hclient *horizon.Client, kp *keypair.Full, custodian string, asset xdr.Asset, amount int) (string, xdr.SequenceNumber, error) {
+// SubmitPreExportTx builds and submits the two pre-export transactions
+// to the Stellar network.
+// The first transaction creates a new temporary account.
+// The second transaction sets the signer on the temporary account
+// to be a preauth transaction, which merges the account and pays
+// out the pegged-out funds.
+// The function returns the temporary account ID and sequence number.
+func SubmitPreExportTx(hclient *horizon.Client, kp *keypair.Full, custodian string, asset xdr.Asset, amount int64) (string, xdr.SequenceNumber, error) {
 	root, err := hclient.Root()
 	if err != nil {
 		return "", 0, errors.Wrap(err, "getting Horizon root")
@@ -256,7 +259,6 @@ func SubmitPreExportTx(hclient *horizon.Client, kp *keypair.Full, custodian stri
 	if err != nil {
 		return "", 0, errors.Wrap(err, "encoding preauth tx hash")
 	}
-	log.Printf("Hash string: %s", hashStr)
 
 	tx, err := b.Transaction(
 		b.Network{Passphrase: root.NetworkPassphrase},

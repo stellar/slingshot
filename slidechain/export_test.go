@@ -52,7 +52,7 @@ func TestPegOut(t *testing.T) {
 		t.Fatalf("error funding account %s: %s", kp.Address(), err)
 	}
 
-	temp, seqnum, err := SubmitPreExportTx(c.hclient, kp, c.AccountID.Address(), lumen, amount)
+	temp, seqnum, err := SubmitPreExportTx(c.hclient, kp, c.AccountID.Address(), lumen, int64(amount))
 	if err != nil {
 		t.Fatal(err)
 	}
