@@ -241,7 +241,7 @@ func TestImport(t *testing.T) {
 }
 
 func TestEndToEnd(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
 	defer cancel()
 	withTestServer(ctx, t, func(ctx context.Context, db *sql.DB, s *submitter, sv *httptest.Server, ch *protocol.Chain) {
 		hclient := &horizon.Client{
@@ -292,17 +292,9 @@ func TestEndToEnd(t *testing.T) {
 		if err != nil {
 			t.Fatalf("error building peg-in tx: %s", err)
 		}
-		txenv, err := pegInTx.Sign(exporter.Seed())
+		succ, err := stellar.SignAndSubmitTx(hclient, pegInTx, exporter.Seed())
 		if err != nil {
-			t.Fatalf("error signing tx: %s", err)
-		}
-		txstr, err := xdr.MarshalBase64(txenv.E)
-		if err != nil {
-			t.Fatalf("error marshaling tx to base64: %s", err)
-		}
-		succ, err := hclient.SubmitTransaction(txstr)
-		if err != nil {
-			t.Fatalf("error submitting tx: %s", err)
+			t.Fatalf("error signing and submitting tx: %s", err)
 		}
 		t.Logf("successfully submitted peg-in tx: id %s, ledger %d", succ.Hash, succ.Ledger)
 
