@@ -497,7 +497,7 @@ Input is serialized as [output](#output-structure) with extra 32 bytes containin
 this output’s [transaction ID](#transaction-id).
 
 ```
-       Input  =  PreviousOutput || PreviousTxID
+       Input  =  PreviousTxID || PreviousOutput
 PreviousTxID  =  <32 bytes>
 
 ```
@@ -523,7 +523,7 @@ Output represents a _snapshot_ of a [contract](#contract-type)
 and can only contain [portable types](#portable-types).
 
 ```
-      Output  =  LE32(k)  ||  Item[0]  || ... ||  Item[k-1]  ||  Predicate
+      Output  =  Predicate  ||  LE32(k)  ||  Item[0]  || ... ||  Item[k-1]
    Predicate  =  <32 bytes>
         Item  =  enum { Data, Value }
         Data  =  0x00  ||  LE32(len)  ||  <bytes>
@@ -1016,7 +1016,10 @@ The VM is initialized with the following state:
 8. Array of signature verification keys is empty.
 9. Array of deferred point operations is empty.
 10. High-level variables: empty.
-11. Constraint system: empty (time bounds are constants that appear only within linear combinations of actual variables).
+11. Constraint system: empty (time bounds are constants that appear only within linear combinations of actual variables), with [transcript](#transcript) initialized with label `ZkVM.r1cs`:
+    ```
+    r1cs_transcript = Transcript("ZkVM.r1cs")
+    ```
 
 Then, the VM executes the current program till completion:
 
