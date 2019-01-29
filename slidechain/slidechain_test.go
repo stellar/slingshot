@@ -339,7 +339,7 @@ func TestEndToEnd(t *testing.T) {
 		}
 
 		t.Log("submitting pre-export tx...")
-		temp, seqnum, err := SubmitPreExportTx(ctx, hclient, c.AccountID.Address(), exporter)
+		temp, seqnum, err := SubmitPreExportTx(hclient, exporter, c.AccountID.Address(), native, int(amount))
 		if err != nil {
 			t.Fatalf("pre-submit tx error: %s", err)
 		}

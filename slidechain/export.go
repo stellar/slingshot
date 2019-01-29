@@ -14,13 +14,13 @@ import (
 	"github.com/chain/txvm/errors"
 	"github.com/chain/txvm/protocol/bc"
 	"github.com/chain/txvm/protocol/txbuilder"
-	"github.com/chain/txvm/protocol/txbuilder/standard"
 	"github.com/chain/txvm/protocol/txbuilder/txresult"
 	"github.com/chain/txvm/protocol/txvm"
 	"github.com/interstellar/starlight/worizon/xlm"
 	b "github.com/stellar/go/build"
 	"github.com/stellar/go/clients/horizon"
 	"github.com/stellar/go/keypair"
+	"github.com/stellar/go/strkey"
 	"github.com/stellar/go/xdr"
 )
 
@@ -148,7 +148,7 @@ func buildPegOutTx(custodian, exporter, temp, network string, asset xdr.Asset, a
 	var paymentOp b.PaymentBuilder
 	switch asset.Type {
 	case xdr.AssetTypeAssetTypeNative:
-		lumens := xlm.Amount(amount * int(xlm.Lumen))
+		lumens := xlm.Amount(amount)
 		paymentOp = b.Payment(
 			b.SourceAccount{AddressOrSeed: custodian},
 			b.Destination{AddressOrSeed: exporter},
@@ -210,13 +210,13 @@ func createTempAccount(hclient *horizon.Client, kp *keypair.Full) (*keypair.Full
 			b.Destination{AddressOrSeed: temp.Address()},
 		),
 	)
-	txenv, err := tx.Sign(kp.Seed(), temp.Seed())
+	txenv, err := tx.Sign(kp.Seed())
 	if err != nil {
-		return nil, 0, errors.Wrap(err, "signing pre-export tx")
+		return nil, 0, errors.Wrap(err, "signing temp account tx")
 	}
 	txstr, err := xdr.MarshalBase64(txenv.E)
 	if err != nil {
-		return nil, 0, errors.Wrap(err, "marshaling pre-export txenv")
+		return nil, 0, errors.Wrap(err, "marshaling temp account txenv")
 	}
 	_, err = hclient.SubmitTransaction(txstr)
 	if err != nil {
@@ -248,10 +248,15 @@ func SubmitPreExportTx(hclient *horizon.Client, kp *keypair.Full, custodian stri
 	if err != nil {
 		return "", 0, errors.Wrap(err, "building preauth tx")
 	}
-	preauthTxHash, err := preauthTx.HashHex()
+	preauthTxHash, err := preauthTx.Hash()
 	if err != nil {
 		return "", 0, errors.Wrap(err, "hashing preauth tx")
 	}
+	hashStr, err := strkey.Encode(strkey.VersionByteHashTx, preauthTxHash[:])
+	if err != nil {
+		return "", 0, errors.Wrap(err, "encoding preauth tx hash")
+	}
+	log.Printf("Hash string: %s", hashStr)
 
 	tx, err := b.Transaction(
 		b.Network{Passphrase: root.NetworkPassphrase},
@@ -262,7 +267,7 @@ func SubmitPreExportTx(hclient *horizon.Client, kp *keypair.Full, custodian stri
 			b.SourceAccount{AddressOrSeed: temp.Address()},
 			b.MasterWeight(0),
 			b.SetThresholds(1, 1, 1),
-			b.AddSigner(preauthTxHash, 1),
+			b.AddSigner(hashStr, 1),
 		),
 	)
 	if err != nil {
@@ -282,61 +287,6 @@ func SubmitPreExportTx(hclient *horizon.Client, kp *keypair.Full, custodian stri
 	}
 	return temp.Address(), seqnum, nil
 }
-
-const (
-	exportContract1SrcFmt = `
-		                                          #  con stack                         arg stack                  log
-		                                          #  ---------                         ---------                  ---
-		                                          #                                    json value txvmexporter
-		get get get                               #  txvmexporter value json
-		[%s] output                               #                                                               {'O', ...}
-	`
-
-	exportContract2SrcFmt = `
-		                                          #  con stack                         arg stack                  log
-		                                          #  ---------                         ---------                  ---
-		                                          #  txvmexporter value json           selector
-		get                                       #  txvmexporter value json selector
-		jumpif:$doretire                          #
-		                                          #  txvmexporter value json
-		"" put                                    #  txvmexporter value json           ""
-		drop                                      #  txvmexporter value                ""
-		put                                       #  txvmexporter                      "" value
-		1 tuple                                   #  {txvmexporter}                    "" value
-		put                                       #                                    "" value {txvmexporter}
-		1 put                                     #                                    "" value {txvmexporter} 1
-		x'%x' contract call                       #                                                               {'L', ...} {'O', ...}
-		jump:$checksig                            #
-		                                          #
-		$doretire                                 #
-		                                          #  txvmexporter value json
-		put put                                   #  txvmexporter                      json value
-		drop                                      #                                    json value
-		x'%x' contract call                       #                                                               {'X', ...} {'L', ...}
-		                                          #
-		$checksig
-		[%s] yield
-	`
-
-	exportTxSrcFmt = `
-		'%s' put            # json
-		xxx                 # marshal utxos and merge them together
-		splitzero swap
-		put
-		x'%x' put           # txvmexporter
-		[%s] contract call  # exportContract1Src
-		finalize
-		get
-		x'%x' put           # signature
-		call
-	`
-)
-
-var (
-	exportContract1Src = fmt.Sprintf(exportContract1SrcFmt, exportContract2Src)
-	exportContract2Src = fmt.Sprintf(exportContract2SrcFmt, standard.PayToMultisigProg1, standard.RetireContract)
-	// exportContract2Src = fmt.Sprintf(exportContract2SrcFmt, standard.PayToMultisigProg1, standard.RetireContract, custodianSigCheckerSrc)
-)
 
 // BuildExportTx builds a txvm retirement tx for an asset issued
 // onto slidechain. It will retire `amount` of the asset, and the
