@@ -1587,8 +1587,9 @@ _input_ **input** → _contract_
 
 1. Pops a [data](#data) `input` representing the [input structure](#input-structure) from the stack.
 2. Constructs a [contract](#contract-type) based on the `input` data and pushes it to the stack.
-3. Adds [input entry](#input-entry) to the [transaction log](#transaction-log).
-4. Sets the [VM uniqueness flag](#vm-state) to `true`.
+3. For each decoded [value](#value-type), quantity variable is allocated first, flavor second.
+4. Adds [input entry](#input-entry) to the [transaction log](#transaction-log).
+5. Sets the [VM uniqueness flag](#vm-state) to `true`.
 
 Fails if the `input` is not a [data type](#data-type) with exact encoding of an [input structure](#input-structure).
 
