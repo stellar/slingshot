@@ -20,15 +20,15 @@ func SignAndSubmitTx(hclient *horizon.Client, tx *b.TransactionBuilder, seeds ..
 	if err != nil {
 		return nil, errors.Wrap(err, "marshaling pre-export txenv")
 	}
-	resp, err := hclient.SubmitTransaction(txstr)
-	if err != nil {
+	resp, submitErr := hclient.SubmitTransaction(txstr)
+	if submitErr != nil {
 		// Attempt to extract more detailed result information
-		log.Printf("error submitting tx: %s\ntx: %s", err, txstr)
+		log.Printf("error submitting tx: %s\ntx: %s", submitErr, txstr)
 		var (
 			resultStr string
 			err       error
 		)
-		if herr, ok := err.(*horizon.Error); ok {
+		if herr, ok := submitErr.(*horizon.Error); ok {
 			resultStr, err = herr.ResultString()
 			if err != nil {
 				log.Print(err, "extracting result string from horizon.Error")
@@ -43,5 +43,5 @@ func SignAndSubmitTx(hclient *horizon.Client, tx *b.TransactionBuilder, seeds ..
 		}
 		log.Println("result string: ", resultStr)
 	}
-	return &resp, err
+	return &resp, submitErr
 }
