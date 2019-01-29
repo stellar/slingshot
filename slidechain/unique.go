@@ -22,7 +22,7 @@ const (
 	                     #  ---------                                                                ---------                                ---  -----
 	                     #  quorum, {recip}, zeroval, amount, asset                                                                                
 	caller               #  quorum, {recip}, zeroval, amount, asset, callerSeed                                                                    
-	%s                   #  quorum, {recip}, zeroval, amount, asset, callerSeed, importIssuanceSeed                                                
+	x"%x"                #  quorum, {recip}, zeroval, amount, asset, callerSeed, importIssuanceSeed                                                
 	eq verify            #  quorum, {recip}, zeroval, amount, asset                                                                                
 	put put put put put  #                                                                           asset, amount, zeroval, {recip}, quorum             
 `
@@ -30,10 +30,10 @@ const (
 	importIssuanceFmt = `
 	                                                    #  con stack                                arg stack                                log
 	                                                    #  ---------                                ---------                                ---
-	                                                    #                                           importUniquenessContract                                                                  
-	get call                                            #                                           asset, amount, zeroval, {recip}, quorum                                                   
-	get get get get get                                 #  quorum, {recip}, zeroval, amount, asset                                                                                            
-	[txid x"%x" get 0 checksig verify] contract put     #  quorum, {recip}, zeroval, amount, asset  sigchecker                                                                                
+	                                                    #                                           importUniquenessContract
+	get call                                            #                                           asset, amount, zeroval, {recip}, quorum
+	get get get get get                                 #  quorum, {recip}, zeroval, amount, asset
+	[txid x"%x" get 0 checksig verify] contract put     #  quorum, {recip}, zeroval, amount, asset  sigchecker
 	issue put put put                                   #                                           sigchecker, issuedval, {recip}, quorum   {"A", vm.caller, issuedval.amount, issuedval.assetid, issuedval.anchor}
 `
 )
