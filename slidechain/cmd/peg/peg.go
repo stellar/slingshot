@@ -1,14 +1,11 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"database/sql"
 	"encoding/hex"
 	"flag"
-	"fmt"
 	"log"
-	"math"
 	"net/http"
 	"strconv"
 	"strings"
@@ -16,11 +13,8 @@ import (
 
 	"github.com/chain/txvm/crypto/ed25519"
 	"github.com/chain/txvm/protocol/bc"
-	"github.com/chain/txvm/protocol/txvm"
-	"github.com/chain/txvm/protocol/txvm/asm"
 	"github.com/interstellar/slingshot/slidechain"
 	"github.com/interstellar/slingshot/slidechain/stellar"
-	"github.com/pkg/errors"
 	"github.com/stellar/go/clients/horizon"
 	"github.com/stellar/go/xdr"
 )
@@ -113,26 +107,4 @@ func main() {
 		log.Fatal(err, "recording pegs")
 	}
 	log.Printf("successfully record pegs for tx hash %s", succ.Hash)
-}
-
-func buildPrepegTx(bcid []byte, amount, expMS int64, assetXDR []byte, pubkey ed25519.PublicKey) ([]byte, error) {
-	nonceHash := slidechain.UniqueNonceHash(bcid, expMS)
-	finalizeExpMS := int64(bc.Millis(time.Now().Add(9 * time.Minute)))
-	buf := new(bytes.Buffer)
-	// Set up pre-peg tx arg stack: asset, amount, zeroval, {pubkey}, quorum
-	fmt.Fprintf(buf, "x'%x' put\n", assetXDR)
-	fmt.Fprintf(buf, "%d put\n", amount)
-	fmt.Fprintf(buf, "x'%x' put\n", nonceHash)
-	fmt.Fprintf(buf, "{x'%x'} put\n", pubkey)
-	fmt.Fprintf(buf, "1 put\n") // The signer quorum size of 1 is fixed.
-	fmt.Fprintf(buf, "x'%x' %d nonce finalize\n", bcid, finalizeExpMS)
-	tx, err := asm.Assemble(buf.String())
-	if err != nil {
-		return nil, errors.Wrap(err, "assembling pre-peg tx")
-	}
-	_, err = txvm.Validate(tx, 3, math.MaxInt64)
-	if err != nil {
-		return nil, errors.Wrap(err, "validating pre-peg tx")
-	}
-	return tx, nil
 }

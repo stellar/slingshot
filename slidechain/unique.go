@@ -40,8 +40,8 @@ const (
 
 var (
 	prepegUniquenessSrc  = fmt.Sprintf(prepegUniquenessFmt, importUniquenessSrc)
-	PrepegUniquenessProg = asm.MustAssemble(prepegUniquenessSrc)
-	prepegUniquenessSeed = txvm.ContractSeed(PrepegUniquenessProg)
+	prepegUniquenessProg = asm.MustAssemble(prepegUniquenessSrc)
+	prepegUniquenessSeed = txvm.ContractSeed(prepegUniquenessProg)
 	importUniquenessSrc  = fmt.Sprintf(importUniquenessFmt, importIssuanceSeed)
 	importUniquenessProg = asm.MustAssemble(importUniquenessSrc)
 	importUniquenessSeed = txvm.ContractSeed(importUniquenessProg)
