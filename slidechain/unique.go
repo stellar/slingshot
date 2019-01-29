@@ -8,16 +8,16 @@ import (
 )
 
 const (
-	prepegUniquenessFmt = `
+	createTokenFmt = `
 	                        #  con stack                                                        arg stack                                log
 	                        #  ---------                                                        ---------                                ---
 	                        #                                                                   asset, amount, zeroval, {recip}, quorum                              
 	get get get get get     #  quorum, {recip}, zeroval, amount, asset                                                                                               
-	[%s]                    #  quorum, {recip}, zeroval, amount, asset, [importUniquenessProg]                                                                       
+	[%s]                    #  quorum, {recip}, zeroval, amount, asset, [consumeTokenProg]                                                                       
 	output                  #  quorum, {recip}, zeroval, amount, asset                                                                   {"O", vm.caller, outputid}  
 `
 
-	importUniquenessFmt = `
+	consumeTokenFmt = `
 	                     #  con stack                                                                arg stack                                log
 	                     #  ---------                                                                ---------                                ---
 	                     #  quorum, {recip}, zeroval, amount, asset                                                                                
@@ -30,7 +30,7 @@ const (
 	importIssuanceFmt = `
 	                                                    #  con stack                                arg stack                                log
 	                                                    #  ---------                                ---------                                ---
-	                                                    #                                           importUniquenessContract
+	                                                    #                                           consumeTokenContract
 	get call                                            #                                           asset, amount, zeroval, {recip}, quorum
 	get get get get get                                 #  quorum, {recip}, zeroval, amount, asset
 	[txid x"%x" get 0 checksig verify] contract put     #  quorum, {recip}, zeroval, amount, asset  sigchecker
@@ -39,13 +39,12 @@ const (
 )
 
 var (
-	prepegUniquenessSrc  = fmt.Sprintf(prepegUniquenessFmt, importUniquenessSrc)
-	prepegUniquenessProg = asm.MustAssemble(prepegUniquenessSrc)
-	prepegUniquenessSeed = txvm.ContractSeed(prepegUniquenessProg)
-	importUniquenessSrc  = fmt.Sprintf(importUniquenessFmt, importIssuanceSeed)
-	importUniquenessProg = asm.MustAssemble(importUniquenessSrc)
-	importUniquenessSeed = txvm.ContractSeed(importUniquenessProg)
-	importIssuanceSrc    = fmt.Sprintf(importIssuanceFmt, custodianPub)
-	importIssuanceProg   = asm.MustAssemble(importIssuanceSrc)
-	importIssuanceSeed   = txvm.ContractSeed(importIssuanceProg)
+	createTokenSrc     = fmt.Sprintf(createTokenFmt, consumeTokenSrc)
+	createTokenProg    = asm.MustAssemble(createTokenSrc)
+	createTokenSeed    = txvm.ContractSeed(createTokenProg)
+	consumeTokenSrc    = fmt.Sprintf(consumeTokenFmt, importIssuanceSeed)
+	consumeTokenProg   = asm.MustAssemble(consumeTokenSrc)
+	importIssuanceSrc  = fmt.Sprintf(importIssuanceFmt, custodianPub)
+	importIssuanceProg = asm.MustAssemble(importIssuanceSrc)
+	importIssuanceSeed = txvm.ContractSeed(importIssuanceProg)
 )
