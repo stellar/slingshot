@@ -1599,7 +1599,6 @@ _items... predicate_ **output:_k_** → ø
 1. Pops [`predicate`](#predicate) from the stack.
 2. Pops `k` items from the stack.
 3. Adds an [output entry](#output-entry) to the [transaction log](#transaction-log).
-4. For each [value](#value-type) in the output, if any quantity or flavor variable is detached, attaches that variable to the constraint system.
 
 Immediate data `k` is encoded as [LE32](#le32).
 
