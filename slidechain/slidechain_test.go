@@ -290,7 +290,7 @@ func TestEndToEnd(t *testing.T) {
 		var exporterPubKeyBytes [32]byte
 		copy(exporterPubKeyBytes[:], exporterPub)
 
-		// Build + submit transaction to peg-in funds
+		// Build transaction to peg-in funds
 		pegInTx, err := stellar.BuildPegInTx(exporter.Address(), exporterPubKeyBytes, amount.HorizonString(), "", "", c.AccountID.Address(), hclient)
 		if err != nil {
 			t.Fatalf("error building peg-in tx: %s", err)
@@ -303,18 +303,22 @@ func TestEndToEnd(t *testing.T) {
 		if err != nil {
 			t.Fatalf("error marshaling tx to base64: %s", err)
 		}
+		// Build and submit pre-peg TxVM tx, wait for it to hit chain
+
+		// Record pegs
+		expMS := int64(bc.Millis(time.Now().Add(10 * time.Minute)))
+		err = c.RecordPegs(ctx, txenv.E.Tx, exporterPubKeyBytes[:], expMS)
+		if err != nil {
+			t.Fatalf("error recording pegs: %s", err)
+		}
+		log.Print("successfully recorded pegs")
+		// Submit peg-in transaction
 		succ, err := hclient.SubmitTransaction(txstr)
 		if err != nil {
 			t.Fatalf("error submitting tx: %s", err)
 		}
 		t.Logf("successfully submitted peg-in tx: id %s, ledger %d", succ.Hash, succ.Ledger)
 
-		expMS := int64(bc.Millis(time.Now().Add(10 * time.Minute)))
-		err = c.RecordPegs(ctx, txenv.E.Tx, exporterPubKeyBytes[:], expMS)
-		if err != nil {
-			t.Fatalf("error recording pegs: %s", err)
-		}
-		log.Printf("successfully recorded pegs for tx id %s", succ.Hash)
 		native := xdr.Asset{
 			Type: xdr.AssetTypeAssetTypeNative,
 		}
@@ -335,7 +339,7 @@ func TestEndToEnd(t *testing.T) {
 			block := item.(*bc.Block)
 			for _, tx := range block.Transactions {
 				if isImportTx(tx, int64(amount), nativeAssetBytes, exporterPub) {
-					t.Logf("found import tx %x", tx.Program)
+					log.Printf("found import tx %x", tx.Program)
 					found = true
 					txresult := txresult.New(tx)
 					anchor = txresult.Outputs[0].Value.Anchor
@@ -455,6 +459,7 @@ func TestEndToEnd(t *testing.T) {
 //   {"O", caller, outputID}
 //   {"F", ...}
 func isImportTx(tx *bc.Tx, amount int64, assetXDR []byte, recipPubKey ed25519.PublicKey) bool {
+	log.Print("top of isImportTx")
 	if len(tx.Log) != 6 {
 		return false
 	}

@@ -30,7 +30,7 @@ func (c *Custodian) buildImportTx(
 	buf := new(bytes.Buffer)
 	fmt.Fprintf(buf, "x'%x' input put\n", consumeTokenSnapshot)            // arg stack: consumeTokenContract
 	fmt.Fprintf(buf, "x'%x' contract call\n", importIssuanceProg)          // arg stack: sigchecker, issuedval, {recip}, quorum
-	fmt.Fprintf(buf, "get get splitzero\n")                                // con stack: quorum, {recip}, issuedval, zeroval; arg stack: sigchecker
+	fmt.Fprintf(buf, "get get get splitzero\n")                            // con stack: quorum, {recip}, issuedval, zeroval; arg stack: sigchecker
 	fmt.Fprintf(buf, "3 bury\n")                                           // con stack: zeroval, quorum, {recip}, issuedval; arg stack: sigchecker
 	fmt.Fprintf(buf, "'' put\n")                                           // con stack: zeroval, quorum, {recip}, issuedval; sigchecker, refdata
 	fmt.Fprintf(buf, "x'%x' contract call\n", standard.PayToMultisigProg1) // con stack: zeroval; arg stack: sigcheck

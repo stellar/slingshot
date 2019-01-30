@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"context"
 	"encoding/hex"
 	"flag"
 	"fmt"
@@ -97,7 +96,7 @@ func main() {
 }
 
 // DoPrepegTx builds, submits the pre-peg TxVM transaction, and waits for it to hit the chain.
-func DoPrepegTx(ctx context.Context, bcid, assetXDR []byte, amount, expMS int64, pubkey ed25519.PublicKey) error {
+func DoPrepegTx(bcid, assetXDR []byte, amount, expMS int64, pubkey ed25519.PublicKey) error {
 	prepegTxBytes, err := buildPrepegTx(bcid, assetXDR, amount, expMS, pubkey)
 	if err != nil {
 		return errors.Wrap(err, "building pre-peg tx")

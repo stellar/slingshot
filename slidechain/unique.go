@@ -73,15 +73,15 @@ func UniqueNonceHash(bcid []byte, expMS int64) [32]byte {
 func consumeTokenProgSnapshot(bcid, assetXDR, recipPubkey []byte, amount, expMS int64) ([]byte, error) {
 	buf := new(bytes.Buffer)
 	// Push components of consume token snapshot.
-	// TODO(debnil): Confirm correct uses of the TxVM type code.
+	// TODO(debnil): Figure out invalid item type error.
 	fmt.Fprintf(buf, "'C' x'%x' x'%x'\n", createTokenSeed[:], consumeTokenProg)
 	// Push con stack: quorum, {recip}, zeroval, amount, asset
-	// Note that {recip} and zeroval are tuples.
-	fmt.Fprintf(buf, "1\n")
-	fmt.Fprintf(buf, "S' x'%x' 2 tuple\n", recipPubkey)
+	// Note that plain data items must be converted to tuples to be contract arguments.
+	fmt.Fprintf(buf, "'Z' %d 2 tuple\n", int64(1))
+	fmt.Fprintf(buf, "'T' x'%x' 2 tuple\n", recipPubkey)
 	nonceHash := UniqueNonceHash(bcid, expMS)
-	fmt.Fprintf(buf, "'V' 0 x'%x' x'%x' 4 tuple\n", zeroSeed[:], nonceHash[:])
-	fmt.Fprintf(buf, "%d x'%x'\n", amount, assetXDR)
+	fmt.Fprintf(buf, "'V' %d x'%x' x'%x' 4 tuple\n", int64(0), zeroSeed[:], nonceHash[:])
+	fmt.Fprintf(buf, "'Z' %d 2 tuple\n", amount)
 	// Construct tuple and assemble bytecode.
 	fmt.Fprintf(buf, "8 tuple\n")
 	tx, err := asm.Assemble(buf.String())
