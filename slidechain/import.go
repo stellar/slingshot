@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log"
 	"math"
-	"time"
 
 	"github.com/bobg/sqlutil"
 	"github.com/chain/txvm/crypto/ed25519"
@@ -20,27 +19,20 @@ import (
 
 // buildImportTx builds the import transaction.
 func (c *Custodian) buildImportTx(
-	amount int64,
-	assetXDR []byte,
-	recipPubkey []byte,
+	amount, expMS int64,
+	assetXDR, recipPubkey []byte,
 ) ([]byte, error) {
-	// Push asset code, amount, exp, blockid onto the arg stack.
+	// Put consume token program snapshot on the con stack and call it.
+	consumeTokenSnapshot, err := consumeTokenProgSnapshot(c.InitBlockHash.Bytes(), assetXDR, recipPubkey, amount, expMS)
+	if err != nil {
+		return nil, errors.Wrap(err, "constructing consume token snapshot")
+	}
 	buf := new(bytes.Buffer)
-	fmt.Fprintf(buf, "x'%x' put\n", assetXDR)
-	fmt.Fprintf(buf, "%d put\n", amount)
-	exp := int64(bc.Millis(time.Now().Add(5 * time.Minute)))
-
-	// now arg stack is set up, empty con stack
-	fmt.Fprintf(buf, "x'%x' %d\n", c.InitBlockHash.Bytes(), exp) // con stack: blockid, exp
-	fmt.Fprintf(buf, "nonce put\n")                              // empty con stack; ..., nonce on arg stack
-	fmt.Fprintf(buf, "x'%x' contract call\n", issueProg)         // empty con stack; arg stack: ..., sigcheck, issuedval
-
-	// pay issued value
-	fmt.Fprintf(buf, "get splitzero\n")                                    // con stack: issuedval, zeroval; arg stack: sigcheck
-	fmt.Fprintf(buf, "'' put\n")                                           // con stack: issuedval, zeroval; arg stack: sigcheck, refdata
-	fmt.Fprintf(buf, "swap put\n")                                         // con stack: zeroval; arg stack: sigcheck, refdata, issuedval
-	fmt.Fprintf(buf, "{x'%x'} put\n", recipPubkey)                         // con stack: zeroval; arg stack: sigcheck, refdata, issuedval, {recippubkey}
-	fmt.Fprintf(buf, "1 put\n")                                            // con stack: zeroval; arg stack: sigcheck, refdata, issuedval, {recippubkey}, quorum
+	fmt.Fprintf(buf, "x'%x' input put\n", consumeTokenSnapshot)            // arg stack: consumeTokenContract
+	fmt.Fprintf(buf, "x'%x' contract call\n", importIssuanceProg)          // arg stack: sigchecker, issuedval, {recip}, quorum
+	fmt.Fprintf(buf, "get get splitzero\n")                                // con stack: quorum, {recip}, issuedval, zeroval; arg stack: sigchecker
+	fmt.Fprintf(buf, "3 bury\n")                                           // con stack: zeroval, quorum, {recip}, issuedval; arg stack: sigchecker
+	fmt.Fprintf(buf, "'' put\n")                                           // con stack: zeroval, quorum, {recip}, issuedval; sigchecker, refdata
 	fmt.Fprintf(buf, "x'%x' contract call\n", standard.PayToMultisigProg1) // con stack: zeroval; arg stack: sigcheck
 	fmt.Fprintf(buf, "finalize\n")
 	tx1, err := asm.Assemble(buf.String())
@@ -123,7 +115,7 @@ func (c *Custodian) importFromPegs(ctx context.Context) {
 func (c *Custodian) doImport(ctx context.Context, nonceHash []byte, amount int64, assetXDR, recip []byte, expMS int64) error {
 	log.Printf("doing import from tx with hash %x: %d of asset %x for recipient %x with expiration %d", nonceHash, amount, assetXDR, recip, expMS)
 
-	importTxBytes, err := c.buildImportTx(amount, assetXDR, recip)
+	importTxBytes, err := c.buildImportTx(amount, expMS, assetXDR, recip)
 	if err != nil {
 		return errors.Wrap(err, "building import tx")
 	}

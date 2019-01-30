@@ -1,8 +1,10 @@
 package slidechain
 
 import (
+	"bytes"
 	"fmt"
 
+	"github.com/chain/txvm/errors"
 	"github.com/chain/txvm/protocol/txvm"
 	"github.com/chain/txvm/protocol/txvm/asm"
 )
@@ -62,9 +64,28 @@ var (
 	zeroSeed           [32]byte
 )
 
-// UniqueNonceHash returns a nonce hash that can be used before pegging
-// and after importing to prevent replay attacks.
+// UniqueNonceHash returns a nonce hash used to prevent replay attacks.
 func UniqueNonceHash(bcid []byte, expMS int64) [32]byte {
 	nonce := txvm.NonceTuple(zeroSeed[:], zeroSeed[:], bcid, expMS)
 	return txvm.NonceHash(nonce)
+}
+
+func consumeTokenProgSnapshot(bcid, assetXDR, recipPubkey []byte, amount, expMS int64) ([]byte, error) {
+	buf := new(bytes.Buffer)
+	// Push components of consume token snapshot.
+	fmt.Fprintf(buf, "'C' x'%x' x'%x'\n", createTokenSeed[:], consumeTokenProg)
+	// Push con stack: quorum, {recip}, zeroval, amount, asset
+	// Note that {recip} and zeroval are tuples.
+	fmt.Fprintf(buf, "1\n")
+	fmt.Fprintf(buf, "S' x'%x' 2 tuple\n", recipPubkey)
+	nonceHash := UniqueNonceHash(bcid, expMS)
+	fmt.Fprintf(buf, "'V' 0 x'%x' x'%x' 4 tuple\n", zeroSeed[:], nonceHash[:])
+	fmt.Fprintf(buf, "%d x'%x'\n", amount, assetXDR)
+	// Construct tuple and assemble bytecode.
+	fmt.Fprintf(buf, "8 tuple\n")
+	tx, err := asm.Assemble(buf.String())
+	if err != nil {
+		return nil, errors.Wrap(err, "assembling consume token snapshot")
+	}
+	return tx, nil
 }
