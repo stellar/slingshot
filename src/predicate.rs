@@ -17,13 +17,9 @@ use crate::transcript::TranscriptProtocol;
 pub struct Predicate(pub CompressedRistretto);
 
 impl Predicate {
-    pub fn transcript() -> Transcript {
-        Transcript::new(b"ZkVM.predicate")
-    }
-
     /// Computes a disjunction of two predicates.
     pub fn or(&self, right: &Predicate, gens: &PedersenGens) -> Result<Predicate, VMError> {
-        let mut t = Predicate::transcript();
+        let mut t = Transcript::new(b"ZkVM.predicate");
         t.commit_point(b"L", &self.0);
         t.commit_point(b"R", &right.0);
         let f = t.challenge_scalar(b"f");
@@ -33,10 +29,8 @@ impl Predicate {
 
     /// Verifies whether the current predicate is a disjunction of two others.
     /// Returns a `PointOp` instance that can be verified in a batch with other operations.
-    ///
-    /// Transcript `t` must be the cloned `Predicate::transcript()`. It is provided explicitly
-    /// in order to reuse the precomputed instance.
-    pub fn prove_or(&self, left: &Predicate, right: &Predicate, mut t: Transcript) -> PointOp {
+    pub fn prove_or(&self, left: &Predicate, right: &Predicate) -> PointOp {
+        let mut t = Transcript::new(b"ZkVM.predicate");
         t.commit_point(b"L", &left.0);
         t.commit_point(b"R", &right.0);
         let f = t.challenge_scalar(b"f");
@@ -52,7 +46,7 @@ impl Predicate {
     /// Creates a program-based predicate.
     /// One cannot sign for it as a public key because it’s using a secondary generator.
     pub fn program_predicate(prog: &[u8], gens: &PedersenGens) -> Predicate {
-        let mut t = Predicate::transcript();
+        let mut t = Transcript::new(b"ZkVM.predicate");
         t.commit_bytes(b"prog", &prog);
         let h = t.challenge_scalar(b"h");
         Predicate((h * gens.B_blinding).compress())
@@ -60,10 +54,8 @@ impl Predicate {
 
     /// Verifies whether the current predicate is a commitment to a program `prog`.
     /// Returns a `PointOp` instance that can be verified in a batch with other operations.
-    ///
-    /// Transcript `t` must be the cloned `Predicate::transcript()`. It is provided explicitly
-    /// in order to reuse the precomputed instance.
-    pub fn prove_program_predicate(&self, prog: &[u8], mut t: Transcript) -> PointOp {
+    pub fn prove_program_predicate(&self, prog: &[u8]) -> PointOp {
+        let mut t = Transcript::new(b"ZkVM.predicate");
         t.commit_bytes(b"prog", &prog);
         let h = t.challenge_scalar(b"h");
 
@@ -85,7 +77,7 @@ mod tests {
         let gens = PedersenGens::default();
         let prog = b"iddqd";
         let pred = Predicate::program_predicate(prog, &gens);
-        let op = pred.prove_program_predicate(prog, Predicate::transcript());
+        let op = pred.prove_program_predicate(prog);
         assert!(op.verify(&gens).is_ok());
     }
 
@@ -95,7 +87,7 @@ mod tests {
         let prog = b"iddqd";
         let prog2 = b"smth else";
         let pred = Predicate::program_predicate(prog, &gens);
-        let op = pred.prove_program_predicate(prog2, Predicate::transcript());
+        let op = pred.prove_program_predicate(prog2);
         assert!(op.verify(&gens).is_err());
     }
 
@@ -108,7 +100,7 @@ mod tests {
         let right = Predicate(gens.B_blinding.compress());
 
         let pred = left.or(&right, &gens).unwrap();
-        let op = pred.prove_or(&left, &right, Predicate::transcript());
+        let op = pred.prove_or(&left, &right);
         assert!(op.verify(&gens).is_ok());
     }
 
@@ -121,7 +113,7 @@ mod tests {
         let right = Predicate(gens.B_blinding.compress());
 
         let pred = left.clone();
-        let op = pred.prove_or(&left, &right, Predicate::transcript());
+        let op = pred.prove_or(&left, &right);
         assert!(op.verify(&gens).is_err());
     }
 
@@ -134,7 +126,7 @@ mod tests {
         let right = Predicate(gens.B_blinding.compress());
 
         let pred = left.or(&right, &gens).unwrap();
-        let op = pred.prove_or(&right, &left, Predicate::transcript());
+        let op = pred.prove_or(&right, &left);
         assert!(op.verify(&gens).is_err());
     }
 }
