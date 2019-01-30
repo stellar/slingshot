@@ -18,6 +18,7 @@ import (
 	"github.com/chain/txvm/protocol/bc"
 	"github.com/chain/txvm/protocol/txvm"
 	"github.com/chain/txvm/protocol/txvm/asm"
+	"github.com/interstellar/slingshot/slidechain"
 	"github.com/interstellar/slingshot/slidechain/stellar"
 	"github.com/stellar/go/clients/horizon"
 	"github.com/stellar/go/xdr"
@@ -113,7 +114,7 @@ func DoPrepegTx(ctx context.Context, bcid, assetXDR []byte, amount, expMS int64,
 }
 
 func buildPrepegTx(bcid, assetXDR []byte, amount, expMS int64, pubkey ed25519.PublicKey) ([]byte, error) {
-	nonceHash := UniqueNonceHash(bcid, expMS)
+	nonceHash := slidechain.UniqueNonceHash(bcid, expMS)
 	finalizeExpMS := int64(bc.Millis(time.Now().Add(9 * time.Minute)))
 	buf := new(bytes.Buffer)
 	// Set up pre-peg tx arg stack: asset, amount, zeroval, {pubkey}, quorum
