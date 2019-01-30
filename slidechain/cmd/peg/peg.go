@@ -25,13 +25,15 @@ import (
 
 func main() {
 	var (
-		custodian  = flag.String("custodian", "", "Stellar account ID of custodian account")
-		amount     = flag.String("amount", "", "amount to peg, in lumens")
-		recipient  = flag.String("recipient", "", "hex-encoded txvm public key for the recipient of the pegged funds")
-		seed       = flag.String("seed", "", "seed of Stellar source account")
-		horizonURL = flag.String("horizon", "https://horizon-testnet.stellar.org", "horizon URL")
-		code       = flag.String("code", "", "asset code for non-Lumen asset")
-		issuer     = flag.String("issuer", "", "asset issuer for non-Lumen asset")
+		custodian   = flag.String("custodian", "", "Stellar account ID of custodian account")
+		amount      = flag.String("amount", "", "amount to peg, in lumens")
+		recipient   = flag.String("recipient", "", "hex-encoded txvm public key for the recipient of the pegged funds")
+		seed        = flag.String("seed", "", "seed of Stellar source account")
+		horizonURL  = flag.String("horizon", "https://horizon-testnet.stellar.org", "horizon URL")
+		code        = flag.String("code", "", "asset code for non-Lumen asset")
+		issuer      = flag.String("issuer", "", "asset issuer for non-Lumen asset")
+		bcid        = flag.String("bcid", "", "initial block ID")
+		slidechaind = flag.String("slidechaind", "http://127.0.0.1:2423", "url of slidechaind server")
 	)
 	flag.Parse()
 
@@ -43,6 +45,9 @@ func main() {
 	}
 	if (*code == "" && *issuer != "") || (*code != "" && *issuer == "") {
 		log.Fatal("must specify both code and issuer for non-Lumen asset")
+	}
+	if *bcid == "" {
+		log.Fatal("must specify initial block ID")
 	}
 	if *recipient == "" {
 		log.Print("no recipient specified, generating txvm keypair...")
@@ -96,6 +101,7 @@ func main() {
 }
 
 // DoPrepegTx builds, submits the pre-peg TxVM transaction, and waits for it to hit the chain.
+// TODO(debnil): Figure out how much of this should be moved to slidechaind.
 func DoPrepegTx(bcid, assetXDR []byte, amount, expMS int64, pubkey ed25519.PublicKey) error {
 	prepegTxBytes, err := buildPrepegTx(bcid, assetXDR, amount, expMS, pubkey)
 	if err != nil {
