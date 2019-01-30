@@ -22,7 +22,7 @@ impl Signature {
     pub fn verify_single(
         &self,
         transcript: &mut Transcript,
-        pubkey: CompressedRistretto,
+        pubkey: VerificationKey,
     ) -> PointOp {
         self.verify_aggregated(transcript, &[pubkey])
     }
@@ -31,18 +31,18 @@ impl Signature {
     pub fn verify_aggregated(
         &self,
         transcript: &mut Transcript,
-        pubkeys: &[CompressedRistretto],
+        pubkeys: &[VerificationKey],
     ) -> PointOp {
         transcript.commit_u64(b"n", pubkeys.len() as u64);
         for p in pubkeys.iter() {
-            transcript.commit_point(b"P", p);
+            transcript.commit_point(b"P", &p.0);
         }
 
         let mut pairs = pubkeys
             .iter()
             .map(|p| {
                 let x = transcript.challenge_scalar(b"x");
-                (x, *p)
+                (x, p.0)
             })
             .collect::<Vec<_>>();
 
@@ -81,14 +81,14 @@ impl Signature {
         let gens = PedersenGens::default();
         let pubkeys = privkeys
             .iter()
-            .map(|p| (p * gens.B).compress())
+            .map(|p| VerificationKey::from_secret(p))
             .collect::<Vec<_>>();
 
         // Commit pubkeys
         let n = pubkeys.len();
         transcript.commit_u64(b"n", n as u64);
         for p in pubkeys.iter() {
-            transcript.commit_point(b"P", p);
+            transcript.commit_point(b"P", &p.0);
         }
 
         // Generate aggregated private key
@@ -142,28 +142,37 @@ impl Signature {
     }
 }
 
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub struct VerificationKey(pub CompressedRistretto);
+
+impl VerificationKey {
+
+    // Constructs a VerificationKey from the private key.
+    pub fn from_secret(privkey: &Scalar) -> Self {
+        let gens = PedersenGens::default();
+        VerificationKey((privkey * gens.B).compress())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn empty() {
-        let gens = PedersenGens::default();
         let mut transcript = Transcript::new(b"empty");
         let sig = Signature::sign_aggregated(&mut transcript, &[]);
         assert!(sig
             .verify_aggregated(&mut transcript, &[])
-            .verify(&gens)
+            .verify()
             .is_ok());
     }
 
     #[test]
     fn single_signature() {
-        let gens = PedersenGens::default();
-
         let (pubkey, sig) = {
             let privkey = Scalar::random(&mut rand::thread_rng());
-            let pubkey = (privkey * gens.B).compress();
+            let pubkey = VerificationKey::from_secret(&privkey);
             let mut transcript = Transcript::new(b"single_signature");
             let sig = Signature::sign_single(&mut transcript, privkey);
             (pubkey, sig)
@@ -172,14 +181,12 @@ mod tests {
         let mut transcript = Transcript::new(b"single_signature");
         assert!(sig
             .verify_single(&mut transcript, pubkey)
-            .verify(&gens)
+            .verify()
             .is_ok());
     }
 
     #[test]
     fn single_signature_wrong_key() {
-        let gens = PedersenGens::default();
-
         let sig = {
             let privkey = Scalar::random(&mut rand::thread_rng());
             let mut transcript = Transcript::new(b"single_signature");
@@ -188,22 +195,20 @@ mod tests {
         };
 
         let mut transcript = Transcript::new(b"single_signature");
-        let wrong_pubkey = (Scalar::random(&mut rand::thread_rng()) * gens.B).compress();
+        let wrong_pubkey = VerificationKey::from_secret(&Scalar::random(&mut rand::thread_rng()));
         assert!(sig
             .verify_single(&mut transcript, wrong_pubkey)
-            .verify(&gens)
+            .verify()
             .is_err());
     }
 
     #[test]
     fn two_key_signature() {
-        let gens = PedersenGens::default();
-
         let (pubkey1, pubkey2, sig) = {
             let privkey1 = Scalar::random(&mut rand::thread_rng());
-            let pubkey1 = (privkey1 * gens.B).compress();
+            let pubkey1 = VerificationKey::from_secret(&privkey1);
             let privkey2 = Scalar::random(&mut rand::thread_rng());
-            let pubkey2 = (privkey2 * gens.B).compress();
+            let pubkey2 = VerificationKey::from_secret(&privkey2);
             let mut transcript = Transcript::new(b"two_key_signature");
             let sig = Signature::sign_aggregated(&mut transcript, &[privkey1, privkey2]);
             (pubkey1, pubkey2, sig)
@@ -212,19 +217,17 @@ mod tests {
         let mut transcript = Transcript::new(b"two_key_signature");
         assert!(sig
             .verify_aggregated(&mut transcript, &[pubkey1, pubkey2])
-            .verify(&gens)
+            .verify()
             .is_ok());
     }
 
     #[test]
     fn two_key_signature_wrong_order() {
-        let gens = PedersenGens::default();
-
         let (pubkey1, pubkey2, sig) = {
             let privkey1 = Scalar::random(&mut rand::thread_rng());
-            let pubkey1 = (privkey1 * gens.B).compress();
+            let pubkey1 = VerificationKey::from_secret(&privkey1);
             let privkey2 = Scalar::random(&mut rand::thread_rng());
-            let pubkey2 = (privkey2 * gens.B).compress();
+            let pubkey2 = VerificationKey::from_secret(&privkey2);
             let mut transcript = Transcript::new(b"two_key_signature");
             let sig = Signature::sign_aggregated(&mut transcript, &[privkey1, privkey2]);
             (pubkey1, pubkey2, sig)
@@ -233,7 +236,7 @@ mod tests {
         let mut transcript = Transcript::new(b"two_key_signature");
         assert!(sig
             .verify_aggregated(&mut transcript, &[pubkey2, pubkey1])
-            .verify(&gens)
+            .verify()
             .is_err());
     }
 }

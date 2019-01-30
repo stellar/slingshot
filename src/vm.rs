@@ -12,7 +12,7 @@ use crate::errors::VMError;
 use crate::ops::Instruction;
 use crate::point_ops::PointOp;
 use crate::predicate::Predicate;
-use crate::signature::Signature;
+use crate::signature::*;
 use crate::transcript::TranscriptProtocol;
 use crate::txlog::{Entry, TxID, UTXO};
 use crate::types::*;
@@ -85,7 +85,7 @@ pub struct VM<'tx, 'transcript, 'gens> {
     current_run: Run<'tx>,
     run_stack: Vec<Run<'tx>>,
     txlog: Vec<Entry>,
-    signtx_keys: Vec<CompressedRistretto>,
+    signtx_keys: Vec<VerificationKey>,
     deferred_operations: Vec<PointOp>,
     variable_commitments: Vec<VariableCommitment>,
     cs: r1cs::Verifier<'transcript, 'gens>,
@@ -463,7 +463,7 @@ impl<'tx, 'transcript, 'gens> VM<'tx, 'transcript, 'gens> {
     // _contract_ **signtx** → _results..._
     fn signtx(&mut self) -> Result<(), VMError> {
         let contract = self.pop_item()?.to_contract()?;
-        self.signtx_keys.push(contract.predicate.0);
+        self.signtx_keys.push(VerificationKey(contract.predicate.0));
         for item in contract.payload.into_iter() {
             self.push_item(item);
         }

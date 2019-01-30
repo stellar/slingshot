@@ -18,8 +18,9 @@ pub struct Predicate(pub CompressedRistretto);
 
 impl Predicate {
     /// Computes a disjunction of two predicates.
-    pub fn or(&self, right: &Predicate, gens: &PedersenGens) -> Result<Predicate, VMError> {
+    pub fn or(&self, right: &Predicate) -> Result<Predicate, VMError> {
         let mut t = Transcript::new(b"ZkVM.predicate");
+        let gens = PedersenGens::default();
         t.commit_point(b"L", &self.0);
         t.commit_point(b"R", &right.0);
         let f = t.challenge_scalar(b"f");
@@ -45,8 +46,9 @@ impl Predicate {
 
     /// Creates a program-based predicate.
     /// One cannot sign for it as a public key because it’s using a secondary generator.
-    pub fn program_predicate(prog: &[u8], gens: &PedersenGens) -> Predicate {
+    pub fn program_predicate(prog: &[u8]) -> Predicate {
         let mut t = Transcript::new(b"ZkVM.predicate");
+        let gens = PedersenGens::default();
         t.commit_bytes(b"prog", &prog);
         let h = t.challenge_scalar(b"h");
         Predicate((h * gens.B_blinding).compress())
@@ -74,21 +76,19 @@ mod tests {
 
     #[test]
     fn valid_program_commitment() {
-        let gens = PedersenGens::default();
         let prog = b"iddqd";
-        let pred = Predicate::program_predicate(prog, &gens);
+        let pred = Predicate::program_predicate(prog);
         let op = pred.prove_program_predicate(prog);
-        assert!(op.verify(&gens).is_ok());
+        assert!(op.verify().is_ok());
     }
 
     #[test]
     fn invalid_program_commitment() {
-        let gens = PedersenGens::default();
         let prog = b"iddqd";
         let prog2 = b"smth else";
-        let pred = Predicate::program_predicate(prog, &gens);
+        let pred = Predicate::program_predicate(prog);
         let op = pred.prove_program_predicate(prog2);
-        assert!(op.verify(&gens).is_err());
+        assert!(op.verify().is_err());
     }
 
     #[test]
@@ -99,9 +99,9 @@ mod tests {
         let left = Predicate(gens.B.compress());
         let right = Predicate(gens.B_blinding.compress());
 
-        let pred = left.or(&right, &gens).unwrap();
+        let pred = left.or(&right).unwrap();
         let op = pred.prove_or(&left, &right);
-        assert!(op.verify(&gens).is_ok());
+        assert!(op.verify().is_ok());
     }
 
     #[test]
@@ -114,7 +114,7 @@ mod tests {
 
         let pred = left.clone();
         let op = pred.prove_or(&left, &right);
-        assert!(op.verify(&gens).is_err());
+        assert!(op.verify().is_err());
     }
 
     #[test]
@@ -125,8 +125,8 @@ mod tests {
         let left = Predicate(gens.B.compress());
         let right = Predicate(gens.B_blinding.compress());
 
-        let pred = left.or(&right, &gens).unwrap();
+        let pred = left.or(&right, ).unwrap();
         let op = pred.prove_or(&right, &left);
-        assert!(op.verify(&gens).is_err());
+        assert!(op.verify().is_err());
     }
 }
