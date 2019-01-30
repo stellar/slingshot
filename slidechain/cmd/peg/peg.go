@@ -1,14 +1,23 @@
 package main
 
 import (
+	"bytes"
+	"context"
 	"encoding/hex"
 	"flag"
+	"fmt"
 	"log"
+	"math"
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/chain/txvm/crypto/ed25519"
+	"github.com/chain/txvm/errors"
+	"github.com/chain/txvm/protocol/bc"
+	"github.com/chain/txvm/protocol/txvm"
+	"github.com/chain/txvm/protocol/txvm/asm"
 	"github.com/interstellar/slingshot/slidechain/stellar"
 	"github.com/stellar/go/clients/horizon"
 	"github.com/stellar/go/xdr"
@@ -84,4 +93,43 @@ func main() {
 		log.Fatalf("%s: submitting tx %s", err, txstr)
 	}
 	log.Printf("successfully submitted peg-in tx hash %s on ledger %d", succ.Hash, succ.Ledger)
+}
+
+// DoPrepegTx builds, submits the pre-peg TxVM transaction, and waits for it to hit the chain.
+func DoPrepegTx(ctx context.Context, bcid, assetXDR []byte, amount, expMS int64, pubkey ed25519.PublicKey) error {
+	prepegTxBytes, err := buildPrepegTx(bcid, assetXDR, amount, expMS, pubkey)
+	if err != nil {
+		return errors.Wrap(err, "building pre-peg tx")
+	}
+	var runlimit int64
+	prepegTx, err := bc.NewTx(prepegTxBytes, 3, math.MaxInt64, txvm.GetRunlimit(&runlimit))
+	if err != nil {
+		return errors.Wrap(err, "populating new pre-peg tx")
+	}
+	prepegTx.Runlimit = math.MaxInt64 - runlimit
+	// TODO(debnil): Wait on submitted TX hitting TxVM chain.
+	// TODO(debnil): Submit TX (requires RPC from slidechaind).
+	return nil
+}
+
+func buildPrepegTx(bcid, assetXDR []byte, amount, expMS int64, pubkey ed25519.PublicKey) ([]byte, error) {
+	nonceHash := UniqueNonceHash(bcid, expMS)
+	finalizeExpMS := int64(bc.Millis(time.Now().Add(9 * time.Minute)))
+	buf := new(bytes.Buffer)
+	// Set up pre-peg tx arg stack: asset, amount, zeroval, {pubkey}, quorum
+	fmt.Fprintf(buf, "x'%x' put\n", assetXDR)
+	fmt.Fprintf(buf, "%d put\n", amount)
+	fmt.Fprintf(buf, "x'%x' put\n", nonceHash)
+	fmt.Fprintf(buf, "{x'%x'} put\n", pubkey)
+	fmt.Fprintf(buf, "1 put\n") // The signer quorum size of 1 is fixed.
+	fmt.Fprintf(buf, "x'%x' %d nonce finalize\n", bcid, finalizeExpMS)
+	tx, err := asm.Assemble(buf.String())
+	if err != nil {
+		return nil, errors.Wrap(err, "assembling pre-peg tx")
+	}
+	_, err = txvm.Validate(tx, 3, math.MaxInt64)
+	if err != nil {
+		return nil, errors.Wrap(err, "validating pre-peg tx")
+	}
+	return tx, nil
 }
