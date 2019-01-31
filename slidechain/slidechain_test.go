@@ -304,14 +304,9 @@ func TestEndToEnd(t *testing.T) {
 			t.Fatalf("error marshaling tx to base64: %s", err)
 		}
 		// TODO(debnil): Build and submit pre-peg TxVM tx, wait for it to hit chain
-		// Record pegs
 		// TODO(debnil): Include recording in the above RPC.
-		expMS := int64(bc.Millis(time.Now().Add(10 * time.Minute)))
-		err = c.RecordPegs(ctx, txenv.E.Tx, exporterPubKeyBytes[:], expMS)
-		if err != nil {
-			t.Fatalf("error recording pegs: %s", err)
-		}
-		log.Print("successfully recorded pegs")
+		// expMS := int64(bc.Millis(time.Now().Add(10 * time.Minute)))
+
 		// Submit peg-in transaction
 		succ, err := hclient.SubmitTransaction(txstr)
 		if err != nil {

@@ -69,21 +69,52 @@ func main() {
 		log.Printf("invalid amount string %s: %s", *amount, err)
 	}
 
-	var recipientPubkey [32]byte
+	var recipientPubkeyBytes [32]byte
 	if len(*recipient) != 64 {
 		log.Fatalf("invalid recipient length: got %d want 64", len(*recipient))
 	}
-	_, err := hex.Decode(recipientPubkey[:], []byte(*recipient))
+	_, err := hex.Decode(recipientPubkeyBytes[:], []byte(*recipient))
 	if err != nil {
 		log.Fatal(err, "decoding recipient")
 	}
-	// TODO(debnil): Call DoPrepegTx here.
+	bcidBytes := []byte(*bcid)
+	var asset xdr.Asset
+	if *issuer != "" {
+		var issuerID xdr.AccountId
+		err = issuerID.SetAddress(*issuer)
+		if err != nil {
+			log.Fatal(err, "setting issuer ID")
+		}
+		err = asset.SetCredit(*code, issuerID)
+		if err != nil {
+			log.Fatal(err, "setting asset code and issuer")
+		}
+	} else {
+		asset, err = xdr.NewAsset(xdr.AssetTypeAssetTypeNative, nil)
+		if err != nil {
+			log.Fatal(err, "setting native asset")
+		}
+	}
 
+	assetXDR, err := asset.MarshalBinary()
+	if err != nil {
+		log.Fatal(err, "marshaling asset xdr")
+	}
+	amountInt, err := strconv.ParseInt(*amount, 10, 64)
+	if err != nil {
+		log.Fatal(err, "converting amount to int64")
+	}
+	expMS := int64(bc.Millis(time.Now().Add(10 * time.Minute)))
+	recipientPubkey := ed25519.PublicKey(recipientPubkeyBytes[:])
+	err = DoPrepegTx(bcidBytes, assetXDR, amountInt, expMS, recipientPubkey, *slidechaind)
+	if err != nil {
+		log.Fatal(err, "doing pre-peg-in tx")
+	}
 	hclient := &horizon.Client{
 		URL:  strings.TrimRight(*horizonURL, "/"),
 		HTTP: new(http.Client),
 	}
-	tx, err := stellar.BuildPegInTx(*seed, recipientPubkey, *amount, *code, *issuer, *custodian, hclient)
+	tx, err := stellar.BuildPegInTx(*seed, recipientPubkeyBytes, *amount, *code, *issuer, *custodian, hclient)
 	if err != nil {
 		log.Fatal(err, "building transaction")
 	}
@@ -104,19 +135,23 @@ func main() {
 
 // DoPrepegTx builds, submits the pre-peg TxVM transaction, and waits for it to hit the chain.
 // TODO(debnil): Check if any of this should be moved to slidechaind.
+// TODO(debnil): Add Printf's for logging.
 func DoPrepegTx(bcid, assetXDR []byte, amount, expMS int64, pubkey ed25519.PublicKey, slidechaind string) error {
 	prepegTx, err := buildPrepegTx(bcid, assetXDR, amount, expMS, pubkey)
 	if err != nil {
 		return errors.Wrap(err, "building pre-peg-in tx")
 	}
+	log.Printf("successfully built pre-peg-in tx")
 	err = submitPrepegTx(prepegTx, slidechaind)
 	if err != nil {
 		return errors.Wrap(err, "submitting and waiting on pre-peg-in tx")
 	}
+	log.Printf("successfully submitted and waited on pre-peg-in tx")
 	err = recordPeg(prepegTx.ID, assetXDR, amount, expMS, pubkey, slidechaind)
 	if err != nil {
 		return errors.Wrap(err, "recording peg")
 	}
+	log.Printf("successfully recorded peg for")
 	return nil
 }
 
