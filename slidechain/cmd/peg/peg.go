@@ -17,6 +17,7 @@ import (
 	"github.com/chain/txvm/protocol/bc"
 	"github.com/chain/txvm/protocol/txvm"
 	"github.com/chain/txvm/protocol/txvm/asm"
+	"github.com/golang/protobuf/proto"
 	"github.com/interstellar/slingshot/slidechain"
 	"github.com/interstellar/slingshot/slidechain/stellar"
 	"github.com/stellar/go/clients/horizon"
@@ -103,24 +104,20 @@ func main() {
 
 // DoPrepegTx builds, submits the pre-peg TxVM transaction, and waits for it to hit the chain.
 // TODO(debnil): Figure out how much of this should be moved to slidechaind.
-func DoPrepegTx(bcid, assetXDR []byte, amount, expMS int64, pubkey ed25519.PublicKey) error {
-	prepegTxBytes, err := buildPrepegTx(bcid, assetXDR, amount, expMS, pubkey)
+func DoPrepegTx(bcid, assetXDR []byte, amount, expMS int64, pubkey ed25519.PublicKey, slidechaind string) error {
+	prepegTx, err := buildPrepegTx(bcid, assetXDR, amount, expMS, pubkey)
 	if err != nil {
-		return errors.Wrap(err, "building pre-peg tx")
+		return errors.Wrap(err, "building pre-peg-in tx")
 	}
-	var runlimit int64
-	prepegTx, err := bc.NewTx(prepegTxBytes, 3, math.MaxInt64, txvm.GetRunlimit(&runlimit))
+	err = submitPrepegTx(prepegTx, slidechaind)
 	if err != nil {
-		return errors.Wrap(err, "populating new pre-peg tx")
+		return errors.Wrap(err, "submitting and waiting on pre-peg-in tx")
 	}
-	prepegTx.Runlimit = math.MaxInt64 - runlimit
-	// TODO(debnil): Submit TX (requires RPC from slidechaind).
-	// TODO(debnil): Wait on submitted TX hitting TxVM chain.
 	// TODO(debnil): Record pegs.
 	return nil
 }
 
-func buildPrepegTx(bcid, assetXDR []byte, amount, expMS int64, pubkey ed25519.PublicKey) ([]byte, error) {
+func buildPrepegTx(bcid, assetXDR []byte, amount, expMS int64, pubkey ed25519.PublicKey) (*bc.Tx, error) {
 	nonceHash := slidechain.UniqueNonceHash(bcid, expMS)
 	finalizeExpMS := int64(bc.Millis(time.Now().Add(9 * time.Minute)))
 	buf := new(bytes.Buffer)
@@ -139,5 +136,28 @@ func buildPrepegTx(bcid, assetXDR []byte, amount, expMS int64, pubkey ed25519.Pu
 	if err != nil {
 		return nil, errors.Wrap(err, "validating pre-peg tx")
 	}
-	return tx, nil
+	var runlimit int64
+	prepegTx, err := bc.NewTx(tx, 3, math.MaxInt64, txvm.GetRunlimit(&runlimit))
+	if err != nil {
+		return nil, errors.Wrap(err, "populating new pre-peg tx")
+	}
+	prepegTx.Runlimit = math.MaxInt64 - runlimit
+	return prepegTx, nil
+}
+
+func submitPrepegTx(tx *bc.Tx, slidechaind string) error {
+	prepegTxBits, err := proto.Marshal(&tx.RawTx)
+	if err != nil {
+		return errors.Wrap(err, "marshaling pre-peg tx")
+	}
+	resp, err := http.Post(slidechaind+"/submit?wait=1", "application/octet-stream", bytes.NewReader(prepegTxBits))
+	if err != nil {
+		return errors.Wrap(err, "submitting to slidechaind: %s")
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode/100 != 2 {
+		return errors.New(fmt.Sprintf("status code %d from POST /submit", resp.StatusCode))
+	}
+	log.Printf("successfully submitted and waited on pre-peg-in tx %x", tx.ID)
+	return nil
 }
