@@ -103,7 +103,7 @@ func main() {
 }
 
 // DoPrepegTx builds, submits the pre-peg TxVM transaction, and waits for it to hit the chain.
-// TODO(debnil): Figure out how much of this should be moved to slidechaind.
+// TODO(debnil): Check if any of this should be moved to slidechaind.
 func DoPrepegTx(bcid, assetXDR []byte, amount, expMS int64, pubkey ed25519.PublicKey, slidechaind string) error {
 	prepegTx, err := buildPrepegTx(bcid, assetXDR, amount, expMS, pubkey)
 	if err != nil {
@@ -113,7 +113,10 @@ func DoPrepegTx(bcid, assetXDR []byte, amount, expMS int64, pubkey ed25519.Publi
 	if err != nil {
 		return errors.Wrap(err, "submitting and waiting on pre-peg-in tx")
 	}
-	// TODO(debnil): Record pegs.
+	err = recordPeg(prepegTx.ID, assetXDR, amount, expMS, pubkey, slidechaind)
+	if err != nil {
+		return errors.Wrap(err, "recording peg")
+	}
 	return nil
 }
 
@@ -159,5 +162,28 @@ func submitPrepegTx(tx *bc.Tx, slidechaind string) error {
 		return errors.New(fmt.Sprintf("status code %d from POST /submit", resp.StatusCode))
 	}
 	log.Printf("successfully submitted and waited on pre-peg-in tx %x", tx.ID)
+	return nil
+}
+
+func recordPeg(txid bc.Hash, assetXDR []byte, amount, expMS int64, pubkey ed25519.PublicKey, slidechaind string) error {
+	p := slidechain.Peg{
+		Amount:      amount,
+		AssetXDR:    assetXDR,
+		RecipPubkey: pubkey,
+		ExpMS:       expMS,
+	}
+	pegBits, err := proto.Marshal(&p)
+	if err != nil {
+		return errors.Wrap(err, "marshaling peg")
+	}
+	resp, err := http.Post(slidechaind+"/record", "application/octet-stream", bytes.NewReader(pegBits))
+	if err != nil {
+		return errors.Wrap(err, "recording to slidechaind: %s")
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode/100 != 2 {
+		return errors.New(fmt.Sprintf("status code %d from POST /record", resp.StatusCode))
+	}
+	log.Printf("successfully recorded peg for tx %x", txid)
 	return nil
 }

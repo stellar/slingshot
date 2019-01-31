@@ -50,4 +50,5 @@ func (c *Custodian) RecordPegs(w http.ResponseWriter, req *http.Request) {
 		net.Errorf(w, http.StatusInternalServerError, "sending response: %s", err)
 		return
 	}
+	return
 }
