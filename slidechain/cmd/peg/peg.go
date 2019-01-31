@@ -157,7 +157,6 @@ func DoPrepegTx(bcid, assetXDR []byte, amount, expMS int64, pubkey ed25519.Publi
 
 func buildPrepegTx(bcid, assetXDR []byte, amount, expMS int64, pubkey ed25519.PublicKey) (*bc.Tx, error) {
 	nonceHash := slidechain.UniqueNonceHash(bcid, expMS)
-	finalizeExpMS := int64(bc.Millis(time.Now().Add(9 * time.Minute)))
 	buf := new(bytes.Buffer)
 	// Set up pre-peg tx arg stack: asset, amount, zeroval, {pubkey}, quorum
 	fmt.Fprintf(buf, "x'%x' put\n", assetXDR)
@@ -165,7 +164,8 @@ func buildPrepegTx(bcid, assetXDR []byte, amount, expMS int64, pubkey ed25519.Pu
 	fmt.Fprintf(buf, "x'%x' put\n", nonceHash)
 	fmt.Fprintf(buf, "{x'%x'} put\n", pubkey)
 	fmt.Fprintf(buf, "1 put\n") // The signer quorum size of 1 is fixed.
-	fmt.Fprintf(buf, "x'%x' %d nonce finalize\n", bcid, finalizeExpMS)
+	// Call contract to create uniqueness token.
+	fmt.Fprintf(buf, "x'%x' contract call\n", slidechain.CreateTokenProg)
 	tx, err := asm.Assemble(buf.String())
 	if err != nil {
 		return nil, errors.Wrap(err, "assembling pre-peg tx")
