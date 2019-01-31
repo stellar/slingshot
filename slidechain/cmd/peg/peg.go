@@ -115,6 +115,7 @@ func DoPrepegTx(bcid, assetXDR []byte, amount, expMS int64, pubkey ed25519.Publi
 	prepegTx.Runlimit = math.MaxInt64 - runlimit
 	// TODO(debnil): Wait on submitted TX hitting TxVM chain.
 	// TODO(debnil): Submit TX (requires RPC from slidechaind).
+	// TODO(debnil): Record pegs.
 	return nil
 }
 
