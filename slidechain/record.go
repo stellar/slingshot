@@ -2,37 +2,52 @@ package slidechain
 
 import (
 	"context"
-	"fmt"
+	"io/ioutil"
+	"net/http"
 
-	"github.com/chain/txvm/errors"
-	"github.com/stellar/go/xdr"
+	"github.com/golang/protobuf/proto"
+	"github.com/interstellar/slingshot/slidechain/net"
 )
 
-// RecordPegs records a peg-in transaction in the database.
-func (c *Custodian) RecordPegs(ctx context.Context, tx xdr.Transaction, recipientPubkey []byte, expMS int64) error {
-	for _, op := range tx.Operations {
-		if op.Body.Type != xdr.OperationTypePayment {
-			continue
-		}
-		payment := op.Body.PaymentOp
-		if !payment.Destination.Equals(c.AccountID) {
-			continue
-		}
+// Peg is a peg, before being inserted into a Custodian DB.
+// The below methods are necessary for Peg to implement Proto.message.
+// TODO(debnil): Should we make all fields required for protobuf and/or json?
+type Peg struct {
+	Amount      int64  `protobuf:"varint,1,opt,name=amount" json:"amount,omitempty"`
+	AssetXDR    []byte `protobuf:"bytes,2,opt,name=assetxdr" json:"assetxdr,omitempty"`
+	RecipPubkey []byte `protobuf:"bytes,3,opt,name=recippubkey" json:"recippubkey,omitempty"`
+	ExpMS       int64  `protobuf:"varint,4,opt,name=expms" json:"expms,omitempty"`
+}
 
-		// This operation is a payment to the custodian account - i.e., a peg.
-		// We record it in the db.
-		const q = `INSERT INTO pegs 
+// Reset implements the Reset method.
+func (m *Peg) Reset() { *m = Peg{} }
+
+// String implements the String method.
+func (m *Peg) String() string { return proto.CompactTextString(m) }
+
+// ProtoMessage implements the ProtoMessage method.
+func (*Peg) ProtoMessage() {}
+
+// RecordPegs records a peg-in transaction in the database.
+func (c *Custodian) RecordPegs(w http.ResponseWriter, req *http.Request) {
+	data, err := ioutil.ReadAll(req.Body)
+	if err != nil {
+		net.Errorf(w, http.StatusInternalServerError, "sending response: %s", err)
+	}
+	var p Peg
+	err = proto.Unmarshal(data, &p)
+	if err != nil {
+		net.Errorf(w, http.StatusInternalServerError, "sending response: %s", err)
+		return
+	}
+	const q = `INSERT INTO pegs
 					(nonce_hash, amount, asset_xdr, recipient_pubkey, expiration_ms)
 					VALUES ($1, $2, $3, $4, $5)`
-		assetXDR, err := payment.Asset.MarshalBinary()
-		if err != nil {
-			return errors.Wrap(err, fmt.Sprintf("marshaling asset to XDR %s", payment.Asset.String()))
-		}
-		nonceHash := UniqueNonceHash(c.InitBlockHash.Bytes(), expMS)
-		_, err = c.DB.ExecContext(ctx, q, nonceHash[:], payment.Amount, assetXDR, recipientPubkey, expMS)
-		if err != nil {
-			return errors.Wrap(err, "inserting peg-in tx")
-		}
+	nonceHash := UniqueNonceHash(c.InitBlockHash.Bytes(), p.ExpMS)
+	ctx := context.Background()
+	_, err = c.DB.ExecContext(ctx, q, nonceHash[:], p.Amount, p.AssetXDR, p.RecipPubkey, p.ExpMS)
+	if err != nil {
+		net.Errorf(w, http.StatusInternalServerError, "sending response: %s", err)
+		return
 	}
-	return nil
 }
