@@ -19,11 +19,7 @@ pub struct Signature {
 
 impl Signature {
     /// Verifies a signature for a single key
-    pub fn verify_single(
-        &self,
-        transcript: &mut Transcript,
-        pubkey: VerificationKey,
-    ) -> PointOp {
+    pub fn verify_single(&self, transcript: &mut Transcript, pubkey: VerificationKey) -> PointOp {
         self.verify_aggregated(transcript, &[pubkey])
     }
 
@@ -146,7 +142,6 @@ impl Signature {
 pub struct VerificationKey(pub CompressedRistretto);
 
 impl VerificationKey {
-
     // Constructs a VerificationKey from the private key.
     pub fn from_secret(privkey: &Scalar) -> Self {
         let gens = PedersenGens::default();
@@ -162,10 +157,7 @@ mod tests {
     fn empty() {
         let mut transcript = Transcript::new(b"empty");
         let sig = Signature::sign_aggregated(&mut transcript, &[]);
-        assert!(sig
-            .verify_aggregated(&mut transcript, &[])
-            .verify()
-            .is_ok());
+        assert!(sig.verify_aggregated(&mut transcript, &[]).verify().is_ok());
     }
 
     #[test]
@@ -179,10 +171,7 @@ mod tests {
         };
 
         let mut transcript = Transcript::new(b"single_signature");
-        assert!(sig
-            .verify_single(&mut transcript, pubkey)
-            .verify()
-            .is_ok());
+        assert!(sig.verify_single(&mut transcript, pubkey).verify().is_ok());
     }
 
     #[test]

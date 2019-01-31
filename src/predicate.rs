@@ -125,7 +125,7 @@ mod tests {
         let left = Predicate(gens.B.compress());
         let right = Predicate(gens.B_blinding.compress());
 
-        let pred = left.or(&right, ).unwrap();
+        let pred = left.or(&right).unwrap();
         let op = pred.prove_or(&right, &left);
         assert!(op.verify().is_err());
     }
