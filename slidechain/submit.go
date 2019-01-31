@@ -42,7 +42,7 @@ type submitter struct {
 	chain *protocol.Chain
 }
 
-func (s *submitter) submitTx(ctx context.Context, tx *bc.Tx) error {
+func (s *submitter) submitTx(ctx context.Context, tx *bc.Tx, wait bool) error {
 	s.bbmu.Lock()
 	defer s.bbmu.Unlock()
 
@@ -93,11 +93,46 @@ func (s *submitter) submitTx(ctx context.Context, tx *bc.Tx) error {
 		return errors.Wrap(err, "adding tx to pool")
 	}
 	log.Printf("added tx %x to the pending block", tx.ID.Bytes())
+	if wait {
+		r := s.w.Reader()
+		for {
+			got, ok := r.Read(ctx)
+			if !ok {
+				log.Printf("error reading block from multichan while waiting for tx %x to hit txvm", tx.ID.Bytes())
+				return ctx.Err()
+			}
+			b := got.(*bc.Block)
+			for _, gotTx := range b.Transactions {
+				if gotTx.ID == tx.ID {
+					log.Printf("tx %x hit txvm chain", tx.ID.Bytes())
+					return nil
+				}
+			}
+		}
+	}
 	return nil
 }
 
 func (s *submitter) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	ctx := req.Context()
+
+	wantStr := req.FormValue("wait")
+	var (
+		wantInt uint64
+		err     error
+	)
+	if wantStr != "" {
+		wantInt, err = strconv.ParseUint(wantStr, 10, 64)
+		if err != nil {
+			net.Errorf(w, http.StatusBadRequest, "parsing wait: %s", err)
+			return
+		}
+		if wantInt != 1 {
+			net.Errorf(w, http.StatusBadRequest, "wait can only be 1")
+			return
+		}
+	}
+	wait := (wantInt != 0)
 
 	bits, err := ioutil.ReadAll(req.Body)
 	if err != nil {
@@ -118,7 +153,7 @@ func (s *submitter) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	err = s.submitTx(ctx, tx)
+	err = s.submitTx(ctx, tx, wait)
 	if err != nil {
 		net.Errorf(w, http.StatusBadRequest, "submitting tx: %s", err)
 		return

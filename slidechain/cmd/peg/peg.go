@@ -76,6 +76,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err, "decoding recipient")
 	}
+	// TODO(debnil): Call DoPrepegTx here.
 
 	hclient := &horizon.Client{
 		URL:  strings.TrimRight(*horizonURL, "/"),
@@ -113,8 +114,8 @@ func DoPrepegTx(bcid, assetXDR []byte, amount, expMS int64, pubkey ed25519.Publi
 		return errors.Wrap(err, "populating new pre-peg tx")
 	}
 	prepegTx.Runlimit = math.MaxInt64 - runlimit
-	// TODO(debnil): Wait on submitted TX hitting TxVM chain.
 	// TODO(debnil): Submit TX (requires RPC from slidechaind).
+	// TODO(debnil): Wait on submitted TX hitting TxVM chain.
 	// TODO(debnil): Record pegs.
 	return nil
 }
