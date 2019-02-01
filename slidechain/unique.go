@@ -77,11 +77,12 @@ func consumeTokenProgSnapshot(bcid, assetXDR, recipPubkey []byte, amount, expMS 
 	fmt.Fprintf(buf, "'C' x'%x' x'%x'\n", createTokenSeed[:], consumeTokenProg)
 	// Push con stack: quorum, {recip}, zeroval, amount, asset
 	// Note that plain data items must be converted to tuples to be contract arguments.
-	fmt.Fprintf(buf, "'Z' %d 2 tuple\n", int64(1))
-	fmt.Fprintf(buf, "'T' {x'%x'} 2 tuple\n", recipPubkey)
+	fmt.Fprintf(buf, "{'S', 1}\n")
+	fmt.Fprintf(buf, "{'T', {x'%x'}}\n", recipPubkey)
 	nonceHash := UniqueNonceHash(bcid, expMS)
-	fmt.Fprintf(buf, "'V' %d x'%x' x'%x' 4 tuple\n", int64(0), zeroSeed[:], nonceHash[:])
-	fmt.Fprintf(buf, "'Z' %d 2 tuple\n", amount)
+	fmt.Fprintf(buf, "{'V', %d, x'%x', x'%x'}\n", 0, zeroSeed[:], nonceHash[:])
+	fmt.Fprintf(buf, "{'Z', %d}\n", amount)
+	fmt.Fprintf(buf, "{'S', x'%x'}\n", assetXDR)
 	// Construct tuple and assemble bytecode.
 	fmt.Fprintf(buf, "8 tuple\n")
 	tx, err := asm.Assemble(buf.String())
