@@ -3,6 +3,7 @@ package slidechain
 import (
 	"context"
 	"io/ioutil"
+	"log"
 	"net/http"
 
 	"github.com/golang/protobuf/proto"
@@ -50,5 +51,6 @@ func (c *Custodian) RecordPegs(w http.ResponseWriter, req *http.Request) {
 		net.Errorf(w, http.StatusInternalServerError, "sending response: %s", err)
 		return
 	}
+	log.Printf("recorded peg for tx with nonce hash %x in db", nonceHash[:])
 	return
 }

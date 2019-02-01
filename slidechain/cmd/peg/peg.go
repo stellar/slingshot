@@ -69,11 +69,11 @@ func main() {
 		log.Printf("invalid amount string %s: %s", *amount, err)
 	}
 
-	var recipientPubkeyBytes [32]byte
+	var recipientPubkey [32]byte
 	if len(*recipient) != 64 {
 		log.Fatalf("invalid recipient length: got %d want 64", len(*recipient))
 	}
-	_, err := hex.Decode(recipientPubkeyBytes[:], []byte(*recipient))
+	_, err := hex.Decode(recipientPubkey[:], []byte(*recipient))
 	if err != nil {
 		log.Fatal(err, "decoding recipient")
 	}
@@ -109,8 +109,7 @@ func main() {
 		log.Fatal(err, "converting amount to int64")
 	}
 	expMS := int64(bc.Millis(time.Now().Add(10 * time.Minute)))
-	recipientPubkey := ed25519.PublicKey(recipientPubkeyBytes[:])
-	err = DoPrepegTx(bcidBytes[:], assetXDR, amountInt, expMS, recipientPubkey, *slidechaind)
+	err = DoPrepegTx(bcidBytes[:], assetXDR, amountInt, expMS, recipientPubkey[:], *slidechaind)
 	if err != nil {
 		log.Fatal(err, "doing pre-peg-in tx")
 	}
@@ -118,7 +117,7 @@ func main() {
 		URL:  strings.TrimRight(*horizonURL, "/"),
 		HTTP: new(http.Client),
 	}
-	tx, err := stellar.BuildPegInTx(*seed, recipientPubkeyBytes, *amount, *code, *issuer, *custodian, hclient)
+	tx, err := stellar.BuildPegInTx(*seed, recipientPubkey, *amount, *code, *issuer, *custodian, hclient)
 	if err != nil {
 		log.Fatal(err, "building transaction")
 	}
@@ -141,7 +140,8 @@ func main() {
 // TODO(debnil): Check if any of this should be moved to slidechaind.
 // TODO(debnil): Add Printf's for logging.
 func DoPrepegTx(bcid, assetXDR []byte, amount, expMS int64, pubkey ed25519.PublicKey, slidechaind string) error {
-	prepegTx, err := buildPrepegTx(bcid, assetXDR, amount, expMS, pubkey)
+	log.Printf("here is the pubkey in DoPrepegTx: %x", pubkey)
+	prepegTx, err := buildPrepegTx(bcid, assetXDR, pubkey, amount, expMS)
 	if err != nil {
 		return errors.Wrap(err, "building pre-peg-in tx")
 	}
@@ -149,6 +149,7 @@ func DoPrepegTx(bcid, assetXDR []byte, amount, expMS int64, pubkey ed25519.Publi
 	if err != nil {
 		return errors.Wrap(err, "submitting and waiting on pre-peg-in tx")
 	}
+	log.Printf("passing pubkey %x to recordPeg", pubkey)
 	err = recordPeg(prepegTx.ID, assetXDR, amount, expMS, pubkey, slidechaind)
 	if err != nil {
 		return errors.Wrap(err, "recording peg")
@@ -156,23 +157,23 @@ func DoPrepegTx(bcid, assetXDR []byte, amount, expMS int64, pubkey ed25519.Publi
 	return nil
 }
 
-func buildPrepegTx(bcid, assetXDR []byte, amount, expMS int64, pubkey ed25519.PublicKey) (*bc.Tx, error) {
+func buildPrepegTx(bcid, assetXDR, recip []byte, amount, expMS int64) (*bc.Tx, error) {
 	buf := new(bytes.Buffer)
-	// Set up pre-peg tx arg stack: asset, amount, zeroval, {pubkey}, quorum
+	// Set up pre-peg tx arg stack: asset, amount, zeroval, {recip}, quorum
+	// Con stack will have splitzeroval for the finalize instruction.
 	fmt.Fprintf(buf, "x'%x' put\n", assetXDR)
 	fmt.Fprintf(buf, "%d put\n", amount)
-	fmt.Fprintf(buf, "x'%x' %d nonce put\n", bcid, expMS)
-	fmt.Fprintf(buf, "{x'%x'} put\n", pubkey)
+	fmt.Fprintf(buf, "x'%x' %d nonce splitzero put\n", bcid, expMS)
+	fmt.Fprintf(buf, "{x'%x'} put\n", recip)
 	fmt.Fprintf(buf, "1 put\n") // The signer quorum size of 1 is fixed.
 	// Call create token contract.
 	fmt.Fprintf(buf, "x'%x' contract call\n", slidechain.CreateTokenProg)
-	finalizeExpMS := int64(bc.Millis(time.Now().Add(9 * time.Minute)))
-	// TODO(debnil): Split nonce from the earlier zero-val.
-	fmt.Fprintf(buf, "x'%x' %d nonce finalize\n", bcid, finalizeExpMS)
+	fmt.Fprintf(buf, "finalize\n")
 	tx, err := asm.Assemble(buf.String())
 	if err != nil {
 		return nil, errors.Wrap(err, "assembling pre-peg tx")
 	}
+	log.Printf("pre-peg tx: %x", tx)
 	_, err = txvm.Validate(tx, 3, math.MaxInt64)
 	if err != nil {
 		return nil, errors.Wrap(err, "validating pre-peg tx")
@@ -222,6 +223,6 @@ func recordPeg(txid bc.Hash, assetXDR []byte, amount, expMS int64, pubkey ed2551
 	if resp.StatusCode/100 != 2 {
 		return errors.New(fmt.Sprintf("status code %d from POST /record", resp.StatusCode))
 	}
-	log.Printf("successfully recorded peg for tx %x", txid)
+	log.Printf("successfully recorded peg for tx %x", txid.Bytes())
 	return nil
 }
