@@ -99,6 +99,7 @@ func (s *submitter) submitTx(ctx context.Context, tx *bc.Tx) error {
 func (s *submitter) waitOnTx(ctx context.Context, tx *bc.Tx) error {
 	log.Printf("waiting on tx %x to hit txvm", tx.ID.Bytes())
 	r := s.w.Reader()
+	defer r.Dispose()
 	for {
 		got, ok := r.Read(ctx)
 		if !ok {
@@ -108,7 +109,7 @@ func (s *submitter) waitOnTx(ctx context.Context, tx *bc.Tx) error {
 		b := got.(*bc.Block)
 		for _, gotTx := range b.Transactions {
 			if gotTx.ID == tx.ID {
-				log.Printf("tx %x hit txvm chain", tx.ID.Bytes())
+				log.Printf("found tx %x on txvm chain", tx.ID.Bytes())
 				return nil
 			}
 		}

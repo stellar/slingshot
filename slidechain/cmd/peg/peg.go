@@ -145,17 +145,14 @@ func DoPrepegTx(bcid, assetXDR []byte, amount, expMS int64, pubkey ed25519.Publi
 	if err != nil {
 		return errors.Wrap(err, "building pre-peg-in tx")
 	}
-	log.Printf("successfully built pre-peg-in tx")
 	err = submitPrepegTx(prepegTx, slidechaind)
 	if err != nil {
 		return errors.Wrap(err, "submitting and waiting on pre-peg-in tx")
 	}
-	log.Printf("successfully submitted and waited on pre-peg-in tx")
 	err = recordPeg(prepegTx.ID, assetXDR, amount, expMS, pubkey, slidechaind)
 	if err != nil {
 		return errors.Wrap(err, "recording peg")
 	}
-	log.Printf("successfully recorded peg for")
 	return nil
 }
 
@@ -194,8 +191,7 @@ func submitPrepegTx(tx *bc.Tx, slidechaind string) error {
 	if err != nil {
 		return errors.Wrap(err, "marshaling pre-peg tx")
 	}
-	// TODO(debnil): Add wait flag below.
-	resp, err := http.Post(slidechaind+"/submit", "application/octet-stream", bytes.NewReader(prepegTxBits))
+	resp, err := http.Post(slidechaind+"/submit?wait=1", "application/octet-stream", bytes.NewReader(prepegTxBits))
 	if err != nil {
 		return errors.Wrap(err, "submitting to slidechaind")
 	}
