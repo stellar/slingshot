@@ -165,10 +165,10 @@ func buildPrepegTx(bcid, assetXDR []byte, amount, expMS int64, pubkey ed25519.Pu
 	fmt.Fprintf(buf, "x'%x' put\n", nonceHash)
 	fmt.Fprintf(buf, "{x'%x'} put\n", pubkey)
 	fmt.Fprintf(buf, "1 put\n") // The signer quorum size of 1 is fixed.
-	// Call contract to create uniqueness token.
+	// Output uniqueness token.
 	fmt.Fprintf(buf, "x'%x' output\n", slidechain.CreateTokenProg)
-	finalizeExpMS := int64(bc.Millis(time.Now().Add(10 * time.Minute)))
-	fmt.Fprintf(buf, "x'%x' %d nonce finalize\n", bcid, finalizeExpMS)
+	// finalizeExpMS := int64(bc.Millis(time.Now().Add(10 * time.Minute)))
+	// fmt.Fprintf(buf, "x'%x' %d nonce finalize\n", bcid, finalizeExpMS)
 	tx, err := asm.Assemble(buf.String())
 	if err != nil {
 		return nil, errors.Wrap(err, "assembling pre-peg tx")
