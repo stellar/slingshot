@@ -94,6 +94,7 @@ func (s *submitter) submitTx(ctx context.Context, tx *bc.Tx, wait bool) error {
 	}
 	log.Printf("added tx %x to the pending block", tx.ID.Bytes())
 	if wait {
+		log.Printf("waiting on tx %x to hit txvm", tx.ID.Bytes())
 		r := s.w.Reader()
 		for {
 			got, ok := r.Read(ctx)

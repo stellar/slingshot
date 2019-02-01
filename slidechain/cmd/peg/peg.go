@@ -77,7 +77,11 @@ func main() {
 	if err != nil {
 		log.Fatal(err, "decoding recipient")
 	}
-	bcidBytes := []byte(*bcid)
+	var bcidBytes [32]byte
+	_, err = hex.Decode(bcidBytes[:], []byte(*bcid))
+	if err != nil {
+		log.Fatal(err, "decoding initial block id")
+	}
 	var asset xdr.Asset
 	if *issuer != "" {
 		var issuerID xdr.AccountId
@@ -106,7 +110,7 @@ func main() {
 	}
 	expMS := int64(bc.Millis(time.Now().Add(10 * time.Minute)))
 	recipientPubkey := ed25519.PublicKey(recipientPubkeyBytes[:])
-	err = DoPrepegTx(bcidBytes, assetXDR, amountInt, expMS, recipientPubkey, *slidechaind)
+	err = DoPrepegTx(bcidBytes[:], assetXDR, amountInt, expMS, recipientPubkey, *slidechaind)
 	if err != nil {
 		log.Fatal(err, "doing pre-peg-in tx")
 	}
@@ -166,6 +170,8 @@ func buildPrepegTx(bcid, assetXDR []byte, amount, expMS int64, pubkey ed25519.Pu
 	fmt.Fprintf(buf, "1 put\n") // The signer quorum size of 1 is fixed.
 	// Call contract to create uniqueness token.
 	fmt.Fprintf(buf, "x'%x' contract call\n", slidechain.CreateTokenProg)
+	finalizeExpMS := int64(bc.Millis(time.Now().Add(10 * time.Minute)))
+	fmt.Fprintf(buf, "x'%x' %d nonce finalize\n", bcid, finalizeExpMS)
 	tx, err := asm.Assemble(buf.String())
 	if err != nil {
 		return nil, errors.Wrap(err, "assembling pre-peg tx")
@@ -188,9 +194,10 @@ func submitPrepegTx(tx *bc.Tx, slidechaind string) error {
 	if err != nil {
 		return errors.Wrap(err, "marshaling pre-peg tx")
 	}
-	resp, err := http.Post(slidechaind+"/submit?wait=1", "application/octet-stream", bytes.NewReader(prepegTxBits))
+	// TODO(debnil): Add wait flag below.
+	resp, err := http.Post(slidechaind+"/submit", "application/octet-stream", bytes.NewReader(prepegTxBits))
 	if err != nil {
-		return errors.Wrap(err, "submitting to slidechaind: %s")
+		return errors.Wrap(err, "submitting to slidechaind")
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode/100 != 2 {
@@ -213,7 +220,7 @@ func recordPeg(txid bc.Hash, assetXDR []byte, amount, expMS int64, pubkey ed2551
 	}
 	resp, err := http.Post(slidechaind+"/record", "application/octet-stream", bytes.NewReader(pegBits))
 	if err != nil {
-		return errors.Wrap(err, "recording to slidechaind: %s")
+		return errors.Wrap(err, "recording to slidechaind")
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode/100 != 2 {
