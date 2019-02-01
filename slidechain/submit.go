@@ -42,7 +42,7 @@ type submitter struct {
 	chain *protocol.Chain
 }
 
-func (s *submitter) submitTx(ctx context.Context, tx *bc.Tx, wait bool) error {
+func (s *submitter) submitTx(ctx context.Context, tx *bc.Tx) error {
 	s.bbmu.Lock()
 	defer s.bbmu.Unlock()
 
@@ -93,25 +93,26 @@ func (s *submitter) submitTx(ctx context.Context, tx *bc.Tx, wait bool) error {
 		return errors.Wrap(err, "adding tx to pool")
 	}
 	log.Printf("added tx %x to the pending block", tx.ID.Bytes())
-	if wait {
-		log.Printf("waiting on tx %x to hit txvm", tx.ID.Bytes())
-		r := s.w.Reader()
-		for {
-			got, ok := r.Read(ctx)
-			if !ok {
-				log.Printf("error reading block from multichan while waiting for tx %x to hit txvm", tx.ID.Bytes())
-				return ctx.Err()
-			}
-			b := got.(*bc.Block)
-			for _, gotTx := range b.Transactions {
-				if gotTx.ID == tx.ID {
-					log.Printf("tx %x hit txvm chain", tx.ID.Bytes())
-					return nil
-				}
+	return nil
+}
+
+func (s *submitter) waitOnTx(ctx context.Context, tx *bc.Tx) error {
+	log.Printf("waiting on tx %x to hit txvm", tx.ID.Bytes())
+	r := s.w.Reader()
+	for {
+		got, ok := r.Read(ctx)
+		if !ok {
+			log.Printf("error reading block from multichan while waiting for tx %x to hit txvm", tx.ID.Bytes())
+			return ctx.Err()
+		}
+		b := got.(*bc.Block)
+		for _, gotTx := range b.Transactions {
+			if gotTx.ID == tx.ID {
+				log.Printf("tx %x hit txvm chain", tx.ID.Bytes())
+				return nil
 			}
 		}
 	}
-	return nil
 }
 
 func (s *submitter) ServeHTTP(w http.ResponseWriter, req *http.Request) {
@@ -154,10 +155,17 @@ func (s *submitter) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	err = s.submitTx(ctx, tx, wait)
+	err = s.submitTx(ctx, tx)
 	if err != nil {
 		net.Errorf(w, http.StatusBadRequest, "submitting tx: %s", err)
 		return
+	}
+	if wait {
+		err = s.waitOnTx(ctx, tx)
+		if err != nil {
+			net.Errorf(w, http.StatusBadRequest, "waiting on tx: %s", err)
+			return
+		}
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
