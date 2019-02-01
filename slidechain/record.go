@@ -41,6 +41,7 @@ func (c *Custodian) RecordPegs(w http.ResponseWriter, req *http.Request) {
 		net.Errorf(w, http.StatusInternalServerError, "sending response: %s", err)
 		return
 	}
+	log.Printf("inserting recip pubkey %x into db", p.RecipPubkey)
 	const q = `INSERT INTO pegs
 					(nonce_hash, amount, asset_xdr, recipient_pubkey, expiration_ms)
 					VALUES ($1, $2, $3, $4, $5)`

@@ -82,7 +82,7 @@ func (c *Custodian) importFromPegs(ctx context.Context) {
 			amounts, expMSs               []int64
 			nonceHashs, assetXDRs, recips [][]byte
 		)
-		const q = `SELECT nonce_hash, amount, asset_xdr, recipient_pubkey, expiration_ms FROM pegs WHERE imported=0`
+		const q = `SELECT nonce_hash, amount, asset_xdr, recipient_pubkey, expiration_ms FROM pegs WHERE imported=0 AND stellar_tx=1`
 		err := sqlutil.ForQueryRows(ctx, c.DB, q, func(nonceHash []byte, amount int64, assetXDR, recip []byte, expMS int64) {
 			nonceHashs = append(nonceHashs, nonceHash)
 			amounts = append(amounts, amount)

@@ -40,6 +40,7 @@ func (c *Custodian) watchPegs(ctx context.Context) {
 				return
 			}
 
+			nonceHash := (*env.Tx.Memo.Hash)[:]
 			for _, op := range env.Tx.Operations {
 				if op.Body.Type != xdr.OperationTypePayment {
 					continue
@@ -55,6 +56,11 @@ func (c *Custodian) watchPegs(ctx context.Context) {
 				if err != nil {
 					log.Fatalf("updating cursor: %s", err)
 					return
+				}
+
+				_, err = c.DB.ExecContext(ctx, `UPDATE pegs SET stellar_tx=1 WHERE nonce_hash = $1`, nonceHash)
+				if err != nil {
+					log.Fatalf("updating stellar_tx=1 for hash %x: %s", nonceHash, err)
 				}
 				// Wake up a goroutine that executes imports for not-yet-imported pegs.
 				c.imports.Broadcast()
