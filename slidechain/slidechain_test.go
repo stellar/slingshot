@@ -356,7 +356,7 @@ func TestEndToEnd(t *testing.T) {
 			block := item.(*bc.Block)
 			for _, tx := range block.Transactions {
 				if isImportTx(tx, int64(amount), nativeAssetBytes, exporterPub) {
-					log.Printf("found import tx %x", tx.Program)
+					t.Logf("found import tx %x", tx.Program)
 					found = true
 					txresult := txresult.New(tx)
 					anchor = txresult.Outputs[0].Value.Anchor
