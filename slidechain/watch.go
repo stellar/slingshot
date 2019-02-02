@@ -41,6 +41,7 @@ func (c *Custodian) watchPegs(ctx context.Context) {
 			}
 
 			nonceHash := (*env.Tx.Memo.Hash)[:]
+			log.Printf("found nonceHash %x", nonceHash)
 			for _, op := range env.Tx.Operations {
 				if op.Body.Type != xdr.OperationTypePayment {
 					continue
@@ -63,6 +64,7 @@ func (c *Custodian) watchPegs(ctx context.Context) {
 					log.Fatalf("updating stellar_tx=1 for hash %x: %s", nonceHash, err)
 				}
 				// Wake up a goroutine that executes imports for not-yet-imported pegs.
+				log.Printf("broadcasting import for tx with nonce hash %x", nonceHash)
 				c.imports.Broadcast()
 			}
 		})

@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 
+	"github.com/chain/txvm/errors"
 	"github.com/golang/protobuf/proto"
 	"github.com/interstellar/slingshot/slidechain/net"
 )
@@ -47,11 +48,22 @@ func (c *Custodian) RecordPegs(w http.ResponseWriter, req *http.Request) {
 					VALUES ($1, $2, $3, $4, $5)`
 	nonceHash := UniqueNonceHash(c.InitBlockHash.Bytes(), p.ExpMS)
 	ctx := context.Background()
-	_, err = c.DB.ExecContext(ctx, q, nonceHash[:], p.Amount, p.AssetXDR, p.RecipPubkey, p.ExpMS)
+	err = c.recordPeg(ctx, nonceHash[:], p.AssetXDR, p.RecipPubkey, p.Amount, p.ExpMS)
 	if err != nil {
 		net.Errorf(w, http.StatusInternalServerError, "sending response: %s", err)
 		return
 	}
 	log.Printf("recorded peg for tx with nonce hash %x in db", nonceHash[:])
 	return
+}
+
+func (c *Custodian) recordPeg(ctx context.Context, nonceHash, assetXDR, recip []byte, amount, expMS int64) error {
+	const q = `INSERT INTO pegs
+					(nonce_hash, amount, asset_xdr, recipient_pubkey, expiration_ms)
+					VALUES ($1, $2, $3, $4, $5)`
+	_, err := c.DB.ExecContext(ctx, q, nonceHash, amount, assetXDR, recip, expMS)
+	if err != nil {
+		return errors.Wrap(err, "inserting peg in db")
+	}
+	return nil
 }
