@@ -353,7 +353,6 @@ func TestEndToEnd(t *testing.T) {
 			t.Fatalf("error submitting tx: %s", err)
 		}
 		t.Logf("successfully submitted peg-in tx: id %s, ledger %d", succ.Hash, succ.Ledger)
-		log.Printf("submitted peg-in tx with hash %x", uniqueNonceHash)
 
 		// Check to verify import
 		var anchor []byte
@@ -378,7 +377,6 @@ func TestEndToEnd(t *testing.T) {
 				break
 			}
 		}
-		log.Print("just verified import!")
 		t.Log("submitting pre-export tx...")
 		temp, seqnum, err := SubmitPreExportTx(hclient, exporter, c.AccountID.Address(), native, int64(amount))
 		if err != nil {
@@ -400,7 +398,6 @@ func TestEndToEnd(t *testing.T) {
 		if resp.StatusCode/100 != 2 {
 			t.Fatalf("status code %d from POST /submit", resp.StatusCode)
 		}
-		log.Print("just verified pre-export!")
 		t.Log("checking for retirement tx on txvm...")
 
 		found = false
@@ -422,7 +419,6 @@ func TestEndToEnd(t *testing.T) {
 				break
 			}
 		}
-		log.Print("just verified export!")
 		t.Log("checking for successful retirement...")
 
 		// Check for successful retirement
@@ -488,34 +484,27 @@ func TestEndToEnd(t *testing.T) {
 func isImportTx(tx *bc.Tx, amount int64, assetXDR []byte, recipPubKey ed25519.PublicKey) bool {
 	log.Print(tx.Log)
 	if len(tx.Log) != 5 {
-		log.Print("isImportTx FAIL 1")
 		return false
 	}
 	if tx.Log[0][0].(txvm.Bytes)[0] != txvm.InputCode {
-		log.Print("isImportTx FAIL 2")
 		return false
 	}
 	if tx.Log[1][0].(txvm.Bytes)[0] != txvm.IssueCode {
-		log.Print("isImportTx FAIL 3")
 		return false
 	}
 	if int64(tx.Log[1][2].(txvm.Int)) != amount {
-		log.Print("isImportTx FAIL 4")
 		return false
 	}
 	wantAssetID := txvm.AssetID(importIssuanceSeed[:], assetXDR)
 	if !bytes.Equal(wantAssetID[:], tx.Log[1][3].(txvm.Bytes)) {
-		log.Print("isImportTx FAIL 5")
 		return false
 	}
 	issueAnchor := tx.Log[1][4].(txvm.Bytes)
 	splitAnchor := txvm.VMHash("Split1", issueAnchor) // the anchor of the issued value after a zeroval is split off of it
 	if tx.Log[2][0].(txvm.Bytes)[0] != txvm.LogCode {
-		log.Print("isImportTx FAIL 6")
 		return false
 	}
 	if tx.Log[3][0].(txvm.Bytes)[0] != txvm.OutputCode {
-		log.Print("isImportTx FAIL 7")
 		return false
 	}
 
@@ -524,11 +513,9 @@ func isImportTx(tx *bc.Tx, amount int64, assetXDR []byte, recipPubKey ed25519.Pu
 	snapshotBytes := b.Build()
 	wantOutputID := txvm.VMHash("SnapshotID", snapshotBytes)
 	if !bytes.Equal(wantOutputID[:], tx.Log[3][2].(txvm.Bytes)) {
-		log.Print("isImportTx FAIL 8")
 		return false
 	}
 	// No need to test tx.Log[4], it has to be a finalize entry.
-	log.Print("isImportTx SUCCEED")
 	return true
 }
 

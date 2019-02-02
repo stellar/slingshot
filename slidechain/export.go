@@ -401,7 +401,7 @@ func IsExportTx(tx *bc.Tx, asset xdr.Asset, inputAmt int64, temp, exporter strin
 	if err != nil {
 		return false
 	}
-	wantAssetID := txvm.AssetID(issueSeed[:], assetBytes)
+	wantAssetID := txvm.AssetID(importIssuanceSeed[:], assetBytes)
 	if !bytes.Equal(wantAssetID[:], tx.Log[2][3].(txvm.Bytes)) {
 		return false
 	}
