@@ -41,7 +41,6 @@ func (c *Custodian) buildImportTx(
 	if err != nil {
 		return nil, errors.Wrap(err, "assembling payment tx")
 	}
-	log.Printf("import tx: %x", tx1)
 	vm, err := txvm.Validate(tx1, 3, math.MaxInt64, txvm.StopAfterFinalize)
 	if err != nil {
 		return nil, errors.Wrap(err, "computing transaction ID")
@@ -103,7 +102,6 @@ func (c *Custodian) importFromPegs(ctx context.Context) {
 				recip    = recips[i]
 				expMS    = expMSs[i]
 			)
-			log.Printf("just read recip %x from db", recip)
 			err = c.doImport(ctx, nonceHash, amount, assetXDR, recip, expMS)
 			if err != nil {
 				if err == context.Canceled {
@@ -117,7 +115,6 @@ func (c *Custodian) importFromPegs(ctx context.Context) {
 
 func (c *Custodian) doImport(ctx context.Context, nonceHash []byte, amount int64, assetXDR, recip []byte, expMS int64) error {
 	log.Printf("doing import from tx with hash %x: %d of asset %x for recipient %x with expiration %d", nonceHash, amount, assetXDR, recip, expMS)
-	log.Printf("here is the pubkey in doImport: %x", recip)
 	importTxBytes, err := c.buildImportTx(amount, expMS, assetXDR, recip)
 	if err != nil {
 		return errors.Wrap(err, "building import tx")

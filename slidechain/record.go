@@ -13,6 +13,7 @@ import (
 // Peg is a peg, before being inserted into a Custodian DB.
 // The below methods are necessary for Peg to implement Proto.message.
 // TODO(debnil): Should we make all fields required for protobuf and/or json?
+// TODO(debnil): Is this worth making a new file?
 type Peg struct {
 	Amount      int64  `protobuf:"varint,1,opt,name=amount" json:"amount,omitempty"`
 	AssetXDR    []byte `protobuf:"bytes,2,opt,name=assetxdr" json:"assetxdr,omitempty"`
@@ -41,7 +42,6 @@ func (c *Custodian) RecordPegs(w http.ResponseWriter, req *http.Request) {
 		net.Errorf(w, http.StatusInternalServerError, "sending response: %s", err)
 		return
 	}
-	log.Printf("inserting recip pubkey %x into db", p.RecipPubkey)
 	const q = `INSERT INTO pegs
 					(nonce_hash, amount, asset_xdr, recipient_pubkey, expiration_ms)
 					VALUES ($1, $2, $3, $4, $5)`

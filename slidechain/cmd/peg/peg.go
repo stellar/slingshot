@@ -138,10 +138,7 @@ func main() {
 }
 
 // DoPrepegTx builds, submits the pre-peg TxVM transaction, and waits for it to hit the chain.
-// TODO(debnil): Check if any of this should be moved to slidechaind.
-// TODO(debnil): Add Printf's for logging.
 func DoPrepegTx(bcid, assetXDR []byte, amount, expMS int64, pubkey ed25519.PublicKey, slidechaind string) error {
-	log.Printf("here is the pubkey in DoPrepegTx: %x", pubkey)
 	prepegTx, err := buildPrepegTx(bcid, assetXDR, pubkey, amount, expMS)
 	if err != nil {
 		return errors.Wrap(err, "building pre-peg-in tx")
@@ -150,7 +147,6 @@ func DoPrepegTx(bcid, assetXDR []byte, amount, expMS int64, pubkey ed25519.Publi
 	if err != nil {
 		return errors.Wrap(err, "submitting and waiting on pre-peg-in tx")
 	}
-	log.Printf("passing pubkey %x to recordPeg", pubkey)
 	err = recordPeg(prepegTx.ID, assetXDR, amount, expMS, pubkey, slidechaind)
 	if err != nil {
 		return errors.Wrap(err, "recording peg")
@@ -175,7 +171,6 @@ func buildPrepegTx(bcid, assetXDR, recip []byte, amount, expMS int64) (*bc.Tx, e
 	if err != nil {
 		return nil, errors.Wrap(err, "assembling pre-peg tx")
 	}
-	log.Printf("pre-peg tx: %x", tx)
 	_, err = txvm.Validate(tx, 3, math.MaxInt64)
 	if err != nil {
 		return nil, errors.Wrap(err, "validating pre-peg tx")
