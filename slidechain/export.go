@@ -16,6 +16,7 @@ import (
 	"github.com/chain/txvm/protocol/txbuilder"
 	"github.com/chain/txvm/protocol/txbuilder/txresult"
 	"github.com/chain/txvm/protocol/txvm"
+	"github.com/interstellar/slingshot/slidechain/stellar"
 	"github.com/interstellar/starlight/worizon/xlm"
 	b "github.com/stellar/go/build"
 	"github.com/stellar/go/clients/horizon"
@@ -105,43 +106,13 @@ func (c *Custodian) pegOutFromExports(ctx context.Context) {
 func (c *Custodian) pegOut(ctx context.Context, exporter xdr.AccountId, asset xdr.Asset, amount int64, temp xdr.AccountId, seqnum xdr.SequenceNumber) error {
 	tx, err := buildPegOutTx(c.AccountID.Address(), exporter.Address(), temp.Address(), c.network, asset, amount, seqnum)
 	if err != nil {
-		return errors.Wrap(err, "building tx")
+		return errors.Wrap(err, "building peg-out tx")
 	}
-	txenv, err := tx.Sign(c.seed)
+	_, err = stellar.SignAndSubmitTx(c.hclient, tx, c.seed)
 	if err != nil {
-		return errors.Wrap(err, "signing tx")
+		errors.Wrap(err, "peg-out tx")
 	}
-	txstr, err := xdr.MarshalBase64(txenv.E)
-	if err != nil {
-		return errors.Wrap(err, "marshaling tx to base64")
-	}
-	resp, err := c.hclient.SubmitTransaction(txstr)
-	if err != nil {
-		log.Printf("error submitting tx: %s\ntx: %s", err, txstr)
-		var (
-			resultStr string
-			err       error
-			tr        xdr.TransactionResult
-		)
-		if herr, ok := err.(*horizon.Error); ok {
-			resultStr, err = herr.ResultString()
-			if err != nil {
-				log.Print(err, "extracting result string from horizon.Error")
-			}
-		}
-		if resultStr == "" {
-			resultStr = resp.Result
-			if resultStr == "" {
-				log.Print("cannot locate result string from failed tx submission")
-			}
-		}
-		err = xdr.SafeUnmarshalBase64(resultStr, &tr)
-		if err != nil {
-			log.Print(err, "unmarshaling TransactionResult")
-		}
-		log.Println("Result: ", resultStr)
-	}
-	return errors.Wrap(err, "submitting tx")
+	return nil
 }
 
 func buildPegOutTx(custodian, exporter, temp, network string, asset xdr.Asset, amount int64, seqnum xdr.SequenceNumber) (*b.TransactionBuilder, error) {
@@ -210,17 +181,12 @@ func createTempAccount(hclient *horizon.Client, kp *keypair.Full) (*keypair.Full
 			b.Destination{AddressOrSeed: temp.Address()},
 		),
 	)
-	txenv, err := tx.Sign(kp.Seed())
 	if err != nil {
-		return nil, 0, errors.Wrap(err, "signing temp account tx")
+		return nil, 0, errors.Wrap(err, "building temp account creation tx")
 	}
-	txstr, err := xdr.MarshalBase64(txenv.E)
+	_, err = stellar.SignAndSubmitTx(hclient, tx, kp.Seed())
 	if err != nil {
-		return nil, 0, errors.Wrap(err, "marshaling temp account txenv")
-	}
-	_, err = hclient.SubmitTransaction(txstr)
-	if err != nil {
-		return nil, 0, errors.Wrapf(err, "submitting pre-export tx: %s", txstr)
+		return nil, 0, errors.Wrapf(err, "submitting temp account creation tx")
 	}
 	seqnum, err := hclient.SequenceForAccount(temp.Address())
 	if err != nil {
@@ -275,17 +241,9 @@ func SubmitPreExportTx(hclient *horizon.Client, kp *keypair.Full, custodian stri
 	if err != nil {
 		return "", 0, errors.Wrap(err, "building pre-export tx")
 	}
-	txenv, err := tx.Sign(kp.Seed(), temp.Seed())
+	_, err = stellar.SignAndSubmitTx(hclient, tx, kp.Seed(), temp.Seed())
 	if err != nil {
-		return "", 0, errors.Wrap(err, "signing pre-export tx")
-	}
-	txstr, err := xdr.MarshalBase64(txenv.E)
-	if err != nil {
-		return "", 0, errors.Wrap(err, "marshaling pre-export txenv")
-	}
-	_, err = hclient.SubmitTransaction(txstr)
-	if err != nil {
-		return "", 0, errors.Wrapf(err, "submitting pre-export tx: %s", txstr)
+		return "", 0, errors.Wrap(err, "pre-exporttx")
 	}
 	return temp.Address(), seqnum, nil
 }

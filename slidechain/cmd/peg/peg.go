@@ -18,7 +18,6 @@ import (
 	"github.com/interstellar/slingshot/slidechain"
 	"github.com/interstellar/slingshot/slidechain/stellar"
 	"github.com/stellar/go/clients/horizon"
-	"github.com/stellar/go/xdr"
 )
 
 func main() {
@@ -119,17 +118,9 @@ func main() {
 	if err != nil {
 		log.Fatal(err, "building transaction")
 	}
-	txenv, err := tx.Sign(*seed)
+	succ, err := stellar.SignAndSubmitTx(hclient, tx, *seed)
 	if err != nil {
-		log.Fatal(err, "signing transaction")
-	}
-	txstr, err := xdr.MarshalBase64(txenv.E)
-	if err != nil {
-		log.Fatal(err, "marshaling tx to base64")
-	}
-	succ, err := hclient.SubmitTransaction(txstr)
-	if err != nil {
-		log.Fatalf("%s: submitting tx %s", err, txstr)
+		log.Fatal(err, "submitting peg-in tx")
 	}
 	log.Printf("successfully submitted peg-in tx hash %s on ledger %d", succ.Hash, succ.Ledger)
 }
