@@ -9,7 +9,6 @@ import (
 	b "github.com/stellar/go/build"
 	"github.com/stellar/go/clients/horizon"
 	"github.com/stellar/go/keypair"
-	"github.com/stellar/go/xdr"
 )
 
 // NewFundedAccount generates a random keypair, creates
@@ -64,15 +63,7 @@ func IssueAsset(hclient *horizon.Client, seed, code, amount, destination string)
 	if err != nil {
 		return errors.Wrap(err, "building tx")
 	}
-	txenv, err := tx.Sign(seed)
-	if err != nil {
-		return errors.Wrap(err, "signing tx")
-	}
-	txstr, err := xdr.MarshalBase64(txenv.E)
-	if err != nil {
-		return errors.Wrap(err, "marshaling tx")
-	}
-	_, err = hclient.SubmitTransaction(txstr)
+	_, err = SignAndSubmitTx(hclient, tx, seed)
 	return err
 }
 
@@ -88,14 +79,6 @@ func TrustAsset(hclient *horizon.Client, seed, code, issuer string) error {
 	if err != nil {
 		return errors.Wrap(err, "building tx")
 	}
-	txenv, err := tx.Sign(seed)
-	if err != nil {
-		return errors.Wrap(err, "signing tx")
-	}
-	txstr, err := xdr.MarshalBase64(txenv.E)
-	if err != nil {
-		return errors.Wrap(err, "marshaling tx")
-	}
-	_, err = hclient.SubmitTransaction(txstr)
+	_, err = SignAndSubmitTx(hclient, tx, seed)
 	return err
 }
