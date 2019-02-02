@@ -164,12 +164,13 @@ func buildPrepegTx(bcid, assetXDR, recip []byte, amount, expMS int64) (*bc.Tx, e
 	// Con stack will have splitzeroval for the finalize instruction.
 	fmt.Fprintf(buf, "x'%x' put\n", assetXDR)
 	fmt.Fprintf(buf, "%d put\n", amount)
-	fmt.Fprintf(buf, "x'%x' %d nonce splitzero put\n", bcid, expMS)
+	fmt.Fprintf(buf, "x'%x' %d nonce put\n", bcid, expMS)
 	fmt.Fprintf(buf, "{x'%x'} put\n", recip)
 	fmt.Fprintf(buf, "1 put\n") // The signer quorum size of 1 is fixed.
 	// Call create token contract.
 	fmt.Fprintf(buf, "x'%x' contract call\n", slidechain.CreateTokenProg)
-	fmt.Fprintf(buf, "finalize\n")
+	finalizeExpMS := int64(bc.Millis(time.Now().Add(9 * time.Minute)))
+	fmt.Fprintf(buf, "x'%x' %d nonce finalize\n", bcid, finalizeExpMS)
 	tx, err := asm.Assemble(buf.String())
 	if err != nil {
 		return nil, errors.Wrap(err, "assembling pre-peg tx")
