@@ -218,10 +218,25 @@ func TestImport(t *testing.T) {
 				privkey:       custodianPrv,
 				InitBlockHash: chain.InitialBlockHash,
 			}
-			go c.importFromPegs(ctx)
+			// Without a successful pre-peg-in TxVM tx, the initial input in the import tx will fail.
+			t.Log("building and submitting pre-peg-in tx...")
 			expMS := int64(bc.Millis(time.Now().Add(10 * time.Minute)))
+			prepegTx, err := BuildPrepegTx(c.InitBlockHash.Bytes(), assetXDR, testRecipPubKey, 1, expMS)
+			if err != nil {
+				t.Fatal("could not build pre-peg-in tx")
+			}
+			err = c.S.submitTx(ctx, prepegTx)
+			if err != nil {
+				t.Fatal("could not submit pre-peg-in tx")
+			}
+			err = c.S.waitOnTx(ctx, prepegTx)
+			if err != nil {
+				t.Fatal("unsuccessfully waited on pre-peg-in tx hitting txvm")
+			}
+			t.Log("pre-peg-in tx hit the txvm chain...")
+			go c.importFromPegs(ctx)
 			nonceHash := UniqueNonceHash(c.InitBlockHash.Bytes(), expMS)
-			_, err := db.Exec("INSERT INTO pegs (nonce_hash, amount, asset_xdr, recipient_pubkey, expiration_ms) VALUES ($1, 1, $2, $3, $4)", nonceHash[:], assetXDR, testRecipPubKey, expMS)
+			_, err = db.Exec("INSERT INTO pegs (nonce_hash, amount, asset_xdr, recipient_pubkey, expiration_ms, stellar_tx) VALUES ($1, 1, $2, $3, $4, 1)", nonceHash[:], assetXDR, testRecipPubKey, expMS)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -290,8 +305,12 @@ func TestEndToEnd(t *testing.T) {
 		var exporterPubKeyBytes [32]byte
 		copy(exporterPubKeyBytes[:], exporterPub)
 
+		// TODO(debnil): Build, submit, wait on pre-peg-in tx.
+
 		// Build transaction to peg-in funds
-		pegInTx, err := stellar.BuildPegInTx(exporter.Address(), exporterPubKeyBytes, amount.HorizonString(), "", "", c.AccountID.Address(), hclient)
+		expMS := int64(bc.Millis(time.Now().Add(10 * time.Minute)))
+		uniqueNonceHash := UniqueNonceHash(c.InitBlockHash.Bytes(), expMS)
+		pegInTx, err := stellar.BuildPegInTx(exporter.Address(), exporterPubKeyBytes, uniqueNonceHash, amount.HorizonString(), "", "", c.AccountID.Address(), hclient)
 		if err != nil {
 			t.Fatalf("error building peg-in tx: %s", err)
 		}
@@ -303,9 +322,6 @@ func TestEndToEnd(t *testing.T) {
 		if err != nil {
 			t.Fatalf("error marshaling tx to base64: %s", err)
 		}
-		// TODO(debnil): Build and submit pre-peg TxVM tx, wait for it to hit chain
-		// TODO(debnil): Include recording in the above RPC.
-		// expMS := int64(bc.Millis(time.Now().Add(10 * time.Minute)))
 
 		// Submit peg-in transaction
 		succ, err := hclient.SubmitTransaction(txstr)
@@ -447,39 +463,34 @@ func TestEndToEnd(t *testing.T) {
 }
 
 // Expected log is:
-//   {"N", ...}
-//   {"R", ...}
+//   {"I", ...}
 //   {"A", contextID, amount, assetID, anchor}
 //   {"L", ...}
 //   {"O", caller, outputID}
 //   {"F", ...}
 func isImportTx(tx *bc.Tx, amount int64, assetXDR []byte, recipPubKey ed25519.PublicKey) bool {
-	log.Print("top of isImportTx")
-	if len(tx.Log) != 6 {
+	if len(tx.Log) != 5 {
 		return false
 	}
-	if tx.Log[0][0].(txvm.Bytes)[0] != txvm.NonceCode {
+	if tx.Log[0][0].(txvm.Bytes)[0] != txvm.InputCode {
 		return false
 	}
-	if tx.Log[1][0].(txvm.Bytes)[0] != txvm.TimerangeCode {
+	if tx.Log[1][0].(txvm.Bytes)[0] != txvm.IssueCode {
 		return false
 	}
-	if tx.Log[2][0].(txvm.Bytes)[0] != txvm.IssueCode {
+	if int64(tx.Log[1][2].(txvm.Int)) != amount {
 		return false
 	}
-	if int64(tx.Log[2][2].(txvm.Int)) != amount {
+	wantAssetID := txvm.AssetID(importIssuanceSeed[:], assetXDR)
+	if !bytes.Equal(wantAssetID[:], tx.Log[1][3].(txvm.Bytes)) {
 		return false
 	}
-	wantAssetID := txvm.AssetID(issueSeed[:], assetXDR)
-	if !bytes.Equal(wantAssetID[:], tx.Log[2][3].(txvm.Bytes)) {
-		return false
-	}
-	issueAnchor := tx.Log[2][4].(txvm.Bytes)
+	issueAnchor := tx.Log[1][4].(txvm.Bytes)
 	splitAnchor := txvm.VMHash("Split1", issueAnchor) // the anchor of the issued value after a zeroval is split off of it
-	if tx.Log[3][0].(txvm.Bytes)[0] != txvm.LogCode {
+	if tx.Log[2][0].(txvm.Bytes)[0] != txvm.LogCode {
 		return false
 	}
-	if tx.Log[4][0].(txvm.Bytes)[0] != txvm.OutputCode {
+	if tx.Log[3][0].(txvm.Bytes)[0] != txvm.OutputCode {
 		return false
 	}
 
@@ -487,10 +498,10 @@ func isImportTx(tx *bc.Tx, amount int64, assetXDR []byte, recipPubKey ed25519.Pu
 	standard.Snapshot(b, 1, []ed25519.PublicKey{recipPubKey}, amount, bc.NewHash(wantAssetID), splitAnchor[:], standard.PayToMultisigSeed1[:])
 	snapshotBytes := b.Build()
 	wantOutputID := txvm.VMHash("SnapshotID", snapshotBytes)
-	if !bytes.Equal(wantOutputID[:], tx.Log[4][2].(txvm.Bytes)) {
+	if !bytes.Equal(wantOutputID[:], tx.Log[3][2].(txvm.Bytes)) {
 		return false
 	}
-	// No need to test tx.Log[5], it has to be a finalize entry.
+	// No need to test tx.Log[4], it has to be a finalize entry.
 	return true
 }
 

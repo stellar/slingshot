@@ -6,7 +6,6 @@ import (
 	"flag"
 	"fmt"
 	"log"
-	"math"
 	"net/http"
 	"strconv"
 	"strings"
@@ -15,8 +14,6 @@ import (
 	"github.com/chain/txvm/crypto/ed25519"
 	"github.com/chain/txvm/errors"
 	"github.com/chain/txvm/protocol/bc"
-	"github.com/chain/txvm/protocol/txvm"
-	"github.com/chain/txvm/protocol/txvm/asm"
 	"github.com/golang/protobuf/proto"
 	"github.com/interstellar/slingshot/slidechain"
 	"github.com/interstellar/slingshot/slidechain/stellar"
@@ -139,7 +136,7 @@ func main() {
 
 // DoPrepegTx builds, submits the pre-peg TxVM transaction, and waits for it to hit the chain.
 func DoPrepegTx(bcid, assetXDR []byte, amount, expMS int64, pubkey ed25519.PublicKey, slidechaind string) error {
-	prepegTx, err := buildPrepegTx(bcid, assetXDR, pubkey, amount, expMS)
+	prepegTx, err := slidechain.BuildPrepegTx(bcid, assetXDR, pubkey, amount, expMS)
 	if err != nil {
 		return errors.Wrap(err, "building pre-peg-in tx")
 	}
@@ -152,36 +149,6 @@ func DoPrepegTx(bcid, assetXDR []byte, amount, expMS int64, pubkey ed25519.Publi
 		return errors.Wrap(err, "recording peg")
 	}
 	return nil
-}
-
-func buildPrepegTx(bcid, assetXDR, recip []byte, amount, expMS int64) (*bc.Tx, error) {
-	buf := new(bytes.Buffer)
-	// Set up pre-peg tx arg stack: asset, amount, zeroval, {recip}, quorum
-	// Con stack will have splitzeroval for the finalize instruction.
-	fmt.Fprintf(buf, "x'%x' put\n", assetXDR)
-	fmt.Fprintf(buf, "%d put\n", amount)
-	fmt.Fprintf(buf, "x'%x' %d nonce put\n", bcid, expMS)
-	fmt.Fprintf(buf, "{x'%x'} put\n", recip)
-	fmt.Fprintf(buf, "1 put\n") // The signer quorum size of 1 is fixed.
-	// Call create token contract.
-	fmt.Fprintf(buf, "x'%x' contract call\n", slidechain.CreateTokenProg)
-	finalizeExpMS := int64(bc.Millis(time.Now().Add(9 * time.Minute)))
-	fmt.Fprintf(buf, "x'%x' %d nonce finalize\n", bcid, finalizeExpMS)
-	tx, err := asm.Assemble(buf.String())
-	if err != nil {
-		return nil, errors.Wrap(err, "assembling pre-peg tx")
-	}
-	_, err = txvm.Validate(tx, 3, math.MaxInt64)
-	if err != nil {
-		return nil, errors.Wrap(err, "validating pre-peg tx")
-	}
-	var runlimit int64
-	prepegTx, err := bc.NewTx(tx, 3, math.MaxInt64, txvm.GetRunlimit(&runlimit))
-	if err != nil {
-		return nil, errors.Wrap(err, "populating new pre-peg tx")
-	}
-	prepegTx.Runlimit = math.MaxInt64 - runlimit
-	return prepegTx, nil
 }
 
 func submitPrepegTx(tx *bc.Tx, slidechaind string) error {
