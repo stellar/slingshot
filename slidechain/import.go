@@ -95,7 +95,6 @@ func (c *Custodian) importFromPegs(ctx context.Context) {
 		if err != nil {
 			log.Fatalf("querying pegs: %s", err)
 		}
-		log.Printf("found %d items in import query", len(nonceHashs))
 		for i, nonceHash := range nonceHashs {
 			var (
 				amount   = amounts[i]
