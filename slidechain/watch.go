@@ -51,6 +51,12 @@ func (c *Custodian) watchPegs(ctx context.Context) {
 				}
 
 				// This operation is a payment to the custodian's account - i.e., a peg.
+				// We update the db to note that we saw this entry on the Stellar network.
+				_, err = c.DB.ExecContext(ctx, `UPDATE pegs SET stellar_tx=1 WHERE nonce_hash = $1`, nonceHash)
+				if err != nil {
+					log.Fatalf("updating stellar_tx=1 for hash %x: %s", nonceHash, err)
+				}
+
 				// We update the cursor to avoid double-processing a transaction.
 				_, err = c.DB.ExecContext(ctx, `UPDATE custodian SET cursor=$1 WHERE seed=$2`, tx.PT, c.seed)
 				if err != nil {
@@ -58,10 +64,6 @@ func (c *Custodian) watchPegs(ctx context.Context) {
 					return
 				}
 
-				_, err = c.DB.ExecContext(ctx, `UPDATE pegs SET stellar_tx=1 WHERE nonce_hash = $1`, nonceHash)
-				if err != nil {
-					log.Fatalf("updating stellar_tx=1 for hash %x: %s", nonceHash, err)
-				}
 				// Wake up a goroutine that executes imports for not-yet-imported pegs.
 				log.Printf("broadcasting import for tx with nonce hash %x", nonceHash)
 				c.imports.Broadcast()
