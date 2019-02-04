@@ -7,7 +7,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io/ioutil"
-	"log"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -472,7 +471,6 @@ func TestEndToEnd(t *testing.T) {
 //   {"O", caller, outputID}
 //   {"F", ...}
 func isImportTx(tx *bc.Tx, amount int64, assetXDR []byte, recipPubKey ed25519.PublicKey) bool {
-	log.Print(tx.Log)
 	if len(tx.Log) != 5 {
 		return false
 	}
