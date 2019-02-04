@@ -224,11 +224,11 @@ func TestImport(t *testing.T) {
 			if err != nil {
 				t.Fatal("could not build pre-peg-in tx")
 			}
-			err = c.S.submitTx(ctx, prepegTx)
+			_, err = c.S.submitTx(ctx, prepegTx)
 			if err != nil {
 				t.Fatal("could not submit pre-peg-in tx")
 			}
-			err = c.S.waitOnTx(ctx, prepegTx.ID)
+			err = c.S.waitOnTx(ctx, prepegTx.ID, r)
 			if err != nil {
 				t.Fatal("unsuccessfully waited on pre-peg-in tx hitting txvm")
 			}
@@ -318,11 +318,11 @@ func TestEndToEnd(t *testing.T) {
 		if err != nil {
 			t.Fatal("could not build pre-peg-in tx")
 		}
-		err = c.S.submitTx(ctx, prepegTx)
+		r, err := c.S.submitTx(ctx, prepegTx)
 		if err != nil {
 			t.Fatal("could not submit pre-peg-in tx")
 		}
-		err = c.S.waitOnTx(ctx, prepegTx.ID)
+		err = c.S.waitOnTx(ctx, prepegTx.ID, r)
 		if err != nil {
 			t.Fatal("unsuccessfully waited on pre-peg-in tx hitting txvm")
 		}
@@ -346,7 +346,6 @@ func TestEndToEnd(t *testing.T) {
 		// Check to verify import.
 		var anchor []byte
 		found := false
-		r := c.S.w.Reader()
 		for {
 			item, ok := r.Read(ctx)
 			if !ok {
