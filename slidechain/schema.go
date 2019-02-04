@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS pegs (
   recipient_pubkey BLOB NOT NULL,
   imported INTEGER NOT NULL DEFAULT 0,
   stellar_tx INTEGER NOT NULL DEFAULT 0,
-  expiration_ms INTEGER NOT NULL,
+  nonce_expms INTEGER NOT NULL,
   PRIMARY KEY (nonce_hash)
 );
 

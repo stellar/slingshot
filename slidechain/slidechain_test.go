@@ -228,14 +228,14 @@ func TestImport(t *testing.T) {
 			if err != nil {
 				t.Fatal("could not submit pre-peg-in tx")
 			}
-			err = c.S.waitOnTx(ctx, prepegTx)
+			err = c.S.waitOnTx(ctx, prepegTx.ID)
 			if err != nil {
 				t.Fatal("unsuccessfully waited on pre-peg-in tx hitting txvm")
 			}
 			t.Log("pre-peg-in tx hit the txvm chain...")
 			go c.importFromPegs(ctx)
 			nonceHash := UniqueNonceHash(c.InitBlockHash.Bytes(), expMS)
-			_, err = db.Exec("INSERT INTO pegs (nonce_hash, amount, asset_xdr, recipient_pubkey, expiration_ms, stellar_tx) VALUES ($1, 1, $2, $3, $4, 1)", nonceHash[:], assetXDR, testRecipPubKey, expMS)
+			_, err = db.Exec("INSERT INTO pegs (nonce_hash, amount, asset_xdr, recipient_pubkey, nonce_expms, stellar_tx) VALUES ($1, 1, $2, $3, $4, 1)", nonceHash[:], assetXDR, testRecipPubKey, expMS)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -287,7 +287,7 @@ func TestEndToEnd(t *testing.T) {
 		}
 		c.launch(ctx)
 
-		// Prepare Stellar account to peg-in funds and txvm account to receive funds
+		// Prepare Stellar account to peg-in funds and txvm account to receive funds.
 		amount := 5 * xlm.Lumen
 		exporterPub, exporterPrv, err := ed25519.GenerateKey(nil)
 		if err != nil {
@@ -322,18 +322,18 @@ func TestEndToEnd(t *testing.T) {
 		if err != nil {
 			t.Fatal("could not submit pre-peg-in tx")
 		}
-		err = c.S.waitOnTx(ctx, prepegTx)
+		err = c.S.waitOnTx(ctx, prepegTx.ID)
 		if err != nil {
 			t.Fatal("unsuccessfully waited on pre-peg-in tx hitting txvm")
 		}
 		uniqueNonceHash := UniqueNonceHash(c.InitBlockHash.Bytes(), expMS)
-		err = c.recordPeg(ctx, uniqueNonceHash[:], nativeAssetBytes, exporterPubKeyBytes[:], int64(amount), expMS)
+		err = c.insertPeg(ctx, uniqueNonceHash[:], nativeAssetBytes, exporterPubKeyBytes[:], int64(amount), expMS)
 		if err != nil {
 			t.Fatal("could not record peg")
 		}
 
-		// Build transaction to peg-in funds
-		pegInTx, err := stellar.BuildPegInTx(exporter.Address(), exporterPubKeyBytes, uniqueNonceHash, amount.HorizonString(), "", "", c.AccountID.Address(), hclient)
+		// Build transaction to peg-in funds.
+		pegInTx, err := stellar.BuildPegInTx(exporter.Address(), uniqueNonceHash, amount.HorizonString(), "", "", c.AccountID.Address(), hclient)
 		if err != nil {
 			t.Fatalf("error building peg-in tx: %s", err)
 		}
@@ -343,7 +343,7 @@ func TestEndToEnd(t *testing.T) {
 		}
 		t.Logf("successfully submitted peg-in tx: id %s, ledger %d", succ.Hash, succ.Ledger)
 
-		// Check to verify import
+		// Check to verify import.
 		var anchor []byte
 		found := false
 		r := c.S.w.Reader()
@@ -397,7 +397,7 @@ func TestEndToEnd(t *testing.T) {
 			}
 			block := item.(*bc.Block)
 			for _, tx := range block.Transactions {
-				// Look for export transaction
+				// Look for export transaction.
 				if IsExportTx(tx, native, int64(amount), temp, exporter.Address(), int64(seqnum)) {
 					t.Logf("found export tx %x", tx.Program)
 					found = true
@@ -410,7 +410,7 @@ func TestEndToEnd(t *testing.T) {
 		}
 		t.Log("checking for successful retirement...")
 
-		// Check for successful retirement
+		// Check for successful retirement.
 		retire := make(chan struct{})
 		go func() {
 			var cur horizon.Cursor

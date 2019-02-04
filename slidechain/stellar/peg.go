@@ -9,7 +9,7 @@ import (
 )
 
 // BuildPegInTx builds a slidechain peg-in transaction
-func BuildPegInTx(source string, txvmPubkey, nonceHash [32]byte, amount, code, issuer, destination string, hclient *horizon.Client) (*b.TransactionBuilder, error) {
+func BuildPegInTx(source string, nonceHash [32]byte, amount, code, issuer, destination string, hclient *horizon.Client) (*b.TransactionBuilder, error) {
 	root, err := hclient.Root()
 	if err != nil {
 		return nil, err

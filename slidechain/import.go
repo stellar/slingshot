@@ -78,12 +78,12 @@ func (c *Custodian) importFromPegs(ctx context.Context) {
 		}
 
 		var (
-			amounts, expMSs               []int64
-			nonceHashs, assetXDRs, recips [][]byte
+			amounts, expMSs                []int64
+			nonceHashes, assetXDRs, recips [][]byte
 		)
-		const q = `SELECT nonce_hash, amount, asset_xdr, recipient_pubkey, expiration_ms FROM pegs WHERE imported=0 AND stellar_tx=1`
+		const q = `SELECT nonce_hash, amount, asset_xdr, recipient_pubkey, nonce_expms FROM pegs WHERE imported=0 AND stellar_tx=1`
 		err := sqlutil.ForQueryRows(ctx, c.DB, q, func(nonceHash []byte, amount int64, assetXDR, recip []byte, expMS int64) {
-			nonceHashs = append(nonceHashs, nonceHash)
+			nonceHashes = append(nonceHashes, nonceHash)
 			amounts = append(amounts, amount)
 			assetXDRs = append(assetXDRs, assetXDR)
 			recips = append(recips, recip)
@@ -95,7 +95,7 @@ func (c *Custodian) importFromPegs(ctx context.Context) {
 		if err != nil {
 			log.Fatalf("querying pegs: %s", err)
 		}
-		for i, nonceHash := range nonceHashs {
+		for i, nonceHash := range nonceHashes {
 			var (
 				amount   = amounts[i]
 				assetXDR = assetXDRs[i]

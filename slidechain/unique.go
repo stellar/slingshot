@@ -54,8 +54,8 @@ const (
 
 var (
 	createTokenSrc     = fmt.Sprintf(createTokenFmt, consumeTokenSrc)
-	CreateTokenProg    = asm.MustAssemble(createTokenSrc)
-	createTokenSeed    = txvm.ContractSeed(CreateTokenProg)
+	createTokenProg    = asm.MustAssemble(createTokenSrc)
+	createTokenSeed    = txvm.ContractSeed(createTokenProg)
 	consumeTokenSrc    = fmt.Sprintf(consumeTokenFmt, importIssuanceSeed)
 	consumeTokenProg   = asm.MustAssemble(consumeTokenSrc)
 	importIssuanceSrc  = fmt.Sprintf(importIssuanceFmt, custodianPub)

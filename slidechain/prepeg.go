@@ -13,7 +13,6 @@ import (
 )
 
 // BuildPrepegTx builds the pre-peg-in TxVM transaction to create a uniqueness token.
-// TODO(debnil): How can this function live in the peg binary while still usable in slidechain tests?
 func BuildPrepegTx(bcid, assetXDR, recip []byte, amount, expMS int64) (*bc.Tx, error) {
 	buf := new(bytes.Buffer)
 	// Set up pre-peg tx arg stack: asset, amount, zeroval, {recip}, quorum
@@ -23,7 +22,7 @@ func BuildPrepegTx(bcid, assetXDR, recip []byte, amount, expMS int64) (*bc.Tx, e
 	fmt.Fprintf(buf, "{x'%x'} put\n", recip)
 	fmt.Fprintf(buf, "1 put\n") // The signer quorum size of 1 is fixed.
 	// Call create token contract.
-	fmt.Fprintf(buf, "x'%x' contract call\n", CreateTokenProg)
+	fmt.Fprintf(buf, "x'%x' contract call\n", createTokenProg)
 	// TODO(debnil): Split the zeroval from the nonce above for performance reasons.
 	// We did not do that right now, because it results in a mismatched anchor on the import side.
 	finalizeExpMS := int64(bc.Millis(time.Now().Add(9 * time.Minute)))

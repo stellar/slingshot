@@ -30,7 +30,7 @@ func main() {
 		horizonURL  = flag.String("horizon", "https://horizon-testnet.stellar.org", "horizon URL")
 		code        = flag.String("code", "", "asset code for non-Lumen asset")
 		issuer      = flag.String("issuer", "", "asset issuer for non-Lumen asset")
-		bcid        = flag.String("bcid", "", "initial block ID")
+		bcidHex     = flag.String("bcid", "", "hex-encoded initial block ID")
 		slidechaind = flag.String("slidechaind", "http://127.0.0.1:2423", "url of slidechaind server")
 	)
 	flag.Parse()
@@ -44,7 +44,7 @@ func main() {
 	if (*code == "" && *issuer != "") || (*code != "" && *issuer == "") {
 		log.Fatal("must specify both code and issuer for non-Lumen asset")
 	}
-	if *bcid == "" {
+	if *bcidHex == "" {
 		log.Fatal("must specify initial block ID")
 	}
 	if *recipient == "" {
@@ -72,56 +72,56 @@ func main() {
 	}
 	_, err := hex.Decode(recipientPubkey[:], []byte(*recipient))
 	if err != nil {
-		log.Fatal(err, "decoding recipient")
+		log.Fatal("decoding recipient: ", err)
 	}
 	var bcidBytes [32]byte
-	_, err = hex.Decode(bcidBytes[:], []byte(*bcid))
+	_, err = hex.Decode(bcidBytes[:], []byte(*bcidHex))
 	if err != nil {
-		log.Fatal(err, "decoding initial block id")
+		log.Fatal("decoding initial block id: ", err)
 	}
 	var asset xdr.Asset
 	if *issuer != "" {
 		var issuerID xdr.AccountId
 		err = issuerID.SetAddress(*issuer)
 		if err != nil {
-			log.Fatal(err, "setting issuer ID")
+			log.Fatal("setting issuer ID: ", err)
 		}
 		err = asset.SetCredit(*code, issuerID)
 		if err != nil {
-			log.Fatal(err, "setting asset code and issuer")
+			log.Fatal("setting asset code and issuer: ", err)
 		}
 	} else {
 		asset, err = xdr.NewAsset(xdr.AssetTypeAssetTypeNative, nil)
 		if err != nil {
-			log.Fatal(err, "setting native asset")
+			log.Fatal("setting native asset: ", err)
 		}
 	}
 
 	assetXDR, err := asset.MarshalBinary()
 	if err != nil {
-		log.Fatal(err, "marshaling asset xdr")
+		log.Fatal("marshaling asset xdr: ", err)
 	}
 	amountInt, err := strconv.ParseInt(*amount, 10, 64)
 	if err != nil {
-		log.Fatal(err, "converting amount to int64")
+		log.Fatal("converting amount to int64: ", err)
 	}
 	expMS := int64(bc.Millis(time.Now().Add(10 * time.Minute)))
 	err = DoPrepegTx(bcidBytes[:], assetXDR, amountInt, expMS, recipientPubkey[:], *slidechaind)
 	if err != nil {
-		log.Fatal(err, "doing pre-peg-in tx")
+		log.Fatal("doing pre-peg-in tx: ", err)
 	}
 	hclient := &horizon.Client{
 		URL:  strings.TrimRight(*horizonURL, "/"),
 		HTTP: new(http.Client),
 	}
 	nonceHash := slidechain.UniqueNonceHash(bcidBytes[:], expMS)
-	tx, err := stellar.BuildPegInTx(*seed, recipientPubkey, nonceHash, *amount, *code, *issuer, *custodian, hclient)
+	tx, err := stellar.BuildPegInTx(*seed, nonceHash, *amount, *code, *issuer, *custodian, hclient)
 	if err != nil {
-		log.Fatal(err, "building transaction")
+		log.Fatal("building transaction: ", err)
 	}
 	succ, err := stellar.SignAndSubmitTx(hclient, tx, *seed)
 	if err != nil {
-		log.Fatal(err, "submitting peg-in tx")
+		log.Fatal("submitting peg-in tx: ", err)
 	}
 	log.Printf("successfully submitted peg-in tx hash %s on ledger %d", succ.Hash, succ.Ledger)
 }
@@ -154,7 +154,7 @@ func submitPrepegTx(tx *bc.Tx, slidechaind string) error {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode/100 != 2 {
-		return errors.New(fmt.Sprintf("status code %d from POST /submit", resp.StatusCode))
+		return fmt.Errorf("status code %d from POST /submit", resp.StatusCode)
 	}
 	log.Printf("successfully submitted and waited on pre-peg-in tx %x", tx.ID)
 	return nil
@@ -177,7 +177,7 @@ func recordPeg(txid bc.Hash, assetXDR []byte, amount, expMS int64, pubkey ed2551
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode/100 != 2 {
-		return errors.New(fmt.Sprintf("status code %d from POST /record", resp.StatusCode))
+		return fmt.Errorf("status code %d from POST /record", resp.StatusCode)
 	}
 	log.Printf("successfully recorded peg for tx %x", txid.Bytes())
 	return nil

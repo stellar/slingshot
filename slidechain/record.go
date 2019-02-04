@@ -31,11 +31,13 @@ func (m *Peg) String() string { return proto.CompactTextString(m) }
 // ProtoMessage implements the ProtoMessage method.
 func (*Peg) ProtoMessage() {}
 
-// RecordPegs records a peg-in transaction in the database.
-func (c *Custodian) RecordPegs(w http.ResponseWriter, req *http.Request) {
+// RecordPeg records a peg-in transaction in the database.
+// TODO(debnil): Make record RPC do pre-peg tx submission as well, instead of requiring a separate server round-trip first.
+func (c *Custodian) RecordPeg(w http.ResponseWriter, req *http.Request) {
 	data, err := ioutil.ReadAll(req.Body)
 	if err != nil {
 		net.Errorf(w, http.StatusInternalServerError, "sending response: %s", err)
+		return
 	}
 	var p Peg
 	err = proto.Unmarshal(data, &p)
@@ -43,12 +45,9 @@ func (c *Custodian) RecordPegs(w http.ResponseWriter, req *http.Request) {
 		net.Errorf(w, http.StatusInternalServerError, "sending response: %s", err)
 		return
 	}
-	const q = `INSERT INTO pegs
-					(nonce_hash, amount, asset_xdr, recipient_pubkey, expiration_ms)
-					VALUES ($1, $2, $3, $4, $5)`
 	nonceHash := UniqueNonceHash(c.InitBlockHash.Bytes(), p.ExpMS)
-	ctx := context.Background()
-	err = c.recordPeg(ctx, nonceHash[:], p.AssetXDR, p.RecipPubkey, p.Amount, p.ExpMS)
+	ctx := req.Context()
+	err = c.insertPeg(ctx, nonceHash[:], p.AssetXDR, p.RecipPubkey, p.Amount, p.ExpMS)
 	if err != nil {
 		net.Errorf(w, http.StatusInternalServerError, "sending response: %s", err)
 		return
@@ -57,10 +56,10 @@ func (c *Custodian) RecordPegs(w http.ResponseWriter, req *http.Request) {
 	return
 }
 
-func (c *Custodian) recordPeg(ctx context.Context, nonceHash, assetXDR, recip []byte, amount, expMS int64) error {
+func (c *Custodian) insertPeg(ctx context.Context, nonceHash, assetXDR, recip []byte, amount, expMS int64) error {
 	const q = `INSERT INTO pegs
-					(nonce_hash, amount, asset_xdr, recipient_pubkey, expiration_ms)
-					VALUES ($1, $2, $3, $4, $5)`
+		(nonce_hash, amount, asset_xdr, recipient_pubkey, nonce_expms)
+		VALUES ($1, $2, $3, $4, $5)`
 	_, err := c.DB.ExecContext(ctx, q, nonceHash, amount, assetXDR, recip, expMS)
 	if err != nil {
 		return errors.Wrap(err, "inserting peg in db")

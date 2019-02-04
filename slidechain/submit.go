@@ -96,20 +96,20 @@ func (s *submitter) submitTx(ctx context.Context, tx *bc.Tx) error {
 	return nil
 }
 
-func (s *submitter) waitOnTx(ctx context.Context, tx *bc.Tx) error {
-	log.Printf("waiting on tx %x to hit txvm", tx.ID.Bytes())
+func (s *submitter) waitOnTx(ctx context.Context, txid bc.Hash) error {
+	log.Printf("waiting on tx %x to hit txvm", txid.Bytes())
 	r := s.w.Reader()
 	defer r.Dispose()
 	for {
 		got, ok := r.Read(ctx)
 		if !ok {
-			log.Printf("error reading block from multichan while waiting for tx %x to hit txvm", tx.ID.Bytes())
+			log.Printf("error reading block from multichan while waiting for tx %x to hit txvm", txid.Bytes())
 			return ctx.Err()
 		}
 		b := got.(*bc.Block)
 		for _, gotTx := range b.Transactions {
-			if gotTx.ID == tx.ID {
-				log.Printf("found tx %x on txvm chain", tx.ID.Bytes())
+			if gotTx.ID == txid {
+				log.Printf("found tx %x on txvm chain", txid.Bytes())
 				return nil
 			}
 		}
@@ -119,23 +119,12 @@ func (s *submitter) waitOnTx(ctx context.Context, tx *bc.Tx) error {
 func (s *submitter) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	ctx := req.Context()
 
-	wantStr := req.FormValue("wait")
-	var (
-		wantInt uint64
-		err     error
-	)
-	if wantStr != "" {
-		wantInt, err = strconv.ParseUint(wantStr, 10, 64)
-		if err != nil {
-			net.Errorf(w, http.StatusBadRequest, "parsing wait: %s", err)
-			return
-		}
-		if wantInt != 1 {
-			net.Errorf(w, http.StatusBadRequest, "wait can only be 1")
-			return
-		}
+	waitStr := req.FormValue("wait")
+	if waitStr != "1" {
+		net.Errorf(w, http.StatusBadRequest, "wait can only be 1")
+		return
 	}
-	wait := (wantInt != 0)
+	wait := (waitStr != "")
 
 	bits, err := ioutil.ReadAll(req.Body)
 	if err != nil {
@@ -162,7 +151,7 @@ func (s *submitter) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	if wait {
-		err = s.waitOnTx(ctx, tx)
+		err = s.waitOnTx(ctx, tx.ID)
 		if err != nil {
 			net.Errorf(w, http.StatusBadRequest, "waiting on tx: %s", err)
 			return
