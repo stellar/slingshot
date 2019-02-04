@@ -41,7 +41,6 @@ func (c *Custodian) watchPegs(ctx context.Context) {
 			}
 
 			nonceHash := (*env.Tx.Memo.Hash)[:]
-			log.Printf("found nonceHash %x", nonceHash)
 			for _, op := range env.Tx.Operations {
 				if op.Body.Type != xdr.OperationTypePayment {
 					continue
