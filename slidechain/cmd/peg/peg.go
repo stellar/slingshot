@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/hex"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
@@ -161,13 +162,18 @@ func submitPrepegTx(tx *bc.Tx, slidechaind string) error {
 }
 
 func recordPeg(txid bc.Hash, assetXDR []byte, amount, expMS int64, pubkey ed25519.PublicKey, slidechaind string) error {
-	p := slidechain.Peg{
-		Amount:      amount,
-		AssetXDR:    assetXDR,
-		RecipPubkey: pubkey,
-		ExpMS:       expMS,
+	p := struct {
+		Amount      int64  `json:"amount"`
+		AssetXDR    []byte `json:"assetxdr"`
+		RecipPubkey []byte `json:"recippubkey"`
+		ExpMS       int64  `json:"expms"`
+	}{
+		amount,
+		assetXDR,
+		pubkey,
+		expMS,
 	}
-	pegBits, err := proto.Marshal(&p)
+	pegBits, err := json.Marshal(&p)
 	if err != nil {
 		return errors.Wrap(err, "marshaling peg")
 	}

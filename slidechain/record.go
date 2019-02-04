@@ -2,34 +2,14 @@ package slidechain
 
 import (
 	"context"
+	"encoding/json"
 	"io/ioutil"
 	"log"
 	"net/http"
 
 	"github.com/chain/txvm/errors"
-	"github.com/golang/protobuf/proto"
 	"github.com/interstellar/slingshot/slidechain/net"
 )
-
-// Peg is a peg, before being inserted into a Custodian DB.
-// The below methods are necessary for Peg to implement Proto.message.
-// TODO(debnil): Should we make all fields required for protobuf and/or json?
-// TODO(debnil): Is this worth making a new file?
-type Peg struct {
-	Amount      int64  `protobuf:"varint,1,opt,name=amount" json:"amount,omitempty"`
-	AssetXDR    []byte `protobuf:"bytes,2,opt,name=assetxdr" json:"assetxdr,omitempty"`
-	RecipPubkey []byte `protobuf:"bytes,3,opt,name=recippubkey" json:"recippubkey,omitempty"`
-	ExpMS       int64  `protobuf:"varint,4,opt,name=expms" json:"expms,omitempty"`
-}
-
-// Reset implements the Reset method.
-func (m *Peg) Reset() { *m = Peg{} }
-
-// String implements the String method.
-func (m *Peg) String() string { return proto.CompactTextString(m) }
-
-// ProtoMessage implements the ProtoMessage method.
-func (*Peg) ProtoMessage() {}
 
 // RecordPeg records a peg-in transaction in the database.
 // TODO(debnil): Make record RPC do pre-peg tx submission as well, instead of requiring a separate server round-trip first.
@@ -39,8 +19,13 @@ func (c *Custodian) RecordPeg(w http.ResponseWriter, req *http.Request) {
 		net.Errorf(w, http.StatusInternalServerError, "sending response: %s", err)
 		return
 	}
-	var p Peg
-	err = proto.Unmarshal(data, &p)
+	var p struct {
+		Amount      int64  `json:"amount"`
+		AssetXDR    []byte `json:"assetxdr"`
+		RecipPubkey []byte `json:"recippubkey"`
+		ExpMS       int64  `json:"expms"`
+	}
+	err = json.Unmarshal(data, &p)
 	if err != nil {
 		net.Errorf(w, http.StatusInternalServerError, "sending response: %s", err)
 		return
