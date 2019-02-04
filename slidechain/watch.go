@@ -52,7 +52,15 @@ func (c *Custodian) watchPegs(ctx context.Context) {
 
 				// This operation is a payment to the custodian's account - i.e., a peg.
 				// We update the db to note that we saw this entry on the Stellar network.
-				_, err = c.DB.ExecContext(ctx, `UPDATE pegs SET stellar_tx=1 WHERE nonce_hash = $1`, nonceHash)
+				// We also update the amount and asset_xdr to use the ones seen in the Stellar tx.
+				amount := payment.Amount
+				asset := payment.Asset
+				assetXDR, err := asset.MarshalBinary()
+				if err != nil {
+					log.Fatalf("marshaling asset xdr: %s", err)
+					return
+				}
+				_, err = c.DB.ExecContext(ctx, `UPDATE pegs SET amount=$1, asset_xdr=$2, stellar_tx=1 WHERE nonce_hash = $3`, amount, assetXDR, nonceHash)
 				if err != nil {
 					log.Fatalf("updating stellar_tx=1 for hash %x: %s", nonceHash, err)
 				}
