@@ -16,10 +16,11 @@ import (
 	"github.com/chain/txvm/errors"
 	"github.com/chain/txvm/protocol/bc"
 	"github.com/golang/protobuf/proto"
-	"github.com/interstellar/slingshot/slidechain"
-	"github.com/interstellar/slingshot/slidechain/stellar"
 	"github.com/stellar/go/clients/horizon"
 	"github.com/stellar/go/xdr"
+
+	"github.com/interstellar/slingshot/slidechain"
+	"github.com/interstellar/slingshot/slidechain/stellar"
 )
 
 func main() {

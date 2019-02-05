@@ -60,7 +60,7 @@ func (c *Custodian) watchPegs(ctx context.Context) {
 					log.Fatalf("marshaling asset xdr: %s", err)
 					return
 				}
-				_, err = c.DB.ExecContext(ctx, `UPDATE pegs SET amount=$1, asset_xdr=$2, stellar_tx=1 WHERE nonce_hash = $3`, amount, assetXDR, nonceHash)
+				_, err = c.DB.ExecContext(ctx, `UPDATE pegs SET amount=$1, asset_xdr=$2, stellar_tx=1 WHERE nonce_hash=$3`, amount, assetXDR, nonceHash)
 				if err != nil {
 					log.Fatalf("updating stellar_tx=1 for hash %x: %s", nonceHash, err)
 				}
