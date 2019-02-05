@@ -2,9 +2,7 @@ package slidechain
 
 import (
 	"fmt"
-	"log"
 
-	"github.com/chain/txvm/protocol/txvm"
 	"github.com/chain/txvm/protocol/txvm/asm"
 )
 
@@ -20,14 +18,5 @@ const issueProgFmt = `
 
 var (
 	issueProgSrc = fmt.Sprintf(issueProgFmt, custodianPub)
-	issueProg    = mustAssemble(issueProgSrc)
-	issueSeed    = txvm.ContractSeed(issueProg)
+	issueProg    = asm.MustAssemble(issueProgSrc)
 )
-
-func mustAssemble(inp string) []byte {
-	result, err := asm.Assemble(inp)
-	if err != nil {
-		log.Fatal(err)
-	}
-	return result
-}

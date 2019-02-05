@@ -39,9 +39,9 @@ func (c *Custodian) watchPegs(ctx context.Context) {
 			if env.Tx.Memo.Type != xdr.MemoTypeMemoHash {
 				return
 			}
-			recipientPubkey := (*env.Tx.Memo.Hash)[:]
 
-			for i, op := range env.Tx.Operations {
+			nonceHash := (*env.Tx.Memo.Hash)[:]
+			for _, op := range env.Tx.Operations {
 				if op.Body.Type != xdr.OperationTypePayment {
 					continue
 				}
@@ -51,27 +51,36 @@ func (c *Custodian) watchPegs(ctx context.Context) {
 				}
 
 				// This operation is a payment to the custodian's account - i.e., a peg.
-				// We record it in the db, then wake up a goroutine that executes imports for not-yet-imported pegs.
-				const q = `INSERT INTO pegs 
-					(txid, operation_num, amount, asset_xdr, recipient_pubkey)
-					VALUES ($1, $2, $3, $4, $5)`
+				// We update the db to note that we saw this entry on the Stellar network.
+				// We also populate the amount and asset_xdr with the values in the Stellar tx.
 				assetXDR, err := payment.Asset.MarshalBinary()
 				if err != nil {
-					log.Fatalf("error marshaling asset to XDR %s: %s", payment.Asset.String(), err)
+					log.Fatalf("marshaling asset xdr: %s", err)
 					return
 				}
-				_, err = c.DB.ExecContext(ctx, q, tx.ID, i, payment.Amount, assetXDR, recipientPubkey)
+				resulted, err := c.DB.ExecContext(ctx, `UPDATE pegs SET amount=$1, asset_xdr=$2, stellar_tx=1 WHERE nonce_hash=$3 AND stellar_tx=0`, payment.Amount, assetXDR, nonceHash)
 				if err != nil {
-					log.Fatal("error recording peg-in tx: ", err)
-					return
+					log.Fatalf("updating stellar_tx=1 for hash %x: %s", nonceHash, err)
 				}
-				// Update cursor after successfully processing transaction
+
+				// We confirm that only a single row was affected by the update query.
+				numAffected, err := resulted.RowsAffected()
+				if err != nil {
+					log.Fatalf("checking rows affected by update query for hash %x: %s", nonceHash, err)
+				}
+				if numAffected != 1 {
+					log.Fatalf("multiple rows affected by update query for hash %x", nonceHash)
+				}
+
+				// We update the cursor to avoid double-processing a transaction.
 				_, err = c.DB.ExecContext(ctx, `UPDATE custodian SET cursor=$1 WHERE seed=$2`, tx.PT, c.seed)
 				if err != nil {
 					log.Fatalf("updating cursor: %s", err)
 					return
 				}
-				log.Printf("recorded peg-in tx %s", tx.ID)
+
+				// Wake up a goroutine that executes imports for not-yet-imported pegs.
+				log.Printf("broadcasting import for tx with nonce hash %x", nonceHash)
 				c.imports.Broadcast()
 			}
 		})
@@ -136,7 +145,7 @@ func (c *Custodian) watchExports(ctx context.Context) {
 				}
 
 				// Check this Stellar asset code corresponds to retiredAssetIDBytes.
-				gotAssetID32 := txvm.AssetID(issueSeed[:], info.AssetXDR)
+				gotAssetID32 := txvm.AssetID(importIssuanceSeed[:], info.AssetXDR)
 				if !bytes.Equal(gotAssetID32[:], retiredAssetIDBytes) {
 					continue
 				}

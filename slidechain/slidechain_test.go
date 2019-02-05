@@ -217,8 +217,25 @@ func TestImport(t *testing.T) {
 				privkey:       custodianPrv,
 				InitBlockHash: chain.InitialBlockHash,
 			}
+			// Without a successful pre-peg-in TxVM tx, the initial input in the import tx will fail.
+			t.Log("building and submitting pre-peg-in tx...")
+			expMS := int64(bc.Millis(time.Now().Add(10 * time.Minute)))
+			prepegTx, err := BuildPrepegTx(c.InitBlockHash.Bytes(), assetXDR, testRecipPubKey, 1, expMS)
+			if err != nil {
+				t.Fatal("could not build pre-peg-in tx")
+			}
+			_, err = c.S.submitTx(ctx, prepegTx)
+			if err != nil {
+				t.Fatal("could not submit pre-peg-in tx")
+			}
+			err = c.S.waitOnTx(ctx, prepegTx.ID, r)
+			if err != nil {
+				t.Fatal("unsuccessfully waited on pre-peg-in tx hitting txvm")
+			}
+			t.Log("pre-peg-in tx hit the txvm chain...")
 			go c.importFromPegs(ctx)
-			_, err := db.Exec("INSERT INTO pegs (txid, operation_num, amount, asset_xdr, recipient_pubkey) VALUES ('txid', 1, 1, $1, $2)", assetXDR, testRecipPubKey)
+			nonceHash := UniqueNonceHash(c.InitBlockHash.Bytes(), expMS)
+			_, err = db.Exec("INSERT INTO pegs (nonce_hash, amount, asset_xdr, recipient_pubkey, nonce_expms, stellar_tx) VALUES ($1, 1, $2, $3, $4, 1)", nonceHash[:], assetXDR, testRecipPubKey, expMS)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -270,7 +287,7 @@ func TestEndToEnd(t *testing.T) {
 		}
 		c.launch(ctx)
 
-		// Prepare Stellar account to peg-in funds and txvm account to receive funds
+		// Prepare Stellar account to peg-in funds and txvm account to receive funds.
 		amount := 5 * xlm.Lumen
 		exporterPub, exporterPrv, err := ed25519.GenerateKey(nil)
 		if err != nil {
@@ -287,8 +304,36 @@ func TestEndToEnd(t *testing.T) {
 		var exporterPubKeyBytes [32]byte
 		copy(exporterPubKeyBytes[:], exporterPub)
 
-		// Build + submit transaction to peg-in funds
-		pegInTx, err := stellar.BuildPegInTx(exporter.Address(), exporterPubKeyBytes, amount.HorizonString(), "", "", c.AccountID.Address(), hclient)
+		// TODO(debnil): Test non-native asset types.
+		native := xdr.Asset{
+			Type: xdr.AssetTypeAssetTypeNative,
+		}
+		nativeAssetBytes, err := native.MarshalBinary()
+		if err != nil {
+			t.Fatalf("error marshaling native asset to xdr: %s", err)
+		}
+		expMS := int64(bc.Millis(time.Now().Add(10 * time.Minute)))
+		// Build, submit, and wait on pre-peg-in TxVM tx.
+		prepegTx, err := BuildPrepegTx(c.InitBlockHash.Bytes(), nativeAssetBytes, exporterPubKeyBytes[:], int64(amount), expMS)
+		if err != nil {
+			t.Fatal("could not build pre-peg-in tx")
+		}
+		r, err := c.S.submitTx(ctx, prepegTx)
+		if err != nil {
+			t.Fatal("could not submit pre-peg-in tx")
+		}
+		err = c.S.waitOnTx(ctx, prepegTx.ID, r)
+		if err != nil {
+			t.Fatal("unsuccessfully waited on pre-peg-in tx hitting txvm")
+		}
+		uniqueNonceHash := UniqueNonceHash(c.InitBlockHash.Bytes(), expMS)
+		err = c.insertPeg(ctx, uniqueNonceHash[:], exporterPubKeyBytes[:], expMS)
+		if err != nil {
+			t.Fatal("could not record peg")
+		}
+
+		// Build transaction to peg-in funds.
+		pegInTx, err := stellar.BuildPegInTx(exporter.Address(), uniqueNonceHash, amount.HorizonString(), "", "", c.AccountID.Address(), hclient)
 		if err != nil {
 			t.Fatalf("error building peg-in tx: %s", err)
 		}
@@ -298,18 +343,9 @@ func TestEndToEnd(t *testing.T) {
 		}
 		t.Logf("successfully submitted peg-in tx: id %s, ledger %d", succ.Hash, succ.Ledger)
 
-		native := xdr.Asset{
-			Type: xdr.AssetTypeAssetTypeNative,
-		}
-		nativeAssetBytes, err := native.MarshalBinary()
-		if err != nil {
-			t.Fatalf("error marshaling native asset to xdr: %s", err)
-		}
-
-		// Check to verify import
+		// Check to verify import.
 		var anchor []byte
 		found := false
-		r := c.S.w.Reader()
 		for {
 			item, ok := r.Read(ctx)
 			if !ok {
@@ -329,7 +365,6 @@ func TestEndToEnd(t *testing.T) {
 				break
 			}
 		}
-
 		t.Log("submitting pre-export tx...")
 		temp, seqnum, err := SubmitPreExportTx(hclient, exporter, c.AccountID.Address(), native, int64(amount))
 		if err != nil {
@@ -351,7 +386,6 @@ func TestEndToEnd(t *testing.T) {
 		if resp.StatusCode/100 != 2 {
 			t.Fatalf("status code %d from POST /submit", resp.StatusCode)
 		}
-
 		t.Log("checking for retirement tx on txvm...")
 
 		found = false
@@ -362,7 +396,7 @@ func TestEndToEnd(t *testing.T) {
 			}
 			block := item.(*bc.Block)
 			for _, tx := range block.Transactions {
-				// Look for export transaction
+				// Look for export transaction.
 				if IsExportTx(tx, native, int64(amount), temp, exporter.Address(), int64(seqnum)) {
 					t.Logf("found export tx %x", tx.Program)
 					found = true
@@ -373,10 +407,9 @@ func TestEndToEnd(t *testing.T) {
 				break
 			}
 		}
-
 		t.Log("checking for successful retirement...")
 
-		// Check for successful retirement
+		// Check for successful retirement.
 		retire := make(chan struct{})
 		go func() {
 			var cur horizon.Cursor
@@ -431,38 +464,34 @@ func TestEndToEnd(t *testing.T) {
 }
 
 // Expected log is:
-//   {"N", ...}
-//   {"R", ...}
+//   {"I", ...}
 //   {"A", contextID, amount, assetID, anchor}
 //   {"L", ...}
 //   {"O", caller, outputID}
 //   {"F", ...}
 func isImportTx(tx *bc.Tx, amount int64, assetXDR []byte, recipPubKey ed25519.PublicKey) bool {
-	if len(tx.Log) != 6 {
+	if len(tx.Log) != 5 {
 		return false
 	}
-	if tx.Log[0][0].(txvm.Bytes)[0] != txvm.NonceCode {
+	if tx.Log[0][0].(txvm.Bytes)[0] != txvm.InputCode {
 		return false
 	}
-	if tx.Log[1][0].(txvm.Bytes)[0] != txvm.TimerangeCode {
+	if tx.Log[1][0].(txvm.Bytes)[0] != txvm.IssueCode {
 		return false
 	}
-	if tx.Log[2][0].(txvm.Bytes)[0] != txvm.IssueCode {
+	if int64(tx.Log[1][2].(txvm.Int)) != amount {
 		return false
 	}
-	if int64(tx.Log[2][2].(txvm.Int)) != amount {
+	wantAssetID := txvm.AssetID(importIssuanceSeed[:], assetXDR)
+	if !bytes.Equal(wantAssetID[:], tx.Log[1][3].(txvm.Bytes)) {
 		return false
 	}
-	wantAssetID := txvm.AssetID(issueSeed[:], assetXDR)
-	if !bytes.Equal(wantAssetID[:], tx.Log[2][3].(txvm.Bytes)) {
-		return false
-	}
-	issueAnchor := tx.Log[2][4].(txvm.Bytes)
+	issueAnchor := tx.Log[1][4].(txvm.Bytes)
 	splitAnchor := txvm.VMHash("Split1", issueAnchor) // the anchor of the issued value after a zeroval is split off of it
-	if tx.Log[3][0].(txvm.Bytes)[0] != txvm.LogCode {
+	if tx.Log[2][0].(txvm.Bytes)[0] != txvm.LogCode {
 		return false
 	}
-	if tx.Log[4][0].(txvm.Bytes)[0] != txvm.OutputCode {
+	if tx.Log[3][0].(txvm.Bytes)[0] != txvm.OutputCode {
 		return false
 	}
 
@@ -470,10 +499,10 @@ func isImportTx(tx *bc.Tx, amount int64, assetXDR []byte, recipPubKey ed25519.Pu
 	standard.Snapshot(b, 1, []ed25519.PublicKey{recipPubKey}, amount, bc.NewHash(wantAssetID), splitAnchor[:], standard.PayToMultisigSeed1[:])
 	snapshotBytes := b.Build()
 	wantOutputID := txvm.VMHash("SnapshotID", snapshotBytes)
-	if !bytes.Equal(wantOutputID[:], tx.Log[4][2].(txvm.Bytes)) {
+	if !bytes.Equal(wantOutputID[:], tx.Log[3][2].(txvm.Bytes)) {
 		return false
 	}
-	// No need to test tx.Log[5], it has to be a finalize entry.
+	// No need to test tx.Log[4], it has to be a finalize entry.
 	return true
 }
 

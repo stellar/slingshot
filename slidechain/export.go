@@ -263,7 +263,7 @@ func BuildExportTx(ctx context.Context, asset xdr.Asset, amount, inputAmt int64,
 	if err != nil {
 		return nil, err
 	}
-	assetID := bc.NewHash(txvm.AssetID(issueSeed[:], assetBytes))
+	assetID := bc.NewHash(txvm.AssetID(importIssuanceSeed[:], assetBytes))
 	var rawSeed [32]byte
 	copy(rawSeed[:], prv)
 	kp, err := keypair.FromRawSeed(rawSeed)
@@ -359,7 +359,7 @@ func IsExportTx(tx *bc.Tx, asset xdr.Asset, inputAmt int64, temp, exporter strin
 	if err != nil {
 		return false
 	}
-	wantAssetID := txvm.AssetID(issueSeed[:], assetBytes)
+	wantAssetID := txvm.AssetID(importIssuanceSeed[:], assetBytes)
 	if !bytes.Equal(wantAssetID[:], tx.Log[2][3].(txvm.Bytes)) {
 		return false
 	}

@@ -1,8 +1,10 @@
 package slidechain
 
 import (
+	"bytes"
 	"fmt"
 
+	"github.com/chain/txvm/errors"
 	"github.com/chain/txvm/protocol/txvm"
 	"github.com/chain/txvm/protocol/txvm/asm"
 )
@@ -59,4 +61,33 @@ var (
 	importIssuanceSrc  = fmt.Sprintf(importIssuanceFmt, custodianPub)
 	importIssuanceProg = asm.MustAssemble(importIssuanceSrc)
 	importIssuanceSeed = txvm.ContractSeed(importIssuanceProg)
+	zeroSeed           [32]byte
 )
+
+// UniqueNonceHash returns a nonce hash used to prevent replay attacks.
+func UniqueNonceHash(bcid []byte, expMS int64) [32]byte {
+	nonce := txvm.NonceTuple(zeroSeed[:], zeroSeed[:], bcid, expMS)
+	return txvm.NonceHash(nonce)
+}
+
+func consumeTokenProgSnapshot(bcid, assetXDR, recipPubkey []byte, amount, expMS int64) ([]byte, error) {
+	buf := new(bytes.Buffer)
+	// Push components of consume token snapshot.
+	// TODO(debnil): Figure out invalid item type error.
+	fmt.Fprintf(buf, "'C' x'%x' x'%x'\n", createTokenSeed[:], consumeTokenProg)
+	// Push con stack: quorum, {recip}, zeroval, amount, asset
+	// Note that plain data items must be converted to tuples to be contract arguments.
+	fmt.Fprintf(buf, "{'Z', 1}\n")
+	fmt.Fprintf(buf, "{'T', {x'%x'}}\n", recipPubkey)
+	nonceHash := UniqueNonceHash(bcid, expMS)
+	fmt.Fprintf(buf, "{'V', %d, x'%x', x'%x'}\n", 0, zeroSeed[:], nonceHash[:])
+	fmt.Fprintf(buf, "{'Z', %d}\n", amount)
+	fmt.Fprintf(buf, "{'S', x'%x'}\n", assetXDR)
+	// Construct tuple and assemble bytecode.
+	fmt.Fprintf(buf, "8 tuple\n")
+	tx, err := asm.Assemble(buf.String())
+	if err != nil {
+		return nil, errors.Wrap(err, "assembling consume token snapshot")
+	}
+	return tx, nil
+}

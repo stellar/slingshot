@@ -42,10 +42,11 @@ type submitter struct {
 	chain *protocol.Chain
 }
 
-func (s *submitter) submitTx(ctx context.Context, tx *bc.Tx) error {
+func (s *submitter) submitTx(ctx context.Context, tx *bc.Tx) (*multichan.R, error) {
 	s.bbmu.Lock()
 	defer s.bbmu.Unlock()
 
+	r := s.w.Reader()
 	if s.bb == nil {
 		s.bb = protocol.NewBlockBuilder()
 		nextBlockTime := time.Now().Add(blockInterval)
@@ -54,13 +55,13 @@ func (s *submitter) submitTx(ctx context.Context, tx *bc.Tx) error {
 		if st.Header == nil {
 			err := st.ApplyBlockHeader(s.initialBlock.BlockHeader)
 			if err != nil {
-				return errors.Wrap(err, "initializing empty state")
+				return nil, errors.Wrap(err, "initializing empty state")
 			}
 		}
 
 		err := s.bb.Start(s.chain.State(), bc.Millis(nextBlockTime))
 		if err != nil {
-			return errors.Wrap(err, "starting a new tx pool")
+			return nil, errors.Wrap(err, "starting a new tx pool")
 		}
 		log.Printf("starting new block, will commit at %s", nextBlockTime)
 		time.AfterFunc(blockInterval, func() {
@@ -82,7 +83,6 @@ func (s *submitter) submitTx(ctx context.Context, tx *bc.Tx) error {
 			if err != nil {
 				log.Fatalf("committing new block: %s", err)
 			}
-
 			s.w.Write(b)
 			log.Printf("committed block %d with %d transaction(s)", unsignedBlock.Height, len(unsignedBlock.Transactions))
 		})
@@ -90,14 +90,39 @@ func (s *submitter) submitTx(ctx context.Context, tx *bc.Tx) error {
 
 	err := s.bb.AddTx(bc.NewCommitmentsTx(tx))
 	if err != nil {
-		return errors.Wrap(err, "adding tx to pool")
+		return nil, errors.Wrap(err, "adding tx to pool")
 	}
 	log.Printf("added tx %x to the pending block", tx.ID.Bytes())
-	return nil
+	return r, nil
+}
+
+func (s *submitter) waitOnTx(ctx context.Context, txid bc.Hash, r *multichan.R) error {
+	log.Printf("waiting on tx %x to hit txvm", txid.Bytes())
+	for {
+		got, ok := r.Read(ctx)
+		if !ok {
+			log.Printf("error reading block from multichan while waiting for tx %x to hit txvm", txid.Bytes())
+			return ctx.Err()
+		}
+		b := got.(*bc.Block)
+		for _, gotTx := range b.Transactions {
+			if gotTx.ID == txid {
+				log.Printf("found tx %x on txvm chain", txid.Bytes())
+				return nil
+			}
+		}
+	}
 }
 
 func (s *submitter) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	ctx := req.Context()
+
+	waitStr := req.FormValue("wait")
+	if waitStr != "" && waitStr != "1" {
+		net.Errorf(w, http.StatusBadRequest, "wait can only be 1")
+		return
+	}
+	wait := (waitStr != "")
 
 	bits, err := ioutil.ReadAll(req.Body)
 	if err != nil {
@@ -118,10 +143,17 @@ func (s *submitter) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	err = s.submitTx(ctx, tx)
+	r, err := s.submitTx(ctx, tx)
 	if err != nil {
 		net.Errorf(w, http.StatusBadRequest, "submitting tx: %s", err)
 		return
+	}
+	if wait {
+		err = s.waitOnTx(ctx, tx.ID, r)
+		if err != nil {
+			net.Errorf(w, http.StatusBadRequest, "waiting on tx: %s", err)
+			return
+		}
 	}
 	w.WriteHeader(http.StatusNoContent)
 }

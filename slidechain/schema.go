@@ -13,13 +13,14 @@ CREATE TABLE IF NOT EXISTS snapshots (
 );
 
 CREATE TABLE IF NOT EXISTS pegs (
-  txid TEXT NOT NULL,
-  operation_num INTEGER NOT NULL,
-  amount INTEGER NOT NULL,
-  asset_xdr BLOB NOT NULL,
+  nonce_hash BLOB NOT NULL,
+  amount INTEGER,
+  asset_xdr BLOB,
   recipient_pubkey BLOB NOT NULL,
   imported INTEGER NOT NULL DEFAULT 0,
-  PRIMARY KEY (txid, operation_num)
+  stellar_tx INTEGER NOT NULL DEFAULT 0,
+  nonce_expms INTEGER NOT NULL,
+  PRIMARY KEY (nonce_hash)
 );
 
 CREATE TABLE IF NOT EXISTS exports (
