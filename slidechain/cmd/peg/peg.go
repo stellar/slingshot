@@ -108,7 +108,7 @@ func main() {
 		log.Fatal("converting amount to int64: ", err)
 	}
 	expMS := int64(bc.Millis(time.Now().Add(10 * time.Minute)))
-	err = DoPrepegTx(bcidBytes[:], assetXDR, amountInt, expMS, recipientPubkey[:], *slidechaind)
+	err = doPrepegTx(bcidBytes[:], assetXDR, amountInt, expMS, recipientPubkey[:], *slidechaind)
 	if err != nil {
 		log.Fatal("doing pre-peg-in tx: ", err)
 	}
@@ -129,7 +129,7 @@ func main() {
 }
 
 // DoPrepegTx builds, submits the pre-peg TxVM transaction, and waits for it to hit the chain.
-func DoPrepegTx(bcid, assetXDR []byte, amount, expMS int64, pubkey ed25519.PublicKey, slidechaind string) error {
+func doPrepegTx(bcid, assetXDR []byte, amount, expMS int64, pubkey ed25519.PublicKey, slidechaind string) error {
 	prepegTx, err := slidechain.BuildPrepegTx(bcid, assetXDR, pubkey, amount, expMS)
 	if err != nil {
 		return errors.Wrap(err, "building pre-peg-in tx")
@@ -163,16 +163,11 @@ func submitPrepegTx(tx *bc.Tx, slidechaind string) error {
 }
 
 func recordPeg(txid bc.Hash, assetXDR []byte, amount, expMS int64, pubkey ed25519.PublicKey, slidechaind string) error {
-	p := struct {
-		Amount      int64  `json:"amount"`
-		AssetXDR    []byte `json:"assetxdr"`
-		RecipPubkey []byte `json:"recippubkey"`
-		ExpMS       int64  `json:"expms"`
-	}{
-		amount,
-		assetXDR,
-		pubkey,
-		expMS,
+	p := slidechain.Peg{
+		Amount:      amount,
+		AssetXDR:    assetXDR,
+		RecipPubkey: pubkey,
+		ExpMS:       expMS,
 	}
 	pegBits, err := json.Marshal(&p)
 	if err != nil {

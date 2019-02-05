@@ -11,6 +11,14 @@ import (
 	"github.com/interstellar/slingshot/slidechain/net"
 )
 
+// Peg contains the fields for a peg-in transaction in the database.
+type Peg struct {
+	Amount      int64  `json:"amount"`
+	AssetXDR    []byte `json:"asset_xdr"`
+	RecipPubkey []byte `json:"recip_pubkey"`
+	ExpMS       int64  `json:"exp_ms"`
+}
+
 // RecordPeg records a peg-in transaction in the database.
 // TODO(debnil): Make record RPC do pre-peg tx submission as well, instead of requiring a separate server round-trip first.
 func (c *Custodian) RecordPeg(w http.ResponseWriter, req *http.Request) {
@@ -19,12 +27,7 @@ func (c *Custodian) RecordPeg(w http.ResponseWriter, req *http.Request) {
 		net.Errorf(w, http.StatusInternalServerError, "sending response: %s", err)
 		return
 	}
-	var p struct {
-		Amount      int64  `json:"amount"`
-		AssetXDR    []byte `json:"assetxdr"`
-		RecipPubkey []byte `json:"recippubkey"`
-		ExpMS       int64  `json:"expms"`
-	}
+	var p Peg
 	err = json.Unmarshal(data, &p)
 	if err != nil {
 		net.Errorf(w, http.StatusInternalServerError, "sending response: %s", err)
@@ -32,7 +35,7 @@ func (c *Custodian) RecordPeg(w http.ResponseWriter, req *http.Request) {
 	}
 	nonceHash := UniqueNonceHash(c.InitBlockHash.Bytes(), p.ExpMS)
 	ctx := req.Context()
-	err = c.insertPeg(ctx, nonceHash[:], p.AssetXDR, p.RecipPubkey, p.Amount, p.ExpMS)
+	err = c.insertPeg(ctx, nonceHash[:], p.RecipPubkey, p.ExpMS)
 	if err != nil {
 		net.Errorf(w, http.StatusInternalServerError, "sending response: %s", err)
 		return
@@ -41,13 +44,10 @@ func (c *Custodian) RecordPeg(w http.ResponseWriter, req *http.Request) {
 	return
 }
 
-func (c *Custodian) insertPeg(ctx context.Context, nonceHash, assetXDR, recip []byte, amount, expMS int64) error {
+func (c *Custodian) insertPeg(ctx context.Context, nonceHash, recip []byte, expMS int64) error {
 	const q = `INSERT INTO pegs
-		(nonce_hash, amount, asset_xdr, recipient_pubkey, nonce_expms)
-		VALUES ($1, $2, $3, $4, $5)`
-	_, err := c.DB.ExecContext(ctx, q, nonceHash, amount, assetXDR, recip, expMS)
-	if err != nil {
-		return errors.Wrap(err, "inserting peg in db")
-	}
-	return nil
+		(nonce_hash, recipient_pubkey, nonce_expms)
+		VALUES ($1, $2, $3)`
+	_, err := c.DB.ExecContext(ctx, q, nonceHash, recip, expMS)
+	return errors.Wrap(err, "inserting peg in db")
 }

@@ -52,17 +52,24 @@ func (c *Custodian) watchPegs(ctx context.Context) {
 
 				// This operation is a payment to the custodian's account - i.e., a peg.
 				// We update the db to note that we saw this entry on the Stellar network.
-				// We also update the amount and asset_xdr to use the ones seen in the Stellar tx.
-				amount := payment.Amount
-				asset := payment.Asset
-				assetXDR, err := asset.MarshalBinary()
+				// We also populate the amount and asset_xdr with the values in the Stellar tx.
+				assetXDR, err := payment.Asset.MarshalBinary()
 				if err != nil {
 					log.Fatalf("marshaling asset xdr: %s", err)
 					return
 				}
-				_, err = c.DB.ExecContext(ctx, `UPDATE pegs SET amount=$1, asset_xdr=$2, stellar_tx=1 WHERE nonce_hash=$3`, amount, assetXDR, nonceHash)
+				resulted, err := c.DB.ExecContext(ctx, `UPDATE pegs SET amount=$1, asset_xdr=$2, stellar_tx=1 WHERE nonce_hash=$3 AND stellar_tx=0`, payment.Amount, assetXDR, nonceHash)
 				if err != nil {
 					log.Fatalf("updating stellar_tx=1 for hash %x: %s", nonceHash, err)
+				}
+
+				// We confirm that only a single row was affected by the update query.
+				numAffected, err := resulted.RowsAffected()
+				if err != nil {
+					log.Fatalf("checking rows affected by update query for hash %x: %s", nonceHash, err)
+				}
+				if numAffected != 1 {
+					log.Fatalf("multiple rows affected by update query for hash %x", nonceHash)
 				}
 
 				// We update the cursor to avoid double-processing a transaction.

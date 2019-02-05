@@ -14,8 +14,8 @@ CREATE TABLE IF NOT EXISTS snapshots (
 
 CREATE TABLE IF NOT EXISTS pegs (
   nonce_hash BLOB NOT NULL,
-  amount INTEGER NOT NULL,
-  asset_xdr BLOB NOT NULL,
+  amount INTEGER,
+  asset_xdr BLOB,
   recipient_pubkey BLOB NOT NULL,
   imported INTEGER NOT NULL DEFAULT 0,
   stellar_tx INTEGER NOT NULL DEFAULT 0,
