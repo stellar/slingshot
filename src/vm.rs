@@ -193,7 +193,6 @@ where
     /// Returns a flag indicating whether to continue the execution
     fn step(&mut self) -> Result<bool, VMError> {
         if let Some(instr) = self.current_run.next_instruction()? {
-            // if let Some(instr) = self.next_instruction()? {
             // Attempt to read the next instruction and advance the program state
             match instr {
                 // the data is just a slice, so the clone would copy the slice struct,
@@ -550,7 +549,7 @@ where
     fn spend_input(&mut self, input: Input) -> Result<(Contract, UTXO), VMError> {
         match input {
             Input::Opaque(data) => self.decode_input(data),
-            Input::Witness(w) => unimplemented!(),
+            Input::Witness(_) => unimplemented!(),
         }
     }
 
@@ -593,8 +592,8 @@ where
                     let qty = output.read_point()?;
                     let flv = output.read_point()?;
 
-                    let qty = self.make_variable(Commitment::Opaque(qty));
-                    let flv = self.make_variable(Commitment::Opaque(flv));
+                    let qty = self.make_variable(Commitment::Closed(qty));
+                    let flv = self.make_variable(Commitment::Closed(flv));
 
                     PortableItem::Value(Value { qty, flv })
                 }

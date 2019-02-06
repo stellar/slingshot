@@ -2,17 +2,14 @@
 
 use crate::transcript::TranscriptProtocol;
 use bulletproofs::{r1cs, PedersenGens};
-use core::ops::Range;
 use curve25519_dalek::ristretto::CompressedRistretto;
 use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
 
-use crate::encoding;
 use crate::encoding::Subslice;
 use crate::errors::VMError;
 use crate::ops::Instruction;
 use crate::txlog::UTXO;
-use crate::vm;
 
 #[derive(Debug)]
 pub enum Item {
@@ -85,7 +82,7 @@ pub enum Predicate {
 
 #[derive(Clone, Debug)]
 pub enum Commitment {
-    Opaque(CompressedRistretto),
+    Closed(CompressedRistretto),
     Open(Box<CommitmentWitness>),
 }
 
@@ -123,7 +120,7 @@ pub struct CommitmentWitness {
 impl Commitment {
     pub fn to_point(&self) -> CompressedRistretto {
         match self {
-            Commitment::Opaque(x) => *x,
+            Commitment::Closed(x) => *x,
             Commitment::Open(w) => w.to_point(),
         }
     }
@@ -246,7 +243,7 @@ impl Data {
         match self {
             Data::Opaque(data) => {
                 let point = Subslice::new(&data).read_point()?;
-                Ok(Commitment::Opaque(point))
+                Ok(Commitment::Closed(point))
             }
             Data::Witness(witness) => match witness {
                 DataWitness::Commitment(w) => Ok(Commitment::Open(w)),
