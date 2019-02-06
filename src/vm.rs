@@ -265,7 +265,7 @@ where
         }
         let item_idx = self.stack.len() - i - 1;
         let item = match &self.stack[item_idx] {
-            Item::Data(x) => Item::Data(x.tbd_clone()?),
+            Item::Data(x) => Item::Data(x.clone()),
             Item::Variable(x) => Item::Variable(x.clone()),
             Item::Expression(x) => Item::Expression(x.clone()),
             Item::Constraint(x) => Item::Constraint(x.clone()),

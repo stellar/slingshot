@@ -4,7 +4,7 @@ use crate::encoding::Subslice;
 use crate::errors::VMError;
 use crate::types::Data;
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum Instruction {
     Push(Data), // size of the string
     Drop,
