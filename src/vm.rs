@@ -229,7 +229,7 @@ where
                 Instruction::Output(k) => self.output(k)?,
                 Instruction::Contract(k) => self.contract(k)?,
                 Instruction::Nonce => self.nonce()?,
-                Instruction::Log => unimplemented!(),
+                Instruction::Log => self.log()?,
                 Instruction::Signtx => self.signtx()?,
                 Instruction::Call => unimplemented!(),
                 Instruction::Left => unimplemented!(),
@@ -294,6 +294,12 @@ where
         self.txlog.push(Entry::Nonce(point, self.maxtime));
         self.push_item(contract);
         self.unique = true;
+        Ok(())
+    }
+
+    fn log(&mut self) -> Result<(), VMError> {
+        let data = self.pop_item()?.to_data()?;
+        self.txlog.push(Entry::Data(data.to_bytes()));
         Ok(())
     }
 
