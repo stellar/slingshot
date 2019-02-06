@@ -1,18 +1,23 @@
 //! Core ZkVM stack types: data, variables, values, contracts etc.
 
-use crate::errors::VMError;
-use crate::predicate::Predicate;
-
 use crate::transcript::TranscriptProtocol;
-use bulletproofs::r1cs;
+use bulletproofs::{r1cs, PedersenGens};
+use core::ops::Range;
 use curve25519_dalek::ristretto::CompressedRistretto;
 use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
 
+use crate::encoding;
+use crate::encoding::Subslice;
+use crate::errors::VMError;
+use crate::ops::Instruction;
+use crate::txlog::UTXO;
+use crate::vm;
+
 #[derive(Debug)]
-pub enum Item<'tx> {
-    Data(Data<'tx>),
-    Contract(Contract<'tx>),
+pub enum Item {
+    Data(Data),
+    Contract(Contract),
     Value(Value),
     WideValue(WideValue),
     Variable(Variable),
@@ -21,19 +26,20 @@ pub enum Item<'tx> {
 }
 
 #[derive(Debug)]
-pub enum PortableItem<'tx> {
-    Data(Data<'tx>),
+pub enum PortableItem {
+    Data(Data),
     Value(Value),
 }
 
-#[derive(Copy, Clone, Debug)]
-pub struct Data<'tx> {
-    pub(crate) bytes: &'tx [u8],
+#[derive(Debug)]
+pub enum Data {
+    Opaque(Vec<u8>),
+    Witness(DataWitness),
 }
 
 #[derive(Debug)]
-pub struct Contract<'tx> {
-    pub(crate) payload: Vec<PortableItem<'tx>>,
+pub struct Contract {
+    pub(crate) payload: Vec<PortableItem>,
     pub(crate) predicate: Predicate,
 }
 
@@ -47,38 +53,119 @@ pub struct Value {
 pub struct WideValue {
     pub(crate) r1cs_qty: r1cs::Variable,
     pub(crate) r1cs_flv: r1cs::Variable,
+    pub(crate) witness: Option<(Scalar, Scalar)>,
 }
 
 #[derive(Copy, Clone, Debug)]
 pub struct Variable {
     pub(crate) index: usize,
+    // the witness is located indirectly in vm::VariableCommitment
 }
 
 #[derive(Clone, Debug)]
 pub struct Expression {
+    /// Terms of the expression
     pub(crate) terms: Vec<(r1cs::Variable, Scalar)>,
 }
 
 #[derive(Clone, Debug)]
-pub struct Constraint {
-    // TBD
+pub enum Constraint {
+    Eq(Expression, Expression),
+    And(Vec<Constraint>),
+    Or(Vec<Constraint>),
+    // no witness needed as it's normally true/false and we derive it on the fly during processing.
+    // this also allows us not to wrap this enum in a struct.
 }
 
-impl<'tx> Item<'tx> {
+#[derive(Debug)]
+pub enum Predicate {
+    Opaque(CompressedRistretto),
+    Witness(Box<PredicateWitness>),
+}
+
+#[derive(Clone, Debug)]
+pub enum Commitment {
+    Opaque(CompressedRistretto),
+    Open(Box<CommitmentWitness>),
+}
+
+#[derive(Debug)]
+pub enum Input {
+    Opaque(Vec<u8>),
+    Witness(Box<(Contract, UTXO)>),
+}
+
+/// Prover's representation of the witness.
+#[derive(Debug)]
+pub enum DataWitness {
+    Program(Vec<Instruction>),
+    Predicate(Box<PredicateWitness>), // maybe having Predicate and one more indirection would be cleaner - lets see how it plays out
+    Commitment(Box<CommitmentWitness>),
+    Scalar(Box<Scalar>),
+    Input(Box<(Contract, UTXO)>),
+}
+
+/// Prover's representation of the predicate tree with all the secrets
+#[derive(Debug)]
+pub enum PredicateWitness {
+    Key(Scalar),
+    Program(Vec<Instruction>),
+    Or(Box<(PredicateWitness, PredicateWitness)>),
+}
+
+/// Prover's representation of the commitment secret: witness and blinding factor
+#[derive(Clone, Debug)]
+pub struct CommitmentWitness {
+    value: Scalar,
+    blinding: Scalar,
+}
+
+impl Commitment {
+    pub fn to_point(&self) -> CompressedRistretto {
+        match self {
+            Commitment::Opaque(x) => *x,
+            Commitment::Open(w) => w.to_point(),
+        }
+    }
+}
+
+impl CommitmentWitness {
+    pub fn to_point(&self) -> CompressedRistretto {
+        let gens = PedersenGens::default();
+        gens.commit(self.value, self.blinding).compress()
+    }
+}
+
+impl Predicate {
+    pub fn to_point(&self) -> CompressedRistretto {
+        match self {
+            Predicate::Opaque(point) => *point,
+            Predicate::Witness(witness) => witness.to_point(),
+        }
+    }
+}
+
+impl PredicateWitness {
+    pub fn to_point(&self) -> CompressedRistretto {
+        unimplemented!()
+    }
+}
+
+impl Item {
+    // Downcasts to Data type
+    pub fn to_data(self) -> Result<Data, VMError> {
+        match self {
+            Item::Data(x) => Ok(x),
+            _ => Err(VMError::TypeNotData),
+        }
+    }
+
     // Downcasts to a portable type
-    pub fn to_portable(self) -> Result<PortableItem<'tx>, VMError> {
+    pub fn to_portable(self) -> Result<PortableItem, VMError> {
         match self {
             Item::Data(x) => Ok(PortableItem::Data(x)),
             Item::Value(x) => Ok(PortableItem::Value(x)),
             _ => Err(VMError::TypeNotPortable),
-        }
-    }
-
-    // Downcasts to Data type
-    pub fn to_data(self) -> Result<Data<'tx>, VMError> {
-        match self {
-            Item::Data(x) => Ok(x),
-            _ => Err(VMError::TypeNotData),
         }
     }
 
@@ -115,7 +202,7 @@ impl<'tx> Item<'tx> {
     }
 
     // Downcasts to Contract type
-    pub fn to_contract(self) -> Result<Contract<'tx>, VMError> {
+    pub fn to_contract(self) -> Result<Contract, VMError> {
         match self {
             Item::Contract(c) => Ok(c),
             _ => Err(VMError::TypeNotContract),
@@ -123,30 +210,72 @@ impl<'tx> Item<'tx> {
     }
 }
 
-impl<'tx> Data<'tx> {
-    /// Ensures the length of the data string
-    pub fn ensure_length(self, len: usize) -> Result<Data<'tx>, VMError> {
-        if self.bytes.len() != len {
-            return Err(VMError::FormatError);
+impl Data {
+    // len returns the length of the data for purposes of
+    // allocating output.
+    pub fn exact_output_size(&self) -> usize {
+        match self {
+            Data::Opaque(data) => data.len(),
+            Data::Witness(_) => unimplemented!(),
         }
-        Ok(self)
     }
 
-    /// Converts a bytestring to a 32-byte array
-    pub fn to_u8x32(self) -> Result<[u8; 32], VMError> {
-        let mut buf = [0u8; 32];
-        buf.copy_from_slice(self.ensure_length(32)?.bytes);
-        Ok(buf)
+    // TBD: make frozen types that are clonable
+    pub fn tbd_clone(&self) -> Result<Data, VMError> {
+        match self {
+            Data::Opaque(data) => Ok(Data::Opaque(data.to_vec())),
+            Data::Witness(_) => unimplemented!(),
+        }
     }
 
-    /// Converts a bytestring to a compressed point
-    pub fn to_point(self) -> Result<CompressedRistretto, VMError> {
-        Ok(CompressedRistretto(self.to_u8x32()?))
+    /// Downcast to a Predicate type.
+    pub fn to_predicate(self) -> Result<Predicate, VMError> {
+        match self {
+            Data::Opaque(data) => {
+                let point = Subslice::new(&data).read_point()?;
+                Ok(Predicate::Opaque(point))
+            }
+            Data::Witness(witness) => match witness {
+                DataWitness::Predicate(w) => Ok(Predicate::Witness(w)),
+                _ => Err(VMError::TypeNotPredicate),
+            },
+        }
     }
 
-    /// Converts a bytestring to a canonical scalar
-    pub fn to_scalar(self) -> Result<Scalar, VMError> {
-        Scalar::from_canonical_bytes(self.to_u8x32()?).ok_or(VMError::FormatError)
+    pub fn to_commitment(self) -> Result<Commitment, VMError> {
+        match self {
+            Data::Opaque(data) => {
+                let point = Subslice::new(&data).read_point()?;
+                Ok(Commitment::Opaque(point))
+            }
+            Data::Witness(witness) => match witness {
+                DataWitness::Commitment(w) => Ok(Commitment::Open(w)),
+                _ => Err(VMError::TypeNotCommitment),
+            },
+        }
+    }
+
+    pub fn to_input(self) -> Result<Input, VMError> {
+        match self {
+            Data::Opaque(data) => Ok(Input::Opaque(data)),
+            Data::Witness(witness) => match witness {
+                DataWitness::Input(w) => Ok(Input::Witness(w)),
+                _ => Err(VMError::TypeNotInput),
+            },
+        }
+    }
+}
+
+impl Contract {
+    pub fn exact_output_size(&self) -> usize {
+        let mut size = 32 + 4;
+        for item in self.payload.iter() {
+            match item {
+                PortableItem::Data(d) => size += 1 + 4 + d.exact_output_size(),
+                PortableItem::Value(_) => size += 1 + 64,
+            }
+        }
+        size
     }
 }
 
@@ -154,58 +283,58 @@ impl Value {
     /// Computes a flavor as defined by the `issue` instruction from a predicate.
     pub fn issue_flavor(predicate: &Predicate) -> Scalar {
         let mut t = Transcript::new(b"ZkVM.issue");
-        t.commit_bytes(b"predicate", predicate.0.as_bytes());
+        t.commit_bytes(b"predicate", predicate.to_point().as_bytes());
         t.challenge_scalar(b"flavor")
     }
 }
 
 // Upcasting all types to Item
 
-impl<'tx> From<Data<'tx>> for Item<'tx> {
-    fn from(x: Data<'tx>) -> Self {
+impl From<Data> for Item {
+    fn from(x: Data) -> Self {
         Item::Data(x)
     }
 }
 
-impl<'tx> From<Value> for Item<'tx> {
+impl From<Value> for Item {
     fn from(x: Value) -> Self {
         Item::Value(x)
     }
 }
 
-impl<'tx> From<WideValue> for Item<'tx> {
+impl From<WideValue> for Item {
     fn from(x: WideValue) -> Self {
         Item::WideValue(x)
     }
 }
 
-impl<'tx> From<Contract<'tx>> for Item<'tx> {
-    fn from(x: Contract<'tx>) -> Self {
+impl From<Contract> for Item {
+    fn from(x: Contract) -> Self {
         Item::Contract(x)
     }
 }
 
-impl<'tx> From<Variable> for Item<'tx> {
+impl From<Variable> for Item {
     fn from(x: Variable) -> Self {
         Item::Variable(x)
     }
 }
 
-impl<'tx> From<Expression> for Item<'tx> {
+impl From<Expression> for Item {
     fn from(x: Expression) -> Self {
         Item::Expression(x)
     }
 }
 
-impl<'tx> From<Constraint> for Item<'tx> {
+impl From<Constraint> for Item {
     fn from(x: Constraint) -> Self {
         Item::Constraint(x)
     }
 }
 
 // Upcast a portable item to any item
-impl<'tx> From<PortableItem<'tx>> for Item<'tx> {
-    fn from(portable: PortableItem<'tx>) -> Self {
+impl From<PortableItem> for Item {
+    fn from(portable: PortableItem) -> Self {
         match portable {
             PortableItem::Data(x) => Item::Data(x),
             PortableItem::Value(x) => Item::Value(x),

@@ -1,9 +1,12 @@
-use byteorder::{ByteOrder, LittleEndian};
 use core::mem;
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+use crate::encoding::Subslice;
+use crate::errors::VMError;
+use crate::types::Data;
+
+#[derive(Debug)]
 pub enum Instruction {
-    Push(usize), // size of the string
+    Push(Data), // size of the string
     Drop,
     Dup(usize),  // index of the item
     Roll(usize), // index of the item
@@ -108,104 +111,80 @@ impl Instruction {
     /// E.g. a push instruction with 5-byte string occupies 1+4+5=10 bytes
     /// (4 for the LE32 length prefix).
     ///
-    /// Return `None` if there is not enough bytes to parse an instruction.
-    pub fn parse(program: &[u8]) -> Option<(Instruction, usize)> {
-        if program.len() == 0 {
-            return None;
-        }
-
-        let byte = program[0];
-        let immdata = &program[1..];
+    /// Return `VMError::FormatError` if there is not enough bytes to parse an instruction.
+    pub fn parse(program: &mut Subslice) -> Result<Self, VMError> {
+        let byte = program.read_u8()?;
 
         // Interpret the opcode. Unknown opcodes are extension opcodes.
         let opcode = match Opcode::from_u8(byte) {
             None => {
-                return Some((Instruction::Ext(byte), 1));
+                return Ok(Instruction::Ext(byte));
             }
             Some(op) => op,
         };
 
         match opcode {
             Opcode::Push => {
-                if immdata.len() < 4 {
-                    return None;
-                }
-                let strlen = LittleEndian::read_u32(immdata) as usize;
-                Some((Instruction::Push(strlen), 1 + 4 + strlen))
+                let strlen = program.read_size()?;
+                let data_slice = program.read_bytes(strlen)?;
+                Ok(Instruction::Push(Data::Opaque(data_slice.to_vec())))
             }
-            Opcode::Drop => Some((Instruction::Drop, 1)),
+            Opcode::Drop => Ok(Instruction::Drop),
             Opcode::Dup => {
-                if immdata.len() < 4 {
-                    return None;
-                }
-                let idx = LittleEndian::read_u32(immdata) as usize;
-                Some((Instruction::Dup(idx), 1 + 4))
+                let idx = program.read_size()?;
+                Ok(Instruction::Dup(idx))
             }
             Opcode::Roll => {
-                if immdata.len() < 4 {
-                    return None;
-                }
-                let idx = LittleEndian::read_u32(immdata) as usize;
-                Some((Instruction::Roll(idx), 1 + 4))
+                let idx = program.read_size()?;
+                Ok(Instruction::Roll(idx))
             }
-            Opcode::Const => Some((Instruction::Const, 1)),
-            Opcode::Var => Some((Instruction::Var, 1)),
-            Opcode::Alloc => Some((Instruction::Alloc, 1)),
-            Opcode::Mintime => Some((Instruction::Mintime, 1)),
-            Opcode::Maxtime => Some((Instruction::Maxtime, 1)),
-            Opcode::Neg => Some((Instruction::Neg, 1)),
-            Opcode::Add => Some((Instruction::Add, 1)),
-            Opcode::Mul => Some((Instruction::Mul, 1)),
-            Opcode::Eq => Some((Instruction::Eq, 1)),
+            Opcode::Const => Ok(Instruction::Const),
+            Opcode::Var => Ok(Instruction::Var),
+            Opcode::Alloc => Ok(Instruction::Alloc),
+            Opcode::Mintime => Ok(Instruction::Mintime),
+            Opcode::Maxtime => Ok(Instruction::Maxtime),
+            Opcode::Neg => Ok(Instruction::Neg),
+            Opcode::Add => Ok(Instruction::Add),
+            Opcode::Mul => Ok(Instruction::Mul),
+            Opcode::Eq => Ok(Instruction::Eq),
             Opcode::Range => {
-                if immdata.len() < 1 {
-                    return None;
-                }
-                Some((Instruction::Range(immdata[0]), 1 + 1))
+                let bit_width = program.read_u8()?;
+                Ok(Instruction::Range(bit_width))
             }
-            Opcode::And => Some((Instruction::And, 1)),
-            Opcode::Or => Some((Instruction::Or, 1)),
-            Opcode::Verify => Some((Instruction::Verify, 1)),
-            Opcode::Blind => Some((Instruction::Blind, 1)),
-            Opcode::Reblind => Some((Instruction::Reblind, 1)),
-            Opcode::Unblind => Some((Instruction::Unblind, 1)),
-            Opcode::Issue => Some((Instruction::Issue, 1)),
-            Opcode::Borrow => Some((Instruction::Borrow, 1)),
-            Opcode::Retire => Some((Instruction::Retire, 1)),
-            Opcode::Qty => Some((Instruction::Qty, 1)),
-            Opcode::Flavor => Some((Instruction::Flavor, 1)),
+            Opcode::And => Ok(Instruction::And),
+            Opcode::Or => Ok(Instruction::Or),
+            Opcode::Verify => Ok(Instruction::Verify),
+            Opcode::Blind => Ok(Instruction::Blind),
+            Opcode::Reblind => Ok(Instruction::Reblind),
+            Opcode::Unblind => Ok(Instruction::Unblind),
+            Opcode::Issue => Ok(Instruction::Issue),
+            Opcode::Borrow => Ok(Instruction::Borrow),
+            Opcode::Retire => Ok(Instruction::Retire),
+            Opcode::Qty => Ok(Instruction::Qty),
+            Opcode::Flavor => Ok(Instruction::Flavor),
             Opcode::Cloak => {
-                if immdata.len() < 8 {
-                    return None;
-                }
-                let m = LittleEndian::read_u32(immdata) as usize;
-                let n = LittleEndian::read_u32(&immdata[4..]) as usize;
-                Some((Instruction::Cloak(m, n), 1 + 8))
+                let m = program.read_size()?;
+                let n = program.read_size()?;
+                Ok(Instruction::Cloak(m, n))
             }
-            Opcode::Import => Some((Instruction::Import, 1)),
-            Opcode::Export => Some((Instruction::Export, 1)),
-            Opcode::Input => Some((Instruction::Input, 1)),
+            Opcode::Import => Ok(Instruction::Import),
+            Opcode::Export => Ok(Instruction::Export),
+            Opcode::Input => Ok(Instruction::Input),
             Opcode::Output => {
-                if immdata.len() < 4 {
-                    return None;
-                }
-                let k = LittleEndian::read_u32(immdata) as usize;
-                Some((Instruction::Output(k), 1 + 4))
+                let k = program.read_size()?;
+                Ok(Instruction::Output(k))
             }
             Opcode::Contract => {
-                if immdata.len() < 4 {
-                    return None;
-                }
-                let k = LittleEndian::read_u32(immdata) as usize;
-                Some((Instruction::Contract(k), 1 + 4))
+                let k = program.read_size()?;
+                Ok(Instruction::Contract(k))
             }
-            Opcode::Nonce => Some((Instruction::Nonce, 1)),
-            Opcode::Log => Some((Instruction::Log, 1)),
-            Opcode::Signtx => Some((Instruction::Signtx, 1)),
-            Opcode::Call => Some((Instruction::Call, 1)),
-            Opcode::Left => Some((Instruction::Left, 1)),
-            Opcode::Right => Some((Instruction::Right, 1)),
-            Opcode::Delegate => Some((Instruction::Delegate, 1)),
+            Opcode::Nonce => Ok(Instruction::Nonce),
+            Opcode::Log => Ok(Instruction::Log),
+            Opcode::Signtx => Ok(Instruction::Signtx),
+            Opcode::Call => Ok(Instruction::Call),
+            Opcode::Left => Ok(Instruction::Left),
+            Opcode::Right => Ok(Instruction::Right),
+            Opcode::Delegate => Ok(Instruction::Delegate),
         }
     }
 }

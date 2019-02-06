@@ -43,9 +43,25 @@ pub enum VMError {
     #[fail(display = "Item is not an expression.")]
     TypeNotExpression,
 
+    /// This error occurs when an instruction requires a predicate type.
+    #[fail(display = "Item is not a predicate.")]
+    TypeNotPredicate,
+
+    /// This error occurs when an instruction requires a commitment type.
+    #[fail(display = "Item is not a commitment.")]
+    TypeNotCommitment,
+
+    /// This error occurs when an instruction requires an input type.
+    #[fail(display = "Item is not an input.")]
+    TypeNotInput,
+
     /// This error occurs when an instruction requires a constraint type.
     #[fail(display = "Item is not a constraint.")]
     TypeNotConstraint,
+
+    /// This error occurs when an instruction expects a key type.
+    #[fail(display = "Item is not a key.")]
+    TypeNotKey,
 
     /// This error occurs when an instruction requires a value type.
     #[fail(display = "Item is not a value.")]
@@ -78,4 +94,13 @@ pub enum VMError {
     /// This error occurs when R1CS gadget reports and error due to inconsistent input
     #[fail(display = "R1CS detected inconsistent input")]
     R1CSInconsistency,
+
+    #[fail(display = "Item misses witness data.")]
+    WitnessMissing,
+
+    #[fail(display = "Data item must be opaque")]
+    DataNotOpaque,
+
+    #[fail(display = "Predicate item must be opaque")]
+    PredicateNotOpaque,
 }

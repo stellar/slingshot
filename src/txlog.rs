@@ -1,7 +1,6 @@
 use curve25519_dalek::ristretto::CompressedRistretto;
 use merlin::Transcript;
 
-use crate::predicate::Predicate;
 use crate::transcript::TranscriptProtocol;
 
 /// Entry in a transaction log
@@ -11,7 +10,7 @@ pub enum Entry {
     Issue(CompressedRistretto, CompressedRistretto),
     Retire(CompressedRistretto, CompressedRistretto),
     Input(UTXO),
-    Nonce(Predicate, u64),
+    Nonce(CompressedRistretto, u64),
     Output(Vec<u8>),
     Data(Vec<u8>),
     Import, // TBD: parameters
@@ -93,7 +92,7 @@ impl Entry {
                 t.commit_bytes(b"input", &utxo.0);
             }
             Entry::Nonce(pred, maxtime) => {
-                t.commit_point(b"nonce.p", &pred.0);
+                t.commit_point(b"nonce.p", &pred);
                 t.commit_u64(b"nonce.t", *maxtime);
             }
             Entry::Output(outstruct) => {
