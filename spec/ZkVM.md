@@ -1232,7 +1232,7 @@ This is different from [`var`](#var) in that the variable is not represented by 
 
 Pushes an [expression](#expression-type) `expr` corresponding to the [minimum time bound](#time-bounds) of the transaction.
 
-The one-term expression represents time bound as a weight on the R1CS constant `1` (see [`cost`](#const)).
+The one-term expression represents time bound as a weight on the R1CS constant `1` (see [`const`](#const)).
 
 #### maxtime
 
@@ -1240,7 +1240,7 @@ The one-term expression represents time bound as a weight on the R1CS constant `
 
 Pushes an [expression](#expression-type) `expr` corresponding to the [maximum time bound](#time-bounds) of the transaction.
 
-The one-term expression represents time bound as a weight on the R1CS constant `1` (see [`cost`](#const)).
+The one-term expression represents time bound as a weight on the R1CS constant `1` (see [`const`](#const)).
 
 #### neg
 
@@ -1669,14 +1669,14 @@ the second-from-the-top is not a [contract](#contract-type).
 
 _contract(P) L R_ **left** → _contract(L)_
 
-1. Pops the right [predicate](#predicate) `R`, then the left [predicate](#predicate) `L`.
+1. Pops the right [predicate](#predicate) `R`, then the left [predicate](#predicate) `L` and a [contract](#contract-type) `contract`.
 2. Reads the [predicate](#predicate) `P` from the contract.
 3. Forms a statement for [predicate disjunction](#predicate-disjunction) of `L` and `R` being equal to `P`:
     ```
     0 == -P + L + f(L, R)·B
     ```
 4. Adds the statement to the [deferred point operations](#deferred-point-operations).
-5. Replaces the contract’s predicate with `L` and leaves the contract on stack.
+5. Replaces the contract’s predicate with `L` and pushes the contract back onto the stack.
 
 Fails if the top two items are not valid [points](#point),
 or if the third from the top item is not a [contract](#contract-type).
@@ -1686,14 +1686,14 @@ or if the third from the top item is not a [contract](#contract-type).
 
 _contract(P) L R_ **right** → _contract(R)_
 
-1. Pops the right [predicate](#predicate) `R`, then the left [predicate](#predicate) `L`.
+1. Pops the right [predicate](#predicate) `R`, then the left [predicate](#predicate) `L` and a [contract](#contract-type) `contract`.
 2. Reads the [predicate](#predicate) `P` from the contract.
 3. Forms a statement of [predicate disjunction](#predicate-disjunction) of `L` and `R` being equal to `P`:
     ```
     0 == -P + L + f(L, R)·B
     ```
 4. Adds the statement to the deferred point operations.
-5. Replaces the contract’s predicate with `R` and leaves the contract on stack.
+5. Replaces the contract’s predicate with `R` and pushes the contract back onto the stack.
 
 Fails if the top two items are not valid [points](#point),
 or if the third from the top item is not a [contract](#contract-type).
