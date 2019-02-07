@@ -260,7 +260,7 @@ Constraints only have an effect if added to the constraint system using the [`ve
 ### Value type
 
 A value is a [linear type](#linear-types) representing a pair of *quantity* and *flavor*.
-Both quantity and flavor are represented as [scalars](#scalar).
+Both quantity and flavor are represented as [variables](#variable-type).
 Quantity is guaranteed to be in a 64-bit range (`[0..2^64-1]`).
 
 Values are created with [`issue`](#issue) and destroyed with [`retire`](#retire).
@@ -1387,7 +1387,7 @@ _proof V2 var1_ **reblind** → _var1_
 1. Pops [variable](#variable-type) `var1`.
 2. Pops [point](#point) `V2`.
 3. Pops [data](#data-type) `proof`.
-4. Checks that `var1` is a [detached variable](#variable-type) with commitment `V1`.
+4. Checks that `var1` is a [detached variable](#variable-type) and reads its commitment `V1` from the [VM list of variable commitments](#vm-state).
 5. Replaces commitment `V1` with `V2` for this variable.
 6. Verifies the [reblinding proof](#reblinding-proof) for the commitments `V1`, `V2` and proof data `proof`, [deferring all point operations](#deferred-point-operations)).
 7. Pushes back the detached variable `var1`.
