@@ -166,7 +166,7 @@ Only the [data](#data-type) and [value](#value-type) types can be _ported_ acros
 
 Notes:
 
-* [Wide values](#wide-value-type) are not portable because it is not proven to be non-negative.
+* [Wide values](#wide-value-type) are not portable because they are not proven to be non-negative.
 * [Contracts](#contract-type) are not portable because they must be satisfied within the current transaction
 or [output](#output-structure) their contents themselves.
 * [Variables](#variable-type), [expressions](#expression-type) and [constraints](#constraint-type) have no meaning outside the VM state
@@ -1955,6 +1955,35 @@ Now let’s see how [`borrow`](#borrow) simplifies things: it allows you to make
 `borrow` gives you a positive $X as requested, but it also needs to require you to repay $X from some other source before tx is finalized. This is represented by creating a *negative –$X* as a less powerful type Wide Value.
 
 Wide values are less powerful (they are super-types of Values) because they are not _portable_. You cannot just stash such value away in some output. You have to actually repay it using the `cloak` instruction.
+
+
+### How to perform an inequality constraint?
+
+First, note that inequality constraint only makes sense for integers, not for scalars.
+This is because integers are ordered and scalars wrap around modulo group order.
+Therefore, any two [variables](#variable-type) or [expressions](#expression-type) that must be compared,
+must theselves be proven to be in range using the [`range`](#range) instruction (directly or indirectly).
+
+Then, the inequality constraint is created by forming an expression of the form `expr ≥ 0` (using instructions [`neg`](#neg) and [`add`](#add)) and using a [`range`](#range) instruction to place a range check on `expr`.
+
+Constraint | Range check
+-----------|------------------
+`a ≥ b`    | `range:64(a - b)`
+`a ≤ b`    | `range:64(b - a)`
+`a > b`    | `range:64(a - b - 1)`
+`a < b`    | `range:64(b - a - 1)`
+
+
+
+### How to perform a logical `not`?
+
+Logical instructions [`or`](#or) and [`and`](#and) work by combining constraints of form `expr == 0`, that is, a comparison with zero. Logical `not` then is a check that a secret variable is _not zero_.
+
+One way to do that is to break the scalar in 253 bits (using 253 multipliers) and add a disjunction "at least one of these bits is 1" (using additional 252 multipliers), spending total 505 multipliers (this is 8x more expensive than a regular 64-bit rangeproof).
+
+On the other hand, using `not` may not be a good way to express contracts because of a dramatic increase in complexity: a contract that says `not(B)` effectively inverts a small set of inadmissible inputs, producing a big set of addmissible inputs.
+
+We need to investigate whether there are use-cases that cannot be safely or efficiently expressed with only [`and`](#and) and [`or`](#or) combinators.
 
 
 ## Open questions
