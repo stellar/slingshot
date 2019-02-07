@@ -1,12 +1,29 @@
-language: go
-go:
-  - '1.11'
-branches:
-  only:
-    - main
-install: true
-before_script:
-  - go vet ./...
-  - test `gofmt -s -l ./slidechain | grep -vF /vendor/ | wc -l` -eq 0
-script:
-  - go test -v ./... -timeout 60m
+matrix:
+  fast_finish: true
+  include:
+  - language: go
+    go: 1.11
+    branches:
+      only:
+        - main
+    install: true
+    before_script:
+      - cd slidechain
+      - go vet ./...
+      - test `gofmt -s -l . | grep -vF /vendor/ | wc -l` -eq 0
+    script:
+      - go test -v ./... -timeout 60m
+  - language: rust
+    rust: nightly-2018-12-31
+    cache: cargo
+    env:
+      - TEST_COMMAND=test EXTRA_FLAGS='' FEATURES=''
+      # run cargo bench with a filter that matches no benchmarks.
+      # this ensures the benchmarks build but doesn't run them on the CI server.
+      - TEST_COMMAND=bench EXTRA_FLAGS='"DONTRUNBENCHMARKS"'
+    before_script:
+    - cd zkvm
+    - rustup component add rustfmt-preview
+    script:
+    - cargo fmt --all -- --check
+    - cargo $TEST_COMMAND --features="$FEATURES" $EXTRA_FLAGS
