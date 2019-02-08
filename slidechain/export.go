@@ -34,7 +34,7 @@ const (
 							#  con stack                arg stack              log      notes
 							#  ---------                ---------              ---      -----
 							#                           json, value, {exporter}           
-	get get get             #  {exporter}, value, json
+	get get get				#  {exporter}, value, json
 	[%s] output				#                                                  {O,...}
 `
 
@@ -44,7 +44,7 @@ const (
 												#  {exporter}, value, json            selector                                            
 	get                            		        #  {exporter}, value, json, selector                                              
 	jumpif:$doretire                    		#                                                                                 
-                                            	#  {exporter}, value, json                                                          
+												#  {exporter}, value, json                                                          
 	"" put                              		#  {exporter}, value, json            ""                                          
 	drop                                		#  {exporter}, value                                                              
 	put put 1 put                       		#                                     "", value, {exporter}, 1                    
@@ -55,8 +55,8 @@ const (
 												#  {exporter}, value, json                                                        
 	put put drop                            	#                                     json, value                                 
 	x"%x" contract call          	            #                                                                                 
-										    	#                                                                                   
-										    	#                                                                                   
+												#                                                                                   
+												#                                                                                   
 	$checksig                                   #                                                                                 
 	[txid x"%x" get 0 checksig verify] yield    #                                     sigchecker
 `
