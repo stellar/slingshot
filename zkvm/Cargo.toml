@@ -1,0 +1,32 @@
+[package]
+name = "zkvm"
+version = "0.0.0"
+authors = ["Oleg Andreev <oleganza@gmail.com>"]
+edition = "2018"
+readme = "README.md"
+license = "Apache-2.0"
+repository = "https://github.com/interstellar/zkvm"
+categories = ["cryptography", "blockchain"]
+keywords = ["cryptography", "blockchain", "zero-knowledge", "bulletproofs"]
+description = "A blockchain VM with cloaked transactions and zero-knowledge smart contracts"
+
+[dependencies]
+failure = "0.1"
+byteorder = "1"
+merlin = "1.0.1"
+rand = "0.6"
+subtle = "2"
+curve25519-dalek = { version = "1.0.1", features = ["serde"] }
+
+
+[dependencies.bulletproofs]
+git = "https://github.com/dalek-cryptography/bulletproofs"
+branch = "develop"
+#path = "../../dalek/bulletproofs"
+features = ["yoloproofs"]
+
+[dependencies.spacesuit]
+path = "../spacesuit"
+
+[dev-dependencies]
+criterion = "0.2"
