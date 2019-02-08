@@ -107,11 +107,13 @@ impl Opcode {
 }
 
 impl Instruction {
-    /// Returns a parsed instruction with a size that it occupies in the program string.
-    /// E.g. a push instruction with 5-byte string occupies 1+4+5=10 bytes
-    /// (4 for the LE32 length prefix).
+    /// Returns a parsed instruction from a subslice of the program string, modifying
+    /// the subslice according to the bytes the instruction occupies
+    /// E.g. a push instruction with 5-byte string occupies 1+4+5=10 bytes,
+    /// (4 for the LE32 length prefix), advancing the program subslice by 10 bytes.
     ///
-    /// Return `VMError::FormatError` if there is not enough bytes to parse an instruction.
+    /// Return `VMError::FormatError` if there are not enough bytes to parse an
+    /// instruction.
     pub fn parse(program: &mut Subslice) -> Result<Self, VMError> {
         let byte = program.read_u8()?;
 
@@ -186,5 +188,10 @@ impl Instruction {
             Opcode::Right => Ok(Instruction::Right),
             Opcode::Delegate => Ok(Instruction::Delegate),
         }
+    }
+
+    /// Returns the bytecode representation of an Instruction.
+    pub fn encode(&self) -> Vec<u8> {
+        unimplemented!()
     }
 }

@@ -84,11 +84,11 @@ impl<'a, 'b> Prover<'a, 'b> {
             version,
             mintime,
             maxtime,
-            RunProver::new(program),
+            RunProver::new(&program),
             &mut prover,
         );
 
-        let (txid, txlog) = vm.run()?;
+        let (txid, _) = vm.run()?;
 
         // Sign txid
         let mut signtx_transcript = Transcript::new(b"ZkVM.signtx");
@@ -98,22 +98,31 @@ impl<'a, 'b> Prover<'a, 'b> {
         // Generate the R1CS proof
         let proof = prover.cs.prove().map_err(|_| VMError::InvalidR1CSProof)?;
 
+        // Encode program into bytecode
+
+        // TBD: determine program capacity
+        let mut bytecode = Vec::new();
+
+        program
+            .iter()
+            .map(|p| p.encode())
+            .for_each(|mut v| bytecode.append(&mut v));
+
         Ok(Tx {
             version,
             mintime,
             maxtime,
             signature,
             proof,
-            // TBD: generate program bytecode from Vec<Instruction>
-            program: Vec::new(),
+            program: bytecode,
         })
     }
 }
 
 impl RunProver {
-    fn new(program: Vec<Instruction>) -> Self {
+    fn new(program: &Vec<Instruction>) -> Self {
         RunProver {
-            program: program.into(),
+            program: program.clone().into(),
         }
     }
 }
