@@ -520,7 +520,7 @@ where
             self.variable_assignment(value.qty),
             self.variable_assignment(value.flv),
         ) {
-            (Some(ScalarKind::Integer(q)), Some(ScalarKind::Scalar(f))) => {
+            (Some(ScalarWitness::Integer(q)), Some(ScalarWitness::Scalar(f))) => {
                 Some(spacesuit::Value { q, f })
             }
             (_, _) => None,
@@ -552,9 +552,11 @@ where
                     self.variable_assignment(value.qty),
                     self.variable_assignment(value.flv),
                 ) {
-                    (Some(ScalarKind::Integer(q)), Some(ScalarKind::Scalar(f))) => Some((q, f)),
+                    (Some(ScalarWitness::Integer(q)), Some(ScalarWitness::Scalar(f))) => {
+                        Some((q, f))
+                    }
                     (None, None) => None,
-                    (_, _) => return Err(VMError::FormatError),
+                    (_, _) => return Err(VMError::InconsistentWitness),
                 },
             }),
             Item::WideValue(w) => Ok(w),
@@ -564,20 +566,13 @@ where
 
     fn variable_to_expression(&mut self, var: Variable) -> Result<Expression, VMError> {
         let (_, r1cs_var) = self.attach_variable(var);
-        let expr = Expression {
+        Ok(Expression {
             terms: vec![(r1cs_var, Scalar::one())],
-            assignment: match self.variable_assignment(var) {
-                None => None,
-                Some(v) => match v {
-                    ScalarKind::Integer(i) => Some(i),
-                    ScalarKind::Scalar(_) => return Err(VMError::FormatError),
-                },
-            },
-        };
-        Ok(expr)
+            assignment: self.variable_assignment(var),
+        })
     }
 
-    fn variable_assignment(&mut self, var: Variable) -> Option<ScalarKind> {
+    fn variable_assignment(&mut self, var: Variable) -> Option<ScalarWitness> {
         let v_com = &self.variable_commitments[var.index];
         match &v_com.commitment {
             Commitment::Closed(_) => None,
@@ -677,7 +672,7 @@ where
         spacesuit::range_proof(
             self.delegate.cs(),
             r1cs::LinearCombination::from_iter(expr.terms),
-            expr.assignment,
+            ScalarWitness::option_to_integer(expr.assignment)?,
             bitrange,
         )
         .map_err(|_| VMError::R1CSInconsistency)

@@ -64,7 +64,7 @@ pub struct Variable {
 pub struct Expression {
     /// Terms of the expression
     pub(crate) terms: Vec<(r1cs::Variable, Scalar)>,
-    pub(crate) assignment: Option<SignedInteger>,
+    pub(crate) assignment: Option<ScalarWitness>,
 }
 
 #[derive(Clone, Debug)]
@@ -115,7 +115,7 @@ pub enum PredicateWitness {
 /// Prover's representation of the commitment secret: witness and blinding factor
 #[derive(Clone, Debug)]
 pub struct CommitmentWitness {
-    pub value: ScalarKind,
+    pub value: ScalarWitness,
     pub blinding: Scalar,
 }
 
@@ -142,8 +142,11 @@ pub struct FrozenValue {
     pub(crate) flv: Commitment,
 }
 
+/// Represents a concrete kind of a number represented by a scalar:
+/// `ScalarKind::Integer` represents a signed integer with 64-bit absolute value (aka i65)
+/// `ScalarKind::Scalar` represents a scalar modulo group order.
 #[derive(Copy, Clone, Debug)]
-pub enum ScalarKind {
+pub enum ScalarWitness {
     Integer(SignedInteger),
     Scalar(Scalar),
 }
@@ -164,11 +167,30 @@ impl CommitmentWitness {
     }
 }
 
-impl Into<Scalar> for ScalarKind {
+impl ScalarWitness {
+    /// Converts the witness to an integer if it is an integer
+    pub fn to_integer(self) -> Result<SignedInteger, VMError> {
+        match self {
+            ScalarWitness::Integer(i) => Ok(i),
+            ScalarWitness::Scalar(_) => Err(VMError::TypeNotSignedInteger),
+        }
+    }
+
+    /// Converts `Option<ScalarWitness>` into optional integer if it is one.
+    pub fn option_to_integer(assignment: Option<Self>) -> Result<Option<SignedInteger>, VMError> {
+        match assignment {
+            None => Ok(None),
+            Some(ScalarWitness::Integer(i)) => Ok(Some(i)),
+            Some(ScalarWitness::Scalar(_)) => Err(VMError::TypeNotSignedInteger),
+        }
+    }
+}
+
+impl Into<Scalar> for ScalarWitness {
     fn into(self) -> Scalar {
         match self {
-            ScalarKind::Integer(i) => i.into(),
-            ScalarKind::Scalar(s) => s,
+            ScalarWitness::Integer(i) => i.into(),
+            ScalarWitness::Scalar(s) => s,
         }
     }
 }
