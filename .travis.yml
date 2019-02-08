@@ -14,26 +14,31 @@ matrix:
       - go test -v ./slidechain/... -timeout 60m
   - language: rust
     rust: nightly-2018-12-31
-    cache: cargo
+    # per https://levans.fr/rust_travis_cache.html
+    cache:
+      directories:
+        - /home/travis/.cargo
+    before_cache:
+      - rm -rf /home/travis/.cargo/registry
     before_script:
     - cd zkvm
     - rustup component add rustfmt-preview
     script:
     - cargo fmt --all -- --check
     - cargo test
-    - RUSTFLAGS="-C opt-level=0" cargo bench "DONTRUNBENCHMARKS"
+    - RUSTFLAGS="-C opt-level=0" cargo build --benches
   - language: rust
     rust: nightly-2018-12-31
-    cache: cargo
+    # per https://levans.fr/rust_travis_cache.html
+    cache:
+      directories:
+        - /home/travis/.cargo
+    before_cache:
+      - rm -rf /home/travis/.cargo/registry
     before_script:
     - cd spacesuit
     - rustup component add rustfmt-preview
     script:
     - cargo fmt --all -- --check
     - cargo test
-    - RUSTFLAGS="-C opt-level=0" cargo bench "DONTRUNBENCHMARKS"
-
-# About DONTRUNBENCHMARKS:
-# This is a filter string that matches none of the benchmarks, therefore not causing Travis
-# to waste time running benchmarks, but simply ensures that the benchmark builds are not broken.
-# For the same reason, RUSTFLAGS="-C opt-level=0" are used: so the benchmarks are built faster.
+    - RUSTFLAGS="-C opt-level=0" cargo build --benches
