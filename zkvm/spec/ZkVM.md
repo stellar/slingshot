@@ -39,7 +39,7 @@ ZkVM defines a procedural representation for blockchain transactions and the rul
     * [Output structure](#output-structure)
     * [Constraint system](#constraint-system)
     * [Constraint system proof](#constraint-system-proof)
-    * [Transaction witness](#transaction-witness)
+    * [Transaction](#transaction)
     * [Transaction log](#transaction-log)
     * [Transaction ID](#transaction-id)
     * [Merkle binary tree](#merkle-binary-tree)
@@ -93,7 +93,7 @@ ZkVM is the entirely new design that inherits most important insights from the T
 
 ### Concepts
 
-A transaction is represented by a [transaction witness](#transaction-witness) that
+A transaction is represented by a [transaction](#transaction) object that
 contains a [program](#program) that runs in the context of a stack-based virtual machine.
 
 When the virtual machine executes a program, it creates and manipulates data of various types:
@@ -547,9 +547,9 @@ A proof of satisfiability of a [constraint system](#constraint-system) built dur
 The proof is provided to the VM at the beggining of execution and verified when the VM is [finished](#vm-execution).
 
 
-### Transaction witness
+### Transaction
 
-Transaction witness is a structure that contains all data and logic
+Transaction is a structure that contains all data and logic
 required to produce a unique [transaction ID](#transaction-id):
 
 * Version (uint64)
@@ -979,7 +979,7 @@ V == v·B + 0·B2
 
 The ZkVM state consists of the static attributes and the state machine attributes.
 
-1. [Transaction witness](#transaction-witness):
+1. [Transaction](#transaction):
     * `version`
     * `mintime` and `maxtime`
     * `program`
@@ -1001,12 +1001,12 @@ The ZkVM state consists of the static attributes and the state machine attribute
 
 The VM is initialized with the following state:
 
-1. A [transaction witness](#transaction-witness) as provided by the user.
-2. Extension flag set to `true` or `false` according to the [transaction versioning](#versioning) rules for the witness version.
+1. [Transaction](#transaction) as provided by the user.
+2. Extension flag set to `true` or `false` according to the [transaction versioning](#versioning) rules for the transaction version.
 3. Uniqueness flag is set to `false`.
 4. Data stack is empty.
 5. Program stack is empty.
-6. Current program set to the transaction witness program; with zero offset.
+6. Current program set to the transaction program; with zero offset.
 7. Transaction log is empty.
 8. Array of signature verification keys is empty.
 9. Array of deferred point operations is empty.
