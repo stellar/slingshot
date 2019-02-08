@@ -119,4 +119,6 @@ func TestPegOut(t *testing.T) {
 		t.Fatal("context timed out: no peg-out tx seen")
 	case <-ch:
 	}
+
+	// PRTODO: Update test to do the post-peg-out check.
 }

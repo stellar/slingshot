@@ -91,6 +91,7 @@ func (c *Custodian) pegOutFromExports(ctx context.Context) {
 
 			log.Printf("pegging out export %x: %d of %s to %s", txid, amounts[i], asset.String(), exporters[i])
 			// TODO(vniu): flag txs that fail with unretriable errors in the db
+			// PRTODO: Pass information for the post-peg-out smart contract to to the peg-out tx.
 			err = c.pegOut(ctx, exporter, asset, int64(amounts[i]), tempID, xdr.SequenceNumber(seqnums[i]))
 			if err != nil {
 				log.Fatalf("pegging out tx: %s", err)
@@ -99,6 +100,7 @@ func (c *Custodian) pegOutFromExports(ctx context.Context) {
 			if err != nil {
 				log.Fatalf("updating export table: %s", err)
 			}
+			// PRTODO: Update db state for new fields.
 		}
 	}
 }
@@ -251,6 +253,7 @@ func SubmitPreExportTx(hclient *horizon.Client, kp *keypair.Full, custodian stri
 // BuildExportTx builds a txvm retirement tx for an asset issued
 // onto slidechain. It will retire `amount` of the asset, and the
 // remaining input will be output back to the original account.
+// PRTODO: Rewrite this function to use new smart contracts.
 func BuildExportTx(ctx context.Context, asset xdr.Asset, amount, inputAmt int64, temp string, anchor []byte, prv ed25519.PrivateKey, seqnum xdr.SequenceNumber) (*bc.Tx, error) {
 	if inputAmt < amount {
 		return nil, fmt.Errorf("cannot have input amount %d less than export amount %d", inputAmt, amount)
@@ -333,6 +336,7 @@ func BuildExportTx(ctx context.Context, asset xdr.Asset, amount, inputAmt int64,
 // {"R", ...}
 // {"L", ...}
 // {"F", ...}
+// PRTODO: Rewrite this check, since the log will change.
 func IsExportTx(tx *bc.Tx, asset xdr.Asset, inputAmt int64, temp, exporter string, seqnum int64) bool {
 	// The export transaction when we export the full input amount has seven operations, and when we export
 	// part of the input and output the rest back to the exporter, it has ten operations
