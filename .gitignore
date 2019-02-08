@@ -1,3 +1,5 @@
 *~
 *.db
 *.DS_Store
+Cargo.lock
+/target
