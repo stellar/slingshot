@@ -15,6 +15,7 @@ import (
 	"github.com/chain/txvm/errors"
 	"github.com/chain/txvm/protocol/bc"
 	"github.com/chain/txvm/protocol/txbuilder"
+	"github.com/chain/txvm/protocol/txbuilder/standard"
 	"github.com/chain/txvm/protocol/txbuilder/txresult"
 	"github.com/chain/txvm/protocol/txvm"
 	"github.com/chain/txvm/protocol/txvm/asm"
@@ -27,7 +28,46 @@ import (
 	"github.com/stellar/go/xdr"
 )
 
-const baseFee = 100
+const (
+	baseFee            = 100
+	exportContract1Fmt = `
+							#  con stack                arg stack              log      notes
+							#  ---------                ---------              ---      -----
+							#                           json value {exporter}           
+	get get get             #  {exporter}, value, json
+	[%s] output				#                                                  {O,...}
+`
+
+	exportContract2Fmt = `
+												#  con stack                          arg stack                 log                 
+												#  ---------                          ---------                 ---               
+												#  {exporter}, value, json            selector                                            
+	get                            		        #  {exporter}, value, json, selector                                              
+	jumpif:$doretire                    		#                                                                                 
+                                            	#  {exporter}, value, json                                                          
+	"" put                              		#  {exporter}, value, json            ""                                          
+	drop                                		#  {exporter}, value                                                              
+	put put 1 put                       		#                                     "", value, {exporter}, 1                    
+	x"%x" contract call  		                #                                                               {'L',...}{'O',...}
+	jump:$checksig                      		#                                                                                 
+												#                                                                                   
+	$doretire                           		#                                                                                   
+												#  {exporter}, value, json                                                        
+	put put drop                            	#                                     json, value                                 
+	x"%x" contract call          	            #                                                                                 
+										    	#                                                                                   
+										    	#                                                                                   
+	$checksig                                   #                                                                                 
+	[txid x"%x" get 0 checksig verify] yield    #                                     sigchecker
+`
+)
+
+var (
+	exportContract1Src  = fmt.Sprintf(exportContract1Fmt, exportContract2Src)
+	exportContract1Prog = asm.MustAssemble(exportContract1Src)
+	exportContract2Src  = fmt.Sprintf(exportContract2Fmt, standard.PayToMultisigProg1, standard.RetireContract, custodianPub)
+	exportContract2Prog = asm.MustAssemble(exportContract2Src)
+)
 
 // Runs as a goroutine.
 func (c *Custodian) pegOutFromExports(ctx context.Context) {
