@@ -1,8 +1,10 @@
 use bulletproofs::r1cs;
 use bulletproofs::r1cs::R1CSProof;
+use byteorder::{ByteOrder, LittleEndian};
 use curve25519_dalek::ristretto::CompressedRistretto;
 use curve25519_dalek::scalar::Scalar;
 use spacesuit;
+use spacesuit::SignedInteger;
 use std::iter::FromIterator;
 
 use crate::encoding;
@@ -323,7 +325,7 @@ where
 
         let value = Value { qty, flv };
 
-        let qty_expr = self.variable_to_expression(qty);
+        let qty_expr = self.variable_to_expression(qty)?;
         self.add_range_proof(64, qty_expr)?;
 
         self.txlog.push(Entry::Issue(qty_point, flv_point));
@@ -414,7 +416,7 @@ where
             let qty = self.make_variable(qty);
 
             let value = Value { qty, flv };
-            let cloak_value = self.value_to_cloak_value(&value);
+            let cloak_value = self.value_to_cloak_value(&value)?;
 
             // insert in the same order as they are on stack (the deepest item will be at index 0)
             output_values.insert(0, value);
@@ -514,21 +516,27 @@ where
         }
     }
 
-    fn value_to_cloak_value(&mut self, value: &Value) -> spacesuit::AllocatedValue {
-        spacesuit::AllocatedValue {
+    fn value_to_cloak_value(
+        &mut self,
+        value: &Value,
+    ) -> Result<spacesuit::AllocatedValue, VMError> {
+        Ok(spacesuit::AllocatedValue {
             q: self.attach_variable(value.qty).1,
             f: self.attach_variable(value.flv).1,
-            // TBD: maintain assignments inside Value types in order to use ZkVM to compute the R1CS proof
-            assignment: None,
-        }
+            assignment: self
+                .value_witness(&value)?
+                .map(|(q, f)| spacesuit::Value { q, f }),
+        })
     }
 
     fn wide_value_to_cloak_value(&mut self, walue: &WideValue) -> spacesuit::AllocatedValue {
         spacesuit::AllocatedValue {
             q: walue.r1cs_qty,
             f: walue.r1cs_flv,
-            // TBD: maintain assignments inside WideValue types in order to use ZkVM to compute the R1CS proof
-            assignment: None,
+            assignment: match walue.witness {
+                None => None,
+                Some(w) => Some(spacesuit::Value { q: w.0, f: w.1 }),
+            },
         }
     }
 
@@ -537,18 +545,39 @@ where
             Item::Value(value) => Ok(WideValue {
                 r1cs_qty: self.attach_variable(value.qty).1,
                 r1cs_flv: self.attach_variable(value.flv).1,
-                // TBD: add witness for Value types where it exists.
-                witness: None,
+                witness: self.value_witness(&value)?,
             }),
             Item::WideValue(w) => Ok(w),
             _ => Err(VMError::TypeNotWideValue),
         }
     }
 
-    fn variable_to_expression(&mut self, var: Variable) -> Expression {
+    fn variable_to_expression(&mut self, var: Variable) -> Result<Expression, VMError> {
         let (_, r1cs_var) = self.attach_variable(var);
-        Expression {
+        Ok(Expression {
             terms: vec![(r1cs_var, Scalar::one())],
+            assignment: self.variable_assignment(var),
+        })
+    }
+
+    /// Returns Ok(Some((qty,flv))) assignment pair if it's missing or consistent.
+    /// Return Err if the witness is present, but is inconsistent.
+    fn value_witness(&mut self, value: &Value) -> Result<Option<(SignedInteger, Scalar)>, VMError> {
+        match (
+            self.variable_assignment(value.qty),
+            self.variable_assignment(value.flv),
+        ) {
+            (Some(ScalarWitness::Integer(q)), Some(ScalarWitness::Scalar(f))) => Ok(Some((q, f))),
+            (None, None) => Ok(None),
+            (_, _) => return Err(VMError::InconsistentWitness),
+        }
+    }
+
+    fn variable_assignment(&mut self, var: Variable) -> Option<ScalarWitness> {
+        let v_com = &self.variable_commitments[var.index];
+        match &v_com.commitment {
+            Commitment::Closed(_) => None,
+            Commitment::Open(w) => Some(w.value),
         }
     }
 
@@ -644,8 +673,7 @@ where
         spacesuit::range_proof(
             self.delegate.cs(),
             r1cs::LinearCombination::from_iter(expr.terms),
-            // TBD: maintain the assignment for the expression and provide it here
-            None,
+            ScalarWitness::option_to_integer(expr.assignment)?,
             bitrange,
         )
         .map_err(|_| VMError::R1CSInconsistency)

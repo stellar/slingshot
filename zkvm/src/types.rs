@@ -1,14 +1,15 @@
 //! Core ZkVM stack types: data, variables, values, contracts etc.
 
-use crate::transcript::TranscriptProtocol;
 use bulletproofs::{r1cs, PedersenGens};
 use curve25519_dalek::ristretto::CompressedRistretto;
 use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
+use spacesuit::SignedInteger;
 
 use crate::encoding::Subslice;
 use crate::errors::VMError;
 use crate::ops::Instruction;
+use crate::transcript::TranscriptProtocol;
 use crate::txlog::UTXO;
 
 #[derive(Debug)]
@@ -50,7 +51,7 @@ pub struct Value {
 pub struct WideValue {
     pub(crate) r1cs_qty: r1cs::Variable,
     pub(crate) r1cs_flv: r1cs::Variable,
-    pub(crate) witness: Option<(Scalar, Scalar)>,
+    pub(crate) witness: Option<(SignedInteger, Scalar)>,
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -63,6 +64,7 @@ pub struct Variable {
 pub struct Expression {
     /// Terms of the expression
     pub(crate) terms: Vec<(r1cs::Variable, Scalar)>,
+    pub(crate) assignment: Option<ScalarWitness>,
 }
 
 #[derive(Clone, Debug)]
@@ -113,8 +115,8 @@ pub enum PredicateWitness {
 /// Prover's representation of the commitment secret: witness and blinding factor
 #[derive(Clone, Debug)]
 pub struct CommitmentWitness {
-    value: Scalar,
-    blinding: Scalar,
+    pub value: ScalarWitness,
+    pub blinding: Scalar,
 }
 
 /// Representation of a Contract inside an Input that can be cloned.
@@ -140,6 +142,15 @@ pub struct FrozenValue {
     pub(crate) flv: Commitment,
 }
 
+/// Represents a concrete kind of a number represented by a scalar:
+/// `ScalarKind::Integer` represents a signed integer with 64-bit absolute value (aka i65)
+/// `ScalarKind::Scalar` represents a scalar modulo group order.
+#[derive(Copy, Clone, Debug)]
+pub enum ScalarWitness {
+    Integer(SignedInteger),
+    Scalar(Scalar),
+}
+
 impl Commitment {
     pub fn to_point(&self) -> CompressedRistretto {
         match self {
@@ -152,7 +163,35 @@ impl Commitment {
 impl CommitmentWitness {
     pub fn to_point(&self) -> CompressedRistretto {
         let gens = PedersenGens::default();
-        gens.commit(self.value, self.blinding).compress()
+        gens.commit(self.value.into(), self.blinding).compress()
+    }
+}
+
+impl ScalarWitness {
+    /// Converts the witness to an integer if it is an integer
+    pub fn to_integer(self) -> Result<SignedInteger, VMError> {
+        match self {
+            ScalarWitness::Integer(i) => Ok(i),
+            ScalarWitness::Scalar(_) => Err(VMError::TypeNotSignedInteger),
+        }
+    }
+
+    /// Converts `Option<ScalarWitness>` into optional integer if it is one.
+    pub fn option_to_integer(assignment: Option<Self>) -> Result<Option<SignedInteger>, VMError> {
+        match assignment {
+            None => Ok(None),
+            Some(ScalarWitness::Integer(i)) => Ok(Some(i)),
+            Some(ScalarWitness::Scalar(_)) => Err(VMError::TypeNotSignedInteger),
+        }
+    }
+}
+
+impl Into<Scalar> for ScalarWitness {
+    fn into(self) -> Scalar {
+        match self {
+            ScalarWitness::Integer(i) => i.into(),
+            ScalarWitness::Scalar(s) => s,
+        }
     }
 }
 
@@ -231,7 +270,7 @@ impl Item {
 }
 
 impl Data {
-    // Returns the length of the underlying vector of bytes.
+    /// Returns the length of the underlying vector of bytes.
     pub fn len(&self) -> usize {
         match self {
             Data::Opaque(data) => data.len(),
