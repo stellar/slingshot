@@ -30,12 +30,9 @@ impl<'a, 'b> Delegate<r1cs::Verifier<'a, 'b>> for Verifier<'a, 'b> {
         &mut self,
         com: &Commitment,
     ) -> Result<(CompressedRistretto, r1cs::Variable), VMError> {
-        let point = match com {
-            Commitment::Closed(p) => p,
-            Commitment::Open(_) => return Err(VMError::DataNotOpaque),
-        };
-        let var = self.cs.commit(*point);
-        Ok((*point, var))
+        let point = com.ensure_closed()?;
+        let var = self.cs.commit(point);
+        Ok((point, var))
     }
 
     fn verify_point_op<F>(&mut self, point_op_fn: F) -> Result<(), VMError>

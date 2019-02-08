@@ -158,6 +158,13 @@ impl Commitment {
             Commitment::Open(w) => w.to_point(),
         }
     }
+
+    pub fn ensure_closed(&self) -> Result<CompressedRistretto, VMError> {
+        match self {
+            Commitment::Open(_) => Err(VMError::DataNotOpaque),
+            Commitment::Closed(x) => Ok(*x),
+        }
+    }
 }
 
 impl CommitmentWitness {

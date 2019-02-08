@@ -95,7 +95,7 @@ impl<'a, 'b> Prover<'a, 'b> {
             version,
             mintime,
             maxtime,
-            ProverRun::root(program),
+            ProverRun::from_txprogram(program),
             &mut prover,
         );
 
@@ -121,13 +121,13 @@ impl<'a, 'b> Prover<'a, 'b> {
 }
 
 impl ProverRun {
-    fn root(program: Vec<Instruction>) -> Self {
+    fn from_txprogram(program: Vec<Instruction>) -> Self {
         ProverRun {
             program: program.into(),
             root: true,
         }
     }
-    fn subprogram(program: Vec<Instruction>) -> Self {
+    fn from_subprogram(program: Vec<Instruction>) -> Self {
         ProverRun {
             program: program.into(),
             root: false,
