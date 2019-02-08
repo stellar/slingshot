@@ -10,15 +10,17 @@ use crate::ops::Instruction;
 use crate::point_ops::PointOp;
 use crate::signature::Signature;
 use crate::types::*;
-use crate::vm::{Delegate, RunTrait, Tx, VM};
+use crate::vm::{Delegate, Tx, VM};
 
 pub struct Prover<'a, 'b> {
     signtx_keys: Vec<Scalar>,
     cs: r1cs::Prover<'a, 'b>,
+    bytecode: Vec<u8>,
 }
 
 pub struct ProverRun {
     program: VecDeque<Instruction>,
+    root: bool,
 }
 
 impl<'a, 'b> Delegate<r1cs::Prover<'a, 'b>> for Prover<'a, 'b> {
@@ -35,11 +37,11 @@ impl<'a, 'b> Delegate<r1cs::Prover<'a, 'b>> for Prover<'a, 'b> {
         Ok(self.cs.commit(v, v_blinding))
     }
 
-    fn verify_point_op<F>(&mut self, point_op_fn: F)
+    fn verify_point_op<F>(&mut self, point_op_fn: F) -> Result<(), VMError>
     where
         F: FnOnce() -> PointOp,
     {
-        return;
+        Ok(())
     }
 
     fn process_tx_signature(&mut self, pred: Predicate) -> Result<(), VMError> {
@@ -50,6 +52,20 @@ impl<'a, 'b> Delegate<r1cs::Prover<'a, 'b>> for Prover<'a, 'b> {
                 _ => Err(VMError::TypeNotKey),
             },
         }
+    }
+
+    fn next_instruction(
+        &mut self,
+        run: &mut Self::RunType,
+    ) -> Result<Option<Instruction>, VMError> {
+        let instruction = run.program.pop_front();
+        if run.root {
+            match &instruction {
+                Some(i) => i.encode(&mut self.bytecode),
+                None => (),
+            };
+        }
+        Ok(instruction)
     }
 
     fn cs(&mut self) -> &mut r1cs::Prover<'a, 'b> {
@@ -72,13 +88,14 @@ impl<'a, 'b> Prover<'a, 'b> {
         let mut prover = Prover {
             signtx_keys: Vec::new(),
             cs: cs,
+            bytecode: Vec::new(),
         };
 
         let vm = VM::new(
             version,
             mintime,
             maxtime,
-            ProverRun::new(&program),
+            ProverRun::root(program),
             &mut prover,
         );
 
@@ -92,33 +109,28 @@ impl<'a, 'b> Prover<'a, 'b> {
         // Generate the R1CS proof
         let proof = prover.cs.prove().map_err(|_| VMError::InvalidR1CSProof)?;
 
-        // Encode program into bytecode
-
-        // TBD: determine program capacity
-        let mut bytecode = Vec::new();
-        program.iter().for_each(|p| p.encode(&mut bytecode));
-
         Ok(Tx {
             version,
             mintime,
             maxtime,
             signature,
             proof,
-            program: bytecode,
+            program: prover.bytecode,
         })
     }
 }
 
 impl ProverRun {
-    fn new(program: &Vec<Instruction>) -> Self {
+    fn root(program: Vec<Instruction>) -> Self {
         ProverRun {
-            program: program.clone().into(),
+            program: program.into(),
+            root: true,
         }
     }
-}
-
-impl RunTrait for ProverRun {
-    fn next_instruction(&mut self) -> Result<Option<Instruction>, VMError> {
-        Ok(self.program.pop_front())
+    fn subprogram(program: Vec<Instruction>) -> Self {
+        ProverRun {
+            program: program.into(),
+            root: false,
+        }
     }
 }

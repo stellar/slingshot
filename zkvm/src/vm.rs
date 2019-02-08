@@ -92,7 +92,7 @@ where
 }
 
 pub trait Delegate<CS: r1cs::ConstraintSystem> {
-    type RunType: RunTrait;
+    type RunType;
 
     /// Adds a Commitment to the underlying constraint system, producing a high-level variable
     fn commit_variable(
@@ -101,7 +101,7 @@ pub trait Delegate<CS: r1cs::ConstraintSystem> {
     ) -> Result<(CompressedRistretto, r1cs::Variable), VMError>;
 
     /// Adds a point operation to the list of deferred operation for later batch verification
-    fn verify_point_op<F>(&mut self, point_op_fn: F)
+    fn verify_point_op<F>(&mut self, point_op_fn: F) -> Result<(), VMError>
     where
         F: FnOnce() -> PointOp;
 
@@ -111,15 +111,13 @@ pub trait Delegate<CS: r1cs::ConstraintSystem> {
 
     /// Returns the delegate's underlying constraint system
     fn cs(&mut self) -> &mut CS;
-}
 
-/// A trait for an instance of a "run": a currently executed program.
-pub trait RunTrait {
     /// Returns the next instruction.
     /// Returns Err() upon decoding/format error.
     /// Returns Ok(Some()) if there is another instruction available.
     /// Returns Ok(None) if there is no more instructions to execute.
-    fn next_instruction(&mut self) -> Result<Option<Instruction>, VMError>;
+    fn next_instruction(&mut self, run: &mut Self::RunType)
+        -> Result<Option<Instruction>, VMError>;
 }
 
 /// And indirect reference to a high-level variable within a constraint system.
@@ -197,7 +195,7 @@ where
 
     /// Returns a flag indicating whether to continue the execution
     fn step(&mut self) -> Result<bool, VMError> {
-        if let Some(instr) = self.current_run.next_instruction()? {
+        if let Some(instr) = self.delegate.next_instruction(&mut self.current_run)? {
             // Attempt to read the next instruction and advance the program state
             match instr {
                 // the data is just a slice, so the clone would copy the slice struct,
@@ -324,7 +322,7 @@ where
                 secondary: None,
                 arbitrary: vec![(-Scalar::one(), flv_point)],
             }
-        });
+        })?;
 
         let value = Value { qty, flv };
 
