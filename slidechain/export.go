@@ -29,44 +29,46 @@ import (
 )
 
 const (
-	baseFee            = 100
-	exportContract1Fmt = `
-							#  con stack                arg stack              log      notes
-							#  ---------                ---------              ---      -----
-							#                           json, value, {exporter}           
-	get get get				#  {exporter}, value, json
-	[%s] output				#                                                  {O,...}
+	baseFee                = 100
+	custodianSigCheckerFmt = `txid x"%x" get 0 checksig verify`
+	exportContract1Fmt     = `
+	              #  con stack                arg stack              log      notes
+	              #  ---------                ---------              ---      -----
+	              #                           json, value, {exporter}           
+	get get get   #  {exporter}, value, json                                  
+	x'%x' output  #                                                  {O,...}
 `
 
 	exportContract2Fmt = `
-												#  con stack                          arg stack                 log                 
-												#  ---------                          ---------                 ---               
-												#  {exporter}, value, json            selector                                            
-	get                            		        #  {exporter}, value, json, selector                                              
-	jumpif:$doretire                    		#                                                                                 
-												#  {exporter}, value, json                                                          
-	"" put                              		#  {exporter}, value, json            ""                                          
-	drop                                		#  {exporter}, value                                                              
-	put put 1 put                       		#                                     "", value, {exporter}, 1                    
-	x"%x" contract call  		                #                                                               {'L',...}{'O',...}
-	jump:$checksig                      		#                                                                                 
-												#                                                                                   
-	$doretire                           		#                                                                                   
-												#  {exporter}, value, json                                                        
-	put put drop                            	#                                     json, value                                 
-	x"%x" contract call          	            #                                                                                 
-												#                                                                                   
-												#                                                                                   
-	$checksig                                   #                                                                                 
-	[txid x"%x" get 0 checksig verify] yield    #                                     sigchecker
+	                     #  con stack                          arg stack                 log                 notes
+	                     #  ---------                          ---------                 ---                 -----
+	                     #  {exporter}, value, json                                                          
+	selector             #  {exporter}, value, json, selector                                                
+	jumpif:$doretire     #                                                                                   
+	                     #  {exporter}, value, json                                                          
+	"" put               #  {exporter}, value, json            ""                                            
+	drop                 #  {exporter}, value                                                                
+	put put 1 put        #                                     "", value, {exporter}, 1                      
+	x'%x' contract call  #                                                               {'L',...}{'O',...}  
+	jump:$checksig       #                                                                                   
+	                     #                                                                                   
+	$doretire            #                                                                                   
+	                     #  {exporter}, value, json                                                          
+	put put drop         #                                     json, value                                   
+	x'%x' contract call  #                                                                                   
+	                     #                                                                                   
+	                     #                                                                                   
+	$checksig            #                                                                                   
+	[%s] yield           #                                     sigchecker	
 `
 )
 
 var (
-	exportContract1Src  = fmt.Sprintf(exportContract1Fmt, exportContract2Src)
-	exportContract1Prog = asm.MustAssemble(exportContract1Src)
-	exportContract2Src  = fmt.Sprintf(exportContract2Fmt, standard.PayToMultisigProg1, standard.RetireContract, custodianPub)
-	exportContract2Prog = asm.MustAssemble(exportContract2Src)
+	custodianSigCheckerSrc = fmt.Sprintf(custodianSigCheckerFmt, custodianPub)
+	exportContract1Src     = fmt.Sprintf(exportContract1Fmt, exportContract2Src)
+	exportContract1Prog    = asm.MustAssemble(exportContract1Src)
+	exportContract2Src     = fmt.Sprintf(exportContract2Fmt, standard.PayToMultisigProg1, standard.RetireContract, custodianSigCheckerSrc)
+	exportContract2Prog    = asm.MustAssemble(exportContract2Src)
 )
 
 // Runs as a goroutine.
