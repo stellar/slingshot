@@ -3,6 +3,8 @@ use merlin::Transcript;
 
 use crate::transcript::TranscriptProtocol;
 
+pub type TxLog = Vec<Entry>;
+
 /// Entry in a transaction log
 #[derive(Clone, PartialEq, Debug)]
 pub enum Entry {

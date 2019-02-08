@@ -13,7 +13,7 @@ use crate::errors::VMError;
 use crate::ops::Instruction;
 use crate::point_ops::PointOp;
 use crate::signature::*;
-use crate::txlog::{Entry, TxID, UTXO};
+use crate::txlog::{Entry, TxID, TxLog, UTXO};
 use crate::types::*;
 
 /// Current tx version determines which extension opcodes are treated as noops (see VM.extension flag).
@@ -61,7 +61,7 @@ pub struct VerifiedTx {
     pub id: TxID,
 
     // List of inputs, outputs and nonces to be inserted/deleted in the blockchain state.
-    pub log: Vec<Entry>,
+    pub log: TxLog,
 }
 
 pub struct VM<'d, CS, D>
@@ -87,18 +87,21 @@ where
 
     current_run: D::RunType,
     run_stack: Vec<D::RunType>,
-    txlog: Vec<Entry>,
+    txlog: TxLog,
     variable_commitments: Vec<VariableCommitment>,
 }
 
 pub trait Delegate<CS: r1cs::ConstraintSystem> {
-    type RunType: RunTrait;
+    type RunType;
 
     /// Adds a Commitment to the underlying constraint system, producing a high-level variable
-    fn commit_variable(&mut self, com: &Commitment) -> (CompressedRistretto, r1cs::Variable);
+    fn commit_variable(
+        &mut self,
+        com: &Commitment,
+    ) -> Result<(CompressedRistretto, r1cs::Variable), VMError>;
 
     /// Adds a point operation to the list of deferred operation for later batch verification
-    fn verify_point_op<F>(&mut self, point_op_fn: F)
+    fn verify_point_op<F>(&mut self, point_op_fn: F) -> Result<(), VMError>
     where
         F: FnOnce() -> PointOp;
 
@@ -108,15 +111,13 @@ pub trait Delegate<CS: r1cs::ConstraintSystem> {
 
     /// Returns the delegate's underlying constraint system
     fn cs(&mut self) -> &mut CS;
-}
 
-/// A trait for an instance of a "run": a currently executed program.
-pub trait RunTrait {
     /// Returns the next instruction.
     /// Returns Err() upon decoding/format error.
     /// Returns Ok(Some()) if there is another instruction available.
     /// Returns Ok(None) if there is no more instructions to execute.
-    fn next_instruction(&mut self) -> Result<Option<Instruction>, VMError>;
+    fn next_instruction(&mut self, run: &mut Self::RunType)
+        -> Result<Option<Instruction>, VMError>;
 }
 
 /// And indirect reference to a high-level variable within a constraint system.
@@ -161,7 +162,7 @@ where
     }
 
     /// Runs through the entire program and nested programs until completion.
-    pub fn run(mut self) -> Result<(TxID, Vec<Entry>), VMError> {
+    pub fn run(mut self) -> Result<(TxID, TxLog), VMError> {
         loop {
             if !self.step()? {
                 break;
@@ -194,7 +195,7 @@ where
 
     /// Returns a flag indicating whether to continue the execution
     fn step(&mut self) -> Result<bool, VMError> {
-        if let Some(instr) = self.current_run.next_instruction()? {
+        if let Some(instr) = self.delegate.next_instruction(&mut self.current_run)? {
             // Attempt to read the next instruction and advance the program state
             match instr {
                 // the data is just a slice, so the clone would copy the slice struct,
@@ -310,8 +311,8 @@ where
         let flv = self.pop_item()?.to_variable()?;
         let qty = self.pop_item()?.to_variable()?;
 
-        let (flv_point, _) = self.attach_variable(flv);
-        let (qty_point, _) = self.attach_variable(qty);
+        let (flv_point, _) = self.attach_variable(flv)?;
+        let (qty_point, _) = self.attach_variable(qty)?;
 
         self.delegate.verify_point_op(|| {
             let flv_scalar = Value::issue_flavor(&predicate);
@@ -321,7 +322,7 @@ where
                 secondary: None,
                 arbitrary: vec![(-Scalar::one(), flv_point)],
             }
-        });
+        })?;
 
         let value = Value { qty, flv };
 
@@ -503,15 +504,18 @@ where
         var_com.to_point()
     }
 
-    fn attach_variable(&mut self, var: Variable) -> (CompressedRistretto, r1cs::Variable) {
+    fn attach_variable(
+        &mut self,
+        var: Variable,
+    ) -> Result<(CompressedRistretto, r1cs::Variable), VMError> {
         // This subscript never fails because the variable is created only via `make_variable`.
         let v_com = &self.variable_commitments[var.index];
         match v_com.variable {
-            Some(v) => (v_com.commitment.to_point(), v),
+            Some(v) => Ok((v_com.commitment.to_point(), v)),
             None => {
-                let (point, r1cs_var) = self.delegate.commit_variable(&v_com.commitment);
+                let (point, r1cs_var) = self.delegate.commit_variable(&v_com.commitment)?;
                 self.variable_commitments[var.index].variable = Some(r1cs_var);
-                (point, r1cs_var)
+                Ok((point, r1cs_var))
             }
         }
     }
@@ -521,8 +525,8 @@ where
         value: &Value,
     ) -> Result<spacesuit::AllocatedValue, VMError> {
         Ok(spacesuit::AllocatedValue {
-            q: self.attach_variable(value.qty).1,
-            f: self.attach_variable(value.flv).1,
+            q: self.attach_variable(value.qty)?.1,
+            f: self.attach_variable(value.flv)?.1,
             assignment: self
                 .value_witness(&value)?
                 .map(|(q, f)| spacesuit::Value { q, f }),
@@ -543,8 +547,8 @@ where
     fn item_to_wide_value(&mut self, item: Item) -> Result<WideValue, VMError> {
         match item {
             Item::Value(value) => Ok(WideValue {
-                r1cs_qty: self.attach_variable(value.qty).1,
-                r1cs_flv: self.attach_variable(value.flv).1,
+                r1cs_qty: self.attach_variable(value.qty)?.1,
+                r1cs_flv: self.attach_variable(value.flv)?.1,
                 witness: self.value_witness(&value)?,
             }),
             Item::WideValue(w) => Ok(w),
@@ -553,7 +557,7 @@ where
     }
 
     fn variable_to_expression(&mut self, var: Variable) -> Result<Expression, VMError> {
-        let (_, r1cs_var) = self.attach_variable(var);
+        let (_, r1cs_var) = self.attach_variable(var)?;
         Ok(Expression {
             terms: vec![(r1cs_var, Scalar::one())],
             assignment: self.variable_assignment(var),
