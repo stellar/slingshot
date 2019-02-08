@@ -26,8 +26,7 @@ branch = "develop"
 features = ["yoloproofs"]
 
 [dependencies.spacesuit]
-git = "https://github.com/interstellar/spacesuit"
-branch = "main"
+path = "../spacesuit"
 
 [dev-dependencies]
 criterion = "0.2"
