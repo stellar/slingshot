@@ -9,6 +9,7 @@ use crate::errors::VMError;
 use crate::ops::Instruction;
 use crate::point_ops::PointOp;
 use crate::signature::Signature;
+use crate::txlog::{TxID, TxLog};
 use crate::types::*;
 use crate::vm::{Delegate, Tx, VM};
 
@@ -80,7 +81,7 @@ impl<'a, 'b> Prover<'a, 'b> {
         mintime: u64,
         maxtime: u64,
         bp_gens: &'g BulletproofGens,
-    ) -> Result<Tx, VMError> {
+    ) -> Result<(Tx, TxID, TxLog), VMError> {
         let mut r1cs_transcript = Transcript::new(b"ZkVM.r1cs");
         let pc_gens = PedersenGens::default();
         let cs = r1cs::Prover::new(bp_gens, &pc_gens, &mut r1cs_transcript);
@@ -99,7 +100,7 @@ impl<'a, 'b> Prover<'a, 'b> {
             &mut prover,
         );
 
-        let (txid, _) = vm.run()?;
+        let (txid, txlog) = vm.run()?;
 
         // Sign txid
         let mut signtx_transcript = Transcript::new(b"ZkVM.signtx");
@@ -109,14 +110,18 @@ impl<'a, 'b> Prover<'a, 'b> {
         // Generate the R1CS proof
         let proof = prover.cs.prove().map_err(|_| VMError::InvalidR1CSProof)?;
 
-        Ok(Tx {
-            version,
-            mintime,
-            maxtime,
-            signature,
-            proof,
-            program: prover.bytecode,
-        })
+        Ok((
+            Tx {
+                version,
+                mintime,
+                maxtime,
+                signature,
+                proof,
+                program: prover.bytecode,
+            },
+            txid,
+            txlog,
+        ))
     }
 }
 

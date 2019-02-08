@@ -13,7 +13,7 @@ use crate::errors::VMError;
 use crate::ops::Instruction;
 use crate::point_ops::PointOp;
 use crate::signature::*;
-use crate::txlog::{Entry, TxID, UTXO};
+use crate::txlog::{Entry, TxID, TxLog, UTXO};
 use crate::types::*;
 
 /// Current tx version determines which extension opcodes are treated as noops (see VM.extension flag).
@@ -61,7 +61,7 @@ pub struct VerifiedTx {
     pub id: TxID,
 
     // List of inputs, outputs and nonces to be inserted/deleted in the blockchain state.
-    pub log: Vec<Entry>,
+    pub log: TxLog,
 }
 
 pub struct VM<'d, CS, D>
@@ -87,7 +87,7 @@ where
 
     current_run: D::RunType,
     run_stack: Vec<D::RunType>,
-    txlog: Vec<Entry>,
+    txlog: TxLog,
     variable_commitments: Vec<VariableCommitment>,
 }
 
@@ -162,7 +162,7 @@ where
     }
 
     /// Runs through the entire program and nested programs until completion.
-    pub fn run(mut self) -> Result<(TxID, Vec<Entry>), VMError> {
+    pub fn run(mut self) -> Result<(TxID, TxLog), VMError> {
         loop {
             if !self.step()? {
                 break;
