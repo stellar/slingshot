@@ -33,7 +33,7 @@ const (
 	exportContract1Fmt = `
 							#  con stack                arg stack              log      notes
 							#  ---------                ---------              ---      -----
-							#                           json value {exporter}           
+							#                           json, value, {exporter}           
 	get get get             #  {exporter}, value, json
 	[%s] output				#                                                  {O,...}
 `
@@ -292,7 +292,7 @@ func SubmitPreExportTx(hclient *horizon.Client, kp *keypair.Full, custodian stri
 	return temp.Address(), seqnum, nil
 }
 
-// BuildExportTxNew PRTODO will be filled in,
+// BuildExportTxNew PRTODO Rename, fill in.
 func BuildExportTxNew(ctx context.Context, asset xdr.Asset, amount, inputAmt int64, temp string, anchor []byte, prv ed25519.PrivateKey, seqnum xdr.SequenceNumber) (*bc.Tx, error) {
 	if inputAmt < amount {
 		return nil, fmt.Errorf("cannot have input amount %d less than export amount %d", inputAmt, amount)
@@ -328,8 +328,8 @@ func BuildExportTxNew(ctx context.Context, asset xdr.Asset, amount, inputAmt int
 	if err != nil {
 		return nil, errors.Wrap(err, "marshaling reference data")
 	}
-	// PRTODO: Replace these placeholders with actual values.
-	var exportContract1Src, sig []byte
+	// PRTODO: Replace this placeholder with actual value.
+	var sig []byte
 	buf := new(bytes.Buffer)
 	fmt.Fprintf(buf, "%x\n", refdata) // con stack: json
 	// TODO(debnil): Clarify what UTXO specifically is being called, so I know the order on the con stack of its results.
@@ -339,7 +339,7 @@ func BuildExportTxNew(ctx context.Context, asset xdr.Asset, amount, inputAmt int
 	fmt.Fprintf(buf, "{x'%x'} put\n", pubkey)                                     // con stack: sigchecker, zeroval; arg stack: json, exportval, {pubkey}
 	fmt.Fprintf(buf, "x'%x' contract call\n", exportContract1Src)                 // con stack: sigchecker, zeroval
 	fmt.Fprintf(buf, "finalize\n")                                                // con stack: sigchecker
-	// TODO(debnil): Figure out why there's a "get" in Bob's sample contract here. Must be misunderstanding where the sigchecker position should be at this point.
+	// TODO(debnil): Figure out why there's a "get" in Bob's sample contract here. Must be misunderstanding where the sigchecker should be at this point.
 	fmt.Fprintf(buf, "x'%x' put\n", sig) // con stack: sigchecker; arg stack: sig
 	fmt.Fprintf(buf, "call\n")
 	exportTxBytes, err := asm.Assemble(buf.String())
@@ -357,7 +357,6 @@ func BuildExportTxNew(ctx context.Context, asset xdr.Asset, amount, inputAmt int
 // BuildExportTx builds a txvm retirement tx for an asset issued
 // onto slidechain. It will retire `amount` of the asset, and the
 // remaining input will be output back to the original account.
-// PRTODO: Rewrite this function to use new smart contracts.
 func BuildExportTx(ctx context.Context, asset xdr.Asset, amount, inputAmt int64, temp string, anchor []byte, prv ed25519.PrivateKey, seqnum xdr.SequenceNumber) (*bc.Tx, error) {
 	if inputAmt < amount {
 		return nil, fmt.Errorf("cannot have input amount %d less than export amount %d", inputAmt, amount)
