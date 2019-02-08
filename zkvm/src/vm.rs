@@ -95,7 +95,10 @@ pub trait Delegate<CS: r1cs::ConstraintSystem> {
     type RunType: RunTrait;
 
     /// Adds a Commitment to the underlying constraint system, producing a high-level variable
-    fn commit_variable(&mut self, com: &Commitment) -> (CompressedRistretto, r1cs::Variable);
+    fn commit_variable(
+        &mut self,
+        com: &Commitment,
+    ) -> Result<(CompressedRistretto, r1cs::Variable), VMError>;
 
     /// Adds a point operation to the list of deferred operation for later batch verification
     fn verify_point_op<F>(&mut self, point_op_fn: F)
@@ -310,8 +313,8 @@ where
         let flv = self.pop_item()?.to_variable()?;
         let qty = self.pop_item()?.to_variable()?;
 
-        let (flv_point, _) = self.attach_variable(flv);
-        let (qty_point, _) = self.attach_variable(qty);
+        let (flv_point, _) = self.attach_variable(flv)?;
+        let (qty_point, _) = self.attach_variable(qty)?;
 
         self.delegate.verify_point_op(|| {
             let flv_scalar = Value::issue_flavor(&predicate);
@@ -503,15 +506,18 @@ where
         var_com.to_point()
     }
 
-    fn attach_variable(&mut self, var: Variable) -> (CompressedRistretto, r1cs::Variable) {
+    fn attach_variable(
+        &mut self,
+        var: Variable,
+    ) -> Result<(CompressedRistretto, r1cs::Variable), VMError> {
         // This subscript never fails because the variable is created only via `make_variable`.
         let v_com = &self.variable_commitments[var.index];
         match v_com.variable {
-            Some(v) => (v_com.commitment.to_point(), v),
+            Some(v) => Ok((v_com.commitment.to_point(), v)),
             None => {
-                let (point, r1cs_var) = self.delegate.commit_variable(&v_com.commitment);
+                let (point, r1cs_var) = self.delegate.commit_variable(&v_com.commitment)?;
                 self.variable_commitments[var.index].variable = Some(r1cs_var);
-                (point, r1cs_var)
+                Ok((point, r1cs_var))
             }
         }
     }
@@ -521,8 +527,8 @@ where
         value: &Value,
     ) -> Result<spacesuit::AllocatedValue, VMError> {
         Ok(spacesuit::AllocatedValue {
-            q: self.attach_variable(value.qty).1,
-            f: self.attach_variable(value.flv).1,
+            q: self.attach_variable(value.qty)?.1,
+            f: self.attach_variable(value.flv)?.1,
             assignment: self
                 .value_witness(&value)?
                 .map(|(q, f)| spacesuit::Value { q, f }),
@@ -543,8 +549,8 @@ where
     fn item_to_wide_value(&mut self, item: Item) -> Result<WideValue, VMError> {
         match item {
             Item::Value(value) => Ok(WideValue {
-                r1cs_qty: self.attach_variable(value.qty).1,
-                r1cs_flv: self.attach_variable(value.flv).1,
+                r1cs_qty: self.attach_variable(value.qty)?.1,
+                r1cs_flv: self.attach_variable(value.flv)?.1,
                 witness: self.value_witness(&value)?,
             }),
             Item::WideValue(w) => Ok(w),
@@ -553,7 +559,7 @@ where
     }
 
     fn variable_to_expression(&mut self, var: Variable) -> Result<Expression, VMError> {
-        let (_, r1cs_var) = self.attach_variable(var);
+        let (_, r1cs_var) = self.attach_variable(var)?;
         Ok(Expression {
             terms: vec![(r1cs_var, Scalar::one())],
             assignment: self.variable_assignment(var),

@@ -26,10 +26,16 @@ pub struct RunVerifier {
 impl<'a, 'b> Delegate<r1cs::Verifier<'a, 'b>> for Verifier<'a, 'b> {
     type RunType = RunVerifier;
 
-    fn commit_variable(&mut self, com: &Commitment) -> (CompressedRistretto, r1cs::Variable) {
-        let point = com.to_point();
-        let var = self.cs.commit(point);
-        (point, var)
+    fn commit_variable(
+        &mut self,
+        com: &Commitment,
+    ) -> Result<(CompressedRistretto, r1cs::Variable), VMError> {
+        let point = match com {
+            Commitment::Closed(p) => p,
+            Commitment::Open(_) => return Err(VMError::DataNotOpaque),
+        };
+        let var = self.cs.commit(*point);
+        Ok((*point, var))
     }
 
     fn verify_point_op<F>(&mut self, point_op_fn: F)
