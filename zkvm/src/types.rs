@@ -76,7 +76,7 @@ pub enum Constraint {
     // this also allows us not to wrap this enum in a struct.
 }
 
-#[derive(Clone,Debug)]
+#[derive(Clone, Debug)]
 pub enum Predicate {
     Opaque(CompressedRistretto),
     Witness(Box<PredicateWitness>),
@@ -88,14 +88,14 @@ pub enum Commitment {
     Open(Box<CommitmentWitness>),
 }
 
-#[derive(Clone,Debug)]
+#[derive(Clone, Debug)]
 pub enum Input {
     Opaque(Vec<u8>),
     Witness(Box<(FrozenContract, UTXO)>),
 }
 
 /// Prover's representation of the witness.
-#[derive(Clone,Debug)]
+#[derive(Clone, Debug)]
 pub enum DataWitness {
     Program(Vec<Instruction>),
     Predicate(Box<PredicateWitness>), // maybe having Predicate and one more indirection would be cleaner - lets see how it plays out
@@ -105,7 +105,7 @@ pub enum DataWitness {
 }
 
 /// Prover's representation of the predicate tree with all the secrets
-#[derive(Clone,Debug)]
+#[derive(Clone, Debug)]
 pub enum PredicateWitness {
     Key(Scalar),
     Program(Vec<Instruction>),
@@ -120,14 +120,14 @@ pub struct CommitmentWitness {
 }
 
 /// Representation of a Contract inside an Input that can be cloned.
-#[derive(Clone,Debug)]
+#[derive(Clone, Debug)]
 pub struct FrozenContract {
     pub(crate) payload: Vec<FrozenItem>,
     pub(crate) predicate: Predicate,
 }
 
-/// Representation of a PortableItem inside an Input that can be cloned. 
-#[derive(Clone,Debug)]
+/// Representation of a PortableItem inside an Input that can be cloned.
+#[derive(Clone, Debug)]
 pub enum FrozenItem {
     Data(Data),
     Value(FrozenValue),
@@ -142,7 +142,7 @@ pub struct FrozenValue {
     pub(crate) flv: Commitment,
 }
 
-#[derive(Copy,Clone,Debug)]
+#[derive(Copy, Clone, Debug)]
 pub enum ScalarKind {
     Integer(SignedInteger),
     Scalar(Scalar),
@@ -168,7 +168,7 @@ impl Into<Scalar> for ScalarKind {
     fn into(self) -> Scalar {
         match self {
             ScalarKind::Integer(i) => i.into(),
-            ScalarKind::Scalar(s) => s
+            ScalarKind::Scalar(s) => s,
         }
     }
 }

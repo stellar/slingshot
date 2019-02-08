@@ -516,9 +516,14 @@ where
     }
 
     fn value_to_cloak_value(&mut self, value: &Value) -> spacesuit::AllocatedValue {
-        let assignment = match (self.variable_assignment(value.qty), self.variable_assignment(value.flv)) {
-            (Some(ScalarKind::Integer(q)), Some(ScalarKind::Scalar(f))) => Some(spacesuit::Value { q, f }),
-            (_, _) => None
+        let assignment = match (
+            self.variable_assignment(value.qty),
+            self.variable_assignment(value.flv),
+        ) {
+            (Some(ScalarKind::Integer(q)), Some(ScalarKind::Scalar(f))) => {
+                Some(spacesuit::Value { q, f })
+            }
+            (_, _) => None,
         };
         spacesuit::AllocatedValue {
             q: self.attach_variable(value.qty).1,
@@ -533,12 +538,10 @@ where
             f: walue.r1cs_flv,
             assignment: match walue.witness {
                 None => None,
-                Some(w) =>{
-                    Some(spacesuit::Value {
-                        q: scalar_to_u64(w.0).into(),
-                        f: w.1,
-                    })
-                },
+                Some(w) => Some(spacesuit::Value {
+                    q: scalar_to_u64(w.0).into(),
+                    f: w.1,
+                }),
             },
         }
     }
@@ -548,7 +551,10 @@ where
             Item::Value(value) => Ok(WideValue {
                 r1cs_qty: self.attach_variable(value.qty).1,
                 r1cs_flv: self.attach_variable(value.flv).1,
-                witness: match (self.variable_assignment(value.qty), self.variable_assignment(value.flv)) {
+                witness: match (
+                    self.variable_assignment(value.qty),
+                    self.variable_assignment(value.flv),
+                ) {
                     (Some(ScalarKind::Scalar(q)), Some(ScalarKind::Scalar(f))) => Some((q, f)),
                     (None, None) => None,
                     (_, _) => return Err(VMError::FormatError),
@@ -568,7 +574,7 @@ where
                 Some(v) => match v {
                     ScalarKind::Integer(i) => Some(i),
                     ScalarKind::Scalar(_) => return Err(VMError::FormatError),
-                }
+                },
             },
         };
         Ok(expr)
