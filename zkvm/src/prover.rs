@@ -16,12 +16,10 @@ use crate::vm::{Delegate, Tx, VM};
 pub struct Prover<'a, 'b> {
     signtx_keys: Vec<Scalar>,
     cs: r1cs::Prover<'a, 'b>,
-    bytecode: Vec<u8>,
 }
 
 pub struct ProverRun {
     program: VecDeque<Instruction>,
-    root: bool,
 }
 
 impl<'a, 'b> Delegate<r1cs::Prover<'a, 'b>> for Prover<'a, 'b> {
@@ -59,14 +57,7 @@ impl<'a, 'b> Delegate<r1cs::Prover<'a, 'b>> for Prover<'a, 'b> {
         &mut self,
         run: &mut Self::RunType,
     ) -> Result<Option<Instruction>, VMError> {
-        let instruction = run.program.pop_front();
-        if run.root {
-            match &instruction {
-                Some(i) => i.encode(&mut self.bytecode),
-                None => (),
-            };
-        }
-        Ok(instruction)
+        Ok(run.program.pop_front())
     }
 
     fn cs(&mut self) -> &mut r1cs::Prover<'a, 'b> {
@@ -82,21 +73,27 @@ impl<'a, 'b> Prover<'a, 'b> {
         maxtime: u64,
         bp_gens: &'g BulletproofGens,
     ) -> Result<(Tx, TxID, TxLog), VMError> {
+        // Prepare the constraint system
         let mut r1cs_transcript = Transcript::new(b"ZkVM.r1cs");
         let pc_gens = PedersenGens::default();
         let cs = r1cs::Prover::new(bp_gens, &pc_gens, &mut r1cs_transcript);
 
+        // Serialize the tx program
+        let mut bytecode = Vec::new();
+        Instruction::encode_program(program.iter(), &mut bytecode);
+
         let mut prover = Prover {
             signtx_keys: Vec::new(),
-            cs: cs,
-            bytecode: Vec::new(),
+            cs,
         };
 
         let vm = VM::new(
             version,
             mintime,
             maxtime,
-            ProverRun::from_txprogram(program),
+            ProverRun {
+                program: program.into(),
+            },
             &mut prover,
         );
 
@@ -117,25 +114,10 @@ impl<'a, 'b> Prover<'a, 'b> {
                 maxtime,
                 signature,
                 proof,
-                program: prover.bytecode,
+                program: bytecode,
             },
             txid,
             txlog,
         ))
-    }
-}
-
-impl ProverRun {
-    fn from_txprogram(program: Vec<Instruction>) -> Self {
-        ProverRun {
-            program: program.into(),
-            root: true,
-        }
-    }
-    fn from_subprogram(program: Vec<Instruction>) -> Self {
-        ProverRun {
-            program: program.into(),
-            root: false,
-        }
     }
 }

@@ -1,3 +1,4 @@
+use core::borrow::Borrow;
 use core::mem;
 
 use crate::encoding::Subslice;
@@ -194,5 +195,15 @@ impl Instruction {
     /// to the program.
     pub fn encode(&self, program: &mut Vec<u8>) {
         unimplemented!()
+    }
+
+    pub fn encode_program<I>(iterator: I, program: &mut Vec<u8>)
+    where
+        I: IntoIterator,
+        I::Item: Borrow<Self>,
+    {
+        for i in iterator.into_iter() {
+            i.borrow().encode(program);
+        }
     }
 }
