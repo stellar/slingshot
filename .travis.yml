@@ -22,9 +22,6 @@ matrix:
       - rm -rf /home/travis/.cargo/registry
     before_script:
     - cd zkvm
-    - export PATH=$HOME/.cargo/bin:$PATH
-    - cargo install cargo-update || echo "cargo-update already installed"
-    - cargo install-update -a # update outdated cached binaries
     - rustup component add rustfmt-preview
     script:
     - cargo fmt --all -- --check
@@ -40,9 +37,6 @@ matrix:
       - rm -rf /home/travis/.cargo/registry
     before_script:
     - cd spacesuit
-    - export PATH=$HOME/.cargo/bin:$PATH
-    - cargo install cargo-update || echo "cargo-update already installed"
-    - cargo install-update -a # update outdated cached binaries
     - rustup component add rustfmt-preview
     script:
     - cargo fmt --all -- --check
