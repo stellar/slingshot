@@ -538,10 +538,7 @@ where
             f: walue.r1cs_flv,
             assignment: match walue.witness {
                 None => None,
-                Some(w) => Some(spacesuit::Value {
-                    q: w.0,
-                    f: w.1,
-                }),
+                Some(w) => Some(spacesuit::Value { q: w.0, f: w.1 }),
             },
         }
     }
