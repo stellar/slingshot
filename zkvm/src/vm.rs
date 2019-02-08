@@ -686,8 +686,3 @@ where
         .map_err(|_| VMError::R1CSInconsistency)
     }
 }
-
-// Helper functions
-fn scalar_to_u64(scalar: Scalar) -> u64 {
-    LittleEndian::read_u64(&scalar.to_bytes())
-}
