@@ -67,19 +67,19 @@ fn verify(
 // Helper functions to make the tests easier to read
 fn yuan(q: u64) -> Value {
     Value {
-        q,
+        q: q.into(),
         f: 888u64.into(),
     }
 }
 fn peso(q: u64) -> Value {
     Value {
-        q,
+        q: q.into(),
         f: 666u64.into(),
     }
 }
 fn euro(q: u64) -> Value {
     Value {
-        q,
+        q: q.into(),
         f: 444u64.into(),
     }
 }

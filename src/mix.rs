@@ -4,7 +4,7 @@ use bulletproofs::r1cs::{ConstraintSystem, R1CSError, RandomizedConstraintSystem
 use curve25519_dalek::scalar::Scalar;
 use std::iter;
 use subtle::{ConditionallySelectable, ConstantTimeEq};
-use value::{AllocatedValue, Value};
+use value::{AllocatedValue, SignedInteger, Value};
 
 /// Enforces that the outputs are either a merge of the inputs :`D = A + B && C = 0`,
 /// or the outputs are equal to the inputs `C = A && D = B`. See spec for more details.
@@ -163,7 +163,7 @@ fn order_by_flavor<CS: ConstraintSystem>(
             let same_flavor = flav.f.ct_eq(&comp.f);
 
             // If same_flavor, then swap `comp` and `swap`. Else, keep the same.
-            u64::conditional_swap(&mut swap.q, &mut comp.q, same_flavor);
+            SignedInteger::conditional_swap(&mut swap.q, &mut comp.q, same_flavor);
             Scalar::conditional_swap(&mut swap.f, &mut comp.f, same_flavor);
             outputs[i + 1] = swap;
             outputs[j] = comp;
@@ -201,7 +201,7 @@ fn combine_by_flavor<CS: ConstraintSystem>(
         // If same_flavor, merge: C.0, C.1, C.2 = 0.
         // Else, move: C = A.
         let mut C = A.clone();
-        C.q.conditional_assign(&0u64, same_flavor);
+        C.q.conditional_assign(&0u64.into(), same_flavor);
         C.f.conditional_assign(&Scalar::zero(), same_flavor);
         outputs.push(C);
 
@@ -249,13 +249,13 @@ mod tests {
     // Helper functions to make the tests easier to read
     fn yuan(q: u64) -> Value {
         Value {
-            q,
+            q: q.into(),
             f: 888u64.into(),
         }
     }
     fn peso(q: u64) -> Value {
         Value {
-            q,
+            q: q.into(),
             f: 666u64.into(),
         }
     }
@@ -297,19 +297,19 @@ mod tests {
         let bp_gens = BulletproofGens::new(128, 1);
 
         let A = Value {
-            q: A.0,
+            q: A.0.into(),
             f: A.1.into(),
         };
         let B = Value {
-            q: B.0,
+            q: B.0.into(),
             f: B.1.into(),
         };
         let C = Value {
-            q: C.0,
+            q: C.0.into(),
             f: C.1.into(),
         };
         let D = Value {
-            q: D.0,
+            q: D.0.into(),
             f: D.1.into(),
         };
 

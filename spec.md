@@ -31,10 +31,15 @@ _Cloak_ is a protocol for confidential assets based on the [Bulletproofs](https:
 
 The protocol guarantees to the verifier that each transaction is balanced _per flavor_.
 
-1. Non-zero quantities were not created from nowhere or dropped.
-2. Non-zero quantities were not transmuted from one [flavor](#flavor) to another.
+Assumptions:
+1. Input [quantities](#quantity) are [scalars](#scalar) in the [signed integer](#signed-integer) range. 
+2. Number of inputs and outputs is below 2^64, such that quantities cannot wrap around the group order.
+
+Guarantees:
+1. Non-zero output quantities were not created from nowhere or dropped.
+2. Non-zero output quantities were not transmuted from one [flavor](#flavor) to another.
 3. Per each [flavor](#flavor), the sum of all input quantities is equal to the sum of all output quantities.
-4. Each [quantity](#quantity) is in range `[0, 2^64)`.
+4. Each output [quantity](#quantity) is in non-negative range `[0, 2^64-1]`.
 
 #### Secrecy
 
@@ -51,6 +56,10 @@ use Cloak as a building block.
 
 An integer mod `l` where `l` is a Ristretto group order (`l = 2^252 + 27742317777372353535851937790883648493`).
 
+### Signed integer
+
+An integer in range [-2^64+1, 2^64-1].
+
 ### Value
 
 The _value_ `v` is the tuple `(q, f)`, consisting of both an untyped [quantity](#quantity) `q` as well as
@@ -63,7 +72,9 @@ Values are encrypted using Pedersen commitments, one per component.
 
 ### Quantity
 
-A [scalar](#scalar) `q` representing a numeric amount of a given [value](#value).
+A [signed integer](#signed-integer) `q` representing a numeric amount of a given [value](#value). 
+
+Note: input values may have a negative quantity, but all outputs of a transaction are proven to be non-negative.
 
 ### Flavor
 
@@ -75,7 +86,6 @@ A [scalar](#scalar) `f` representing a unique asset type of a given [value](#val
 
 Each gadget represents constraints on a number of variables.
 Gadgets can be composed of nested gadgets.
-
 
 ### Transaction
 

@@ -1,12 +1,15 @@
 use bulletproofs::r1cs::{ConstraintSystem, Prover, R1CSError, Variable, Verifier};
+use core::ops::Neg;
 use curve25519_dalek::ristretto::CompressedRistretto;
 use curve25519_dalek::scalar::Scalar;
 use rand::{CryptoRng, Rng};
+use std::ops::Add;
+use subtle::{Choice, ConditionallySelectable};
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub struct Value {
-    pub q: u64,    // quantity
-    pub f: Scalar, // flavor
+    pub q: SignedInteger, // quantity
+    pub f: Scalar,        // flavor
 }
 
 pub struct CommittedValue {
@@ -27,14 +30,18 @@ pub struct AllocatedValue {
 #[derive(Copy, Clone, Debug)]
 pub struct AllocatedQuantity {
     pub variable: Variable,
-    pub assignment: Option<u64>,
+    pub assignment: Option<SignedInteger>,
 }
+
+/// Represents a signed integer with absolute value in the 64-bit range.
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub struct SignedInteger(i128);
 
 impl Value {
     /// Returns a zero quantity with a zero flavor.
     pub fn zero() -> Value {
         Value {
-            q: 0,
+            q: 0u64.into(),
             f: Scalar::zero(),
         }
     }
@@ -87,6 +94,56 @@ impl AllocatedValue {
             Some(value) => value.allocate(cs),
             None => Value::allocate_unassigned(cs),
         }
+    }
+}
+
+impl SignedInteger {
+    // Returns Some(x) if self is non-negative
+    // Otherwise returns None.
+    pub fn to_u64(&self) -> Option<u64> {
+        if self.0 < 0 {
+            None
+        } else {
+            Some(self.0 as u64)
+        }
+    }
+}
+
+impl From<u64> for SignedInteger {
+    fn from(u: u64) -> SignedInteger {
+        SignedInteger(u as i128)
+    }
+}
+
+impl Into<Scalar> for SignedInteger {
+    fn into(self) -> Scalar {
+        if self.0 < 0 {
+            Scalar::zero() - Scalar::from((-self.0) as u64)
+        } else {
+            Scalar::from(self.0 as u64)
+        }
+    }
+}
+
+impl Add for SignedInteger {
+    type Output = SignedInteger;
+
+    fn add(self, rhs: SignedInteger) -> SignedInteger {
+        SignedInteger(self.0 + rhs.0)
+    }
+}
+
+impl ConditionallySelectable for SignedInteger {
+    fn conditional_select(a: &Self, b: &Self, choice: Choice) -> Self {
+        SignedInteger(i128::conditional_select(&a.0, &b.0, choice))
+    }
+}
+
+impl Neg for SignedInteger {
+    type Output = SignedInteger;
+
+    fn neg(self) -> SignedInteger {
+        SignedInteger(-self.0)
     }
 }
 
