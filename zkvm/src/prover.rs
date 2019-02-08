@@ -17,25 +17,19 @@ pub struct Prover<'a, 'b> {
     cs: r1cs::Prover<'a, 'b>,
 }
 
-pub struct RunProver {
+pub struct ProverRun {
     program: VecDeque<Instruction>,
 }
 
 impl<'a, 'b> Delegate<r1cs::Prover<'a, 'b>> for Prover<'a, 'b> {
-    type RunType = RunProver;
+    type RunType = ProverRun;
 
     fn commit_variable(
         &mut self,
         com: &Commitment,
     ) -> Result<(CompressedRistretto, r1cs::Variable), VMError> {
         let (v, v_blinding) = match com {
-            Commitment::Open(w) => {
-                let val = match w.value {
-                    ScalarWitness::Integer(s) => s.into(),
-                    ScalarWitness::Scalar(s) => s,
-                };
-                (val, w.blinding)
-            }
+            Commitment::Open(w) => (w.value.into(), w.blinding),
             Commitment::Closed(_) => return Err(VMError::WitnessMissing),
         };
         Ok(self.cs.commit(v, v_blinding))
@@ -84,7 +78,7 @@ impl<'a, 'b> Prover<'a, 'b> {
             version,
             mintime,
             maxtime,
-            RunProver::new(&program),
+            ProverRun::new(&program),
             &mut prover,
         );
 
@@ -102,11 +96,7 @@ impl<'a, 'b> Prover<'a, 'b> {
 
         // TBD: determine program capacity
         let mut bytecode = Vec::new();
-
-        program
-            .iter()
-            .map(|p| p.encode())
-            .for_each(|mut v| bytecode.append(&mut v));
+        program.iter().for_each(|p| p.encode(&mut bytecode));
 
         Ok(Tx {
             version,
@@ -119,15 +109,15 @@ impl<'a, 'b> Prover<'a, 'b> {
     }
 }
 
-impl RunProver {
+impl ProverRun {
     fn new(program: &Vec<Instruction>) -> Self {
-        RunProver {
+        ProverRun {
             program: program.clone().into(),
         }
     }
 }
 
-impl RunTrait for RunProver {
+impl RunTrait for ProverRun {
     fn next_instruction(&mut self) -> Result<Option<Instruction>, VMError> {
         Ok(self.program.pop_front())
     }

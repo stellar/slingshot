@@ -190,8 +190,9 @@ impl Instruction {
         }
     }
 
-    /// Returns the bytecode representation of an Instruction.
-    pub fn encode(&self) -> Vec<u8> {
+    /// Appends the bytecode representation of an Instruction
+    /// to the program.
+    pub fn encode(&self, program: &mut Vec<u8>) {
         unimplemented!()
     }
 }

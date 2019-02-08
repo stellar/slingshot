@@ -18,13 +18,13 @@ pub struct Verifier<'a, 'b> {
     cs: r1cs::Verifier<'a, 'b>,
 }
 
-pub struct RunVerifier {
+pub struct VerifierRun {
     program: Vec<u8>,
     offset: usize,
 }
 
 impl<'a, 'b> Delegate<r1cs::Verifier<'a, 'b>> for Verifier<'a, 'b> {
-    type RunType = RunVerifier;
+    type RunType = VerifierRun;
 
     fn commit_variable(
         &mut self,
@@ -73,7 +73,7 @@ impl<'a, 'b> Verifier<'a, 'b> {
             tx.version,
             tx.mintime,
             tx.maxtime,
-            RunVerifier::new(tx.program),
+            VerifierRun::new(tx.program),
             &mut verifier,
         );
 
@@ -106,13 +106,13 @@ impl<'a, 'b> Verifier<'a, 'b> {
     }
 }
 
-impl RunVerifier {
+impl VerifierRun {
     fn new(program: Vec<u8>) -> Self {
-        RunVerifier { program, offset: 0 }
+        VerifierRun { program, offset: 0 }
     }
 }
 
-impl RunTrait for RunVerifier {
+impl RunTrait for VerifierRun {
     fn next_instruction(&mut self) -> Result<Option<Instruction>, VMError> {
         let mut program = Subslice::new_with_range(&self.program, self.offset..self.program.len())?;
 
