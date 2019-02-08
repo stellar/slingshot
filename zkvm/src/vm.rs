@@ -4,6 +4,7 @@ use byteorder::{ByteOrder, LittleEndian};
 use curve25519_dalek::ristretto::CompressedRistretto;
 use curve25519_dalek::scalar::Scalar;
 use spacesuit;
+use spacesuit::SignedInteger;
 use std::iter::FromIterator;
 
 use crate::encoding;
@@ -415,7 +416,7 @@ where
             let qty = self.make_variable(qty);
 
             let value = Value { qty, flv };
-            let cloak_value = self.value_to_cloak_value(&value);
+            let cloak_value = self.value_to_cloak_value(&value)?;
 
             // insert in the same order as they are on stack (the deepest item will be at index 0)
             output_values.insert(0, value);
@@ -515,21 +516,17 @@ where
         }
     }
 
-    fn value_to_cloak_value(&mut self, value: &Value) -> spacesuit::AllocatedValue {
-        let assignment = match (
-            self.variable_assignment(value.qty),
-            self.variable_assignment(value.flv),
-        ) {
-            (Some(ScalarWitness::Integer(q)), Some(ScalarWitness::Scalar(f))) => {
-                Some(spacesuit::Value { q, f })
-            }
-            (_, _) => None,
-        };
-        spacesuit::AllocatedValue {
+    fn value_to_cloak_value(
+        &mut self,
+        value: &Value,
+    ) -> Result<spacesuit::AllocatedValue, VMError> {
+        Ok(spacesuit::AllocatedValue {
             q: self.attach_variable(value.qty).1,
             f: self.attach_variable(value.flv).1,
-            assignment,
-        }
+            assignment: self
+                .value_witness(&value)?
+                .map(|(q, f)| spacesuit::Value { q, f }),
+        })
     }
 
     fn wide_value_to_cloak_value(&mut self, walue: &WideValue) -> spacesuit::AllocatedValue {
@@ -548,16 +545,7 @@ where
             Item::Value(value) => Ok(WideValue {
                 r1cs_qty: self.attach_variable(value.qty).1,
                 r1cs_flv: self.attach_variable(value.flv).1,
-                witness: match (
-                    self.variable_assignment(value.qty),
-                    self.variable_assignment(value.flv),
-                ) {
-                    (Some(ScalarWitness::Integer(q)), Some(ScalarWitness::Scalar(f))) => {
-                        Some((q, f))
-                    }
-                    (None, None) => None,
-                    (_, _) => return Err(VMError::InconsistentWitness),
-                },
+                witness: self.value_witness(&value)?,
             }),
             Item::WideValue(w) => Ok(w),
             _ => Err(VMError::TypeNotWideValue),
@@ -570,6 +558,19 @@ where
             terms: vec![(r1cs_var, Scalar::one())],
             assignment: self.variable_assignment(var),
         })
+    }
+
+    /// Returns Ok(Some((qty,flv))) assignment pair if it's missing or consistent.
+    /// Return Err if the witness is present, but is inconsistent.
+    fn value_witness(&mut self, value: &Value) -> Result<Option<(SignedInteger, Scalar)>, VMError> {
+        match (
+            self.variable_assignment(value.qty),
+            self.variable_assignment(value.flv),
+        ) {
+            (Some(ScalarWitness::Integer(q)), Some(ScalarWitness::Scalar(f))) => Ok(Some((q, f))),
+            (None, None) => Ok(None),
+            (_, _) => return Err(VMError::InconsistentWitness),
+        }
     }
 
     fn variable_assignment(&mut self, var: Variable) -> Option<ScalarWitness> {
