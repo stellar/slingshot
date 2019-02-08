@@ -539,7 +539,7 @@ where
             assignment: match walue.witness {
                 None => None,
                 Some(w) => Some(spacesuit::Value {
-                    q: scalar_to_u64(w.0).into(),
+                    q: w.0,
                     f: w.1,
                 }),
             },
@@ -555,7 +555,7 @@ where
                     self.variable_assignment(value.qty),
                     self.variable_assignment(value.flv),
                 ) {
-                    (Some(ScalarKind::Scalar(q)), Some(ScalarKind::Scalar(f))) => Some((q, f)),
+                    (Some(ScalarKind::Integer(q)), Some(ScalarKind::Scalar(f))) => Some((q, f)),
                     (None, None) => None,
                     (_, _) => return Err(VMError::FormatError),
                 },

@@ -51,7 +51,7 @@ pub struct Value {
 pub struct WideValue {
     pub(crate) r1cs_qty: r1cs::Variable,
     pub(crate) r1cs_flv: r1cs::Variable,
-    pub(crate) witness: Option<(Scalar, Scalar)>,
+    pub(crate) witness: Option<(SignedInteger, Scalar)>,
 }
 
 #[derive(Copy, Clone, Debug)]
