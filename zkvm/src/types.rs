@@ -1,7 +1,7 @@
 //! Core ZkVM stack types: data, variables, values, contracts etc.
 
-use crate::transcript::TranscriptProtocol;
 use bulletproofs::{r1cs, PedersenGens};
+use byteorder::{ByteOrder, LittleEndian};
 use curve25519_dalek::ristretto::CompressedRistretto;
 use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
@@ -9,6 +9,7 @@ use merlin::Transcript;
 use crate::encoding::Subslice;
 use crate::errors::VMError;
 use crate::ops::Instruction;
+use crate::transcript::TranscriptProtocol;
 use crate::txlog::UTXO;
 
 #[derive(Debug)]
@@ -28,10 +29,19 @@ pub enum PortableItem {
     Value(Value),
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub enum Data {
     Opaque(Vec<u8>),
     Witness(DataWitness),
+}
+
+impl Data {
+    pub fn to_bytes(self) -> Vec<u8> {
+        match self {
+            Data::Opaque(data) => data,
+            Data::Witness(_) => unimplemented!(),
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -63,6 +73,7 @@ pub struct Variable {
 pub struct Expression {
     /// Terms of the expression
     pub(crate) terms: Vec<(r1cs::Variable, Scalar)>,
+    pub(crate) assignment: Option<u64>,
 }
 
 #[derive(Clone, Debug)]
@@ -74,7 +85,7 @@ pub enum Constraint {
     // this also allows us not to wrap this enum in a struct.
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub enum Predicate {
     Opaque(CompressedRistretto),
     Witness(Box<PredicateWitness>),
@@ -86,24 +97,24 @@ pub enum Commitment {
     Open(Box<CommitmentWitness>),
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub enum Input {
     Opaque(Vec<u8>),
-    Witness(Box<(FrozenContract, UTXO)>),
+    Witness(Box<(Contract, UTXO)>),
 }
 
 /// Prover's representation of the witness.
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub enum DataWitness {
     Program(Vec<Instruction>),
     Predicate(Box<PredicateWitness>), // maybe having Predicate and one more indirection would be cleaner - lets see how it plays out
     Commitment(Box<CommitmentWitness>),
     Scalar(Box<Scalar>),
-    Input(Box<(FrozenContract, UTXO)>),
+    Input(Box<(Contract, UTXO)>),
 }
 
 /// Prover's representation of the predicate tree with all the secrets
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub enum PredicateWitness {
     Key(Scalar),
     Program(Vec<Instruction>),
@@ -113,31 +124,14 @@ pub enum PredicateWitness {
 /// Prover's representation of the commitment secret: witness and blinding factor
 #[derive(Clone, Debug)]
 pub struct CommitmentWitness {
-    value: Scalar,
-    blinding: Scalar,
+    pub value: ScalarKind,
+    pub blinding: Scalar,
 }
 
-/// Representation of a Contract inside an Input that can be cloned.
-#[derive(Clone, Debug)]
-pub struct FrozenContract {
-    pub(crate) payload: Vec<FrozenItem>,
-    pub(crate) predicate: Predicate,
-}
-
-/// Representation of a PortableItem inside an Input that can be cloned.
-#[derive(Clone, Debug)]
-pub enum FrozenItem {
-    Data(Data),
-    Value(FrozenValue),
-}
-
-/// Representation of a Value inside an Input that can be cloned.
-/// Note: values do not necessarily have open commitments. Some can be reblinded,
-/// others can be passed-through to an output without going through `cloak` and the constraint system.
-#[derive(Clone, Debug)]
-pub struct FrozenValue {
-    pub(crate) qty: Commitment,
-    pub(crate) flv: Commitment,
+#[derive(Copy,Clone,Debug)]
+pub enum ScalarKind {
+    Integer(u64),
+    Scalar(Scalar),
 }
 
 impl Commitment {
@@ -152,7 +146,16 @@ impl Commitment {
 impl CommitmentWitness {
     pub fn to_point(&self) -> CompressedRistretto {
         let gens = PedersenGens::default();
-        gens.commit(self.value, self.blinding).compress()
+        gens.commit(self.value.into(), self.blinding).compress()
+    }
+}
+
+impl Into<Scalar> for ScalarKind {
+    fn into(self) -> Scalar {
+        match self {
+            ScalarKind::Integer(i) => i.into(),
+            ScalarKind::Scalar(s) => s
+        }
     }
 }
 
@@ -231,18 +234,19 @@ impl Item {
 }
 
 impl Data {
-    // Returns the length of the underlying vector of bytes.
-    pub fn len(&self) -> usize {
+    // len returns the length of the data for purposes of
+    // allocating output.
+    pub fn exact_output_size(&self) -> usize {
         match self {
             Data::Opaque(data) => data.len(),
             Data::Witness(_) => unimplemented!(),
         }
     }
 
-    /// Converts the Data into a vector of bytes
-    pub fn to_bytes(self) -> Vec<u8> {
+    // TBD: make frozen types that are clonable
+    pub fn tbd_clone(&self) -> Result<Data, VMError> {
         match self {
-            Data::Opaque(data) => data,
+            Data::Opaque(data) => Ok(Data::Opaque(data.to_vec())),
             Data::Witness(_) => unimplemented!(),
         }
     }
@@ -290,7 +294,7 @@ impl Contract {
         let mut size = 32 + 4;
         for item in self.payload.iter() {
             match item {
-                PortableItem::Data(d) => size += 1 + 4 + d.len(),
+                PortableItem::Data(d) => size += 1 + 4 + d.exact_output_size(),
                 PortableItem::Value(_) => size += 1 + 64,
             }
         }
