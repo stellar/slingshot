@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"math"
 	"strconv"
 	"time"
 
@@ -16,6 +17,7 @@ import (
 	"github.com/chain/txvm/protocol/txbuilder"
 	"github.com/chain/txvm/protocol/txbuilder/txresult"
 	"github.com/chain/txvm/protocol/txvm"
+	"github.com/chain/txvm/protocol/txvm/asm"
 	"github.com/interstellar/slingshot/slidechain/stellar"
 	"github.com/interstellar/starlight/worizon/xlm"
 	b "github.com/stellar/go/build"
@@ -248,6 +250,68 @@ func SubmitPreExportTx(hclient *horizon.Client, kp *keypair.Full, custodian stri
 		return "", 0, errors.Wrap(err, "pre-exporttx")
 	}
 	return temp.Address(), seqnum, nil
+}
+
+// BuildExportTxNew PRTODO will be filled in,
+func BuildExportTxNew(ctx context.Context, asset xdr.Asset, amount, inputAmt int64, temp string, anchor []byte, prv ed25519.PrivateKey, seqnum xdr.SequenceNumber) (*bc.Tx, error) {
+	if inputAmt < amount {
+		return nil, fmt.Errorf("cannot have input amount %d less than export amount %d", inputAmt, amount)
+	}
+	assetXDR, err := xdr.MarshalBase64(asset)
+	if err != nil {
+		return nil, err
+	}
+	assetBytes, err := asset.MarshalBinary()
+	if err != nil {
+		return nil, err
+	}
+	assetID := bc.NewHash(txvm.AssetID(importIssuanceSeed[:], assetBytes))
+	var rawSeed [32]byte
+	copy(rawSeed[:], prv)
+	kp, err := keypair.FromRawSeed(rawSeed)
+	if err != nil {
+		return nil, err
+	}
+	pubkey := prv.Public().(ed25519.PublicKey)
+	ref := struct {
+		AssetXDR string `json:"asset"`
+		Temp     string `json:"temp"`
+		Seqnum   int64  `json:"seqnum"`
+		Exporter string `json:"exporter"`
+	}{
+		assetXDR,
+		temp,
+		int64(seqnum),
+		kp.Address(),
+	}
+	refdata, err := json.Marshal(ref)
+	if err != nil {
+		return nil, errors.Wrap(err, "marshaling reference data")
+	}
+	// PRTODO: Replace these placeholders with actual values.
+	var exportContract1Src, sig []byte
+	buf := new(bytes.Buffer)
+	fmt.Fprintf(buf, "%x\n", refdata) // con stack: json
+	// TODO(debnil): Clarify what UTXO specifically is being called, so I know the order on the con stack of its results.
+	fmt.Fprintf(buf, "{'V', %d, %x, %x} input call\n", inputAmt, assetID, anchor) // arg stack: json, exportval, sigchecker
+	fmt.Fprintf(buf, "get get\n")                                                 // con stack: sigchecker, exportval; arg stack: json
+	fmt.Fprintf(buf, "splitzero swap put\n")                                      // con stack: sigchecker, zeroval; arg stack: json, exportval
+	fmt.Fprintf(buf, "{x'%x'} put\n", pubkey)                                     // con stack: sigchecker, zeroval; arg stack: json, exportval, {pubkey}
+	fmt.Fprintf(buf, "x'%x' contract call\n", exportContract1Src)                 // con stack: sigchecker, zeroval
+	fmt.Fprintf(buf, "finalize\n")                                                // con stack: sigchecker
+	// TODO(debnil): Figure out why there's a "get" in Bob's sample contract here. Must be misunderstanding where the sigchecker position should be at this point.
+	fmt.Fprintf(buf, "x'%x' put\n", sig) // con stack: sigchecker; arg stack: sig
+	fmt.Fprintf(buf, "call\n")
+	exportTxBytes, err := asm.Assemble(buf.String())
+	if err != nil {
+		return nil, errors.Wrap(err, "assembling export tx")
+	}
+	var runlimit int64
+	tx, err := bc.NewTx(exportTxBytes, 3, math.MaxInt64, txvm.GetRunlimit(&runlimit))
+	if err != nil {
+		return nil, errors.Wrap(err, "computing transaction ID")
+	}
+	return tx, nil
 }
 
 // BuildExportTx builds a txvm retirement tx for an asset issued

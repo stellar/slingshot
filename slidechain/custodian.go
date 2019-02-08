@@ -199,7 +199,7 @@ func (c *Custodian) launch(ctx context.Context) {
 	go c.importFromPegs(ctx)
 	go c.watchExports(ctx)
 	go c.pegOutFromExports(ctx)
-	// PRTODO: Launch retirement goroutine.
+	go c.retireFromPegOut(ctx)
 }
 
 func mustDecodeHex(inp string) []byte {
