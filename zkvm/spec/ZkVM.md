@@ -1986,6 +1986,70 @@ On the other hand, using `not` may not be a good way to express contracts becaus
 We need to investigate whether there are use-cases that cannot be safely or efficiently expressed with only [`and`](#and) and [`or`](#or) combinators.
 
 
+### What ensures transaction uniqueness?
+
+In ZkVM:
+
+* [Transaction ID](#transaction-id) is globally unique,
+* [UTXO ID](#utxo) is globally unique,
+* [Nonce](#nonce) is globally unique,
+* [Value](#value-type) is not unique,
+* [Contract](#contract-type) is not unique.
+
+**Rationale:**
+
+TxVM ensures transaction uniqueness this way:
+
+* Each value has a unique “anchor” (32-byte payload)
+* When values are split/merged, anchor is one-way hashed to produce new anchor(s).
+* `finalize` instruction consumes a zero-quantity value, effectively consuming a unique anchor.
+* Anchors are originally produced via `nonce` instruction that uses blockchain state to prevent reuse of nonces.
+* Issuance of new assets consumes a zero-quantity value, moving the anchor from it to the new value.
+
+**Pro:**
+
+UTXO ID is fully determined before transaction is finalized. So e.g. a child transaction can be formed before the current transaction is completed and its ID is known. This might be handy in some cases.
+
+**Meh:**
+
+It seems like transaction ID is defined quite simply as a hash of the log, but it also must consume an anchor (since UTXOs alone are not guaranteed to be unique, and one can make a transaction without spending any UTXOs). So transaction ID computation still has some level of special handling.
+
+**Con:**
+
+Recipient of payment cannot fully specify the contract snapshot because they do not know sender’s anchors. This is not a problem in cleartext TxVM, but a problem in ZkVM where values have to participate in the Cloak protocol.
+
+Storing anchor inside a value turned out to be handy, but is not very ergonomic. For instance, a contract cannot simply “claim” an arbitrary value and produce a negative counterpart, w/o having _some_ value to “fork off” an anchor from.
+
+Another potential issue: UTXOs are not guaranteed to be always unique. E.g. if a contract does not modify its value and other content, it can re-save itself to the same UTXO ID. It can even toggle between different states, returning to the previously spent ID. This can cause issues in some applications that forget that UTXO ID in special circumstances can be resurrected.
+
+In ZkVM:
+
+* Values do not have anchors.
+* We still have `nonce` instruction with the same semantics
+* `issue` does not consume zero value
+* `finalize` does not consume zero value
+* `claim/borrow` can produce an arbitrary value and its negative at any point
+* Each UTXO ID is defined as `Hash(contract, txid)`, that is contents of the contract are not unique, but the new UTXO ID is defined by transaction ID, not vice versa.
+* Transaction ID is a hash of the finalized log.
+* When VM finishes, it checks that the log contains either an _input_ or a _nonce_, setting the `uniqueness` flag.
+* Outputs are encoded in the log as snapshots of contents. Blockchain state update hashes these with transaction ID when generating UTXO IDs.
+* Inputs are encoded in the log as their UTXO IDs, so the blockchain processor knows which ones to find and remove.
+
+**Pros:**
+
+Huge pro: recipient can know upfront and provide full spec for the _compressed_ contract+value specification, so it can be revealed behind a shuffle.
+
+Handling values becomes much simpler — they are just values. So we can issue, finalize and even “claim” a value in a straightforward manner.
+
+The values are simply pedersen commitments (Q,A) (quantity, flavor), without any extra payload.
+
+**Con:**
+
+UTXO IDs are not known until the full transaction log is formed. This could be not a big deal, as we cannot really plan for the next transaction until this one is fully formed and published. Also, in a joint proof scenario, it’s even less reliable to plan the next payment until the MPC is completed, so requirement to wait till transaction ID is determined may not be a big deal.
+
+
+
+
 ## Open questions
 
 ### Do we really need qty/flavor introspection ops?
