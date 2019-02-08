@@ -266,7 +266,7 @@ where
         }
         let item_idx = self.stack.len() - i - 1;
         let item = match &self.stack[item_idx] {
-            Item::Data(x) => Item::Data(x.tbd_clone()?),
+            Item::Data(x) => Item::Data(x.clone()),
             Item::Variable(x) => Item::Variable(x.clone()),
             Item::Expression(x) => Item::Expression(x.clone()),
             Item::Constraint(x) => Item::Constraint(x.clone()),
@@ -533,10 +533,12 @@ where
             f: walue.r1cs_flv,
             assignment: match walue.witness {
                 None => None,
-                Some(w) => Some(spacesuit::Value {
-                    q: scalar_to_u64(w.0),
-                    f: w.1,
-                }),
+                Some(w) =>{
+                    Some(spacesuit::Value {
+                        q: scalar_to_u64(w.0).into(),
+                        f: w.1,
+                    })
+                },
             },
         }
     }
@@ -679,7 +681,7 @@ where
     }
 }
 
-// Helper methods
+// Helper functions
 fn scalar_to_u64(scalar: Scalar) -> u64 {
     LittleEndian::read_u64(&scalar.to_bytes())
 }
