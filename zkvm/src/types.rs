@@ -1,11 +1,12 @@
 //! Core ZkVM stack types: data, variables, values, contracts etc.
 
 use bulletproofs::{r1cs, PedersenGens};
-use curve25519_dalek::ristretto::CompressedRistretto;
+use curve25519_dalek::ristretto::{CompressedRistretto, RistrettoPoint};
 use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
 use spacesuit::SignedInteger;
 
+use crate::encoding;
 use crate::encoding::Subslice;
 use crate::errors::VMError;
 use crate::ops::Instruction;
@@ -165,12 +166,23 @@ impl Commitment {
             Commitment::Closed(x) => Ok(*x),
         }
     }
+
+    fn encode(&self, program: &mut Vec<u8>) {
+        match self {
+            Commitment::Closed(x) => program.extend_from_slice(&x.to_bytes()),
+            Commitment::Open(w) => w.encode(program),
+        }
+    }
 }
 
 impl CommitmentWitness {
     pub fn to_point(&self) -> CompressedRistretto {
         let gens = PedersenGens::default();
         gens.commit(self.value.into(), self.blinding).compress()
+    }
+
+    fn encode(&self, program: &mut Vec<u8>) {
+        program.extend_from_slice(&self.to_point().to_bytes());
     }
 }
 
@@ -213,7 +225,34 @@ impl Predicate {
 
 impl PredicateWitness {
     pub fn to_point(&self) -> CompressedRistretto {
-        unimplemented!()
+        self.to_commitment().compress()
+    }
+
+    fn to_commitment(&self) -> RistrettoPoint {
+        let gens = PedersenGens::default();
+        match self {
+            PredicateWitness::Key(s) => s * gens.B,
+            PredicateWitness::Or(b) => {
+                let mut t = Transcript::new(b"ZkVM.predicate");
+                let (left, right) = (&b.0.to_commitment(), &b.1.to_commitment());
+                t.commit_point(b"L", &left.compress());
+                t.commit_point(b"R", &right.compress());
+                let f = t.challenge_scalar(b"f");
+                left + f * gens.B
+            }
+            PredicateWitness::Program(prog) => {
+                let mut t = Transcript::new(b"ZkVM.predicate");
+                let mut bytecode = Vec::new();
+                Instruction::encode_program(prog.iter(), &mut bytecode);
+                t.commit_bytes(b"prog", &bytecode);
+                let h = t.challenge_scalar(b"h");
+                h * gens.B_blinding
+            }
+        }
+    }
+
+    fn encode(&self, program: &mut Vec<u8>) {
+        program.extend_from_slice(&self.to_point().to_bytes());
     }
 }
 
@@ -289,7 +328,11 @@ impl Data {
     pub fn to_bytes(self) -> Vec<u8> {
         match self {
             Data::Opaque(data) => data,
-            Data::Witness(_) => unimplemented!(),
+            Data::Witness(w) => {
+                let mut bytes: Vec<u8> = Vec::new();
+                w.encode(&mut bytes);
+                bytes
+            }
         }
     }
 
@@ -332,7 +375,32 @@ impl Data {
 
     /// Encodes blinded Data values for txprogram bytecode.
     pub fn encode(&self, program: &mut Vec<u8>) {
-        unimplemented!()
+        match self {
+            Data::Opaque(x) => {
+                program.append(&mut x.clone());
+                return;
+            }
+            Data::Witness(w) => w.encode(program),
+        };
+    }
+}
+
+impl DataWitness {
+    fn encode(&self, program: &mut Vec<u8>) {
+        match self {
+            DataWitness::Program(instr) => Instruction::encode_program(instr.iter(), program),
+            DataWitness::Predicate(pw) => pw.encode(program),
+            DataWitness::Commitment(cw) => cw.encode(program),
+            DataWitness::Scalar(s) => program.extend_from_slice(&s.to_bytes()),
+            DataWitness::Input(b) => {
+                // Input = PreviousTxID || PreviousOutput
+                let (contract, _) = (&b.0, b.1);
+                // TBD: get prev_txid
+                let prev_txid: [u8; 32];
+                program.extend_from_slice(&prev_txid);
+                contract.encode(program);
+            }
+        }
     }
 }
 
@@ -346,6 +414,28 @@ impl Contract {
             }
         }
         size
+    }
+}
+
+impl FrozenContract {
+    fn encode(&self, program: &mut Vec<u8>) {
+        program.extend_from_slice(&self.predicate.to_point().to_bytes());
+        for p in self.payload.iter() {
+            match p {
+                // Data = 0x00 || LE32(len) || <bytes>
+                FrozenItem::Data(d) => {
+                    program.push(0u8);
+                    encoding::write_u32(d.len() as u32, program);
+                    d.encode(program);
+                }
+                // Value = 0x01 || <32 bytes> || <32 bytes>
+                FrozenItem::Value(v) => {
+                    program.push(1u8);
+                    program.extend_from_slice(&v.qty.to_point().to_bytes());
+                    program.extend_from_slice(&v.qty.to_point().to_bytes());
+                }
+            }
+        }
     }
 }
 

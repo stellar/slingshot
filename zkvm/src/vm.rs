@@ -1,6 +1,5 @@
 use bulletproofs::r1cs;
 use bulletproofs::r1cs::R1CSProof;
-use byteorder::{ByteOrder, LittleEndian};
 use curve25519_dalek::ristretto::CompressedRistretto;
 use curve25519_dalek::scalar::Scalar;
 use spacesuit;
