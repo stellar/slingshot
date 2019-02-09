@@ -168,10 +168,7 @@ impl Commitment {
     }
 
     fn encode(&self, program: &mut Vec<u8>) {
-        match self {
-            Commitment::Closed(x) => program.extend_from_slice(&x.to_bytes()),
-            Commitment::Open(w) => w.encode(program),
-        }
+        program.extend_from_slice(&self.to_point().to_bytes());
     }
 }
 
@@ -320,18 +317,24 @@ impl Data {
     pub fn len(&self) -> usize {
         match self {
             Data::Opaque(data) => data.len(),
+            // TBD: calculate length of witness data
+            // Is there a way to do this without just serializing the
+            // data and taking its length?
             Data::Witness(_) => unimplemented!(),
         }
     }
 
     /// Converts the Data into a vector of bytes
-    pub fn to_bytes(self) -> Vec<u8> {
+    pub fn to_bytes(&self) -> Vec<u8> {
         match self {
-            Data::Opaque(data) => data,
+            Data::Opaque(data) => data.clone(),
             Data::Witness(w) => {
                 let mut bytes: Vec<u8> = Vec::new();
+                // TBD: right now the encode/to_bytes flow
+                // seems a little backwards. Might be better
+                // to do it the other way around.
                 w.encode(&mut bytes);
-                bytes
+                bytes.clone()
             }
         }
     }
@@ -425,8 +428,11 @@ impl FrozenContract {
                 // Data = 0x00 || LE32(len) || <bytes>
                 FrozenItem::Data(d) => {
                     program.push(0u8);
-                    encoding::write_u32(d.len() as u32, program);
-                    d.encode(program);
+                    let bytes = d.to_bytes();
+                    // If we can't get the length before serializing, might have
+                    // to write a filler value and then go backwards
+                    encoding::write_u32(bytes.len() as u32, program);
+                    program.extend_from_slice(&bytes);
                 }
                 // Value = 0x01 || <32 bytes> || <32 bytes>
                 FrozenItem::Value(v) => {
