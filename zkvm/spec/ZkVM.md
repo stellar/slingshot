@@ -69,9 +69,14 @@ ZkVM defines a procedural representation for blockchain transactions and the rul
 * [Discussion](#discussion)
     * [Relation to TxVM](#relation-to-txvm)
     * [Compatibility](#compatibility)
-
-
-
+    * [Static arguments](#static-arguments)
+    * [Should cloak and borrow take variables and not commitments?](#should-cloak-and-borrow-take-variables-and-not-commitments)
+    * [Why there is no `and` combinator in the predicate tree?](#why-there-is-no-and-combinator-in-the-predicate-tree)
+    * [Why we need Wide value and `borrow`?](#why-we-need-wide-value-and-borrow)
+    * [How to perform an inequality constraint?](#how-to-perform-an-inequality-constraint)
+    * [How to perform a logical `not`?](#how-to-perform-a-logical-not)
+    * [What ensures transaction uniqueness?](#what-ensures-transaction-uniqueness)
+    * [Open questions](#open-questions)
 
 
 
@@ -1935,7 +1940,7 @@ program structure can be determined right before the use.
 2. txbuilder can keep the secrets assigned to variable instances, so it may be more convenient than remembering preimages for commitments.
 
 
-### Why there is no AND combinator in predicate tree?
+### Why there is no `and` combinator in the predicate tree?
 
 The payload of a contract must be provided to the selected branch. If both predicates must be evaluated and both are programs, then which one takes the payload? To avoid ambiguity, AND can be implemented inside a program that can explicitly decide in which order and which parts of payload to process: maybe check some conditions and then delegate the whole payload to a predicate, or split the payload in two parts and apply different predicates to each part. There's [`contract`](#contract) instruction for that delegation.
 
@@ -2048,11 +2053,9 @@ The values are simply pedersen commitments (Q,A) (quantity, flavor), without any
 UTXO IDs are not known until the full transaction log is formed. This could be not a big deal, as we cannot really plan for the next transaction until this one is fully formed and published. Also, in a joint proof scenario, it’s even less reliable to plan the next payment until the MPC is completed, so requirement to wait till transaction ID is determined may not be a big deal.
 
 
+### Open questions
 
-
-## Open questions
-
-### Do we really need qty/flavor introspection ops?
+#### Do we really need qty/flavor introspection ops?
 
 We currently need them to reblind the received value, but we normally use `borrow` instead of receiving some value and then placing bounds on it.
 
