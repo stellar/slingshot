@@ -329,6 +329,11 @@ impl Data {
             },
         }
     }
+
+    /// Encodes blinded Data values for txprogram bytecode.
+    pub fn encode(&self, program: &mut Vec<u8>) {
+        unimplemented!()
+    }
 }
 
 impl Contract {
