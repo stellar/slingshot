@@ -1860,6 +1860,14 @@ TBD.
 
 TBD.
 
+Payment channel is specified as follows:
+
+1. Parties prepare a 2-of-2 signature predicate.
+2. Parties pre-sign a "Close Channel" transaction that transfers funds to an intermediate "Close" contract. Each party pre-signs this to the counter-party. When both parties have exchanged their presigned contracts, they sign a funding tx that locks funds from each party in such 2-of-2 predicate.
+3. From the perspective of each party A, a "Close" contract can be spent either after a relative timeout of N seconds ("contest period"),
+   or immediately by the counter-party B, if B shows a signed proof of channel update.
+4. TBD.
+
 ### Payment routing example
 
 TBD.
