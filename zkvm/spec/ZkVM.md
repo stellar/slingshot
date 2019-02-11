@@ -187,7 +187,7 @@ Data cannot be larger than the entire transaction program and cannot be longer t
 
 ### Contract type
 
-A contract is a [predicate](#predicate) and a [payload](#contract-payload) . The payload is guarded by the predicate.
+A contract consists of a [predicate](#predicate) and a [payload](#contract-payload) . The payload is guarded by the predicate.
 
 Contracts are created with the [`contract`](#contract) instruction and
 destroyed by evaluating the predicate, leaving their payload on the stack.
