@@ -644,12 +644,11 @@ where
     }
 
     fn encode_output(&mut self, contract: Contract) -> Vec<u8> {
-        let mut output = Vec::with_capacity(contract.min_output_size());
+        let mut output = Vec::with_capacity(contract.min_serialized_length());
 
         encoding::write_point(&contract.predicate.to_point(), &mut output);
         encoding::write_u32(contract.payload.len() as u32, &mut output);
 
-        // can move all the write functions into type impl
         for item in contract.payload.iter() {
             match item {
                 PortableItem::Data(d) => match d {

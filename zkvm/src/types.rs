@@ -92,7 +92,14 @@ pub enum Commitment {
 #[derive(Clone, Debug)]
 pub enum Input {
     Opaque(Vec<u8>),
-    Witness(Box<(FrozenContract, UTXO, TxID)>),
+    Witness(Box<InputWitness>),
+}
+
+#[derive(Clone, Debug)]
+pub struct InputWitness {
+    contract: FrozenContract,
+    utxo: UTXO,
+    txid: TxID,
 }
 
 /// Prover's representation of the witness.
@@ -102,7 +109,7 @@ pub enum DataWitness {
     Predicate(Box<PredicateWitness>), // maybe having Predicate and one more indirection would be cleaner - lets see how it plays out
     Commitment(Box<CommitmentWitness>),
     Scalar(Box<Scalar>),
-    Input(Box<(FrozenContract, UTXO, TxID)>),
+    Input(Box<InputWitness>),
 }
 
 /// Prover's representation of the predicate tree with all the secrets
@@ -110,7 +117,7 @@ pub enum DataWitness {
 pub enum PredicateWitness {
     Key(Scalar),
     Program(Vec<Instruction>),
-    Or(Box<(PredicateWitness, PredicateWitness)>),
+    Or(Box<PredicateWitness>, Box<PredicateWitness>),
 }
 
 /// Prover's representation of the commitment secret: witness and blinding factor
@@ -180,6 +187,13 @@ impl CommitmentWitness {
 
     fn encode(&self, buf: &mut Vec<u8>) {
         buf.extend_from_slice(&self.to_point().to_bytes());
+    }
+}
+
+impl InputWitness {
+    // TBD: need initializer to construct InputWitness
+    fn destructure(&self) -> (&FrozenContract, UTXO, TxID) {
+        (&self.contract, self.utxo, self.txid)
     }
 }
 
@@ -285,18 +299,18 @@ impl Data {
     pub fn min_serialized_length(&self) -> usize {
         match self {
             Data::Opaque(data) => data.len(),
-            Data::Witness(x) => 0,
+            Data::Witness(_) => 0,
         }
     }
 
     /// Converts the Data into a vector of bytes
-    pub fn to_bytes(self) -> Vec<u8> {
+    pub fn to_bytes(&self) -> Vec<u8> {
         match self {
-            Data::Opaque(data) => data,
+            Data::Opaque(data) => data.clone(),
             Data::Witness(w) => {
-                let mut bytes: Vec<u8> = Vec::new();
+                let mut bytes: Vec<u8> = Vec::with_capacity(self.min_serialized_length());
                 w.encode(&mut bytes);
-                bytes
+                bytes.clone()
             }
         }
     }
@@ -348,15 +362,6 @@ impl Data {
             Data::Witness(w) => w.encode(buf),
         };
     }
-
-    /// Encodes blinded Data values with length.
-    /// LE32(len) || <bytes>
-    fn encode_with_len(&self, buf: &mut Vec<u8>) {
-        let mut bytes = Vec::new();
-        self.encode(&mut bytes);
-        encoding::write_u32(bytes.len() as u32, buf);
-        buf.append(&mut bytes);
-    }
 }
 
 impl DataWitness {
@@ -368,7 +373,7 @@ impl DataWitness {
             DataWitness::Scalar(s) => buf.extend_from_slice(&s.to_bytes()),
             DataWitness::Input(b) => {
                 // Input = PreviousTxID || PreviousOutput
-                let (contract, prev_txid) = (&b.0, b.2);
+                let (contract, _, prev_txid) = b.destructure();
                 buf.extend_from_slice(&prev_txid.0);
                 contract.encode(buf);
             }
@@ -377,7 +382,7 @@ impl DataWitness {
 }
 
 impl Contract {
-    pub fn min_output_size(&self) -> usize {
+    pub fn min_serialized_length(&self) -> usize {
         let mut size = 32 + 4;
         for item in self.payload.iter() {
             match item {
@@ -397,7 +402,9 @@ impl FrozenContract {
                 // Data = 0x00 || LE32(len) || <bytes>
                 FrozenItem::Data(d) => {
                     buf.push(0u8);
-                    d.encode_with_len(buf);
+                    let mut bytes = d.to_bytes();
+                    encoding::write_u32(bytes.len() as u32, buf);
+                    buf.extend_from_slice(&mut bytes);
                 }
                 // Value = 0x01 || <32 bytes> || <32 bytes>
                 FrozenItem::Value(v) => {

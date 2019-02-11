@@ -82,9 +82,9 @@ impl PredicateWitness {
         let gens = PedersenGens::default();
         match self {
             PredicateWitness::Key(s) => s * gens.B,
-            PredicateWitness::Or(b) => {
+            PredicateWitness::Or(l, r) => {
                 let mut t = Transcript::new(b"ZkVM.predicate");
-                let (left, right) = (&b.0.to_uncompressed_point(), &b.1.to_uncompressed_point());
+                let (left, right) = (&l.to_uncompressed_point(), &r.to_uncompressed_point());
                 t.commit_point(b"L", &left.compress());
                 t.commit_point(b"R", &right.compress());
                 let f = t.challenge_scalar(b"f");
