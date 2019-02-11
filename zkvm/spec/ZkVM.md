@@ -182,10 +182,10 @@ Data cannot be larger than the entire transaction program and cannot be longer t
 
 ### Contract type
 
-A contract is a [predicate](#predicate) and a [payload](#contract-payload) guarded by that predicate.
+A contract is a [predicate](#predicate) and a [payload](#contract-payload) . The payload is guarded by the predicate.
 
 Contracts are created with the [`contract`](#contract) instruction and
-destroyed by evaluating the predicate, leaving their stored items on the stack.
+destroyed by evaluating the predicate, leaving their payload on the stack.
 
 Contracts can be "frozen" with the [`output`](#output) instruction that places the predicate
 and the payload into the [output structure](#output-structure) which is
@@ -198,7 +198,7 @@ _Variable_ represents a secret [scalar](#scalar) value in the [constraint system
 bound to its [Pedersen commitment](#pedersen-commitment).
 
 A [point](#point) that represents a commitment to a secret scalar can be turned into a variable using the [`var`](#var) instruction.
-Non-secret [scalar](#scalar) can be turned into a single-term [expression](#expression-type) using the [`const`](#const) instruction (which does not allocate a variable).
+A non-secret [scalar](#scalar) can be turned into a single-term [expression](#expression-type) using the [`const`](#const) instruction (which does not allocate a variable). Since we do not need to hide their values, a Variable is not needed.
 
 Variables can be copied and dropped at will, but cannot be ported across transactions via [outputs](#output-structure).
 
@@ -209,17 +209,17 @@ when these are exposed to the VM (for instance, from [`mul`](#mul)), they have t
 
 ### Attached and detached variables
 
-A [variable](#variable-type) can be in one of two states: **detached** and **attached**.
+A [variable](#variable-type) can be in one of two states: **detached** or **attached**.
 
-**Detached variable** can be [reblinded](#reblinded): all copies of a detached variable share the same commitment,
+A **Detached variable** can be [reblinded](#reblinded): all copies of a detached variable share the same commitment,
 so reblinding one of them reflects the new commitments in all the copies. When an [expression](#expression-type) is formed using detached variables, all of them transition to an _attached_ state.
 
-**Attached variable** has its commitment applied to the constraint system, so it cannot be reblinded and variable cannot be detached.
+An **Attached variable** has its commitment applied to the constraint system, so it cannot be reblinded and variable cannot be detached.
 
 
 ### Expression type
 
-_Expression_ is a linear combination of [variables](#variable-type) with cleartext [scalar](#scalar) weights.
+_Expression_ is a linear combination of attached [variables](#variable-type) with cleartext [scalar](#scalar) weights.
 
     expr = { (weight0, var0), (weight1, var1), ...  }
 
