@@ -39,7 +39,7 @@ ZkVM defines a procedural representation for blockchain transactions and the rul
     * [Output structure](#output-structure)
     * [Constraint system](#constraint-system)
     * [Constraint system proof](#constraint-system-proof)
-    * [Transaction witness](#transaction-witness)
+    * [Transaction](#transaction)
     * [Transaction log](#transaction-log)
     * [Transaction ID](#transaction-id)
     * [Merkle binary tree](#merkle-binary-tree)
@@ -69,9 +69,14 @@ ZkVM defines a procedural representation for blockchain transactions and the rul
 * [Discussion](#discussion)
     * [Relation to TxVM](#relation-to-txvm)
     * [Compatibility](#compatibility)
-
-
-
+    * [Static arguments](#static-arguments)
+    * [Should cloak and borrow take variables and not commitments?](#should-cloak-and-borrow-take-variables-and-not-commitments)
+    * [Why there is no `and` combinator in the predicate tree?](#why-there-is-no-and-combinator-in-the-predicate-tree)
+    * [Why we need Wide value and `borrow`?](#why-we-need-wide-value-and-borrow)
+    * [How to perform an inequality constraint?](#how-to-perform-an-inequality-constraint)
+    * [How to perform a logical `not`?](#how-to-perform-a-logical-not)
+    * [What ensures transaction uniqueness?](#what-ensures-transaction-uniqueness)
+    * [Open questions](#open-questions)
 
 
 
@@ -93,7 +98,7 @@ ZkVM is the entirely new design that inherits most important insights from the T
 
 ### Concepts
 
-A transaction is represented by a [transaction witness](#transaction-witness) that
+A transaction is represented by a [transaction](#transaction) object that
 contains a [program](#program) that runs in the context of a stack-based virtual machine.
 
 When the virtual machine executes a program, it creates and manipulates data of various types:
@@ -166,7 +171,7 @@ Only the [data](#data-type) and [value](#value-type) types can be _ported_ acros
 
 Notes:
 
-* [Wide values](#wide-value-type) are not portable because it is not proven to be non-negative.
+* [Wide values](#wide-value-type) are not portable because they are not proven to be non-negative.
 * [Contracts](#contract-type) are not portable because they must be satisfied within the current transaction
 or [output](#output-structure) their contents themselves.
 * [Variables](#variable-type), [expressions](#expression-type) and [constraints](#constraint-type) have no meaning outside the VM state
@@ -260,7 +265,7 @@ Constraints only have an effect if added to the constraint system using the [`ve
 ### Value type
 
 A value is a [linear type](#linear-types) representing a pair of *quantity* and *flavor*.
-Both quantity and flavor are represented as [scalars](#scalar).
+Both quantity and flavor are represented as [variables](#variable-type).
 Quantity is guaranteed to be in a 64-bit range (`[0..2^64-1]`).
 
 Values are created with [`issue`](#issue) and destroyed with [`retire`](#retire).
@@ -547,9 +552,9 @@ A proof of satisfiability of a [constraint system](#constraint-system) built dur
 The proof is provided to the VM at the beggining of execution and verified when the VM is [finished](#vm-execution).
 
 
-### Transaction witness
+### Transaction
 
-Transaction witness is a structure that contains all data and logic
+Transaction is a structure that contains all data and logic
 required to produce a unique [transaction ID](#transaction-id):
 
 * Version (uint64)
@@ -979,7 +984,7 @@ V == v·B + 0·B2
 
 The ZkVM state consists of the static attributes and the state machine attributes.
 
-1. [Transaction witness](#transaction-witness):
+1. [Transaction](#transaction):
     * `version`
     * `mintime` and `maxtime`
     * `program`
@@ -1001,12 +1006,12 @@ The ZkVM state consists of the static attributes and the state machine attribute
 
 The VM is initialized with the following state:
 
-1. A [transaction witness](#transaction-witness) as provided by the user.
-2. Extension flag set to `true` or `false` according to the [transaction versioning](#versioning) rules for the witness version.
+1. [Transaction](#transaction) as provided by the user.
+2. Extension flag set to `true` or `false` according to the [transaction versioning](#versioning) rules for the transaction version.
 3. Uniqueness flag is set to `false`.
 4. Data stack is empty.
 5. Program stack is empty.
-6. Current program set to the transaction witness program; with zero offset.
+6. Current program set to the transaction program; with zero offset.
 7. Transaction log is empty.
 8. Array of signature verification keys is empty.
 9. Array of deferred point operations is empty.
@@ -1387,7 +1392,7 @@ _proof V2 var1_ **reblind** → _var1_
 1. Pops [variable](#variable-type) `var1`.
 2. Pops [point](#point) `V2`.
 3. Pops [data](#data-type) `proof`.
-4. Checks that `var1` is a [detached variable](#variable-type) with commitment `V1`.
+4. Checks that `var1` is a [detached variable](#variable-type) and reads its commitment `V1` from the [VM list of variable commitments](#vm-state).
 5. Replaces commitment `V1` with `V2` for this variable.
 6. Verifies the [reblinding proof](#reblinding-proof) for the commitments `V1`, `V2` and proof data `proof`, [deferring all point operations](#deferred-point-operations)).
 7. Pushes back the detached variable `var1`.
@@ -1853,7 +1858,14 @@ TBD.
 
 ### Payment channel example
 
-TBD.
+Payment channel overview:
+
+1. Parties prepare a 2-of-2 signature predicate.
+2. Parties pre-sign a "Force Close" transaction that transfers funds to an intermediate "Close" contract. Each party pre-signs this to the counter-party. When both parties have exchanged their presigned contracts, they sign a funding tx that locks funds from each party in such 2-of-2 predicate.
+3. From the perspective of each party A, a "Close" contract can be spent either after a relative timeout of N seconds ("contest period"), or immediately by the counter-party B, if B shows a signed proof of channel update.
+4. At any time, the current (possibly timelocked) state of the funds in a channel can be unlocked with a mutual agreement from both parties by signing a final "Mutual Close" transaction.
+
+TBD: specifics.
 
 ### Payment routing example
 
@@ -1935,7 +1947,7 @@ program structure can be determined right before the use.
 2. txbuilder can keep the secrets assigned to variable instances, so it may be more convenient than remembering preimages for commitments.
 
 
-### Why there is no AND combinator in predicate tree?
+### Why there is no `and` combinator in the predicate tree?
 
 The payload of a contract must be provided to the selected branch. If both predicates must be evaluated and both are programs, then which one takes the payload? To avoid ambiguity, AND can be implemented inside a program that can explicitly decide in which order and which parts of payload to process: maybe check some conditions and then delegate the whole payload to a predicate, or split the payload in two parts and apply different predicates to each part. There's [`contract`](#contract) instruction for that delegation.
 
@@ -1957,9 +1969,106 @@ Now let’s see how [`borrow`](#borrow) simplifies things: it allows you to make
 Wide values are less powerful (they are super-types of Values) because they are not _portable_. You cannot just stash such value away in some output. You have to actually repay it using the `cloak` instruction.
 
 
-## Open questions
+### How to perform an inequality constraint?
 
-### Do we really need qty/flavor introspection ops?
+First, note that inequality constraint only makes sense for integers, not for scalars.
+This is because integers are ordered and scalars wrap around modulo group order.
+Therefore, any two [variables](#variable-type) or [expressions](#expression-type) that must be compared,
+must theselves be proven to be in range using the [`range`](#range) instruction (directly or indirectly).
+
+Then, the inequality constraint is created by forming an expression of the form `expr ≥ 0` (using instructions [`neg`](#neg) and [`add`](#add)) and using a [`range`](#range) instruction to place a range check on `expr`.
+
+Constraint | Range check
+-----------|------------------
+`a ≥ b`    | `range:64(a - b)`
+`a ≤ b`    | `range:64(b - a)`
+`a > b`    | `range:64(a - b - 1)`
+`a < b`    | `range:64(b - a - 1)`
+
+
+
+### How to perform a logical `not`?
+
+Logical instructions [`or`](#or) and [`and`](#and) work by combining constraints of form `expr == 0`, that is, a comparison with zero. Logical `not` then is a check that a secret variable is _not zero_.
+
+One way to do that is to break the scalar in 253 bits (using 253 multipliers) and add a disjunction "at least one of these bits is 1" (using additional 252 multipliers), spending total 505 multipliers (this is 8x more expensive than a regular 64-bit rangeproof).
+
+On the other hand, using `not` may not be a good way to express contracts because of a dramatic increase in complexity: a contract that says `not(B)` effectively inverts a small set of inadmissible inputs, producing a big set of addmissible inputs.
+
+We need to investigate whether there are use-cases that cannot be safely or efficiently expressed with only [`and`](#and) and [`or`](#or) combinators.
+
+
+### What ensures transaction uniqueness?
+
+In ZkVM:
+
+* [Transaction ID](#transaction-id) is globally unique,
+* [UTXO ID](#utxo) is globally unique,
+* [Nonce](#nonce) is globally unique,
+* [Value](#value-type) is **not** unique,
+* [Contract](#contract-type) is **not** unique.
+
+In contrast, in TxVM:
+
+* [Transaction ID](#transaction-id) is globally unique,
+* [UTXO ID](#utxo) is **not** unique,
+* [Nonce](#nonce) is globally unique,
+* [Value](#value-type) is globally unique,
+* [Contract](#contract-type) is globally unique.
+
+TxVM ensures transaction uniqueness this way:
+
+* Each value has a unique “anchor” (32-byte payload)
+* When values are split/merged, anchor is one-way hashed to produce new anchor(s).
+* `finalize` instruction consumes a zero-quantity value, effectively consuming a unique anchor.
+* Anchors are originally produced via `nonce` instruction that uses blockchain state to prevent reuse of nonces.
+* Issuance of new assets consumes a zero-quantity value, moving the anchor from it to the new value.
+
+**Pro:**
+
+UTXO ID is fully determined before transaction is finalized. So e.g. a child transaction can be formed before the current transaction is completed and its ID is known. This might be handy in some cases.
+
+**Meh:**
+
+It seems like transaction ID is defined quite simply as a hash of the log, but it also must consume an anchor (since UTXOs alone are not guaranteed to be unique, and one can make a transaction without spending any UTXOs). So transaction ID computation still has some level of special handling.
+
+**Con:**
+
+Recipient of payment cannot fully specify the contract snapshot because they do not know sender’s anchors. This is not a problem in cleartext TxVM, but a problem in ZkVM where values have to participate in the Cloak protocol.
+
+Storing anchor inside a value turned out to be handy, but is not very ergonomic. For instance, a contract cannot simply “claim” an arbitrary value and produce a negative counterpart, w/o having _some_ value to “fork off” an anchor from.
+
+Another potential issue: UTXOs are not guaranteed to be always unique. E.g. if a contract does not modify its value and other content, it can re-save itself to the same UTXO ID. It can even toggle between different states, returning to the previously spent ID. This can cause issues in some applications that forget that UTXO ID in special circumstances can be resurrected.
+
+ZkVM ensures transaction uniqueness this way:
+
+* Values do not have anchors.
+* We still have `nonce` instruction with the same semantics
+* `issue` does not consume zero value
+* `finalize` does not consume zero value
+* `claim/borrow` can produce an arbitrary value and its negative at any point
+* Each UTXO ID is defined as `Hash(contract, txid)`, that is contents of the contract are not unique, but the new UTXO ID is defined by transaction ID, not vice versa.
+* Transaction ID is a hash of the finalized log.
+* When VM finishes, it checks that the log contains either an [input](#input-entry) or a [nonce](#nonce-entry), setting the `uniqueness` flag.
+* Outputs are encoded in the log as snapshots of contents. Blockchain state update hashes these with transaction ID when generating UTXO IDs.
+* Inputs are encoded in the log as their UTXO IDs, so the blockchain processor knows which ones to find and remove.
+
+**Pros:**
+
+Huge pro: recipient can know upfront and provide full spec for the _compressed_ contract+value specification, so it can be revealed behind a shuffle.
+
+Handling values becomes much simpler — they are just values. So we can issue, finalize and even “claim” a value in a straightforward manner.
+
+The values are simply pedersen commitments (Q,A) (quantity, flavor), without any extra payload.
+
+**Con:**
+
+UTXO IDs are not known until the full transaction log is formed. This could be not a big deal, as we cannot really plan for the next transaction until this one is fully formed and published. Also, in a joint proof scenario, it’s even less reliable to plan the next payment until the MPC is completed, so requirement to wait till transaction ID is determined may not be a big deal.
+
+
+### Open questions
+
+#### Do we really need qty/flavor introspection ops?
 
 We currently need them to reblind the received value, but we normally use `borrow` instead of receiving some value and then placing bounds on it.
 
