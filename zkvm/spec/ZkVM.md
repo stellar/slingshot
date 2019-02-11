@@ -1856,16 +1856,22 @@ TBD.
 
 TBD.
 
+
 ### Payment channel example
 
-Payment channel overview:
+Payment channel is a contract that permits a number of parties to exchange value within a given range back-and-forth
+without publication of each transaction on a blockchain. Instead, only net distribution of balances is _settled_ when the channel is _closed_.
 
-1. Parties prepare a 2-of-2 signature predicate.
-2. Parties pre-sign a "Force Close" transaction that transfers funds to an intermediate "Close" contract. Each party pre-signs this to the counter-party. When both parties have exchanged their presigned contracts, they sign a funding tx that locks funds from each party in such 2-of-2 predicate.
-3. From the perspective of each party A, a "Close" contract can be spent either after a relative timeout of N seconds ("contest period"), or immediately by the counter-party B, if B shows a signed proof of channel update.
-4. At any time, the current (possibly timelocked) state of the funds in a channel can be unlocked with a mutual agreement from both parties by signing a final "Mutual Close" transaction.
+Assumptions for this example:
 
-TBD: specifics.
+1. There are 2 parties in a channel.
+2. The channel uses values of one _flavor_ chosen when the channel is created.
+
+Overview:
+
+1. Both parties commit X quantity of funds to a shared contract protected by a simple 2-of-2 multisig predicate. This allows each party to net-send or net-receive up to X units.
+2. 
+
 
 ### Payment routing example
 
