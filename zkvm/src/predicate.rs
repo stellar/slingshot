@@ -4,13 +4,15 @@
 //! - disjunction: P = L + f(L,R)*B
 //! - program_commitment: P = h(prog)*B2
 use bulletproofs::PedersenGens;
+use curve25519_dalek::ristretto::{CompressedRistretto, RistrettoPoint};
 use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
 
 use crate::errors::VMError;
+use crate::ops::Instruction;
 use crate::point_ops::PointOp;
 use crate::transcript::TranscriptProtocol;
-use crate::types::Predicate;
+use crate::types::{Predicate, PredicateWitness};
 
 impl Predicate {
     /// Computes a disjunction of two predicates.
@@ -68,6 +70,39 @@ impl Predicate {
             secondary: Some(h),
             arbitrary: vec![(-Scalar::one(), self.to_point())],
         }
+    }
+}
+
+impl PredicateWitness {
+    pub fn to_point(&self) -> CompressedRistretto {
+        self.to_uncompressed_point().compress()
+    }
+
+    fn to_uncompressed_point(&self) -> RistrettoPoint {
+        let gens = PedersenGens::default();
+        match self {
+            PredicateWitness::Key(s) => s * gens.B,
+            PredicateWitness::Or(l, r) => {
+                let mut t = Transcript::new(b"ZkVM.predicate");
+                let (left, right) = (&l.to_uncompressed_point(), &r.to_uncompressed_point());
+                t.commit_point(b"L", &left.compress());
+                t.commit_point(b"R", &right.compress());
+                let f = t.challenge_scalar(b"f");
+                left + f * gens.B
+            }
+            PredicateWitness::Program(prog) => {
+                let mut t = Transcript::new(b"ZkVM.predicate");
+                let mut bytecode = Vec::new();
+                Instruction::encode_program(prog.iter(), &mut bytecode);
+                t.commit_bytes(b"prog", &bytecode);
+                let h = t.challenge_scalar(b"h");
+                h * gens.B_blinding
+            }
+        }
+    }
+
+    pub fn encode(&self, program: &mut Vec<u8>) {
+        program.extend_from_slice(&self.to_point().to_bytes());
     }
 }
 
