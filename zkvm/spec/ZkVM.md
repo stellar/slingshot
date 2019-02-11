@@ -1870,7 +1870,7 @@ Assumptions for this example:
 Overview:
 
 1. Both parties commit X quantity of funds to a shared contract protected by a simple 2-of-2 multisig predicate. This allows each party to net-send or net-receive up to X units.
-2. Parties can close the channel mutually at any time, signing off a transaction that distributes the latest balances. They can even choose the target addresses arbitrarily. E.g. if one party needs to make an on-chain payment, they can have their balance split in two output: _payment_ and _change_ immediately when closing a channel, without having to make an additional transaction.
+2. Parties can close the channel mutually at any time, signing off a transaction that distributes the latest balances. They can even choose the target addresses arbitrarily. E.g. if one party needs to make an on-chain payment, they can have their balance split in two outputs: _payment_ and _change_ immediately when closing a channel, without having to make an additional transaction.
 3. Parties can _independently close_ the channel at any time using a _pre-signed authorization predicate_, that encodes a distribution of balances with the hard-coded pay-out outputs.
 4. Each payment has a corresponding pre-signed authorization reflecting a new distribution.
 5. To prevent publication of a transaction using a _stale_ authorization predicate:
@@ -1879,12 +1879,12 @@ Overview:
     3. Users watch the blockchain updates for attempts to use a stale authorization, and counter-act them with the latest version.
 6. If the channel was force-closed and not (anymore) contested, after a "contest period" is passed, the "holding" contract can be opened by either party, which sends the funds to the pre-determined outputs.
 
-In ZkVM such predicate is implemented with a _signed program_ that plays dual role:
+In ZkVM such predicate is implemented with a _signed program_ ([`delegate`](#delegate)) that plays dual role:
 
-1. It allows any party to _initiate_ force-close.
-2. It allows any party to _dispute_ a stale force-close.
+1. It allows any party to _initiate_ a force-close.
+2. It allows any party to _dispute_ a stale force-close (overriding it with a more fresh force-close).
 
-To initiate a force-close, the program `P1` does:
+To _initiate_ a force-close, the program `P1` does:
 
 1. Take the exptime as an argument provided by the user (encrypted via Pedersen commitment).
 2. Check that `tx.maxtime + D == exptime` (built-in contest period).
@@ -1898,7 +1898,7 @@ The final-distribution program `P2`:
 2. Creates `borrow`/`output` combinations for each party with hard-coded predicate.
 3. Leaves the payload value and negatives from `borrow` on the stack to be consumed by the `cloak` instruction.
 
-To dispute a stale force-close, the program `P1` has an additional feature:
+To _dispute_ a stale force-close, the program `P1` has an additional feature:
 it contains a sequence number that's incremented for each new authorization predicate `P1`, at each payment.
 The program `P1`, therefore:
 
