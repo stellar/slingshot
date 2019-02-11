@@ -1871,12 +1871,49 @@ Overview:
 
 1. Both parties commit X quantity of funds to a shared contract protected by a simple 2-of-2 multisig predicate. This allows each party to net-send or net-receive up to X units.
 2. Parties can close the channel mutually at any time, signing off a transaction that distributes the latest balances. They can even choose the target addresses arbitrarily. E.g. if one party needs to make an on-chain payment, they can have their balance split in two output: _payment_ and _change_ immediately when closing a channel, without having to make an additional transaction.
-3. Parties can _independently close_ the channel at any time using a _pre-signed authorization program_, that encodes a distribution of balances with the hard-coded pay-out outputs.
-4. Each payment has a corresponding pre-signed authorization program reflecting a new distribution.
-5. To prevent publication of a transaction using a _stale_ program:
-    1. The program locks funds in a temporary "holding" contract for a duration of a "contest period" (agreed upon by both parties at the creation of a channel).
-    2. Any newer program can immediately 
+3. Parties can _independently close_ the channel at any time using a _pre-signed authorization predicate_, that encodes a distribution of balances with the hard-coded pay-out outputs.
+4. Each payment has a corresponding pre-signed authorization reflecting a new distribution.
+5. To prevent publication of a transaction using a _stale_ authorization predicate:
+    1. The predicate locks funds in a temporary "holding" contract for a duration of a "contest period" (agreed upon by both parties at the creation of a channel).
+    2. Any newer predicate can immediately spend that time-locked contract into a new "holding" contract with an updated distribution of funds.
+    3. Users watch the blockchain updates for attempts to use a stale authorization, and counter-act them with the latest version.
+6. If the channel was force-closed and not (anymore) contested, after a "contest period" is passed, the "holding" contract can be opened by either party, which sends the funds to the pre-determined outputs.
 
+In ZkVM such predicate is implemented with a _signed program_ that plays dual role:
+
+1. It allows any party to _initiate_ force-close.
+2. It allows any party to _dispute_ a stale force-close.
+
+To initiate a force-close, the program `P1` does:
+
+1. Take the exptime as an argument provided by the user (encrypted via Pedersen commitment).
+2. Check that `tx.maxtime + D == exptime` (built-in contest period).
+   Transaction maxtime is chosen by the initiator of the tx close to the current time.
+3. Put the exptime and the value into the output under predicate `P2` (built-in predicate committing to a program producing final outputs and checking exptime).
+
+To construct such program `P1`, users first agree on the final distribution of balances via the program `P2`, which:
+1. Checks that `tx.mintime >= exptime` (can be done via `range:24(tx.mintime - exptime)` which gives 6-month resolution for the expiration time)
+2. Creates `borrow`/`output` combinations for each party with hard-coded predicate.
+3. Leaves the payload value and negatives from `borrow` on the stack to be consumed by the `cloak` instruction.
+
+To dispute a stale force-close, the program `P1` has an additional feature:
+it contains a sequence number that's incremented for each new authorization predicate `P1`, at each payment.
+The program `P1`, therefore:
+
+1. Expect two items on the stack coming from a contract: `seq` scalar and `val` value (on top of `seq`). Below these, there is `exptime` commitment.
+2. Check `range:24(new_seq - seq - 1)` to make sure `new_seq > seq`. If there are more than 16.7 million payments (capped by a 24-bit rangeproof), several contest transactions can be chained together with a distance of 16.7 million payments between each other to reach the latest one. At the tx rate of 1 tx/sec, this implies 6 months worth of channel life per intermediate force-close transaction.
+3. Check the expiration time `tx.maxtime + D == exptime` (D is built into the predicate).
+4. Lock the value and `exptime` in a new output with a built-in predicate `P2`.
+
+If `P1` is used to initiate force-close on a contract that does not have a sequence number (initial contract),
+the user simply provides a zero scalar on the stack under the contract.
+
+Confidentiality properties:
+
+1. When the channel is normally closed, it is not even revealed whether it was a payment channel at all. The channel contract looks like an ordinary output indistinguishable from others.
+2. When the channel is force-closed, it does not reveal the number of payments (sequence number) that went through it, nor the contest period which could be used to fingerprint participants with different settings.
+
+The overhead in the force-close case is 48 multipliers (two 24-bit rangeproofs) — a 37.5% performance overhead on top of 2 outputs which the channel has to create in any case.
 
 
 ### Payment routing example
