@@ -191,9 +191,9 @@ impl CommitmentWitness {
 }
 
 impl InputWitness {
-    // TBD: need initializer to construct InputWitness
-    fn destructure(&self) -> (&FrozenContract, UTXO, TxID) {
-        (&self.contract, self.utxo, self.txid)
+    fn encode(&self, buf: &mut Vec<u8>) {
+        buf.extend_from_slice(&self.txid.0);
+        self.contract.encode(buf);
     }
 }
 
@@ -371,12 +371,7 @@ impl DataWitness {
             DataWitness::Predicate(pw) => pw.encode(buf),
             DataWitness::Commitment(cw) => cw.encode(buf),
             DataWitness::Scalar(s) => buf.extend_from_slice(&s.to_bytes()),
-            DataWitness::Input(b) => {
-                // Input = PreviousTxID || PreviousOutput
-                let (contract, _, prev_txid) = b.destructure();
-                buf.extend_from_slice(&prev_txid.0);
-                contract.encode(buf);
-            }
+            DataWitness::Input(b) => b.encode(buf),
         }
     }
 }
