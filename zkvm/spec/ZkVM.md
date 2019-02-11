@@ -2005,10 +2005,16 @@ In ZkVM:
 * [Transaction ID](#transaction-id) is globally unique,
 * [UTXO ID](#utxo) is globally unique,
 * [Nonce](#nonce) is globally unique,
-* [Value](#value-type) is not unique,
-* [Contract](#contract-type) is not unique.
+* [Value](#value-type) is **not** unique,
+* [Contract](#contract-type) is **not** unique.
 
-**Rationale:**
+In contrast, in TxVM:
+
+* [Transaction ID](#transaction-id) is globally unique,
+* [UTXO ID](#utxo) is **not** unique,
+* [Nonce](#nonce) is globally unique,
+* [Value](#value-type) is globally unique,
+* [Contract](#contract-type) is globally unique.
 
 TxVM ensures transaction uniqueness this way:
 
@@ -2034,7 +2040,7 @@ Storing anchor inside a value turned out to be handy, but is not very ergonomic.
 
 Another potential issue: UTXOs are not guaranteed to be always unique. E.g. if a contract does not modify its value and other content, it can re-save itself to the same UTXO ID. It can even toggle between different states, returning to the previously spent ID. This can cause issues in some applications that forget that UTXO ID in special circumstances can be resurrected.
 
-In ZkVM:
+ZkVM ensures transaction uniqueness this way:
 
 * Values do not have anchors.
 * We still have `nonce` instruction with the same semantics
@@ -2043,7 +2049,7 @@ In ZkVM:
 * `claim/borrow` can produce an arbitrary value and its negative at any point
 * Each UTXO ID is defined as `Hash(contract, txid)`, that is contents of the contract are not unique, but the new UTXO ID is defined by transaction ID, not vice versa.
 * Transaction ID is a hash of the finalized log.
-* When VM finishes, it checks that the log contains either an _input_ or a _nonce_, setting the `uniqueness` flag.
+* When VM finishes, it checks that the log contains either an [input](#input-entry) or a [nonce](#nonce-entry), setting the `uniqueness` flag.
 * Outputs are encoded in the log as snapshots of contents. Blockchain state update hashes these with transaction ID when generating UTXO IDs.
 * Inputs are encoded in the log as their UTXO IDs, so the blockchain processor knows which ones to find and remove.
 
