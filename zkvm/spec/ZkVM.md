@@ -1858,7 +1858,14 @@ TBD.
 
 ### Payment channel example
 
-TBD.
+Payment channel overview:
+
+1. Parties prepare a 2-of-2 signature predicate.
+2. Parties pre-sign a "Force Close" transaction that transfers funds to an intermediate "Close" contract. Each party pre-signs this to the counter-party. When both parties have exchanged their presigned contracts, they sign a funding tx that locks funds from each party in such 2-of-2 predicate.
+3. From the perspective of each party A, a "Close" contract can be spent either after a relative timeout of N seconds ("contest period"), or immediately by the counter-party B, if B shows a signed proof of channel update.
+4. At any time, the current (possibly timelocked) state of the funds in a channel can be unlocked with a mutual agreement from both parties by signing a final "Mutual Close" transaction.
+
+TBD: specifics.
 
 Payment channel is specified as follows:
 
@@ -2006,10 +2013,17 @@ In ZkVM:
 * [Transaction ID](#transaction-id) is globally unique,
 * [UTXO ID](#utxo) is globally unique,
 * [Nonce](#nonce) is globally unique,
-* [Value](#value-type) is not unique,
-* [Contract](#contract-type) is not unique.
 
-**Rationale:**
+* [Value](#value-type) is **not** unique,
+* [Contract](#contract-type) is **not** unique.
+
+In contrast, in TxVM:
+
+* [Transaction ID](#transaction-id) is globally unique,
+* [UTXO ID](#utxo) is **not** unique,
+* [Nonce](#nonce) is globally unique,
+* [Value](#value-type) is globally unique,
+* [Contract](#contract-type) is globally unique.
 
 TxVM ensures transaction uniqueness this way:
 
@@ -2035,7 +2049,8 @@ Storing anchor inside a value turned out to be handy, but is not very ergonomic.
 
 Another potential issue: UTXOs are not guaranteed to be always unique. E.g. if a contract does not modify its value and other content, it can re-save itself to the same UTXO ID. It can even toggle between different states, returning to the previously spent ID. This can cause issues in some applications that forget that UTXO ID in special circumstances can be resurrected.
 
-In ZkVM:
+
+ZkVM ensures transaction uniqueness this way:
 
 * Values do not have anchors.
 * We still have `nonce` instruction with the same semantics
@@ -2044,7 +2059,9 @@ In ZkVM:
 * `claim/borrow` can produce an arbitrary value and its negative at any point
 * Each UTXO ID is defined as `Hash(contract, txid)`, that is contents of the contract are not unique, but the new UTXO ID is defined by transaction ID, not vice versa.
 * Transaction ID is a hash of the finalized log.
-* When VM finishes, it checks that the log contains either an _input_ or a _nonce_, setting the `uniqueness` flag.
+
+* When VM finishes, it checks that the log contains either an [input](#input-entry) or a [nonce](#nonce-entry), setting the `uniqueness` flag.
+
 * Outputs are encoded in the log as snapshots of contents. Blockchain state update hashes these with transaction ID when generating UTXO IDs.
 * Inputs are encoded in the log as their UTXO IDs, so the blockchain processor knows which ones to find and remove.
 
