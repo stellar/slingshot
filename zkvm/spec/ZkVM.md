@@ -1891,7 +1891,9 @@ To initiate a force-close, the program `P1` does:
    Transaction maxtime is chosen by the initiator of the tx close to the current time.
 3. Put the exptime and the value into the output under predicate `P2` (built-in predicate committing to a program producing final outputs and checking exptime).
 
-To construct such program `P1`, users first agree on the final distribution of balances via the program `P2`, which:
+To construct such program `P1`, users first agree on the final distribution of balances via the program `P2`.
+
+The final-distribution program `P2`:
 1. Checks that `tx.mintime >= exptime` (can be done via `range:24(tx.mintime - exptime)` which gives 6-month resolution for the expiration time)
 2. Creates `borrow`/`output` combinations for each party with hard-coded predicate.
 3. Leaves the payload value and negatives from `borrow` on the stack to be consumed by the `cloak` instruction.
@@ -1913,7 +1915,7 @@ Confidentiality properties:
 1. When the channel is normally closed, it is not even revealed whether it was a payment channel at all. The channel contract looks like an ordinary output indistinguishable from others.
 2. When the channel is force-closed, it does not reveal the number of payments (sequence number) that went through it, nor the contest period which could be used to fingerprint participants with different settings.
 
-The overhead in the force-close case is 48 multipliers (two 24-bit rangeproofs) — a 37.5% performance overhead on top of 2 outputs which the channel has to create in any case.
+The overhead in the force-close case is 48 multipliers (two 24-bit rangeproofs) — a 37.5% performance overhead on top of 2 outputs which the channel has to create even in a normal-close case. There is no range proof for the re-locked value between `P1` and `P2`, as it's already known to be in range and it does no go through the `cloak`.
 
 
 ### Payment routing example
