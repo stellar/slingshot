@@ -280,25 +280,23 @@ impl Item {
 }
 
 impl Data {
-    /// Returns the length of the underlying vector of bytes.
-    pub fn len(&self) -> usize {
+    /// Returns a guaranteed lower bound on the number of bytes
+    /// needed to serialize the Data.
+    pub fn min_serialized_length(&self) -> usize {
         match self {
             Data::Opaque(data) => data.len(),
-            // TBD: calculate length of witness data
-            // Is there a way to do this without just serializing the
-            // data and taking its length?
-            Data::Witness(_) => unimplemented!(),
+            Data::Witness(x) => 0,
         }
     }
 
     /// Converts the Data into a vector of bytes
-    pub fn to_bytes(&self) -> Vec<u8> {
+    pub fn to_bytes(self) -> Vec<u8> {
         match self {
-            Data::Opaque(data) => data.clone(),
+            Data::Opaque(data) => data,
             Data::Witness(w) => {
-                let mut bytes: Vec<u8> = Vec::with_capacity(self.len());
+                let mut bytes: Vec<u8> = Vec::new();
                 w.encode(&mut bytes);
-                bytes.clone()
+                bytes
             }
         }
     }
@@ -350,6 +348,15 @@ impl Data {
             Data::Witness(w) => w.encode(buf),
         };
     }
+
+    /// Encodes blinded Data values with length.
+    /// LE32(len) || <bytes>
+    fn encode_with_len(&self, buf: &mut Vec<u8>) {
+        let mut bytes = Vec::new();
+        self.encode(&mut bytes);
+        encoding::write_u32(bytes.len() as u32, buf);
+        buf.append(&mut bytes);
+    }
 }
 
 impl DataWitness {
@@ -370,11 +377,11 @@ impl DataWitness {
 }
 
 impl Contract {
-    pub fn exact_output_size(&self) -> usize {
+    pub fn min_output_size(&self) -> usize {
         let mut size = 32 + 4;
         for item in self.payload.iter() {
             match item {
-                PortableItem::Data(d) => size += 1 + 4 + d.len(),
+                PortableItem::Data(d) => size += 1 + 4 + d.min_serialized_length(),
                 PortableItem::Value(_) => size += 1 + 64,
             }
         }
@@ -390,9 +397,7 @@ impl FrozenContract {
                 // Data = 0x00 || LE32(len) || <bytes>
                 FrozenItem::Data(d) => {
                     buf.push(0u8);
-                    let bytes = d.to_bytes();
-                    encoding::write_u32(bytes.len() as u32, buf);
-                    buf.extend_from_slice(&bytes);
+                    d.encode_with_len(buf);
                 }
                 // Value = 0x01 || <32 bytes> || <32 bytes>
                 FrozenItem::Value(v) => {
