@@ -1895,7 +1895,7 @@ To construct such program `P1`, users first agree on the final distribution of b
 
 The final-distribution program `P2`:
 1. Checks that `tx.mintime >= exptime` (can be done via `range:24(tx.mintime - exptime)` which gives 6-month resolution for the expiration time)
-2. Creates `borrow`/`output` combinations for each party with hard-coded predicate.
+2. Creates `borrow`/`output` combinations for each party with hard-coded predicate for each output.
 3. Leaves the payload value and negatives from `borrow` on the stack to be consumed by the `cloak` instruction.
 
 To _dispute_ a stale force-close, the program `P1` has an additional feature:
