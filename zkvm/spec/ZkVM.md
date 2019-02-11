@@ -1870,7 +1870,13 @@ Assumptions for this example:
 Overview:
 
 1. Both parties commit X quantity of funds to a shared contract protected by a simple 2-of-2 multisig predicate. This allows each party to net-send or net-receive up to X units.
-2. 
+2. Parties can close the channel mutually at any time, signing off a transaction that distributes the latest balances. They can even choose the target addresses arbitrarily. E.g. if one party needs to make an on-chain payment, they can have their balance split in two output: _payment_ and _change_ immediately when closing a channel, without having to make an additional transaction.
+3. Parties can _independently close_ the channel at any time using a _pre-signed authorization program_, that encodes a distribution of balances with the hard-coded pay-out outputs.
+4. Each payment has a corresponding pre-signed authorization program reflecting a new distribution.
+5. To prevent publication of a transaction using a _stale_ program:
+    1. The program locks funds in a temporary "holding" contract for a duration of a "contest period" (agreed upon by both parties at the creation of a channel).
+    2. Any newer program can immediately 
+
 
 
 ### Payment routing example
