@@ -1,7 +1,7 @@
 //! Core ZkVM stack types: data, variables, values, contracts etc.
 
 use bulletproofs::{r1cs, PedersenGens};
-use curve25519_dalek::ristretto::{CompressedRistretto, RistrettoPoint};
+use curve25519_dalek::ristretto::CompressedRistretto;
 use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
 use spacesuit::SignedInteger;
@@ -11,7 +11,7 @@ use crate::encoding::Subslice;
 use crate::errors::VMError;
 use crate::ops::Instruction;
 use crate::transcript::TranscriptProtocol;
-use crate::txlog::UTXO;
+use crate::txlog::{TxID, UTXO};
 
 #[derive(Debug)]
 pub enum Item {
@@ -92,7 +92,7 @@ pub enum Commitment {
 #[derive(Clone, Debug)]
 pub enum Input {
     Opaque(Vec<u8>),
-    Witness(Box<(FrozenContract, UTXO)>),
+    Witness(Box<(FrozenContract, UTXO, TxID)>),
 }
 
 /// Prover's representation of the witness.
@@ -102,7 +102,7 @@ pub enum DataWitness {
     Predicate(Box<PredicateWitness>), // maybe having Predicate and one more indirection would be cleaner - lets see how it plays out
     Commitment(Box<CommitmentWitness>),
     Scalar(Box<Scalar>),
-    Input(Box<(FrozenContract, UTXO)>),
+    Input(Box<(FrozenContract, UTXO, TxID)>),
 }
 
 /// Prover's representation of the predicate tree with all the secrets
@@ -167,8 +167,8 @@ impl Commitment {
         }
     }
 
-    fn encode(&self, program: &mut Vec<u8>) {
-        program.extend_from_slice(&self.to_point().to_bytes());
+    fn encode(&self, buf: &mut Vec<u8>) {
+        buf.extend_from_slice(&self.to_point().to_bytes());
     }
 }
 
@@ -178,8 +178,8 @@ impl CommitmentWitness {
         gens.commit(self.value.into(), self.blinding).compress()
     }
 
-    fn encode(&self, program: &mut Vec<u8>) {
-        program.extend_from_slice(&self.to_point().to_bytes());
+    fn encode(&self, buf: &mut Vec<u8>) {
+        buf.extend_from_slice(&self.to_point().to_bytes());
     }
 }
 
@@ -217,39 +217,6 @@ impl Predicate {
             Predicate::Opaque(point) => *point,
             Predicate::Witness(witness) => witness.to_point(),
         }
-    }
-}
-
-impl PredicateWitness {
-    pub fn to_point(&self) -> CompressedRistretto {
-        self.to_commitment().compress()
-    }
-
-    fn to_commitment(&self) -> RistrettoPoint {
-        let gens = PedersenGens::default();
-        match self {
-            PredicateWitness::Key(s) => s * gens.B,
-            PredicateWitness::Or(b) => {
-                let mut t = Transcript::new(b"ZkVM.predicate");
-                let (left, right) = (&b.0.to_commitment(), &b.1.to_commitment());
-                t.commit_point(b"L", &left.compress());
-                t.commit_point(b"R", &right.compress());
-                let f = t.challenge_scalar(b"f");
-                left + f * gens.B
-            }
-            PredicateWitness::Program(prog) => {
-                let mut t = Transcript::new(b"ZkVM.predicate");
-                let mut bytecode = Vec::new();
-                Instruction::encode_program(prog.iter(), &mut bytecode);
-                t.commit_bytes(b"prog", &bytecode);
-                let h = t.challenge_scalar(b"h");
-                h * gens.B_blinding
-            }
-        }
-    }
-
-    fn encode(&self, program: &mut Vec<u8>) {
-        program.extend_from_slice(&self.to_point().to_bytes());
     }
 }
 
@@ -329,10 +296,7 @@ impl Data {
         match self {
             Data::Opaque(data) => data.clone(),
             Data::Witness(w) => {
-                let mut bytes: Vec<u8> = Vec::new();
-                // TBD: right now the encode/to_bytes flow
-                // seems a little backwards. Might be better
-                // to do it the other way around.
+                let mut bytes: Vec<u8> = Vec::with_capacity(self.len());
                 w.encode(&mut bytes);
                 bytes.clone()
             }
@@ -376,32 +340,30 @@ impl Data {
         }
     }
 
-    /// Encodes blinded Data values for txprogram bytecode.
-    pub fn encode(&self, program: &mut Vec<u8>) {
+    /// Encodes blinded Data values.
+    pub fn encode(&self, buf: &mut Vec<u8>) {
         match self {
             Data::Opaque(x) => {
-                program.append(&mut x.clone());
+                buf.extend_from_slice(x);
                 return;
             }
-            Data::Witness(w) => w.encode(program),
+            Data::Witness(w) => w.encode(buf),
         };
     }
 }
 
 impl DataWitness {
-    fn encode(&self, program: &mut Vec<u8>) {
+    fn encode(&self, buf: &mut Vec<u8>) {
         match self {
-            DataWitness::Program(instr) => Instruction::encode_program(instr.iter(), program),
-            DataWitness::Predicate(pw) => pw.encode(program),
-            DataWitness::Commitment(cw) => cw.encode(program),
-            DataWitness::Scalar(s) => program.extend_from_slice(&s.to_bytes()),
+            DataWitness::Program(instr) => Instruction::encode_program(instr.iter(), buf),
+            DataWitness::Predicate(pw) => pw.encode(buf),
+            DataWitness::Commitment(cw) => cw.encode(buf),
+            DataWitness::Scalar(s) => buf.extend_from_slice(&s.to_bytes()),
             DataWitness::Input(b) => {
                 // Input = PreviousTxID || PreviousOutput
-                let (contract, _) = (&b.0, b.1);
-                // TBD: get prev_txid
-                let prev_txid: [u8; 32];
-                program.extend_from_slice(&prev_txid);
-                contract.encode(program);
+                let (contract, prev_txid) = (&b.0, b.2);
+                buf.extend_from_slice(&prev_txid.0);
+                contract.encode(buf);
             }
         }
     }
@@ -421,24 +383,22 @@ impl Contract {
 }
 
 impl FrozenContract {
-    fn encode(&self, program: &mut Vec<u8>) {
-        program.extend_from_slice(&self.predicate.to_point().to_bytes());
+    fn encode(&self, buf: &mut Vec<u8>) {
+        buf.extend_from_slice(&self.predicate.to_point().to_bytes());
         for p in self.payload.iter() {
             match p {
                 // Data = 0x00 || LE32(len) || <bytes>
                 FrozenItem::Data(d) => {
-                    program.push(0u8);
+                    buf.push(0u8);
                     let bytes = d.to_bytes();
-                    // If we can't get the length before serializing, might have
-                    // to write a filler value and then go backwards
-                    encoding::write_u32(bytes.len() as u32, program);
-                    program.extend_from_slice(&bytes);
+                    encoding::write_u32(bytes.len() as u32, buf);
+                    buf.extend_from_slice(&bytes);
                 }
                 // Value = 0x01 || <32 bytes> || <32 bytes>
                 FrozenItem::Value(v) => {
-                    program.push(1u8);
-                    program.extend_from_slice(&v.qty.to_point().to_bytes());
-                    program.extend_from_slice(&v.qty.to_point().to_bytes());
+                    buf.push(1u8);
+                    buf.extend_from_slice(&v.qty.to_point().to_bytes());
+                    buf.extend_from_slice(&v.flv.to_point().to_bytes());
                 }
             }
         }

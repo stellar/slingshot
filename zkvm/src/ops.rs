@@ -195,67 +195,68 @@ impl Instruction {
     /// Appends the bytecode representation of an Instruction
     /// to the program.
     pub fn encode(&self, program: &mut Vec<u8>) {
+        let mut write = |op: Opcode| program.push(op.to_u8());
         match self {
             Instruction::Push(data) => {
-                program.push(Opcode::Push.to_u8());
+                write(Opcode::Push);
                 data.encode(program);
             }
-            Instruction::Drop => program.push(Opcode::Drop.to_u8()),
+            Instruction::Drop => write(Opcode::Drop),
             Instruction::Dup(idx) => {
-                program.push(Opcode::Dup.to_u8());
+                write(Opcode::Dup);
                 encoding::write_u32(*idx as u32, program);
             }
             Instruction::Roll(idx) => {
-                program.push(Opcode::Roll.to_u8());
+                write(Opcode::Roll);
                 encoding::write_u32(*idx as u32, program);
             }
-            Instruction::Const => program.push(Opcode::Const.to_u8()),
-            Instruction::Var => program.push(Opcode::Var.to_u8()),
-            Instruction::Alloc => program.push(Opcode::Alloc.to_u8()),
-            Instruction::Mintime => program.push(Opcode::Mintime.to_u8()),
-            Instruction::Maxtime => program.push(Opcode::Maxtime.to_u8()),
-            Instruction::Neg => program.push(Opcode::Neg.to_u8()),
-            Instruction::Add => program.push(Opcode::Add.to_u8()),
-            Instruction::Mul => program.push(Opcode::Mul.to_u8()),
-            Instruction::Eq => program.push(Opcode::Eq.to_u8()),
+            Instruction::Const => write(Opcode::Const),
+            Instruction::Var => write(Opcode::Var),
+            Instruction::Alloc => write(Opcode::Alloc),
+            Instruction::Mintime => write(Opcode::Mintime),
+            Instruction::Maxtime => write(Opcode::Maxtime),
+            Instruction::Neg => write(Opcode::Neg),
+            Instruction::Add => write(Opcode::Add),
+            Instruction::Mul => write(Opcode::Mul),
+            Instruction::Eq => write(Opcode::Eq),
             Instruction::Range(bit_width) => {
-                program.push(Opcode::Range.to_u8());
+                write(Opcode::Range);
                 program.push(*bit_width);
             }
-            Instruction::And => program.push(Opcode::And.to_u8()),
-            Instruction::Or => program.push(Opcode::Or.to_u8()),
-            Instruction::Verify => program.push(Opcode::Verify.to_u8()),
-            Instruction::Blind => program.push(Opcode::Blind.to_u8()),
-            Instruction::Reblind => program.push(Opcode::Reblind.to_u8()),
-            Instruction::Unblind => program.push(Opcode::Unblind.to_u8()),
-            Instruction::Issue => program.push(Opcode::Issue.to_u8()),
-            Instruction::Borrow => program.push(Opcode::Borrow.to_u8()),
-            Instruction::Retire => program.push(Opcode::Retire.to_u8()),
-            Instruction::Qty => program.push(Opcode::Qty.to_u8()),
-            Instruction::Flavor => program.push(Opcode::Flavor.to_u8()),
+            Instruction::And => write(Opcode::And),
+            Instruction::Or => write(Opcode::Or),
+            Instruction::Verify => write(Opcode::Verify),
+            Instruction::Blind => write(Opcode::Blind),
+            Instruction::Reblind => write(Opcode::Reblind),
+            Instruction::Unblind => write(Opcode::Unblind),
+            Instruction::Issue => write(Opcode::Issue),
+            Instruction::Borrow => write(Opcode::Borrow),
+            Instruction::Retire => write(Opcode::Retire),
+            Instruction::Qty => write(Opcode::Qty),
+            Instruction::Flavor => write(Opcode::Flavor),
             Instruction::Cloak(m, n) => {
-                program.push(Opcode::Cloak.to_u8());
+                write(Opcode::Cloak);
                 encoding::write_u32(*m as u32, program);
                 encoding::write_u32(*n as u32, program);
             }
-            Instruction::Import => program.push(Opcode::Import.to_u8()),
-            Instruction::Export => program.push(Opcode::Export.to_u8()),
-            Instruction::Input => program.push(Opcode::Input.to_u8()),
+            Instruction::Import => write(Opcode::Import),
+            Instruction::Export => write(Opcode::Export),
+            Instruction::Input => write(Opcode::Input),
             Instruction::Output(k) => {
-                program.push(Opcode::Output.to_u8());
+                write(Opcode::Output);
                 encoding::write_u32(*k as u32, program);
             }
             Instruction::Contract(k) => {
-                program.push(Opcode::Contract.to_u8());
+                write(Opcode::Contract);
                 encoding::write_u32(*k as u32, program);
             }
-            Instruction::Nonce => program.push(Opcode::Nonce.to_u8()),
-            Instruction::Log => program.push(Opcode::Log.to_u8()),
-            Instruction::Signtx => program.push(Opcode::Signtx.to_u8()),
-            Instruction::Call => program.push(Opcode::Call.to_u8()),
-            Instruction::Left => program.push(Opcode::Left.to_u8()),
-            Instruction::Right => program.push(Opcode::Right.to_u8()),
-            Instruction::Delegate => program.push(Opcode::Delegate.to_u8()),
+            Instruction::Nonce => write(Opcode::Nonce),
+            Instruction::Log => write(Opcode::Log),
+            Instruction::Signtx => write(Opcode::Signtx),
+            Instruction::Call => write(Opcode::Call),
+            Instruction::Left => write(Opcode::Left),
+            Instruction::Right => write(Opcode::Right),
+            Instruction::Delegate => write(Opcode::Delegate),
             Instruction::Ext(x) => program.push(*x),
         };
     }
