@@ -11,6 +11,7 @@ use crate::encoding::Subslice;
 use crate::errors::VMError;
 use crate::ops::Instruction;
 use crate::point_ops::PointOp;
+use crate::predicate::Predicate;
 use crate::signature::*;
 use crate::txlog::{Entry, TxID, TxLog, UTXO};
 use crate::types::*;

@@ -7,6 +7,7 @@ use crate::encoding::*;
 use crate::errors::VMError;
 use crate::ops::Instruction;
 use crate::point_ops::PointOp;
+use crate::predicate::Predicate;
 use crate::signature::VerificationKey;
 use crate::types::*;
 

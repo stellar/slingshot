@@ -8,6 +8,7 @@ use std::collections::VecDeque;
 use crate::errors::VMError;
 use crate::ops::Instruction;
 use crate::point_ops::PointOp;
+use crate::predicate::{Predicate, PredicateWitness};
 use crate::signature::Signature;
 use crate::txlog::{TxID, TxLog};
 use crate::types::*;

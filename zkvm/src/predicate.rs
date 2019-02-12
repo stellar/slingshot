@@ -19,13 +19,12 @@ pub struct Predicate {
     witness: Option<PredicateWitness>,
 }
 
-
 /// Prover's representation of the predicate tree with all the secrets
 #[derive(Clone, Debug)]
 pub enum PredicateWitness {
     Key(Scalar),
     Program(Vec<Instruction>),
-    Or(Box<PredicateWitness>, Box<PredicateWitness>),
+    Or(Box<Predicate>, Box<Predicate>),
 }
 
 impl Predicate {
@@ -62,11 +61,10 @@ impl Predicate {
     /// Computes a disjunction of two predicates.
     /// TBD: push this code into to_point() impl for the witness
     pub fn or(self, right: Predicate) -> Result<Predicate, VMError> {
-        Ok(Predicate::from_witness(
-            PredicateWitness::Or(
-                Box::new(self.witness.ok_or(VMError::WitnessMissing)?), 
-                Box::new(right))
-        )?)
+        Ok(Predicate::from_witness(PredicateWitness::Or(
+            Box::new(self),
+            Box::new(right),
+        ))?)
     }
 
     /// Verifies whether the current predicate is a disjunction of two others.
@@ -81,9 +79,7 @@ impl Predicate {
     /// One cannot sign for it as a public key because it’s using a secondary generator.
     /// TBD: push this code into to_point() impl for the witness
     pub fn from_program(program: Vec<Instruction>) -> Result<Predicate, VMError> {
-        Ok(Predicate::from_witness(
-            PredicateWitness::Program(program)
-        )?)
+        Ok(Predicate::from_witness(PredicateWitness::Program(program))?)
     }
 
     /// Verifies whether the current predicate is a commitment to a program `prog`.
@@ -132,9 +128,7 @@ impl PredicateWitness {
         Ok(match self {
             // TBD: use VerificatioNKey API instead of plain multiplication
             PredicateWitness::Key(s) => s * PedersenGens::default().B,
-            PredicateWitness::Or(l, r) => {
-                Predicate::commit_or(l.to_point()?, r.to_point()?).compute()?
-            }
+            PredicateWitness::Or(l, r) => Predicate::commit_or(l.point(), r.point()).compute()?,
             PredicateWitness::Program(prog) => {
                 let mut bytecode = Vec::new();
                 Instruction::encode_program(prog.iter(), &mut bytecode);
@@ -179,7 +173,7 @@ mod tests {
         let left = Predicate::opaque(gens.B.compress());
         let right = Predicate::opaque(gens.B_blinding.compress());
 
-        let pred = left.or(&right).unwrap();
+        let pred = left.clone().or(right.clone()).unwrap();
         let op = pred.prove_or(&left, &right);
         assert!(op.verify().is_ok());
     }
@@ -205,7 +199,7 @@ mod tests {
         let left = Predicate::opaque(gens.B.compress());
         let right = Predicate::opaque(gens.B_blinding.compress());
 
-        let pred = left.or(&right).unwrap();
+        let pred = left.clone().or(right.clone()).unwrap();
         let op = pred.prove_or(&right, &left);
         assert!(op.verify().is_err());
     }

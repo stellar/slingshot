@@ -10,9 +10,9 @@ use crate::encoding;
 use crate::encoding::Subslice;
 use crate::errors::VMError;
 use crate::ops::Instruction;
+use crate::predicate::Predicate;
 use crate::transcript::TranscriptProtocol;
 use crate::txlog::{TxID, UTXO};
-use crate::predicate::Predicate;
 
 #[derive(Debug)]
 pub enum Item {
@@ -211,7 +211,6 @@ impl Into<Scalar> for ScalarWitness {
         }
     }
 }
-
 
 impl Item {
     // Downcasts to Data type
