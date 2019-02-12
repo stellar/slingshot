@@ -44,7 +44,7 @@ impl PointOp {
             .ok_or(VMError::PointOperationFailed)
     }
 
-    /// Non-batched verificatin of an individual point operation
+    /// Non-batched verification of an individual point operation
     pub fn verify(self) -> Result<(), VMError> {
         if !self.compute()?.is_identity() {
             return Err(VMError::PointOperationFailed);
