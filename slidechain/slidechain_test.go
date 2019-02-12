@@ -59,7 +59,9 @@ func makeAsset(typ xdr.AssetType, code string, issuer string) xdr.Asset {
 }
 
 func TestServer(t *testing.T) {
-	withTestServer(context.Background(), t, func(ctx context.Context, _ *sql.DB, _ *submitter, server *httptest.Server, _ *protocol.Chain) {
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
+	defer cancel()
+	withTestServer(ctx, t, func(ctx context.Context, _ *sql.DB, _ *submitter, server *httptest.Server, _ *protocol.Chain) {
 		resp, err := http.Get(server.URL + "/get")
 		if err != nil {
 			t.Fatalf("getting initial block from new server: %s", err)
@@ -189,6 +191,8 @@ var testRecipPubKey = mustDecodeHex("cca6ae12527fcb3f8d5648868a757ebb085a973b0fd
 const importTestAccountID = "GDSBCQO34HWPGUGQSP3QBFEXVTSR2PW46UIGTHVWGWJGQKH3AFNHXHXN"
 
 func TestImport(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
+	defer cancel()
 	var importtests = []struct {
 		assetType xdr.AssetType
 		code      string
@@ -206,7 +210,7 @@ func TestImport(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		withTestServer(context.Background(), t, func(ctx context.Context, db *sql.DB, s *submitter, server *httptest.Server, chain *protocol.Chain) {
+		withTestServer(ctx, t, func(ctx context.Context, db *sql.DB, s *submitter, server *httptest.Server, chain *protocol.Chain) {
 			r := s.w.Reader()
 			defer r.Dispose()
 
