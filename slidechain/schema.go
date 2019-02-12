@@ -30,7 +30,8 @@ CREATE TABLE IF NOT EXISTS exports (
   asset_xdr BLOB NOT NULL,
   temp TEXT NOT NULL,
   seqnum INTEGER NOT NULL,
-  exported INTEGER NOT NULL DEFAULT 0
+  exported INTEGER NOT NULL DEFAULT 0,
+  pegged_out INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS custodian (
@@ -39,5 +40,4 @@ CREATE TABLE IF NOT EXISTS custodian (
 );
 `
 
-// PRTODO: Add field to exports to cover the 4 states Bob talked about.
 // PRTODO: Add field to exports to transmit the extra information needed for the post-export smart contract.

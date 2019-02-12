@@ -37,6 +37,7 @@ type Custodian struct {
 	hclient *horizon.Client
 	imports *sync.Cond
 	exports *sync.Cond
+	pegouts *sync.Cond
 	network string
 	privkey ed25519.PrivateKey
 
@@ -199,7 +200,7 @@ func (c *Custodian) launch(ctx context.Context) {
 	go c.importFromPegs(ctx)
 	go c.watchExports(ctx)
 	go c.pegOutFromExports(ctx)
-	go c.retireFromPegOut(ctx)
+	// go c.watchPegOuts(ctx)
 }
 
 func mustDecodeHex(inp string) []byte {

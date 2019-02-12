@@ -42,8 +42,8 @@ const (
 	exportContract2Fmt = `
 	                     #  con stack                          arg stack                 log                 notes
 	                     #  ---------                          ---------                 ---                 -----
-	                     #  {exporter}, value, json                                                          
-	selector             #  {exporter}, value, json, selector                                                
+	                     #  {exporter}, value, json            selector                                              
+	get		             #  {exporter}, value, json                                                
 	jumpif:$doretire     #                                                                                   
 	                     #  {exporter}, value, json                                                          
 	"" put               #  {exporter}, value, json            ""                                            
@@ -67,6 +67,7 @@ var (
 	custodianSigCheckerSrc = fmt.Sprintf(custodianSigCheckerFmt, custodianPub)
 	exportContract1Src     = fmt.Sprintf(exportContract1Fmt, exportContract2Src)
 	exportContract1Prog    = asm.MustAssemble(exportContract1Src)
+	exportContract1Seed    = txvm.ContractSeed(exportContract1Prog)
 	exportContract2Src     = fmt.Sprintf(exportContract2Fmt, standard.PayToMultisigProg1, standard.RetireContract, custodianSigCheckerSrc)
 	exportContract2Prog    = asm.MustAssemble(exportContract2Src)
 )
@@ -144,7 +145,7 @@ func (c *Custodian) pegOutFromExports(ctx context.Context) {
 			if err != nil {
 				log.Fatalf("updating export table: %s", err)
 			}
-			// PRTODO: Update db state for new fields.
+			// PRTODO: Maybe update db state for new fields.
 		}
 	}
 }
@@ -203,6 +204,7 @@ func buildPegOutTx(custodian, exporter, temp, network string, asset xdr.Asset, a
 		mergeAccountOp,
 		paymentOp,
 	)
+	// PRTODO: Add a MemoHash with unique info for the post-peg-out smart contract.
 }
 
 // createTempAccount builds and submits a transaction to the Stellar
@@ -294,8 +296,10 @@ func SubmitPreExportTx(hclient *horizon.Client, kp *keypair.Full, custodian stri
 	return temp.Address(), seqnum, nil
 }
 
-// BuildExportTxNew PRTODO Rename, fill in.
-func BuildExportTxNew(ctx context.Context, asset xdr.Asset, amount, inputAmt int64, temp string, anchor []byte, prv ed25519.PrivateKey, seqnum xdr.SequenceNumber) (*bc.Tx, error) {
+// BuildExportTx locks money to be retired in a TxVM smart contract.
+// Based on the success of the peg-out transaction, it either retires this amount
+// or returns it to the exporter address.
+func BuildExportTx(ctx context.Context, asset xdr.Asset, amount, inputAmt int64, temp string, anchor []byte, prv ed25519.PrivateKey, seqnum xdr.SequenceNumber) (*bc.Tx, error) {
 	if inputAmt < amount {
 		return nil, fmt.Errorf("cannot have input amount %d less than export amount %d", inputAmt, amount)
 	}
@@ -333,17 +337,18 @@ func BuildExportTxNew(ctx context.Context, asset xdr.Asset, amount, inputAmt int
 	// PRTODO: Replace this placeholder with actual value.
 	var sig []byte
 	buf := new(bytes.Buffer)
-	fmt.Fprintf(buf, "%x\n", refdata) // con stack: json
-	// TODO(debnil): Clarify what UTXO specifically is being called, so I know the order on the con stack of its results.
-	fmt.Fprintf(buf, "{'V', %d, %x, %x} input call\n", inputAmt, assetID, anchor) // arg stack: json, exportval, sigchecker
-	fmt.Fprintf(buf, "get get\n")                                                 // con stack: sigchecker, exportval; arg stack: json
-	fmt.Fprintf(buf, "splitzero swap put\n")                                      // con stack: sigchecker, zeroval; arg stack: json, exportval
-	fmt.Fprintf(buf, "{x'%x'} put\n", pubkey)                                     // con stack: sigchecker, zeroval; arg stack: json, exportval, {pubkey}
-	fmt.Fprintf(buf, "x'%x' contract call\n", exportContract1Src)                 // con stack: sigchecker, zeroval
-	fmt.Fprintf(buf, "finalize\n")                                                // con stack: sigchecker
-	// TODO(debnil): Figure out why there's a "get" in Bob's sample contract here. Must be misunderstanding where the sigchecker should be at this point.
+	fmt.Fprintf(buf, "%s\n", refdata) // con stack: json
+	// PRTODO: Clarify what UTXO specifically is being called, so I know the order on the con stack of its results.
+	fmt.Fprintf(buf, "{'C', %d, x'%x', x'%x'} input call\n", inputAmt, assetID, anchor) // arg stack: json, exportval, sigchecker
+	fmt.Fprintf(buf, "get get\n")                                                       // con stack: sigchecker, exportval; arg stack: json
+	fmt.Fprintf(buf, "splitzero swap put\n")                                            // con stack: sigchecker, zeroval; arg stack: json, exportval
+	fmt.Fprintf(buf, "{x'%x'} put\n", pubkey)                                           // con stack: sigchecker, zeroval; arg stack: json, exportval, {pubkey}
+	fmt.Fprintf(buf, "x'%x' contract call\n", exportContract1Src)                       // con stack: sigchecker, zeroval
+	fmt.Fprintf(buf, "finalize\n")                                                      // con stack: sigchecker
+	// PRTODO: Figure out why there's a "get" in Bob's sample contract here. Must be misunderstanding where the sigchecker should be at this point.
 	fmt.Fprintf(buf, "x'%x' put\n", sig) // con stack: sigchecker; arg stack: sig
 	fmt.Fprintf(buf, "call\n")
+	log.Print(buf)
 	exportTxBytes, err := asm.Assemble(buf.String())
 	if err != nil {
 		return nil, errors.Wrap(err, "assembling export tx")
@@ -356,10 +361,35 @@ func BuildExportTxNew(ctx context.Context, asset xdr.Asset, amount, inputAmt int
 	return tx, nil
 }
 
-// BuildExportTx builds a txvm retirement tx for an asset issued
+func exportTxSnapshot(exporterPubkey, assetXDR []byte) ([]byte, error) {
+	var asset xdr.Asset
+	err := xdr.SafeUnmarshalBase64(string(assetXDR), asset)
+	if err != nil {
+		return nil, err
+	}
+	assetBytes, err := asset.MarshalBinary()
+	if err != nil {
+		return nil, err
+	}
+	assetID := bc.NewHash(txvm.AssetID(importIssuanceSeed[:], assetBytes))
+	log.Print(assetID)
+	// Push components of export transaction snapshot.
+	buf := new(bytes.Buffer)
+	fmt.Fprintf(buf, "'C' x'%x' x'%x'\n", exportContract1Seed[:], exportContract2Prog)
+	// Push con stack: {exporter}, value, json
+	fmt.Fprintf(buf, "{'T', {x'%x'}}\n", exporterPubkey)
+	// fmt.Fprintf(buf, "{'V', %d, x'%x', x'%x'}\n", inputAmt, assetID, anchor)
+	tx, err := asm.Assemble(buf.String())
+	if err != nil {
+		return nil, errors.Wrap(err, "assembling export tx snapshot")
+	}
+	return tx, nil
+}
+
+// BuildExportTxOld builds a txvm retirement tx for an asset issued
 // onto slidechain. It will retire `amount` of the asset, and the
 // remaining input will be output back to the original account.
-func BuildExportTx(ctx context.Context, asset xdr.Asset, amount, inputAmt int64, temp string, anchor []byte, prv ed25519.PrivateKey, seqnum xdr.SequenceNumber) (*bc.Tx, error) {
+func BuildExportTxOld(ctx context.Context, asset xdr.Asset, amount, inputAmt int64, temp string, anchor []byte, prv ed25519.PrivateKey, seqnum xdr.SequenceNumber) (*bc.Tx, error) {
 	if inputAmt < amount {
 		return nil, fmt.Errorf("cannot have input amount %d less than export amount %d", inputAmt, amount)
 	}

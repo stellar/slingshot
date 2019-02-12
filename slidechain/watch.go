@@ -8,6 +8,7 @@ import (
 	"log"
 	"time"
 
+	"github.com/bobg/sqlutil"
 	"github.com/chain/txvm/protocol/bc"
 	"github.com/chain/txvm/protocol/txvm"
 	i10rnet "github.com/interstellar/starlight/net"
@@ -120,6 +121,7 @@ func (c *Custodian) watchExports(ctx context.Context) {
 			// Look for a retire-type ("X") entry
 			// followed by a specially formatted log ("L") entry
 			// that specifies the Stellar asset code to peg out and the Stellar recipient account ID.
+			// PRTODO: Rewrite this with export changes.
 
 			for i := 0; i < len(tx.Log)-2; i++ {
 				item := tx.Log[i]
@@ -174,5 +176,60 @@ func (c *Custodian) watchExports(ctx context.Context) {
 				i++ // advance past the consumed log ("L") entry
 			}
 		}
+	}
+}
+
+// Runs as a goroutine
+func (c *Custodian) watchPegOuts(ctx context.Context) {
+	defer log.Print("retireFromPegOut exiting")
+
+	// TODO(debnil): Check if we do, in fact, want a condition variable here.
+	ch := make(chan struct{})
+	go func() {
+		c.pegouts.L.Lock()
+		defer c.pegouts.L.Unlock()
+		for {
+			if ctx.Err() != nil {
+				return
+			}
+			c.pegouts.Wait()
+			ch <- struct{}{}
+		}
+	}()
+
+	// PRTODO: Include some information for reconstructing the input snapshot in the watch export.
+
+	// PRTODO: Run smart contract using the query.
+
+	// PRTODO: Wait for result of the smart contract.
+
+	// PRTODO: Use that result to update information in the exports table.
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ch:
+		}
+
+		var (
+			txids, assetXDRs             [][]byte
+			amounts, seqnums, peggedOuts []int64
+			exporters, temps             []string
+		)
+		const q = `SELECT txid, amount, asset_xdr, exporter, temp, seqnum, pegged_out FROM exports WHERE exported=1 AND (pegged_out=1 OR pegged_out=2)`
+		err := sqlutil.ForQueryRows(ctx, c.DB, q, func(txid []byte, amount int64, assetXDR []byte, exporter, temp string, seqnum, peggedOut int64) {
+			txids = append(txids, txid)
+			amounts = append(amounts, amount)
+			assetXDRs = append(assetXDRs, assetXDR)
+			exporters = append(exporters, exporter)
+			temps = append(temps, temp)
+			seqnums = append(seqnums, seqnum)
+			peggedOuts = append(peggedOuts, peggedOut)
+		})
+		if err != nil {
+			log.Fatalf("querying peg-outs: %s", err)
+		}
+		// PRTODO:
 	}
 }
