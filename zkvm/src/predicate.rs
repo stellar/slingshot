@@ -18,30 +18,36 @@ impl Predicate {
     /// Computes a disjunction of two predicates.
     /// TBD: push this code into to_point() impl for the witness
     pub fn or(&self, right: &Predicate) -> Result<Predicate, VMError> {
-        Ok(Predicate::Opaque(Self::commit_or(self.to_point(), right.to_point()).compute()?.compress()))
+        Ok(Predicate::Opaque(
+            Self::commit_or(self.to_point()?, right.to_point()?)
+                .compute()?
+                .compress(),
+        ))
     }
 
     /// Verifies whether the current predicate is a disjunction of two others.
     /// Returns a `PointOp` instance that can be verified in a batch with other operations.
-    pub fn prove_or(&self, left: &Predicate, right: &Predicate) -> PointOp {
-        let mut op = Self::commit_or(left.to_point(), right.to_point());
-        op.arbitrary.push((-Scalar::one(), self.to_point()));
-        op
+    pub fn prove_or(&self, left: &Predicate, right: &Predicate) -> Result<PointOp, VMError> {
+        let mut op = Self::commit_or(left.to_point()?, right.to_point()?);
+        op.arbitrary.push((-Scalar::one(), self.to_point()?));
+        Ok(op)
     }
 
     /// Creates a program-based predicate.
     /// One cannot sign for it as a public key because it’s using a secondary generator.
     /// TBD: push this code into to_point() impl for the witness
     pub fn program_predicate(prog: &[u8]) -> Result<Predicate, VMError> {
-        Ok(Predicate::Opaque(Self::commit_program(prog).compute()?.compress()))
+        Ok(Predicate::Opaque(
+            Self::commit_program(prog).compute()?.compress(),
+        ))
     }
 
     /// Verifies whether the current predicate is a commitment to a program `prog`.
     /// Returns a `PointOp` instance that can be verified in a batch with other operations.
-    pub fn prove_program_predicate(&self, prog: &[u8]) -> PointOp {
+    pub fn prove_program_predicate(&self, prog: &[u8]) -> Result<PointOp, VMError> {
         let mut op = Self::commit_program(prog);
-        op.arbitrary.push((-Scalar::one(), self.to_point()));
-        op
+        op.arbitrary.push((-Scalar::one(), self.to_point()?));
+        Ok(op)
     }
 
     fn commit_or(left: CompressedRistretto, right: CompressedRistretto) -> PointOp {
@@ -54,9 +60,7 @@ impl Predicate {
         PointOp {
             primary: Some(f),
             secondary: None,
-            arbitrary: vec![
-                (Scalar::one(), left),
-            ],
+            arbitrary: vec![(Scalar::one(), left)],
         }
     }
 
@@ -83,7 +87,9 @@ impl PredicateWitness {
         Ok(match self {
             // TBD: use VerificationKey API instead of plain mult
             PredicateWitness::Key(s) => s * PedersenGens::default().B,
-            PredicateWitness::Or(l, r) => Predicate::commit_or(l.to_point()?, r.to_point()?).compute()?,
+            PredicateWitness::Or(l, r) => {
+                Predicate::commit_or(l.to_point()?, r.to_point()?).compute()?
+            }
             PredicateWitness::Program(prog) => {
                 let mut bytecode = Vec::new();
                 Instruction::encode_program(prog.iter(), &mut bytecode);
@@ -92,8 +98,9 @@ impl PredicateWitness {
         })
     }
 
-    pub fn encode(&self, program: &mut Vec<u8>) {
-        program.extend_from_slice(&self.to_point().to_bytes());
+    pub fn encode(&self, program: &mut Vec<u8>) -> Result<(), VMError> {
+        program.extend_from_slice(&self.to_point()?.to_bytes());
+        Ok(())
     }
 }
 
@@ -104,8 +111,8 @@ mod tests {
     #[test]
     fn valid_program_commitment() {
         let prog = b"iddqd";
-        let pred = Predicate::program_predicate(prog);
-        let op = pred.prove_program_predicate(prog);
+        let pred = Predicate::program_predicate(prog).unwrap();
+        let op = pred.prove_program_predicate(prog).unwrap();
         assert!(op.verify().is_ok());
     }
 
@@ -113,8 +120,8 @@ mod tests {
     fn invalid_program_commitment() {
         let prog = b"iddqd";
         let prog2 = b"smth else";
-        let pred = Predicate::program_predicate(prog);
-        let op = pred.prove_program_predicate(prog2);
+        let pred = Predicate::program_predicate(prog).unwrap();
+        let op = pred.prove_program_predicate(prog2).unwrap();
         assert!(op.verify().is_err());
     }
 
@@ -127,7 +134,7 @@ mod tests {
         let right = Predicate::Opaque(gens.B_blinding.compress());
 
         let pred = left.or(&right).unwrap();
-        let op = pred.prove_or(&left, &right);
+        let op = pred.prove_or(&left, &right).unwrap();
         assert!(op.verify().is_ok());
     }
 
@@ -140,7 +147,7 @@ mod tests {
         let right = Predicate::Opaque(gens.B_blinding.compress());
 
         let pred = Predicate::Opaque(gens.B.compress());
-        let op = pred.prove_or(&left, &right);
+        let op = pred.prove_or(&left, &right).unwrap();
         assert!(op.verify().is_err());
     }
 
@@ -153,7 +160,7 @@ mod tests {
         let right = Predicate::Opaque(gens.B_blinding.compress());
 
         let pred = left.or(&right).unwrap();
-        let op = pred.prove_or(&right, &left);
+        let op = pred.prove_or(&right, &left).unwrap();
         assert!(op.verify().is_err());
     }
 }

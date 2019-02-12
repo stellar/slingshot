@@ -288,7 +288,7 @@ where
 
     fn nonce(&mut self) -> Result<(), VMError> {
         let predicate = self.pop_item()?.to_data()?.to_predicate()?;
-        let point = predicate.to_point();
+        let point = predicate.to_point()?;
         let contract = Contract {
             predicate,
             payload: Vec::new(),
@@ -301,7 +301,7 @@ where
 
     fn log(&mut self) -> Result<(), VMError> {
         let data = self.pop_item()?.to_data()?;
-        self.txlog.push(Entry::Data(data.to_bytes()));
+        self.txlog.push(Entry::Data(data.to_bytes()?));
         Ok(())
     }
 
@@ -313,8 +313,9 @@ where
         let (flv_point, _) = self.attach_variable(flv)?;
         let (qty_point, _) = self.attach_variable(qty)?;
 
+        let pred_point = predicate.to_point()?;
         self.delegate.verify_point_op(|| {
-            let flv_scalar = Value::issue_flavor(&predicate);
+            let flv_scalar = Value::issue_flavor(&pred_point);
             // flv_point == flavor·B    ->   0 == -flv_point + flv_scalar·B
             PointOp {
                 primary: Some(flv_scalar),
@@ -360,7 +361,7 @@ where
     /// _items... predicate_ **output:_k_** → ø
     fn output(&mut self, k: usize) -> Result<(), VMError> {
         let contract = self.pop_contract(k)?;
-        let output = self.encode_output(contract);
+        let output = self.encode_output(contract)?;
         self.txlog.push(Entry::Output(output));
         Ok(())
     }
@@ -643,10 +644,10 @@ where
         Ok(Contract { predicate, payload })
     }
 
-    fn encode_output(&mut self, contract: Contract) -> Vec<u8> {
+    fn encode_output(&mut self, contract: Contract) -> Result<Vec<u8>, VMError> {
         let mut output = Vec::with_capacity(contract.min_serialized_length());
 
-        encoding::write_point(&contract.predicate.to_point(), &mut output);
+        encoding::write_point(&contract.predicate.to_point()?, &mut output);
         encoding::write_u32(contract.payload.len() as u32, &mut output);
 
         for item in contract.payload.iter() {
@@ -668,7 +669,7 @@ where
                 }
             }
         }
-        output
+        Ok(output)
     }
 
     fn add_range_proof(&mut self, bitrange: usize, expr: Expression) -> Result<(), VMError> {

@@ -1,7 +1,7 @@
 use bulletproofs::PedersenGens;
 use curve25519_dalek::ristretto::{CompressedRistretto, RistrettoPoint};
 use curve25519_dalek::scalar::Scalar;
-use curve25519_dalek::traits::{Identity,IsIdentity, VartimeMultiscalarMul};
+use curve25519_dalek::traits::{Identity, IsIdentity, VartimeMultiscalarMul};
 
 use super::errors::VMError;
 

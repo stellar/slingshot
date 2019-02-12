@@ -226,9 +226,9 @@ impl Into<Scalar> for ScalarWitness {
 }
 
 impl Predicate {
-    pub fn to_point(&self) -> CompressedRistretto {
+    pub fn to_point(&self) -> Result<CompressedRistretto, VMError> {
         match self {
-            Predicate::Opaque(point) => *point,
+            Predicate::Opaque(point) => Ok(*point),
             Predicate::Witness(witness) => witness.to_point(),
         }
     }
@@ -304,13 +304,14 @@ impl Data {
     }
 
     /// Converts the Data into a vector of bytes
-    pub fn to_bytes(&self) -> Vec<u8> {
+    pub fn to_bytes(self) -> Result<Vec<u8>, VMError> {
+        let len = self.min_serialized_length();
         match self {
-            Data::Opaque(data) => data.clone(),
+            Data::Opaque(data) => Ok(data),
             Data::Witness(w) => {
-                let mut bytes: Vec<u8> = Vec::with_capacity(self.min_serialized_length());
-                w.encode(&mut bytes);
-                bytes.clone()
+                let mut bytes: Vec<u8> = Vec::with_capacity(len);
+                w.encode(&mut bytes)?;
+                Ok(bytes)
             }
         }
     }
@@ -353,26 +354,29 @@ impl Data {
     }
 
     /// Encodes blinded Data values.
-    pub fn encode(&self, buf: &mut Vec<u8>) {
+    pub fn encode(&self, buf: &mut Vec<u8>) -> Result<(), VMError> {
         match self {
             Data::Opaque(x) => {
                 buf.extend_from_slice(x);
-                return;
+                Ok(())
             }
             Data::Witness(w) => w.encode(buf),
-        };
+        }
     }
 }
 
 impl DataWitness {
-    fn encode(&self, buf: &mut Vec<u8>) {
+    fn encode(&self, buf: &mut Vec<u8>) -> Result<(), VMError> {
         match self {
-            DataWitness::Program(instr) => Instruction::encode_program(instr.iter(), buf),
-            DataWitness::Predicate(pw) => pw.encode(buf),
+            DataWitness::Program(instr) => Instruction::encode_program(instr.iter(), buf)?,
+            DataWitness::Predicate(pw) => pw.encode(buf)?,
             DataWitness::Commitment(cw) => cw.encode(buf),
-            DataWitness::Scalar(s) => buf.extend_from_slice(&s.to_bytes()),
+            DataWitness::Scalar(s) => {
+                buf.extend_from_slice(&s.to_bytes());
+            }
             DataWitness::Input(b) => b.encode(buf),
-        }
+        };
+        Ok(())
     }
 }
 
@@ -390,14 +394,15 @@ impl Contract {
 }
 
 impl FrozenContract {
-    fn encode(&self, buf: &mut Vec<u8>) {
-        buf.extend_from_slice(&self.predicate.to_point().to_bytes());
+    fn encode(&self, buf: &mut Vec<u8>) -> Result<(), VMError> {
+        buf.extend_from_slice(&self.predicate.to_point()?.to_bytes());
         for p in self.payload.iter() {
             match p {
                 // Data = 0x00 || LE32(len) || <bytes>
                 FrozenItem::Data(d) => {
                     buf.push(0u8);
-                    let mut bytes = d.to_bytes();
+                    let mut bytes = Vec::new();
+                    d.encode(&mut bytes)?;
                     encoding::write_u32(bytes.len() as u32, buf);
                     buf.extend_from_slice(&mut bytes);
                 }
@@ -409,14 +414,15 @@ impl FrozenContract {
                 }
             }
         }
+        Ok(())
     }
 }
 
 impl Value {
     /// Computes a flavor as defined by the `issue` instruction from a predicate.
-    pub fn issue_flavor(predicate: &Predicate) -> Scalar {
+    pub fn issue_flavor(predicate: &CompressedRistretto) -> Scalar {
         let mut t = Transcript::new(b"ZkVM.issue");
-        t.commit_bytes(b"predicate", predicate.to_point().as_bytes());
+        t.commit_bytes(b"predicate", predicate.as_bytes());
         t.challenge_scalar(b"flavor")
     }
 }

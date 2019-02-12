@@ -194,12 +194,12 @@ impl Instruction {
 
     /// Appends the bytecode representation of an Instruction
     /// to the program.
-    pub fn encode(&self, program: &mut Vec<u8>) {
+    pub fn encode(&self, program: &mut Vec<u8>) -> Result<(), VMError> {
         let mut write = |op: Opcode| program.push(op.to_u8());
         match self {
             Instruction::Push(data) => {
                 write(Opcode::Push);
-                data.encode(program);
+                data.encode(program)?;
             }
             Instruction::Drop => write(Opcode::Drop),
             Instruction::Dup(idx) => {
@@ -259,15 +259,17 @@ impl Instruction {
             Instruction::Delegate => write(Opcode::Delegate),
             Instruction::Ext(x) => program.push(*x),
         };
+        Ok(())
     }
 
-    pub fn encode_program<I>(iterator: I, program: &mut Vec<u8>)
+    pub fn encode_program<I>(iterator: I, program: &mut Vec<u8>) -> Result<(),VMError>
     where
         I: IntoIterator,
         I::Item: Borrow<Self>,
     {
         for i in iterator.into_iter() {
-            i.borrow().encode(program);
+            i.borrow().encode(program)?;
         }
+        Ok(())
     }
 }
