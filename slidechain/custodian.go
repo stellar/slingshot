@@ -34,7 +34,7 @@ var (
 // values.
 type Custodian struct {
 	seed    string
-	hclient *horizon.Client
+	hclient horizon.ClientInterface
 	imports *sync.Cond
 	exports *sync.Cond
 	network string
@@ -50,7 +50,7 @@ type Custodian struct {
 // account ID and seed from the db if it exists, otherwise generating
 // a new keypair and funding the account.
 func GetCustodian(ctx context.Context, db *sql.DB, horizonURL string) (*Custodian, error) {
-	c, err := newCustodian(ctx, db, horizonURL)
+	c, err := newCustodian(ctx, db, hclient(horizonURL))
 	if err != nil {
 		return nil, err
 	}
@@ -58,15 +58,10 @@ func GetCustodian(ctx context.Context, db *sql.DB, horizonURL string) (*Custodia
 	return c, nil
 }
 
-func newCustodian(ctx context.Context, db *sql.DB, horizonURL string) (*Custodian, error) {
+func newCustodian(ctx context.Context, db *sql.DB, hclient horizon.ClientInterface) (*Custodian, error) {
 	err := setSchema(db)
 	if err != nil {
 		return nil, errors.Wrap(err, "setting db schema")
-	}
-
-	hclient := &horizon.Client{
-		URL:  strings.TrimRight(horizonURL, "/"),
-		HTTP: new(http.Client),
 	}
 
 	root, err := hclient.Root()
@@ -117,7 +112,7 @@ func newCustodian(ctx context.Context, db *sql.DB, horizonURL string) (*Custodia
 	}, nil
 }
 
-func custodianAccount(ctx context.Context, db *sql.DB, hclient *horizon.Client) (*xdr.AccountId, string, error) {
+func custodianAccount(ctx context.Context, db *sql.DB, hclient horizon.ClientInterface) (*xdr.AccountId, string, error) {
 	var seed string
 	err := db.QueryRow("SELECT seed FROM custodian").Scan(&seed)
 	if err == sql.ErrNoRows {
@@ -138,7 +133,7 @@ func custodianAccount(ctx context.Context, db *sql.DB, hclient *horizon.Client) 
 	return &custAccountID, seed, err
 }
 
-func makeNewCustodianAccount(ctx context.Context, db *sql.DB, hclient *horizon.Client) (*xdr.AccountId, string, error) {
+func makeNewCustodianAccount(ctx context.Context, db *sql.DB, hclient horizon.ClientInterface) (*xdr.AccountId, string, error) {
 	pair, err := keypair.Random()
 	if err != nil {
 		return nil, "", errors.Wrap(err, "generating new keypair")
@@ -212,4 +207,11 @@ func mustDecodeHex(inp string) []byte {
 func setSchema(db *sql.DB) error {
 	_, err := db.Exec(schema)
 	return errors.Wrap(err, "creating db schema")
+}
+
+func hclient(url string) *horizon.Client {
+	return &horizon.Client{
+		URL:  strings.TrimRight(url, "/"),
+		HTTP: new(http.Client),
+	}
 }

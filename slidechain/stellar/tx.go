@@ -11,7 +11,7 @@ import (
 
 // SignAndSubmitTx signs and submits a transaction to the Stellar network. If there is
 // an error, SubmitTx will log the Result string to the console and return the error.
-func SignAndSubmitTx(hclient *horizon.Client, tx *b.TransactionBuilder, seeds ...string) (*horizon.TransactionSuccess, error) {
+func SignAndSubmitTx(hclient horizon.ClientInterface, tx *b.TransactionBuilder, seeds ...string) (*horizon.TransactionSuccess, error) {
 	txenv, err := tx.Sign(seeds...)
 	if err != nil {
 		return nil, errors.Wrap(err, "signing tx")
