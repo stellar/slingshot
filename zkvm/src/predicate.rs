@@ -18,87 +18,78 @@ impl Predicate {
     /// Computes a disjunction of two predicates.
     /// TBD: push this code into to_point() impl for the witness
     pub fn or(&self, right: &Predicate) -> Result<Predicate, VMError> {
-        let mut t = Transcript::new(b"ZkVM.predicate");
-        let gens = PedersenGens::default();
-        t.commit_point(b"L", &self.to_point());
-        t.commit_point(b"R", &right.to_point());
-        let f = t.challenge_scalar(b"f");
-        let l = self.to_point().decompress().ok_or(VMError::InvalidPoint)?;
-        Ok(Predicate::Opaque((l + f * gens.B).compress()))
+        Ok(Predicate::Opaque(Self::commit_or(self.to_point(), right.to_point()).compute()?.compress()))
     }
 
     /// Verifies whether the current predicate is a disjunction of two others.
     /// Returns a `PointOp` instance that can be verified in a batch with other operations.
     pub fn prove_or(&self, left: &Predicate, right: &Predicate) -> PointOp {
-        let mut t = Transcript::new(b"ZkVM.predicate");
-        t.commit_point(b"L", &left.to_point());
-        t.commit_point(b"R", &right.to_point());
-        let f = t.challenge_scalar(b"f");
-
-        // P == L + f*B   ->   0 == -P + L + f*B
-        PointOp {
-            primary: Some(f),
-            secondary: None,
-            arbitrary: vec![
-                (-Scalar::one(), self.to_point()),
-                (Scalar::one(), left.to_point()),
-            ],
-        }
+        let mut op = Self::commit_or(left.to_point(), right.to_point());
+        op.arbitrary.push((-Scalar::one(), self.to_point()));
+        op
     }
 
     /// Creates a program-based predicate.
     /// One cannot sign for it as a public key because it’s using a secondary generator.
     /// TBD: push this code into to_point() impl for the witness
-    pub fn program_predicate(prog: &[u8]) -> Predicate {
-        let mut t = Transcript::new(b"ZkVM.predicate");
-        let gens = PedersenGens::default();
-        t.commit_bytes(b"prog", &prog);
-        let h = t.challenge_scalar(b"h");
-        Predicate::Opaque((h * gens.B_blinding).compress())
+    pub fn program_predicate(prog: &[u8]) -> Result<Predicate, VMError> {
+        Ok(Predicate::Opaque(Self::commit_program(prog).compute()?.compress()))
     }
 
     /// Verifies whether the current predicate is a commitment to a program `prog`.
     /// Returns a `PointOp` instance that can be verified in a batch with other operations.
     pub fn prove_program_predicate(&self, prog: &[u8]) -> PointOp {
+        let mut op = Self::commit_program(prog);
+        op.arbitrary.push((-Scalar::one(), self.to_point()));
+        op
+    }
+
+    fn commit_or(left: CompressedRistretto, right: CompressedRistretto) -> PointOp {
+        let mut t = Transcript::new(b"ZkVM.predicate");
+        t.commit_point(b"L", &left);
+        t.commit_point(b"R", &right);
+        let f = t.challenge_scalar(b"f");
+
+        // P = L + f*B
+        PointOp {
+            primary: Some(f),
+            secondary: None,
+            arbitrary: vec![
+                (Scalar::one(), left),
+            ],
+        }
+    }
+
+    fn commit_program(prog: &[u8]) -> PointOp {
         let mut t = Transcript::new(b"ZkVM.predicate");
         t.commit_bytes(b"prog", &prog);
         let h = t.challenge_scalar(b"h");
 
-        // P == h*B2   ->   0 == -P + h*B2
+        // P = h*B2
         PointOp {
             primary: None,
             secondary: Some(h),
-            arbitrary: vec![(-Scalar::one(), self.to_point())],
+            arbitrary: Vec::new(),
         }
     }
 }
 
 impl PredicateWitness {
-    pub fn to_point(&self) -> CompressedRistretto {
-        self.to_uncompressed_point().compress()
+    pub fn to_point(&self) -> Result<CompressedRistretto, VMError> {
+        Ok(self.to_uncompressed_point()?.compress())
     }
 
-    fn to_uncompressed_point(&self) -> RistrettoPoint {
-        let gens = PedersenGens::default();
-        match self {
-            PredicateWitness::Key(s) => s * gens.B,
-            PredicateWitness::Or(l, r) => {
-                let mut t = Transcript::new(b"ZkVM.predicate");
-                let (left, right) = (&l.to_uncompressed_point(), &r.to_uncompressed_point());
-                t.commit_point(b"L", &left.compress());
-                t.commit_point(b"R", &right.compress());
-                let f = t.challenge_scalar(b"f");
-                left + f * gens.B
-            }
+    fn to_uncompressed_point(&self) -> Result<RistrettoPoint, VMError> {
+        Ok(match self {
+            // TBD: use VerificationKey API instead of plain mult
+            PredicateWitness::Key(s) => s * PedersenGens::default().B,
+            PredicateWitness::Or(l, r) => Predicate::commit_or(l.to_point()?, r.to_point()?).compute()?,
             PredicateWitness::Program(prog) => {
-                let mut t = Transcript::new(b"ZkVM.predicate");
                 let mut bytecode = Vec::new();
                 Instruction::encode_program(prog.iter(), &mut bytecode);
-                t.commit_bytes(b"prog", &bytecode);
-                let h = t.challenge_scalar(b"h");
-                h * gens.B_blinding
+                Predicate::commit_program(&bytecode).compute()?
             }
-        }
+        })
     }
 
     pub fn encode(&self, program: &mut Vec<u8>) {

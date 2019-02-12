@@ -1,7 +1,7 @@
 use bulletproofs::PedersenGens;
 use curve25519_dalek::ristretto::{CompressedRistretto, RistrettoPoint};
 use curve25519_dalek::scalar::Scalar;
-use curve25519_dalek::traits::{IsIdentity, VartimeMultiscalarMul};
+use curve25519_dalek::traits::{Identity,IsIdentity, VartimeMultiscalarMul};
 
 use super::errors::VMError;
 
@@ -22,7 +22,7 @@ pub struct PointOp {
 
 impl PointOp {
     /// Non-batched verification of an individual point operation.
-    pub fn verify(self) -> Result<(), VMError> {
+    pub fn compute(self) -> Result<RistrettoPoint, VMError> {
         let gens = PedersenGens::default();
         let (mut weights, points): (Vec<_>, Vec<_>) = self.arbitrary.into_iter().unzip();
         let mut points: Vec<_> = points.into_iter().map(|p| p.decompress()).collect();
@@ -37,16 +37,18 @@ impl PointOp {
         }
 
         if points.len() == 0 {
-            return Ok(());
+            return Ok(RistrettoPoint::identity());
         }
 
-        let check = RistrettoPoint::optional_multiscalar_mul(weights, points)
-            .ok_or_else(|| VMError::PointOperationFailed)?;
+        RistrettoPoint::optional_multiscalar_mul(weights, points)
+            .ok_or_else(|| VMError::PointOperationFailed)
+    }
 
-        if !check.is_identity() {
+    /// Non-batched verification of an individual point operation.
+    pub fn verify(self) -> Result<(), VMError> {
+        if !self.compute()?.is_identity() {
             return Err(VMError::PointOperationFailed);
         }
-
         Ok(())
     }
 
