@@ -36,7 +36,7 @@ impl<'a, 'b> Delegate<r1cs::Prover<'a, 'b>> for Prover<'a, 'b> {
         Ok(self.cs.commit(v, v_blinding))
     }
 
-    fn verify_point_op<F>(&mut self, point_op_fn: F) -> Result<(), VMError>
+    fn verify_point_op<F>(&mut self, _point_op_fn: F) -> Result<(), VMError>
     where
         F: FnOnce() -> PointOp,
     {
