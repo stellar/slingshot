@@ -238,7 +238,9 @@ func TestImport(t *testing.T) {
 				t.Fatal("unsuccessfully waited on pre-peg-in tx hitting txvm")
 			}
 			log.Println("pre-peg-in tx hit the txvm chain...")
-			go c.importFromPegs(ctx)
+			ready := make(chan struct{})
+			go c.importFromPegs(ctx, ready)
+			<-ready
 			nonceHash := UniqueNonceHash(c.InitBlockHash.Bytes(), expMS)
 			_, err = db.Exec("INSERT INTO pegs (nonce_hash, amount, asset_xdr, recipient_pubkey, nonce_expms, stellar_tx) VALUES ($1, 1, $2, $3, $4, 1)", nonceHash[:], assetXDR, testRecipPubKey, expMS)
 			if err != nil {
@@ -258,8 +260,6 @@ func TestImport(t *testing.T) {
 						t.Logf("found import tx %x", tx.Program)
 						log.Printf("found import tx %x", tx.Program)
 						return
-					} else {
-						log.Printf("read tx %x, not import tx", tx.Program)
 					}
 				}
 			}

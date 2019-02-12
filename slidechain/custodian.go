@@ -191,7 +191,7 @@ func (c *Custodian) Account(w http.ResponseWriter, req *http.Request) {
 // that stream txs, import, and export.
 func (c *Custodian) launch(ctx context.Context) {
 	go c.watchPegs(ctx)
-	go c.importFromPegs(ctx)
+	go c.importFromPegs(ctx, nil)
 	go c.watchExports(ctx)
 	go c.pegOutFromExports(ctx)
 }
