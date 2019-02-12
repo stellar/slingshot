@@ -59,7 +59,7 @@ impl Predicate {
 
     fn commit_or(left: CompressedRistretto, right: CompressedRistretto) -> PointOp {
         let mut t = Transcript::new(b"ZkVM.predicate");
-        
+
         t.commit_point(b"L", &left);
         t.commit_point(b"R", &right);
         let f = t.challenge_scalar(b"f");
