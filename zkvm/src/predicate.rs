@@ -23,7 +23,7 @@ impl Predicate {
     /// Computes a disjunction of two predicates.
     /// TBD: push this code into to_point() impl for the witness
     pub fn or(&self, right: &Predicate) -> Result<Predicate, VMError> {
-        Ok(Predicate::new(
+        Ok(Predicate::opaque(
             Self::commit_or(self.point(), right.point())
                 .compute()?
                 .compress(),
@@ -46,7 +46,7 @@ impl Predicate {
         let gens = PedersenGens::default();
         t.commit_bytes(b"prog", &prog);
         let h = t.challenge_scalar(b"h");
-        Predicate::new((h * gens.B_blinding).compress())
+        Predicate::opaque((h * gens.B_blinding).compress())
     }
 
     /// Verifies whether the current predicate is a commitment to a program `prog`.
@@ -133,8 +133,8 @@ mod tests {
         let gens = PedersenGens::default();
 
         // dummy predicates
-        let left = Predicate::new(gens.B.compress());
-        let right = Predicate::new(gens.B_blinding.compress());
+        let left = Predicate::opaque(gens.B.compress());
+        let right = Predicate::opaque(gens.B_blinding.compress());
 
         let pred = left.or(&right).unwrap();
         let op = pred.prove_or(&left, &right);
@@ -146,10 +146,10 @@ mod tests {
         let gens = PedersenGens::default();
 
         // dummy predicates
-        let left = Predicate::new(gens.B.compress());
-        let right = Predicate::new(gens.B_blinding.compress());
+        let left = Predicate::opaque(gens.B.compress());
+        let right = Predicate::opaque(gens.B_blinding.compress());
 
-        let pred = Predicate::new(gens.B.compress());
+        let pred = Predicate::opaque(gens.B.compress());
         let op = pred.prove_or(&left, &right);
         assert!(op.verify().is_err());
     }
@@ -159,8 +159,8 @@ mod tests {
         let gens = PedersenGens::default();
 
         // dummy predicates
-        let left = Predicate::new(gens.B.compress());
-        let right = Predicate::new(gens.B_blinding.compress());
+        let left = Predicate::opaque(gens.B.compress());
+        let right = Predicate::opaque(gens.B_blinding.compress());
 
         let pred = left.or(&right).unwrap();
         let op = pred.prove_or(&right, &left);

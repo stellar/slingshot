@@ -47,7 +47,7 @@ impl<'a, 'b> Delegate<r1cs::Prover<'a, 'b>> for Prover<'a, 'b> {
         match pred.witness() {
             None => Err(VMError::WitnessMissing),
             Some(w) => match w {
-                PredicateWitness::Key(s) => Ok(self.signtx_keys.push(s)),
+                PredicateWitness::Key(s) => Ok(self.signtx_keys.push(s.clone())),
                 _ => Err(VMError::TypeNotKey),
             },
         }

@@ -106,7 +106,7 @@ pub struct InputWitness {
 #[derive(Clone, Debug)]
 pub enum DataWitness {
     Program(Vec<Instruction>),
-    Predicate(Predicate),
+    Predicate(Box<Predicate>),
     Commitment(Box<CommitmentWitness>),
     Scalar(Box<Scalar>),
     Input(Box<InputWitness>),
@@ -226,7 +226,7 @@ impl Into<Scalar> for ScalarWitness {
 }
 
 impl Predicate {
-    pub fn new(point: CompressedRistretto) -> Self {
+    pub fn opaque(point: CompressedRistretto) -> Self {
         Predicate {
             point,
             witness: None,
@@ -244,10 +244,10 @@ impl Predicate {
         self.point
     }
 
-    pub fn witness(&self) -> Option<PredicateWitness> {
+    pub fn witness(&self) -> Option<&PredicateWitness> {
         match &self.witness {
             None => None,
-            Some(w) => Some(w.clone()),
+            Some(w) => Some(w),
         }
     }
 }
@@ -338,13 +338,10 @@ impl Data {
         match self {
             Data::Opaque(data) => {
                 let point = Subslice::new(&data).read_point()?;
-                Ok(Predicate::new(point))
+                Ok(Predicate::opaque(point))
             }
             Data::Witness(witness) => match witness {
-                DataWitness::Predicate(p) => match p.witness() {
-                    Some(w) => Ok(Predicate::from_witness(w)?),
-                    None => Err(VMError::WitnessMissing),
-                },
+                DataWitness::Predicate(boxed_pred) => Ok(*boxed_pred),
                 _ => Err(VMError::TypeNotPredicate),
             },
         }
@@ -389,7 +386,7 @@ impl DataWitness {
     fn encode(&self, buf: &mut Vec<u8>) {
         match self {
             DataWitness::Program(instr) => Instruction::encode_program(instr.iter(), buf),
-            DataWitness::Predicate(p) => p.encode(buf),
+            DataWitness::Predicate(pw) => pw.encode(buf),
             DataWitness::Commitment(cw) => cw.encode(buf),
             DataWitness::Scalar(s) => buf.extend_from_slice(&s.to_bytes()),
             DataWitness::Input(b) => b.encode(buf),
