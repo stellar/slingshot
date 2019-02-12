@@ -61,6 +61,7 @@ func (c *Custodian) importFromPegs(ctx context.Context, ready chan struct{}) {
 	go func() {
 		c.imports.L.Lock()
 		defer c.imports.L.Unlock()
+		log.Println("waiting")
 		for {
 			if ctx.Err() != nil {
 				return
@@ -71,6 +72,7 @@ func (c *Custodian) importFromPegs(ctx context.Context, ready chan struct{}) {
 	}()
 
 	if ready != nil {
+		log.Println("closing ready")
 		close(ready)
 	}
 

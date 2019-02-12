@@ -241,6 +241,7 @@ func TestImport(t *testing.T) {
 			ready := make(chan struct{})
 			go c.importFromPegs(ctx, ready)
 			<-ready
+			log.Println("importFromPegs goroutine ready")
 			nonceHash := UniqueNonceHash(c.InitBlockHash.Bytes(), expMS)
 			_, err = db.Exec("INSERT INTO pegs (nonce_hash, amount, asset_xdr, recipient_pubkey, nonce_expms, stellar_tx) VALUES ($1, 1, $2, $3, $4, 1)", nonceHash[:], assetXDR, testRecipPubKey, expMS)
 			if err != nil {
