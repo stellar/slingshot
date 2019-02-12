@@ -11,15 +11,17 @@ use merlin::Transcript;
 use crate::errors::VMError;
 use crate::ops::Instruction;
 use crate::point_ops::PointOp;
+use crate::signature::VerificationKey;
 use crate::transcript::TranscriptProtocol;
 
+/// Represents a ZkVM predicate with its optional witness data.
 #[derive(Clone, Debug)]
 pub struct Predicate {
     point: CompressedRistretto,
     witness: Option<PredicateWitness>,
 }
 
-/// Prover's representation of the predicate tree with all the secrets
+/// Prover's representation of the predicate tree with all the secret witness data.
 #[derive(Clone, Debug)]
 pub enum PredicateWitness {
     Key(Scalar),
@@ -35,6 +37,7 @@ impl Predicate {
         }
     }
 
+    /// Constructs a predicate from a witness.
     pub fn from_witness(witness: PredicateWitness) -> Result<Self, VMError> {
         Ok(Predicate {
             point: witness.to_point()?,
@@ -121,18 +124,15 @@ impl Predicate {
 
 impl PredicateWitness {
     pub fn to_point(&self) -> Result<CompressedRistretto, VMError> {
-        Ok(self.to_uncompressed_point()?.compress())
-    }
-
-    fn to_uncompressed_point(&self) -> Result<RistrettoPoint, VMError> {
         Ok(match self {
-            // TBD: use VerificatioNKey API instead of plain multiplication
-            PredicateWitness::Key(s) => s * PedersenGens::default().B,
-            PredicateWitness::Or(l, r) => Predicate::commit_or(l.point(), r.point()).compute()?,
+            PredicateWitness::Key(s) => VerificationKey::from_secret(s).0,
+            PredicateWitness::Or(l, r) => Predicate::commit_or(l.point(), r.point())
+                .compute()?
+                .compress(),
             PredicateWitness::Program(prog) => {
                 let mut bytecode = Vec::new();
                 Instruction::encode_program(prog.iter(), &mut bytecode);
-                Predicate::commit_program(&bytecode).compute()?
+                Predicate::commit_program(&bytecode).compute()?.compress()
             }
         })
     }
