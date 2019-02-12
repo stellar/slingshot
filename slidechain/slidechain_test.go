@@ -204,7 +204,7 @@ func TestImport(t *testing.T) {
 		{xdr.AssetTypeAssetTypeCreditAlphanum12, "USDUSD", importTestAccountID},
 	}
 	for _, tt := range importtests {
-		t.Logf("testing asset %s", tt.assetType)
+		log.Printf("testing asset %s", tt.assetType)
 		stellarAsset := makeAsset(tt.assetType, tt.code, tt.issuer)
 		assetXDR, err := stellarAsset.MarshalBinary()
 		if err != nil {
@@ -241,15 +241,12 @@ func TestImport(t *testing.T) {
 			ready := make(chan struct{})
 			go c.importFromPegs(ctx, ready)
 			<-ready
-			log.Println("importFromPegs goroutine ready")
 			nonceHash := UniqueNonceHash(c.InitBlockHash.Bytes(), expMS)
 			_, err = db.Exec("INSERT INTO pegs (nonce_hash, amount, asset_xdr, recipient_pubkey, nonce_expms, stellar_tx) VALUES ($1, 1, $2, $3, $4, 1)", nonceHash[:], assetXDR, testRecipPubKey, expMS)
 			if err != nil {
 				t.Fatal(err)
 			}
-			log.Println("inserted peg-in row")
 			c.imports.Broadcast()
-			log.Println("broadcast()")
 			for {
 				item, ok := r.Read(ctx)
 				if !ok {
@@ -259,7 +256,6 @@ func TestImport(t *testing.T) {
 				for _, tx := range block.Transactions {
 					if isImportTx(tx, 1, assetXDR, testRecipPubKey) {
 						t.Logf("found import tx %x", tx.Program)
-						log.Printf("found import tx %x", tx.Program)
 						return
 					}
 				}
