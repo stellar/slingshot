@@ -62,19 +62,25 @@ func (c *Custodian) importFromPegs(ctx context.Context, ready chan struct{}) {
 		c.imports.L.Lock()
 		defer c.imports.L.Unlock()
 		log.Println("waiting")
+		if ready != nil {
+			log.Println("closing ready")
+			close(ready)
+		}
 		for {
 			if ctx.Err() != nil {
 				return
 			}
+			log.Println("pre-wait")
 			c.imports.Wait()
+			log.Println("post-wait")
 			ch <- struct{}{}
 		}
 	}()
 
-	if ready != nil {
-		log.Println("closing ready")
-		close(ready)
-	}
+	// if ready != nil {
+	// 	log.Println("closing ready")
+	// 	close(ready)
+	// }
 
 	for {
 		select {
