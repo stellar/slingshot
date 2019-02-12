@@ -12,6 +12,7 @@ use crate::errors::VMError;
 use crate::ops::Instruction;
 use crate::transcript::TranscriptProtocol;
 use crate::txlog::{TxID, UTXO};
+use crate::predicate::Predicate;
 
 #[derive(Debug)]
 pub enum Item {
@@ -78,12 +79,6 @@ pub enum Constraint {
 }
 
 #[derive(Clone, Debug)]
-pub struct Predicate {
-    point: CompressedRistretto,
-    witness: Option<PredicateWitness>,
-}
-
-#[derive(Clone, Debug)]
 pub enum Commitment {
     Closed(CompressedRistretto),
     Open(Box<CommitmentWitness>),
@@ -110,14 +105,6 @@ pub enum DataWitness {
     Commitment(Box<CommitmentWitness>),
     Scalar(Box<Scalar>),
     Input(Box<InputWitness>),
-}
-
-/// Prover's representation of the predicate tree with all the secrets
-#[derive(Clone, Debug)]
-pub enum PredicateWitness {
-    Key(Scalar),
-    Program(Vec<Instruction>),
-    Or(Box<PredicateWitness>, Box<PredicateWitness>),
 }
 
 /// Prover's representation of the commitment secret: witness and blinding factor
@@ -225,32 +212,6 @@ impl Into<Scalar> for ScalarWitness {
     }
 }
 
-impl Predicate {
-    pub fn opaque(point: CompressedRistretto) -> Self {
-        Predicate {
-            point,
-            witness: None,
-        }
-    }
-
-    pub fn from_witness(witness: PredicateWitness) -> Result<Self, VMError> {
-        Ok(Predicate {
-            point: witness.to_point()?,
-            witness: Some(witness),
-        })
-    }
-
-    pub fn point(&self) -> CompressedRistretto {
-        self.point
-    }
-
-    pub fn witness(&self) -> Option<&PredicateWitness> {
-        match &self.witness {
-            None => None,
-            Some(w) => Some(w),
-        }
-    }
-}
 
 impl Item {
     // Downcasts to Data type
@@ -409,7 +370,7 @@ impl Contract {
 
 impl FrozenContract {
     fn encode(&self, buf: &mut Vec<u8>) {
-        buf.extend_from_slice(&self.predicate.point.to_bytes());
+        buf.extend_from_slice(&self.predicate.point().to_bytes());
         for p in self.payload.iter() {
             match p {
                 // Data = 0x00 || LE32(len) || <bytes>
@@ -434,7 +395,7 @@ impl Value {
     /// Computes a flavor as defined by the `issue` instruction from a predicate.
     pub fn issue_flavor(predicate: &Predicate) -> Scalar {
         let mut t = Transcript::new(b"ZkVM.issue");
-        t.commit_bytes(b"predicate", predicate.point.as_bytes());
+        t.commit_bytes(b"predicate", predicate.point().as_bytes());
         t.challenge_scalar(b"flavor")
     }
 }

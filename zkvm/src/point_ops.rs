@@ -41,7 +41,7 @@ impl PointOp {
         }
 
         RistrettoPoint::optional_multiscalar_mul(weights, points)
-            .ok_or_else(|| VMError::PointOperationFailed)
+            .ok_or(VMError::PointOperationFailed)
     }
 
     /// Non-batched verificatin of an individual point operation
@@ -93,7 +93,7 @@ impl PointOp {
         }
 
         let check = RistrettoPoint::optional_multiscalar_mul(weights, points)
-            .ok_or_else(|| VMError::PointOperationFailed)?;
+            .ok_or(VMError::PointOperationFailed)?;
         if !check.is_identity() {
             return Err(VMError::PointOperationFailed);
         }

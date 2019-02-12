@@ -12,9 +12,48 @@ use crate::errors::VMError;
 use crate::ops::Instruction;
 use crate::point_ops::PointOp;
 use crate::transcript::TranscriptProtocol;
-use crate::types::{Predicate, PredicateWitness};
+
+#[derive(Clone, Debug)]
+pub struct Predicate {
+    point: CompressedRistretto,
+    witness: Option<PredicateWitness>,
+}
+
+
+/// Prover's representation of the predicate tree with all the secrets
+#[derive(Clone, Debug)]
+pub enum PredicateWitness {
+    Key(Scalar),
+    Program(Vec<Instruction>),
+    Or(Box<PredicateWitness>, Box<PredicateWitness>),
+}
 
 impl Predicate {
+    pub fn opaque(point: CompressedRistretto) -> Self {
+        Predicate {
+            point,
+            witness: None,
+        }
+    }
+
+    pub fn from_witness(witness: PredicateWitness) -> Result<Self, VMError> {
+        Ok(Predicate {
+            point: witness.to_point()?,
+            witness: Some(witness),
+        })
+    }
+
+    pub fn point(&self) -> CompressedRistretto {
+        self.point
+    }
+
+    pub fn witness(&self) -> Option<&PredicateWitness> {
+        match &self.witness {
+            None => None,
+            Some(w) => Some(w),
+        }
+    }
+
     /// Encodes the Predicate in program bytecode.
     pub fn encode(&self, prog: &mut Vec<u8>) {
         prog.extend_from_slice(&self.point().to_bytes())
@@ -22,12 +61,12 @@ impl Predicate {
 
     /// Computes a disjunction of two predicates.
     /// TBD: push this code into to_point() impl for the witness
-    pub fn or(&self, right: &Predicate) -> Result<Predicate, VMError> {
-        Ok(Predicate::opaque(
-            Self::commit_or(self.point(), right.point())
-                .compute()?
-                .compress(),
-        ))
+    pub fn or(self, right: Predicate) -> Result<Predicate, VMError> {
+        Ok(Predicate::from_witness(
+            PredicateWitness::Or(
+                Box::new(self.witness.ok_or(VMError::WitnessMissing)?), 
+                Box::new(right))
+        )?)
     }
 
     /// Verifies whether the current predicate is a disjunction of two others.
@@ -41,12 +80,10 @@ impl Predicate {
     /// Creates a program-based predicate.
     /// One cannot sign for it as a public key because it’s using a secondary generator.
     /// TBD: push this code into to_point() impl for the witness
-    pub fn program_predicate(prog: &[u8]) -> Predicate {
-        let mut t = Transcript::new(b"ZkVM.predicate");
-        let gens = PedersenGens::default();
-        t.commit_bytes(b"prog", &prog);
-        let h = t.challenge_scalar(b"h");
-        Predicate::opaque((h * gens.B_blinding).compress())
+    pub fn from_program(program: Vec<Instruction>) -> Result<Predicate, VMError> {
+        Ok(Predicate::from_witness(
+            PredicateWitness::Program(program)
+        )?)
     }
 
     /// Verifies whether the current predicate is a commitment to a program `prog`.
@@ -59,7 +96,7 @@ impl Predicate {
 
     fn commit_or(left: CompressedRistretto, right: CompressedRistretto) -> PointOp {
         let mut t = Transcript::new(b"ZkVM.predicate");
-        
+
         t.commit_point(b"L", &left);
         t.commit_point(b"R", &right);
         let f = t.challenge_scalar(b"f");
@@ -111,20 +148,26 @@ impl PredicateWitness {
 mod tests {
     use super::*;
 
+    fn bytecode(prog: &Vec<Instruction>) -> Vec<u8> {
+        let mut prog_vec = Vec::new();
+        Instruction::encode_program(prog.iter(), &mut prog_vec);
+        prog_vec
+    }
+
     #[test]
     fn valid_program_commitment() {
-        let prog = b"iddqd";
-        let pred = Predicate::program_predicate(prog);
-        let op = pred.prove_program_predicate(prog);
+        let prog = vec![Instruction::Drop];
+        let pred = Predicate::from_program(prog.clone()).unwrap();
+        let op = pred.prove_program_predicate(&bytecode(&prog));
         assert!(op.verify().is_ok());
     }
 
     #[test]
     fn invalid_program_commitment() {
-        let prog = b"iddqd";
-        let prog2 = b"smth else";
-        let pred = Predicate::program_predicate(prog);
-        let op = pred.prove_program_predicate(prog2);
+        let prog = vec![Instruction::Drop];
+        let prog2 = vec![Instruction::Dup(1)];
+        let pred = Predicate::from_program(prog).unwrap();
+        let op = pred.prove_program_predicate(&bytecode(&prog2));
         assert!(op.verify().is_err());
     }
 
