@@ -44,8 +44,8 @@ impl<'a, 'b> Delegate<r1cs::Verifier<'a, 'b>> for Verifier<'a, 'b> {
     }
 
     fn process_tx_signature(&mut self, pred: Predicate) -> Result<(), VMError> {
-        match pred.witness {
-            None => Ok(self.signtx_keys.push(VerificationKey(pred.point))),
+        match pred.witness() {
+            None => Ok(self.signtx_keys.push(VerificationKey(pred.point()))),
             Some(_) => Err(VMError::PredicateNotOpaque),
         }
     }

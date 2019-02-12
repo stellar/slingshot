@@ -79,8 +79,8 @@ pub enum Constraint {
 
 #[derive(Clone, Debug)]
 pub struct Predicate {
-    pub(crate) point: CompressedRistretto,
-    pub(crate) witness: Option<PredicateWitness>,
+    point: CompressedRistretto,
+    witness: Option<PredicateWitness>,
 }
 
 #[derive(Clone, Debug)]
@@ -106,7 +106,7 @@ pub struct InputWitness {
 #[derive(Clone, Debug)]
 pub enum DataWitness {
     Program(Vec<Instruction>),
-    Predicate(Box<PredicateWitness>), // maybe having Predicate and one more indirection would be cleaner - lets see how it plays out
+    Predicate(Predicate),
     Commitment(Box<CommitmentWitness>),
     Scalar(Box<Scalar>),
     Input(Box<InputWitness>),
@@ -233,10 +233,21 @@ impl Predicate {
         }
     }
 
-    pub fn new_witness(point: CompressedRistretto, witness: PredicateWitness) -> Self {
-        Predicate {
-            point,
+    pub fn from_witness(witness: PredicateWitness) -> Result<Self, VMError> {
+        Ok(Predicate {
+            point: witness.to_point()?,
             witness: Some(witness),
+        })
+    }
+
+    pub fn point(&self) -> CompressedRistretto {
+        self.point
+    }
+
+    pub fn witness(&self) -> Option<PredicateWitness> {
+        match &self.witness {
+            None => None,
+            Some(w) => Some(w.clone()),
         }
     }
 }
@@ -330,7 +341,10 @@ impl Data {
                 Ok(Predicate::new(point))
             }
             Data::Witness(witness) => match witness {
-                DataWitness::Predicate(w) => Ok(Predicate::new_witness(w.to_point(), *w)),
+                DataWitness::Predicate(p) => match p.witness() {
+                    Some(w) => Ok(Predicate::from_witness(w)?),
+                    None => Err(VMError::WitnessMissing),
+                },
                 _ => Err(VMError::TypeNotPredicate),
             },
         }
@@ -375,7 +389,7 @@ impl DataWitness {
     fn encode(&self, buf: &mut Vec<u8>) {
         match self {
             DataWitness::Program(instr) => Instruction::encode_program(instr.iter(), buf),
-            DataWitness::Predicate(pw) => pw.encode(buf),
+            DataWitness::Predicate(p) => p.encode(buf),
             DataWitness::Commitment(cw) => cw.encode(buf),
             DataWitness::Scalar(s) => buf.extend_from_slice(&s.to_bytes()),
             DataWitness::Input(b) => b.encode(buf),
