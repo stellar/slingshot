@@ -10,6 +10,7 @@ use crate::encoding;
 use crate::encoding::Subslice;
 use crate::errors::VMError;
 use crate::ops::Instruction;
+use crate::predicate::Predicate;
 use crate::transcript::TranscriptProtocol;
 use crate::txlog::{TxID, UTXO};
 
@@ -78,12 +79,6 @@ pub enum Constraint {
 }
 
 #[derive(Clone, Debug)]
-pub enum Predicate {
-    Opaque(CompressedRistretto),
-    Witness(Box<PredicateWitness>),
-}
-
-#[derive(Clone, Debug)]
 pub enum Commitment {
     Closed(CompressedRistretto),
     Open(Box<CommitmentWitness>),
@@ -106,18 +101,10 @@ pub struct InputWitness {
 #[derive(Clone, Debug)]
 pub enum DataWitness {
     Program(Vec<Instruction>),
-    Predicate(Box<PredicateWitness>), // maybe having Predicate and one more indirection would be cleaner - lets see how it plays out
+    Predicate(Box<Predicate>),
     Commitment(Box<CommitmentWitness>),
     Scalar(Box<Scalar>),
     Input(Box<InputWitness>),
-}
-
-/// Prover's representation of the predicate tree with all the secrets
-#[derive(Clone, Debug)]
-pub enum PredicateWitness {
-    Key(Scalar),
-    Program(Vec<Instruction>),
-    Or(Box<PredicateWitness>, Box<PredicateWitness>),
 }
 
 /// Prover's representation of the commitment secret: witness and blinding factor
@@ -225,15 +212,6 @@ impl Into<Scalar> for ScalarWitness {
     }
 }
 
-impl Predicate {
-    pub fn to_point(&self) -> CompressedRistretto {
-        match self {
-            Predicate::Opaque(point) => *point,
-            Predicate::Witness(witness) => witness.to_point(),
-        }
-    }
-}
-
 impl Item {
     // Downcasts to Data type
     pub fn to_data(self) -> Result<Data, VMError> {
@@ -320,10 +298,10 @@ impl Data {
         match self {
             Data::Opaque(data) => {
                 let point = Subslice::new(&data).read_point()?;
-                Ok(Predicate::Opaque(point))
+                Ok(Predicate::opaque(point))
             }
             Data::Witness(witness) => match witness {
-                DataWitness::Predicate(w) => Ok(Predicate::Witness(w)),
+                DataWitness::Predicate(boxed_pred) => Ok(*boxed_pred),
                 _ => Err(VMError::TypeNotPredicate),
             },
         }
@@ -391,7 +369,7 @@ impl Contract {
 
 impl FrozenContract {
     fn encode(&self, buf: &mut Vec<u8>) {
-        buf.extend_from_slice(&self.predicate.to_point().to_bytes());
+        buf.extend_from_slice(&self.predicate.point().to_bytes());
         for p in self.payload.iter() {
             match p {
                 // Data = 0x00 || LE32(len) || <bytes>
@@ -416,7 +394,7 @@ impl Value {
     /// Computes a flavor as defined by the `issue` instruction from a predicate.
     pub fn issue_flavor(predicate: &Predicate) -> Scalar {
         let mut t = Transcript::new(b"ZkVM.issue");
-        t.commit_bytes(b"predicate", predicate.to_point().as_bytes());
+        t.commit_bytes(b"predicate", predicate.point().as_bytes());
         t.challenge_scalar(b"flavor")
     }
 }

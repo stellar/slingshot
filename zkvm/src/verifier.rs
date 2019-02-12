@@ -7,6 +7,7 @@ use crate::encoding::*;
 use crate::errors::VMError;
 use crate::ops::Instruction;
 use crate::point_ops::PointOp;
+use crate::predicate::Predicate;
 use crate::signature::VerificationKey;
 use crate::types::*;
 
@@ -44,9 +45,9 @@ impl<'a, 'b> Delegate<r1cs::Verifier<'a, 'b>> for Verifier<'a, 'b> {
     }
 
     fn process_tx_signature(&mut self, pred: Predicate) -> Result<(), VMError> {
-        match pred {
-            Predicate::Opaque(p) => Ok(self.signtx_keys.push(VerificationKey(p))),
-            Predicate::Witness(_) => Err(VMError::PredicateNotOpaque),
+        match pred.witness() {
+            None => Ok(self.signtx_keys.push(VerificationKey(pred.point()))),
+            Some(_) => Err(VMError::PredicateNotOpaque),
         }
     }
 

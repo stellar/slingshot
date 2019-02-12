@@ -11,6 +11,9 @@ use crate::errors::VMError;
 use crate::point_ops::PointOp;
 use crate::transcript::TranscriptProtocol;
 
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub struct VerificationKey(pub CompressedRistretto);
+
 #[derive(Copy, Clone, Debug)]
 pub struct Signature {
     R: CompressedRistretto,
@@ -137,9 +140,6 @@ impl Signature {
         buf
     }
 }
-
-#[derive(Copy, Clone, PartialEq, Eq, Debug)]
-pub struct VerificationKey(pub CompressedRistretto);
 
 impl VerificationKey {
     // Constructs a VerificationKey from the private key.
