@@ -36,7 +36,7 @@ impl<'a, 'b> Delegate<r1cs::Prover<'a, 'b>> for Prover<'a, 'b> {
         Ok(self.cs.commit(v, v_blinding))
     }
 
-    fn verify_point_op<F>(&mut self, point_op_fn: F) -> Result<(), VMError>
+    fn verify_point_op<F>(&mut self, _point_op_fn: F) -> Result<(), VMError>
     where
         F: FnOnce() -> PointOp,
     {
@@ -80,7 +80,7 @@ impl<'a, 'b> Prover<'a, 'b> {
 
         // Serialize the tx program
         let mut bytecode = Vec::new();
-        Instruction::encode_program(program.iter(), &mut bytecode);
+        Instruction::encode_program(program.iter(), &mut bytecode)?;
 
         let mut prover = Prover {
             signtx_keys: Vec::new(),

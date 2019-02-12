@@ -92,7 +92,7 @@ impl PredicateWitness {
             }
             PredicateWitness::Program(prog) => {
                 let mut bytecode = Vec::new();
-                Instruction::encode_program(prog.iter(), &mut bytecode);
+                Instruction::encode_program(prog.iter(), &mut bytecode)?;
                 Predicate::commit_program(&bytecode).compute()?
             }
         })

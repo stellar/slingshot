@@ -191,9 +191,9 @@ impl CommitmentWitness {
 }
 
 impl InputWitness {
-    fn encode(&self, buf: &mut Vec<u8>) {
+    fn encode(&self, buf: &mut Vec<u8>) -> Result<(),VMError> {
         buf.extend_from_slice(&self.txid.0);
-        self.contract.encode(buf);
+        self.contract.encode(buf)
     }
 }
 
@@ -374,7 +374,7 @@ impl DataWitness {
             DataWitness::Scalar(s) => {
                 buf.extend_from_slice(&s.to_bytes());
             }
-            DataWitness::Input(b) => b.encode(buf),
+            DataWitness::Input(b) => b.encode(buf)?,
         };
         Ok(())
     }
