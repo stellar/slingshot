@@ -77,6 +77,8 @@ func (c *Custodian) importFromPegs(ctx context.Context) {
 		case <-ch:
 		}
 
+		log.Println("received imports broadcast")
+
 		var (
 			amounts, expMSs                []int64
 			nonceHashes, assetXDRs, recips [][]byte

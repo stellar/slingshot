@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -222,7 +223,7 @@ func TestImport(t *testing.T) {
 				InitBlockHash: chain.InitialBlockHash,
 			}
 			// Without a successful pre-peg-in TxVM tx, the initial input in the import tx will fail.
-			t.Log("building and submitting pre-peg-in tx...")
+			log.Println("building and submitting pre-peg-in tx...")
 			expMS := int64(bc.Millis(time.Now().Add(10 * time.Minute)))
 			prepegTx, err := BuildPrepegTx(c.InitBlockHash.Bytes(), assetXDR, testRecipPubKey, 1, expMS)
 			if err != nil {
@@ -236,14 +237,16 @@ func TestImport(t *testing.T) {
 			if err != nil {
 				t.Fatal("unsuccessfully waited on pre-peg-in tx hitting txvm")
 			}
-			t.Log("pre-peg-in tx hit the txvm chain...")
+			log.Println("pre-peg-in tx hit the txvm chain...")
 			go c.importFromPegs(ctx)
 			nonceHash := UniqueNonceHash(c.InitBlockHash.Bytes(), expMS)
 			_, err = db.Exec("INSERT INTO pegs (nonce_hash, amount, asset_xdr, recipient_pubkey, nonce_expms, stellar_tx) VALUES ($1, 1, $2, $3, $4, 1)", nonceHash[:], assetXDR, testRecipPubKey, expMS)
 			if err != nil {
 				t.Fatal(err)
 			}
+			log.Println("inserted peg-in row")
 			c.imports.Broadcast()
+			log.Println("broadcast()")
 			for {
 				item, ok := r.Read(ctx)
 				if !ok {
@@ -253,7 +256,10 @@ func TestImport(t *testing.T) {
 				for _, tx := range block.Transactions {
 					if isImportTx(tx, 1, assetXDR, testRecipPubKey) {
 						t.Logf("found import tx %x", tx.Program)
+						log.Printf("found import tx %x", tx.Program)
 						return
+					} else {
+						log.Printf("read tx %x, not import tx", tx.Program)
 					}
 				}
 			}
