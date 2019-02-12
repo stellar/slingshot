@@ -20,29 +20,27 @@ impl Predicate {
     pub fn or(&self, right: &Predicate) -> Result<Predicate, VMError> {
         let mut t = Transcript::new(b"ZkVM.predicate");
         let gens = PedersenGens::default();
-        t.commit_point(b"L", &self.to_point());
-        t.commit_point(b"R", &right.to_point());
+        t.commit_point(b"L", &self.point);
+        t.commit_point(b"R", &right.point);
         let f = t.challenge_scalar(b"f");
-        let l = self.to_point().decompress().ok_or(VMError::InvalidPoint)?;
-        Ok(Predicate::Opaque((l + f * gens.B).compress()))
+        let l = self.point.decompress().ok_or(VMError::InvalidPoint)?;
+        // TBD: construct Witness when self/right have Witness fields
+        Ok(Predicate::new((l + f * gens.B).compress()))
     }
 
     /// Verifies whether the current predicate is a disjunction of two others.
     /// Returns a `PointOp` instance that can be verified in a batch with other operations.
     pub fn prove_or(&self, left: &Predicate, right: &Predicate) -> PointOp {
         let mut t = Transcript::new(b"ZkVM.predicate");
-        t.commit_point(b"L", &left.to_point());
-        t.commit_point(b"R", &right.to_point());
+        t.commit_point(b"L", &left.point);
+        t.commit_point(b"R", &right.point);
         let f = t.challenge_scalar(b"f");
 
         // P == L + f*B   ->   0 == -P + L + f*B
         PointOp {
             primary: Some(f),
             secondary: None,
-            arbitrary: vec![
-                (-Scalar::one(), self.to_point()),
-                (Scalar::one(), left.to_point()),
-            ],
+            arbitrary: vec![(-Scalar::one(), self.point), (Scalar::one(), left.point)],
         }
     }
 
@@ -54,7 +52,7 @@ impl Predicate {
         let gens = PedersenGens::default();
         t.commit_bytes(b"prog", &prog);
         let h = t.challenge_scalar(b"h");
-        Predicate::Opaque((h * gens.B_blinding).compress())
+        Predicate::new((h * gens.B_blinding).compress())
     }
 
     /// Verifies whether the current predicate is a commitment to a program `prog`.
@@ -68,7 +66,7 @@ impl Predicate {
         PointOp {
             primary: None,
             secondary: Some(h),
-            arbitrary: vec![(-Scalar::one(), self.to_point())],
+            arbitrary: vec![(-Scalar::one(), self.point)],
         }
     }
 }
@@ -132,8 +130,8 @@ mod tests {
         let gens = PedersenGens::default();
 
         // dummy predicates
-        let left = Predicate::Opaque(gens.B.compress());
-        let right = Predicate::Opaque(gens.B_blinding.compress());
+        let left = Predicate::new(gens.B.compress());
+        let right = Predicate::new(gens.B_blinding.compress());
 
         let pred = left.or(&right).unwrap();
         let op = pred.prove_or(&left, &right);
@@ -145,10 +143,10 @@ mod tests {
         let gens = PedersenGens::default();
 
         // dummy predicates
-        let left = Predicate::Opaque(gens.B.compress());
-        let right = Predicate::Opaque(gens.B_blinding.compress());
+        let left = Predicate::new(gens.B.compress());
+        let right = Predicate::new(gens.B_blinding.compress());
 
-        let pred = Predicate::Opaque(gens.B.compress());
+        let pred = Predicate::new(gens.B.compress());
         let op = pred.prove_or(&left, &right);
         assert!(op.verify().is_err());
     }
@@ -158,8 +156,8 @@ mod tests {
         let gens = PedersenGens::default();
 
         // dummy predicates
-        let left = Predicate::Opaque(gens.B.compress());
-        let right = Predicate::Opaque(gens.B_blinding.compress());
+        let left = Predicate::new(gens.B.compress());
+        let right = Predicate::new(gens.B_blinding.compress());
 
         let pred = left.or(&right).unwrap();
         let op = pred.prove_or(&right, &left);

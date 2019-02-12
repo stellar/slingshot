@@ -288,7 +288,7 @@ where
 
     fn nonce(&mut self) -> Result<(), VMError> {
         let predicate = self.pop_item()?.to_data()?.to_predicate()?;
-        let point = predicate.to_point();
+        let point = predicate.point;
         let contract = Contract {
             predicate,
             payload: Vec::new(),
@@ -609,7 +609,7 @@ where
         //      Data  =  0x00  ||  LE32(len)  ||  <bytes>
         //     Value  =  0x01  ||  <32 bytes> ||  <32 bytes>
 
-        let predicate = Predicate::Opaque(output.read_point()?);
+        let predicate = Predicate::new(output.read_point()?);
         let k = output.read_size()?;
 
         // sanity check: avoid allocating unreasonably more memory
@@ -646,7 +646,7 @@ where
     fn encode_output(&mut self, contract: Contract) -> Vec<u8> {
         let mut output = Vec::with_capacity(contract.min_serialized_length());
 
-        encoding::write_point(&contract.predicate.to_point(), &mut output);
+        encoding::write_point(&contract.predicate.point, &mut output);
         encoding::write_u32(contract.payload.len() as u32, &mut output);
 
         for item in contract.payload.iter() {

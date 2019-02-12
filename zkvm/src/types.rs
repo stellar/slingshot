@@ -78,9 +78,9 @@ pub enum Constraint {
 }
 
 #[derive(Clone, Debug)]
-pub enum Predicate {
-    Opaque(CompressedRistretto),
-    Witness(Box<PredicateWitness>),
+pub struct Predicate {
+    pub(crate) point: CompressedRistretto,
+    pub(crate) witness: Option<PredicateWitness>,
 }
 
 #[derive(Clone, Debug)]
@@ -226,10 +226,17 @@ impl Into<Scalar> for ScalarWitness {
 }
 
 impl Predicate {
-    pub fn to_point(&self) -> CompressedRistretto {
-        match self {
-            Predicate::Opaque(point) => *point,
-            Predicate::Witness(witness) => witness.to_point(),
+    pub fn new(point: CompressedRistretto) -> Self {
+        Predicate {
+            point,
+            witness: None,
+        }
+    }
+
+    pub fn new_witness(point: CompressedRistretto, witness: PredicateWitness) -> Self {
+        Predicate {
+            point,
+            witness: Some(witness),
         }
     }
 }
@@ -320,10 +327,10 @@ impl Data {
         match self {
             Data::Opaque(data) => {
                 let point = Subslice::new(&data).read_point()?;
-                Ok(Predicate::Opaque(point))
+                Ok(Predicate::new(point))
             }
             Data::Witness(witness) => match witness {
-                DataWitness::Predicate(w) => Ok(Predicate::Witness(w)),
+                DataWitness::Predicate(w) => Ok(Predicate::new_witness(w.to_point(), *w)),
                 _ => Err(VMError::TypeNotPredicate),
             },
         }
@@ -391,7 +398,7 @@ impl Contract {
 
 impl FrozenContract {
     fn encode(&self, buf: &mut Vec<u8>) {
-        buf.extend_from_slice(&self.predicate.to_point().to_bytes());
+        buf.extend_from_slice(&self.predicate.point.to_bytes());
         for p in self.payload.iter() {
             match p {
                 // Data = 0x00 || LE32(len) || <bytes>
@@ -416,7 +423,7 @@ impl Value {
     /// Computes a flavor as defined by the `issue` instruction from a predicate.
     pub fn issue_flavor(predicate: &Predicate) -> Scalar {
         let mut t = Transcript::new(b"ZkVM.issue");
-        t.commit_bytes(b"predicate", predicate.to_point().as_bytes());
+        t.commit_bytes(b"predicate", predicate.point.as_bytes());
         t.challenge_scalar(b"flavor")
     }
 }
