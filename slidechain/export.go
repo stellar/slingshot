@@ -432,11 +432,13 @@ func IsExportTx(tx *bc.Tx, asset xdr.Asset, inputAmt int64, temp, exporter strin
 		Temp     string `json:"temp"`
 		Seqnum   int64  `json:"seqnum"`
 		Exporter string `json:"exporter"`
+		Amount   int64  `json:"amount"`
 	}{
 		assetXDR,
 		temp,
 		seqnum,
 		exporter,
+		inputAmt,
 	}
 	refdata, err := json.Marshal(ref)
 	if !bytes.Equal(refdata, tx.Log[1][2].(txvm.Bytes)) {

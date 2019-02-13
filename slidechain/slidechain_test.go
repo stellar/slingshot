@@ -265,7 +265,7 @@ func TestImport(t *testing.T) {
 }
 
 func TestEndToEnd(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 	withTestServer(ctx, t, func(ctx context.Context, db *sql.DB, s *submitter, sv *httptest.Server, ch *protocol.Chain) {
 		hclient := &horizon.Client{
@@ -415,12 +415,14 @@ func TestEndToEnd(t *testing.T) {
 			}
 		}
 		t.Log("checking for successful retirement...")
+		log.Print("checking foru successful retirement...")
 
 		// Check for successful retirement.
 		retire := make(chan struct{})
 		go func() {
 			var cur horizon.Cursor
 			err := c.hclient.StreamTransactions(ctx, exporter.Address(), &cur, func(tx horizon.Transaction) {
+				log.Printf("received tx in the test: %s", tx.EnvelopeXdr)
 				t.Logf("received tx: %s", tx.EnvelopeXdr)
 				var env xdr.TransactionEnvelope
 				err := xdr.SafeUnmarshalBase64(tx.EnvelopeXdr, &env)
