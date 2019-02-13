@@ -401,31 +401,13 @@ func exportTxSnapshot(exporterPubkey, assetXDR []byte) ([]byte, error) {
 // IsExportTx returns whether or not a txvm transaction matches the slidechain export tx format.
 //
 // Expected log is:
-// For an export that fully consumes the input:
 // {"I", ...}
-// {"L", ...}
-// {"X", vm seed, inputAmount, asset id, anchor}
-// {"L", vm seed, refdata}
-// {"R", ...} timerange
-// {"L", ...}
-// {"F", ...}
-//
-// For an export that partially consumes the input:
-// {"I", ...}
-// {"L", ...}
-// {"X", vm seed, inputAmount, asset id, anchor}
-// {"L", vm seed, refdata}
-// {"L", ...}
 // {"L", ...}
 // {"O", caller, outputid}
-// {"R", ...}
-// {"L", ...}
 // {"F", ...}
-// PRTODO: Rewrite this check, since the log will change.
 func IsExportTx(tx *bc.Tx, asset xdr.Asset, inputAmt int64, temp, exporter string, seqnum int64) bool {
-	// The export transaction when we export the full input amount has seven operations, and when we export
-	// part of the input and output the rest back to the exporter, it has ten operations
-	if len(tx.Log) != 7 && len(tx.Log) != 10 {
+	log.Print(tx.Log)
+	if len(tx.Log) != 4 {
 		return false
 	}
 	if tx.Log[0][0].(txvm.Bytes)[0] != txvm.InputCode {
@@ -434,25 +416,14 @@ func IsExportTx(tx *bc.Tx, asset xdr.Asset, inputAmt int64, temp, exporter strin
 	if tx.Log[1][0].(txvm.Bytes)[0] != txvm.LogCode {
 		return false
 	}
-	if tx.Log[2][0].(txvm.Bytes)[0] != txvm.RetireCode {
+	if tx.Log[2][0].(txvm.Bytes)[0] != txvm.OutputCode {
 		return false
 	}
-	if int64(tx.Log[2][2].(txvm.Int)) != inputAmt {
-		return false
-	}
-	assetBytes, err := asset.MarshalBinary()
-	if err != nil {
+	if tx.Log[3][0].(txvm.Bytes)[0] != txvm.FinalizeCode {
 		return false
 	}
 	assetXDR, err := xdr.MarshalBase64(asset)
 	if err != nil {
-		return false
-	}
-	wantAssetID := txvm.AssetID(importIssuanceSeed[:], assetBytes)
-	if !bytes.Equal(wantAssetID[:], tx.Log[2][3].(txvm.Bytes)) {
-		return false
-	}
-	if tx.Log[3][0].(txvm.Bytes)[0] != txvm.LogCode {
 		return false
 	}
 	ref := struct {
@@ -467,10 +438,8 @@ func IsExportTx(tx *bc.Tx, asset xdr.Asset, inputAmt int64, temp, exporter strin
 		exporter,
 	}
 	refdata, err := json.Marshal(ref)
-	if !bytes.Equal(refdata, tx.Log[3][2].(txvm.Bytes)) {
+	if !bytes.Equal(refdata, tx.Log[1][2].(txvm.Bytes)) {
 		return false
 	}
-	// Beyond this, the two transactions diverge but must either finalize
-	// or output the remaining unconsumed input
 	return true
 }
