@@ -6,7 +6,7 @@ use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
 use spacesuit::SignedInteger;
 
-use crate::contract::{Contract, FrozenValue, Input, PortableItem};
+use crate::contract::{Contract, Input, PortableItem};
 use crate::encoding::Subslice;
 use crate::errors::VMError;
 use crate::ops::Instruction;

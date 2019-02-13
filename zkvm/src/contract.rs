@@ -115,7 +115,7 @@ impl PortableItem {
             PortableItem::Value(v) => {
                 let flv = commitments[v.flv.index].closed_commitment();
                 let qty = commitments[v.qty.index].closed_commitment();
-                FrozenItem::Value(FrozenValue{ flv, qty })
+                FrozenItem::Value(FrozenValue { flv, qty })
             }
         }
     }

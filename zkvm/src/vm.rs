@@ -6,10 +6,7 @@ use spacesuit;
 use spacesuit::SignedInteger;
 use std::iter::FromIterator;
 
-use crate::contract::{
-    Contract, FrozenContract, FrozenItem, Input, PortableItem, DATA_TYPE, VALUE_TYPE,
-};
-use crate::encoding;
+use crate::contract::{Contract, FrozenContract, FrozenItem, Input, PortableItem};
 use crate::errors::VMError;
 use crate::ops::Instruction;
 use crate::point_ops::PointOp;
@@ -359,7 +356,9 @@ where
     fn output(&mut self, k: usize) -> Result<(), VMError> {
         let contract = self.pop_contract(k)?;
         let mut buf = Vec::with_capacity(contract.min_serialized_length());
-        contract.to_frozen(&self.variable_commitments).encode(&mut buf);
+        contract
+            .to_frozen(&self.variable_commitments)
+            .encode(&mut buf);
         self.txlog.push(Entry::Output(buf));
         Ok(())
     }
@@ -610,36 +609,6 @@ where
                 PortableItem::Value(val)
             }
         }
-    }
-
-    fn encode_output(&mut self, contract: Contract) -> Vec<u8> {
-        // TBD:  remove this method
-
-        let mut output = Vec::with_capacity(contract.min_serialized_length());
-
-        encoding::write_point(&contract.predicate.point(), &mut output);
-        encoding::write_u32(contract.payload.len() as u32, &mut output);
-
-        for item in contract.payload.iter() {
-            match item {
-                PortableItem::Data(d) => match d {
-                    Data::Opaque(data) => {
-                        encoding::write_u8(DATA_TYPE, &mut output);
-                        encoding::write_u32(data.len() as u32, &mut output);
-                        encoding::write_bytes(&data, &mut output);
-                    }
-                    Data::Witness(_) => unimplemented!(),
-                },
-                PortableItem::Value(v) => {
-                    encoding::write_u8(VALUE_TYPE, &mut output);
-                    let qty = self.get_variable_commitment(v.qty);
-                    let flv = self.get_variable_commitment(v.flv);
-                    encoding::write_point(&qty, &mut output);
-                    encoding::write_point(&flv, &mut output);
-                }
-            }
-        }
-        output
     }
 
     fn add_range_proof(&mut self, bitrange: usize, expr: Expression) -> Result<(), VMError> {
