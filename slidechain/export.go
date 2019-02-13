@@ -139,7 +139,7 @@ func (c *Custodian) pegOutFromExports(ctx context.Context) {
 			log.Printf("pegging out export %x: %d of %s to %s", txid, amounts[i], asset.String(), exporters[i])
 			// TODO(vniu): flag txs that fail with unretriable errors in the db
 			// PRTODO: Pass information for the post-peg-out smart contract to to the peg-out tx.
-			peggedOut := 0
+			var peggedOut int
 			for i := 0; i < 5; i++ {
 				err = c.pegOut(ctx, exporter, asset, int64(amounts[i]), tempID, xdr.SequenceNumber(seqnums[i]))
 				if err == nil { // successful peg-out
@@ -158,13 +158,13 @@ func (c *Custodian) pegOutFromExports(ctx context.Context) {
 					break
 				}
 				if i == 0 {
-					_, err = c.DB.ExecContext(ctx, `UPDATE exports SET exported=1 AND pegged_out=2 WHERE txid=$1`, txid)
+					_, err = c.DB.ExecContext(ctx, `UPDATE exports SET exported=1, pegged_out=2 WHERE txid=$1`, txid)
 					if err != nil {
 						log.Fatalf("updating export table for retriable tx: %s", err)
 					}
 				}
 			}
-			_, err = c.DB.ExecContext(ctx, `UPDATE exports SET exported=1 AND pegged_out=$1 WHERE txid=$2`, peggedOut, txid)
+			_, err = c.DB.ExecContext(ctx, `UPDATE exports SET exported=1, pegged_out=$1 WHERE txid=$2`, peggedOut, txid)
 			if err != nil {
 				log.Fatalf("updating export table: %s", err)
 			}
@@ -354,18 +354,24 @@ func BuildExportTx(ctx context.Context, asset xdr.Asset, amount, inputAmt int64,
 		kp.Address(),
 		inputAmt,
 	}
-	refdata, err := json.Marshal(ref)
+	inputRefdata, err := json.Marshal(ref)
 	if err != nil {
 		return nil, errors.Wrap(err, "marshaling reference data")
 	}
-	refdataHex := i10rjson.HexBytes(refdata)
+	inputRefdataHex := i10rjson.HexBytes(inputRefdata)
 
+	ref.Amount = amount
+	retireRefdata, err := json.Marshal(ref)
+	if err != nil {
+		return nil, errors.Wrap(err, "marshaling reference data")
+	}
+	retireRefdataHex := i10rjson.HexBytes(retireRefdata)
 	b := new(txvmutil.Builder)
-	b.PushdataBytes(refdataHex)                                                                                          // con stack: json
+	b.PushdataBytes(inputRefdataHex)                                                                                     // con stack: json
 	b.Op(op.Put)                                                                                                         // arg stack: json
 	standard.SpendMultisig(b, 1, []ed25519.PublicKey{pubkey}, inputAmt, assetID, anchor, standard.PayToMultisigSeed1[:]) // arg stack: value, sigcheck
 	b.Op(op.Get).Op(op.Get)                                                                                              // con stack: sigcheck, value
-	b.PushdataBytes(refdataHex).Op(op.Put)                                                                               // con stack: sigcheck, value; arg stack: json
+	b.PushdataBytes(retireRefdataHex).Op(op.Put)                                                                         // con stack: sigcheck, value; arg stack: json
 	b.PushdataInt64(0).Op(op.Split).PushdataInt64(1).Op(op.Roll).Op(op.Put)                                              // con stack: sigcheck, zeroval; arg stack: json, value
 	b.Tuple(func(tup *txvmutil.TupleBuilder) {
 		tup.PushdataBytes(pubkey)
