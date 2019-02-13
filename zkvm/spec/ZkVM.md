@@ -216,7 +216,7 @@ when these are exposed to the VM (for instance, from [`mul`](#mul)), they have t
 
 A [variable](#variable-type) can be in one of two states: **detached** or **attached**.
 
-A **Detached variable** can be [reblinded](#reblinded): all copies of a detached variable share the same commitment,
+A **detached variable** can be [reblinded](#reblinded): all copies of a detached variable share the same commitment,
 so reblinding one of them reflects the new commitments in all the copies. When an [expression](#expression-type) is formed using detached variables, all of them transition to an _attached_ state.
 
 An **attached variable** has its commitment applied to the constraint system, so it cannot be reblinded and variable cannot be detached.
