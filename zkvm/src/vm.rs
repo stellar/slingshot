@@ -587,12 +587,15 @@ where
     }
 
     fn spend_input(&mut self, input: Input) -> Result<(Contract, UTXO), VMError> {
-        match input {
-            Input::Opaque(data) => self.decode_input(data),
-            Input::Witness(_) => unimplemented!(),
-        }
+        // TBD: create a contract out of a frozen contract
+        unimplemented!()
+        // match input {
+        //     Input::Opaque(data) => self.decode_input(data),
+        //     Input::Witness(_) => unimplemented!(),
+        // }
     }
 
+    // TBD: move this into Input::decode
     fn decode_input(&mut self, data: Vec<u8>) -> Result<(Contract, UTXO), VMError> {
         // Input  =  PreviousTxID || PreviousOutput
         // PreviousTxID  =  <32 bytes>
@@ -604,6 +607,7 @@ where
         Ok((contract, utxo))
     }
 
+    // TBD: move this into Input::decode
     fn decode_output<'a>(&mut self, mut output: Subslice<'a>) -> Result<Contract, VMError> {
         //    Output  =  Predicate  ||  LE32(k)  ||  Item[0]  || ... ||  Item[k-1]
         // Predicate  =  <32 bytes>

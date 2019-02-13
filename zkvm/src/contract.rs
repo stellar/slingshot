@@ -1,4 +1,5 @@
 use crate::encoding;
+use crate::errors::VMError;
 use crate::predicate::Predicate;
 use crate::txlog::{TxID, UTXO};
 use crate::types::{Commitment, Data, Value};
@@ -18,13 +19,7 @@ pub enum PortableItem {
 }
 
 #[derive(Clone, Debug)]
-pub enum Input {
-    Opaque(Vec<u8>),
-    Witness(Box<InputWitness>),
-}
-
-#[derive(Clone, Debug)]
-pub struct InputWitness {
+pub struct Input {
     contract: FrozenContract,
     utxo: UTXO,
     txid: TxID,
@@ -53,12 +48,6 @@ pub struct FrozenValue {
     pub(crate) flv: Commitment,
 }
 
-impl InputWitness {
-    pub fn encode(&self, buf: &mut Vec<u8>) {
-        buf.extend_from_slice(&self.txid.0);
-        self.contract.encode(buf);
-    }
-}
 
 impl Contract {
     pub fn min_serialized_length(&self) -> usize {
@@ -70,6 +59,18 @@ impl Contract {
             }
         }
         size
+    }
+}
+
+impl Input {
+    pub fn decode(data: Vec<u8>) -> Result<Self, VMError> {
+        // TBD: parse FrozenContract from data (copy from VM::decode_input).
+        unimplemented!()
+    }
+
+    pub fn encode(&self, buf: &mut Vec<u8>) {
+        buf.extend_from_slice(&self.txid.0);
+        self.contract.encode(buf);
     }
 }
 

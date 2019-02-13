@@ -6,7 +6,7 @@ use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
 use spacesuit::SignedInteger;
 
-use crate::contract::{Contract, Input, InputWitness, PortableItem};
+use crate::contract::{Contract, Input, PortableItem};
 use crate::encoding::Subslice;
 use crate::errors::VMError;
 use crate::ops::Instruction;
@@ -78,7 +78,7 @@ pub enum DataWitness {
     Predicate(Box<Predicate>),
     Commitment(Box<CommitmentWitness>),
     Scalar(Box<Scalar>),
-    Input(Box<InputWitness>),
+    Input(Box<Input>),
 }
 
 /// Prover's representation of the commitment secret: witness and blinding factor
@@ -262,9 +262,9 @@ impl Data {
 
     pub fn to_input(self) -> Result<Input, VMError> {
         match self {
-            Data::Opaque(data) => Ok(Input::Opaque(data)),
+            Data::Opaque(data) => Input::decode(data),
             Data::Witness(witness) => match witness {
-                DataWitness::Input(w) => Ok(Input::Witness(w)),
+                DataWitness::Input(i) => Ok(*i),
                 _ => Err(VMError::TypeNotInput),
             },
         }
