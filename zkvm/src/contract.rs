@@ -27,9 +27,9 @@ pub enum PortableItem {
 
 #[derive(Clone, Debug)]
 pub struct Input {
-    contract: FrozenContract,
-    utxo: UTXO,
-    txid: TxID,
+    pub contract: FrozenContract,
+    pub utxo: UTXO,
+    pub txid: TxID,
 }
 
 /// Representation of a Contract inside an Input that can be cloned.
@@ -89,10 +89,6 @@ impl Input {
     pub fn encode(&self, buf: &mut Vec<u8>) {
         buf.extend_from_slice(&self.txid.0);
         self.contract.encode(buf);
-    }
-
-    pub fn spend(self) -> Result<(Contract, UTXO), VMError> {
-        Ok((self.contract.thaw()?, self.utxo))
     }
 
     fn decode<'a>(mut input: Subslice<'a>) -> Result<Self, VMError> {
@@ -180,27 +176,5 @@ impl FrozenContract {
         }
 
         Ok(FrozenContract { predicate, payload })
-    }
-
-    pub fn thaw(self) -> Result<Contract, VMError> {
-        let mut payload = Vec::with_capacity(self.payload.len());
-        for item in self.payload.iter() {
-            payload.push(item.thaw()?)
-        }
-        Ok(Contract {
-            payload,
-            predicate: self.predicate,
-        })
-    }
-}
-
-impl FrozenItem {
-    pub fn thaw(&self) -> Result<PortableItem, VMError> {
-        match self {
-            FrozenItem::Data(d) => Ok(PortableItem::Data(d.clone())),
-            // TBD: how do we turn a frozen item into a
-            // variable with the current representation?
-            FrozenItem::Value(v) => unimplemented!(),
-        }
     }
 }

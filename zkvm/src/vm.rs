@@ -6,7 +6,9 @@ use spacesuit;
 use spacesuit::SignedInteger;
 use std::iter::FromIterator;
 
-use crate::contract::{Contract, Input, PortableItem, DATA_TYPE, VALUE_TYPE};
+use crate::contract::{
+    Contract, FrozenContract, FrozenItem, Input, PortableItem, DATA_TYPE, VALUE_TYPE,
+};
 use crate::encoding;
 use crate::errors::VMError;
 use crate::ops::Instruction;
@@ -582,9 +584,32 @@ where
     }
 
     fn spend_input(&mut self, input: Input) -> Result<(Contract, UTXO), VMError> {
-        // TBD: create a contract out of a frozen contract
-        // Pass variables in from VM object
-        input.spend()
+        let contract = self.unfreeze_contract(input.contract);
+        Ok((contract, input.utxo))
+    }
+
+    fn unfreeze_contract(&mut self, contract: FrozenContract) -> Contract {
+        let payload = contract
+            .payload
+            .into_iter()
+            .map(|p| self.unfreeze_item(p))
+            .collect::<Vec<_>>();
+        Contract {
+            payload: payload,
+            predicate: contract.predicate,
+        }
+    }
+
+    fn unfreeze_item(&mut self, item: FrozenItem) -> PortableItem {
+        match item {
+            FrozenItem::Data(d) => PortableItem::Data(d),
+            FrozenItem::Value(v) => {
+                let qty = self.make_variable(v.qty);
+                let flv = self.make_variable(v.flv);
+                let val = Value { qty, flv };
+                PortableItem::Value(val)
+            }
+        }
     }
 
     fn encode_output(&mut self, contract: Contract) -> Vec<u8> {
