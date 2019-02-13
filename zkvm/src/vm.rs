@@ -357,7 +357,7 @@ where
         let contract = self.pop_contract(k)?;
         let mut buf = Vec::with_capacity(contract.min_serialized_length());
         contract
-            .to_frozen(&self.variable_commitments)
+            .to_frozen(&self.variable_commitments)?
             .encode(&mut buf);
         self.txlog.push(Entry::Output(buf));
         Ok(())

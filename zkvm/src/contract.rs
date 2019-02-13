@@ -69,16 +69,18 @@ impl Contract {
     }
 
     /// Half-way to encoding the contract
-    pub fn to_frozen(self, commitments: &Vec<VariableCommitment>) -> FrozenContract {
-        let frozen_items = self
-            .payload
-            .iter()
-            .map(|p| p.to_frozen(commitments))
-            .collect::<Vec<_>>();
-        FrozenContract {
+    pub fn to_frozen(
+        self,
+        commitments: &Vec<VariableCommitment>,
+    ) -> Result<FrozenContract, VMError> {
+        let mut frozen_items = Vec::with_capacity(self.payload.len());
+        for item in self.payload.iter() {
+            frozen_items.push(item.to_frozen(commitments)?);
+        }
+        Ok(FrozenContract {
             payload: frozen_items,
             predicate: self.predicate,
-        }
+        })
     }
 }
 
@@ -108,14 +110,19 @@ impl Input {
 }
 
 impl PortableItem {
-    pub fn to_frozen(&self, commitments: &Vec<VariableCommitment>) -> FrozenItem {
+    pub fn to_frozen(&self, commitments: &Vec<VariableCommitment>) -> Result<FrozenItem, VMError> {
         match self {
-            // TBD: not clone?
-            PortableItem::Data(d) => FrozenItem::Data(d.clone()),
+            PortableItem::Data(d) => Ok(FrozenItem::Data(d.clone())),
             PortableItem::Value(v) => {
-                let flv = commitments[v.flv.index].closed_commitment();
-                let qty = commitments[v.qty.index].closed_commitment();
-                FrozenItem::Value(FrozenValue { flv, qty })
+                let flv = commitments
+                    .get(v.flv.index)
+                    .ok_or(VMError::CommitmentOutOfRange)?
+                    .closed_commitment();
+                let qty = commitments
+                    .get(v.qty.index)
+                    .ok_or(VMError::CommitmentOutOfRange)?
+                    .closed_commitment();
+                Ok(FrozenItem::Value(FrozenValue { flv, qty }))
             }
         }
     }
