@@ -20,12 +20,6 @@ use crate::types::*;
 /// Current tx version determines which extension opcodes are treated as noops (see VM.extension flag).
 pub const CURRENT_VERSION: u64 = 1;
 
-/// Prefix for the data type in the Output Structure
-pub const DATA_TYPE: u8 = 0x00;
-
-/// Prefix for the value type in the Output Structure
-pub const VALUE_TYPE: u8 = 0x01;
-
 /// Instance of a transaction that contains all necessary data to validate it.
 pub struct Tx {
     /// Version of the transaction
@@ -362,8 +356,9 @@ where
     /// _items... predicate_ **output:_k_** → ø
     fn output(&mut self, k: usize) -> Result<(), VMError> {
         let contract = self.pop_contract(k)?;
-        let output = self.encode_output(contract);
-        self.txlog.push(Entry::Output(output));
+        let mut buf = Vec::with_capacity(contract.min_serialized_length());
+        contract.to_frozen().encode(&mut buf);
+        self.txlog.push(Entry::Output(buf));
         Ok(())
     }
 
@@ -595,61 +590,12 @@ where
         // }
     }
 
-    // TBD: move this into Input::decode
-    fn decode_input(&mut self, data: Vec<u8>) -> Result<(Contract, UTXO), VMError> {
-        // Input  =  PreviousTxID || PreviousOutput
-        // PreviousTxID  =  <32 bytes>
-        let mut slice = Subslice::new(&data);
-        let txid = TxID(slice.read_u8x32()?);
-        let output_slice = &slice;
-        let contract = self.decode_output(slice)?;
-        let utxo = UTXO::from_output(output_slice, &txid);
-        Ok((contract, utxo))
-    }
-
-    // TBD: move this into Input::decode
-    fn decode_output<'a>(&mut self, mut output: Subslice<'a>) -> Result<Contract, VMError> {
-        //    Output  =  Predicate  ||  LE32(k)  ||  Item[0]  || ... ||  Item[k-1]
-        // Predicate  =  <32 bytes>
-        //      Item  =  enum { Data, Value }
-        //      Data  =  0x00  ||  LE32(len)  ||  <bytes>
-        //     Value  =  0x01  ||  <32 bytes> ||  <32 bytes>
-
-        let predicate = Predicate::opaque(output.read_point()?);
-        let k = output.read_size()?;
-
-        // sanity check: avoid allocating unreasonably more memory
-        // just because an untrusted length prefix says so.
-        if k > output.len() {
-            return Err(VMError::FormatError);
-        }
-
-        let mut payload: Vec<PortableItem> = Vec::with_capacity(k);
-        for _ in 0..k {
-            let item = match output.read_u8()? {
-                DATA_TYPE => {
-                    let len = output.read_size()?;
-                    let bytes = output.read_bytes(len)?;
-                    PortableItem::Data(Data::Opaque(bytes.to_vec()))
-                }
-                VALUE_TYPE => {
-                    let qty = output.read_point()?;
-                    let flv = output.read_point()?;
-
-                    let qty = self.make_variable(Commitment::Closed(qty));
-                    let flv = self.make_variable(Commitment::Closed(flv));
-
-                    PortableItem::Value(Value { qty, flv })
-                }
-                _ => return Err(VMError::FormatError),
-            };
-            payload.push(item);
-        }
-
-        Ok(Contract { predicate, payload })
-    }
-
     fn encode_output(&mut self, contract: Contract) -> Vec<u8> {
+        
+
+        // TBD:  remove this method
+
+
         let mut output = Vec::with_capacity(contract.min_serialized_length());
 
         encoding::write_point(&contract.predicate.point(), &mut output);

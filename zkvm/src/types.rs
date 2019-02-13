@@ -262,7 +262,7 @@ impl Data {
 
     pub fn to_input(self) -> Result<Input, VMError> {
         match self {
-            Data::Opaque(data) => Input::decode(data),
+            Data::Opaque(data) => Input::from_bytes(data),
             Data::Witness(witness) => match witness {
                 DataWitness::Input(i) => Ok(*i),
                 _ => Err(VMError::TypeNotInput),
