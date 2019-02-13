@@ -219,7 +219,7 @@ A [variable](#variable-type) can be in one of two states: **detached** or **atta
 A **Detached variable** can be [reblinded](#reblinded): all copies of a detached variable share the same commitment,
 so reblinding one of them reflects the new commitments in all the copies. When an [expression](#expression-type) is formed using detached variables, all of them transition to an _attached_ state.
 
-An **Attached variable** has its commitment applied to the constraint system, so it cannot be reblinded and variable cannot be detached.
+An **attached variable** has its commitment applied to the constraint system, so it cannot be reblinded and variable cannot be detached.
 
 
 ### Expression type
