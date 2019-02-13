@@ -6,6 +6,7 @@ use spacesuit;
 use spacesuit::SignedInteger;
 use std::iter::FromIterator;
 
+use crate::contract::{Contract, Input, PortableItem};
 use crate::encoding;
 use crate::encoding::Subslice;
 use crate::errors::VMError;
