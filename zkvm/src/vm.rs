@@ -6,9 +6,8 @@ use spacesuit;
 use spacesuit::SignedInteger;
 use std::iter::FromIterator;
 
-use crate::contract::{Contract, Input, PortableItem};
+use crate::contract::{Contract, Input, PortableItem, DATA_TYPE, VALUE_TYPE};
 use crate::encoding;
-use crate::encoding::Subslice;
 use crate::errors::VMError;
 use crate::ops::Instruction;
 use crate::point_ops::PointOp;
@@ -117,7 +116,8 @@ pub trait Delegate<CS: r1cs::ConstraintSystem> {
 
 /// And indirect reference to a high-level variable within a constraint system.
 /// Variable types store index of such commitments that allows replacing them.
-struct VariableCommitment {
+#[derive(Debug)]
+pub struct VariableCommitment {
     /// Pedersen commitment to a variable
     commitment: Commitment,
 
@@ -583,18 +583,12 @@ where
 
     fn spend_input(&mut self, input: Input) -> Result<(Contract, UTXO), VMError> {
         // TBD: create a contract out of a frozen contract
-        unimplemented!()
-        // match input {
-        //     Input::Opaque(data) => self.decode_input(data),
-        //     Input::Witness(_) => unimplemented!(),
-        // }
+        // Pass variables in from VM object
+        input.spend()
     }
 
     fn encode_output(&mut self, contract: Contract) -> Vec<u8> {
-        
-
         // TBD:  remove this method
-
 
         let mut output = Vec::with_capacity(contract.min_serialized_length());
 

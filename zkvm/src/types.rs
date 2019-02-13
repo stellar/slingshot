@@ -6,7 +6,7 @@ use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
 use spacesuit::SignedInteger;
 
-use crate::contract::{Contract, Input, PortableItem};
+use crate::contract::{Contract, FrozenValue, Input, PortableItem};
 use crate::encoding::Subslice;
 use crate::errors::VMError;
 use crate::ops::Instruction;
@@ -295,6 +295,13 @@ impl DataWitness {
 }
 
 impl Value {
+    /// Converts a value to FrozenValue type.
+    pub fn to_frozen(&self) -> FrozenValue {
+        // TBD: should be impossible (?) to have Variable
+        // types from structured Instruction objects
+        unimplemented!()
+    }
+
     /// Computes a flavor as defined by the `issue` instruction from a predicate.
     pub fn issue_flavor(predicate: &Predicate) -> Scalar {
         let mut t = Transcript::new(b"ZkVM.issue");

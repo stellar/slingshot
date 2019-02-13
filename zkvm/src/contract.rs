@@ -55,7 +55,6 @@ pub struct FrozenValue {
     pub(crate) flv: Commitment,
 }
 
-
 impl Contract {
     pub fn min_serialized_length(&self) -> usize {
         let mut size = 32 + 4;
@@ -70,7 +69,15 @@ impl Contract {
 
     /// Half-way to encoding the contract
     pub fn to_frozen(self) -> FrozenContract {
-        unimplemented!()
+        let frozen_items = self
+            .payload
+            .iter()
+            .map(|p| p.to_frozen())
+            .collect::<Vec<_>>();
+        FrozenContract {
+            payload: frozen_items,
+            predicate: self.predicate,
+        }
     }
 }
 
@@ -82,6 +89,10 @@ impl Input {
     pub fn encode(&self, buf: &mut Vec<u8>) {
         buf.extend_from_slice(&self.txid.0);
         self.contract.encode(buf);
+    }
+
+    pub fn spend(self) -> Result<(Contract, UTXO), VMError> {
+        Ok((self.contract.thaw()?, self.utxo))
     }
 
     fn decode<'a>(mut input: Subslice<'a>) -> Result<Self, VMError> {
@@ -96,6 +107,16 @@ impl Input {
             utxo,
             txid,
         })
+    }
+}
+
+impl PortableItem {
+    pub fn to_frozen(&self) -> FrozenItem {
+        match self {
+            // TBD: not clone?
+            PortableItem::Data(d) => FrozenItem::Data(d.clone()),
+            PortableItem::Value(v) => FrozenItem::Value(v.to_frozen()),
+        }
     }
 }
 
@@ -159,5 +180,27 @@ impl FrozenContract {
         }
 
         Ok(FrozenContract { predicate, payload })
+    }
+
+    pub fn thaw(self) -> Result<Contract, VMError> {
+        let mut payload = Vec::with_capacity(self.payload.len());
+        for item in self.payload.iter() {
+            payload.push(item.thaw()?)
+        }
+        Ok(Contract {
+            payload,
+            predicate: self.predicate,
+        })
+    }
+}
+
+impl FrozenItem {
+    pub fn thaw(&self) -> Result<PortableItem, VMError> {
+        match self {
+            FrozenItem::Data(d) => Ok(PortableItem::Data(d.clone())),
+            // TBD: how do we turn a frozen item into a
+            // variable with the current representation?
+            FrozenItem::Value(v) => unimplemented!(),
+        }
     }
 }
