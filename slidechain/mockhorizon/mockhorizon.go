@@ -19,17 +19,17 @@ func New() *Client {
 	}
 }
 
+// Client is a mock Horizon client, implemengint the Horizon
+// client interface.
+//
+// Our mock implementation assumes that the calling functions
+// want to submit transactions and then stream to see if they
+// have been successfully included in the ledger.
 type Client struct {
 	txs       []string
 	mu        *sync.Mutex
 	submitted *sync.Cond
 }
-
-// Implement horizon.ClientInterface for mockhorizon.
-//
-// Our mock implementation assumes that the calling functions
-// want to submit transactions and then stream to see if they
-// have been successfully included in the ledger.
 
 // SubmitTransaction unmarshals the tx envelope string into a xdr.TransactionEnvelope,
 // and then adds the transaction to the Client's internal record of transactions to
@@ -47,7 +47,7 @@ func (c *Client) SubmitTransaction(txeBase64 string) (horizon.TransactionSuccess
 	return horizon.TransactionSuccess{}, nil
 }
 
-// StreamTransactions "streams" the transactions that have been submitted to SubmitTransaction.
+// StreamTransactions "streams" all transactions that have been submitted to SubmitTransaction.
 func (c *Client) StreamTransactions(ctx context.Context, accountID string, cursor *horizon.Cursor, handler horizon.TransactionHandler) error {
 	txindex := 0
 	ch := make(chan struct{})
@@ -71,9 +71,6 @@ func (c *Client) StreamTransactions(ctx context.Context, accountID string, curso
 		case <-ch:
 		}
 
-		// figure out how we exactly want to "stream" txs
-		// stream all the ones in the array
-		// and then wait for new ones?
 		c.mu.Lock()
 		txs := c.txs[txindex:]
 		c.mu.Unlock()
