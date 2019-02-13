@@ -359,7 +359,7 @@ where
     fn output(&mut self, k: usize) -> Result<(), VMError> {
         let contract = self.pop_contract(k)?;
         let mut buf = Vec::with_capacity(contract.min_serialized_length());
-        contract.to_frozen().encode(&mut buf);
+        contract.to_frozen(&self.variable_commitments).encode(&mut buf);
         self.txlog.push(Entry::Output(buf));
         Ok(())
     }
@@ -650,5 +650,11 @@ where
             bitrange,
         )
         .map_err(|_| VMError::R1CSInconsistency)
+    }
+}
+
+impl VariableCommitment {
+    pub fn closed_commitment(&self) -> Commitment {
+        Commitment::Closed(self.commitment.to_point())
     }
 }

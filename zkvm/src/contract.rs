@@ -4,6 +4,7 @@ use crate::errors::VMError;
 use crate::predicate::Predicate;
 use crate::txlog::{TxID, UTXO};
 use crate::types::{Commitment, Data, Value};
+use crate::vm::VariableCommitment;
 
 /// Prefix for the data type in the Output Structure
 pub const DATA_TYPE: u8 = 0x00;
@@ -68,11 +69,11 @@ impl Contract {
     }
 
     /// Half-way to encoding the contract
-    pub fn to_frozen(self) -> FrozenContract {
+    pub fn to_frozen(self, commitments: &Vec<VariableCommitment>) -> FrozenContract {
         let frozen_items = self
             .payload
             .iter()
-            .map(|p| p.to_frozen())
+            .map(|p| p.to_frozen(commitments))
             .collect::<Vec<_>>();
         FrozenContract {
             payload: frozen_items,
@@ -107,11 +108,15 @@ impl Input {
 }
 
 impl PortableItem {
-    pub fn to_frozen(&self) -> FrozenItem {
+    pub fn to_frozen(&self, commitments: &Vec<VariableCommitment>) -> FrozenItem {
         match self {
             // TBD: not clone?
             PortableItem::Data(d) => FrozenItem::Data(d.clone()),
-            PortableItem::Value(v) => FrozenItem::Value(v.to_frozen()),
+            PortableItem::Value(v) => {
+                let flv = commitments[v.flv.index].closed_commitment();
+                let qty = commitments[v.qty.index].closed_commitment();
+                FrozenItem::Value(FrozenValue{ flv, qty })
+            }
         }
     }
 }

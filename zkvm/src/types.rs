@@ -295,13 +295,6 @@ impl DataWitness {
 }
 
 impl Value {
-    /// Converts a value to FrozenValue type.
-    pub fn to_frozen(&self) -> FrozenValue {
-        // TBD: should be impossible (?) to have Variable
-        // types from structured Instruction objects
-        unimplemented!()
-    }
-
     /// Computes a flavor as defined by the `issue` instruction from a predicate.
     pub fn issue_flavor(predicate: &Predicate) -> Scalar {
         let mut t = Transcript::new(b"ZkVM.issue");
