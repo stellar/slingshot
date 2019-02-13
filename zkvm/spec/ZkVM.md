@@ -742,7 +742,7 @@ The protocol is the following:
     ```
     T.commit("n", LE32(n))
     ```
-3. Commit all verification keys `P[i]` one by one (in order they were collected):
+3. Commit all verification keys `P[i]` one by one (in the order they were added during VM execution):
     ```
     T.commit("P", P[i])
     ```
