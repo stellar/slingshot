@@ -8,17 +8,17 @@ import (
 	"log"
 	"math"
 	"strconv"
-	"time"
 
 	"github.com/bobg/sqlutil"
 	"github.com/chain/txvm/crypto/ed25519"
+	i10rjson "github.com/chain/txvm/encoding/json"
 	"github.com/chain/txvm/errors"
 	"github.com/chain/txvm/protocol/bc"
-	"github.com/chain/txvm/protocol/txbuilder"
 	"github.com/chain/txvm/protocol/txbuilder/standard"
-	"github.com/chain/txvm/protocol/txbuilder/txresult"
 	"github.com/chain/txvm/protocol/txvm"
 	"github.com/chain/txvm/protocol/txvm/asm"
+	"github.com/chain/txvm/protocol/txvm/op"
+	"github.com/chain/txvm/protocol/txvm/txvmutil"
 	"github.com/interstellar/slingshot/slidechain/stellar"
 	"github.com/interstellar/starlight/worizon/xlm"
 	b "github.com/stellar/go/build"
@@ -43,14 +43,14 @@ const (
 	                     #  con stack                          arg stack                 log                 notes
 	                     #  ---------                          ---------                 ---                 -----
 	                     #  {exporter}, value, json            selector                                              
-	get		             #  {exporter}, value, json                                                
+	get		             #  {exporter}, value, json, selector                                                
 	jumpif:$doretire     #                                                                                   
 	                     #  {exporter}, value, json                                                          
 	"" put               #  {exporter}, value, json            ""                                            
-	drop                 #  {exporter}, value                                                                
+	drop                 #  {exporter}, value                  ""                                              
 	put put 1 put        #                                     "", value, {exporter}, 1                      
 	x'%x' contract call  #                                                               {'L',...}{'O',...}  
-	jump:$checksig       #                                                                                   
+	jump:$end		     #                                                                                   
 	                     #                                                                                   
 	$doretire            #                                                                                   
 	                     #  {exporter}, value, json                                                          
@@ -58,17 +58,19 @@ const (
 	x'%x' contract call  #                                                                                   
 	                     #                                                                                   
 	                     #                                                                                   
-	$checksig            #                                                                                   
-	[%s] yield           #                                     sigchecker	
+	$end	      	     #                                                                                   
 `
 )
 
+// [%s] yield           #                                     sigchecker
+// custodianSigCheckerSrc
+
 var (
 	custodianSigCheckerSrc = fmt.Sprintf(custodianSigCheckerFmt, custodianPub)
-	exportContract1Src     = fmt.Sprintf(exportContract1Fmt, exportContract2Src)
+	exportContract1Src     = fmt.Sprintf(exportContract1Fmt, exportContract2Prog)
 	exportContract1Prog    = asm.MustAssemble(exportContract1Src)
 	exportContract1Seed    = txvm.ContractSeed(exportContract1Prog)
-	exportContract2Src     = fmt.Sprintf(exportContract2Fmt, standard.PayToMultisigProg1, standard.RetireContract, custodianSigCheckerSrc)
+	exportContract2Src     = fmt.Sprintf(exportContract2Fmt, standard.PayToMultisigProg1, standard.RetireContract)
 	exportContract2Prog    = asm.MustAssemble(exportContract2Src)
 )
 
@@ -334,29 +336,39 @@ func BuildExportTx(ctx context.Context, asset xdr.Asset, amount, inputAmt int64,
 	if err != nil {
 		return nil, errors.Wrap(err, "marshaling reference data")
 	}
-	// PRTODO: Replace this placeholder with actual value.
-	var sig []byte
-	buf := new(bytes.Buffer)
-	fmt.Fprintf(buf, "%s\n", refdata) // con stack: json
-	// PRTODO: Clarify what UTXO specifically is being called, so I know the order on the con stack of its results.
-	fmt.Fprintf(buf, "{'C', %d, x'%x', x'%x'} input call\n", inputAmt, assetID, anchor) // arg stack: json, exportval, sigchecker
-	fmt.Fprintf(buf, "get get\n")                                                       // con stack: sigchecker, exportval; arg stack: json
-	fmt.Fprintf(buf, "splitzero swap put\n")                                            // con stack: sigchecker, zeroval; arg stack: json, exportval
-	fmt.Fprintf(buf, "{x'%x'} put\n", pubkey)                                           // con stack: sigchecker, zeroval; arg stack: json, exportval, {pubkey}
-	fmt.Fprintf(buf, "x'%x' contract call\n", exportContract1Src)                       // con stack: sigchecker, zeroval
-	fmt.Fprintf(buf, "finalize\n")                                                      // con stack: sigchecker
-	// PRTODO: Figure out why there's a "get" in Bob's sample contract here. Must be misunderstanding where the sigchecker should be at this point.
-	fmt.Fprintf(buf, "x'%x' put\n", sig) // con stack: sigchecker; arg stack: sig
-	fmt.Fprintf(buf, "call\n")
-	log.Print(buf)
-	exportTxBytes, err := asm.Assemble(buf.String())
-	if err != nil {
-		return nil, errors.Wrap(err, "assembling export tx")
-	}
-	var runlimit int64
-	tx, err := bc.NewTx(exportTxBytes, 3, math.MaxInt64, txvm.GetRunlimit(&runlimit))
+	refdataHex := i10rjson.HexBytes(refdata)
+
+	b := new(txvmutil.Builder)
+	b.PushdataBytes(refdataHex)                                                                                          // con stack: json
+	b.Op(op.Put)                                                                                                         // arg stack: json
+	standard.SpendMultisig(b, 1, []ed25519.PublicKey{pubkey}, inputAmt, assetID, anchor, standard.PayToMultisigSeed1[:]) // arg stack: value, sigcheck
+	b.Op(op.Get).Op(op.Get)                                                                                              // con stack: sigcheck, value
+	b.PushdataBytes(refdataHex).Op(op.Put)                                                                               // con stack: sigcheck, value; arg stack: json
+	b.PushdataInt64(0).Op(op.Split).PushdataInt64(1).Op(op.Roll).Op(op.Put)                                              // con stack: sigcheck, zeroval; arg stack: json, value
+	b.Tuple(func(tup *txvmutil.TupleBuilder) {
+		tup.PushdataBytes(pubkey)
+	})
+	b.Op(op.Put) // con stack: sigchecker, zeroval; arg stack: json, value, {pubkey}
+	b.PushdataBytes(exportContract1Prog)
+	b.Op(op.Contract).Op(op.Call) // con stack: sigchecker, zeroval
+	b.Op(op.Finalize)             // con stack: sigchecker
+	prog1 := b.Build()
+
+	vm, err := txvm.Validate(prog1, 3, math.MaxInt64, txvm.StopAfterFinalize)
 	if err != nil {
 		return nil, errors.Wrap(err, "computing transaction ID")
+	}
+	sigProg := standard.VerifyTxID(vm.TxID)
+	msg := append(sigProg, anchor...)
+	sig := ed25519.Sign(prv, msg)
+	b.PushdataBytes(sig).Op(op.Put)
+	b.PushdataBytes(sigProg).Op(op.Put)
+	b.Op(op.Call)
+
+	prog2 := b.Build()
+	tx, err := bc.NewTx(prog2, 3, math.MaxInt64)
+	if err != nil {
+		return nil, errors.Wrap(err, "making pre-export tx")
 	}
 	return tx, nil
 }
@@ -382,68 +394,6 @@ func exportTxSnapshot(exporterPubkey, assetXDR []byte) ([]byte, error) {
 	tx, err := asm.Assemble(buf.String())
 	if err != nil {
 		return nil, errors.Wrap(err, "assembling export tx snapshot")
-	}
-	return tx, nil
-}
-
-// BuildExportTxOld builds a txvm retirement tx for an asset issued
-// onto slidechain. It will retire `amount` of the asset, and the
-// remaining input will be output back to the original account.
-func BuildExportTxOld(ctx context.Context, asset xdr.Asset, amount, inputAmt int64, temp string, anchor []byte, prv ed25519.PrivateKey, seqnum xdr.SequenceNumber) (*bc.Tx, error) {
-	if inputAmt < amount {
-		return nil, fmt.Errorf("cannot have input amount %d less than export amount %d", inputAmt, amount)
-	}
-	assetXDR, err := xdr.MarshalBase64(asset)
-	if err != nil {
-		return nil, err
-	}
-	assetBytes, err := asset.MarshalBinary()
-	if err != nil {
-		return nil, err
-	}
-	assetID := bc.NewHash(txvm.AssetID(importIssuanceSeed[:], assetBytes))
-	var rawSeed [32]byte
-	copy(rawSeed[:], prv)
-	kp, err := keypair.FromRawSeed(rawSeed)
-	if err != nil {
-		return nil, err
-	}
-	pubkey := prv.Public().(ed25519.PublicKey)
-	ref := struct {
-		AssetXDR string `json:"asset"`
-		Temp     string `json:"temp"`
-		Seqnum   int64  `json:"seqnum"`
-		Exporter string `json:"exporter"`
-	}{
-		assetXDR,
-		temp,
-		int64(seqnum),
-		kp.Address(),
-	}
-	refdata, err := json.Marshal(ref)
-	if err != nil {
-		return nil, errors.Wrap(err, "marshaling reference data")
-	}
-	tpl := txbuilder.NewTemplate(time.Now().Add(time.Minute), nil)
-	tpl.AddInput(1, [][]byte{prv}, nil, []ed25519.PublicKey{pubkey}, inputAmt, assetID, anchor, nil, 1)
-	tpl.AddRetirement(int64(amount), assetID, refdata)
-	if inputAmt > amount {
-		tpl.AddOutput(1, []ed25519.PublicKey{pubkey}, inputAmt-amount, assetID, nil, nil)
-	}
-	err = tpl.Sign(ctx, func(_ context.Context, msg []byte, prv []byte, path [][]byte) ([]byte, error) {
-		return ed25519.Sign(prv, msg), nil
-	})
-	if err != nil {
-		return nil, errors.Wrap(err, "signing tx")
-	}
-	tx, err := tpl.Tx()
-	if err != nil {
-		return nil, errors.Wrap(err, "building tx")
-	}
-	if inputAmt > amount {
-		txresult := txresult.New(tx)
-		output := txresult.Outputs[0].Value
-		log.Printf("output: assetid %x amount %x anchor %x", output.AssetID.Bytes(), output.Amount, output.Anchor)
 	}
 	return tx, nil
 }
