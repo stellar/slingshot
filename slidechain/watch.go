@@ -1,7 +1,6 @@
 package slidechain
 
 import (
-	"bytes"
 	"context"
 	"database/sql"
 	"encoding/json"
@@ -118,45 +117,33 @@ func (c *Custodian) watchExports(ctx context.Context) {
 		}
 		b := got.(*bc.Block)
 		for _, tx := range b.Transactions {
-			// Look for a retire-type ("X") entry
-			// followed by a specially formatted log ("L") entry
+			// Look for a specially formatted log ("L") entry
 			// that specifies the Stellar asset code to peg out and the Stellar recipient account ID.
-			// PRTODO: Rewrite this with export changes.
-
+			// We confirm it is the correct one using the subsequent output ("O") entry.
 			for i := 0; i < len(tx.Log)-2; i++ {
 				item := tx.Log[i]
-				if item[0].(txvm.Bytes)[0] != txvm.RetireCode {
+				if item[0].(txvm.Bytes)[0] != txvm.LogCode {
 					continue
 				}
-				retiredAmount := int64(item[2].(txvm.Int))
-				retiredAssetIDBytes := []byte(item[3].(txvm.Bytes))
 
-				infoItem := tx.Log[i+1]
-				if infoItem[0].(txvm.Bytes)[0] != txvm.LogCode {
+				outputItem := tx.Log[i+1]
+				if outputItem[0].(txvm.Bytes)[0] != txvm.OutputCode {
 					continue
 				}
+				// TODO(debnil): Should we do more checks of the output value?
+
 				var info struct {
 					AssetXDR []byte `json:"asset"`
 					Temp     string `json:"temp"`
 					Seqnum   int64  `json:"seqnum"`
 					Exporter string `json:"exporter"`
+					Amount   int64  `json:"amount"`
 				}
-				err := json.Unmarshal(infoItem[2].(txvm.Bytes), &info)
+				err := json.Unmarshal(item[2].(txvm.Bytes), &info)
 				if err != nil {
 					continue
 				}
-
-				// Check this Stellar asset code corresponds to retiredAssetIDBytes.
-				gotAssetID32 := txvm.AssetID(importIssuanceSeed[:], info.AssetXDR)
-				if !bytes.Equal(gotAssetID32[:], retiredAssetIDBytes) {
-					continue
-				}
-
-				var exporter xdr.AccountId
-				err = exporter.SetAddress(info.Exporter)
-				if err != nil {
-					continue
-				}
+				exportedAssetBytes := txvm.AssetID(importIssuanceSeed[:], info.AssetXDR)
 
 				// Record the export in the db,
 				// then wake up a goroutine that executes peg-outs on the main chain.
@@ -164,12 +151,12 @@ func (c *Custodian) watchExports(ctx context.Context) {
 					INSERT INTO exports 
 					(txid, exporter, amount, asset_xdr, temp, seqnum)
 					VALUES ($1, $2, $3, $4, $5, $6)`
-				_, err = c.DB.ExecContext(ctx, q, tx.ID.Bytes(), exporter.Address(), retiredAmount, info.AssetXDR, info.Temp, info.Seqnum)
+				_, err = c.DB.ExecContext(ctx, q, tx.ID.Bytes(), info.Exporter, info.Amount, info.AssetXDR, info.Temp, info.Seqnum)
 				if err != nil {
 					log.Fatalf("recording export tx: %s", err)
 				}
 
-				log.Printf("recorded export: %d of txvm asset %x (Stellar %x) for %s", retiredAmount, retiredAssetIDBytes, info.AssetXDR, exporter.Address())
+				log.Printf("recorded export: %d of txvm asset %x (Stellar %x) for %s", info.Amount, exportedAssetBytes, info.AssetXDR, info.Exporter)
 
 				c.exports.Broadcast()
 

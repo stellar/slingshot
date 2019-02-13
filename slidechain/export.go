@@ -326,11 +326,13 @@ func BuildExportTx(ctx context.Context, asset xdr.Asset, amount, inputAmt int64,
 		Temp     string `json:"temp"`
 		Seqnum   int64  `json:"seqnum"`
 		Exporter string `json:"exporter"`
+		Amount   int64  `json:"amount"`
 	}{
 		assetXDR,
 		temp,
 		int64(seqnum),
 		kp.Address(),
+		inputAmt,
 	}
 	refdata, err := json.Marshal(ref)
 	if err != nil {
@@ -406,7 +408,6 @@ func exportTxSnapshot(exporterPubkey, assetXDR []byte) ([]byte, error) {
 // {"O", caller, outputid}
 // {"F", ...}
 func IsExportTx(tx *bc.Tx, asset xdr.Asset, inputAmt int64, temp, exporter string, seqnum int64) bool {
-	log.Print(tx.Log)
 	if len(tx.Log) != 4 {
 		return false
 	}
