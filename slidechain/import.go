@@ -54,13 +54,16 @@ func (c *Custodian) buildImportTx(
 	return tx2, nil
 }
 
-func (c *Custodian) importFromPegs(ctx context.Context) {
+func (c *Custodian) importFromPegs(ctx context.Context, ready chan struct{}) {
 	defer log.Print("importFromPegs exiting")
 
 	ch := make(chan struct{})
 	go func() {
 		c.imports.L.Lock()
 		defer c.imports.L.Unlock()
+		if ready != nil {
+			close(ready)
+		}
 		for {
 			if ctx.Err() != nil {
 				return
