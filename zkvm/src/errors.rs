@@ -63,6 +63,14 @@ pub enum VMError {
     #[fail(display = "Item is not a key.")]
     TypeNotKey,
 
+    /// This error occurs when a prover is supposed to provide signed integer.
+    #[fail(display = "Item is not a signed integer.")]
+    TypeNotSignedInteger,
+
+    /// This error occurs when a prover has an inconsistent combination of witness data
+    #[fail(display = "Witness data is inconsistent.")]
+    InconsistentWitness,
+
     /// This error occurs when an instruction requires a value type.
     #[fail(display = "Item is not a value.")]
     TypeNotValue,

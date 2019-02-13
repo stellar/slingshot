@@ -39,7 +39,7 @@ ZkVM defines a procedural representation for blockchain transactions and the rul
     * [Output structure](#output-structure)
     * [Constraint system](#constraint-system)
     * [Constraint system proof](#constraint-system-proof)
-    * [Transaction witness](#transaction-witness)
+    * [Transaction](#transaction)
     * [Transaction log](#transaction-log)
     * [Transaction ID](#transaction-id)
     * [Merkle binary tree](#merkle-binary-tree)
@@ -69,9 +69,14 @@ ZkVM defines a procedural representation for blockchain transactions and the rul
 * [Discussion](#discussion)
     * [Relation to TxVM](#relation-to-txvm)
     * [Compatibility](#compatibility)
-
-
-
+    * [Static arguments](#static-arguments)
+    * [Should cloak and borrow take variables and not commitments?](#should-cloak-and-borrow-take-variables-and-not-commitments)
+    * [Why there is no `and` combinator in the predicate tree?](#why-there-is-no-and-combinator-in-the-predicate-tree)
+    * [Why we need Wide value and `borrow`?](#why-we-need-wide-value-and-borrow)
+    * [How to perform an inequality constraint?](#how-to-perform-an-inequality-constraint)
+    * [How to perform a logical `not`?](#how-to-perform-a-logical-not)
+    * [What ensures transaction uniqueness?](#what-ensures-transaction-uniqueness)
+    * [Open questions](#open-questions)
 
 
 
@@ -93,7 +98,7 @@ ZkVM is the entirely new design that inherits most important insights from the T
 
 ### Concepts
 
-A transaction is represented by a [transaction witness](#transaction-witness) that
+A transaction is represented by a [transaction](#transaction) object that
 contains a [program](#program) that runs in the context of a stack-based virtual machine.
 
 When the virtual machine executes a program, it creates and manipulates data of various types:
@@ -166,7 +171,7 @@ Only the [data](#data-type) and [value](#value-type) types can be _ported_ acros
 
 Notes:
 
-* [Wide values](#wide-value-type) are not portable because it is not proven to be non-negative.
+* [Wide values](#wide-value-type) are not portable because they are not proven to be non-negative.
 * [Contracts](#contract-type) are not portable because they must be satisfied within the current transaction
 or [output](#output-structure) their contents themselves.
 * [Variables](#variable-type), [expressions](#expression-type) and [constraints](#constraint-type) have no meaning outside the VM state
@@ -182,10 +187,10 @@ Data cannot be larger than the entire transaction program and cannot be longer t
 
 ### Contract type
 
-A contract is a [predicate](#predicate) and a [payload](#contract-payload) guarded by that predicate.
+A contract consists of a [predicate](#predicate) and a [payload](#contract-payload). The payload is guarded by the predicate.
 
 Contracts are created with the [`contract`](#contract) instruction and
-destroyed by evaluating the predicate, leaving their stored items on the stack.
+destroyed by evaluating the predicate, leaving their payload on the stack.
 
 Contracts can be "frozen" with the [`output`](#output) instruction that places the predicate
 and the payload into the [output structure](#output-structure) which is
@@ -198,7 +203,8 @@ _Variable_ represents a secret [scalar](#scalar) value in the [constraint system
 bound to its [Pedersen commitment](#pedersen-commitment).
 
 A [point](#point) that represents a commitment to a secret scalar can be turned into a variable using the [`var`](#var) instruction.
-Non-secret [scalar](#scalar) can be turned into a single-term [expression](#expression-type) using the [`const`](#const) instruction (which does not allocate a variable).
+
+A cleartext [scalar](#scalar) can be turned into a single-term [expression](#expression-type) using the [`const`](#const) instruction (which does not allocate a variable). Since we do not need to hide their values, a Variable is not needed.
 
 Variables can be copied and dropped at will, but cannot be ported across transactions via [outputs](#output-structure).
 
@@ -209,17 +215,17 @@ when these are exposed to the VM (for instance, from [`mul`](#mul)), they have t
 
 ### Attached and detached variables
 
-A [variable](#variable-type) can be in one of two states: **detached** and **attached**.
+A [variable](#variable-type) can be in one of two states: **detached** or **attached**.
 
-**Detached variable** can be [reblinded](#reblinded): all copies of a detached variable share the same commitment,
+A **detached variable** can be [reblinded](#reblinded): all copies of a detached variable share the same commitment,
 so reblinding one of them reflects the new commitments in all the copies. When an [expression](#expression-type) is formed using detached variables, all of them transition to an _attached_ state.
 
-**Attached variable** has its commitment applied to the constraint system, so it cannot be reblinded and variable cannot be detached.
+An **attached variable** has its commitment applied to the constraint system, so it cannot be reblinded and variable cannot be detached.
 
 
 ### Expression type
 
-_Expression_ is a linear combination of [variables](#variable-type) with cleartext [scalar](#scalar) weights.
+_Expression_ is a linear combination of attached [variables](#variable-type) with cleartext [scalar](#scalar) weights.
 
     expr = { (weight0, var0), (weight1, var1), ...  }
 
@@ -259,8 +265,8 @@ Constraints only have an effect if added to the constraint system using the [`ve
 
 ### Value type
 
-A value is a [linear type](#linear-types) representing a pair of *quantity* and *flavor*.
-Both quantity and flavor are represented as [scalars](#scalar).
+A value is a [linear type](#linear-types) representing a pair of *quantity* and *flavor* (see [quantity](../../spacesuit/spec.md#quantity) and [flavor](../../spacesuit/spec.md#flavor) in the [Cloak specification](../../spacesuit/spec.md)).
+Both quantity and flavor are represented as [variables](#variable-type).
 Quantity is guaranteed to be in a 64-bit range (`[0..2^64-1]`).
 
 Values are created with [`issue`](#issue) and destroyed with [`retire`](#retire).
@@ -417,13 +423,13 @@ of a [predicate tree](#predicate-tree).
 ### Predicate tree
 
 A _predicate tree_ is a composition of [predicates](#predicate) and [programs](#program) that
-provides flexible way to open a [contract](#contract-type).
+provide a flexible way to open a [contract](#contract-type).
 
 Each node in a predicate tree is formed with one of the following:
 
 1. [Verification key](#verification-key): can be satisfied by signing a transaction using [`signtx`](#signtx) or signing and executing a program using [`delegate`](#delegate).
 2. [Disjunction](#predicate-disjunction) of other predicates. Choice is made using [`left`](#left) and [`right`](#right) instructions.
-3. [Program commitment](#program-predicate). The structure of the commitment prevents signing and requires user to reveal and evaluate the program using [`call`](#call) instruction.
+3. [Program commitment](#program-predicate). The structure of the commitment prevents signing and requires user to reveal and evaluate the program using the [`call`](#call) instruction.
 
 
 ### Predicate disjunction
@@ -473,17 +479,17 @@ h = T.challenge_scalar("h")
 PP(prog) = h·B2
 ```
 
-Program predicate can be satisfied only via the [`call`](#call) instruction that takes a cleartext program string, verifies the commitment and evaluates the program. Use of the [secondary base point](#base-points) `B2` prevents using the predicate as a [verification key](#verification-key)) and signing with `h` without executing the program.
+Program predicate can be satisfied only via the [`call`](#call) instruction that takes a cleartext program string, verifies the commitment and evaluates the program. Use of the [secondary base point](#base-points) `B2` prevents using the predicate as a [verification key](#verification-key) and signing with `h` without executing the program.
 
 
 ### Program
 
-A program is a [data](#data-type) containing a sequence of ZkVM [instructions](#instructions).
+A program is of type [data](#data-type) containing a sequence of ZkVM [instructions](#instructions).
 
 
 ### Contract payload
 
-A list of [items](#types) stored in the [contract](#contract-type) or [output](#output-structure).
+The contract payload is a list of [items](#types) stored in the [contract](#contract-type) or [output](#output-structure).
 
 Payload of a [contract](#contract-type) may contain arbitrary [types](#types),
 but in the [output](#output-structure) only the [portable types](#portable-types) are allowed.
@@ -493,8 +499,8 @@ but in the [output](#output-structure) only the [portable types](#portable-types
 
 Input structure represents an unspent output (UTXO) from a previous transaction.
 
-Input is serialized as [output](#output-structure) with extra 32 bytes containing
-this output’s [transaction ID](#transaction-id).
+Input is serialized as [output](#output-structure) with an extra 32 bytes containing
+the output’s [transaction ID](#transaction-id).
 
 ```
        Input  =  PreviousTxID || PreviousOutput
@@ -514,7 +520,7 @@ utxo = T.challenge_bytes("id")
 ```
 
 In the above, `previous_txid` is the [transaction ID](#transaction-id) of the transaction where the output was created,
-and `previous_output` is the [output](#output-structure), serialized.
+and `previous_output` is the serialized [output](#output-structure).
 
 
 ### Output structure
@@ -533,10 +539,10 @@ and can only contain [portable types](#portable-types).
 
 ### Constraint system
 
-The part of the [VM state](#vm-state) that implements
-[Bulletprofs rank-1 constraint system](https://doc-internal.dalek.rs/develop/bulletproofs/notes/r1cs_proof/index.html).
+The constraint system is the part of the [VM state](#vm-state) that implements
+[Bulletproof's rank-1 constraint system](https://doc-internal.dalek.rs/develop/bulletproofs/notes/r1cs_proof/index.html).
 
-Constraint system keeps track of [variables](#variable-type) and [constraints](#constraint-type)
+It also keeps track of the [variables](#variable-type) and [constraints](#constraint-type),
 and is used to verify the [constraint system proof](#constraint-system-proof).
 
 
@@ -544,12 +550,12 @@ and is used to verify the [constraint system proof](#constraint-system-proof).
 
 A proof of satisfiability of a [constraint system](#constraint-system) built during the VM execution.
 
-The proof is provided to the VM at the beggining of execution and verified when the VM is [finished](#vm-execution).
+The proof is provided to the VM at the beginning of execution and verified when the VM is [finished](#vm-execution).
 
 
-### Transaction witness
+### Transaction
 
-Transaction witness is a structure that contains all data and logic
+Transaction is a structure that contains all data and logic
 required to produce a unique [transaction ID](#transaction-id):
 
 * Version (uint64)
@@ -732,12 +738,12 @@ Aggregated Signature is encoded as a 64-byte [data](#data-type).
 
 The protocol is the following:
 
-1. Prover and verifier obtain a [transcript](#transcript) `T` defined by the context in which the signature is used (see [`signtx`](#signtx), [`delegate`](#delegate)). The transcript is assumed to be already bound to the _message_ being signed.
+1. Prover and verifier obtain a [transcript](#transcript) `T` that is assumed to be already bound to the _message_ being signed (see [`signtx`](#signtx) and [transaction signature](#transaction-signature)).
 2. Commit the count `n` of verification keys as [LE32](#le32):
     ```
     T.commit("n", LE32(n))
     ```
-3. Commit all verification keys `P[i]` in order, one by one:
+3. Commit all verification keys `P[i]` one by one (in the order they were added during VM execution):
     ```
     T.commit("P", P[i])
     ```
@@ -802,7 +808,7 @@ Fiat-Shamir transform defined through the use of the [transcript](#transcript) i
 
 ### Blinding protocol
 
-Blinding protocol consists of three proofs about blinding factors:
+The blinding protocol consists of three proofs about blinding factors:
 
 1. [Blinding proof](#blinding-proof): a proof that a blinding factor is formed with a pre-determined key which can be removed using [reblind](#reblind-proof) operation. Implemented by the [`blind`](#blind) instruction.
 2. [Reblinding proof](#reblinding-proof): a proof that a blinding factor is replaced with another one without affecting the committed value. Implemented by the [`reblind`](#reblind) instruction.
@@ -840,7 +846,7 @@ Proof:
     ```
 4. Prover and verifier perform the [signature protocol](#aggregated-signature) with base point `B2` producing a 64-byte proof `R_q || s_q`.
 5. Prover makes a commitment `Com(v, q·p) = v·B + q·p·B2`.
-6. Prover commits to the value by multiplicatively blinding it (because often secret values are distributed non-uniformely) and sends `W` to the verifier:
+6. Prover commits to the value by multiplicatively blinding it (because often secret values are distributed non-uniformly) and sends `W` to the verifier:
     ```
     W = p^{-1}·v·B
     ```
@@ -979,7 +985,7 @@ V == v·B + 0·B2
 
 The ZkVM state consists of the static attributes and the state machine attributes.
 
-1. [Transaction witness](#transaction-witness):
+1. [Transaction](#transaction):
     * `version`
     * `mintime` and `maxtime`
     * `program`
@@ -1001,12 +1007,12 @@ The ZkVM state consists of the static attributes and the state machine attribute
 
 The VM is initialized with the following state:
 
-1. A [transaction witness](#transaction-witness) as provided by the user.
-2. Extension flag set to `true` or `false` according to the [transaction versioning](#versioning) rules for the witness version.
+1. [Transaction](#transaction) as provided by the user.
+2. Extension flag set to `true` or `false` according to the [transaction versioning](#versioning) rules for the transaction version.
 3. Uniqueness flag is set to `false`.
 4. Data stack is empty.
 5. Program stack is empty.
-6. Current program set to the transaction witness program; with zero offset.
+6. Current program set to the transaction program; with zero offset.
 7. Transaction log is empty.
 8. Array of signature verification keys is empty.
 9. Array of deferred point operations is empty.
@@ -1387,7 +1393,7 @@ _proof V2 var1_ **reblind** → _var1_
 1. Pops [variable](#variable-type) `var1`.
 2. Pops [point](#point) `V2`.
 3. Pops [data](#data-type) `proof`.
-4. Checks that `var1` is a [detached variable](#variable-type) with commitment `V1`.
+4. Checks that `var1` is a [detached variable](#variable-type) and reads its commitment `V1` from the [VM list of variable commitments](#vm-state).
 5. Replaces commitment `V1` with `V2` for this variable.
 6. Verifies the [reblinding proof](#reblinding-proof) for the commitments `V1`, `V2` and proof data `proof`, [deferring all point operations](#deferred-point-operations)).
 7. Pushes back the detached variable `var1`.
@@ -1851,19 +1857,71 @@ TBD.
 
 TBD.
 
+
 ### Payment channel example
 
-TBD.
+Payment channel is a contract that permits a number of parties to exchange value within a given range back-and-forth
+without publication of each transaction on a blockchain. Instead, only net distribution of balances is _settled_ when the channel is _closed_.
+
+Assumptions for this example:
+
+1. There are 2 parties in a channel.
+2. The channel uses values of one _flavor_ chosen when the channel is created.
+
+Overview:
+
+1. Both parties commit X quantity of funds to a shared contract protected by a simple 2-of-2 multisig predicate. This allows each party to net-send or net-receive up to X units.
+2. Parties can close the channel mutually at any time, signing off a transaction that distributes the latest balances. They can even choose the target addresses arbitrarily. E.g. if one party needs to make an on-chain payment, they can have their balance split in two outputs: _payment_ and _change_ immediately when closing a channel, without having to make an additional transaction.
+3. Parties can _independently close_ the channel at any time using a _pre-signed authorization predicate_, that encodes a distribution of balances with the hard-coded pay-out outputs.
+4. Each payment has a corresponding pre-signed authorization reflecting a new distribution.
+5. To prevent publication of a transaction using a _stale_ authorization predicate:
+    1. The predicate locks funds in a temporary "holding" contract for a duration of a "contest period" (agreed upon by both parties at the creation of a channel).
+    2. Any newer predicate can immediately spend that time-locked contract into a new "holding" contract with an updated distribution of funds.
+    3. Users watch the blockchain updates for attempts to use a stale authorization, and counter-act them with the latest version.
+6. If the channel was force-closed and not (anymore) contested, after a "contest period" is passed, the "holding" contract can be opened by either party, which sends the funds to the pre-determined outputs.
+
+In ZkVM such predicate is implemented with a _signed program_ ([`delegate`](#delegate)) that plays dual role:
+
+1. It allows any party to _initiate_ a force-close.
+2. It allows any party to _dispute_ a stale force-close (overriding it with a more fresh force-close).
+
+To _initiate_ a force-close, the program `P1` does:
+
+1. Take the exptime as an argument provided by the user (encrypted via Pedersen commitment).
+2. Check that `tx.maxtime + D == exptime` (built-in contest period).
+   Transaction maxtime is chosen by the initiator of the tx close to the current time.
+3. Put the exptime and the value into the output under predicate `P2` (built-in predicate committing to a program producing final outputs and checking exptime).
+
+To construct such program `P1`, users first agree on the final distribution of balances via the program `P2`.
+
+The final-distribution program `P2`:
+1. Checks that `tx.mintime >= exptime` (can be done via `range:24(tx.mintime - exptime)` which gives 6-month resolution for the expiration time)
+2. Creates `borrow`/`output` combinations for each party with hard-coded predicate for each output.
+3. Leaves the payload value and negatives from `borrow` on the stack to be consumed by the `cloak` instruction.
+
+To _dispute_ a stale force-close, the program `P1` has an additional feature:
+it contains a sequence number that's incremented for each new authorization predicate `P1`, at each payment.
+The program `P1`, therefore:
+
+1. Expect two items on the stack coming from a contract: `seq` scalar and `val` value (on top of `seq`). Below these, there is `exptime` commitment.
+2. Check `range:24(new_seq - seq - 1)` to make sure `new_seq > seq`. If there are more than 16.7 million payments (capped by a 24-bit rangeproof), several contest transactions can be chained together with a distance of 16.7 million payments between each other to reach the latest one. At the tx rate of 1 tx/sec, this implies 6 months worth of channel life per intermediate force-close transaction.
+3. Check the expiration time `tx.maxtime + D == exptime` (D is built into the predicate).
+4. Lock the value and `exptime` in a new output with a built-in predicate `P2`.
+
+If `P1` is used to initiate force-close on a contract that does not have a sequence number (initial contract),
+the user simply provides a zero scalar on the stack under the contract.
+
+Confidentiality properties:
+
+1. When the channel is normally closed, it is not even revealed whether it was a payment channel at all. The channel contract looks like an ordinary output indistinguishable from others.
+2. When the channel is force-closed, it does not reveal the number of payments (sequence number) that went through it, nor the contest period which could be used to fingerprint participants with different settings.
+
+The overhead in the force-close case is 48 multipliers (two 24-bit rangeproofs) — a 37.5% performance overhead on top of 2 outputs which the channel has to create even in a normal-close case. There is no range proof for the re-locked value between `P1` and `P2`, as it's already known to be in range and it does no go through the `cloak`.
+
 
 ### Payment routing example
 
 TBD.
-
-
-
-
-
-
 
 ## Discussion
 
@@ -1935,7 +1993,7 @@ program structure can be determined right before the use.
 2. txbuilder can keep the secrets assigned to variable instances, so it may be more convenient than remembering preimages for commitments.
 
 
-### Why there is no AND combinator in predicate tree?
+### Why there is no `and` combinator in the predicate tree?
 
 The payload of a contract must be provided to the selected branch. If both predicates must be evaluated and both are programs, then which one takes the payload? To avoid ambiguity, AND can be implemented inside a program that can explicitly decide in which order and which parts of payload to process: maybe check some conditions and then delegate the whole payload to a predicate, or split the payload in two parts and apply different predicates to each part. There's [`contract`](#contract) instruction for that delegation.
 
@@ -1957,9 +2015,107 @@ Now let’s see how [`borrow`](#borrow) simplifies things: it allows you to make
 Wide values are less powerful (they are super-types of Values) because they are not _portable_. You cannot just stash such value away in some output. You have to actually repay it using the `cloak` instruction.
 
 
-## Open questions
+### How to perform an inequality constraint?
 
-### Do we really need qty/flavor introspection ops?
+First, note that inequality constraint only makes sense for integers, not for scalars.
+This is because integers are ordered and scalars wrap around modulo group order.
+Therefore, any two [variables](#variable-type) or [expressions](#expression-type) that must be compared,
+must theselves be proven to be in range using the [`range`](#range) instruction (directly or indirectly).
+
+Then, the inequality constraint is created by forming an expression of the form `expr ≥ 0` (using instructions [`neg`](#neg) and [`add`](#add)) and using a [`range`](#range) instruction to place a range check on `expr`.
+
+Constraint | Range check
+-----------|------------------
+`a ≥ b`    | `range:64(a - b)`
+`a ≤ b`    | `range:64(b - a)`
+`a > b`    | `range:64(a - b - 1)`
+`a < b`    | `range:64(b - a - 1)`
+
+
+
+### How to perform a logical `not`?
+
+Logical instructions [`or`](#or) and [`and`](#and) work by combining constraints of form `expr == 0`, that is, a comparison with zero. Logical `not` then is a check that a secret variable is _not zero_.
+
+One way to do that is to break the scalar in 253 bits (using 253 multipliers) and add a disjunction "at least one of these bits is 1" (using additional 252 multipliers), spending total 505 multipliers (this is 8x more expensive than a regular 64-bit rangeproof).
+
+On the other hand, using `not` may not be a good way to express contracts because of a dramatic increase in complexity: a contract that says `not(B)` effectively inverts a small set of inadmissible inputs, producing a big set of addmissible inputs.
+
+We need to investigate whether there are use-cases that cannot be safely or efficiently expressed with only [`and`](#and) and [`or`](#or) combinators.
+
+
+### What ensures transaction uniqueness?
+
+In ZkVM:
+
+* [Transaction ID](#transaction-id) is globally unique,
+* [UTXO ID](#utxo) is globally unique,
+* [Nonce](#nonce) is globally unique,
+* [Value](#value-type) is **not** unique,
+* [Contract](#contract-type) is **not** unique.
+
+In contrast, in TxVM:
+
+* [Transaction ID](#transaction-id) is globally unique,
+* [UTXO ID](#utxo) is **not** unique,
+* [Nonce](#nonce) is globally unique,
+* [Value](#value-type) is globally unique,
+* [Contract](#contract-type) is globally unique.
+
+TxVM ensures transaction uniqueness this way:
+
+* Each value has a unique “anchor” (32-byte payload)
+* When values are split/merged, anchor is one-way hashed to produce new anchor(s).
+* `finalize` instruction consumes a zero-quantity value, effectively consuming a unique anchor.
+* Anchors are originally produced via `nonce` instruction that uses blockchain state to prevent reuse of nonces.
+* Issuance of new assets consumes a zero-quantity value, moving the anchor from it to the new value.
+
+**Pro:**
+
+UTXO ID is fully determined before transaction is finalized. So e.g. a child transaction can be formed before the current transaction is completed and its ID is known. This might be handy in some cases.
+
+**Meh:**
+
+It seems like transaction ID is defined quite simply as a hash of the log, but it also must consume an anchor (since UTXOs alone are not guaranteed to be unique, and one can make a transaction without spending any UTXOs). So transaction ID computation still has some level of special handling.
+
+**Con:**
+
+Recipient of payment cannot fully specify the contract snapshot because they do not know sender’s anchors. This is not a problem in cleartext TxVM, but a problem in ZkVM where values have to participate in the Cloak protocol.
+
+Storing anchor inside a value turned out to be handy, but is not very ergonomic. For instance, a contract cannot simply “claim” an arbitrary value and produce a negative counterpart, w/o having _some_ value to “fork off” an anchor from.
+
+Another potential issue: UTXOs are not guaranteed to be always unique. E.g. if a contract does not modify its value and other content, it can re-save itself to the same UTXO ID. It can even toggle between different states, returning to the previously spent ID. This can cause issues in some applications that forget that UTXO ID in special circumstances can be resurrected.
+
+
+ZkVM ensures transaction uniqueness this way:
+
+* Values do not have anchors.
+* We still have `nonce` instruction with the same semantics
+* `issue` does not consume zero value
+* `finalize` does not consume zero value
+* `claim/borrow` can produce an arbitrary value and its negative at any point
+* Each UTXO ID is defined as `Hash(contract, txid)`, that is contents of the contract are not unique, but the new UTXO ID is defined by transaction ID, not vice versa.
+* Transaction ID is a hash of the finalized log.
+* When VM finishes, it checks that the log contains either an [input](#input-entry) or a [nonce](#nonce-entry), setting the `uniqueness` flag.
+* Outputs are encoded in the log as snapshots of contents. Blockchain state update hashes these with transaction ID when generating UTXO IDs.
+* Inputs are encoded in the log as their UTXO IDs, so the blockchain processor knows which ones to find and remove.
+
+**Pros:**
+
+Huge pro: recipient can know upfront and provide full spec for the _compressed_ contract+value specification, so it can be revealed behind a shuffle.
+
+Handling values becomes much simpler — they are just values. So we can issue, finalize and even “claim” a value in a straightforward manner.
+
+The values are simply pedersen commitments (Q,A) (quantity, flavor), without any extra payload.
+
+**Con:**
+
+UTXO IDs are not known until the full transaction log is formed. This could be not a big deal, as we cannot really plan for the next transaction until this one is fully formed and published. Also, in a joint proof scenario, it’s even less reliable to plan the next payment until the MPC is completed, so requirement to wait till transaction ID is determined may not be a big deal.
+
+
+### Open questions
+
+#### Do we really need qty/flavor introspection ops?
 
 We currently need them to reblind the received value, but we normally use `borrow` instead of receiving some value and then placing bounds on it.
 

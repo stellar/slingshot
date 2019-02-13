@@ -14,29 +14,31 @@ matrix:
       - go test -v ./slidechain/... -timeout 60m
   - language: rust
     rust: nightly-2018-12-31
-    cache: cargo
-    env:
-      - TEST_COMMAND=test EXTRA_FLAGS='' FEATURES=''
-      # run cargo bench with a filter that matches no benchmarks.
-      # this ensures the benchmarks build but doesn't run them on the CI server.
-      - TEST_COMMAND=bench EXTRA_FLAGS='"DONTRUNBENCHMARKS"'
+    # per https://levans.fr/rust_travis_cache.html
+    cache:
+      directories:
+        - /home/travis/.cargo
+    before_cache:
+      - rm -rf /home/travis/.cargo/registry
     before_script:
     - cd zkvm
     - rustup component add rustfmt-preview
     script:
     - cargo fmt --all -- --check
-    - cargo $TEST_COMMAND --features="$FEATURES" $EXTRA_FLAGS
+    - cargo test
+    - RUSTFLAGS="-C opt-level=0" cargo bench "DONOTMATCHANYBENCHMARK"
   - language: rust
     rust: nightly-2018-12-31
-    cache: cargo
-    env:
-      - TEST_COMMAND=test EXTRA_FLAGS='' FEATURES=''
-      # run cargo bench with a filter that matches no benchmarks.
-      # this ensures the benchmarks build but doesn't run them on the CI server.
-      - TEST_COMMAND=bench EXTRA_FLAGS='"DONTRUNBENCHMARKS"'
+    # per https://levans.fr/rust_travis_cache.html
+    cache:
+      directories:
+        - /home/travis/.cargo
+    before_cache:
+      - rm -rf /home/travis/.cargo/registry
     before_script:
     - cd spacesuit
     - rustup component add rustfmt-preview
     script:
     - cargo fmt --all -- --check
-    - cargo $TEST_COMMAND --features="$FEATURES" $EXTRA_FLAGS
+    - cargo test
+    - RUSTFLAGS="-C opt-level=0" cargo bench "DONOTMATCHANYBENCHMARK"

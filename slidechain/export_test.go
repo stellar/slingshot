@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/interstellar/slingshot/slidechain/mockhorizon"
 	"github.com/interstellar/slingshot/slidechain/stellar"
 	"github.com/stellar/go/clients/horizon"
 	"github.com/stellar/go/keypair"
@@ -29,7 +30,8 @@ func TestPegOut(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	c, err := newCustodian(ctx, db, "https://horizon-testnet.stellar.org")
+	hclient := mockhorizon.New()
+	c, err := newCustodian(ctx, db, hclient)
 	if err != nil {
 		t.Fatal(err)
 	}

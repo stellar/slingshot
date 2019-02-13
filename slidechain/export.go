@@ -212,7 +212,7 @@ func buildPegOutTx(custodian, exporter, temp, network string, asset xdr.Asset, a
 // createTempAccount builds and submits a transaction to the Stellar
 // network that creates a new temporary account. It returns the
 // temporary account keypair and sequence number.
-func createTempAccount(hclient *horizon.Client, kp *keypair.Full) (*keypair.Full, xdr.SequenceNumber, error) {
+func createTempAccount(hclient horizon.ClientInterface, kp *keypair.Full) (*keypair.Full, xdr.SequenceNumber, error) {
 	root, err := hclient.Root()
 	if err != nil {
 		return nil, 0, errors.Wrap(err, "getting Horizon root")
@@ -252,7 +252,7 @@ func createTempAccount(hclient *horizon.Client, kp *keypair.Full) (*keypair.Full
 // to be a preauth transaction, which merges the account and pays
 // out the pegged-out funds.
 // The function returns the temporary account ID and sequence number.
-func SubmitPreExportTx(hclient *horizon.Client, kp *keypair.Full, custodian string, asset xdr.Asset, amount int64) (string, xdr.SequenceNumber, error) {
+func SubmitPreExportTx(hclient horizon.ClientInterface, kp *keypair.Full, custodian string, asset xdr.Asset, amount int64) (string, xdr.SequenceNumber, error) {
 	root, err := hclient.Root()
 	if err != nil {
 		return "", 0, errors.Wrap(err, "getting Horizon root")

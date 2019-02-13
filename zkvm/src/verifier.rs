@@ -7,10 +7,11 @@ use crate::encoding::*;
 use crate::errors::VMError;
 use crate::ops::Instruction;
 use crate::point_ops::PointOp;
+use crate::predicate::Predicate;
 use crate::signature::VerificationKey;
 use crate::types::*;
 
-use crate::vm::{Delegate, RunTrait, Tx, VerifiedTx, VM};
+use crate::vm::{Delegate, Tx, VerifiedTx, VM};
 
 pub struct Verifier<'a, 'b> {
     signtx_keys: Vec<VerificationKey>,
@@ -18,32 +19,51 @@ pub struct Verifier<'a, 'b> {
     cs: r1cs::Verifier<'a, 'b>,
 }
 
-pub struct RunVerifier {
+pub struct VerifierRun {
     program: Vec<u8>,
     offset: usize,
 }
 
 impl<'a, 'b> Delegate<r1cs::Verifier<'a, 'b>> for Verifier<'a, 'b> {
-    type RunType = RunVerifier;
+    type RunType = VerifierRun;
 
-    fn commit_variable(&mut self, com: &Commitment) -> (CompressedRistretto, r1cs::Variable) {
-        let point = com.to_point();
+    fn commit_variable(
+        &mut self,
+        com: &Commitment,
+    ) -> Result<(CompressedRistretto, r1cs::Variable), VMError> {
+        let point = com.ensure_closed()?;
         let var = self.cs.commit(point);
-        (point, var)
+        Ok((point, var))
     }
 
-    fn verify_point_op<F>(&mut self, point_op_fn: F)
+    fn verify_point_op<F>(&mut self, point_op_fn: F) -> Result<(), VMError>
     where
         F: FnOnce() -> PointOp,
     {
         self.deferred_operations.push(point_op_fn());
+        Ok(())
     }
 
     fn process_tx_signature(&mut self, pred: Predicate) -> Result<(), VMError> {
-        match pred {
-            Predicate::Opaque(p) => Ok(self.signtx_keys.push(VerificationKey(p))),
-            Predicate::Witness(_) => Err(VMError::PredicateNotOpaque),
+        match pred.witness() {
+            None => Ok(self.signtx_keys.push(VerificationKey(pred.point()))),
+            Some(_) => Err(VMError::PredicateNotOpaque),
         }
+    }
+
+    fn next_instruction(
+        &mut self,
+        run: &mut Self::RunType,
+    ) -> Result<Option<Instruction>, VMError> {
+        let mut program = Subslice::new_with_range(&run.program, run.offset..run.program.len())?;
+
+        // Reached the end of the program - no more instructions to execute.
+        if program.len() == 0 {
+            return Ok(None);
+        }
+        let instr = Instruction::parse(&mut program)?;
+        run.offset = program.range().start;
+        Ok(Some(instr))
     }
 
     fn cs(&mut self) -> &mut r1cs::Verifier<'a, 'b> {
@@ -67,7 +87,7 @@ impl<'a, 'b> Verifier<'a, 'b> {
             tx.version,
             tx.mintime,
             tx.maxtime,
-            RunVerifier::new(tx.program),
+            VerifierRun::new(tx.program),
             &mut verifier,
         );
 
@@ -100,22 +120,8 @@ impl<'a, 'b> Verifier<'a, 'b> {
     }
 }
 
-impl RunVerifier {
+impl VerifierRun {
     fn new(program: Vec<u8>) -> Self {
-        RunVerifier { program, offset: 0 }
-    }
-}
-
-impl RunTrait for RunVerifier {
-    fn next_instruction(&mut self) -> Result<Option<Instruction>, VMError> {
-        let mut program = Subslice::new_with_range(&self.program, self.offset..self.program.len())?;
-
-        // Reached the end of the program - no more instructions to execute.
-        if program.len() == 0 {
-            return Ok(None);
-        }
-        let instr = Instruction::parse(&mut program)?;
-        self.offset = program.range().start;
-        Ok(Some(instr))
+        VerifierRun { program, offset: 0 }
     }
 }

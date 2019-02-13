@@ -3,6 +3,7 @@ use bulletproofs::r1cs::R1CSProof;
 use curve25519_dalek::ristretto::CompressedRistretto;
 use curve25519_dalek::scalar::Scalar;
 use spacesuit;
+use spacesuit::SignedInteger;
 use std::iter::FromIterator;
 
 use crate::encoding;
@@ -10,8 +11,9 @@ use crate::encoding::Subslice;
 use crate::errors::VMError;
 use crate::ops::Instruction;
 use crate::point_ops::PointOp;
+use crate::predicate::Predicate;
 use crate::signature::*;
-use crate::txlog::{Entry, TxID, UTXO};
+use crate::txlog::{Entry, TxID, TxLog, UTXO};
 use crate::types::*;
 
 /// Current tx version determines which extension opcodes are treated as noops (see VM.extension flag).
@@ -59,7 +61,7 @@ pub struct VerifiedTx {
     pub id: TxID,
 
     // List of inputs, outputs and nonces to be inserted/deleted in the blockchain state.
-    pub log: Vec<Entry>,
+    pub log: TxLog,
 }
 
 pub struct VM<'d, CS, D>
@@ -85,18 +87,21 @@ where
 
     current_run: D::RunType,
     run_stack: Vec<D::RunType>,
-    txlog: Vec<Entry>,
+    txlog: TxLog,
     variable_commitments: Vec<VariableCommitment>,
 }
 
 pub trait Delegate<CS: r1cs::ConstraintSystem> {
-    type RunType: RunTrait;
+    type RunType;
 
     /// Adds a Commitment to the underlying constraint system, producing a high-level variable
-    fn commit_variable(&mut self, com: &Commitment) -> (CompressedRistretto, r1cs::Variable);
+    fn commit_variable(
+        &mut self,
+        com: &Commitment,
+    ) -> Result<(CompressedRistretto, r1cs::Variable), VMError>;
 
     /// Adds a point operation to the list of deferred operation for later batch verification
-    fn verify_point_op<F>(&mut self, point_op_fn: F)
+    fn verify_point_op<F>(&mut self, point_op_fn: F) -> Result<(), VMError>
     where
         F: FnOnce() -> PointOp;
 
@@ -106,15 +111,13 @@ pub trait Delegate<CS: r1cs::ConstraintSystem> {
 
     /// Returns the delegate's underlying constraint system
     fn cs(&mut self) -> &mut CS;
-}
 
-/// A trait for an instance of a "run": a currently executed program.
-pub trait RunTrait {
     /// Returns the next instruction.
     /// Returns Err() upon decoding/format error.
     /// Returns Ok(Some()) if there is another instruction available.
     /// Returns Ok(None) if there is no more instructions to execute.
-    fn next_instruction(&mut self) -> Result<Option<Instruction>, VMError>;
+    fn next_instruction(&mut self, run: &mut Self::RunType)
+        -> Result<Option<Instruction>, VMError>;
 }
 
 /// And indirect reference to a high-level variable within a constraint system.
@@ -159,7 +162,7 @@ where
     }
 
     /// Runs through the entire program and nested programs until completion.
-    pub fn run(mut self) -> Result<(TxID, Vec<Entry>), VMError> {
+    pub fn run(mut self) -> Result<(TxID, TxLog), VMError> {
         loop {
             if !self.step()? {
                 break;
@@ -192,7 +195,7 @@ where
 
     /// Returns a flag indicating whether to continue the execution
     fn step(&mut self) -> Result<bool, VMError> {
-        if let Some(instr) = self.current_run.next_instruction()? {
+        if let Some(instr) = self.delegate.next_instruction(&mut self.current_run)? {
             // Attempt to read the next instruction and advance the program state
             match instr {
                 // the data is just a slice, so the clone would copy the slice struct,
@@ -286,7 +289,7 @@ where
 
     fn nonce(&mut self) -> Result<(), VMError> {
         let predicate = self.pop_item()?.to_data()?.to_predicate()?;
-        let point = predicate.to_point();
+        let point = predicate.point();
         let contract = Contract {
             predicate,
             payload: Vec::new(),
@@ -308,8 +311,8 @@ where
         let flv = self.pop_item()?.to_variable()?;
         let qty = self.pop_item()?.to_variable()?;
 
-        let (flv_point, _) = self.attach_variable(flv);
-        let (qty_point, _) = self.attach_variable(qty);
+        let (flv_point, _) = self.attach_variable(flv)?;
+        let (qty_point, _) = self.attach_variable(qty)?;
 
         self.delegate.verify_point_op(|| {
             let flv_scalar = Value::issue_flavor(&predicate);
@@ -319,11 +322,11 @@ where
                 secondary: None,
                 arbitrary: vec![(-Scalar::one(), flv_point)],
             }
-        });
+        })?;
 
         let value = Value { qty, flv };
 
-        let qty_expr = self.variable_to_expression(qty);
+        let qty_expr = self.variable_to_expression(qty)?;
         self.add_range_proof(64, qty_expr)?;
 
         self.txlog.push(Entry::Issue(qty_point, flv_point));
@@ -414,7 +417,7 @@ where
             let qty = self.make_variable(qty);
 
             let value = Value { qty, flv };
-            let cloak_value = self.value_to_cloak_value(&value);
+            let cloak_value = self.value_to_cloak_value(&value)?;
 
             // insert in the same order as they are on stack (the deepest item will be at index 0)
             output_values.insert(0, value);
@@ -501,54 +504,84 @@ where
         var_com.to_point()
     }
 
-    fn attach_variable(&mut self, var: Variable) -> (CompressedRistretto, r1cs::Variable) {
+    fn attach_variable(
+        &mut self,
+        var: Variable,
+    ) -> Result<(CompressedRistretto, r1cs::Variable), VMError> {
         // This subscript never fails because the variable is created only via `make_variable`.
         let v_com = &self.variable_commitments[var.index];
         match v_com.variable {
-            Some(v) => (v_com.commitment.to_point(), v),
+            Some(v) => Ok((v_com.commitment.to_point(), v)),
             None => {
-                let (point, r1cs_var) = self.delegate.commit_variable(&v_com.commitment);
+                let (point, r1cs_var) = self.delegate.commit_variable(&v_com.commitment)?;
                 self.variable_commitments[var.index].variable = Some(r1cs_var);
-                (point, r1cs_var)
+                Ok((point, r1cs_var))
             }
         }
     }
 
-    fn value_to_cloak_value(&mut self, value: &Value) -> spacesuit::AllocatedValue {
-        spacesuit::AllocatedValue {
-            q: self.attach_variable(value.qty).1,
-            f: self.attach_variable(value.flv).1,
-            // TBD: maintain assignments inside Value types in order to use ZkVM to compute the R1CS proof
-            assignment: None,
-        }
+    fn value_to_cloak_value(
+        &mut self,
+        value: &Value,
+    ) -> Result<spacesuit::AllocatedValue, VMError> {
+        Ok(spacesuit::AllocatedValue {
+            q: self.attach_variable(value.qty)?.1,
+            f: self.attach_variable(value.flv)?.1,
+            assignment: self
+                .value_witness(&value)?
+                .map(|(q, f)| spacesuit::Value { q, f }),
+        })
     }
 
     fn wide_value_to_cloak_value(&mut self, walue: &WideValue) -> spacesuit::AllocatedValue {
         spacesuit::AllocatedValue {
             q: walue.r1cs_qty,
             f: walue.r1cs_flv,
-            // TBD: maintain assignments inside WideValue types in order to use ZkVM to compute the R1CS proof
-            assignment: None,
+            assignment: match walue.witness {
+                None => None,
+                Some(w) => Some(spacesuit::Value { q: w.0, f: w.1 }),
+            },
         }
     }
 
     fn item_to_wide_value(&mut self, item: Item) -> Result<WideValue, VMError> {
         match item {
             Item::Value(value) => Ok(WideValue {
-                r1cs_qty: self.attach_variable(value.qty).1,
-                r1cs_flv: self.attach_variable(value.flv).1,
-                // TBD: add witness for Value types where it exists.
-                witness: None,
+                r1cs_qty: self.attach_variable(value.qty)?.1,
+                r1cs_flv: self.attach_variable(value.flv)?.1,
+                witness: self.value_witness(&value)?,
             }),
             Item::WideValue(w) => Ok(w),
             _ => Err(VMError::TypeNotWideValue),
         }
     }
 
-    fn variable_to_expression(&mut self, var: Variable) -> Expression {
-        let (_, r1cs_var) = self.attach_variable(var);
-        Expression {
+    fn variable_to_expression(&mut self, var: Variable) -> Result<Expression, VMError> {
+        let (_, r1cs_var) = self.attach_variable(var)?;
+        Ok(Expression {
             terms: vec![(r1cs_var, Scalar::one())],
+            assignment: self.variable_assignment(var),
+        })
+    }
+
+    /// Returns Ok(Some((qty,flv))) assignment pair if it's missing or consistent.
+    /// Return Err if the witness is present, but is inconsistent.
+    fn value_witness(&mut self, value: &Value) -> Result<Option<(SignedInteger, Scalar)>, VMError> {
+        match (
+            self.variable_assignment(value.qty),
+            self.variable_assignment(value.flv),
+        ) {
+            (Some(ScalarWitness::Integer(q)), Some(ScalarWitness::Scalar(f))) => Ok(Some((q, f))),
+            (None, None) => Ok(None),
+            (_, _) => return Err(VMError::InconsistentWitness),
+        }
+    }
+
+    fn variable_assignment(&mut self, var: Variable) -> Option<ScalarWitness> {
+        let v_com = &self.variable_commitments[var.index];
+        match &v_com.commitment {
+            Commitment::Closed(_) => None,
+            Commitment::Open(w) => Some(w.value),
         }
     }
 
@@ -577,7 +610,7 @@ where
         //      Data  =  0x00  ||  LE32(len)  ||  <bytes>
         //     Value  =  0x01  ||  <32 bytes> ||  <32 bytes>
 
-        let predicate = Predicate::Opaque(output.read_point()?);
+        let predicate = Predicate::opaque(output.read_point()?);
         let k = output.read_size()?;
 
         // sanity check: avoid allocating unreasonably more memory
@@ -612,12 +645,11 @@ where
     }
 
     fn encode_output(&mut self, contract: Contract) -> Vec<u8> {
-        let mut output = Vec::with_capacity(contract.exact_output_size());
+        let mut output = Vec::with_capacity(contract.min_serialized_length());
 
-        encoding::write_point(&contract.predicate.to_point(), &mut output);
+        encoding::write_point(&contract.predicate.point(), &mut output);
         encoding::write_u32(contract.payload.len() as u32, &mut output);
 
-        // can move all the write functions into type impl
         for item in contract.payload.iter() {
             match item {
                 PortableItem::Data(d) => match d {
@@ -644,8 +676,7 @@ where
         spacesuit::range_proof(
             self.delegate.cs(),
             r1cs::LinearCombination::from_iter(expr.terms),
-            // TBD: maintain the assignment for the expression and provide it here
-            None,
+            ScalarWitness::option_to_integer(expr.assignment)?,
             bitrange,
         )
         .map_err(|_| VMError::R1CSInconsistency)
