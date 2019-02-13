@@ -203,7 +203,7 @@ _Variable_ represents a secret [scalar](#scalar) value in the [constraint system
 bound to its [Pedersen commitment](#pedersen-commitment).
 
 A [point](#point) that represents a commitment to a secret scalar can be turned into a variable using the [`var`](#var) instruction.
-Non-secret [scalar](#scalar) can be turned into a single-term [expression](#expression-type) using the [`const`](#const) instruction (which does not allocate a variable).
+Cleartext [scalar](#scalar) can be turned into a single-term [expression](#expression-type) using the [`const`](#const) instruction (which does not allocate a variable).
 
 Variables can be copied and dropped at will, but cannot be ported across transactions via [outputs](#output-structure).
 
@@ -264,7 +264,7 @@ Constraints only have an effect if added to the constraint system using the [`ve
 
 ### Value type
 
-A value is a [linear type](#linear-types) representing a pair of *quantity* and *flavor*.
+A value is a [linear type](#linear-types) representing a pair of *quantity* and *flavor* (see [quantity](../../spacesuit/spec.md#quantity) and [flavor](../../spacesuit/spec.md#flavor) in the [Cloak specification](../../spacesuit/spec.md)).
 Both quantity and flavor are represented as [variables](#variable-type).
 Quantity is guaranteed to be in a 64-bit range (`[0..2^64-1]`).
 
@@ -737,12 +737,12 @@ Aggregated Signature is encoded as a 64-byte [data](#data-type).
 
 The protocol is the following:
 
-1. Prover and verifier obtain a [transcript](#transcript) `T` defined by the context in which the signature is used (see [`signtx`](#signtx), [`delegate`](#delegate)). The transcript is assumed to be already bound to the _message_ being signed.
+1. Prover and verifier obtain a [transcript](#transcript) `T` that is assumed to be already bound to the _message_ being signed (see [`signtx`](#signtx) and [transaction signature](#transaction-signature)).
 2. Commit the count `n` of verification keys as [LE32](#le32):
     ```
     T.commit("n", LE32(n))
     ```
-3. Commit all verification keys `P[i]` in order, one by one:
+3. Commit all verification keys `P[i]` one by one (in the order they were added during VM execution):
     ```
     T.commit("P", P[i])
     ```
