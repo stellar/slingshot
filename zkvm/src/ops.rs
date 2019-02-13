@@ -1,6 +1,7 @@
 use core::borrow::Borrow;
 use core::mem;
 
+use crate::encoding;
 use crate::encoding::Subslice;
 use crate::errors::VMError;
 use crate::types::Data;
@@ -194,7 +195,70 @@ impl Instruction {
     /// Appends the bytecode representation of an Instruction
     /// to the program.
     pub fn encode(&self, program: &mut Vec<u8>) {
-        unimplemented!()
+        let mut write = |op: Opcode| program.push(op.to_u8());
+        match self {
+            Instruction::Push(data) => {
+                write(Opcode::Push);
+                data.encode(program);
+            }
+            Instruction::Drop => write(Opcode::Drop),
+            Instruction::Dup(idx) => {
+                write(Opcode::Dup);
+                encoding::write_u32(*idx as u32, program);
+            }
+            Instruction::Roll(idx) => {
+                write(Opcode::Roll);
+                encoding::write_u32(*idx as u32, program);
+            }
+            Instruction::Const => write(Opcode::Const),
+            Instruction::Var => write(Opcode::Var),
+            Instruction::Alloc => write(Opcode::Alloc),
+            Instruction::Mintime => write(Opcode::Mintime),
+            Instruction::Maxtime => write(Opcode::Maxtime),
+            Instruction::Neg => write(Opcode::Neg),
+            Instruction::Add => write(Opcode::Add),
+            Instruction::Mul => write(Opcode::Mul),
+            Instruction::Eq => write(Opcode::Eq),
+            Instruction::Range(bit_width) => {
+                write(Opcode::Range);
+                program.push(*bit_width);
+            }
+            Instruction::And => write(Opcode::And),
+            Instruction::Or => write(Opcode::Or),
+            Instruction::Verify => write(Opcode::Verify),
+            Instruction::Blind => write(Opcode::Blind),
+            Instruction::Reblind => write(Opcode::Reblind),
+            Instruction::Unblind => write(Opcode::Unblind),
+            Instruction::Issue => write(Opcode::Issue),
+            Instruction::Borrow => write(Opcode::Borrow),
+            Instruction::Retire => write(Opcode::Retire),
+            Instruction::Qty => write(Opcode::Qty),
+            Instruction::Flavor => write(Opcode::Flavor),
+            Instruction::Cloak(m, n) => {
+                write(Opcode::Cloak);
+                encoding::write_u32(*m as u32, program);
+                encoding::write_u32(*n as u32, program);
+            }
+            Instruction::Import => write(Opcode::Import),
+            Instruction::Export => write(Opcode::Export),
+            Instruction::Input => write(Opcode::Input),
+            Instruction::Output(k) => {
+                write(Opcode::Output);
+                encoding::write_u32(*k as u32, program);
+            }
+            Instruction::Contract(k) => {
+                write(Opcode::Contract);
+                encoding::write_u32(*k as u32, program);
+            }
+            Instruction::Nonce => write(Opcode::Nonce),
+            Instruction::Log => write(Opcode::Log),
+            Instruction::Signtx => write(Opcode::Signtx),
+            Instruction::Call => write(Opcode::Call),
+            Instruction::Left => write(Opcode::Left),
+            Instruction::Right => write(Opcode::Right),
+            Instruction::Delegate => write(Opcode::Delegate),
+            Instruction::Ext(x) => program.push(*x),
+        };
     }
 
     pub fn encode_program<I>(iterator: I, program: &mut Vec<u8>)

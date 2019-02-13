@@ -203,7 +203,8 @@ _Variable_ represents a secret [scalar](#scalar) value in the [constraint system
 bound to its [Pedersen commitment](#pedersen-commitment).
 
 A [point](#point) that represents a commitment to a secret scalar can be turned into a variable using the [`var`](#var) instruction.
-A non-secret [scalar](#scalar) can be turned into a single-term [expression](#expression-type) using the [`const`](#const) instruction (which does not allocate a variable). Since we do not need to hide their values, a Variable is not needed.
+
+A cleartext [scalar](#scalar) can be turned into a single-term [expression](#expression-type) using the [`const`](#const) instruction (which does not allocate a variable). Since we do not need to hide their values, a Variable is not needed.
 
 Variables can be copied and dropped at will, but cannot be ported across transactions via [outputs](#output-structure).
 
@@ -264,7 +265,7 @@ Constraints only have an effect if added to the constraint system using the [`ve
 
 ### Value type
 
-A value is a [linear type](#linear-types) representing a pair of *quantity* and *flavor*.
+A value is a [linear type](#linear-types) representing a pair of *quantity* and *flavor* (see [quantity](../../spacesuit/spec.md#quantity) and [flavor](../../spacesuit/spec.md#flavor) in the [Cloak specification](../../spacesuit/spec.md)).
 Both quantity and flavor are represented as [variables](#variable-type).
 Quantity is guaranteed to be in a 64-bit range (`[0..2^64-1]`).
 
@@ -737,12 +738,12 @@ Aggregated Signature is encoded as a 64-byte [data](#data-type).
 
 The protocol is the following:
 
-1. Prover and verifier obtain a [transcript](#transcript) `T` defined by the context in which the signature is used (see [`signtx`](#signtx), [`delegate`](#delegate)). The transcript is assumed to be already bound to the _message_ being signed.
+1. Prover and verifier obtain a [transcript](#transcript) `T` that is assumed to be already bound to the _message_ being signed (see [`signtx`](#signtx) and [transaction signature](#transaction-signature)).
 2. Commit the count `n` of verification keys as [LE32](#le32):
     ```
     T.commit("n", LE32(n))
     ```
-3. Commit all verification keys `P[i]` in order, one by one:
+3. Commit all verification keys `P[i]` one by one (in the order they were added during VM execution):
     ```
     T.commit("P", P[i])
     ```
@@ -1856,16 +1857,67 @@ TBD.
 
 TBD.
 
+
 ### Payment channel example
 
-Payment channel overview:
+Payment channel is a contract that permits a number of parties to exchange value within a given range back-and-forth
+without publication of each transaction on a blockchain. Instead, only net distribution of balances is _settled_ when the channel is _closed_.
 
-1. Parties prepare a 2-of-2 signature predicate.
-2. Parties pre-sign a "Force Close" transaction that transfers funds to an intermediate "Close" contract. Each party pre-signs this to the counter-party. When both parties have exchanged their presigned contracts, they sign a funding tx that locks funds from each party in such 2-of-2 predicate.
-3. From the perspective of each party A, a "Close" contract can be spent either after a relative timeout of N seconds ("contest period"), or immediately by the counter-party B, if B shows a signed proof of channel update.
-4. At any time, the current (possibly timelocked) state of the funds in a channel can be unlocked with a mutual agreement from both parties by signing a final "Mutual Close" transaction.
+Assumptions for this example:
 
-TBD: specifics.
+1. There are 2 parties in a channel.
+2. The channel uses values of one _flavor_ chosen when the channel is created.
+
+Overview:
+
+1. Both parties commit X quantity of funds to a shared contract protected by a simple 2-of-2 multisig predicate. This allows each party to net-send or net-receive up to X units.
+2. Parties can close the channel mutually at any time, signing off a transaction that distributes the latest balances. They can even choose the target addresses arbitrarily. E.g. if one party needs to make an on-chain payment, they can have their balance split in two outputs: _payment_ and _change_ immediately when closing a channel, without having to make an additional transaction.
+3. Parties can _independently close_ the channel at any time using a _pre-signed authorization predicate_, that encodes a distribution of balances with the hard-coded pay-out outputs.
+4. Each payment has a corresponding pre-signed authorization reflecting a new distribution.
+5. To prevent publication of a transaction using a _stale_ authorization predicate:
+    1. The predicate locks funds in a temporary "holding" contract for a duration of a "contest period" (agreed upon by both parties at the creation of a channel).
+    2. Any newer predicate can immediately spend that time-locked contract into a new "holding" contract with an updated distribution of funds.
+    3. Users watch the blockchain updates for attempts to use a stale authorization, and counter-act them with the latest version.
+6. If the channel was force-closed and not (anymore) contested, after a "contest period" is passed, the "holding" contract can be opened by either party, which sends the funds to the pre-determined outputs.
+
+In ZkVM such predicate is implemented with a _signed program_ ([`delegate`](#delegate)) that plays dual role:
+
+1. It allows any party to _initiate_ a force-close.
+2. It allows any party to _dispute_ a stale force-close (overriding it with a more fresh force-close).
+
+To _initiate_ a force-close, the program `P1` does:
+
+1. Take the exptime as an argument provided by the user (encrypted via Pedersen commitment).
+2. Check that `tx.maxtime + D == exptime` (built-in contest period).
+   Transaction maxtime is chosen by the initiator of the tx close to the current time.
+3. Put the exptime and the value into the output under predicate `P2` (built-in predicate committing to a program producing final outputs and checking exptime).
+
+To construct such program `P1`, users first agree on the final distribution of balances via the program `P2`.
+
+The final-distribution program `P2`:
+1. Checks that `tx.mintime >= exptime` (can be done via `range:24(tx.mintime - exptime)` which gives 6-month resolution for the expiration time)
+2. Creates `borrow`/`output` combinations for each party with hard-coded predicate for each output.
+3. Leaves the payload value and negatives from `borrow` on the stack to be consumed by the `cloak` instruction.
+
+To _dispute_ a stale force-close, the program `P1` has an additional feature:
+it contains a sequence number that's incremented for each new authorization predicate `P1`, at each payment.
+The program `P1`, therefore:
+
+1. Expect two items on the stack coming from a contract: `seq` scalar and `val` value (on top of `seq`). Below these, there is `exptime` commitment.
+2. Check `range:24(new_seq - seq - 1)` to make sure `new_seq > seq`. If there are more than 16.7 million payments (capped by a 24-bit rangeproof), several contest transactions can be chained together with a distance of 16.7 million payments between each other to reach the latest one. At the tx rate of 1 tx/sec, this implies 6 months worth of channel life per intermediate force-close transaction.
+3. Check the expiration time `tx.maxtime + D == exptime` (D is built into the predicate).
+4. Lock the value and `exptime` in a new output with a built-in predicate `P2`.
+
+If `P1` is used to initiate force-close on a contract that does not have a sequence number (initial contract),
+the user simply provides a zero scalar on the stack under the contract.
+
+Confidentiality properties:
+
+1. When the channel is normally closed, it is not even revealed whether it was a payment channel at all. The channel contract looks like an ordinary output indistinguishable from others.
+2. When the channel is force-closed, it does not reveal the number of payments (sequence number) that went through it, nor the contest period which could be used to fingerprint participants with different settings.
+
+The overhead in the force-close case is 48 multipliers (two 24-bit rangeproofs) — a 37.5% performance overhead on top of 2 outputs which the channel has to create even in a normal-close case. There is no range proof for the re-locked value between `P1` and `P2`, as it's already known to be in range and it does no go through the `cloak`.
+
 
 ### Payment routing example
 

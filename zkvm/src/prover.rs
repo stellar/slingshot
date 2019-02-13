@@ -8,6 +8,7 @@ use std::collections::VecDeque;
 use crate::errors::VMError;
 use crate::ops::Instruction;
 use crate::point_ops::PointOp;
+use crate::predicate::{Predicate, PredicateWitness};
 use crate::signature::Signature;
 use crate::txlog::{TxID, TxLog};
 use crate::types::*;
@@ -36,7 +37,7 @@ impl<'a, 'b> Delegate<r1cs::Prover<'a, 'b>> for Prover<'a, 'b> {
         Ok(self.cs.commit(v, v_blinding))
     }
 
-    fn verify_point_op<F>(&mut self, point_op_fn: F) -> Result<(), VMError>
+    fn verify_point_op<F>(&mut self, _point_op_fn: F) -> Result<(), VMError>
     where
         F: FnOnce() -> PointOp,
     {
@@ -44,10 +45,10 @@ impl<'a, 'b> Delegate<r1cs::Prover<'a, 'b>> for Prover<'a, 'b> {
     }
 
     fn process_tx_signature(&mut self, pred: Predicate) -> Result<(), VMError> {
-        match pred {
-            Predicate::Opaque(_) => Err(VMError::WitnessMissing),
-            Predicate::Witness(w) => match *w {
-                PredicateWitness::Key(s) => Ok(self.signtx_keys.push(s)),
+        match pred.witness() {
+            None => Err(VMError::WitnessMissing),
+            Some(w) => match w {
+                PredicateWitness::Key(s) => Ok(self.signtx_keys.push(s.clone())),
                 _ => Err(VMError::TypeNotKey),
             },
         }

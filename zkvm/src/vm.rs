@@ -1,6 +1,5 @@
 use bulletproofs::r1cs;
 use bulletproofs::r1cs::R1CSProof;
-use byteorder::{ByteOrder, LittleEndian};
 use curve25519_dalek::ristretto::CompressedRistretto;
 use curve25519_dalek::scalar::Scalar;
 use spacesuit;
@@ -12,6 +11,7 @@ use crate::encoding::Subslice;
 use crate::errors::VMError;
 use crate::ops::Instruction;
 use crate::point_ops::PointOp;
+use crate::predicate::Predicate;
 use crate::signature::*;
 use crate::txlog::{Entry, TxID, TxLog, UTXO};
 use crate::types::*;
@@ -289,7 +289,7 @@ where
 
     fn nonce(&mut self) -> Result<(), VMError> {
         let predicate = self.pop_item()?.to_data()?.to_predicate()?;
-        let point = predicate.to_point();
+        let point = predicate.point();
         let contract = Contract {
             predicate,
             payload: Vec::new(),
@@ -610,7 +610,7 @@ where
         //      Data  =  0x00  ||  LE32(len)  ||  <bytes>
         //     Value  =  0x01  ||  <32 bytes> ||  <32 bytes>
 
-        let predicate = Predicate::Opaque(output.read_point()?);
+        let predicate = Predicate::opaque(output.read_point()?);
         let k = output.read_size()?;
 
         // sanity check: avoid allocating unreasonably more memory
@@ -645,12 +645,11 @@ where
     }
 
     fn encode_output(&mut self, contract: Contract) -> Vec<u8> {
-        let mut output = Vec::with_capacity(contract.exact_output_size());
+        let mut output = Vec::with_capacity(contract.min_serialized_length());
 
-        encoding::write_point(&contract.predicate.to_point(), &mut output);
+        encoding::write_point(&contract.predicate.point(), &mut output);
         encoding::write_u32(contract.payload.len() as u32, &mut output);
 
-        // can move all the write functions into type impl
         for item in contract.payload.iter() {
             match item {
                 PortableItem::Data(d) => match d {
