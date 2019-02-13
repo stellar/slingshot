@@ -187,10 +187,10 @@ Data cannot be larger than the entire transaction program and cannot be longer t
 
 ### Contract type
 
-A contract is a [predicate](#predicate) and a [payload](#contract-payload) guarded by that predicate.
+A contract consists of a [predicate](#predicate) and a [payload](#contract-payload). The payload is guarded by the predicate.
 
 Contracts are created with the [`contract`](#contract) instruction and
-destroyed by evaluating the predicate, leaving their stored items on the stack.
+destroyed by evaluating the predicate, leaving their payload on the stack.
 
 Contracts can be "frozen" with the [`output`](#output) instruction that places the predicate
 and the payload into the [output structure](#output-structure) which is
@@ -203,7 +203,8 @@ _Variable_ represents a secret [scalar](#scalar) value in the [constraint system
 bound to its [Pedersen commitment](#pedersen-commitment).
 
 A [point](#point) that represents a commitment to a secret scalar can be turned into a variable using the [`var`](#var) instruction.
-Cleartext [scalar](#scalar) can be turned into a single-term [expression](#expression-type) using the [`const`](#const) instruction (which does not allocate a variable).
+
+A cleartext [scalar](#scalar) can be turned into a single-term [expression](#expression-type) using the [`const`](#const) instruction (which does not allocate a variable). Since we do not need to hide their values, a Variable is not needed.
 
 Variables can be copied and dropped at will, but cannot be ported across transactions via [outputs](#output-structure).
 
@@ -214,17 +215,17 @@ when these are exposed to the VM (for instance, from [`mul`](#mul)), they have t
 
 ### Attached and detached variables
 
-A [variable](#variable-type) can be in one of two states: **detached** and **attached**.
+A [variable](#variable-type) can be in one of two states: **detached** or **attached**.
 
-**Detached variable** can be [reblinded](#reblinded): all copies of a detached variable share the same commitment,
+A **detached variable** can be [reblinded](#reblinded): all copies of a detached variable share the same commitment,
 so reblinding one of them reflects the new commitments in all the copies. When an [expression](#expression-type) is formed using detached variables, all of them transition to an _attached_ state.
 
-**Attached variable** has its commitment applied to the constraint system, so it cannot be reblinded and variable cannot be detached.
+An **attached variable** has its commitment applied to the constraint system, so it cannot be reblinded and variable cannot be detached.
 
 
 ### Expression type
 
-_Expression_ is a linear combination of [variables](#variable-type) with cleartext [scalar](#scalar) weights.
+_Expression_ is a linear combination of attached [variables](#variable-type) with cleartext [scalar](#scalar) weights.
 
     expr = { (weight0, var0), (weight1, var1), ...  }
 
@@ -422,13 +423,13 @@ of a [predicate tree](#predicate-tree).
 ### Predicate tree
 
 A _predicate tree_ is a composition of [predicates](#predicate) and [programs](#program) that
-provides flexible way to open a [contract](#contract-type).
+provide a flexible way to open a [contract](#contract-type).
 
 Each node in a predicate tree is formed with one of the following:
 
 1. [Verification key](#verification-key): can be satisfied by signing a transaction using [`signtx`](#signtx) or signing and executing a program using [`delegate`](#delegate).
 2. [Disjunction](#predicate-disjunction) of other predicates. Choice is made using [`left`](#left) and [`right`](#right) instructions.
-3. [Program commitment](#program-predicate). The structure of the commitment prevents signing and requires user to reveal and evaluate the program using [`call`](#call) instruction.
+3. [Program commitment](#program-predicate). The structure of the commitment prevents signing and requires user to reveal and evaluate the program using the [`call`](#call) instruction.
 
 
 ### Predicate disjunction
@@ -478,17 +479,17 @@ h = T.challenge_scalar("h")
 PP(prog) = h·B2
 ```
 
-Program predicate can be satisfied only via the [`call`](#call) instruction that takes a cleartext program string, verifies the commitment and evaluates the program. Use of the [secondary base point](#base-points) `B2` prevents using the predicate as a [verification key](#verification-key)) and signing with `h` without executing the program.
+Program predicate can be satisfied only via the [`call`](#call) instruction that takes a cleartext program string, verifies the commitment and evaluates the program. Use of the [secondary base point](#base-points) `B2` prevents using the predicate as a [verification key](#verification-key) and signing with `h` without executing the program.
 
 
 ### Program
 
-A program is a [data](#data-type) containing a sequence of ZkVM [instructions](#instructions).
+A program is of type [data](#data-type) containing a sequence of ZkVM [instructions](#instructions).
 
 
 ### Contract payload
 
-A list of [items](#types) stored in the [contract](#contract-type) or [output](#output-structure).
+The contract payload is a list of [items](#types) stored in the [contract](#contract-type) or [output](#output-structure).
 
 Payload of a [contract](#contract-type) may contain arbitrary [types](#types),
 but in the [output](#output-structure) only the [portable types](#portable-types) are allowed.
@@ -498,8 +499,8 @@ but in the [output](#output-structure) only the [portable types](#portable-types
 
 Input structure represents an unspent output (UTXO) from a previous transaction.
 
-Input is serialized as [output](#output-structure) with extra 32 bytes containing
-this output’s [transaction ID](#transaction-id).
+Input is serialized as [output](#output-structure) with an extra 32 bytes containing
+the output’s [transaction ID](#transaction-id).
 
 ```
        Input  =  PreviousTxID || PreviousOutput
@@ -519,7 +520,7 @@ utxo = T.challenge_bytes("id")
 ```
 
 In the above, `previous_txid` is the [transaction ID](#transaction-id) of the transaction where the output was created,
-and `previous_output` is the [output](#output-structure), serialized.
+and `previous_output` is the serialized [output](#output-structure).
 
 
 ### Output structure
@@ -538,10 +539,10 @@ and can only contain [portable types](#portable-types).
 
 ### Constraint system
 
-The part of the [VM state](#vm-state) that implements
-[Bulletprofs rank-1 constraint system](https://doc-internal.dalek.rs/develop/bulletproofs/notes/r1cs_proof/index.html).
+The constraint system is the part of the [VM state](#vm-state) that implements
+[Bulletproof's rank-1 constraint system](https://doc-internal.dalek.rs/develop/bulletproofs/notes/r1cs_proof/index.html).
 
-Constraint system keeps track of [variables](#variable-type) and [constraints](#constraint-type)
+It also keeps track of the [variables](#variable-type) and [constraints](#constraint-type),
 and is used to verify the [constraint system proof](#constraint-system-proof).
 
 
@@ -549,7 +550,7 @@ and is used to verify the [constraint system proof](#constraint-system-proof).
 
 A proof of satisfiability of a [constraint system](#constraint-system) built during the VM execution.
 
-The proof is provided to the VM at the beggining of execution and verified when the VM is [finished](#vm-execution).
+The proof is provided to the VM at the beginning of execution and verified when the VM is [finished](#vm-execution).
 
 
 ### Transaction
@@ -807,7 +808,7 @@ Fiat-Shamir transform defined through the use of the [transcript](#transcript) i
 
 ### Blinding protocol
 
-Blinding protocol consists of three proofs about blinding factors:
+The blinding protocol consists of three proofs about blinding factors:
 
 1. [Blinding proof](#blinding-proof): a proof that a blinding factor is formed with a pre-determined key which can be removed using [reblind](#reblind-proof) operation. Implemented by the [`blind`](#blind) instruction.
 2. [Reblinding proof](#reblinding-proof): a proof that a blinding factor is replaced with another one without affecting the committed value. Implemented by the [`reblind`](#reblind) instruction.
@@ -845,7 +846,7 @@ Proof:
     ```
 4. Prover and verifier perform the [signature protocol](#aggregated-signature) with base point `B2` producing a 64-byte proof `R_q || s_q`.
 5. Prover makes a commitment `Com(v, q·p) = v·B + q·p·B2`.
-6. Prover commits to the value by multiplicatively blinding it (because often secret values are distributed non-uniformely) and sends `W` to the verifier:
+6. Prover commits to the value by multiplicatively blinding it (because often secret values are distributed non-uniformly) and sends `W` to the verifier:
     ```
     W = p^{-1}·v·B
     ```
@@ -1922,12 +1923,6 @@ The overhead in the force-close case is 48 multipliers (two 24-bit rangeproofs) 
 
 TBD.
 
-
-
-
-
-
-
 ## Discussion
 
 This section collects discussion of the rationale behind the design decisions in the ZkVM.
@@ -2090,6 +2085,7 @@ Recipient of payment cannot fully specify the contract snapshot because they do 
 Storing anchor inside a value turned out to be handy, but is not very ergonomic. For instance, a contract cannot simply “claim” an arbitrary value and produce a negative counterpart, w/o having _some_ value to “fork off” an anchor from.
 
 Another potential issue: UTXOs are not guaranteed to be always unique. E.g. if a contract does not modify its value and other content, it can re-save itself to the same UTXO ID. It can even toggle between different states, returning to the previously spent ID. This can cause issues in some applications that forget that UTXO ID in special circumstances can be resurrected.
+
 
 ZkVM ensures transaction uniqueness this way:
 
