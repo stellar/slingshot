@@ -139,15 +139,35 @@ func (c *Custodian) pegOutFromExports(ctx context.Context) {
 			log.Printf("pegging out export %x: %d of %s to %s", txid, amounts[i], asset.String(), exporters[i])
 			// TODO(vniu): flag txs that fail with unretriable errors in the db
 			// PRTODO: Pass information for the post-peg-out smart contract to to the peg-out tx.
-			err = c.pegOut(ctx, exporter, asset, int64(amounts[i]), tempID, xdr.SequenceNumber(seqnums[i]))
-			if err != nil {
-				log.Fatalf("pegging out tx: %s", err)
+			peggedOut := 0
+			for i := 0; i < 5; i++ {
+				err = c.pegOut(ctx, exporter, asset, int64(amounts[i]), tempID, xdr.SequenceNumber(seqnums[i]))
+				if err == nil { // successful peg-out
+					peggedOut = 1
+					break
+				}
+				if herr, ok := errors.Root(err).(*horizon.Error); ok {
+					resultCodes, err := herr.ResultCodes()
+					if err != nil {
+						log.Fatalf("getting error codes from failed submission of tx %s", txid)
+					}
+					if resultCodes.TransactionCode != xdr.TransactionResultCodeTxBadSeq.String() { // non-retriable error
+						break
+					}
+				} else {
+					break
+				}
+				if i == 0 {
+					_, err = c.DB.ExecContext(ctx, `UPDATE exports SET exported=1 AND pegged_out=2 WHERE txid=$1`, txid)
+					if err != nil {
+						log.Fatalf("updating export table for retriable tx: %s", err)
+					}
+				}
 			}
-			_, err = c.DB.ExecContext(ctx, `UPDATE exports SET exported=1 WHERE txid=$1`, txid)
+			_, err = c.DB.ExecContext(ctx, `UPDATE exports SET exported=1 AND pegged_out=$1 WHERE txid=$2`, peggedOut, txid)
 			if err != nil {
 				log.Fatalf("updating export table: %s", err)
 			}
-			// PRTODO: Maybe update db state for new fields.
 		}
 	}
 }
@@ -159,7 +179,7 @@ func (c *Custodian) pegOut(ctx context.Context, exporter xdr.AccountId, asset xd
 	}
 	_, err = stellar.SignAndSubmitTx(c.hclient, tx, c.seed)
 	if err != nil {
-		errors.Wrap(err, "peg-out tx")
+		return errors.Wrap(err, "submitting peg-out tx")
 	}
 	return nil
 }
