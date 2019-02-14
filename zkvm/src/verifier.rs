@@ -31,7 +31,7 @@ impl<'a, 'b> Delegate<r1cs::Verifier<'a, 'b>> for Verifier<'a, 'b> {
         &mut self,
         com: &Commitment,
     ) -> Result<(CompressedRistretto, r1cs::Variable), VMError> {
-        let point = com.ensure_closed()?;
+        let point = com.to_point();
         let var = self.cs.commit(point);
         Ok((point, var))
     }
