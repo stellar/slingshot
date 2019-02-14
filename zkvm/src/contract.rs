@@ -70,7 +70,13 @@ impl Contract {
 
 impl Input {
     pub fn from_bytes(data: Vec<u8>) -> Result<Self, VMError> {
-        Self::decode(Subslice::new(&data))
+        let mut reader = Subslice::new(&data);
+        let contract = Self::decode(&mut reader)?;
+        // Check that reader bytes have been fully consumed
+        if reader.len() != 0 {
+            return Err(VMError::FormatError);
+        }
+        Ok(contract)
     }
 
     pub fn encode(&self, buf: &mut Vec<u8>) {
@@ -78,7 +84,7 @@ impl Input {
         self.contract.encode(buf);
     }
 
-    fn decode<'a>(mut reader: Subslice<'a>) -> Result<Self, VMError> {
+    fn decode<'a>(reader: &mut Subslice<'a>) -> Result<Self, VMError> {
         // Input  =  PreviousTxID || PreviousOutput
         // PreviousTxID  =  <32 bytes>
         let txid = TxID(reader.read_u8x32()?);
@@ -118,7 +124,7 @@ impl FrozenContract {
         }
     }
 
-    fn decode<'a>(mut output: Subslice<'a>) -> Result<Self, VMError> {
+    fn decode<'a>(output: &mut Subslice<'a>) -> Result<Self, VMError> {
         //    Output  =  Predicate  ||  LE32(k)  ||  Item[0]  || ... ||  Item[k-1]
         // Predicate  =  <32 bytes>
         //      Item  =  enum { Data, Value }

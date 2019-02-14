@@ -367,11 +367,10 @@ where
             .into_iter()
             .map(|i| match i {
                 PortableItem::Data(d) => FrozenItem::Data(d),
-                PortableItem::Value(v) => {
-                    let flv = self.variable_commitments[v.flv.index].closed_commitment();
-                    let qty = self.variable_commitments[v.qty.index].closed_commitment();
-                    FrozenItem::Value(FrozenValue { flv, qty })
-                }
+                PortableItem::Value(v) => FrozenItem::Value(FrozenValue {
+                    flv: Commitment::Closed(self.get_variable_commitment(v.flv)),
+                    qty: Commitment::Closed(self.get_variable_commitment(v.qty)),
+                }),
             })
             .collect::<Vec<_>>();
         FrozenContract {
@@ -610,12 +609,10 @@ where
             .into_iter()
             .map(|p| match p {
                 FrozenItem::Data(d) => PortableItem::Data(d),
-                FrozenItem::Value(v) => {
-                    let qty = self.make_variable(v.qty);
-                    let flv = self.make_variable(v.flv);
-                    let val = Value { qty, flv };
-                    PortableItem::Value(val)
-                }
+                FrozenItem::Value(v) => PortableItem::Value(Value {
+                    qty: self.make_variable(v.qty),
+                    flv: self.make_variable(v.flv),
+                }),
             })
             .collect::<Vec<_>>();
         Contract {
@@ -632,11 +629,5 @@ where
             bitrange,
         )
         .map_err(|_| VMError::R1CSInconsistency)
-    }
-}
-
-impl VariableCommitment {
-    pub fn closed_commitment(&self) -> Commitment {
-        Commitment::Closed(self.commitment.to_point())
     }
 }
