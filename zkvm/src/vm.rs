@@ -6,8 +6,7 @@ use spacesuit;
 use spacesuit::SignedInteger;
 use std::iter::FromIterator;
 
-use crate::encoding;
-use crate::encoding::Subslice;
+use crate::contract::{Contract, FrozenContract, FrozenItem, FrozenValue, Input, PortableItem};
 use crate::errors::VMError;
 use crate::ops::Instruction;
 use crate::point_ops::PointOp;
@@ -18,12 +17,6 @@ use crate::types::*;
 
 /// Current tx version determines which extension opcodes are treated as noops (see VM.extension flag).
 pub const CURRENT_VERSION: u64 = 1;
-
-/// Prefix for the data type in the Output Structure
-pub const DATA_TYPE: u8 = 0x00;
-
-/// Prefix for the value type in the Output Structure
-pub const VALUE_TYPE: u8 = 0x01;
 
 /// Instance of a transaction that contains all necessary data to validate it.
 pub struct Tx {
@@ -122,7 +115,8 @@ pub trait Delegate<CS: r1cs::ConstraintSystem> {
 
 /// And indirect reference to a high-level variable within a constraint system.
 /// Variable types store index of such commitments that allows replacing them.
-struct VariableCommitment {
+#[derive(Debug)]
+pub struct VariableCommitment {
     /// Pedersen commitment to a variable
     commitment: Commitment,
 
@@ -378,9 +372,9 @@ where
     /// _input_ **input** → _contract_
     fn input(&mut self) -> Result<(), VMError> {
         let input = self.pop_item()?.to_data()?.to_input()?;
-        let (contract, utxo) = self.spend_input(input)?;
+        let contract = self.unfreeze_contract(input.contract);
         self.push_item(contract);
-        self.txlog.push(Entry::Input(utxo));
+        self.txlog.push(Entry::Input(input.utxo));
         self.unique = true;
         Ok(())
     }
@@ -388,9 +382,28 @@ where
     /// _items... predicate_ **output:_k_** → ø
     fn output(&mut self, k: usize) -> Result<(), VMError> {
         let contract = self.pop_contract(k)?;
-        let output = self.encode_output(contract);
-        self.txlog.push(Entry::Output(output));
+        let mut buf = Vec::with_capacity(contract.min_serialized_length());
+        self.freeze_contract(contract).encode(&mut buf);
+        self.txlog.push(Entry::Output(buf));
         Ok(())
+    }
+
+    fn freeze_contract(&mut self, contract: Contract) -> FrozenContract {
+        let frozen_items = contract
+            .payload
+            .into_iter()
+            .map(|i| match i {
+                PortableItem::Data(d) => FrozenItem::Data(d),
+                PortableItem::Value(v) => FrozenItem::Value(FrozenValue {
+                    flv: Commitment::Closed(self.get_variable_commitment(v.flv)),
+                    qty: Commitment::Closed(self.get_variable_commitment(v.qty)),
+                }),
+            })
+            .collect::<Vec<_>>();
+        FrozenContract {
+            payload: frozen_items,
+            predicate: contract.predicate,
+        }
     }
 
     fn contract(&mut self, k: usize) -> Result<(), VMError> {
@@ -642,91 +655,22 @@ where
         }
     }
 
-    fn spend_input(&mut self, input: Input) -> Result<(Contract, UTXO), VMError> {
-        match input {
-            Input::Opaque(data) => self.decode_input(data),
-            Input::Witness(_) => unimplemented!(),
+    fn unfreeze_contract(&mut self, contract: FrozenContract) -> Contract {
+        let payload = contract
+            .payload
+            .into_iter()
+            .map(|p| match p {
+                FrozenItem::Data(d) => PortableItem::Data(d),
+                FrozenItem::Value(v) => PortableItem::Value(Value {
+                    qty: self.make_variable(v.qty),
+                    flv: self.make_variable(v.flv),
+                }),
+            })
+            .collect::<Vec<_>>();
+        Contract {
+            payload: payload,
+            predicate: contract.predicate,
         }
-    }
-
-    fn decode_input(&mut self, data: Vec<u8>) -> Result<(Contract, UTXO), VMError> {
-        // Input  =  PreviousTxID || PreviousOutput
-        // PreviousTxID  =  <32 bytes>
-        let mut slice = Subslice::new(&data);
-        let txid = TxID(slice.read_u8x32()?);
-        let output_slice = &slice;
-        let contract = self.decode_output(slice)?;
-        let utxo = UTXO::from_output(output_slice, &txid);
-        Ok((contract, utxo))
-    }
-
-    fn decode_output<'a>(&mut self, mut output: Subslice<'a>) -> Result<Contract, VMError> {
-        //    Output  =  Predicate  ||  LE32(k)  ||  Item[0]  || ... ||  Item[k-1]
-        // Predicate  =  <32 bytes>
-        //      Item  =  enum { Data, Value }
-        //      Data  =  0x00  ||  LE32(len)  ||  <bytes>
-        //     Value  =  0x01  ||  <32 bytes> ||  <32 bytes>
-
-        let predicate = Predicate::opaque(output.read_point()?);
-        let k = output.read_size()?;
-
-        // sanity check: avoid allocating unreasonably more memory
-        // just because an untrusted length prefix says so.
-        if k > output.len() {
-            return Err(VMError::FormatError);
-        }
-
-        let mut payload: Vec<PortableItem> = Vec::with_capacity(k);
-        for _ in 0..k {
-            let item = match output.read_u8()? {
-                DATA_TYPE => {
-                    let len = output.read_size()?;
-                    let bytes = output.read_bytes(len)?;
-                    PortableItem::Data(Data::Opaque(bytes.to_vec()))
-                }
-                VALUE_TYPE => {
-                    let qty = output.read_point()?;
-                    let flv = output.read_point()?;
-
-                    let qty = self.make_variable(Commitment::Closed(qty));
-                    let flv = self.make_variable(Commitment::Closed(flv));
-
-                    PortableItem::Value(Value { qty, flv })
-                }
-                _ => return Err(VMError::FormatError),
-            };
-            payload.push(item);
-        }
-
-        Ok(Contract { predicate, payload })
-    }
-
-    fn encode_output(&mut self, contract: Contract) -> Vec<u8> {
-        let mut output = Vec::with_capacity(contract.min_serialized_length());
-
-        encoding::write_point(&contract.predicate.point(), &mut output);
-        encoding::write_u32(contract.payload.len() as u32, &mut output);
-
-        for item in contract.payload.iter() {
-            match item {
-                PortableItem::Data(d) => match d {
-                    Data::Opaque(data) => {
-                        encoding::write_u8(DATA_TYPE, &mut output);
-                        encoding::write_u32(data.len() as u32, &mut output);
-                        encoding::write_bytes(&data, &mut output);
-                    }
-                    Data::Witness(_) => unimplemented!(),
-                },
-                PortableItem::Value(v) => {
-                    encoding::write_u8(VALUE_TYPE, &mut output);
-                    let qty = self.get_variable_commitment(v.qty);
-                    let flv = self.get_variable_commitment(v.flv);
-                    encoding::write_point(&qty, &mut output);
-                    encoding::write_point(&flv, &mut output);
-                }
-            }
-        }
-        output
     }
 
     fn add_range_proof(&mut self, bitrange: usize, expr: Expression) -> Result<(), VMError> {
