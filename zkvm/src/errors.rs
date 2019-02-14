@@ -111,7 +111,4 @@ pub enum VMError {
 
     #[fail(display = "Predicate item must be opaque")]
     PredicateNotOpaque,
-
-    #[fail(display = "Variable commitment out of range.")]
-    CommitmentOutOfRange,
 }
