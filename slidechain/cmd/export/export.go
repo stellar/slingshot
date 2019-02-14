@@ -181,6 +181,7 @@ func main() {
 		}
 		for _, tx := range b.Transactions {
 			// Look for export transaction
+			// TODO(debnil): Update parameters
 			if slidechain.IsExportTx(tx, asset, inputAmount, temp, kp.Address(), int64(seqnum)) {
 				log.Println("export tx included in txvm chain")
 				return

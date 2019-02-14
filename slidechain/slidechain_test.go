@@ -265,7 +265,7 @@ func TestImport(t *testing.T) {
 }
 
 func TestEndToEnd(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
 	withTestServer(ctx, t, func(ctx context.Context, db *sql.DB, s *submitter, sv *httptest.Server, ch *protocol.Chain) {
 		hclient := &horizon.Client{
@@ -407,7 +407,7 @@ func TestEndToEnd(t *testing.T) {
 			block := item.(*bc.Block)
 			for _, tx := range block.Transactions {
 				// Look for export transaction.
-				if IsExportTx(tx, native, int64(amount), temp, exporter.Address(), int64(seqnum), retireAnchor) {
+				if IsExportTx(tx, native, int64(amount), temp, exporter.Address(), int64(seqnum), retireAnchor[:], exporterPubKeyBytes[:]) {
 					t.Logf("found export tx %x", tx.Program)
 					found = true
 					break

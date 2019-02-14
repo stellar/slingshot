@@ -32,7 +32,8 @@ CREATE TABLE IF NOT EXISTS exports (
   seqnum INTEGER NOT NULL,
   exported INTEGER NOT NULL DEFAULT 0,
   pegged_out INTEGER,
-  anchor BLOB NOT NULL
+  anchor BLOB NOT NULL,
+  pubkey BLOB NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS custodian (

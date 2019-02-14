@@ -348,6 +348,7 @@ func BuildExportTx(ctx context.Context, asset xdr.Asset, amount, inputAmt int64,
 		Exporter string `json:"exporter"`
 		Amount   int64  `json:"amount"`
 		Anchor   []byte `json:"anchor"`
+		Pubkey   []byte `json:"pubkey"`
 	}{
 		assetXDR,
 		temp,
@@ -355,6 +356,7 @@ func BuildExportTx(ctx context.Context, asset xdr.Asset, amount, inputAmt int64,
 		kp.Address(),
 		inputAmt,
 		anchor,
+		pubkey,
 	}
 	inputRefdata, err := json.Marshal(ref)
 	if err != nil {
@@ -366,7 +368,7 @@ func BuildExportTx(ctx context.Context, asset xdr.Asset, amount, inputAmt int64,
 	// We first split off the difference between inputAmt and amt.
 	// Then, we split off the zero-value for finalize.
 	retireAnchor1 := txvm.VMHash("Split2", anchor)
-	retireAnchor := txvm.VMHash("Split2", retireAnchor1[:])
+	retireAnchor := txvm.VMHash("Split1", retireAnchor1[:])
 	ref.Anchor = retireAnchor[:]
 	retireRefdata, err := json.Marshal(ref)
 	if err != nil {
@@ -412,7 +414,7 @@ func BuildExportTx(ctx context.Context, asset xdr.Asset, amount, inputAmt int64,
 	return tx, nil
 }
 
-func (c *Custodian) doPostExport(ctx context.Context, assetXDR, anchor, txid []byte, amount, seqnum, peggedOut int64, exporter, temp string) error {
+func (c *Custodian) doPostExport(ctx context.Context, assetXDR, anchor, txid []byte, amount, seqnum, peggedOut int64, exporter, temp string, pubkey []byte) error {
 	var asset xdr.Asset
 	err := asset.UnmarshalBinary(assetXDR)
 	if err != nil {
@@ -424,19 +426,21 @@ func (c *Custodian) doPostExport(ctx context.Context, assetXDR, anchor, txid []b
 	}
 	assetID := bc.NewHash(txvm.AssetID(importIssuanceSeed[:], assetBytes))
 	ref := struct {
-		AssetXDR string `json:"asset"`
+		AssetXDR []byte `json:"asset"`
 		Temp     string `json:"temp"`
 		Seqnum   int64  `json:"seqnum"`
 		Exporter string `json:"exporter"`
 		Amount   int64  `json:"amount"`
 		Anchor   []byte `json:"anchor"`
+		Pubkey   []byte `json:"pubkey"`
 	}{
-		string(assetXDR),
+		assetXDR,
 		temp,
 		seqnum,
 		exporter,
 		amount,
 		anchor,
+		pubkey,
 	}
 	refdata, err := json.Marshal(ref)
 	if err != nil {
@@ -448,9 +452,11 @@ func (c *Custodian) doPostExport(ctx context.Context, assetXDR, anchor, txid []b
 		contract.PushdataByte(txvm.ContractCode)
 		contract.PushdataBytes(exportContract1Seed[:])
 		contract.PushdataBytes(exportContract2Prog)
-		contract.Tuple(func(tup *txvmutil.TupleBuilder) { // {'S', refdata}
-			tup.PushdataByte(txvm.BytesCode)
-			tup.PushdataBytes(refdataHex)
+		contract.Tuple(func(tup *txvmutil.TupleBuilder) { // {'T', pubkey}
+			tup.PushdataByte(txvm.TupleCode)
+			tup.Tuple(func(pktup *txvmutil.TupleBuilder) {
+				pktup.PushdataBytes(pubkey)
+			})
 		})
 		contract.Tuple(func(tup *txvmutil.TupleBuilder) { // {'V', amount, assetID, anchor}
 			tup.PushdataByte(txvm.ValueCode)
@@ -458,11 +464,9 @@ func (c *Custodian) doPostExport(ctx context.Context, assetXDR, anchor, txid []b
 			tup.PushdataBytes(assetID.Bytes())
 			tup.PushdataBytes(anchor)
 		})
-		contract.Tuple(func(tup *txvmutil.TupleBuilder) { // {'T', pubkey}
-			tup.PushdataByte(txvm.TupleCode)
-			tup.Tuple(func(pktup *txvmutil.TupleBuilder) {
-				pktup.PushdataBytes([]byte(exporter))
-			})
+		contract.Tuple(func(tup *txvmutil.TupleBuilder) { // {'S', refdata}
+			tup.PushdataByte(txvm.BytesCode)
+			tup.PushdataBytes(refdataHex)
 		})
 	})
 	b.PushdataInt64(peggedOut).Op(op.Put) // arg stack: selector
@@ -504,9 +508,7 @@ func (c *Custodian) doPostExport(ctx context.Context, assetXDR, anchor, txid []b
 // {"L", ...}
 // {"O", caller, outputid}
 // {"F", ...}
-func IsExportTx(tx *bc.Tx, asset xdr.Asset, inputAmt int64, temp, exporter string, seqnum int64, anchor []byte) bool {
-	log.Print("top of export tx")
-	log.Print(tx.Log)
+func IsExportTx(tx *bc.Tx, asset xdr.Asset, inputAmt int64, temp, exporter string, seqnum int64, anchor, pubkey []byte) bool {
 	if len(tx.Log) != 4 {
 		return false
 	}
@@ -533,6 +535,7 @@ func IsExportTx(tx *bc.Tx, asset xdr.Asset, inputAmt int64, temp, exporter strin
 		Exporter string `json:"exporter"`
 		Amount   int64  `json:"amount"`
 		Anchor   []byte `json:"anchor"`
+		Pubkey   []byte `json:"pubkey"`
 	}{
 		assetXDR,
 		temp,
@@ -540,6 +543,7 @@ func IsExportTx(tx *bc.Tx, asset xdr.Asset, inputAmt int64, temp, exporter strin
 		exporter,
 		inputAmt,
 		anchor,
+		pubkey,
 	}
 	refdata, err := json.Marshal(ref)
 	if !bytes.Equal(refdata, tx.Log[1][2].(txvm.Bytes)) {
