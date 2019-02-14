@@ -3,8 +3,7 @@
 //! Operations:
 //! - disjunction: P = L + f(L,R)*B
 //! - program_commitment: P = h(prog)*B2
-use bulletproofs::PedersenGens;
-use curve25519_dalek::ristretto::{CompressedRistretto, RistrettoPoint};
+use curve25519_dalek::ristretto::CompressedRistretto;
 use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
 
@@ -141,6 +140,7 @@ impl PredicateWitness {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use bulletproofs::PedersenGens;
 
     fn bytecode(prog: &Vec<Instruction>) -> Vec<u8> {
         let mut prog_vec = Vec::new();

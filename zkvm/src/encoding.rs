@@ -124,17 +124,12 @@ pub fn write_u32<'a>(x: u32, target: &mut Vec<u8>) {
     target.extend_from_slice(&buf);
 }
 
-/// Reads a 32-byte array and returns the subsequent slice
+/// Writes a 32-byte array and returns the subsequent slice
 pub fn write_bytes(x: &[u8], target: &mut Vec<u8>) {
     target.extend_from_slice(&x);
 }
 
-/// Reads a compressed point
+/// Writes a compressed point
 pub fn write_point(x: &CompressedRistretto, target: &mut Vec<u8>) {
-    write_bytes(x.as_bytes(), target);
-}
-
-/// Reads a scalar
-pub fn write_scalar(x: &Scalar, target: &mut Vec<u8>) {
     write_bytes(x.as_bytes(), target);
 }
