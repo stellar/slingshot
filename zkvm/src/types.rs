@@ -304,7 +304,7 @@ impl Value {
 }
 
 impl Expression {
-    pub fn constant(a: Scalar) -> Self {
+    pub fn constant<S: Into<Scalar>>(a: S) -> Self {
         Expression {
             terms: vec![(r1cs::Variable::One(), a)],
             assignment: None,
