@@ -402,15 +402,15 @@ func BuildExportTx(ctx context.Context, asset xdr.Asset, amount, inputAmt int64,
 	return tx, nil
 }
 
-func buildPostexportTx(assetXDR, anchor, bcid []byte, amount, seqnum, peggedOut int64, exporter, temp string) (*bc.Tx, error) {
+func (c *Custodian) doPostExport(ctx context.Context, assetXDR, anchor []byte, amount, seqnum, peggedOut int64, exporter, temp string) error {
 	var asset xdr.Asset
 	err := xdr.SafeUnmarshalBase64(string(assetXDR), asset)
 	if err != nil {
-		return nil, err
+		return errors.Wrap(err, "unmarshaling asset xdr")
 	}
 	assetBytes, err := asset.MarshalBinary()
 	if err != nil {
-		return nil, err
+		return errors.Wrap(err, "marshaling asset bytes")
 	}
 	assetID := bc.NewHash(txvm.AssetID(importIssuanceSeed[:], assetBytes))
 	ref := struct {
@@ -428,11 +428,11 @@ func buildPostexportTx(assetXDR, anchor, bcid []byte, amount, seqnum, peggedOut 
 	}
 	refdata, err := json.Marshal(ref)
 	if err != nil {
-		return nil, errors.Wrap(err, "marshaling reference data")
+		return errors.Wrap(err, "marshaling reference data")
 	}
 	refdataHex := i10rjson.HexBytes(refdata)
 	b := new(txvmutil.Builder)
-	b.Tuple(func(contract *txvmutil.TupleBuilder) {
+	b.Tuple(func(contract *txvmutil.TupleBuilder) { // {'C', ...}
 		contract.PushdataByte(txvm.ContractCode)
 		contract.PushdataBytes(exportContract1Seed[:])
 		contract.PushdataBytes(exportContract2Prog)
@@ -453,17 +453,22 @@ func buildPostexportTx(assetXDR, anchor, bcid []byte, amount, seqnum, peggedOut 
 	})
 	b.PushdataInt64(peggedOut).Op(op.Put) // arg stack: selector
 	b.Op(op.Input).Op(op.Call)
-	b.PushdataBytes(bcid)
+	b.PushdataBytes(c.InitBlockHash.Bytes())
 	b.PushdataInt64(int64(bc.Millis(time.Now().Add(10 * time.Minute))))
 	b.Op(op.Nonce).Op(op.Finalize)
 
-	// PRTODO: Check if we need a sigchecker here.
+	// PRTODO: I feel like there was a sigcheck here... check if there should be one.
+
+	// Build and submit tx
 	prog := b.Build()
-	tx, err := bc.NewTx(prog, 3, math.MaxInt64)
+	var runlimit int64
+	tx, err := bc.NewTx(prog, 3, math.MaxInt64, txvm.GetRunlimit(&runlimit))
 	if err != nil {
-		return nil, errors.Wrap(err, "making post-export tx")
+		return errors.Wrap(err, "making post-export tx")
 	}
-	return tx, nil
+	tx.Runlimit = math.MaxInt64 - runlimit
+	_, err = c.S.submitTx(ctx, tx)
+	return errors.Wrap(err, "submitting tx")
 }
 
 // IsExportTx returns whether or not a txvm transaction matches the slidechain export tx format.
