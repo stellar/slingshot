@@ -78,13 +78,14 @@ impl Input {
         self.contract.encode(buf);
     }
 
-    fn decode<'a>(mut input: Subslice<'a>) -> Result<Self, VMError> {
+    fn decode<'a>(mut reader: Subslice<'a>) -> Result<Self, VMError> {
         // Input  =  PreviousTxID || PreviousOutput
         // PreviousTxID  =  <32 bytes>
-        let txid = TxID(input.read_u8x32()?);
-        let output_slice = &input;
-        let contract = FrozenContract::decode(input)?;
-        let utxo = UTXO::from_output(output_slice, &txid);
+        let txid = TxID(reader.read_u8x32()?);
+        // Hash the contract into utxo before the subslice
+        // is advanced by the contract.decode method
+        let utxo = UTXO::from_output(&reader, &txid);
+        let contract = FrozenContract::decode(reader)?;
         Ok(Input {
             contract,
             utxo,

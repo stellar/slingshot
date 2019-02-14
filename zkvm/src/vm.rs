@@ -364,23 +364,21 @@ where
     fn freeze_contract(&mut self, contract: Contract) -> FrozenContract {
         let frozen_items = contract
             .payload
-            .iter()
-            .map(|i| self.freeze_item(i))
+            .into_iter()
+            .map(|i| {
+                match i {
+                    PortableItem::Data(d) => FrozenItem::Data(d),
+                    PortableItem::Value(v) => {
+                        let flv = self.variable_commitments[v.flv.index].closed_commitment();
+                        let qty = self.variable_commitments[v.qty.index].closed_commitment();
+                        FrozenItem::Value(FrozenValue { flv, qty })
+                    }
+                }
+            })
             .collect::<Vec<_>>();
         FrozenContract {
             payload: frozen_items,
             predicate: contract.predicate,
-        }
-    }
-
-    fn freeze_item(&mut self, item: &PortableItem) -> FrozenItem {
-        match item {
-            PortableItem::Data(d) => FrozenItem::Data(d.clone()),
-            PortableItem::Value(v) => {
-                let flv = self.variable_commitments[v.flv.index].closed_commitment();
-                let qty = self.variable_commitments[v.qty.index].closed_commitment();
-                FrozenItem::Value(FrozenValue { flv, qty })
-            }
         }
     }
 
@@ -612,23 +610,21 @@ where
         let payload = contract
             .payload
             .into_iter()
-            .map(|p| self.unfreeze_item(p))
+            .map(|p| {
+                match p {
+                    FrozenItem::Data(d) => PortableItem::Data(d),
+                    FrozenItem::Value(v) => {
+                        let qty = self.make_variable(v.qty);
+                        let flv = self.make_variable(v.flv);
+                        let val = Value { qty, flv };
+                        PortableItem::Value(val)
+                    }   
+                }
+            })
             .collect::<Vec<_>>();
         Contract {
             payload: payload,
             predicate: contract.predicate,
-        }
-    }
-
-    fn unfreeze_item(&mut self, item: FrozenItem) -> PortableItem {
-        match item {
-            FrozenItem::Data(d) => PortableItem::Data(d),
-            FrozenItem::Value(v) => {
-                let qty = self.make_variable(v.qty);
-                let flv = self.make_variable(v.flv);
-                let val = Value { qty, flv };
-                PortableItem::Value(val)
-            }
         }
     }
 
