@@ -286,6 +286,7 @@ where
         let data = self.pop_item()?.to_data()?.to_bytes();
         let mut slice = Subslice::new(&data);
         let scalar = slice.read_scalar()?;
+        if slice.len() != 0 { return Err(VMError::FormatError) }
         self.push_item(Expression::constant(scalar));
         Ok(())
     }
