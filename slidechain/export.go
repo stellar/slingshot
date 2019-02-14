@@ -363,7 +363,10 @@ func BuildExportTx(ctx context.Context, asset xdr.Asset, amount, inputAmt int64,
 	inputRefdataHex := i10rjson.HexBytes(inputRefdata)
 
 	ref.Amount = amount
-	retireAnchor := txvm.VMHash("Split2", anchor)
+	// We first split off the difference between inputAmt and amt.
+	// Then, we split off the zero-value for finalize.
+	retireAnchor1 := txvm.VMHash("Split2", anchor)
+	retireAnchor := txvm.VMHash("Split2", retireAnchor1[:])
 	ref.Anchor = retireAnchor[:]
 	retireRefdata, err := json.Marshal(ref)
 	if err != nil {
@@ -388,6 +391,8 @@ func BuildExportTx(ctx context.Context, asset xdr.Asset, amount, inputAmt int64,
 	b.Op(op.Finalize)             // con stack: sigchecker
 	prog1 := b.Build()
 
+	log.Print("PRINTING EXPORT TX BYTES")
+	log.Printf("x'%x'", i10rjson.HexBytes(prog1))
 	vm, err := txvm.Validate(prog1, 3, math.MaxInt64, txvm.StopAfterFinalize)
 	if err != nil {
 		return nil, errors.Wrap(err, "computing transaction ID")
@@ -424,12 +429,14 @@ func (c *Custodian) doPostExport(ctx context.Context, assetXDR, anchor, txid []b
 		Seqnum   int64  `json:"seqnum"`
 		Exporter string `json:"exporter"`
 		Amount   int64  `json:"amount"`
+		Anchor   []byte `json:"anchor"`
 	}{
 		string(assetXDR),
 		temp,
 		seqnum,
 		exporter,
 		amount,
+		anchor,
 	}
 	refdata, err := json.Marshal(ref)
 	if err != nil {
@@ -441,11 +448,9 @@ func (c *Custodian) doPostExport(ctx context.Context, assetXDR, anchor, txid []b
 		contract.PushdataByte(txvm.ContractCode)
 		contract.PushdataBytes(exportContract1Seed[:])
 		contract.PushdataBytes(exportContract2Prog)
-		contract.Tuple(func(tup *txvmutil.TupleBuilder) { // {'T', pubkey}
-			tup.PushdataByte(txvm.TupleCode)
-			tup.Tuple(func(pktup *txvmutil.TupleBuilder) {
-				pktup.PushdataBytes([]byte(exporter))
-			})
+		contract.Tuple(func(tup *txvmutil.TupleBuilder) { // {'S', refdata}
+			tup.PushdataByte(txvm.BytesCode)
+			tup.PushdataBytes(refdataHex)
 		})
 		contract.Tuple(func(tup *txvmutil.TupleBuilder) { // {'V', amount, assetID, anchor}
 			tup.PushdataByte(txvm.ValueCode)
@@ -453,9 +458,11 @@ func (c *Custodian) doPostExport(ctx context.Context, assetXDR, anchor, txid []b
 			tup.PushdataBytes(assetID.Bytes())
 			tup.PushdataBytes(anchor)
 		})
-		contract.Tuple(func(tup *txvmutil.TupleBuilder) { // {'S', refdata}
-			tup.PushdataByte(txvm.BytesCode)
-			tup.PushdataBytes(refdataHex)
+		contract.Tuple(func(tup *txvmutil.TupleBuilder) { // {'T', pubkey}
+			tup.PushdataByte(txvm.TupleCode)
+			tup.Tuple(func(pktup *txvmutil.TupleBuilder) {
+				pktup.PushdataBytes([]byte(exporter))
+			})
 		})
 	})
 	b.PushdataInt64(peggedOut).Op(op.Put) // arg stack: selector
@@ -469,6 +476,9 @@ func (c *Custodian) doPostExport(ctx context.Context, assetXDR, anchor, txid []b
 	// Build and submit tx
 	// TODO(debnil): confirm we need to wait on the tx hitting txvm before deleting the row
 	prog := b.Build()
+
+	log.Print("PRINTING IMPORT TX BYTES")
+	log.Printf("x'%x'", i10rjson.HexBytes(prog))
 	var runlimit int64
 	tx, err := bc.NewTx(prog, 3, math.MaxInt64, txvm.GetRunlimit(&runlimit))
 	if err != nil {
@@ -494,7 +504,9 @@ func (c *Custodian) doPostExport(ctx context.Context, assetXDR, anchor, txid []b
 // {"L", ...}
 // {"O", caller, outputid}
 // {"F", ...}
-func IsExportTx(tx *bc.Tx, asset xdr.Asset, inputAmt int64, temp, exporter string, seqnum int64) bool {
+func IsExportTx(tx *bc.Tx, asset xdr.Asset, inputAmt int64, temp, exporter string, seqnum int64, anchor []byte) bool {
+	log.Print("top of export tx")
+	log.Print(tx.Log)
 	if len(tx.Log) != 4 {
 		return false
 	}
@@ -520,12 +532,14 @@ func IsExportTx(tx *bc.Tx, asset xdr.Asset, inputAmt int64, temp, exporter strin
 		Seqnum   int64  `json:"seqnum"`
 		Exporter string `json:"exporter"`
 		Amount   int64  `json:"amount"`
+		Anchor   []byte `json:"anchor"`
 	}{
 		assetXDR,
 		temp,
 		seqnum,
 		exporter,
 		inputAmt,
+		anchor,
 	}
 	refdata, err := json.Marshal(ref)
 	if !bytes.Equal(refdata, tx.Log[1][2].(txvm.Bytes)) {

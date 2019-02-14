@@ -396,6 +396,8 @@ func TestEndToEnd(t *testing.T) {
 		}
 		t.Log("checking for retirement tx on txvm...")
 
+		retireAnchor1 := txvm.VMHash("Split2", anchor)
+		retireAnchor := txvm.VMHash("Split2", retireAnchor1[:])
 		found = false
 		for {
 			item, ok := r.Read(ctx)
@@ -405,7 +407,7 @@ func TestEndToEnd(t *testing.T) {
 			block := item.(*bc.Block)
 			for _, tx := range block.Transactions {
 				// Look for export transaction.
-				if IsExportTx(tx, native, int64(amount), temp, exporter.Address(), int64(seqnum)) {
+				if IsExportTx(tx, native, int64(amount), temp, exporter.Address(), int64(seqnum), retireAnchor) {
 					t.Logf("found export tx %x", tx.Program)
 					found = true
 					break
