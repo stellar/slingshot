@@ -6,7 +6,7 @@ use spacesuit;
 use spacesuit::SignedInteger;
 use std::iter::FromIterator;
 
-use crate::contract::{Contract, FrozenContract, FrozenItem, Input, PortableItem};
+use crate::contract::{Contract, FrozenContract, FrozenItem, FrozenValue, Input, PortableItem};
 use crate::errors::VMError;
 use crate::ops::Instruction;
 use crate::point_ops::PointOp;
@@ -356,11 +356,32 @@ where
     fn output(&mut self, k: usize) -> Result<(), VMError> {
         let contract = self.pop_contract(k)?;
         let mut buf = Vec::with_capacity(contract.min_serialized_length());
-        contract
-            .to_frozen(&self.variable_commitments)?
-            .encode(&mut buf);
+        self.freeze_contract(contract).encode(&mut buf);
         self.txlog.push(Entry::Output(buf));
         Ok(())
+    }
+
+    fn freeze_contract(&mut self, contract: Contract) -> FrozenContract {
+        let frozen_items = contract
+            .payload
+            .iter()
+            .map(|i| self.freeze_item(i))
+            .collect::<Vec<_>>();
+        FrozenContract {
+            payload: frozen_items,
+            predicate: contract.predicate,
+        }
+    }
+
+    fn freeze_item(&mut self, item: &PortableItem) -> FrozenItem {
+        match item {
+            PortableItem::Data(d) => FrozenItem::Data(d.clone()),
+            PortableItem::Value(v) => {
+                let flv = self.variable_commitments[v.flv.index].closed_commitment();
+                let qty = self.variable_commitments[v.qty.index].closed_commitment();
+                FrozenItem::Value(FrozenValue { flv, qty })
+            }
+        }
     }
 
     fn contract(&mut self, k: usize) -> Result<(), VMError> {

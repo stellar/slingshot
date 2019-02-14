@@ -1,15 +1,9 @@
-use curve25519_dalek::ristretto::CompressedRistretto;
-use curve25519_dalek::scalar::Scalar;
-
 use crate::encoding;
 use crate::encoding::Subslice;
 use crate::errors::VMError;
-use crate::ops::Opcode;
 use crate::predicate::Predicate;
-use crate::signature::VerificationKey;
 use crate::txlog::{TxID, UTXO};
 use crate::types::{Commitment, Data, Value};
-use crate::vm::VariableCommitment;
 
 /// Prefix for the data type in the Output Structure
 pub const DATA_TYPE: u8 = 0x00;
@@ -72,21 +66,6 @@ impl Contract {
         }
         size
     }
-
-    /// Half-way to encoding the contract
-    pub fn to_frozen(
-        self,
-        commitments: &Vec<VariableCommitment>,
-    ) -> Result<FrozenContract, VMError> {
-        let mut frozen_items = Vec::with_capacity(self.payload.len());
-        for item in self.payload.iter() {
-            frozen_items.push(item.to_frozen(commitments)?);
-        }
-        Ok(FrozenContract {
-            payload: frozen_items,
-            predicate: self.predicate,
-        })
-    }
 }
 
 impl Input {
@@ -111,25 +90,6 @@ impl Input {
             utxo,
             txid,
         })
-    }
-}
-
-impl PortableItem {
-    pub fn to_frozen(&self, commitments: &Vec<VariableCommitment>) -> Result<FrozenItem, VMError> {
-        match self {
-            PortableItem::Data(d) => Ok(FrozenItem::Data(d.clone())),
-            PortableItem::Value(v) => {
-                let flv = commitments
-                    .get(v.flv.index)
-                    .ok_or(VMError::CommitmentOutOfRange)?
-                    .closed_commitment();
-                let qty = commitments
-                    .get(v.qty.index)
-                    .ok_or(VMError::CommitmentOutOfRange)?
-                    .closed_commitment();
-                Ok(FrozenItem::Value(FrozenValue { flv, qty }))
-            }
-        }
     }
 }
 
@@ -193,63 +153,5 @@ impl FrozenContract {
         }
 
         Ok(FrozenContract { predicate, payload })
-    }
-}
-
-impl FrozenItem {
-    // Evaluates equality between two FrozenItems. Will return 
-    // false if both FrozenItems are witness data.
-    pub fn eq(&self, rhs: &Self) -> bool {
-        match (self, rhs) {
-            (FrozenItem::Data(ld), FrozenItem::Data(rd)) => {
-                match (ld, rd) {
-                    (Data::Opaque(lx), Data::Opaque(rx)) => {
-                        return lx == rx;
-                    },
-                    (_, _) => return false,
-                }
-            },
-            (FrozenItem::Value(lv), FrozenItem::Value(rv)) => {
-                if lv.flv.to_point() == rv.flv.to_point() && lv.qty.to_point() == rv.qty.to_point() {
-                    return true;
-                }
-                return false;
-            },
-            (_, _) => return false,
-        }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn freeze_contract() {
-        let privkey = Scalar::random(&mut rand::thread_rng());
-        let pubkey = VerificationKey::from_secret(&privkey);
-        // TBD: make this nicer
-        let payload = vec![(PortableItem::Data(Data::Opaque(vec![Opcode::Signtx as u8])))];
-        let contract = Contract {
-            payload,
-            predicate: Predicate::opaque(pubkey.0),
-        };
-
-        match contract.to_frozen(&Vec::new()) {
-            Ok(fc) => {
-                let mut buf = Vec::new();
-                fc.encode(&mut buf);
-                match FrozenContract::decode(Subslice::new(&buf)) {
-                    Ok(decoded_fc) => {
-                        assert_eq!(fc.predicate.point(), decoded_fc.predicate.point());
-                        for (x, y) in fc.payload.iter().zip(decoded_fc.payload.iter()) {
-                            assert!(x.eq(y), "payload items do not match")
-                        }
-                    }
-                    Err(err) => assert!(false, err),
-                }
-            }
-            Err(err) => assert!(false, err),
-        }
     }
 }
