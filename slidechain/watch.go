@@ -138,6 +138,7 @@ func (c *Custodian) watchExports(ctx context.Context) {
 					Seqnum   int64  `json:"seqnum"`
 					Exporter string `json:"exporter"`
 					Amount   int64  `json:"amount"`
+					Anchor   []byte `json:"anchor"`
 				}
 				err := json.Unmarshal(item[2].(txvm.Bytes), &info)
 				if err != nil {
@@ -145,13 +146,16 @@ func (c *Custodian) watchExports(ctx context.Context) {
 				}
 				exportedAssetBytes := txvm.AssetID(importIssuanceSeed[:], info.AssetXDR)
 
+				// We want the anchor of the retirement value to reconstruct the snapshotted contract's stack.
+				retireAnchor := txvm.VMHash("Split2", info.Anchor)
+
 				// Record the export in the db,
 				// then wake up a goroutine that executes peg-outs on the main chain.
 				const q = `
 					INSERT INTO exports 
-					(txid, exporter, amount, asset_xdr, temp, seqnum)
-					VALUES ($1, $2, $3, $4, $5, $6)`
-				_, err = c.DB.ExecContext(ctx, q, tx.ID.Bytes(), info.Exporter, info.Amount, info.AssetXDR, info.Temp, info.Seqnum)
+					(txid, exporter, amount, asset_xdr, temp, seqnum, anchor)
+					VALUES ($1, $2, $3, $4, $5, $6, $7)`
+				_, err = c.DB.ExecContext(ctx, q, tx.ID.Bytes(), info.Exporter, info.Amount, info.AssetXDR, info.Temp, info.Seqnum, retireAnchor[:])
 				if err != nil {
 					log.Fatalf("recording export tx: %s", err)
 				}
@@ -183,7 +187,6 @@ func (c *Custodian) watchPegOuts(ctx context.Context) {
 		}
 	}()
 
-	var anchor []byte // TODO(debnil): Insert anchor in db, needed for input snapshot
 	for {
 		select {
 		case <-ctx.Done():
@@ -192,12 +195,12 @@ func (c *Custodian) watchPegOuts(ctx context.Context) {
 		}
 
 		var (
-			txids, assetXDRs             [][]byte
+			txids, assetXDRs, anchors    [][]byte
 			amounts, seqnums, peggedOuts []int64
 			exporters, temps             []string
 		)
-		const q = `SELECT txid, amount, asset_xdr, exporter, temp, seqnum, pegged_out FROM exports WHERE exported=1 AND (pegged_out=0 OR pegged_out=1)`
-		err := sqlutil.ForQueryRows(ctx, c.DB, q, func(txid []byte, amount int64, assetXDR []byte, exporter, temp string, seqnum, peggedOut int64) {
+		const q = `SELECT txid, amount, asset_xdr, exporter, temp, seqnum, pegged_out, anchor FROM exports WHERE exported=1 AND (pegged_out=0 OR pegged_out=1)`
+		err := sqlutil.ForQueryRows(ctx, c.DB, q, func(txid []byte, amount int64, assetXDR []byte, exporter, temp string, seqnum, peggedOut int64, anchor []byte) {
 			txids = append(txids, txid)
 			amounts = append(amounts, amount)
 			assetXDRs = append(assetXDRs, assetXDR)
@@ -205,6 +208,7 @@ func (c *Custodian) watchPegOuts(ctx context.Context) {
 			temps = append(temps, temp)
 			seqnums = append(seqnums, seqnum)
 			peggedOuts = append(peggedOuts, peggedOut)
+			anchors = append(anchors, anchor)
 		})
 		if err == context.Canceled {
 			return
@@ -213,7 +217,7 @@ func (c *Custodian) watchPegOuts(ctx context.Context) {
 			log.Fatalf("querying peg-outs: %s", err)
 		}
 		for i, txid := range txids {
-			err = c.doPostExport(ctx, assetXDRs[i], anchor, txid, amounts[i], seqnums[i], peggedOuts[i], exporters[i], temps[i])
+			err = c.doPostExport(ctx, assetXDRs[i], anchors[i], txid, amounts[i], seqnums[i], peggedOuts[i], exporters[i], temps[i])
 			if err != nil {
 				if err == context.Canceled {
 					return

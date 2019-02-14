@@ -102,12 +102,9 @@ func (c *Custodian) pegOutFromExports(ctx context.Context) {
 		const q = `SELECT txid, amount, asset_xdr, exporter, temp, seqnum FROM exports WHERE exported=0`
 
 		var (
-			txids     [][]byte
-			amounts   []int
-			assetXDRs [][]byte
-			exporters []string
-			temps     []string
-			seqnums   []int
+			txids, assetXDRs [][]byte
+			amounts, seqnums []int
+			exporters, temps []string
 		)
 		err := sqlutil.ForQueryRows(ctx, c.DB, q, func(txid []byte, amount int, assetXDR []byte, exporter string, temp string, seqnum int) {
 			txids = append(txids, txid)
@@ -350,12 +347,14 @@ func BuildExportTx(ctx context.Context, asset xdr.Asset, amount, inputAmt int64,
 		Seqnum   int64  `json:"seqnum"`
 		Exporter string `json:"exporter"`
 		Amount   int64  `json:"amount"`
+		Anchor   []byte `json:"anchor"`
 	}{
 		assetXDR,
 		temp,
 		int64(seqnum),
 		kp.Address(),
 		inputAmt,
+		anchor,
 	}
 	inputRefdata, err := json.Marshal(ref)
 	if err != nil {
@@ -364,6 +363,8 @@ func BuildExportTx(ctx context.Context, asset xdr.Asset, amount, inputAmt int64,
 	inputRefdataHex := i10rjson.HexBytes(inputRefdata)
 
 	ref.Amount = amount
+	retireAnchor := txvm.VMHash("Split2", anchor)
+	ref.Anchor = retireAnchor[:]
 	retireRefdata, err := json.Marshal(ref)
 	if err != nil {
 		return nil, errors.Wrap(err, "marshaling reference data")
@@ -372,8 +373,10 @@ func BuildExportTx(ctx context.Context, asset xdr.Asset, amount, inputAmt int64,
 	b := new(txvmutil.Builder)
 	b.PushdataBytes(inputRefdataHex)                                                                                     // con stack: json
 	b.Op(op.Put)                                                                                                         // arg stack: json
-	standard.SpendMultisig(b, 1, []ed25519.PublicKey{pubkey}, inputAmt, assetID, anchor, standard.PayToMultisigSeed1[:]) // arg stack: value, sigcheck
-	b.Op(op.Get).Op(op.Get)                                                                                              // con stack: sigcheck, value
+	standard.SpendMultisig(b, 1, []ed25519.PublicKey{pubkey}, inputAmt, assetID, anchor, standard.PayToMultisigSeed1[:]) // arg stack: inputval, sigcheck
+	b.Op(op.Get).Op(op.Get)                                                                                              // con stack: sigcheck, inputval
+	b.PushdataInt64(amount).Op(op.Split)                                                                                 // con stack: sigcheck, changeval, retireval
+	b.PushdataInt64(1).Op(op.Roll).Op(op.Drop)                                                                           // con stack: sigcheck, retireval
 	b.PushdataBytes(retireRefdataHex).Op(op.Put)                                                                         // con stack: sigcheck, value; arg stack: json
 	b.PushdataInt64(0).Op(op.Split).PushdataInt64(1).Op(op.Roll).Op(op.Put)                                              // con stack: sigcheck, zeroval; arg stack: json, value
 	b.Tuple(func(tup *txvmutil.TupleBuilder) {

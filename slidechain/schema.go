@@ -31,7 +31,8 @@ CREATE TABLE IF NOT EXISTS exports (
   temp TEXT NOT NULL,
   seqnum INTEGER NOT NULL,
   exported INTEGER NOT NULL DEFAULT 0,
-  pegged_out INTEGER
+  pegged_out INTEGER,
+  anchor BLOB NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS custodian (
