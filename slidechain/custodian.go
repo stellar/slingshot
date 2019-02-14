@@ -107,6 +107,7 @@ func newCustodian(ctx context.Context, db *sql.DB, hclient horizon.ClientInterfa
 		hclient:       hclient,
 		imports:       sync.NewCond(new(sync.Mutex)),
 		exports:       sync.NewCond(new(sync.Mutex)),
+		pegouts:       sync.NewCond(new(sync.Mutex)),
 		network:       root.NetworkPassphrase,
 		privkey:       custodianPrv,
 		InitBlockHash: initialBlock.Hash(),
@@ -195,7 +196,7 @@ func (c *Custodian) launch(ctx context.Context) {
 	go c.importFromPegs(ctx, nil)
 	go c.watchExports(ctx)
 	go c.pegOutFromExports(ctx)
-	// go c.watchPegOuts(ctx)
+	go c.watchPegOuts(ctx)
 }
 
 func mustDecodeHex(inp string) []byte {

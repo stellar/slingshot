@@ -169,6 +169,8 @@ func (c *Custodian) pegOutFromExports(ctx context.Context) {
 			if err != nil {
 				log.Fatalf("updating export table: %s", err)
 			}
+			// Wake up a goroutine for post-peg-out txvm txs
+			c.pegouts.Broadcast()
 		}
 	}
 }
@@ -402,9 +404,9 @@ func BuildExportTx(ctx context.Context, asset xdr.Asset, amount, inputAmt int64,
 	return tx, nil
 }
 
-func (c *Custodian) doPostExport(ctx context.Context, assetXDR, anchor []byte, amount, seqnum, peggedOut int64, exporter, temp string) error {
+func (c *Custodian) doPostExport(ctx context.Context, assetXDR, anchor, txid []byte, amount, seqnum, peggedOut int64, exporter, temp string) error {
 	var asset xdr.Asset
-	err := xdr.SafeUnmarshalBase64(string(assetXDR), asset)
+	err := asset.UnmarshalBinary(assetXDR)
 	if err != nil {
 		return errors.Wrap(err, "unmarshaling asset xdr")
 	}
@@ -438,7 +440,9 @@ func (c *Custodian) doPostExport(ctx context.Context, assetXDR, anchor []byte, a
 		contract.PushdataBytes(exportContract2Prog)
 		contract.Tuple(func(tup *txvmutil.TupleBuilder) { // {'T', pubkey}
 			tup.PushdataByte(txvm.TupleCode)
-			tup.PushdataBytes([]byte(exporter))
+			tup.Tuple(func(pktup *txvmutil.TupleBuilder) {
+				pktup.PushdataBytes([]byte(exporter))
+			})
 		})
 		contract.Tuple(func(tup *txvmutil.TupleBuilder) { // {'V', amount, assetID, anchor}
 			tup.PushdataByte(txvm.ValueCode)
@@ -460,6 +464,7 @@ func (c *Custodian) doPostExport(ctx context.Context, assetXDR, anchor []byte, a
 	// PRTODO: I feel like there was a sigcheck here... check if there should be one.
 
 	// Build and submit tx
+	// TODO(debnil): confirm we need to wait on the tx hitting txvm before deleting the row
 	prog := b.Build()
 	var runlimit int64
 	tx, err := bc.NewTx(prog, 3, math.MaxInt64, txvm.GetRunlimit(&runlimit))
@@ -467,8 +472,16 @@ func (c *Custodian) doPostExport(ctx context.Context, assetXDR, anchor []byte, a
 		return errors.Wrap(err, "making post-export tx")
 	}
 	tx.Runlimit = math.MaxInt64 - runlimit
-	_, err = c.S.submitTx(ctx, tx)
-	return errors.Wrap(err, "submitting tx")
+	r, err := c.S.submitTx(ctx, tx)
+	if err != nil {
+		return errors.Wrap(err, "submitting post-export tx")
+	}
+	err = c.S.waitOnTx(ctx, tx.ID, r)
+	if err != nil {
+		return errors.Wrap(err, "waiting on post-export tx to hit txvm")
+	}
+	_, err = c.DB.ExecContext(ctx, `DELETE FROM exports WHERE txid=$1`, txid)
+	return errors.Wrapf(err, "deleting export for tx %x", txid)
 }
 
 // IsExportTx returns whether or not a txvm transaction matches the slidechain export tx format.

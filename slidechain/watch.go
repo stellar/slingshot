@@ -168,9 +168,8 @@ func (c *Custodian) watchExports(ctx context.Context) {
 
 // Runs as a goroutine
 func (c *Custodian) watchPegOuts(ctx context.Context) {
-	defer log.Print("retireFromPegOut exiting")
+	defer log.Print("watchPegOuts exiting")
 
-	// TODO(debnil): Check if we do, in fact, want a condition variable here.
 	ch := make(chan struct{})
 	go func() {
 		c.pegouts.L.Lock()
@@ -184,14 +183,7 @@ func (c *Custodian) watchPegOuts(ctx context.Context) {
 		}
 	}()
 
-	// PRTODO: Include some information for reconstructing the input snapshot in the watch export.
-
-	// PRTODO: Run smart contract using the query.
-
-	// PRTODO: Wait for result of the smart contract.
-
-	// PRTODO: Use that result to update information in the exports table.
-
+	var anchor []byte // TODO(debnil): Insert anchor in db, needed for input snapshot
 	for {
 		select {
 		case <-ctx.Done():
@@ -214,9 +206,20 @@ func (c *Custodian) watchPegOuts(ctx context.Context) {
 			seqnums = append(seqnums, seqnum)
 			peggedOuts = append(peggedOuts, peggedOut)
 		})
+		if err == context.Canceled {
+			return
+		}
 		if err != nil {
 			log.Fatalf("querying peg-outs: %s", err)
 		}
-		// PRTODO:
+		for i, txid := range txids {
+			err = c.doPostExport(ctx, assetXDRs[i], anchor, txid, amounts[i], seqnums[i], peggedOuts[i], exporters[i], temps[i])
+			if err != nil {
+				if err == context.Canceled {
+					return
+				}
+				log.Fatal(err)
+			}
+		}
 	}
 }
