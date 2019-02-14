@@ -538,8 +538,6 @@ func IsExportTx(tx *bc.Tx, asset xdr.Asset, inputAmt int64, temp, exporter strin
 		pubkey,
 	}
 	refdata, err := json.Marshal(ref)
-	log.Print(string(refdata))
-	log.Print(tx.Log[1][2].(txvm.Bytes))
 	if !bytes.Equal(refdata, tx.Log[1][2].(txvm.Bytes)) {
 		return false
 	}
@@ -601,9 +599,6 @@ func IsPostExportTx(tx *bc.Tx, asset xdr.Asset, amount int64, temp, exporter str
 	}
 	refdata, err := json.Marshal(ref)
 	if !bytes.Equal(refdata, tx.Log[2][2].(txvm.Bytes)) {
-		log.Print("CHECK FAILED")
-		log.Print(string(refdata))
-		log.Print(tx.Log[2][2].(txvm.Bytes))
 		return false
 	}
 	return true

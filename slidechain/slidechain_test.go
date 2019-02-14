@@ -407,7 +407,6 @@ func TestEndToEnd(t *testing.T) {
 				// Look for export transaction.
 				if IsExportTx(tx, native, int64(amount), temp, exporter.Address(), int64(seqnum), anchor, exporterPubKeyBytes[:]) {
 					t.Logf("found export tx %x", tx.Program)
-					log.Print("FOUND EXPORT TX IN TEST CHECK")
 					found = true
 					break
 				}
@@ -469,6 +468,7 @@ func TestEndToEnd(t *testing.T) {
 			t.Fatal("context timed out: no peg-out tx seen")
 		case <-retire:
 		}
+
 		// Check for successful post-export txvm tx.
 		retireAnchor1 := txvm.VMHash("Split2", anchor)
 		retireAnchor := txvm.VMHash("Split1", retireAnchor1[:])
@@ -480,7 +480,6 @@ func TestEndToEnd(t *testing.T) {
 			}
 			block := item.(*bc.Block)
 			for _, tx := range block.Transactions {
-				log.Print(tx.Log)
 				if IsPostExportTx(tx, native, int64(amount), temp, exporter.Address(), int64(seqnum), retireAnchor[:], exporterPubKeyBytes[:]) {
 					t.Logf("found post-export tx %x", tx.Program)
 					found = true
