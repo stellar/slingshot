@@ -204,7 +204,7 @@ where
                 Instruction::Drop => self.drop()?,
                 Instruction::Dup(i) => self.dup(i)?,
                 Instruction::Roll(i) => self.roll(i)?,
-                Instruction::Const => self.const_instr()?,
+                Instruction::Const => self.r#const()?,
                 Instruction::Var => self.var()?,
                 Instruction::Alloc => unimplemented!(),
                 Instruction::Mintime => self.mintime()?,
