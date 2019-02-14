@@ -8,6 +8,7 @@ import (
 	"log"
 	"math"
 	"strconv"
+	"time"
 
 	"github.com/bobg/sqlutil"
 	"github.com/chain/txvm/crypto/ed25519"
@@ -401,7 +402,7 @@ func BuildExportTx(ctx context.Context, asset xdr.Asset, amount, inputAmt int64,
 	return tx, nil
 }
 
-func exportTxSnapshot(exporterPubkey, assetXDR []byte) ([]byte, error) {
+func buildPostexportTx(assetXDR, anchor, bcid []byte, amount, seqnum, peggedOut int64, exporter, temp string) (*bc.Tx, error) {
 	var asset xdr.Asset
 	err := xdr.SafeUnmarshalBase64(string(assetXDR), asset)
 	if err != nil {
@@ -412,16 +413,55 @@ func exportTxSnapshot(exporterPubkey, assetXDR []byte) ([]byte, error) {
 		return nil, err
 	}
 	assetID := bc.NewHash(txvm.AssetID(importIssuanceSeed[:], assetBytes))
-	log.Print(assetID)
-	// Push components of export transaction snapshot.
-	buf := new(bytes.Buffer)
-	fmt.Fprintf(buf, "'C' x'%x' x'%x'\n", exportContract1Seed[:], exportContract2Prog)
-	// Push con stack: {exporter}, value, json
-	fmt.Fprintf(buf, "{'T', {x'%x'}}\n", exporterPubkey)
-	// fmt.Fprintf(buf, "{'V', %d, x'%x', x'%x'}\n", inputAmt, assetID, anchor)
-	tx, err := asm.Assemble(buf.String())
+	ref := struct {
+		AssetXDR string `json:"asset"`
+		Temp     string `json:"temp"`
+		Seqnum   int64  `json:"seqnum"`
+		Exporter string `json:"exporter"`
+		Amount   int64  `json:"amount"`
+	}{
+		string(assetXDR),
+		temp,
+		seqnum,
+		exporter,
+		amount,
+	}
+	refdata, err := json.Marshal(ref)
 	if err != nil {
-		return nil, errors.Wrap(err, "assembling export tx snapshot")
+		return nil, errors.Wrap(err, "marshaling reference data")
+	}
+	refdataHex := i10rjson.HexBytes(refdata)
+	b := new(txvmutil.Builder)
+	b.Tuple(func(contract *txvmutil.TupleBuilder) {
+		contract.PushdataByte(txvm.ContractCode)
+		contract.PushdataBytes(exportContract1Seed[:])
+		contract.PushdataBytes(exportContract2Prog)
+		contract.Tuple(func(tup *txvmutil.TupleBuilder) { // {'T', pubkey}
+			tup.PushdataByte(txvm.TupleCode)
+			tup.PushdataBytes([]byte(exporter))
+		})
+		contract.Tuple(func(tup *txvmutil.TupleBuilder) { // {'V', amount, assetID, anchor}
+			tup.PushdataByte(txvm.ValueCode)
+			tup.PushdataInt64(amount)
+			tup.PushdataBytes(assetID.Bytes())
+			tup.PushdataBytes(anchor)
+		})
+		contract.Tuple(func(tup *txvmutil.TupleBuilder) { // {'S', refdata}
+			tup.PushdataByte(txvm.BytesCode)
+			tup.PushdataBytes(refdataHex)
+		})
+	})
+	b.PushdataInt64(peggedOut).Op(op.Put) // arg stack: selector
+	b.Op(op.Input).Op(op.Call)
+	b.PushdataBytes(bcid)
+	b.PushdataInt64(int64(bc.Millis(time.Now().Add(10 * time.Minute))))
+	b.Op(op.Nonce).Op(op.Finalize)
+
+	// PRTODO: Check if we need a sigchecker here.
+	prog := b.Build()
+	tx, err := bc.NewTx(prog, 3, math.MaxInt64)
+	if err != nil {
+		return nil, errors.Wrap(err, "making post-export tx")
 	}
 	return tx, nil
 }
