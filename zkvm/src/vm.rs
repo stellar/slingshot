@@ -297,13 +297,11 @@ where
     }
 
     fn mintime(&mut self) -> Result<(), VMError> {
-        let a: Scalar = self.mintime.into();
         self.push_item(Expression::constant(self.mintime));
         Ok(())
     }
 
     fn maxtime(&mut self) -> Result<(), VMError> {
-        let a: Scalar = self.maxtime.into();
         self.push_item(Expression::constant(self.maxtime));
         Ok(())
     }
