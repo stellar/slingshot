@@ -7,6 +7,7 @@ use spacesuit::SignedInteger;
 use std::iter::FromIterator;
 
 use crate::contract::{Contract, FrozenContract, FrozenItem, FrozenValue, Input, PortableItem};
+use crate::encoding::Subslice;
 use crate::errors::VMError;
 use crate::ops::Instruction;
 use crate::point_ops::PointOp;
@@ -121,9 +122,9 @@ pub struct VariableCommitment {
     commitment: Commitment,
 
     /// Attached/detached state
-    /// None if the variable is not attached to the CS yet,
+    /// None - if the variable is not attached to the CS yet,
     /// so its commitment is replaceable via `reblind`.
-    /// Some if variable is attached to the CS yet and has an index in CS,
+    /// Some - if variable is attached to the CS yet and has an index in CS,
     /// so its commitment is no longer replaceable via `reblind`.
     variable: Option<r1cs::Variable>,
 }
@@ -198,11 +199,11 @@ where
                 Instruction::Drop => self.drop()?,
                 Instruction::Dup(i) => self.dup(i)?,
                 Instruction::Roll(i) => self.roll(i)?,
-                Instruction::Const => unimplemented!(),
-                Instruction::Var => unimplemented!(),
+                Instruction::Const => self.r#const()?,
+                Instruction::Var => self.var()?,
                 Instruction::Alloc => unimplemented!(),
-                Instruction::Mintime => unimplemented!(),
-                Instruction::Maxtime => unimplemented!(),
+                Instruction::Mintime => self.mintime()?,
+                Instruction::Maxtime => self.maxtime()?,
                 Instruction::Neg => unimplemented!(),
                 Instruction::Add => unimplemented!(),
                 Instruction::Mul => unimplemented!(),
@@ -229,8 +230,8 @@ where
                 Instruction::Log => self.log()?,
                 Instruction::Signtx => self.signtx()?,
                 Instruction::Call => unimplemented!(),
-                Instruction::Left => unimplemented!(),
-                Instruction::Right => unimplemented!(),
+                Instruction::Left => self.left()?,
+                Instruction::Right => self.right()?,
                 Instruction::Delegate => unimplemented!(),
                 Instruction::Ext(opcode) => self.ext(opcode)?,
             }
@@ -278,6 +279,34 @@ where
         }
         let item = self.stack.remove(self.stack.len() - i - 1);
         self.push_item(item);
+        Ok(())
+    }
+
+    fn r#const(&mut self) -> Result<(), VMError> {
+        let data = self.pop_item()?.to_data()?.to_bytes();
+        let mut slice = Subslice::new(&data);
+        let scalar = slice.read_scalar()?;
+        if slice.len() != 0 {
+            return Err(VMError::FormatError);
+        }
+        self.push_item(Expression::constant(scalar));
+        Ok(())
+    }
+
+    fn var(&mut self) -> Result<(), VMError> {
+        let comm = self.pop_item()?.to_data()?.to_commitment()?;
+        let v = self.make_variable(comm);
+        self.push_item(v);
+        Ok(())
+    }
+
+    fn mintime(&mut self) -> Result<(), VMError> {
+        self.push_item(Expression::constant(self.mintime));
+        Ok(())
+    }
+
+    fn maxtime(&mut self) -> Result<(), VMError> {
+        self.push_item(Expression::constant(self.maxtime));
         Ok(())
     }
 
@@ -472,6 +501,36 @@ where
             self.push_item(item);
         }
         Ok(())
+    }
+
+    fn left_or_right<F>(&mut self, assign: F) -> Result<(), VMError>
+    where
+        F: FnOnce(&mut Contract, Predicate, Predicate) -> (),
+    {
+        let r = self.pop_item()?.to_data()?.to_predicate()?;
+        let l = self.pop_item()?.to_data()?.to_predicate()?;
+
+        let mut contract = self.pop_item()?.to_contract()?;
+        let p = &contract.predicate;
+
+        self.delegate.verify_point_op(|| p.prove_or(&l, &r));
+
+        assign(&mut contract, l, r);
+
+        self.push_item(contract);
+        Ok(())
+    }
+
+    fn left(&mut self) -> Result<(), VMError> {
+        self.left_or_right(|contract, left, _| {
+            contract.predicate = left;
+        })
+    }
+
+    fn right(&mut self) -> Result<(), VMError> {
+        self.left_or_right(|contract, _, right| {
+            contract.predicate = right;
+        })
     }
 
     fn ext(&mut self, _: u8) -> Result<(), VMError> {

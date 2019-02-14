@@ -303,6 +303,17 @@ impl Value {
     }
 }
 
+impl Expression {
+    pub fn constant<S: Into<Scalar>>(a: S) -> Self {
+        let a: Scalar = a.into();
+
+        Expression {
+            terms: vec![(r1cs::Variable::One(), a)],
+            assignment: Some(ScalarWitness::Scalar(a)),
+        }
+    }
+}
+
 // Upcasting all types to Item
 
 impl From<Data> for Item {
