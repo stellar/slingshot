@@ -205,10 +205,10 @@ where
                 Instruction::Dup(i) => self.dup(i)?,
                 Instruction::Roll(i) => self.roll(i)?,
                 Instruction::Const => self.const_instr()?,
-                Instruction::Var => unimplemented!(),
+                Instruction::Var => self.var()?,
                 Instruction::Alloc => unimplemented!(),
-                Instruction::Mintime => unimplemented!(),
-                Instruction::Maxtime => unimplemented!(),
+                Instruction::Mintime => self.mintime()?,
+                Instruction::Maxtime => self.maxtime()?,
                 Instruction::Neg => unimplemented!(),
                 Instruction::Add => unimplemented!(),
                 Instruction::Mul => unimplemented!(),
@@ -235,8 +235,8 @@ where
                 Instruction::Log => self.log()?,
                 Instruction::Signtx => self.signtx()?,
                 Instruction::Call => unimplemented!(),
-                Instruction::Left => unimplemented!(),
-                Instruction::Right => unimplemented!(),
+                Instruction::Left => self.left()?,
+                Instruction::Right => self.right()?,
                 Instruction::Delegate => unimplemented!(),
                 Instruction::Ext(opcode) => self.ext(opcode)?,
             }
@@ -289,6 +289,25 @@ where
 
     fn const_instr(&mut self) -> Result<(), VMError> {
         let a = self.pop_item()?.to_data()?.to_scalar()?;
+        self.push_item(Expression::from(a));
+        Ok(())
+    }
+
+        fn var(&mut self) -> Result<(), VMError> {
+        let comm = self.pop_item()?.to_data()?.to_commitment()?;
+        let v = self.make_variable(comm);
+        self.push_item(v);
+        Ok(())
+    }
+
+        fn mintime(&mut self) -> Result<(), VMError> {
+        let a: Scalar = self.mintime.into();
+        self.push_item(Expression::from(a));
+        Ok(())
+    }
+
+    fn maxtime(&mut self) -> Result<(), VMError> {
+        let a: Scalar = self.maxtime.into();
         self.push_item(Expression::from(a));
         Ok(())
     }
@@ -464,6 +483,36 @@ where
         for item in contract.payload.into_iter() {
             self.push_item(item);
         }
+        Ok(())
+    }
+
+        fn left(&mut self) -> Result<(), VMError> {
+        let r = self.pop_item()?.to_data()?.to_predicate()?;
+        let l = self.pop_item()?.to_data()?.to_predicate()?;
+
+        let mut contract = self.pop_item()?.to_contract()?;
+        let p = contract.predicate;
+
+        self.delegate.verify_point_op(|| p.prove_or(&l, &r));
+
+        contract.predicate = l;
+
+        self.push_item(contract);
+        Ok(())
+    }
+
+    fn right(&mut self) -> Result<(), VMError> {
+        let r = self.pop_item()?.to_data()?.to_predicate()?;
+        let l = self.pop_item()?.to_data()?.to_predicate()?;
+
+        let mut contract = self.pop_item()?.to_contract()?;
+        let p = contract.predicate;
+
+        self.delegate.verify_point_op(|| p.prove_or(&l, &r));
+
+        contract.predicate = r;
+
+        self.push_item(contract);
         Ok(())
     }
 
