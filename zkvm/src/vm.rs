@@ -304,7 +304,7 @@ where
 
     fn maxtime(&mut self) -> Result<(), VMError> {
         let a: Scalar = self.maxtime.into();
-        self.push_item(Expression::constant(a));
+        self.push_item(Expression::constant(self.maxtime));
         Ok(())
     }
 
