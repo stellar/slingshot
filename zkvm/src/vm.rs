@@ -11,7 +11,7 @@ use crate::encoding::Subslice;
 use crate::errors::VMError;
 use crate::ops::Instruction;
 use crate::point_ops::PointOp;
-use crate::predicate::Predicate;
+use crate::predicate::{Predicate, PredicateWitness};
 use crate::signature::*;
 use crate::txlog::{Entry, TxID, TxLog};
 use crate::types::*;
@@ -691,5 +691,42 @@ where
             bitrange,
         )
         .map_err(|_| VMError::R1CSInconsistency)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn issue() {
+        let privkey = Scalar::random(&mut rand::thread_rng());
+        let pubkey = VerificationKey::from_secret(&privkey);
+
+        let predicate = match Predicate::from_witness(PredicateWitness::Key(privkey)) {
+            Err(_) => return assert!(false),
+            Ok(x) => x,
+        };
+
+        // pushdata qty
+        // var
+        // pushdata flv
+        // var
+        // pushdata pred <- pubkey to issue to
+        // issue
+        let mut program = vec![(
+            // TBD: replace with real scalars
+            Instruction::Push(Data::Witness(DataWitness::Scalar(Box::new(Scalar::one())))),
+            Instruction::Var,
+            // TBD: replace with real scalars
+            Instruction::Push(Data::Witness(DataWitness::Scalar(Box::new(Scalar::one())))),
+            Instruction::Var,
+            // Predicate
+            Instruction::Push(Data::Witness(DataWitness::Predicate(Box::new(predicate)))),
+            Instruction::Issue,
+            Instruction::Signtx,
+        )];
+
+
     }
 }
