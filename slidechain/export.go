@@ -135,8 +135,6 @@ func (c *Custodian) pegOutFromExports(ctx context.Context) {
 			}
 
 			log.Printf("pegging out export %x: %d of %s to %s", txid, amounts[i], asset.String(), exporters[i])
-			// TODO(vniu): flag txs that fail with unretriable errors in the db
-			// PRTODO: Pass information for the post-peg-out smart contract to to the peg-out tx.
 			var peggedOut int
 			for i := 0; i < 5; i++ {
 				err = c.pegOut(ctx, exporter, asset, int64(amounts[i]), tempID, xdr.SequenceNumber(seqnums[i]))
@@ -226,7 +224,6 @@ func buildPegOutTx(custodian, exporter, temp, network string, asset xdr.Asset, a
 		mergeAccountOp,
 		paymentOp,
 	)
-	// PRTODO: Add a MemoHash with unique info for the post-peg-out smart contract.
 }
 
 // createTempAccount builds and submits a transaction to the Stellar
@@ -366,7 +363,7 @@ func BuildExportTx(ctx context.Context, asset xdr.Asset, amount, inputAmt int64,
 
 	ref.Amount = amount
 	// We first split off the difference between inputAmt and amt.
-	// Then, we split off the zero-value for finalize.
+	// Then, we split off the zero-value for finalize, creating the retire anchor.
 	retireAnchor1 := txvm.VMHash("Split2", anchor)
 	retireAnchor := txvm.VMHash("Split1", retireAnchor1[:])
 	ref.Anchor = retireAnchor[:]
@@ -393,8 +390,6 @@ func BuildExportTx(ctx context.Context, asset xdr.Asset, amount, inputAmt int64,
 	b.Op(op.Finalize)             // con stack: sigchecker
 	prog1 := b.Build()
 
-	log.Print("PRINTING EXPORT TX BYTES")
-	log.Printf("x'%x'", i10rjson.HexBytes(prog1))
 	vm, err := txvm.Validate(prog1, 3, math.MaxInt64, txvm.StopAfterFinalize)
 	if err != nil {
 		return nil, errors.Wrap(err, "computing transaction ID")
@@ -475,14 +470,11 @@ func (c *Custodian) doPostExport(ctx context.Context, assetXDR, anchor, txid []b
 	b.PushdataInt64(int64(bc.Millis(time.Now().Add(10 * time.Minute))))
 	b.Op(op.Nonce).Op(op.Finalize)
 
-	// PRTODO: I feel like there was a sigcheck here... check if there should be one.
+	// TODO(debnil): Should there be a signature check here?
 
 	// Build and submit tx
-	// TODO(debnil): confirm we need to wait on the tx hitting txvm before deleting the row
 	prog := b.Build()
 
-	log.Print("PRINTING IMPORT TX BYTES")
-	log.Printf("x'%x'", i10rjson.HexBytes(prog))
 	var runlimit int64
 	tx, err := bc.NewTx(prog, 3, math.MaxInt64, txvm.GetRunlimit(&runlimit))
 	if err != nil {
@@ -546,7 +538,72 @@ func IsExportTx(tx *bc.Tx, asset xdr.Asset, inputAmt int64, temp, exporter strin
 		pubkey,
 	}
 	refdata, err := json.Marshal(ref)
+	log.Print(string(refdata))
+	log.Print(tx.Log[1][2].(txvm.Bytes))
 	if !bytes.Equal(refdata, tx.Log[1][2].(txvm.Bytes)) {
+		return false
+	}
+	return true
+}
+
+// IsPostExportTx returns whether or not a txvm transaction matches the slidechain post-export tx format.
+//
+// Expected log is
+// {"I", ...}
+// {"X", ...}
+// {"L", ...}
+// {"N", ...}
+// {"R", ...}
+// {"F", ...}
+func IsPostExportTx(tx *bc.Tx, asset xdr.Asset, amount int64, temp, exporter string, seqnum int64, anchor, pubkey []byte) bool {
+	if len(tx.Log) != 6 {
+		return false
+	}
+	if tx.Log[0][0].(txvm.Bytes)[0] != txvm.InputCode {
+		return false
+	}
+	if tx.Log[1][0].(txvm.Bytes)[0] != txvm.RetireCode {
+		return false
+	}
+	if tx.Log[2][0].(txvm.Bytes)[0] != txvm.LogCode {
+		return false
+	}
+	if tx.Log[3][0].(txvm.Bytes)[0] != txvm.NonceCode {
+		return false
+	}
+	if tx.Log[4][0].(txvm.Bytes)[0] != txvm.TimerangeCode {
+		return false
+	}
+	if tx.Log[5][0].(txvm.Bytes)[0] != txvm.FinalizeCode {
+		return false
+	}
+	// TODO(debnil): Marshal and check logged JSON.
+	assetXDR, err := xdr.MarshalBase64(asset)
+	if err != nil {
+		return false
+	}
+	ref := struct {
+		AssetXDR string `json:"asset"`
+		Temp     string `json:"temp"`
+		Seqnum   int64  `json:"seqnum"`
+		Exporter string `json:"exporter"`
+		Amount   int64  `json:"amount"`
+		Anchor   []byte `json:"anchor"`
+		Pubkey   []byte `json:"pubkey"`
+	}{
+		assetXDR,
+		temp,
+		seqnum,
+		exporter,
+		amount,
+		anchor,
+		pubkey,
+	}
+	refdata, err := json.Marshal(ref)
+	if !bytes.Equal(refdata, tx.Log[2][2].(txvm.Bytes)) {
+		log.Print("CHECK FAILED")
+		log.Print(string(refdata))
+		log.Print(tx.Log[2][2].(txvm.Bytes))
 		return false
 	}
 	return true

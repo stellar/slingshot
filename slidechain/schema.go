@@ -41,5 +41,3 @@ CREATE TABLE IF NOT EXISTS custodian (
   cursor TEXT NOT NULL DEFAULT ''
 );
 `
-
-// PRTODO: Add field to exports to transmit the extra information needed for the post-export smart contract.
