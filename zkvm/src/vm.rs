@@ -287,7 +287,7 @@ where
         Ok(())
     }
 
-    fn const_instr(&mut self) -> Result<(), VMError> {
+    fn r#const(&mut self) -> Result<(), VMError> {
         let a = self.pop_item()?.to_data()?.to_scalar()?;
         self.push_item(Expression::from(a));
         Ok(())
