@@ -16,6 +16,7 @@ import (
 	"github.com/stellar/go/xdr"
 )
 
+// TODO(debnil): Factor out BuildPostExportTx.
 func (c *Custodian) doPostExport(ctx context.Context, assetXDR, anchor, txid []byte, amount, seqnum, peggedOut int64, exporter, temp string, pubkey []byte) error {
 	var asset xdr.Asset
 	err := asset.UnmarshalBinary(assetXDR)

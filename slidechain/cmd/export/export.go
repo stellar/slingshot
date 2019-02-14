@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/chain/txvm/crypto/ed25519"
 	"github.com/chain/txvm/protocol/bc"
 	"github.com/golang/protobuf/proto"
 	"github.com/interstellar/slingshot/slidechain"
@@ -156,6 +157,7 @@ func main() {
 	log.Printf("successfully submitted export transaction: %x", tx.ID)
 
 	client := http.DefaultClient
+	pubkey := ed25519.PrivateKey(mustDecode(*prv)).Public().(ed25519.PublicKey)
 	for height := block.Height + 1; ; height++ {
 		req, err := http.NewRequest("GET", fmt.Sprintf(*slidechaind+"/get?height=%d", height), nil)
 		if err != nil {
@@ -181,8 +183,7 @@ func main() {
 		}
 		for _, tx := range b.Transactions {
 			// Look for export transaction
-			// TODO(debnil): Update parameters
-			if slidechain.IsExportTx(tx, asset, inputAmount, temp, kp.Address(), int64(seqnum)) {
+			if slidechain.IsExportTx(tx, asset, inputAmount, temp, kp.Address(), int64(seqnum), mustDecode(*anchor), pubkey) {
 				log.Println("export tx included in txvm chain")
 				return
 			}
