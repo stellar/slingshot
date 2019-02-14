@@ -1113,51 +1113,51 @@ Each instruction defines the format for immediate data. See the reference below 
 Code | Instruction                | Stack diagram                              | Effects
 -----|----------------------------|--------------------------------------------|----------------------------------
  |     [**Stack**](#stack-instructions)               |                        |
-0x?? | [`push:n:x`](#push)        |                 ø → _data_                 |
-0x?? | [`drop`](#drop)            |               _x_ → ø                      |
-0x?? | [`dup:k`](#dup)            |     _x[k] … x[0]_ → _x[k] ... x[0] x[k]_   |
-0x?? | [`roll:k`](#roll)          |     _x[k] … x[0]_ → _x[k-1] ... x[0] x[k]_ |
+0x00 | [`push:n:x`](#push)        |                 ø → _data_                 |
+0x01 | [`drop`](#drop)            |               _x_ → ø                      |
+0x02 | [`dup:k`](#dup)            |     _x[k] … x[0]_ → _x[k] ... x[0] x[k]_   |
+0x03 | [`roll:k`](#roll)          |     _x[k] … x[0]_ → _x[k-1] ... x[0] x[k]_ |
  |                                |                                            |
  |     [**Constraints**](#constraint-system-instructions)  |                   | 
-0x?? | [`const`](#var)            |          _scalar_ → _expr_                 | 
-0x?? | [`var`](#var)              |           _point_ → _var_                  | Adds an external variable to [CS](#constraint-system)
-0x?? | [`alloc`](#alloc)          |                 ø → _expr_                 | Allocates a low-level variable in [CS](#constraint-system)
-0x?? | [`mintime`](#mintime)      |                 ø → _expr_                 |
-0x?? | [`maxtime`](#maxtime)      |                 ø → _expr_                 |
-0x?? | [`expr`](#expr)            |             _var_ → _expr_                 | [Attaches](#attached-and-detached-variables) variable to [CS](#constraint-system)
-0x?? | [`neg`](#neg)              |           _expr1_ → _expr2_                |
-0x?? | [`add`](#add)              |     _expr1 expr2_ → _expr3_                |
-0x?? | [`mul`](#mul)              |     _expr1 expr2_ → _expr3_                | Potentially adds multiplier in [CS](#constraint-system)
-0x?? | [`eq`](#eq)                |     _expr1 expr2_ → _constraint_           | 
-0x?? | [`range:n`](#range)        |            _expr_ → _expr_                 | Modifies [CS](#constraint-system)
-0x?? | [`and`](#and)              | _constr1 constr2_ → _constr3_              |
-0x?? | [`or`](#or)                | _constr1 constr2_ → _constr3_              |
-0x?? | [`verify`](#verify)        |      _constraint_ → ø                      | Modifies [CS](#constraint-system) 
-0x?? | [`blind`](#blind)          |  _proof V expr P_ → _var_                  | Modifies [CS](#constraint-system), [defers point ops](#deferred-point-operations)
-0x?? | [`reblind`](#reblind)      |   _proof V2 var1_ → _var1_                 | [Defers point operations](#deferred-point-operations)
-0x?? | [`unblind`](#unblind)      |        _v V expr_ → _var_                  | Modifies [CS](#constraint-system), [Defers point ops](#deferred-point-operations)
+0x04 | [`const`](#var)            |          _scalar_ → _expr_                 | 
+0x05 | [`var`](#var)              |           _point_ → _var_                  | Adds an external variable to [CS](#constraint-system)
+0x06 | [`alloc`](#alloc)          |                 ø → _expr_                 | Allocates a low-level variable in [CS](#constraint-system)
+0x07 | [`mintime`](#mintime)      |                 ø → _expr_                 |
+0x08 | [`maxtime`](#maxtime)      |                 ø → _expr_                 |
+0x09 | [`expr`](#expr)            |             _var_ → _expr_                 | [Attaches](#attached-and-detached-variables) variable to [CS](#constraint-system)
+0x0a | [`neg`](#neg)              |           _expr1_ → _expr2_                |
+0x0b | [`add`](#add)              |     _expr1 expr2_ → _expr3_                |
+0x0c | [`mul`](#mul)              |     _expr1 expr2_ → _expr3_                | Potentially adds multiplier in [CS](#constraint-system)
+0x0d | [`eq`](#eq)                |     _expr1 expr2_ → _constraint_           | 
+0x0e | [`range:n`](#range)        |            _expr_ → _expr_                 | Modifies [CS](#constraint-system)
+0x0f | [`and`](#and)              | _constr1 constr2_ → _constr3_              |
+0x10 | [`or`](#or)                | _constr1 constr2_ → _constr3_              |
+0x11 | [`verify`](#verify)        |      _constraint_ → ø                      | Modifies [CS](#constraint-system) 
+0x12 | [`blind`](#blind)          |  _proof V expr P_ → _var_                  | Modifies [CS](#constraint-system), [defers point ops](#deferred-point-operations)
+0x13 | [`reblind`](#reblind)      |   _proof V2 var1_ → _var1_                 | [Defers point operations](#deferred-point-operations)
+0x14 | [`unblind`](#unblind)      |        _v V expr_ → _var_                  | Modifies [CS](#constraint-system), [Defers point ops](#deferred-point-operations)
  |                                |                                            |
  |     [**Values**](#value-instructions)              |                        |
-0x?? | [`issue`](#issue)          |    _qty flv pred_ → _contract_             | Modifies [CS](#constraint-system), [tx log](#transaction-log), [defers point ops](#deferred-point-operations)
-0x?? | [`borrow`](#borrow)        |         _qty flv_ → _–V +V_                | Modifies [CS](#constraint-system)
-0x?? | [`retire`](#retire)        |           _value_ → ø                      | Modifies [CS](#constraint-system), [tx log](#transaction-log)
-0x?? | [`qty`](#qty)              |           _value_ → _value qtyvar_         |
-0x?? | [`flavor`](#flavor)        |           _value_ → _value flavorvar_      |
-0x?? | [`cloak:m:n`](#cloak)      | _widevalues commitments_ → _values_        | Modifies [CS](#constraint-system)
-0x?? | [`import`](#import)        |   _proof qty flv_ → _value_                | Modifies [CS](#constraint-system), [tx log](#transaction-log), [defers point ops](#deferred-point-operations)
-0x?? | [`export`](#export)        |       _value ???_ → ø                      | Modifies [CS](#constraint-system), [tx log](#transaction-log)
+0x15 | [`issue`](#issue)          |    _qty flv pred_ → _contract_             | Modifies [CS](#constraint-system), [tx log](#transaction-log), [defers point ops](#deferred-point-operations)
+0x16 | [`borrow`](#borrow)        |         _qty flv_ → _–V +V_                | Modifies [CS](#constraint-system)
+0x17 | [`retire`](#retire)        |           _value_ → ø                      | Modifies [CS](#constraint-system), [tx log](#transaction-log)
+0x18 | [`qty`](#qty)              |           _value_ → _value qtyvar_         |
+0x19 | [`flavor`](#flavor)        |           _value_ → _value flavorvar_      |
+0x1a | [`cloak:m:n`](#cloak)      | _widevalues commitments_ → _values_        | Modifies [CS](#constraint-system)
+0x1b | [`import`](#import)        |   _proof qty flv_ → _value_                | Modifies [CS](#constraint-system), [tx log](#transaction-log), [defers point ops](#deferred-point-operations)
+0x1c | [`export`](#export)        |       _value ???_ → ø                      | Modifies [CS](#constraint-system), [tx log](#transaction-log)
  |                                |                                            |
  |     [**Contracts**](#contract-instructions)        |                        |
-0x?? | [`input`](#input)          |           _input_ → _contract_             | Modifies [tx log](#transaction-log)
-0x?? | [`output:k`](#output)      |   _items... pred_ → ø                      | Modifies [tx log](#transaction-log)
-0x?? | [`contract:k`](#contract)  |   _items... pred_ → _contract_             | 
-0x?? | [`nonce`](#nonce)          |            _pred_ → _contract_             | Modifies [tx log](#transaction-log)
-0x?? | [`log`](#log)              |            _data_ → ø                      | Modifies [tx log](#transaction-log)
-0x?? | [`signtx`](#signtx)        |        _contract_ → _results..._           | Modifies [deferred verification keys](#transaction-signature)
-0x?? | [`call`](#call)            |   _contract prog_ → _results..._           | [Defers point operations](#deferred-point-operations)
-0x?? | [`left`](#left)            |    _contract A B_ → _contract’_            | [Defers point operations](#deferred-point-operations)
-0x?? | [`right`](#right)          |    _contract A B_ → _contract’_            | [Defers point operations](#deferred-point-operations)
-0x?? | [`delegate`](#delegate)    |_contract prog sig_ → _results..._          | [Defers point operations](#deferred-point-operations)
+0x1d | [`input`](#input)          |           _input_ → _contract_             | Modifies [tx log](#transaction-log)
+0x1e | [`output:k`](#output)      |   _items... pred_ → ø                      | Modifies [tx log](#transaction-log)
+0x1f | [`contract:k`](#contract)  |   _items... pred_ → _contract_             | 
+0x20 | [`nonce`](#nonce)          |            _pred_ → _contract_             | Modifies [tx log](#transaction-log)
+0x21 | [`log`](#log)              |            _data_ → ø                      | Modifies [tx log](#transaction-log)
+0x22 | [`signtx`](#signtx)        |        _contract_ → _results..._           | Modifies [deferred verification keys](#transaction-signature)
+0x23 | [`call`](#call)            |   _contract prog_ → _results..._           | [Defers point operations](#deferred-point-operations)
+0x24 | [`left`](#left)            |    _contract A B_ → _contract’_            | [Defers point operations](#deferred-point-operations)
+0x25 | [`right`](#right)          |    _contract A B_ → _contract’_            | [Defers point operations](#deferred-point-operations)
+0x26 | [`delegate`](#delegate)    |_contract prog sig_ → _results..._          | [Defers point operations](#deferred-point-operations)
 
 
 
