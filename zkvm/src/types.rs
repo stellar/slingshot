@@ -305,9 +305,12 @@ impl Value {
 
 impl Expression {
     pub fn constant<S: Into<Scalar>>(a: S) -> Self {
+
+        let a:Scalar = a.into();
+
         Expression {
-            terms: vec![(r1cs::Variable::One(), a.into())],
-            assignment: Some(ScalarWitness::Scalar(a.into())),
+            terms: vec![(r1cs::Variable::One(), a)],
+            assignment: Some(ScalarWitness::Scalar(a)),
         }
     }
 }

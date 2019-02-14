@@ -8,6 +8,7 @@ use std::iter::FromIterator;
 
 use crate::contract::{Contract, FrozenContract, FrozenItem, FrozenValue, Input, PortableItem};
 use crate::errors::VMError;
+use crate::encoding::Subslice;
 use crate::ops::Instruction;
 use crate::point_ops::PointOp;
 use crate::predicate::Predicate;
