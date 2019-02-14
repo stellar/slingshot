@@ -488,34 +488,34 @@ where
         Ok(())
     }
 
-    fn left(&mut self) -> Result<(), VMError> {
+    fn left_or_right<F>(&mut self, assign: F) -> Result<(), VMError>
+    where
+        F: FnOnce(&mut Contract, Predicate, Predicate) -> (),
+    {
         let r = self.pop_item()?.to_data()?.to_predicate()?;
         let l = self.pop_item()?.to_data()?.to_predicate()?;
 
         let mut contract = self.pop_item()?.to_contract()?;
-        let p = contract.predicate;
+        let p = &contract.predicate;
 
         self.delegate.verify_point_op(|| p.prove_or(&l, &r));
 
-        contract.predicate = l;
+        assign(&mut contract, l, r);
 
         self.push_item(contract);
         Ok(())
     }
 
+    fn left(&mut self) -> Result<(), VMError> {
+        self.left_or_right(|contract, left, _| {
+            contract.predicate = left;
+        })
+    }
+
     fn right(&mut self) -> Result<(), VMError> {
-        let r = self.pop_item()?.to_data()?.to_predicate()?;
-        let l = self.pop_item()?.to_data()?.to_predicate()?;
-
-        let mut contract = self.pop_item()?.to_contract()?;
-        let p = contract.predicate;
-
-        self.delegate.verify_point_op(|| p.prove_or(&l, &r));
-
-        contract.predicate = r;
-
-        self.push_item(contract);
-        Ok(())
+        self.left_or_right(|contract, _, right| {
+            contract.predicate = right;
+        })
     }
 
     fn ext(&mut self, _: u8) -> Result<(), VMError> {
