@@ -345,9 +345,9 @@ where
     /// _input_ **input** → _contract_
     fn input(&mut self) -> Result<(), VMError> {
         let input = self.pop_item()?.to_data()?.to_input()?;
-        let (contract, utxo) = self.spend_input(input)?;
+        let contract = self.unfreeze_contract(input.contract);
         self.push_item(contract);
-        self.txlog.push(Entry::Input(utxo));
+        self.txlog.push(Entry::Input(input.utxo));
         self.unique = true;
         Ok(())
     }
@@ -596,11 +596,6 @@ where
             Commitment::Closed(_) => None,
             Commitment::Open(w) => Some(w.value),
         }
-    }
-
-    fn spend_input(&mut self, input: Input) -> Result<(Contract, UTXO), VMError> {
-        let contract = self.unfreeze_contract(input.contract);
-        Ok((contract, input.utxo))
     }
 
     fn unfreeze_contract(&mut self, contract: FrozenContract) -> Contract {

@@ -27,9 +27,9 @@ pub enum PortableItem {
 
 #[derive(Clone, Debug)]
 pub struct Input {
-    pub contract: FrozenContract,
-    pub utxo: UTXO,
-    pub txid: TxID,
+    pub(crate) contract: FrozenContract,
+    pub(crate) utxo: UTXO,
+    pub(crate) txid: TxID,
 }
 
 /// Representation of a Contract inside an Input that can be cloned.
