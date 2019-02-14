@@ -1,7 +1,12 @@
+use curve25519_dalek::ristretto::CompressedRistretto;
+use curve25519_dalek::scalar::Scalar;
+
 use crate::encoding;
 use crate::encoding::Subslice;
 use crate::errors::VMError;
+use crate::ops::Opcode;
 use crate::predicate::Predicate;
+use crate::signature::VerificationKey;
 use crate::txlog::{TxID, UTXO};
 use crate::types::{Commitment, Data, Value};
 use crate::vm::VariableCommitment;
@@ -188,5 +193,40 @@ impl FrozenContract {
         }
 
         Ok(FrozenContract { predicate, payload })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn freeze_contract() {
+        let privkey = Scalar::random(&mut rand::thread_rng());
+        let pubkey = VerificationKey::from_secret(&privkey);
+        // TBD: make this nicer
+        let payload = vec![(PortableItem::Data(Data::Opaque(vec![Opcode::Signtx as u8])))];
+        let contract = Contract {
+            payload,
+            predicate: Predicate::opaque(pubkey.0),
+        };
+
+        match contract.to_frozen(&Vec::new()) {
+            Ok(fc) => {
+                let mut buf = Vec::new();
+                fc.encode(&mut buf);
+                match FrozenContract::decode(Subslice::new(&buf)) {
+                    Ok(decoded_fc) => {
+                        assert_eq!(fc.predicate.point(), decoded_fc.predicate.point());
+                        for (x, y) in fc.payload.iter().zip(decoded_fc.payload.iter()) {
+                            // TBD: implement FrozenItem.eq(...)
+                            unimplemented!()
+                        }
+                    }
+                    Err(err) => assert!(false, err),
+                }
+            }
+            Err(err) => assert!(false, err),
+        }
     }
 }
