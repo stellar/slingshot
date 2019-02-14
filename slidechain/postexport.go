@@ -16,16 +16,34 @@ import (
 	"github.com/stellar/go/xdr"
 )
 
-// TODO(debnil): Factor out BuildPostExportTx.
 func (c *Custodian) doPostExport(ctx context.Context, assetXDR, anchor, txid []byte, amount, seqnum, peggedOut int64, exporter, temp string, pubkey []byte) error {
+	tx, err := BuildPostExportTx(ctx, assetXDR, anchor, txid, c.InitBlockHash.Bytes(), amount, seqnum, peggedOut, exporter, temp, pubkey)
+	if err != nil {
+		return errors.Wrap(err, "building post-export tx")
+	}
+	r, err := c.S.submitTx(ctx, tx)
+	if err != nil {
+		return errors.Wrap(err, "submitting post-export tx")
+	}
+	err = c.S.waitOnTx(ctx, tx.ID, r)
+	if err != nil {
+		return errors.Wrap(err, "waiting on post-export tx to hit txvm")
+	}
+	_, err = c.DB.ExecContext(ctx, `DELETE FROM exports WHERE txid=$1`, txid)
+	return errors.Wrapf(err, "deleting export for tx %x", txid)
+}
+
+// BuildPostExportTx builds the post-export TxVM tx. This either retires funds locked in
+// a smart contract by the ExportTx or pays them back to the exporter.
+func BuildPostExportTx(ctx context.Context, assetXDR, anchor, txid, bcid []byte, amount, seqnum, peggedOut int64, exporter, temp string, pubkey []byte) (*bc.Tx, error) {
 	var asset xdr.Asset
 	err := asset.UnmarshalBinary(assetXDR)
 	if err != nil {
-		return errors.Wrap(err, "unmarshaling asset xdr")
+		return nil, errors.Wrap(err, "unmarshaling asset xdr")
 	}
 	assetBytes, err := asset.MarshalBinary()
 	if err != nil {
-		return errors.Wrap(err, "marshaling asset bytes")
+		return nil, errors.Wrap(err, "marshaling asset bytes")
 	}
 	assetID := bc.NewHash(txvm.AssetID(importIssuanceSeed[:], assetBytes))
 	ref := struct {
@@ -47,7 +65,7 @@ func (c *Custodian) doPostExport(ctx context.Context, assetXDR, anchor, txid []b
 	}
 	refdata, err := json.Marshal(ref)
 	if err != nil {
-		return errors.Wrap(err, "marshaling reference data")
+		return nil, errors.Wrap(err, "marshaling reference data")
 	}
 	refdataHex := i10rjson.HexBytes(refdata)
 	b := new(txvmutil.Builder)
@@ -74,31 +92,20 @@ func (c *Custodian) doPostExport(ctx context.Context, assetXDR, anchor, txid []b
 	})
 	b.PushdataInt64(peggedOut).Op(op.Put) // arg stack: selector
 	b.Op(op.Input).Op(op.Call)
-	b.PushdataBytes(c.InitBlockHash.Bytes())
+	b.PushdataBytes(bcid)
 	b.PushdataInt64(int64(bc.Millis(time.Now().Add(10 * time.Minute))))
 	b.Op(op.Nonce).Op(op.Finalize)
 
 	// TODO(debnil): Should there be a signature check here?
 
-	// Build and submit tx
 	prog := b.Build()
-
 	var runlimit int64
 	tx, err := bc.NewTx(prog, 3, math.MaxInt64, txvm.GetRunlimit(&runlimit))
 	if err != nil {
-		return errors.Wrap(err, "making post-export tx")
+		return nil, errors.Wrap(err, "making post-export tx")
 	}
 	tx.Runlimit = math.MaxInt64 - runlimit
-	r, err := c.S.submitTx(ctx, tx)
-	if err != nil {
-		return errors.Wrap(err, "submitting post-export tx")
-	}
-	err = c.S.waitOnTx(ctx, tx.ID, r)
-	if err != nil {
-		return errors.Wrap(err, "waiting on post-export tx to hit txvm")
-	}
-	_, err = c.DB.ExecContext(ctx, `DELETE FROM exports WHERE txid=$1`, txid)
-	return errors.Wrapf(err, "deleting export for tx %x", txid)
+	return tx, nil
 }
 
 // IsPostExportTx returns whether or not a txvm transaction matches the slidechain post-export tx format.
