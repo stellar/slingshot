@@ -293,14 +293,14 @@ where
         Ok(())
     }
 
-        fn var(&mut self) -> Result<(), VMError> {
+    fn var(&mut self) -> Result<(), VMError> {
         let comm = self.pop_item()?.to_data()?.to_commitment()?;
         let v = self.make_variable(comm);
         self.push_item(v);
         Ok(())
     }
 
-        fn mintime(&mut self) -> Result<(), VMError> {
+    fn mintime(&mut self) -> Result<(), VMError> {
         let a: Scalar = self.mintime.into();
         self.push_item(Expression::from(a));
         Ok(())
@@ -486,7 +486,7 @@ where
         Ok(())
     }
 
-        fn left(&mut self) -> Result<(), VMError> {
+    fn left(&mut self) -> Result<(), VMError> {
         let r = self.pop_item()?.to_data()?.to_predicate()?;
         let l = self.pop_item()?.to_data()?.to_predicate()?;
 
