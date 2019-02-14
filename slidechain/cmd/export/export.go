@@ -15,14 +15,18 @@ import (
 
 	"github.com/chain/txvm/crypto/ed25519"
 	"github.com/chain/txvm/protocol/bc"
+	"github.com/chain/txvm/protocol/txvm"
 	"github.com/golang/protobuf/proto"
 	"github.com/interstellar/slingshot/slidechain"
 	"github.com/interstellar/slingshot/slidechain/stellar"
 	"github.com/interstellar/starlight/worizon/xlm"
+	"github.com/pkg/errors"
 	"github.com/stellar/go/clients/horizon"
 	"github.com/stellar/go/keypair"
 	"github.com/stellar/go/xdr"
 )
+
+type checkFn func(tx *bc.Tx, asset xdr.Asset, inputAmt int64, temp, exporter string, seqnum int64, anchor, pubkey []byte) bool
 
 func main() {
 	var (
@@ -33,6 +37,7 @@ func main() {
 		slidechaind = flag.String("slidechaind", "http://127.0.0.1:2423", "url of slidechaind server")
 		code        = flag.String("code", "", "asset code if exporting non-lumen Stellar asset")
 		issuer      = flag.String("issuer", "", "issuer of asset if exporting non-lumen Stellar asset")
+		bcidHex     = flag.String("bcid", "", "hex-encoded initial block ID")
 	)
 
 	flag.Parse()
@@ -51,6 +56,9 @@ func main() {
 	if *input == "" {
 		log.Printf("no input amount specified, default to export amount %s", *amount)
 		*input = *amount
+	}
+	if *bcidHex == "" {
+		log.Fatal("must specify initial block ID")
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
 	defer cancel()
@@ -102,6 +110,12 @@ func main() {
 			log.Fatalf("error funding Stellar account %s: %s", kp.Address(), err)
 		}
 	}
+	anchorBytes := mustDecode(*anchor)
+	var bcidBytes [32]byte
+	_, err = hex.Decode(bcidBytes[:], []byte(*bcidHex))
+	if err != nil {
+		log.Fatal("decoding initial block id: ", err)
+	}
 	var custodian xdr.AccountId
 	resp, err := http.Get(*slidechaind + "/account")
 	if err != nil {
@@ -118,76 +132,32 @@ func main() {
 	}
 
 	// Export funds from slidechain
-	tx, err := slidechain.BuildExportTx(ctx, asset, exportAmount, inputAmount, temp, mustDecode(*anchor), mustDecode(*prv), seqnum)
+	tx, err := slidechain.BuildExportTx(ctx, asset, exportAmount, inputAmount, temp, anchorBytes, mustDecode(*prv), seqnum)
 	if err != nil {
 		log.Fatalf("error building export tx: %s", err)
 	}
-	txbits, err := proto.Marshal(&tx.RawTx)
+	pubkey := ed25519.PrivateKey(mustDecode(*prv)).Public().(ed25519.PublicKey)
+	err = submitTxAndWait(ctx, tx, *slidechaind, checkFn(slidechain.IsExportTx), asset, inputAmount, temp, kp.Address(), int64(seqnum), anchorBytes, pubkey)
 	if err != nil {
-		log.Fatal(err)
-	}
-
-	// Get latest block height
-	resp, err = http.Get(*slidechaind + "/get?height=0")
-	if err != nil {
-		log.Fatalf("error getting latest block height: %s", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode/100 != 2 {
-		log.Fatalf("bad status code %d getting latest block height", resp.StatusCode)
-	}
-	block := new(bc.Block)
-	bits, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		log.Fatalf("error reading block from response body: %s", err)
-	}
-	err = block.FromBytes(bits)
-	if err != nil {
-		log.Fatalf("error unmarshaling block: %s", err)
-	}
-
-	resp, err = http.Post(*slidechaind+"/submit", "application/octet-stream", bytes.NewReader(txbits))
-	if err != nil {
-		log.Fatalf("error submitting tx to slidechaind: %s", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode/100 != 2 {
-		log.Fatalf("status code %d from POST /submit", resp.StatusCode)
+		log.Fatalf("error submitting export tx: %s", err)
 	}
 	log.Printf("successfully submitted export transaction: %x", tx.ID)
 
-	client := http.DefaultClient
-	pubkey := ed25519.PrivateKey(mustDecode(*prv)).Public().(ed25519.PublicKey)
-	for height := block.Height + 1; ; height++ {
-		req, err := http.NewRequest("GET", fmt.Sprintf(*slidechaind+"/get?height=%d", height), nil)
-		if err != nil {
-			log.Fatalf("error building request for latest block: %s", err)
-		}
-		req = req.WithContext(ctx)
-		resp, err = client.Do(req)
-		if err != nil {
-			log.Fatalf("error getting block at height %d: %s", height, err)
-		}
-		defer resp.Body.Close()
-		if resp.StatusCode/100 != 2 {
-			log.Fatalf("bad status code %d getting latest block height", resp.StatusCode)
-		}
-		b := new(bc.Block)
-		bits, err := ioutil.ReadAll(resp.Body)
-		if err != nil {
-			log.Fatalf("error reading block from response body: %s", err)
-		}
-		err = b.FromBytes(bits)
-		if err != nil {
-			log.Fatalf("error unmarshaling block: %s", err)
-		}
-		for _, tx := range b.Transactions {
-			// Look for export transaction
-			if slidechain.IsExportTx(tx, asset, inputAmount, temp, kp.Address(), int64(seqnum), mustDecode(*anchor), pubkey) {
-				log.Println("export tx included in txvm chain")
-				return
-			}
-		}
+	// Call post-export smart contract
+	retireAnchor1 := txvm.VMHash("Split2", anchorBytes)
+	retireAnchor := txvm.VMHash("Split1", retireAnchor1[:])
+	assetXDR, err := asset.MarshalBinary()
+	if err != nil {
+		log.Fatalf("error marshaling asset: %s", err)
+	}
+	peggedOut := 1 // hard-code tx success
+	tx, err = slidechain.BuildPostExportTx(ctx, assetXDR, retireAnchor[:], bcidBytes[:], exportAmount, int64(seqnum), int64(peggedOut), kp.Address(), temp, pubkey)
+	if err != nil {
+		log.Fatalf("error building post-export tx: %s", err)
+	}
+	err = submitTxAndWait(ctx, tx, *slidechaind, checkFn(slidechain.IsPostExportTx), asset, exportAmount, temp, kp.Address(), int64(seqnum), retireAnchor[:], pubkey)
+	if err != nil {
+		log.Fatalf("error submitting post-export tx: %s", err)
 	}
 }
 
@@ -197,4 +167,73 @@ func mustDecode(src string) []byte {
 		log.Fatalf("error decoding %s: %s", src, err)
 	}
 	return bytes
+}
+
+func submitTxAndWait(ctx context.Context, tx *bc.Tx, slidechaind string, fn checkFn, asset xdr.Asset, amount int64, temp, exporter string, seqnum int64, anchor, pubkey []byte) error {
+	// Marshal tx
+	txbits, err := proto.Marshal(&tx.RawTx)
+	if err != nil {
+		return err
+	}
+
+	// Get latest block height
+	resp, err := http.Get(slidechaind + "/get?height=0")
+	if err != nil {
+		return errors.Wrapf(err, "error getting latest block height")
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode/100 != 2 {
+		return fmt.Errorf("bad status code %d getting latest block height", resp.StatusCode)
+	}
+	block := new(bc.Block)
+	bits, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return errors.Wrapf(err, "error reading block from response body")
+	}
+	err = block.FromBytes(bits)
+	if err != nil {
+		return errors.Wrapf(err, "error unmarshaling block")
+	}
+
+	resp, err = http.Post(slidechaind+"/submit", "application/octet-stream", bytes.NewReader(txbits))
+	if err != nil {
+		return errors.Wrapf(err, "error submitting tx to slidechaind")
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode/100 != 2 {
+		return fmt.Errorf("status code %d from POST /submit", resp.StatusCode)
+	}
+	client := http.DefaultClient
+
+	for height := block.Height + 1; ; height++ {
+		req, err := http.NewRequest("GET", fmt.Sprintf(slidechaind+"/get?height=%d", height), nil)
+		if err != nil {
+			return errors.Wrap(err, "error building request for latest block")
+		}
+		req = req.WithContext(ctx)
+		resp, err = client.Do(req)
+		if err != nil {
+			return errors.Wrapf(err, "error getting block at height %d", height)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode/100 != 2 {
+			return fmt.Errorf("bad status code %d getting latest block height", resp.StatusCode)
+		}
+		b := new(bc.Block)
+		bits, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			return errors.Wrap(err, "error reading block from response body")
+		}
+		err = b.FromBytes(bits)
+		if err != nil {
+			return errors.Wrap(err, "error unmarshaling block")
+		}
+		for _, checkTx := range b.Transactions {
+			// Check for the appropriate type of tx
+			if fn(checkTx, asset, amount, temp, exporter, seqnum, anchor, pubkey) {
+				log.Println("export tx included in txvm chain")
+				return nil
+			}
+		}
+	}
 }

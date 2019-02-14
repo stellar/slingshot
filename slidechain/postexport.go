@@ -17,7 +17,7 @@ import (
 )
 
 func (c *Custodian) doPostExport(ctx context.Context, assetXDR, anchor, txid []byte, amount, seqnum, peggedOut int64, exporter, temp string, pubkey []byte) error {
-	tx, err := BuildPostExportTx(ctx, assetXDR, anchor, txid, c.InitBlockHash.Bytes(), amount, seqnum, peggedOut, exporter, temp, pubkey)
+	tx, err := BuildPostExportTx(ctx, assetXDR, anchor, c.InitBlockHash.Bytes(), amount, seqnum, peggedOut, exporter, temp, pubkey)
 	if err != nil {
 		return errors.Wrap(err, "building post-export tx")
 	}
@@ -35,7 +35,7 @@ func (c *Custodian) doPostExport(ctx context.Context, assetXDR, anchor, txid []b
 
 // BuildPostExportTx builds the post-export TxVM tx. This either retires funds locked in
 // a smart contract by the ExportTx or pays them back to the exporter.
-func BuildPostExportTx(ctx context.Context, assetXDR, anchor, txid, bcid []byte, amount, seqnum, peggedOut int64, exporter, temp string, pubkey []byte) (*bc.Tx, error) {
+func BuildPostExportTx(ctx context.Context, assetXDR, anchor, bcid []byte, amount, seqnum, peggedOut int64, exporter, temp string, pubkey []byte) (*bc.Tx, error) {
 	var asset xdr.Asset
 	err := asset.UnmarshalBinary(assetXDR)
 	if err != nil {
