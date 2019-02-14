@@ -399,6 +399,15 @@ impl Value {
     }
 }
 
+impl Expression {
+    pub fn constant(a: Scalar) -> Self {
+        Expression {
+            terms: vec![(r1cs::Variable::One(), a)],
+            assignment: None,
+        }
+    }
+}
+
 // Upcasting all types to Item
 
 impl From<Data> for Item {
