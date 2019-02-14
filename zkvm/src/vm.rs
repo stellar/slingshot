@@ -204,7 +204,7 @@ where
                 Instruction::Drop => self.drop()?,
                 Instruction::Dup(i) => self.dup(i)?,
                 Instruction::Roll(i) => self.roll(i)?,
-                Instruction::Const => self.const_instr()?,
+                Instruction::Const => self.r#const()?,
                 Instruction::Var => self.var()?,
                 Instruction::Alloc => unimplemented!(),
                 Instruction::Mintime => self.mintime()?,
@@ -287,7 +287,7 @@ where
         Ok(())
     }
 
-    fn const_instr(&mut self) -> Result<(), VMError> {
+    fn r#const(&mut self) -> Result<(), VMError> {
         let a = self.pop_item()?.to_data()?.to_scalar()?;
         self.push_item(Expression::from(a));
         Ok(())
