@@ -127,9 +127,9 @@ struct VariableCommitment {
     commitment: Commitment,
 
     /// Attached/detached state
-    /// None if the variable is not attached to the CS yet,
+    /// None - if the variable is not attached to the CS yet,
     /// so its commitment is replaceable via `reblind`.
-    /// Some if variable is attached to the CS yet and has an index in CS,
+    /// Some - if variable is attached to the CS yet and has an index in CS,
     /// so its commitment is no longer replaceable via `reblind`.
     variable: Option<r1cs::Variable>,
 }
@@ -288,8 +288,10 @@ where
     }
 
     fn r#const(&mut self) -> Result<(), VMError> {
-        let a = self.pop_item()?.to_data()?.to_scalar()?;
-        self.push_item(Expression::from(a));
+        let data = self.pop_item()?.to_data()?.to_bytes();
+        let mut slice = Subslice::new(&data);
+        let scalar = slice.read_scalar()?;
+        self.push_item(Expression::constant(scalar));
         Ok(())
     }
 
@@ -302,13 +304,13 @@ where
 
     fn mintime(&mut self) -> Result<(), VMError> {
         let a: Scalar = self.mintime.into();
-        self.push_item(Expression::from(a));
+        self.push_item(Expression::constant(a));
         Ok(())
     }
 
     fn maxtime(&mut self) -> Result<(), VMError> {
         let a: Scalar = self.maxtime.into();
-        self.push_item(Expression::from(a));
+        self.push_item(Expression::constant(a));
         Ok(())
     }
 
