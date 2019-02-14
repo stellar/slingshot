@@ -6,14 +6,14 @@ use spacesuit;
 use spacesuit::SignedInteger;
 use std::iter::FromIterator;
 
-use crate::contract::{Contract, FrozenContract, FrozenItem, FrozenValue, Input, PortableItem};
+use crate::contract::{Contract, FrozenContract, FrozenItem, FrozenValue, PortableItem};
 use crate::encoding::Subslice;
 use crate::errors::VMError;
 use crate::ops::Instruction;
 use crate::point_ops::PointOp;
 use crate::predicate::Predicate;
 use crate::signature::*;
-use crate::txlog::{Entry, TxID, TxLog, UTXO};
+use crate::txlog::{Entry, TxID, TxLog};
 use crate::types::*;
 
 /// Current tx version determines which extension opcodes are treated as noops (see VM.extension flag).
@@ -204,6 +204,7 @@ where
                 Instruction::Alloc => unimplemented!(),
                 Instruction::Mintime => self.mintime()?,
                 Instruction::Maxtime => self.maxtime()?,
+                Instruction::Expr => self.expr()?,
                 Instruction::Neg => unimplemented!(),
                 Instruction::Add => unimplemented!(),
                 Instruction::Mul => unimplemented!(),
@@ -279,6 +280,13 @@ where
         }
         let item = self.stack.remove(self.stack.len() - i - 1);
         self.push_item(item);
+        Ok(())
+    }
+
+    fn expr(&mut self) -> Result<(), VMError> {
+        let var = self.pop_item()?.to_variable()?;
+        let expr = self.variable_to_expression(var)?;
+        self.push_item(expr);
         Ok(())
     }
 
