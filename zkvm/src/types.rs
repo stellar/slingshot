@@ -284,7 +284,7 @@ impl DataWitness {
             DataWitness::Scalar(s) => {
                 let s: Scalar = (*s.clone()).into();
                 buf.extend_from_slice(&s.to_bytes())
-            },
+            }
             DataWitness::Input(b) => b.encode(buf),
         }
     }
@@ -312,7 +312,6 @@ impl Expression {
 
 // Upcasting integers/scalars into ScalarWitness
 
-
 impl From<u64> for ScalarWitness {
     fn from(x: u64) -> Self {
         ScalarWitness::Integer(x.into())
@@ -325,19 +324,22 @@ impl From<Scalar> for ScalarWitness {
     }
 }
 
-
 // Upcasting all witness data types to Data and DataWitness
 
 // Anything convertible to DataWitness is also convertible to Data
 impl<T> From<T> for Data
-where T: Into<DataWitness> {
+where
+    T: Into<DataWitness>,
+{
     fn from(w: T) -> Self {
         Data::Witness(w.into())
     }
 }
 
 impl<T> From<T> for DataWitness
-where T: Into<ScalarWitness> {
+where
+    T: Into<ScalarWitness>,
+{
     fn from(x: T) -> Self {
         DataWitness::Scalar(Box::new(x.into()))
     }
@@ -360,7 +362,6 @@ impl From<Input> for DataWitness {
         DataWitness::Input(Box::new(x))
     }
 }
-
 
 // Upcasting all types to Item
 
