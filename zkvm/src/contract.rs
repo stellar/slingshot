@@ -196,6 +196,30 @@ impl FrozenContract {
     }
 }
 
+impl FrozenItem {
+    // Evaluates equality between two FrozenItems. Will return 
+    // false if both FrozenItems are witness data.
+    pub fn eq(&self, rhs: &Self) -> bool {
+        match (self, rhs) {
+            (FrozenItem::Data(ld), FrozenItem::Data(rd)) => {
+                match (ld, rd) {
+                    (Data::Opaque(lx), Data::Opaque(rx)) => {
+                        return lx == rx;
+                    },
+                    (_, _) => return false,
+                }
+            },
+            (FrozenItem::Value(lv), FrozenItem::Value(rv)) => {
+                if lv.flv.to_point() == rv.flv.to_point() && lv.qty.to_point() == rv.qty.to_point() {
+                    return true;
+                }
+                return false;
+            },
+            (_, _) => return false,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -219,8 +243,7 @@ mod tests {
                     Ok(decoded_fc) => {
                         assert_eq!(fc.predicate.point(), decoded_fc.predicate.point());
                         for (x, y) in fc.payload.iter().zip(decoded_fc.payload.iter()) {
-                            // TBD: implement FrozenItem.eq(...)
-                            unimplemented!()
+                            assert!(x.eq(y), "payload items do not match")
                         }
                     }
                     Err(err) => assert!(false, err),
