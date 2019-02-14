@@ -204,7 +204,7 @@ where
                 Instruction::Drop => self.drop()?,
                 Instruction::Dup(i) => self.dup(i)?,
                 Instruction::Roll(i) => self.roll(i)?,
-                Instruction::Const => unimplemented!(),
+                Instruction::Const => self.const_instr()?,
                 Instruction::Var => unimplemented!(),
                 Instruction::Alloc => unimplemented!(),
                 Instruction::Mintime => unimplemented!(),
@@ -284,6 +284,12 @@ where
         }
         let item = self.stack.remove(self.stack.len() - i - 1);
         self.push_item(item);
+        Ok(())
+    }
+
+    fn const_instr(&mut self) -> Result<(), VMError> {
+        let a = self.pop_item()?.to_data()?.to_scalar()?;
+        self.push_item(Expression::from(a));
         Ok(())
     }
 
