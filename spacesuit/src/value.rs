@@ -2,7 +2,7 @@ use bulletproofs::r1cs::{ConstraintSystem, Prover, R1CSError, Variable, Verifier
 use core::ops::Neg;
 use curve25519_dalek::ristretto::CompressedRistretto;
 use curve25519_dalek::scalar::Scalar;
-use rand::{CryptoRng, Rng};
+use rand::{CryptoRng, RngCore};
 use std::ops::Add;
 use subtle::{Choice, ConditionallySelectable};
 
@@ -150,15 +150,15 @@ impl Neg for SignedInteger {
 pub trait ProverCommittable {
     type Output;
 
-    fn commit<R: Rng + CryptoRng>(&self, prover: &mut Prover, rng: &mut R) -> Self::Output;
+    fn commit<R: RngCore + CryptoRng>(&self, prover: &mut Prover, rng: R) -> Self::Output;
 }
 
 impl ProverCommittable for Value {
     type Output = (CommittedValue, AllocatedValue);
 
-    fn commit<R: Rng + CryptoRng>(&self, prover: &mut Prover, rng: &mut R) -> Self::Output {
-        let (q_commit, q_var) = prover.commit(self.q.into(), Scalar::random(rng));
-        let (f_commit, f_var) = prover.commit(self.f, Scalar::random(rng));
+    fn commit<R: RngCore + CryptoRng>(&self, prover: &mut Prover, mut rng: R) -> Self::Output {
+        let (q_commit, q_var) = prover.commit(self.q.into(), Scalar::random(&mut rng));
+        let (f_commit, f_var) = prover.commit(self.f, Scalar::random(&mut rng));
         let commitments = CommittedValue {
             q: q_commit,
             f: f_commit,
@@ -175,8 +175,8 @@ impl ProverCommittable for Value {
 impl ProverCommittable for Vec<Value> {
     type Output = (Vec<CommittedValue>, Vec<AllocatedValue>);
 
-    fn commit<R: Rng + CryptoRng>(&self, prover: &mut Prover, rng: &mut R) -> Self::Output {
-        self.iter().map(|value| value.commit(prover, rng)).unzip()
+    fn commit<R: RngCore + CryptoRng>(&self, prover: &mut Prover, mut rng: R) -> Self::Output {
+        self.iter().map(|value| value.commit(prover, &mut rng)).unzip()
     }
 }
 
