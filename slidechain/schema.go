@@ -30,8 +30,7 @@ CREATE TABLE IF NOT EXISTS exports (
   asset_xdr BLOB NOT NULL,
   temp TEXT NOT NULL,
   seqnum INTEGER NOT NULL,
-  exported INTEGER NOT NULL DEFAULT 0,
-  pegged_out INTEGER,
+  pegged_out INTEGER NOT NULL DEFAULT 0,
   anchor BLOB NOT NULL,
   pubkey BLOB NOT NULL
 );

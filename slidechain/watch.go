@@ -203,7 +203,7 @@ func (c *Custodian) watchPegOuts(ctx context.Context) {
 			amounts, seqnums, peggedOuts       []int64
 			exporters, temps                   []string
 		)
-		const q = `SELECT txid, amount, asset_xdr, exporter, temp, seqnum, pegged_out, anchor, pubkey FROM exports WHERE exported=1 AND (pegged_out=0 OR pegged_out=1)`
+		const q = `SELECT txid, amount, asset_xdr, exporter, temp, seqnum, pegged_out, anchor, pubkey FROM exports WHERE (pegged_out=1 OR pegged_out=3)`
 		err := sqlutil.ForQueryRows(ctx, c.DB, q, func(txid []byte, amount int64, assetXDR []byte, exporter, temp string, seqnum, peggedOut int64, anchor, pubkey []byte) {
 			txids = append(txids, txid)
 			amounts = append(amounts, amount)

@@ -63,12 +63,14 @@ const (
 	[%s] yield           #                                     sigchecker                                    
                                                                                    
 `
-	// PegOutFail indicates a failed peg-out that is nonretriable.
-	PegOutFail PegOutState = 0
+	// PegOutNotYet indicates a peg-out that has not happened yet.
+	PegOutNotYet PegOutState = 0
 	// PegOutOK indicates a successful peg-out.
 	PegOutOK PegOutState = 1
 	// PegOutRetry indicates a failed peg-out that is retriable.
 	PegOutRetry PegOutState = 2
+	// PegOutFail indicates a failed peg-out that is non-retriable.
+	PegOutFail PegOutState = 3
 )
 
 var (
@@ -104,7 +106,7 @@ func (c *Custodian) pegOutFromExports(ctx context.Context) {
 		case <-ch:
 		}
 
-		const q = `SELECT txid, amount, asset_xdr, exporter, temp, seqnum FROM exports WHERE exported=0`
+		const q = `SELECT txid, amount, asset_xdr, exporter, temp, seqnum FROM exports WHERE pegged_out=0`
 
 		var (
 			txids, assetXDRs [][]byte
@@ -140,11 +142,11 @@ func (c *Custodian) pegOutFromExports(ctx context.Context) {
 			}
 
 			log.Printf("pegging out export %x: %d of %s to %s", txid, amounts[i], asset.String(), exporters[i])
-			var peggedOut int
+			var peggedOut PegOutState
 			for i := 0; i < 5; i++ {
 				err = c.pegOut(ctx, exporter, asset, int64(amounts[i]), tempID, xdr.SequenceNumber(seqnums[i]))
 				if err == nil { // successful peg-out
-					peggedOut = 1
+					peggedOut = PegOutOK
 					break
 				}
 				if herr, ok := errors.Root(err).(*horizon.Error); ok {
@@ -153,19 +155,18 @@ func (c *Custodian) pegOutFromExports(ctx context.Context) {
 						log.Fatalf("getting error codes from failed submission of tx %s", txid)
 					}
 					if resultCodes.TransactionCode != xdr.TransactionResultCodeTxBadSeq.String() { // non-retriable error
+						peggedOut = PegOutFail
 						break
 					}
 				} else {
 					break
 				}
-				if i == 0 {
-					_, err = c.DB.ExecContext(ctx, `UPDATE exports SET exported=1, pegged_out=2 WHERE txid=$1`, txid)
-					if err != nil {
-						log.Fatalf("updating export table for retriable tx: %s", err)
-					}
+				_, err = c.DB.ExecContext(ctx, `UPDATE exports SET pegged_out=$1 WHERE txid=$2`, PegOutRetry, txid)
+				if err != nil {
+					log.Fatalf("updating export table for retriable tx: %s", err)
 				}
 			}
-			_, err = c.DB.ExecContext(ctx, `UPDATE exports SET exported=1, pegged_out=$1 WHERE txid=$2`, peggedOut, txid)
+			_, err = c.DB.ExecContext(ctx, `UPDATE exports SET pegged_out=$1 WHERE txid=$2`, peggedOut, txid)
 			if err != nil {
 				log.Fatalf("updating export table: %s", err)
 			}
@@ -321,11 +322,12 @@ func SubmitPreExportTx(hclient horizon.ClientInterface, kp *keypair.Full, custod
 }
 
 // BuildExportTx locks money to be retired in a TxVM smart contract.
-// Based on the success of the peg-out transaction, it either retires this amount
-// or returns it to the exporter address.
-func BuildExportTx(ctx context.Context, asset xdr.Asset, amount, inputAmt int64, temp string, anchor []byte, prv ed25519.PrivateKey, seqnum xdr.SequenceNumber) (*bc.Tx, error) {
-	if inputAmt < amount {
-		return nil, fmt.Errorf("cannot have input amount %d less than export amount %d", inputAmt, amount)
+// If the peg-out transaction succeeds, it retires `exportAmt` of this asset,
+// and `inputAmt` - `exportAmt` will be output back to the original account.
+// Else, it returns `exportAmt` to the exporter address.
+func BuildExportTx(ctx context.Context, asset xdr.Asset, exportAmt, inputAmt int64, temp string, anchor []byte, prv ed25519.PrivateKey, seqnum xdr.SequenceNumber) (*bc.Tx, error) {
+	if inputAmt < exportAmt {
+		return nil, fmt.Errorf("cannot have input amount %d less than export amount %d", inputAmt, exportAmt)
 	}
 	assetXDR, err := xdr.MarshalBase64(asset)
 	if err != nil {
@@ -365,7 +367,7 @@ func BuildExportTx(ctx context.Context, asset xdr.Asset, amount, inputAmt int64,
 		return nil, errors.Wrap(err, "marshaling reference data")
 	}
 
-	ref.Amount = amount
+	ref.Amount = exportAmt
 	// We first split off the difference between inputAmt and amt.
 	// Then, we split off the zero-value for finalize, creating the retire anchor.
 	retireAnchor1 := txvm.VMHash("Split2", anchor)
@@ -380,15 +382,20 @@ func BuildExportTx(ctx context.Context, asset xdr.Asset, amount, inputAmt int64,
 	b.Op(op.Put)                                                                                                         // arg stack: json
 	standard.SpendMultisig(b, 1, []ed25519.PublicKey{pubkey}, inputAmt, assetID, anchor, standard.PayToMultisigSeed1[:]) // arg stack: inputval, sigcheck
 	b.Op(op.Get).Op(op.Get)                                                                                              // con stack: sigcheck, inputval
-	b.PushdataInt64(amount).Op(op.Split)                                                                                 // con stack: sigcheck, changeval, retireval
+	b.PushdataInt64(exportAmt).Op(op.Split)                                                                              // con stack: sigcheck, changeval, retireval
 	b.PushdataInt64(1).Op(op.Roll)                                                                                       // con stack: sigcheck, retireval, changeval
-	b.PushdataBytes([]byte("")).Op(op.Put)                                                                               // con stack: sigcheck, retireval, changeval; arg stack: refdata
-	b.Op(op.Put)                                                                                                         // con stack: sigcheck, retireval; arg stack: refdata, changeval
-	b.PushdataBytes(pubkey).PushdataInt64(1).Op(op.Tuple).Op(op.Put)                                                     // con stack: sigcheck, retireval; arg stack: refdata, changeval, {pubkey}
-	b.PushdataInt64(1).Op(op.Put)                                                                                        // con stack: sigcheck, retireval; arg stack: refdata, changeval, {pubkey}, 1
-	b.PushdataBytes(standard.PayToMultisigProg1).Op(op.Contract).Op(op.Call)                                             // con stack: sigcheck, retireval
-	b.PushdataBytes(retireRefdata).Op(op.Put)                                                                            // con stack: sigcheck, retireval; arg stack: json
-	b.PushdataInt64(0).Op(op.Split).PushdataInt64(1).Op(op.Roll).Op(op.Put)                                              // con stack: sigcheck, zeroval; arg stack: json, retireval
+	if inputAmt != exportAmt {
+		b.PushdataBytes([]byte("")).Op(op.Put)                                   // con stack: sigcheck, retireval, changeval; arg stack: refdata
+		b.Op(op.Put)                                                             // con stack: sigcheck, retireval; arg stack: refdata, changeval
+		b.PushdataBytes(pubkey).PushdataInt64(1).Op(op.Tuple).Op(op.Put)         // con stack: sigcheck, retireval; arg stack: refdata, changeval, {pubkey}
+		b.PushdataInt64(1).Op(op.Put)                                            // con stack: sigcheck, retireval; arg stack: refdata, changeval, {pubkey}, 1
+		b.PushdataBytes(standard.PayToMultisigProg1).Op(op.Contract).Op(op.Call) // con stack: sigcheck, retireval
+	} else {
+		b.Op(op.Drop) // con stack: sigcheck, retireval
+	}
+	// con stack: sigcheck, retireval
+	b.PushdataBytes(retireRefdata).Op(op.Put)                               // con stack: sigcheck, retireval; arg stack: json
+	b.PushdataInt64(0).Op(op.Split).PushdataInt64(1).Op(op.Roll).Op(op.Put) // con stack: sigcheck, zeroval; arg stack: json, retireval
 	b.Tuple(func(tup *txvmutil.TupleBuilder) {
 		tup.PushdataBytes(pubkey)
 	})
@@ -397,7 +404,6 @@ func BuildExportTx(ctx context.Context, asset xdr.Asset, amount, inputAmt int64,
 	b.Op(op.Contract).Op(op.Call) // con stack: sigchecker, zeroval
 	b.Op(op.Finalize)             // con stack: sigchecker
 	prog1 := b.Build()
-
 	vm, err := txvm.Validate(prog1, 3, math.MaxInt64, txvm.StopAfterFinalize)
 	if err != nil {
 		return nil, errors.Wrap(err, "computing transaction ID")
@@ -410,6 +416,7 @@ func BuildExportTx(ctx context.Context, asset xdr.Asset, amount, inputAmt int64,
 	b.Op(op.Call)
 
 	prog2 := b.Build()
+	log.Printf("%x", prog2)
 	tx, err := bc.NewTx(prog2, 3, math.MaxInt64)
 	if err != nil {
 		return nil, errors.Wrap(err, "making pre-export tx")
@@ -420,28 +427,45 @@ func BuildExportTx(ctx context.Context, asset xdr.Asset, amount, inputAmt int64,
 // IsExportTx returns whether or not a txvm transaction matches the slidechain export tx format.
 //
 // Expected log is:
+// If input and export amounts are equal,
 // {"I", ...}
 // {"L", ...}
 // {"O", caller, outputid}
 // {"F", ...}
+//
+// Else,
+// {"I", ...}
+// {"L", ...}
+// {"L", ...}
+// {"O", ...}
+// {"O", caller, outputid}
+// {"F", ...}
 func IsExportTx(tx *bc.Tx, asset xdr.Asset, inputAmt int64, temp, exporter string, seqnum int64, anchor, pubkey []byte) bool {
-	if len(tx.Log) != 4 {
+	log.Print(tx.Log)
+	if len(tx.Log) != 4 && len(tx.Log) != 6 {
+		log.Print("FAIL 1")
 		return false
 	}
 	if tx.Log[0][0].(txvm.Bytes)[0] != txvm.InputCode {
+		log.Print("FAIL 2")
 		return false
 	}
 	if tx.Log[1][0].(txvm.Bytes)[0] != txvm.LogCode {
+		log.Print("FAIL 3")
 		return false
 	}
-	if tx.Log[2][0].(txvm.Bytes)[0] != txvm.OutputCode {
+	lastIndex := len(tx.Log) - 1
+	if tx.Log[lastIndex-1][0].(txvm.Bytes)[0] != txvm.OutputCode {
+		log.Print("FAIL 4")
 		return false
 	}
-	if tx.Log[3][0].(txvm.Bytes)[0] != txvm.FinalizeCode {
+	if tx.Log[lastIndex][0].(txvm.Bytes)[0] != txvm.FinalizeCode {
+		log.Print("FAIL 5")
 		return false
 	}
 	assetXDR, err := xdr.MarshalBase64(asset)
 	if err != nil {
+		log.Print("FAIL 6")
 		return false
 	}
 	ref := struct {
@@ -463,7 +487,9 @@ func IsExportTx(tx *bc.Tx, asset xdr.Asset, inputAmt int64, temp, exporter strin
 	}
 	refdata, err := json.Marshal(ref)
 	if !bytes.Equal(refdata, tx.Log[1][2].(txvm.Bytes)) {
+		log.Print("FAIL 7")
 		return false
 	}
+	log.Print("SUCCESS")
 	return true
 }

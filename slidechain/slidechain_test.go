@@ -296,7 +296,8 @@ func TestEndToEnd(t *testing.T) {
 		c.launch(ctx)
 
 		// Prepare Stellar account to peg-in funds and txvm account to receive funds.
-		amount := 5 * xlm.Lumen
+		inputAmount := 5 * xlm.Lumen
+		exportAmount := 3 * xlm.Lumen
 		exporterPub, exporterPrv, err := ed25519.GenerateKey(nil)
 		if err != nil {
 			t.Fatalf("error generating txvm recipient keypair: %s", err)
@@ -322,7 +323,7 @@ func TestEndToEnd(t *testing.T) {
 		}
 		expMS := int64(bc.Millis(time.Now().Add(10 * time.Minute)))
 		// Build, submit, and wait on pre-peg-in TxVM tx.
-		prepegTx, err := BuildPrepegTx(c.InitBlockHash.Bytes(), nativeAssetBytes, exporterPubKeyBytes[:], int64(amount), expMS)
+		prepegTx, err := BuildPrepegTx(c.InitBlockHash.Bytes(), nativeAssetBytes, exporterPubKeyBytes[:], int64(inputAmount), expMS)
 		if err != nil {
 			t.Fatal("could not build pre-peg-in tx")
 		}
@@ -341,7 +342,7 @@ func TestEndToEnd(t *testing.T) {
 		}
 
 		// Build transaction to peg-in funds.
-		pegInTx, err := stellar.BuildPegInTx(exporter.Address(), uniqueNonceHash, amount.HorizonString(), "", "", c.AccountID.Address(), hclient)
+		pegInTx, err := stellar.BuildPegInTx(exporter.Address(), uniqueNonceHash, inputAmount.HorizonString(), "", "", c.AccountID.Address(), hclient)
 		if err != nil {
 			t.Fatalf("error building peg-in tx: %s", err)
 		}
@@ -361,7 +362,7 @@ func TestEndToEnd(t *testing.T) {
 			}
 			block := item.(*bc.Block)
 			for _, tx := range block.Transactions {
-				if isImportTx(tx, int64(amount), nativeAssetBytes, exporterPub) {
+				if isImportTx(tx, int64(inputAmount), nativeAssetBytes, exporterPub) {
 					t.Logf("found import tx %x", tx.Program)
 					found = true
 					txresult := txresult.New(tx)
@@ -374,12 +375,12 @@ func TestEndToEnd(t *testing.T) {
 			}
 		}
 		t.Log("submitting pre-export tx...")
-		temp, seqnum, err := SubmitPreExportTx(hclient, exporter, c.AccountID.Address(), native, int64(amount))
+		temp, seqnum, err := SubmitPreExportTx(hclient, exporter, c.AccountID.Address(), native, int64(exportAmount))
 		if err != nil {
 			t.Fatalf("pre-submit tx error: %s", err)
 		}
 		t.Log("building export tx...")
-		exportTx, err := BuildExportTx(ctx, native, int64(amount), int64(amount), temp, anchor, exporterPrv, seqnum)
+		exportTx, err := BuildExportTx(ctx, native, int64(exportAmount), int64(inputAmount), temp, anchor, exporterPrv, seqnum)
 		if err != nil {
 			t.Fatalf("error building retirement tx %s", err)
 		}
@@ -405,8 +406,9 @@ func TestEndToEnd(t *testing.T) {
 			block := item.(*bc.Block)
 			for _, tx := range block.Transactions {
 				// Look for export transaction.
-				if IsExportTx(tx, native, int64(amount), temp, exporter.Address(), int64(seqnum), anchor, exporterPubKeyBytes[:]) {
+				if IsExportTx(tx, native, int64(inputAmount), temp, exporter.Address(), int64(seqnum), anchor, exporterPubKeyBytes[:]) {
 					t.Logf("found export tx %x", tx.Program)
+					log.Print("Found export tx, exiting...")
 					found = true
 					break
 				}
@@ -416,7 +418,7 @@ func TestEndToEnd(t *testing.T) {
 			}
 		}
 		t.Log("checking for successful retirement...")
-
+		log.Print("checking successful retirement........")
 		// Check for successful retirement.
 		retire := make(chan struct{})
 		go func() {
@@ -451,8 +453,8 @@ func TestEndToEnd(t *testing.T) {
 				if paymentOp.Destination.Address() != exporter.Address() {
 					t.Fatalf("incorrect payment destination got %s, want %s", paymentOp.Destination.Address(), exporter.Address())
 				}
-				if paymentOp.Amount != xdr.Int64(amount) {
-					t.Fatalf("got incorrect payment amount %d, want %d", paymentOp.Amount, amount)
+				if paymentOp.Amount != xdr.Int64(exportAmount) {
+					t.Fatalf("got incorrect payment amount %d, want %d", paymentOp.Amount, exportAmount)
 				}
 				if paymentOp.Asset.Type != xdr.AssetTypeAssetTypeNative {
 					t.Fatalf("got incorrect payment asset %s, want lumens", paymentOp.Asset.String())
@@ -480,7 +482,7 @@ func TestEndToEnd(t *testing.T) {
 			}
 			block := item.(*bc.Block)
 			for _, tx := range block.Transactions {
-				if IsPostExportTx(tx, native, int64(amount), temp, exporter.Address(), int64(seqnum), retireAnchor[:], exporterPubKeyBytes[:]) {
+				if IsPostExportTx(tx, native, int64(exportAmount), temp, exporter.Address(), int64(seqnum), retireAnchor[:], exporterPubKeyBytes[:]) {
 					t.Logf("found post-export tx %x", tx.Program)
 					found = true
 					break
