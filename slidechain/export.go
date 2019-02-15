@@ -11,7 +11,6 @@ import (
 
 	"github.com/bobg/sqlutil"
 	"github.com/chain/txvm/crypto/ed25519"
-	i10rjson "github.com/chain/txvm/encoding/json"
 	"github.com/chain/txvm/errors"
 	"github.com/chain/txvm/protocol/bc"
 	"github.com/chain/txvm/protocol/txbuilder/standard"
@@ -44,15 +43,15 @@ const (
 	exportContract2Fmt = `
 	                     #  con stack                          arg stack                 log                 notes
 	                     #  ---------                          ---------                 ---                 -----
-	                     #  {exporter}, value, json            selector                                              
-	get		             #  {exporter}, value, json, selector                                                
+	                     #  {exporter}, value, json            selector                                      
+	get                  #  {exporter}, value, json, selector                                                
 	jumpif:$doretire     #                                                                                   
 	                     #  {exporter}, value, json                                                          
 	"" put               #  {exporter}, value, json            ""                                            
-	drop                 #  {exporter}, value                  ""                                              
+	drop                 #  {exporter}, value                                                                
 	put put 1 put        #                                     "", value, {exporter}, 1                      
 	x'%x' contract call  #                                                               {'L',...}{'O',...}  
-	jump:$end		     #                                                                                   
+	jump:$checksig       #                                                                                   
 	                     #                                                                                   
 	$doretire            #                                                                                   
 	                     #  {exporter}, value, json                                                          
@@ -60,7 +59,9 @@ const (
 	x'%x' contract call  #                                                                                   
 	                     #                                                                                   
 	                     #                                                                                   
-	$end	      	     #                                                                                   
+	$checksig            #                                                                                   
+	[%s] yield           #                                     sigchecker                                    
+                                                                                   
 `
 	// PegOutFail indicates a failed peg-out that is nonretriable.
 	PegOutFail PegOutState = 0
@@ -70,15 +71,12 @@ const (
 	PegOutRetry PegOutState = 2
 )
 
-// [%s] yield           #                                     sigchecker
-// custodianSigCheckerSrc
-
 var (
 	custodianSigCheckerSrc = fmt.Sprintf(custodianSigCheckerFmt, custodianPub)
 	exportContract1Src     = fmt.Sprintf(exportContract1Fmt, exportContract2Prog)
 	exportContract1Prog    = asm.MustAssemble(exportContract1Src)
 	exportContract1Seed    = txvm.ContractSeed(exportContract1Prog)
-	exportContract2Src     = fmt.Sprintf(exportContract2Fmt, standard.PayToMultisigProg1, standard.RetireContract)
+	exportContract2Src     = fmt.Sprintf(exportContract2Fmt, standard.PayToMultisigProg1, standard.RetireContract, custodianSigCheckerSrc)
 	exportContract2Prog    = asm.MustAssemble(exportContract2Src)
 )
 
@@ -366,7 +364,6 @@ func BuildExportTx(ctx context.Context, asset xdr.Asset, amount, inputAmt int64,
 	if err != nil {
 		return nil, errors.Wrap(err, "marshaling reference data")
 	}
-	inputRefdataHex := i10rjson.HexBytes(inputRefdata)
 
 	ref.Amount = amount
 	// We first split off the difference between inputAmt and amt.
@@ -378,9 +375,8 @@ func BuildExportTx(ctx context.Context, asset xdr.Asset, amount, inputAmt int64,
 	if err != nil {
 		return nil, errors.Wrap(err, "marshaling reference data")
 	}
-	retireRefdataHex := i10rjson.HexBytes(retireRefdata)
 	b := new(txvmutil.Builder)
-	b.PushdataBytes(inputRefdataHex)                                                                                     // con stack: json
+	b.PushdataBytes(inputRefdata)                                                                                        // con stack: json
 	b.Op(op.Put)                                                                                                         // arg stack: json
 	standard.SpendMultisig(b, 1, []ed25519.PublicKey{pubkey}, inputAmt, assetID, anchor, standard.PayToMultisigSeed1[:]) // arg stack: inputval, sigcheck
 	b.Op(op.Get).Op(op.Get)                                                                                              // con stack: sigcheck, inputval
@@ -391,7 +387,7 @@ func BuildExportTx(ctx context.Context, asset xdr.Asset, amount, inputAmt int64,
 	b.PushdataBytes(pubkey).PushdataInt64(1).Op(op.Tuple).Op(op.Put)                                                     // con stack: sigcheck, retireval; arg stack: refdata, changeval, {pubkey}
 	b.PushdataInt64(1).Op(op.Put)                                                                                        // con stack: sigcheck, retireval; arg stack: refdata, changeval, {pubkey}, 1
 	b.PushdataBytes(standard.PayToMultisigProg1).Op(op.Contract).Op(op.Call)                                             // con stack: sigcheck, retireval
-	b.PushdataBytes(retireRefdataHex).Op(op.Put)                                                                         // con stack: sigcheck, retireval; arg stack: json
+	b.PushdataBytes(retireRefdata).Op(op.Put)                                                                            // con stack: sigcheck, retireval; arg stack: json
 	b.PushdataInt64(0).Op(op.Split).PushdataInt64(1).Op(op.Roll).Op(op.Put)                                              // con stack: sigcheck, zeroval; arg stack: json, retireval
 	b.Tuple(func(tup *txvmutil.TupleBuilder) {
 		tup.PushdataBytes(pubkey)
