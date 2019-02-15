@@ -28,6 +28,8 @@ import (
 	"github.com/stellar/go/xdr"
 )
 
+type PegOutState int
+
 const (
 	baseFee                = 100
 	custodianSigCheckerFmt = `txid x"%x" get 0 checksig verify`
@@ -60,6 +62,12 @@ const (
 	                     #                                                                                   
 	$end	      	     #                                                                                   
 `
+	// PegOutFail indicates a failed peg-out that is nonretriable.
+	PegOutFail PegOutState = 0
+	// PegOutOK indicates a successful peg-out.
+	PegOutOK PegOutState = 1
+	// PegOutRetry indicates a failed peg-out that is retriable.
+	PegOutRetry PegOutState = 2
 )
 
 // [%s] yield           #                                     sigchecker
@@ -377,9 +385,14 @@ func BuildExportTx(ctx context.Context, asset xdr.Asset, amount, inputAmt int64,
 	standard.SpendMultisig(b, 1, []ed25519.PublicKey{pubkey}, inputAmt, assetID, anchor, standard.PayToMultisigSeed1[:]) // arg stack: inputval, sigcheck
 	b.Op(op.Get).Op(op.Get)                                                                                              // con stack: sigcheck, inputval
 	b.PushdataInt64(amount).Op(op.Split)                                                                                 // con stack: sigcheck, changeval, retireval
-	b.PushdataInt64(1).Op(op.Roll).Op(op.Drop)                                                                           // con stack: sigcheck, retireval
-	b.PushdataBytes(retireRefdataHex).Op(op.Put)                                                                         // con stack: sigcheck, value; arg stack: json
-	b.PushdataInt64(0).Op(op.Split).PushdataInt64(1).Op(op.Roll).Op(op.Put)                                              // con stack: sigcheck, zeroval; arg stack: json, value
+	b.PushdataInt64(1).Op(op.Roll)                                                                                       // con stack: sigcheck, retireval, changeval
+	b.PushdataBytes([]byte("")).Op(op.Put)                                                                               // con stack: sigcheck, retireval, changeval; arg stack: refdata
+	b.Op(op.Put)                                                                                                         // con stack: sigcheck, retireval; arg stack: refdata, changeval
+	b.PushdataBytes(pubkey).PushdataInt64(1).Op(op.Tuple).Op(op.Put)                                                     // con stack: sigcheck, retireval; arg stack: refdata, changeval, {pubkey}
+	b.PushdataInt64(1).Op(op.Put)                                                                                        // con stack: sigcheck, retireval; arg stack: refdata, changeval, {pubkey}, 1
+	b.PushdataBytes(standard.PayToMultisigProg1).Op(op.Contract).Op(op.Call)                                             // con stack: sigcheck, retireval
+	b.PushdataBytes(retireRefdataHex).Op(op.Put)                                                                         // con stack: sigcheck, retireval; arg stack: json
+	b.PushdataInt64(0).Op(op.Split).PushdataInt64(1).Op(op.Roll).Op(op.Put)                                              // con stack: sigcheck, zeroval; arg stack: json, retireval
 	b.Tuple(func(tup *txvmutil.TupleBuilder) {
 		tup.PushdataBytes(pubkey)
 	})
