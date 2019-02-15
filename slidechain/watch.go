@@ -118,58 +118,105 @@ func (c *Custodian) watchExports(ctx context.Context) {
 		}
 		b := got.(*bc.Block)
 		for _, tx := range b.Transactions {
-			// Look for a specially formatted log ("L") entry
+			// Check if the transaction has either expected length for an export tx.
+			// Confirm that its input, log, and output entries are as expected.
+			// If so, look for a specially formatted log ("L") entry
 			// that specifies the Stellar asset code to peg out and the Stellar recipient account ID.
-			// We confirm it is the correct one using the subsequent output ("O") entry.
-			for i := 0; i < len(tx.Log)-2; i++ {
-				item := tx.Log[i]
-				if item[0].(txvm.Bytes)[0] != txvm.LogCode {
-					continue
-				}
-
-				outputItem := tx.Log[i+1]
-				if outputItem[0].(txvm.Bytes)[0] != txvm.OutputCode {
-					continue
-				}
-				// TODO(debnil): Should we do more checks of the output value?
-
-				var info struct {
-					AssetXDR []byte `json:"asset"`
-					Temp     string `json:"temp"`
-					Seqnum   int64  `json:"seqnum"`
-					Exporter string `json:"exporter"`
-					Amount   int64  `json:"amount"`
-					Anchor   []byte `json:"anchor"`
-					Pubkey   []byte `json:"pubkey"`
-				}
-				err := json.Unmarshal(i10rjson.HexBytes(item[2].(txvm.Bytes)), &info)
-				if err != nil {
-					continue
-				}
-				exportedAssetBytes := txvm.AssetID(importIssuanceSeed[:], info.AssetXDR)
-
-				// We want the anchor of the retirement value to reconstruct the snapshotted contract's stack.
-				// Since the above struct logs the input data, it's not quite right.
-				retireAnchor1 := txvm.VMHash("Split2", info.Anchor)
-				retireAnchor := txvm.VMHash("Split1", retireAnchor1[:])
-
-				// Record the export in the db,
-				// then wake up a goroutine that executes peg-outs on the main chain.
-				const q = `
-					INSERT INTO exports 
-					(txid, exporter, amount, asset_xdr, temp, seqnum, anchor, pubkey)
-					VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`
-				_, err = c.DB.ExecContext(ctx, q, tx.ID.Bytes(), info.Exporter, info.Amount, info.AssetXDR, info.Temp, info.Seqnum, retireAnchor[:], info.Pubkey)
-				if err != nil {
-					log.Fatalf("recording export tx: %s", err)
-				}
-
-				log.Printf("recorded export: %d of txvm asset %x (Stellar %x) for %s", info.Amount, exportedAssetBytes, info.AssetXDR, info.Exporter)
-
-				c.exports.Broadcast()
-
-				i++ // advance past the consumed log ("L") entry
+			if len(tx.Log) != 4 && len(tx.Log) != 6 {
+				continue
 			}
+			if tx.Log[0][0].(txvm.Bytes)[0] != txvm.InputCode {
+				continue
+			}
+			if tx.Log[1][0].(txvm.Bytes)[0] != txvm.LogCode {
+				continue
+			}
+
+			outputIndex := len(tx.Log) - 2
+			if tx.Log[outputIndex][0].(txvm.Bytes)[0] != txvm.OutputCode {
+				continue
+			}
+
+			logItem := tx.Log[1]
+			var info struct {
+				AssetXDR []byte `json:"asset"`
+				Temp     string `json:"temp"`
+				Seqnum   int64  `json:"seqnum"`
+				Exporter string `json:"exporter"`
+				Amount   int64  `json:"amount"`
+				Anchor   []byte `json:"anchor"`
+				Pubkey   []byte `json:"pubkey"`
+			}
+			err := json.Unmarshal(i10rjson.HexBytes(logItem[2].(txvm.Bytes)), &info)
+			if err != nil {
+				continue
+			}
+			exportedAssetBytes := txvm.AssetID(importIssuanceSeed[:], info.AssetXDR)
+
+			// Record the export in the db,
+			// then wake up a goroutine that executes peg-outs on the main chain.
+			const q = `
+				INSERT INTO exports 
+				(txid, exporter, amount, asset_xdr, temp, seqnum, anchor, pubkey)
+				VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`
+			_, err = c.DB.ExecContext(ctx, q, tx.ID.Bytes(), info.Exporter, info.Amount, info.AssetXDR, info.Temp, info.Seqnum, info.Anchor, info.Pubkey)
+			if err != nil {
+				log.Fatalf("recording export tx: %s", err)
+			}
+
+			log.Printf("recorded export: %d of txvm asset %x (Stellar %x) for %s", info.Amount, exportedAssetBytes, info.AssetXDR, info.Exporter)
+
+			c.exports.Broadcast()
+
+			// for i := 0; i < len(tx.Log)-2; i++ {
+			// 	item := tx.Log[i]
+			// 	if item[0].(txvm.Bytes)[0] != txvm.LogCode {
+			// 		continue
+			// 	}
+
+			// 	outputItem := tx.Log[i+1]
+			// 	if outputItem[0].(txvm.Bytes)[0] != txvm.OutputCode {
+			// 		continue
+			// 	}
+			// 	// TODO(debnil): Should we do more checks of the output value?
+
+			// 	var info struct {
+			// 		AssetXDR []byte `json:"asset"`
+			// 		Temp     string `json:"temp"`
+			// 		Seqnum   int64  `json:"seqnum"`
+			// 		Exporter string `json:"exporter"`
+			// 		Amount   int64  `json:"amount"`
+			// 		Anchor   []byte `json:"anchor"`
+			// 		Pubkey   []byte `json:"pubkey"`
+			// 	}
+			// 	err := json.Unmarshal(i10rjson.HexBytes(item[2].(txvm.Bytes)), &info)
+			// 	if err != nil {
+			// 		continue
+			// 	}
+			// 	exportedAssetBytes := txvm.AssetID(importIssuanceSeed[:], info.AssetXDR)
+
+			// 	// We want the anchor of the retirement value to reconstruct the snapshotted contract's stack.
+			// 	// Since the above struct logs the input data, it's not quite right.
+			// 	retireAnchor1 := txvm.VMHash("Split2", info.Anchor)
+			// 	retireAnchor := txvm.VMHash("Split1", retireAnchor1[:])
+
+			// 	// Record the export in the db,
+			// 	// then wake up a goroutine that executes peg-outs on the main chain.
+			// 	const q = `
+			// 		INSERT INTO exports
+			// 		(txid, exporter, amount, asset_xdr, temp, seqnum, anchor, pubkey)
+			// 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`
+			// 	_, err = c.DB.ExecContext(ctx, q, tx.ID.Bytes(), info.Exporter, info.Amount, info.AssetXDR, info.Temp, info.Seqnum, retireAnchor[:], info.Pubkey)
+			// 	if err != nil {
+			// 		log.Fatalf("recording export tx: %s", err)
+			// 	}
+
+			// 	log.Printf("recorded export: %d of txvm asset %x (Stellar %x) for %s", info.Amount, exportedAssetBytes, info.AssetXDR, info.Exporter)
+
+			// 	c.exports.Broadcast()
+
+			// 	i++ // advance past the consumed log ("L") entry
+			// }
 		}
 	}
 }

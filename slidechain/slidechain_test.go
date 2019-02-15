@@ -397,6 +397,8 @@ func TestEndToEnd(t *testing.T) {
 		}
 		t.Log("checking for retirement tx on txvm...")
 
+		retireAnchor1 := txvm.VMHash("Split2", anchor)
+		retireAnchor := txvm.VMHash("Split1", retireAnchor1[:])
 		found = false
 		for {
 			item, ok := r.Read(ctx)
@@ -406,9 +408,9 @@ func TestEndToEnd(t *testing.T) {
 			block := item.(*bc.Block)
 			for _, tx := range block.Transactions {
 				// Look for export transaction.
-				if IsExportTx(tx, native, int64(inputAmount), temp, exporter.Address(), int64(seqnum), anchor, exporterPubKeyBytes[:]) {
+				if IsExportTx(tx, native, int64(exportAmount), temp, exporter.Address(), int64(seqnum), retireAnchor[:], exporterPubKeyBytes[:]) {
 					t.Logf("found export tx %x", tx.Program)
-					log.Print("Found export tx, exiting...")
+					log.Print("Found export tx, exiting loop...")
 					found = true
 					break
 				}
@@ -417,8 +419,8 @@ func TestEndToEnd(t *testing.T) {
 				break
 			}
 		}
+
 		t.Log("checking for successful retirement...")
-		log.Print("checking successful retirement........")
 		// Check for successful retirement.
 		retire := make(chan struct{})
 		go func() {
@@ -472,8 +474,6 @@ func TestEndToEnd(t *testing.T) {
 		}
 
 		// Check for successful post-export txvm tx.
-		retireAnchor1 := txvm.VMHash("Split2", anchor)
-		retireAnchor := txvm.VMHash("Split1", retireAnchor1[:])
 		found = false
 		for {
 			item, ok := r.Read(ctx)

@@ -345,6 +345,11 @@ func BuildExportTx(ctx context.Context, asset xdr.Asset, exportAmt, inputAmt int
 		return nil, err
 	}
 	pubkey := prv.Public().(ed25519.PublicKey)
+
+	// We first split off the difference between inputAmt and amt.
+	// Then, we split off the zero-value for finalize, creating the retire anchor.
+	retireAnchor1 := txvm.VMHash("Split2", anchor)
+	retireAnchor := txvm.VMHash("Split1", retireAnchor1[:])
 	ref := struct {
 		AssetXDR string `json:"asset"`
 		Temp     string `json:"temp"`
@@ -358,27 +363,16 @@ func BuildExportTx(ctx context.Context, asset xdr.Asset, exportAmt, inputAmt int
 		temp,
 		int64(seqnum),
 		kp.Address(),
-		inputAmt,
-		anchor,
+		exportAmt,
+		retireAnchor[:],
 		pubkey,
 	}
-	inputRefdata, err := json.Marshal(ref)
-	if err != nil {
-		return nil, errors.Wrap(err, "marshaling reference data")
-	}
-
-	ref.Amount = exportAmt
-	// We first split off the difference between inputAmt and amt.
-	// Then, we split off the zero-value for finalize, creating the retire anchor.
-	retireAnchor1 := txvm.VMHash("Split2", anchor)
-	retireAnchor := txvm.VMHash("Split1", retireAnchor1[:])
-	ref.Anchor = retireAnchor[:]
-	retireRefdata, err := json.Marshal(ref)
+	exportRefdata, err := json.Marshal(ref)
 	if err != nil {
 		return nil, errors.Wrap(err, "marshaling reference data")
 	}
 	b := new(txvmutil.Builder)
-	b.PushdataBytes(inputRefdata)                                                                                        // con stack: json
+	b.PushdataBytes(exportRefdata)                                                                                       // con stack: json
 	b.Op(op.Put)                                                                                                         // arg stack: json
 	standard.SpendMultisig(b, 1, []ed25519.PublicKey{pubkey}, inputAmt, assetID, anchor, standard.PayToMultisigSeed1[:]) // arg stack: inputval, sigcheck
 	b.Op(op.Get).Op(op.Get)                                                                                              // con stack: sigcheck, inputval
@@ -394,15 +388,13 @@ func BuildExportTx(ctx context.Context, asset xdr.Asset, exportAmt, inputAmt int
 		b.Op(op.Drop) // con stack: sigcheck, retireval
 	}
 	// con stack: sigcheck, retireval
-	b.PushdataBytes(retireRefdata).Op(op.Put)                               // con stack: sigcheck, retireval; arg stack: json
+	b.PushdataBytes(exportRefdata).Op(op.Put)                               // con stack: sigcheck, retireval; arg stack: json
 	b.PushdataInt64(0).Op(op.Split).PushdataInt64(1).Op(op.Roll).Op(op.Put) // con stack: sigcheck, zeroval; arg stack: json, retireval
-	b.Tuple(func(tup *txvmutil.TupleBuilder) {
-		tup.PushdataBytes(pubkey)
-	})
-	b.Op(op.Put) // con stack: sigchecker, zeroval; arg stack: json, value, {pubkey}
-	b.PushdataBytes(exportContract1Prog)
-	b.Op(op.Contract).Op(op.Call) // con stack: sigchecker, zeroval
-	b.Op(op.Finalize)             // con stack: sigchecker
+	b.Tuple(func(tup *txvmutil.TupleBuilder) { tup.PushdataBytes(pubkey) }) // con stack: sigcheck, zeroval; arg stack: json, retireval, {pubkey}
+	b.Op(op.Put)                                                            // con stack: sigchecker, zeroval; arg stack: json, retireval, {pubkey}
+	b.PushdataBytes(exportContract1Prog)                                    // con stack: sigchecker, zeroval, exportContract; arg stack: json, retireval, {pubkey}
+	b.Op(op.Contract).Op(op.Call)                                           // con stack: sigchecker, zeroval
+	b.Op(op.Finalize)                                                       // con stack: sigchecker
 	prog1 := b.Build()
 	vm, err := txvm.Validate(prog1, 3, math.MaxInt64, txvm.StopAfterFinalize)
 	if err != nil {
@@ -435,7 +427,7 @@ func BuildExportTx(ctx context.Context, asset xdr.Asset, exportAmt, inputAmt int
 //
 // Else,
 // {"I", ...}
-// {"L", ...}
+// {"L", ..., refdata}
 // {"L", ...}
 // {"O", ...}
 // {"O", caller, outputid}
@@ -443,7 +435,6 @@ func BuildExportTx(ctx context.Context, asset xdr.Asset, exportAmt, inputAmt int
 func IsExportTx(tx *bc.Tx, asset xdr.Asset, inputAmt int64, temp, exporter string, seqnum int64, anchor, pubkey []byte) bool {
 	log.Print(tx.Log)
 	if len(tx.Log) != 4 && len(tx.Log) != 6 {
-		log.Print("FAIL 1")
 		return false
 	}
 	if tx.Log[0][0].(txvm.Bytes)[0] != txvm.InputCode {
@@ -487,9 +478,7 @@ func IsExportTx(tx *bc.Tx, asset xdr.Asset, inputAmt int64, temp, exporter strin
 	}
 	refdata, err := json.Marshal(ref)
 	if !bytes.Equal(refdata, tx.Log[1][2].(txvm.Bytes)) {
-		log.Print("FAIL 7")
 		return false
 	}
-	log.Print("SUCCESS")
 	return true
 }
