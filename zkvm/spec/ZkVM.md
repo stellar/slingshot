@@ -204,11 +204,11 @@ bound to its [Pedersen commitment](#pedersen-commitment).
 
 A [point](#point) that represents a commitment to a secret scalar can be turned into a variable using the [`var`](#var) instruction.
 
-A cleartext [scalar](#scalar) can be turned into a single-term [expression](#expression-type) using the [`const`](#const) instruction (which does not allocate a variable). Since we do not need to hide their values, a Variable is not needed.
+A cleartext [scalar](#scalar) can be turned into a single-term [expression](#expression-type) using the [`const`](#const) instruction (which does not allocate a variable). Since we do not need to hide their values, a Variable is not needed to represent the cleartext constant.
 
 Variables can be copied and dropped at will, but cannot be ported across transactions via [outputs](#output-structure).
 
-Examples of variables: [value quantities](#value-type) and [time bounds](#time-bounds).
+[Value quantities and flavors](#value-type) are represented as variables.
 
 Constraint system also contains _low-level variables_ that are not individually bound to [Pedersen commitments](#pedersen-commitment):
 when these are exposed to the VM (for instance, from [`mul`](#mul)), they have the [expression type](#expression-type).
@@ -229,7 +229,10 @@ _Expression_ is a linear combination of attached [variables](#variable-type) wit
 
     expr = { (weight0, var0), (weight1, var1), ...  }
 
-Expression is a supertype of a single variable: a variable can always be coerced to a linear combination containing one term with weight 1.
+A [variable](#variable-type) can be converted to an expression using [`expr`](#expr):
+the result is a linear combination with one term with weight 1:
+
+    expr = { (1, var) }
 
 Expressions can be [added](#add) and [multiplied](#mul), producing new expressions.
 Expressions can also be [encrypted](#encrypt) into a [Pedersen commitment](#pedersen-commitment) with a predetermined
@@ -1110,50 +1113,51 @@ Each instruction defines the format for immediate data. See the reference below 
 Code | Instruction                | Stack diagram                              | Effects
 -----|----------------------------|--------------------------------------------|----------------------------------
  |     [**Stack**](#stack-instructions)               |                        |
-0x?? | [`push:n:x`](#push)        |                 ø → _data_                 |
-0x?? | [`drop`](#drop)            |               _x_ → ø                      |
-0x?? | [`dup:k`](#dup)            |     _x[k] … x[0]_ → _x[k] ... x[0] x[k]_   |
-0x?? | [`roll:k`](#roll)          |     _x[k] … x[0]_ → _x[k-1] ... x[0] x[k]_ |
+0x00 | [`push:n:x`](#push)        |                 ø → _data_                 |
+0x01 | [`drop`](#drop)            |               _x_ → ø                      |
+0x02 | [`dup:k`](#dup)            |     _x[k] … x[0]_ → _x[k] ... x[0] x[k]_   |
+0x03 | [`roll:k`](#roll)          |     _x[k] … x[0]_ → _x[k-1] ... x[0] x[k]_ |
  |                                |                                            |
  |     [**Constraints**](#constraint-system-instructions)  |                   | 
-0x?? | [`const`](#var)            |          _scalar_ → _expr_                 | 
-0x?? | [`var`](#var)              |           _point_ → _var_                  | Adds an external variable to [CS](#constraint-system)
-0x?? | [`alloc`](#alloc)          |                 ø → _expr_                 | Allocates a low-level variable in [CS](#constraint-system)
-0x?? | [`mintime`](#mintime)      |                 ø → _expr_                 |
-0x?? | [`maxtime`](#maxtime)      |                 ø → _expr_                 |
-0x?? | [`neg`](#neg)              |           _expr1_ → _expr2_                |
-0x?? | [`add`](#add)              |     _expr1 expr2_ → _expr3_                |
-0x?? | [`mul`](#mul)              |     _expr1 expr2_ → _expr3_                | Potentially adds multiplier in [CS](#constraint-system)
-0x?? | [`eq`](#eq)                |     _expr1 expr2_ → _constraint_           | 
-0x?? | [`range:n`](#range)        |            _expr_ → _expr_                 | Modifies [CS](#constraint-system)
-0x?? | [`and`](#and)              | _constr1 constr2_ → _constr3_              |
-0x?? | [`or`](#or)                | _constr1 constr2_ → _constr3_              |
-0x?? | [`verify`](#verify)        |      _constraint_ → ø                      | Modifies [CS](#constraint-system) 
-0x?? | [`blind`](#blind)          |  _proof V expr P_ → _var_                  | Modifies [CS](#constraint-system), [defers point ops](#deferred-point-operations)
-0x?? | [`reblind`](#reblind)      |   _proof V2 var1_ → _var1_                 | [Defers point operations](#deferred-point-operations)
-0x?? | [`unblind`](#unblind)      |        _v V expr_ → _var_                  | Modifies [CS](#constraint-system), [Defers point ops](#deferred-point-operations)
+0x04 | [`const`](#var)            |          _scalar_ → _expr_                 | 
+0x05 | [`var`](#var)              |           _point_ → _var_                  | Adds an external variable to [CS](#constraint-system)
+0x06 | [`alloc`](#alloc)          |                 ø → _expr_                 | Allocates a low-level variable in [CS](#constraint-system)
+0x07 | [`mintime`](#mintime)      |                 ø → _expr_                 |
+0x08 | [`maxtime`](#maxtime)      |                 ø → _expr_                 |
+0x09 | [`expr`](#expr)            |             _var_ → _expr_                 | [Attaches](#attached-and-detached-variables) variable to [CS](#constraint-system)
+0x0a | [`neg`](#neg)              |           _expr1_ → _expr2_                |
+0x0b | [`add`](#add)              |     _expr1 expr2_ → _expr3_                |
+0x0c | [`mul`](#mul)              |     _expr1 expr2_ → _expr3_                | Potentially adds multiplier in [CS](#constraint-system)
+0x0d | [`eq`](#eq)                |     _expr1 expr2_ → _constraint_           | 
+0x0e | [`range:n`](#range)        |            _expr_ → _expr_                 | Modifies [CS](#constraint-system)
+0x0f | [`and`](#and)              | _constr1 constr2_ → _constr3_              |
+0x10 | [`or`](#or)                | _constr1 constr2_ → _constr3_              |
+0x11 | [`verify`](#verify)        |      _constraint_ → ø                      | Modifies [CS](#constraint-system) 
+0x12 | [`blind`](#blind)          |  _proof V expr P_ → _var_                  | Modifies [CS](#constraint-system), [defers point ops](#deferred-point-operations)
+0x13 | [`reblind`](#reblind)      |   _proof V2 var1_ → _var1_                 | [Defers point operations](#deferred-point-operations)
+0x14 | [`unblind`](#unblind)      |        _v V expr_ → _var_                  | Modifies [CS](#constraint-system), [Defers point ops](#deferred-point-operations)
  |                                |                                            |
  |     [**Values**](#value-instructions)              |                        |
-0x?? | [`issue`](#issue)          |    _qty flv pred_ → _contract_             | Modifies [CS](#constraint-system), [tx log](#transaction-log), [defers point ops](#deferred-point-operations)
-0x?? | [`borrow`](#borrow)        |         _qty flv_ → _–V +V_                | Modifies [CS](#constraint-system)
-0x?? | [`retire`](#retire)        |           _value_ → ø                      | Modifies [CS](#constraint-system), [tx log](#transaction-log)
-0x?? | [`qty`](#qty)              |           _value_ → _value qtyvar_         |
-0x?? | [`flavor`](#flavor)        |           _value_ → _value flavorvar_      |
-0x?? | [`cloak:m:n`](#cloak)      | _widevalues commitments_ → _values_        | Modifies [CS](#constraint-system)
-0x?? | [`import`](#import)        |   _proof qty flv_ → _value_                | Modifies [CS](#constraint-system), [tx log](#transaction-log), [defers point ops](#deferred-point-operations)
-0x?? | [`export`](#export)        |       _value ???_ → ø                      | Modifies [CS](#constraint-system), [tx log](#transaction-log)
+0x15 | [`issue`](#issue)          |    _qty flv pred_ → _contract_             | Modifies [CS](#constraint-system), [tx log](#transaction-log), [defers point ops](#deferred-point-operations)
+0x16 | [`borrow`](#borrow)        |         _qty flv_ → _–V +V_                | Modifies [CS](#constraint-system)
+0x17 | [`retire`](#retire)        |           _value_ → ø                      | Modifies [CS](#constraint-system), [tx log](#transaction-log)
+0x18 | [`qty`](#qty)              |           _value_ → _value qtyvar_         |
+0x19 | [`flavor`](#flavor)        |           _value_ → _value flavorvar_      |
+0x1a | [`cloak:m:n`](#cloak)      | _widevalues commitments_ → _values_        | Modifies [CS](#constraint-system)
+0x1b | [`import`](#import)        |   _proof qty flv_ → _value_                | Modifies [CS](#constraint-system), [tx log](#transaction-log), [defers point ops](#deferred-point-operations)
+0x1c | [`export`](#export)        |       _value ???_ → ø                      | Modifies [CS](#constraint-system), [tx log](#transaction-log)
  |                                |                                            |
  |     [**Contracts**](#contract-instructions)        |                        |
-0x?? | [`input`](#input)          |           _input_ → _contract_             | Modifies [tx log](#transaction-log)
-0x?? | [`output:k`](#output)      |   _items... pred_ → ø                      | Modifies [tx log](#transaction-log)
-0x?? | [`contract:k`](#contract)  |   _items... pred_ → _contract_             | 
-0x?? | [`nonce`](#nonce)          |            _pred_ → _contract_             | Modifies [tx log](#transaction-log)
-0x?? | [`log`](#log)              |            _data_ → ø                      | Modifies [tx log](#transaction-log)
-0x?? | [`signtx`](#signtx)        |        _contract_ → _results..._           | Modifies [deferred verification keys](#transaction-signature)
-0x?? | [`call`](#call)            |   _contract prog_ → _results..._           | [Defers point operations](#deferred-point-operations)
-0x?? | [`left`](#left)            |    _contract A B_ → _contract’_            | [Defers point operations](#deferred-point-operations)
-0x?? | [`right`](#right)          |    _contract A B_ → _contract’_            | [Defers point operations](#deferred-point-operations)
-0x?? | [`delegate`](#delegate)    |_contract prog sig_ → _results..._          | [Defers point operations](#deferred-point-operations)
+0x1d | [`input`](#input)          |           _input_ → _contract_             | Modifies [tx log](#transaction-log)
+0x1e | [`output:k`](#output)      |   _items... pred_ → ø                      | Modifies [tx log](#transaction-log)
+0x1f | [`contract:k`](#contract)  |   _items... pred_ → _contract_             | 
+0x20 | [`nonce`](#nonce)          |            _pred_ → _contract_             | Modifies [tx log](#transaction-log)
+0x21 | [`log`](#log)              |            _data_ → ø                      | Modifies [tx log](#transaction-log)
+0x22 | [`signtx`](#signtx)        |        _contract_ → _results..._           | Modifies [deferred verification keys](#transaction-signature)
+0x23 | [`call`](#call)            |   _contract prog_ → _results..._           | [Defers point operations](#deferred-point-operations)
+0x24 | [`left`](#left)            |    _contract A B_ → _contract’_            | [Defers point operations](#deferred-point-operations)
+0x25 | [`right`](#right)          |    _contract A B_ → _contract’_            | [Defers point operations](#deferred-point-operations)
+0x26 | [`delegate`](#delegate)    |_contract prog sig_ → _results..._          | [Defers point operations](#deferred-point-operations)
 
 
 
@@ -1248,14 +1252,23 @@ Pushes an [expression](#expression-type) `expr` corresponding to the [maximum ti
 
 The one-term expression represents time bound as a weight on the R1CS constant `1` (see [`const`](#const)).
 
+#### expr
+
+_var_ **expr** → _ex_
+
+1. Pops a [variable](#variable-type) `var`.
+2. If it is [detached](#attached-and-detached-variables), attaches it to the constraint system.
+3. Pushes a single-term [expression](#expression-type) with weight=1 to the stack: `expr = { (1, var) }`.
+
+Fails if `var` is not a [variable type](#variable-type).
+
 #### neg
 
 _ex1_ **neg** → _ex2_
 
 1. Pops an [expression](#expression-type) `ex1`.
-2. If the expression is a [detached variable](#variable-type), attaches it to the constraint system.
-3. Negates the weights in the `ex1` producing new expression `ex2`.
-4. Pushes `ex2` to the stack.
+2. Negates the weights in the `ex1` producing new expression `ex2`.
+3. Pushes `ex2` to the stack.
 
 Fails if `ex1` is not an [expression type](#expression-type).
 
@@ -1264,10 +1277,9 @@ Fails if `ex1` is not an [expression type](#expression-type).
 _ex1 ex2_ **add** → ex3_
 
 1. Pops two [expressions](#expression-type) `ex2`, then `ex1`.
-2. If any of `ex1` or `ex2` is a [detached variable](#variable-type), that variable is attached to the constraint system.
-3. If both expressions are [constant expressions](#constant-expression):
+2. If both expressions are [constant expressions](#constant-expression):
     1. Creates a new [constant expression](#constant-expression) `ex3` with the weight equal to the sum of weights in `ex1` and `ex2`.
-4. Otherwise, createes a new expression `ex3` by concatenating terms in `ex1` and `ex2`.
+3. Otherwise, creates a new expression `ex3` by concatenating terms in `ex1` and `ex2`.
 4. Pushes `ex3` to the stack.
 
 Fails if `ex1` and `ex2` are not both [expression types](#expression-type).
@@ -1278,14 +1290,19 @@ _ex1 ex2_ **mul** → _ex3_
 
 Multiplies two [expressions](#expression-type) producing another [expression](#expression-type) representing the result of multiplication.
 
-This performs an optimization: if one of the expressions `ex1` or `ex2` contains only one term and this term is for the variable representing the R1CS constant `1` (in other words, the statement is a cleartext constant), then the other expression is multiplied by that constant in-place without allocating a multiplier in the [constraint system](#constraint-system).
+This performs a _guaranteed optimization_: if one of the expressions `ex1` or `ex2` contains
+only one term and this term is for the variable representing the R1CS constant `1`
+(in other words, the statement is a cleartext constant),
+then the other expression is multiplied by that constant in-place without allocating a multiplier in the [constraint system](#constraint-system).
+
+This optimization is _guaranteed_ because it affects the state of the constraint system:
+not performing it would make the existing proofs invalid.
 
 1. Pops two [expressions](#expression-type) `ex2`, then `ex1`.
-2. If any of `ex1` or `ex2` is a [detached variable](#variable-type), that variable is attached to the constraint system.
-3. If either `ex1` or `ex2` is a [constant expression](#constant-expression):
+2. If either `ex1` or `ex2` is a [constant expression](#constant-expression):
     1. The other expression is multiplied in place by the scalar from that expression.
     2. The resulting expression is pushed to the stack.
-4. Otherwise:
+3. Otherwise:
     1. Creates a multiplier in the constraint system.
     2. Constrains the left wire to `ex1`, and the right wire to `ex2`.
     3. Creates an [expression](#expression-type) `ex3` with the output wire in its single term.
@@ -1294,16 +1311,16 @@ This performs an optimization: if one of the expressions `ex1` or `ex2` contains
 Fails if `ex1` and `ex2` are not both [expression types](#expression-type).
 
 Note: if both `ex1` and `ex2` are [constant expressions](#constant-expression),
-the result does not depend on which one treated as a constant.
+the result does not depend on which one treated as a constant,
+and the resulting expression is also a constant expression.
 
 #### eq
 
 _ex1 ex2_ **eq** → _constraint_
 
 1. Pops two [expressions](#expression-type) `ex2`, then `ex1`.
-2. If any of `ex1` or `ex2` is a [detached variable](#variable-type), that variable is attached to the constraint system.
-3. Creates a [constraint](#constraint-type) that represents statement `ex1 - ex2 = 0`.
-4. Pushes the constraint to the stack.
+2. Creates a [constraint](#constraint-type) that represents statement `ex1 - ex2 = 0`.
+3. Pushes the constraint to the stack.
 
 Fails if `ex1` and `ex2` are not both [expression types](#expression-type).
 
@@ -1312,9 +1329,8 @@ Fails if `ex1` and `ex2` are not both [expression types](#expression-type).
 _expr_ **range:_n_** → _expr_
 
 1. Pops an [expression](#expression-type) `expr`.
-2. If the expression is a [detached variable](#variable-type), attaches it to the constraint system.
-3. Adds an `n`-bit range proof for `expr` to the [constraint system](#constraint-system) (see [Cloak protocol](https://github.com/interstellar/spacesuit/blob/master/spec.md) for the range proof definition).
-4. Pushes `expr` back to the stack.
+2. Adds an `n`-bit range proof for `expr` to the [constraint system](#constraint-system) (see [Cloak protocol](https://github.com/interstellar/spacesuit/blob/master/spec.md) for the range proof definition).
+3. Pushes `expr` back to the stack.
 
 Immediate data `n` is encoded as one byte.
 
@@ -1374,11 +1390,10 @@ _proof V expr P_ **blind** → _var_
 2. Pops [expression](#expression-type) `expr`.
 3. Pops [point](#point) `V`.
 4. Pops [data](data-type) `proof`.
-5. If `expr` is a [detached variable](#variable-type), attaches it to the constraint system.
-6. Creates a new [detached variable](#variable-type) `var` with commitment `V`.
-7. Verifies the [blinding proof](#blinding-proof) for commitments `V`, `P` and proof data `proof`, [deferring all point operations](#deferred-point-operations)).
-8. Adds an equality [constraint](#constraint-type) `expr == var` to the [constraint system](#constraint-system).
-9. Pushes `var` to the stack.
+5. Creates a new [detached variable](#variable-type) `var` with commitment `V`.
+6. Verifies the [blinding proof](#blinding-proof) for commitments `V`, `P` and proof data `proof`, [deferring all point operations](#deferred-point-operations)).
+7. Adds an equality [constraint](#constraint-type) `expr == var` to the [constraint system](#constraint-system).
+8. Pushes `var` to the stack.
 
 Fails if: 
 * `proof` is not a 256-byte [data](data-type), or
@@ -1412,11 +1427,10 @@ _v V expr_ **unblind** → _var_
 1. Pops [expression](#expression-type) `expr`.
 2. Pops [point](#point) `V`.
 3. Pops [scalar](#scalar) `v`.
-4. If `expr` is a [detached variable](#variable-type), attaches it to the constraint system.
-5. Creates a new [detached variable](#variable-type) `var` with commitment `V`.
-6. Verifies the [unblinding proof](#unblinding-proof) for the commitment `V` and scalar `v`, [deferring all point operations](#deferred-point-operations)).
-7. Adds an equality [constraint](#constraint-type) `expr == var` to the [constraint system](#constraint-system).
-8. Pushes `var` to the stack.
+4. Creates a new [detached variable](#variable-type) `var` with commitment `V`.
+5. Verifies the [unblinding proof](#unblinding-proof) for the commitment `V` and scalar `v`, [deferring all point operations](#deferred-point-operations)).
+6. Adds an equality [constraint](#constraint-type) `expr == var` to the [constraint system](#constraint-system).
+7. Pushes `var` to the stack.
 
 Fails if: 
 * `v` is not a valid [scalar](#scalar), or
@@ -1445,7 +1459,7 @@ _qty flv pred_ **issue** → _contract_
     ```
     flv == flavor·B
     ```
-7. Adds a 64-bit range proof for the `qty` to the [constraint system](#constraint-system) (see [Cloak protocol](https://github.com/interstellar/spacesuit/blob/master/spec.md) for the range proof definition). 
+7. Adds a 64-bit range proof for the `qty` to the [constraint system](#constraint-system) (see [Cloak protocol](https://github.com/interstellar/spacesuit/blob/master/spec.md) for the range proof definition).
 8. Adds an [issue entry](#issue-entry) to the [transaction log](#transaction-log).
 9. Creates a [contract](#contract-type) with the value as the only [payload](#contract-payload), protected by the predicate `pred`.
 
