@@ -28,7 +28,7 @@ fn prove<R: Rng + CryptoRng>(
     pc_gens: &PedersenGens,
     inputs: &Vec<Value>,
     outputs: &Vec<Value>,
-    rng: &mut R,
+    mut rng: R,
 ) -> Result<(R1CSProof, Vec<CommittedValue>, Vec<CommittedValue>), R1CSError>
 where
     R: rand::RngCore,
@@ -36,8 +36,8 @@ where
     let mut prover_transcript = Transcript::new(b"TransactionTest");
     let mut prover = Prover::new(&bp_gens, &pc_gens, &mut prover_transcript);
 
-    let (in_com, in_vars) = inputs.commit(&mut prover, rng);
-    let (out_com, out_vars) = outputs.commit(&mut prover, rng);
+    let (in_com, in_vars) = inputs.commit(&mut prover, &mut rng);
+    let (out_com, out_vars) = outputs.commit(&mut prover, &mut rng);
 
     cloak(&mut prover, in_vars, out_vars)?;
     let proof = prover.prove()?;
