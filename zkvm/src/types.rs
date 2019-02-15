@@ -76,8 +76,8 @@ pub enum Commitment {
 pub enum DataWitness {
     Program(Vec<Instruction>),
     Predicate(Box<Predicate>),
-    Commitment(Box<CommitmentWitness>),
-    Scalar(Box<Scalar>),
+    Commitment(Box<Commitment>),
+    Scalar(Box<ScalarWitness>),
     Input(Box<Input>),
 }
 
@@ -105,11 +105,8 @@ impl Commitment {
         }
     }
 
-    pub fn ensure_closed(&self) -> Result<CompressedRistretto, VMError> {
-        match self {
-            Commitment::Open(_) => Err(VMError::DataNotOpaque),
-            Commitment::Closed(x) => Ok(*x),
-        }
+    pub(crate) fn encode(&self, buf: &mut Vec<u8>) {
+        buf.extend_from_slice(&self.to_point().to_bytes());
     }
 }
 
@@ -117,10 +114,6 @@ impl CommitmentWitness {
     pub fn to_point(&self) -> CompressedRistretto {
         let gens = PedersenGens::default();
         gens.commit(self.value.into(), self.blinding).compress()
-    }
-
-    pub(crate) fn encode(&self, buf: &mut Vec<u8>) {
-        buf.extend_from_slice(&self.to_point().to_bytes());
     }
 }
 
@@ -254,7 +247,7 @@ impl Data {
                 Ok(Commitment::Closed(point))
             }
             Data::Witness(witness) => match witness {
-                DataWitness::Commitment(w) => Ok(Commitment::Open(w)),
+                DataWitness::Commitment(w) => Ok(*w),
                 _ => Err(VMError::TypeNotCommitment),
             },
         }
@@ -287,8 +280,11 @@ impl DataWitness {
         match self {
             DataWitness::Program(instr) => Instruction::encode_program(instr.iter(), buf),
             DataWitness::Predicate(pw) => pw.encode(buf),
-            DataWitness::Commitment(cw) => cw.encode(buf),
-            DataWitness::Scalar(s) => buf.extend_from_slice(&s.to_bytes()),
+            DataWitness::Commitment(c) => c.encode(buf),
+            DataWitness::Scalar(s) => {
+                let s: Scalar = (*s.clone()).into();
+                buf.extend_from_slice(&s.to_bytes())
+            }
             DataWitness::Input(b) => b.encode(buf),
         }
     }
@@ -311,6 +307,59 @@ impl Expression {
             terms: vec![(r1cs::Variable::One(), a)],
             assignment: Some(ScalarWitness::Scalar(a)),
         }
+    }
+}
+
+// Upcasting integers/scalars into ScalarWitness
+
+impl From<u64> for ScalarWitness {
+    fn from(x: u64) -> Self {
+        ScalarWitness::Integer(x.into())
+    }
+}
+
+impl From<Scalar> for ScalarWitness {
+    fn from(x: Scalar) -> Self {
+        ScalarWitness::Scalar(x)
+    }
+}
+
+// Upcasting all witness data types to Data and DataWitness
+
+// Anything convertible to DataWitness is also convertible to Data
+impl<T> From<T> for Data
+where
+    T: Into<DataWitness>,
+{
+    fn from(w: T) -> Self {
+        Data::Witness(w.into())
+    }
+}
+
+impl<T> From<T> for DataWitness
+where
+    T: Into<ScalarWitness>,
+{
+    fn from(x: T) -> Self {
+        DataWitness::Scalar(Box::new(x.into()))
+    }
+}
+
+impl From<Predicate> for DataWitness {
+    fn from(x: Predicate) -> Self {
+        DataWitness::Predicate(Box::new(x))
+    }
+}
+
+impl From<Commitment> for DataWitness {
+    fn from(x: Commitment) -> Self {
+        DataWitness::Commitment(Box::new(x))
+    }
+}
+
+impl From<Input> for DataWitness {
+    fn from(x: Input) -> Self {
+        DataWitness::Input(Box::new(x))
     }
 }
 
