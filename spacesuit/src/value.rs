@@ -176,7 +176,9 @@ impl ProverCommittable for Vec<Value> {
     type Output = (Vec<CommittedValue>, Vec<AllocatedValue>);
 
     fn commit<R: RngCore + CryptoRng>(&self, prover: &mut Prover, mut rng: R) -> Self::Output {
-        self.iter().map(|value| value.commit(prover, &mut rng)).unzip()
+        self.iter()
+            .map(|value| value.commit(prover, &mut rng))
+            .unzip()
     }
 }
 
