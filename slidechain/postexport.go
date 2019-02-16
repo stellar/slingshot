@@ -138,7 +138,6 @@ func IsPostExportTx(tx *bc.Tx, asset xdr.Asset, amount int64, temp, exporter str
 	if tx.Log[5][0].(txvm.Bytes)[0] != txvm.FinalizeCode {
 		return false
 	}
-	// TODO(debnil): Marshal and check logged JSON.
 	assetXDR, err := xdr.MarshalBase64(asset)
 	if err != nil {
 		return false

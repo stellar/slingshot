@@ -170,8 +170,8 @@ func (c *Custodian) pegOutFromExports(ctx context.Context) {
 			if err != nil {
 				log.Fatalf("updating export table: %s", err)
 			}
-			// Wake up a goroutine for post-peg-out txvm txs
-			c.pegouts.Broadcast()
+			// Send peg-out info to goroutine for post-peg-out txvm txs
+			c.pegouts <- PegOut{txid: txid, state: peggedOut}
 		}
 	}
 }

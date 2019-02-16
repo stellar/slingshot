@@ -289,7 +289,7 @@ func TestEndToEnd(t *testing.T) {
 			InitBlockHash: ch.InitialBlockHash,
 			imports:       sync.NewCond(new(sync.Mutex)),
 			exports:       sync.NewCond(new(sync.Mutex)),
-			pegouts:       sync.NewCond(new(sync.Mutex)),
+			pegouts:       make(chan PegOut),
 			network:       root.NetworkPassphrase,
 			privkey:       custodianPrv,
 		}
