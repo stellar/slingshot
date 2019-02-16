@@ -290,6 +290,7 @@ func TestEndToEnd(t *testing.T) {
 			imports:       sync.NewCond(new(sync.Mutex)),
 			exports:       sync.NewCond(new(sync.Mutex)),
 			pegouts:       make(chan PegOut),
+			exportmux:     new(sync.Mutex),
 			network:       root.NetworkPassphrase,
 			privkey:       custodianPrv,
 		}

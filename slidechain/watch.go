@@ -179,6 +179,10 @@ func (c *Custodian) watchPegOuts(ctx context.Context) {
 	go func(ctx context.Context) {
 		defer log.Print("export table poll exiting")
 		for t := time.Tick(1 * time.Minute); ; {
+			// Lock access to the export database.
+			// We do this to avoid double-processing any peg-out tx, via selecting it in both go-routines.
+			// We unlock at the end of an iteration of this go-routine or before any early return.
+			c.exportmux.Lock()
 			const q = `SELECT amount, asset_xdr, exporter, temp, seqnum, anchor, pubkey FROM exports WHERE (pegged_out=1 OR pegged_out=3)`
 			var (
 				txids, assetXDRs, anchors, pubkeys [][]byte
@@ -197,20 +201,24 @@ func (c *Custodian) watchPegOuts(ctx context.Context) {
 				pubkeys = append(pubkeys, pubkey)
 			})
 			if err == context.Canceled {
+				c.exportmux.Unlock()
 				return
 			}
 			if err != nil {
+				c.exportmux.Unlock()
 				log.Fatalf("querying peg-outs: %s", err)
 			}
 			for i, txid := range txids {
 				err = c.doPostExport(ctx, assetXDRs[i], anchors[i], txid, amounts[i], seqnums[i], peggedOuts[i], exporters[i], temps[i], pubkeys[i])
 				if err != nil {
+					c.exportmux.Unlock()
 					if err == context.Canceled {
 						return
 					}
 					log.Fatal(err)
 				}
 			}
+			c.exportmux.Unlock()
 			select {
 			case <-t:
 				continue
@@ -221,10 +229,13 @@ func (c *Custodian) watchPegOuts(ctx context.Context) {
 	}(ctx)
 
 	for {
+		// The lock and unlock pattern for the export database is as in the above go routine.
+		c.exportmux.Lock()
 		// Read in new peg-outs via channel.
 		var pegOut PegOut
 		select {
 		case <-ctx.Done():
+			c.exportmux.Unlock()
 			return
 		case pegOut = <-c.pegouts:
 		}
@@ -240,12 +251,15 @@ func (c *Custodian) watchPegOuts(ctx context.Context) {
 			exporter, temp = qExporter, qTemp
 		})
 		if err == context.Canceled {
+			c.exportmux.Unlock()
 			return
 		}
 		if err != nil {
+			c.exportmux.Unlock()
 			log.Fatalf("querying peg-outs: %s", err)
 		}
 		err = c.doPostExport(ctx, assetXDR, anchor, pegOut.txid, amount, seqnum, int64(pegOut.state), exporter, temp, pubkey)
+		c.exportmux.Unlock()
 		if err != nil {
 			if err == context.Canceled {
 				return

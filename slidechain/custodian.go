@@ -40,13 +40,14 @@ type PegOut struct {
 // for importing pegged-in values and pegging out exported
 // values.
 type Custodian struct {
-	seed    string
-	hclient horizon.ClientInterface
-	imports *sync.Cond
-	exports *sync.Cond
-	pegouts chan PegOut
-	network string
-	privkey ed25519.PrivateKey
+	seed      string
+	hclient   horizon.ClientInterface
+	imports   *sync.Cond
+	exports   *sync.Cond
+	pegouts   chan PegOut
+	exportmux *sync.Mutex
+	network   string
+	privkey   ed25519.PrivateKey
 
 	DB            *sql.DB
 	S             *submitter
@@ -115,6 +116,7 @@ func newCustodian(ctx context.Context, db *sql.DB, hclient horizon.ClientInterfa
 		imports:       sync.NewCond(new(sync.Mutex)),
 		exports:       sync.NewCond(new(sync.Mutex)),
 		pegouts:       make(chan PegOut),
+		exportmux:     new(sync.Mutex),
 		network:       root.NetworkPassphrase,
 		privkey:       custodianPrv,
 		InitBlockHash: initialBlock.Hash(),
