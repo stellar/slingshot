@@ -10,7 +10,7 @@ use zkvm::*;
 fn issue_contract(qty: u64, flv: Scalar, pred: &Predicate) -> Vec<Instruction> {
     vec![
         // pushdata qty [qty]
-        Instruction::Push(Commitment::from(CommitmentWitness::from_secret(qty)).into()),
+        Instruction::Push(Commitment::from(CommitmentWitness::blinded(qty)).into()),
         // stack: qty-var
         Instruction::Var,
         // stack: flv, qty-var

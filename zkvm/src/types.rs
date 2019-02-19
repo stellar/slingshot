@@ -127,7 +127,7 @@ impl CommitmentWitness {
         }
     }
 
-    pub fn from_secret<T>(x: T) -> Self
+    pub fn blinded<T>(x: T) -> Self
     where
         T: Into<ScalarWitness>,
     {

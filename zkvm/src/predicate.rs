@@ -121,15 +121,6 @@ impl Predicate {
     }
 }
 
-impl From<Scalar> for Predicate {
-    fn from(s: Scalar) -> Self {
-        Predicate {
-            point: VerificationKey::from_secret(&s).0,
-            witness: Some(PredicateWitness::Key(s)),
-        }
-    }
-}
-
 impl PredicateWitness {
     pub fn to_point(&self) -> Result<CompressedRistretto, VMError> {
         Ok(match self {
