@@ -232,12 +232,12 @@ func (c *Custodian) watchPegOuts(ctx context.Context) {
 		// The lock and unlock pattern for the export database is as in the above go routine.
 		c.exportmux.Lock()
 		// Read in new peg-outs via channel.
-		var pegOut PegOut
+		var peg pegOut
 		select {
 		case <-ctx.Done():
 			c.exportmux.Unlock()
 			return
-		case pegOut = <-c.pegouts:
+		case peg = <-c.pegouts:
 		}
 		const q = `SELECT amount, asset_xdr, exporter, temp, seqnum, anchor, pubkey FROM exports WHERE txid=$1 AND pegged_out=$2`
 		var (
@@ -245,7 +245,7 @@ func (c *Custodian) watchPegOuts(ctx context.Context) {
 			amount, seqnum           int64
 			exporter, temp           string
 		)
-		err := sqlutil.ForQueryRows(ctx, c.DB, q, pegOut.txid, pegOut.state, func(qAmount int64, qAssetXDR []byte, qExporter, qTemp string, qSeqnum int64, qAnchor, qPubkey []byte) {
+		err := sqlutil.ForQueryRows(ctx, c.DB, q, peg.txid, peg.state, func(qAmount int64, qAssetXDR []byte, qExporter, qTemp string, qSeqnum int64, qAnchor, qPubkey []byte) {
 			assetXDR, anchor, pubkey = qAssetXDR, qAnchor, qPubkey
 			amount, seqnum = qAmount, qSeqnum
 			exporter, temp = qExporter, qTemp
@@ -258,7 +258,7 @@ func (c *Custodian) watchPegOuts(ctx context.Context) {
 			c.exportmux.Unlock()
 			log.Fatalf("querying peg-outs: %s", err)
 		}
-		err = c.doPostExport(ctx, assetXDR, anchor, pegOut.txid, amount, seqnum, int64(pegOut.state), exporter, temp, pubkey)
+		err = c.doPostExport(ctx, assetXDR, anchor, peg.txid, amount, seqnum, int64(peg.state), exporter, temp, pubkey)
 		c.exportmux.Unlock()
 		if err != nil {
 			if err == context.Canceled {

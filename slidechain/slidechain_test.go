@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -289,7 +290,7 @@ func TestEndToEnd(t *testing.T) {
 			InitBlockHash: ch.InitialBlockHash,
 			imports:       sync.NewCond(new(sync.Mutex)),
 			exports:       sync.NewCond(new(sync.Mutex)),
-			pegouts:       make(chan PegOut),
+			pegouts:       make(chan pegOut),
 			exportmux:     new(sync.Mutex),
 			network:       root.NetworkPassphrase,
 			privkey:       custodianPrv,
@@ -536,6 +537,60 @@ func isImportTx(tx *bc.Tx, amount int64, assetXDR []byte, recipPubKey ed25519.Pu
 		return false
 	}
 	// No need to test tx.Log[4], it has to be a finalize entry.
+	return true
+}
+
+// IsExportTx returns whether or not a txvm transaction matches the slidechain export tx format.
+//
+// Expected log is:
+// If input and export amounts are equal,
+// {"I", ...}
+// {"L", ...}
+// {"O", caller, outputid}
+// {"F", ...}
+//
+// Else,
+// {"I", ...}
+// {"L", ..., refdata}
+// {"L", ...}
+// {"O", ...}
+// {"O", caller, outputid}
+// {"F", ...}
+func IsExportTx(tx *bc.Tx, asset xdr.Asset, inputAmt int64, temp, exporter string, seqnum int64, anchor, pubkey []byte) bool {
+	if len(tx.Log) != 4 && len(tx.Log) != 6 {
+		return false
+	}
+	if tx.Log[0][0].(txvm.Bytes)[0] != txvm.InputCode {
+		return false
+	}
+	if tx.Log[1][0].(txvm.Bytes)[0] != txvm.LogCode {
+		return false
+	}
+	lastIndex := len(tx.Log) - 1
+	if tx.Log[lastIndex-1][0].(txvm.Bytes)[0] != txvm.OutputCode {
+		return false
+	}
+	if tx.Log[lastIndex][0].(txvm.Bytes)[0] != txvm.FinalizeCode {
+		return false
+	}
+	assetXDR, err := xdr.MarshalBase64(asset)
+	if err != nil {
+		return false
+	}
+	log.Printf("asset xdr in IsExportTx: %s", assetXDR)
+	ref := pegRef{
+		assetXDR,
+		temp,
+		seqnum,
+		exporter,
+		inputAmt,
+		anchor,
+		pubkey,
+	}
+	refdata, err := json.Marshal(ref)
+	if !bytes.Equal(refdata, tx.Log[1][2].(txvm.Bytes)) {
+		return false
+	}
 	return true
 }
 

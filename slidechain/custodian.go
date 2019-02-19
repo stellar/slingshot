@@ -29,13 +29,6 @@ var (
 	custodianPub = custodianPrv.Public().(ed25519.PublicKey)
 )
 
-// PegOut indicates that an export tx has been pegged out,
-// either successfully or unsuccessfully.
-type PegOut struct {
-	txid  []byte
-	state PegOutState
-}
-
 // Custodian manages a Slidechain custodian, responsible
 // for importing pegged-in values and pegging out exported
 // values.
@@ -44,7 +37,7 @@ type Custodian struct {
 	hclient   horizon.ClientInterface
 	imports   *sync.Cond
 	exports   *sync.Cond
-	pegouts   chan PegOut
+	pegouts   chan pegOut
 	exportmux *sync.Mutex
 	network   string
 	privkey   ed25519.PrivateKey
@@ -115,7 +108,7 @@ func newCustodian(ctx context.Context, db *sql.DB, hclient horizon.ClientInterfa
 		hclient:       hclient,
 		imports:       sync.NewCond(new(sync.Mutex)),
 		exports:       sync.NewCond(new(sync.Mutex)),
-		pegouts:       make(chan PegOut),
+		pegouts:       make(chan pegOut),
 		exportmux:     new(sync.Mutex),
 		network:       root.NetworkPassphrase,
 		privkey:       custodianPrv,

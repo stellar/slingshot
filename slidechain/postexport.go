@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"log"
 	"math"
 	"time"
 
@@ -28,16 +29,9 @@ func (c *Custodian) doPostExport(ctx context.Context, assetXDR, anchor, txid []b
 		return errors.Wrap(err, "marshaling asset bytes")
 	}
 	assetID := bc.NewHash(txvm.AssetID(importIssuanceSeed[:], assetBytes))
-	ref := struct {
-		AssetXDR []byte `json:"asset"`
-		Temp     string `json:"temp"`
-		Seqnum   int64  `json:"seqnum"`
-		Exporter string `json:"exporter"`
-		Amount   int64  `json:"amount"`
-		Anchor   []byte `json:"anchor"`
-		Pubkey   []byte `json:"pubkey"`
-	}{
-		assetXDR,
+	log.Printf("asset xdr in doPostExport: %s", string(assetXDR))
+	ref := pegRef{
+		string(assetXDR),
 		temp,
 		seqnum,
 		exporter,

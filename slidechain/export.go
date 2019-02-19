@@ -1,7 +1,6 @@
 package slidechain
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -27,7 +26,29 @@ import (
 	"github.com/stellar/go/xdr"
 )
 
-type PegOutState int
+type pegOut struct {
+	txid  []byte
+	state pegOutState
+}
+
+type pegRef struct {
+	AssetXDR string `json:"asset"`
+	Temp     string `json:"temp"`
+	Seqnum   int64  `json:"seqnum"`
+	Exporter string `json:"exporter"`
+	Amount   int64  `json:"amount"`
+	Anchor   []byte `json:"anchor"`
+	Pubkey   []byte `json:"pubkey"`
+}
+
+type pegOutState int
+
+const (
+	pegOutNotYet pegOutState = iota
+	pegOutOK
+	pegOutRetry
+	pegOutFail
+)
 
 const (
 	baseFee                = 100
@@ -63,14 +84,6 @@ const (
 	[%s] yield           #                                     sigchecker                                    
                                                                                    
 `
-	// PegOutNotYet indicates a peg-out that has not happened yet.
-	PegOutNotYet PegOutState = 0
-	// PegOutOK indicates a successful peg-out.
-	PegOutOK PegOutState = 1
-	// PegOutRetry indicates a failed peg-out that is retriable.
-	PegOutRetry PegOutState = 2
-	// PegOutFail indicates a failed peg-out that is non-retriable.
-	PegOutFail PegOutState = 3
 )
 
 var (
@@ -106,14 +119,14 @@ func (c *Custodian) pegOutFromExports(ctx context.Context) {
 		case <-ch:
 		}
 
-		const q = `SELECT txid, amount, asset_xdr, exporter, temp, seqnum FROM exports WHERE pegged_out=0`
+		const q = `SELECT txid, amount, asset_xdr, exporter, temp, seqnum FROM exports WHERE pegged_out=$1`
 
 		var (
 			txids, assetXDRs [][]byte
 			amounts, seqnums []int
 			exporters, temps []string
 		)
-		err := sqlutil.ForQueryRows(ctx, c.DB, q, func(txid []byte, amount int, assetXDR []byte, exporter string, temp string, seqnum int) {
+		err := sqlutil.ForQueryRows(ctx, c.DB, q, pegOutNotYet, func(txid []byte, amount int, assetXDR []byte, exporter string, temp string, seqnum int) {
 			txids = append(txids, txid)
 			amounts = append(amounts, amount)
 			assetXDRs = append(assetXDRs, assetXDR)
@@ -142,11 +155,11 @@ func (c *Custodian) pegOutFromExports(ctx context.Context) {
 			}
 
 			log.Printf("pegging out export %x: %d of %s to %s", txid, amounts[i], asset.String(), exporters[i])
-			var peggedOut PegOutState
+			var peggedOut pegOutState
 			for i := 0; i < 5; i++ {
 				err = c.pegOut(ctx, exporter, asset, int64(amounts[i]), tempID, xdr.SequenceNumber(seqnums[i]))
 				if err == nil { // successful peg-out
-					peggedOut = PegOutOK
+					peggedOut = pegOutOK
 					break
 				}
 				if herr, ok := errors.Root(err).(*horizon.Error); ok {
@@ -155,13 +168,13 @@ func (c *Custodian) pegOutFromExports(ctx context.Context) {
 						log.Fatalf("getting error codes from failed submission of tx %s", txid)
 					}
 					if resultCodes.TransactionCode != xdr.TransactionResultCodeTxBadSeq.String() { // non-retriable error
-						peggedOut = PegOutFail
+						peggedOut = pegOutFail
 						break
 					}
 				} else {
 					break
 				}
-				_, err = c.DB.ExecContext(ctx, `UPDATE exports SET pegged_out=$1 WHERE txid=$2`, PegOutRetry, txid)
+				_, err = c.DB.ExecContext(ctx, `UPDATE exports SET pegged_out=$1 WHERE txid=$2`, pegOutRetry, txid)
 				if err != nil {
 					log.Fatalf("updating export table for retriable tx: %s", err)
 				}
@@ -171,7 +184,7 @@ func (c *Custodian) pegOutFromExports(ctx context.Context) {
 				log.Fatalf("updating export table: %s", err)
 			}
 			// Send peg-out info to goroutine for post-peg-out txvm txs
-			c.pegouts <- PegOut{txid: txid, state: peggedOut}
+			c.pegouts <- pegOut{txid: txid, state: peggedOut}
 		}
 	}
 }
@@ -322,9 +335,9 @@ func SubmitPreExportTx(hclient horizon.ClientInterface, kp *keypair.Full, custod
 }
 
 // BuildExportTx locks money to be retired in a TxVM smart contract.
-// If the peg-out transaction succeeds, it retires `exportAmt` of this asset,
+// If the peg-out transaction succeeds, the contract will retire `exportAmt` of this asset,
 // and `inputAmt` - `exportAmt` will be output back to the original account.
-// Else, it returns `exportAmt` to the exporter address.
+// Else, the contract will return `exportAmt` to the exporter address.
 func BuildExportTx(ctx context.Context, asset xdr.Asset, exportAmt, inputAmt int64, temp string, anchor []byte, prv ed25519.PrivateKey, seqnum xdr.SequenceNumber) (*bc.Tx, error) {
 	if inputAmt < exportAmt {
 		return nil, fmt.Errorf("cannot have input amount %d less than export amount %d", inputAmt, exportAmt)
@@ -346,19 +359,12 @@ func BuildExportTx(ctx context.Context, asset xdr.Asset, exportAmt, inputAmt int
 	}
 	pubkey := prv.Public().(ed25519.PublicKey)
 
-	// We first split off the difference between inputAmt and amt.
+	// We first split off the difference between inputAmt and exportAmt.
 	// Then, we split off the zero-value for finalize, creating the retire anchor.
 	retireAnchor1 := txvm.VMHash("Split2", anchor)
 	retireAnchor := txvm.VMHash("Split1", retireAnchor1[:])
-	ref := struct {
-		AssetXDR string `json:"asset"`
-		Temp     string `json:"temp"`
-		Seqnum   int64  `json:"seqnum"`
-		Exporter string `json:"exporter"`
-		Amount   int64  `json:"amount"`
-		Anchor   []byte `json:"anchor"`
-		Pubkey   []byte `json:"pubkey"`
-	}{
+	log.Printf("asset xdr in BuildExportTx: %s", assetXDR)
+	ref := pegRef{
 		assetXDR,
 		temp,
 		int64(seqnum),
@@ -408,77 +414,9 @@ func BuildExportTx(ctx context.Context, asset xdr.Asset, exportAmt, inputAmt int
 	b.Op(op.Call)
 
 	prog2 := b.Build()
-	log.Printf("%x", prog2)
 	tx, err := bc.NewTx(prog2, 3, math.MaxInt64)
 	if err != nil {
-		return nil, errors.Wrap(err, "making pre-export tx")
+		return nil, errors.Wrap(err, "making export tx")
 	}
 	return tx, nil
-}
-
-// IsExportTx returns whether or not a txvm transaction matches the slidechain export tx format.
-//
-// Expected log is:
-// If input and export amounts are equal,
-// {"I", ...}
-// {"L", ...}
-// {"O", caller, outputid}
-// {"F", ...}
-//
-// Else,
-// {"I", ...}
-// {"L", ..., refdata}
-// {"L", ...}
-// {"O", ...}
-// {"O", caller, outputid}
-// {"F", ...}
-func IsExportTx(tx *bc.Tx, asset xdr.Asset, inputAmt int64, temp, exporter string, seqnum int64, anchor, pubkey []byte) bool {
-	log.Print(tx.Log)
-	if len(tx.Log) != 4 && len(tx.Log) != 6 {
-		return false
-	}
-	if tx.Log[0][0].(txvm.Bytes)[0] != txvm.InputCode {
-		log.Print("FAIL 2")
-		return false
-	}
-	if tx.Log[1][0].(txvm.Bytes)[0] != txvm.LogCode {
-		log.Print("FAIL 3")
-		return false
-	}
-	lastIndex := len(tx.Log) - 1
-	if tx.Log[lastIndex-1][0].(txvm.Bytes)[0] != txvm.OutputCode {
-		log.Print("FAIL 4")
-		return false
-	}
-	if tx.Log[lastIndex][0].(txvm.Bytes)[0] != txvm.FinalizeCode {
-		log.Print("FAIL 5")
-		return false
-	}
-	assetXDR, err := xdr.MarshalBase64(asset)
-	if err != nil {
-		log.Print("FAIL 6")
-		return false
-	}
-	ref := struct {
-		AssetXDR string `json:"asset"`
-		Temp     string `json:"temp"`
-		Seqnum   int64  `json:"seqnum"`
-		Exporter string `json:"exporter"`
-		Amount   int64  `json:"amount"`
-		Anchor   []byte `json:"anchor"`
-		Pubkey   []byte `json:"pubkey"`
-	}{
-		assetXDR,
-		temp,
-		seqnum,
-		exporter,
-		inputAmt,
-		anchor,
-		pubkey,
-	}
-	refdata, err := json.Marshal(ref)
-	if !bytes.Equal(refdata, tx.Log[1][2].(txvm.Bytes)) {
-		return false
-	}
-	return true
 }
