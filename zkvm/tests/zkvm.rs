@@ -1,9 +1,6 @@
-use bulletproofs::r1cs;
-use bulletproofs::{BulletproofGens, PedersenGens};
-use curve25519_dalek::ristretto::CompressedRistretto;
+use bulletproofs::BulletproofGens;
 use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
-use std::collections::VecDeque;
 
 use zkvm::*;
 
@@ -32,7 +29,7 @@ fn issue_contract(
 
 #[test]
 fn issue() {
-    let (tx, txid) = {
+    let (tx, _, txlog) = {
         let issuance_pred = Predicate::from_witness(PredicateWitness::Key(Scalar::random(
             &mut rand::thread_rng(),
         )))
@@ -62,13 +59,15 @@ fn issue() {
             Err(err) => return assert!(false, err.to_string()),
             Ok(x) => x,
         };
-        (tx, txid)
+        (tx, txid, txlog)
     };
 
     // Verify tx
     let bp_gens = BulletproofGens::new(64, 1);
     match Verifier::verify_tx(tx, &bp_gens) {
         Err(err) => return assert!(false, err.to_string()),
-        Ok(_) => (),
+        Ok(v) => {
+            assert_eq!(v.log, txlog);
+        }
     };
 }
