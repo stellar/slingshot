@@ -228,4 +228,19 @@ mod tests {
             .verify()
             .is_err());
     }
+
+    #[test]
+    fn verify_batch() {
+        let (pubkey, sig) = {
+            let privkey = Scalar::random(&mut rand::thread_rng());
+            let pubkey = VerificationKey::from_secret(&privkey);
+            let mut transcript = Transcript::new(b"single_signature");
+            let sig = Signature::sign_single(&mut transcript, privkey);
+            (pubkey, sig)
+        };
+
+        let mut transcript = Transcript::new(b"single_signature");
+        let point_ops = vec![sig.verify_single(&mut transcript, pubkey)];
+        assert!(PointOp::verify_batch(&point_ops).is_ok());
+    }
 }

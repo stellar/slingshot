@@ -7,6 +7,7 @@ use merlin::Transcript;
 use spacesuit::SignedInteger;
 
 use crate::contract::{Contract, Input, PortableItem};
+use crate::encoding;
 use crate::encoding::Subslice;
 use crate::errors::VMError;
 use crate::ops::Instruction;
@@ -114,6 +115,16 @@ impl CommitmentWitness {
     pub fn to_point(&self) -> CompressedRistretto {
         let gens = PedersenGens::default();
         gens.commit(self.value.into(), self.blinding).compress()
+    }
+
+    pub fn from_secret<T>(x: T) -> Self
+    where
+        T: Into<ScalarWitness>,
+    {
+        CommitmentWitness {
+            blinding: Scalar::random(&mut rand::thread_rng()),
+            value: x.into(),
+        }
     }
 }
 
@@ -264,13 +275,20 @@ impl Data {
     }
 
     /// Encodes blinded Data values.
+    /// LE32(len) || data
     pub fn encode(&self, buf: &mut Vec<u8>) {
         match self {
             Data::Opaque(x) => {
+                encoding::write_u32(x.len() as u32, buf);
                 buf.extend_from_slice(x);
                 return;
             }
-            Data::Witness(w) => w.encode(buf),
+            Data::Witness(w) => {
+                let mut witness: Vec<u8> = Vec::new();
+                w.encode(&mut witness);
+                encoding::write_u32(witness.len() as u32, buf);
+                buf.append(&mut witness);
+            }
         };
     }
 }
@@ -307,6 +325,20 @@ impl Expression {
             terms: vec![(r1cs::Variable::One(), a)],
             assignment: Some(ScalarWitness::Scalar(a)),
         }
+    }
+}
+
+// Upcasting witness/points into Commitment
+
+impl From<CommitmentWitness> for Commitment {
+    fn from(x: CommitmentWitness) -> Self {
+        Commitment::Open(Box::new(x))
+    }
+}
+
+impl From<CompressedRistretto> for Commitment {
+    fn from(x: CompressedRistretto) -> Self {
+        Commitment::Closed(x)
     }
 }
 

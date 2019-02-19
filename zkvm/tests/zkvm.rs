@@ -8,56 +8,69 @@ use std::collections::VecDeque;
 use zkvm::*;
 
 // Take some key as a param
-fn issue_contract(qty: Scalar, flv: Scalar, pred: &Predicate) -> Vec<Instruction> {
+fn issue_contract(qty: u64, flv: Scalar, pred: &Predicate) -> Vec<Instruction> {
     vec![
-        // TBD: replace with real scalars
-        // pushdata qty
-        Instruction::Push(Data::Witness(DataWitness::Scalar(Box::new(qty)))),
-        // var
-        Instruction::Var,
-        // TBD: replace with real scalars
-        // pushdata flv
-        Instruction::Push(Data::Witness(DataWitness::Scalar(Box::new(flv)))),
-        // var
-        Instruction::Var,
-        // Predicate
-        Instruction::Push(Data::Witness(DataWitness::Predicate(Box::new(
-            pred.clone(),
+        // pushdata qty [qty]
+        // TBD: fix implicit type conversions to avoid this nightmare
+        Instruction::Push(Data::Witness(DataWitness::Commitment(Box::new(
+            Commitment::Open(Box::new(CommitmentWitness::from_secret(qty))),
         )))),
+        // var [qty var]
+        Instruction::Var,
+        // pushdata flv [qty var] [flv]
+        Instruction::Push(Data::Witness(DataWitness::Commitment(Box::new(
+            Commitment::Open(Box::new(CommitmentWitness::from_secret(flv))),
+        )))),
+        // var [qty var] [flv var]
+        Instruction::Var,
+        // pushdata predicate [qty var] [flv var] [pred]
+        Instruction::Push(pred.clone().into()),
+        // issue [c:issue]
         Instruction::Issue,
-        // Predicate
-        Instruction::Push(Data::Witness(DataWitness::Predicate(Box::new(
-            pred.clone(),
-        )))),
-        // Nonce
+        // pushdata predicate [c:issue] [pred]
+        Instruction::Push(pred.clone().into()),
+        // nonce [c:issue] [c:nonce]
         Instruction::Nonce,
-        // Signtx
+        // signtx [c:issue]
         Instruction::Signtx,
+        // signtx [...payload]
+        Instruction::Signtx,
+        // pushdata predicate [...payload] [pred]
+        Instruction::Push(pred.clone().into()),
+        // output:1
+        Instruction::Output(1),
     ]
 }
 
+// TBD: define test helpers similar to cloak for proving + verifying
+
 #[test]
 fn issue() {
-    let privkey = Scalar::random(&mut rand::thread_rng());
-    let pubkey = VerificationKey::from_secret(&privkey);
+    let (tx, txid) = {
+        let privkey = Scalar::random(&mut rand::thread_rng());
 
-    let predicate = match Predicate::from_witness(PredicateWitness::Key(privkey)) {
-        Err(_) => return assert!(false),
-        Ok(x) => x,
+        let predicate = match Predicate::from_witness(PredicateWitness::Key(privkey)) {
+            Err(_) => return assert!(false),
+            Ok(x) => x,
+        };
+
+        let program = issue_contract(1u64, 888u64.into(), &predicate);
+
+        let bp_gens = BulletproofGens::new(64, 1);
+        let txresult = Prover::build_tx(program, 0u64, 0u64, 0u64, &bp_gens);
+        let (tx, txid, txlog) = match txresult {
+            Err(err) => return assert!(false, err.to_string()),
+            Ok(x) => x,
+        };
+        (tx, txid)
     };
 
-    // pushdata qty
-    // var
-    // pushdata flv
-    // var
-    // pushdata pred <- pubkey to issue to
-    // issue
-    let program = issue_contract(Scalar::one(), Scalar::one(), &predicate);
+    println!("prover txid {:?}", txid);
 
+    // verify
     let bp_gens = BulletproofGens::new(64, 1);
-    let txresult = Prover::build_tx(program, 0u64, 0u64, 0u64, &bp_gens);
-    let (tx, txid, txlog) = match txresult {
-        Err(err) => return assert!(false, err),
-        Ok(x) => x,
+    match Verifier::verify_tx(tx, &bp_gens) {
+        Err(err) => return assert!(false, err.to_string()),
+        Ok(_) => return,
     };
 }
