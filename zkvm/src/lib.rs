@@ -21,6 +21,7 @@ pub use self::ops::{Instruction, Opcode};
 pub use self::predicate::{Predicate, PredicateWitness};
 pub use self::prover::Prover;
 pub use self::signature::VerificationKey;
+pub use self::transcript::TranscriptProtocol;
 pub use self::txlog::{Entry, TxID, UTXO};
 pub use self::types::{
     Commitment, CommitmentWitness, Data, DataWitness, Item, ScalarWitness, Value, WideValue,

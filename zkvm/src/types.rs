@@ -117,6 +117,16 @@ impl CommitmentWitness {
         gens.commit(self.value.into(), self.blinding).compress()
     }
 
+    pub fn unblinded<T>(x: T) -> Self
+    where
+        T: Into<ScalarWitness>,
+    {
+        CommitmentWitness {
+            blinding: Scalar::zero(),
+            value: x.into(),
+        }
+    }
+
     pub fn from_secret<T>(x: T) -> Self
     where
         T: Into<ScalarWitness>,

@@ -15,46 +15,50 @@ fn issue_contract(qty: u64, flv: Scalar, pred: &Predicate) -> Vec<Instruction> {
         Instruction::Push(Data::Witness(DataWitness::Commitment(Box::new(
             Commitment::Open(Box::new(CommitmentWitness::from_secret(qty))),
         )))),
-        // var [qty var]
+        // stack: qty-var
         Instruction::Var,
-        // pushdata flv [qty var] [flv]
+        // stack: flv, qty-var
         Instruction::Push(Data::Witness(DataWitness::Commitment(Box::new(
-            Commitment::Open(Box::new(CommitmentWitness::from_secret(flv))),
+            Commitment::Open(Box::new(CommitmentWitness::unblinded(flv))),
         )))),
-        // var [qty var] [flv var]
+        // stack: flv-var, qty-var
         Instruction::Var,
-        // pushdata predicate [qty var] [flv var] [pred]
+        // stack: pred, flv-var, qty-var
         Instruction::Push(pred.clone().into()),
-        // issue [c:issue]
+        // stack: issue-contract
         Instruction::Issue,
-        // pushdata predicate [c:issue] [pred]
+        // stack: pred, issue-contract
         Instruction::Push(pred.clone().into()),
-        // nonce [c:issue] [c:nonce]
+        // stack: nonce-contract, issue-contract
         Instruction::Nonce,
-        // signtx [c:issue]
+        // stack: issue-contract
         Instruction::Signtx,
-        // signtx [...payload]
+        // stack: issue-payload...
         Instruction::Signtx,
-        // pushdata predicate [...payload] [pred]
+        // stack: pred, issue-payload...
         Instruction::Push(pred.clone().into()),
-        // output:1
+        // stack: empty
         Instruction::Output(1),
     ]
 }
 
-// TBD: define test helpers similar to cloak for proving + verifying
-
 #[test]
 fn issue() {
     let (tx, txid) = {
-        let privkey = Scalar::random(&mut rand::thread_rng());
-
-        let predicate = match Predicate::from_witness(PredicateWitness::Key(privkey)) {
+        // Random predicate
+        let pred = match Predicate::from_witness(PredicateWitness::Key(Scalar::random(
+            &mut rand::thread_rng(),
+        ))) {
             Err(_) => return assert!(false),
             Ok(x) => x,
         };
 
-        let program = issue_contract(1u64, 888u64.into(), &predicate);
+        // Generate flavor scalar
+        let mut t = Transcript::new(b"ZkVM.issue");
+        t.commit_bytes(b"predicate", pred.point().as_bytes());
+        let flavor = t.challenge_scalar(b"flavor");
+
+        let program = issue_contract(1u64, flavor, &pred);
 
         let bp_gens = BulletproofGens::new(64, 1);
         let txresult = Prover::build_tx(program, 0u64, 0u64, 0u64, &bp_gens);
@@ -65,9 +69,7 @@ fn issue() {
         (tx, txid)
     };
 
-    println!("prover txid {:?}", txid);
-
-    // verify
+    // Verify tx
     let bp_gens = BulletproofGens::new(64, 1);
     match Verifier::verify_tx(tx, &bp_gens) {
         Err(err) => return assert!(false, err.to_string()),

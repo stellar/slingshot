@@ -34,14 +34,16 @@ impl<'a, 'b> Delegate<r1cs::Prover<'a, 'b>> for Prover<'a, 'b> {
             Commitment::Open(w) => (w.value.into(), w.blinding),
             Commitment::Closed(_) => return Err(VMError::WitnessMissing),
         };
-        Ok(self.cs.commit(v, v_blinding))
+        let var = self.cs.commit(v, v_blinding).1;
+        Ok((com.to_point(), var))
     }
 
-    fn verify_point_op<F>(&mut self, _point_op_fn: F) -> Result<(), VMError>
+    fn verify_point_op<F>(&mut self, point_op_fn: F) -> Result<(), VMError>
     where
         F: FnOnce() -> PointOp,
     {
-        Ok(())
+        let op = point_op_fn();
+        op.verify()
     }
 
     fn process_tx_signature(&mut self, pred: Predicate) -> Result<(), VMError> {
