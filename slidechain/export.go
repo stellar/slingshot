@@ -364,8 +364,16 @@ func BuildExportTx(ctx context.Context, asset xdr.Asset, exportAmt, inputAmt int
 	retireAnchor1 := txvm.VMHash("Split2", anchor)
 	retireAnchor := txvm.VMHash("Split1", retireAnchor1[:])
 	log.Printf("asset xdr in BuildExportTx: %s", assetXDR)
-	ref := pegRef{
-		assetXDR,
+	ref := struct {
+		AssetXDR string `json:"asset"`
+		Temp     string `json:"temp"`
+		Seqnum   int64  `json:"seqnum"`
+		Exporter string `json:"exporter"`
+		Amount   int64  `json:"amount"`
+		Anchor   []byte `json:"anchor"`
+		Pubkey   []byte `json:"pubkey"`
+	}{
+		string(assetXDR),
 		temp,
 		int64(seqnum),
 		kp.Address(),

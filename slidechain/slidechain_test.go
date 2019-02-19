@@ -578,7 +578,15 @@ func IsExportTx(tx *bc.Tx, asset xdr.Asset, inputAmt int64, temp, exporter strin
 		return false
 	}
 	log.Printf("asset xdr in IsExportTx: %s", assetXDR)
-	ref := pegRef{
+	ref := struct {
+		AssetXDR string `json:"asset"`
+		Temp     string `json:"temp"`
+		Seqnum   int64  `json:"seqnum"`
+		Exporter string `json:"exporter"`
+		Amount   int64  `json:"amount"`
+		Anchor   []byte `json:"anchor"`
+		Pubkey   []byte `json:"pubkey"`
+	}{
 		assetXDR,
 		temp,
 		seqnum,
