@@ -93,8 +93,6 @@ impl<'a, 'b> Verifier<'a, 'b> {
 
         let (txid, txlog) = vm.run()?;
 
-        println!("verifier txid {:?}", txid);
-
         // Verify the signatures over txid
         let mut signtx_transcript = Transcript::new(b"ZkVM.signtx");
         signtx_transcript.commit_bytes(b"txid", &txid.0);

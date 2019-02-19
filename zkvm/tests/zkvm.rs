@@ -7,20 +7,14 @@ use std::collections::VecDeque;
 
 use zkvm::*;
 
-// Take some key as a param
 fn issue_contract(qty: u64, flv: Scalar, pred: &Predicate) -> Vec<Instruction> {
     vec![
         // pushdata qty [qty]
-        // TBD: fix implicit type conversions to avoid this nightmare
-        Instruction::Push(Data::Witness(DataWitness::Commitment(Box::new(
-            Commitment::Open(Box::new(CommitmentWitness::from_secret(qty))),
-        )))),
+        Instruction::Push(Commitment::from(CommitmentWitness::from_secret(qty)).into()),
         // stack: qty-var
         Instruction::Var,
         // stack: flv, qty-var
-        Instruction::Push(Data::Witness(DataWitness::Commitment(Box::new(
-            Commitment::Open(Box::new(CommitmentWitness::unblinded(flv))),
-        )))),
+        Instruction::Push(Commitment::from(CommitmentWitness::unblinded(flv)).into()),
         // stack: flv-var, qty-var
         Instruction::Var,
         // stack: pred, flv-var, qty-var
