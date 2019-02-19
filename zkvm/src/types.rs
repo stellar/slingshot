@@ -285,19 +285,14 @@ impl Data {
     }
 
     /// Encodes blinded Data values.
-    /// LE32(len) || data
     pub fn encode(&self, buf: &mut Vec<u8>) {
         match self {
             Data::Opaque(x) => {
-                encoding::write_u32(x.len() as u32, buf);
                 buf.extend_from_slice(x);
                 return;
             }
             Data::Witness(w) => {
-                let mut witness: Vec<u8> = Vec::new();
-                w.encode(&mut witness);
-                encoding::write_u32(witness.len() as u32, buf);
-                buf.append(&mut witness);
+                w.encode(buf);
             }
         };
     }
