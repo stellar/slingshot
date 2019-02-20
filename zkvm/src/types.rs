@@ -324,15 +324,16 @@ impl Neg for Expression {
     fn neg(self) -> Expression {
         match self {
             Expression::Constant(a) => Expression::Constant(-a),
-            Expression::Terms(terms, assignment) => {
+            Expression::Terms(mut terms, assignment) => {
                 for (_, n) in terms.iter_mut() {
                     *n = -*n;
                 }
 
                 let x = match assignment {
-                    Some(a) => -a,
+                    Some(a) => Some(-a),
+                    None => None,
                 };
-                Expression::Terms(terms, Some(x))
+                Expression::Terms(terms, x)
             }
         }
     }
