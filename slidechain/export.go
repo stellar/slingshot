@@ -93,7 +93,7 @@ var (
 )
 
 // Runs as a goroutine.
-func (c *Custodian) pegOutFromExports(ctx context.Context) {
+func (c *Custodian) pegOutFromExports(ctx context.Context, pegouts chan pegOut) {
 	defer log.Print("pegOutFromExports exiting")
 
 	ch := make(chan struct{})
@@ -157,33 +157,34 @@ func (c *Custodian) pegOutFromExports(ctx context.Context) {
 			var peggedOut pegOutState
 			for i := 0; i < 5; i++ {
 				err = c.pegOut(ctx, exporter, asset, amounts[i], tempID, xdr.SequenceNumber(seqnums[i]))
-				if err == nil { // successful peg-out
-					peggedOut = pegOutOK
-					break
-				}
-				if herr, ok := errors.Root(err).(*horizon.Error); ok {
-					resultCodes, err := herr.ResultCodes()
-					if err != nil {
-						log.Fatalf("getting error codes from failed submission of tx %s", txid)
-					}
-					if resultCodes.TransactionCode != xdr.TransactionResultCodeTxBadSeq.String() { // non-retriable error
-						peggedOut = pegOutFail
-						break
-					}
-				} else {
-					break
-				}
-				_, err = c.DB.ExecContext(ctx, `UPDATE exports SET pegged_out=$1 WHERE txid=$2`, pegOutRetry, txid)
 				if err != nil {
-					log.Fatalf("updating export table for retriable tx: %s", err)
+					if herr, ok := errors.Root(err).(*horizon.Error); ok {
+						resultCodes, err := herr.ResultCodes()
+						if err != nil {
+							log.Fatalf("getting error codes from failed submission of tx %s", txid)
+						}
+						if resultCodes.TransactionCode != xdr.TransactionResultCodeTxBadSeq.String() { // non-retriable error
+							peggedOut = pegOutFail
+							break
+						}
+					} else {
+						log.Fatalf("could not get error code from failed submission of tx %s", txid)
+					}
+					_, err = c.DB.ExecContext(ctx, `UPDATE exports SET pegged_out=$1 WHERE txid=$2`, pegOutRetry, txid)
+					if err != nil {
+						log.Fatalf("updating export table for retriable tx: %s", err)
+					}
+					continue
 				}
+				peggedOut = pegOutOK
+				break
 			}
 			_, err = c.DB.ExecContext(ctx, `UPDATE exports SET pegged_out=$1 WHERE txid=$2`, peggedOut, txid)
 			if err != nil {
 				log.Fatalf("updating export table: %s", err)
 			}
 			// Send peg-out info to goroutine for post-peg-out txvm txs
-			c.pegouts <- pegOut{
+			pegouts <- pegOut{
 				Txid:     txid,
 				AssetXDR: assetXDRs[i],
 				Temp:     temps[i],

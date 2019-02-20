@@ -36,7 +36,8 @@ func TestPegOut(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	go c.pegOutFromExports(ctx)
+	pegouts := make(chan pegOut)
+	go c.pegOutFromExports(ctx, pegouts)
 
 	var lumen xdr.Asset
 	lumen.Type = xdr.AssetTypeAssetTypeNative

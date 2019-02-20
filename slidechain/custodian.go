@@ -33,14 +33,12 @@ var (
 // for importing pegged-in values and pegging out exported
 // values.
 type Custodian struct {
-	seed      string
-	hclient   horizon.ClientInterface
-	imports   *sync.Cond
-	exports   *sync.Cond
-	pegouts   chan pegOut
-	exportmux *sync.Mutex
-	network   string
-	privkey   ed25519.PrivateKey
+	seed    string
+	hclient horizon.ClientInterface
+	imports *sync.Cond
+	exports *sync.Cond
+	network string
+	privkey ed25519.PrivateKey
 
 	DB            *sql.DB
 	S             *submitter
@@ -108,8 +106,6 @@ func newCustodian(ctx context.Context, db *sql.DB, hclient horizon.ClientInterfa
 		hclient:       hclient,
 		imports:       sync.NewCond(new(sync.Mutex)),
 		exports:       sync.NewCond(new(sync.Mutex)),
-		pegouts:       make(chan pegOut),
-		exportmux:     new(sync.Mutex),
 		network:       root.NetworkPassphrase,
 		privkey:       custodianPrv,
 		InitBlockHash: initialBlock.Hash(),
@@ -194,11 +190,12 @@ func (c *Custodian) Account(w http.ResponseWriter, req *http.Request) {
 // launch kicks off the Custodian's long-running goroutines
 // that stream txs, import, and export.
 func (c *Custodian) launch(ctx context.Context) {
+	pegouts := make(chan pegOut)
 	go c.watchPegs(ctx)
 	go c.importFromPegs(ctx, nil)
 	go c.watchExports(ctx)
-	go c.pegOutFromExports(ctx)
-	go c.watchPegOuts(ctx)
+	go c.pegOutFromExports(ctx, pegouts)
+	go c.watchPegOuts(ctx, pegouts)
 }
 
 func mustDecodeHex(inp string) []byte {

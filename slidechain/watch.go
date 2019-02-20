@@ -164,17 +164,15 @@ func (c *Custodian) watchExports(ctx context.Context) {
 }
 
 // Runs as a goroutine
-func (c *Custodian) watchPegOuts(ctx context.Context) {
+func (c *Custodian) watchPegOuts(ctx context.Context, pegouts chan pegOut) {
 	defer log.Print("watchPegOuts exiting")
 
-	// Poll the database every minute for unprocessed exports.
-	go func(ctx context.Context) {
-		defer log.Print("export table poll exiting")
-		for t := time.Tick(1 * time.Minute); ; {
-			// Lock access to the export database.
-			// We do this to avoid double-processing any peg-out tx, via selecting it in both go-routines.
-			// We unlock at the end of an iteration of this go-routine or before any early return.
-			c.exportmux.Lock()
+	ticker := time.NewTicker(time.Minute)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+		case <-ticker.C:
 			const q = `SELECT amount, asset_xdr, exporter, temp, seqnum, anchor, pubkey FROM exports WHERE (pegged_out=$1 OR pegged_out=$2)`
 			var (
 				txids, anchors, pubkeys     [][]byte
@@ -194,51 +192,28 @@ func (c *Custodian) watchPegOuts(ctx context.Context) {
 				pubkeys = append(pubkeys, pubkey)
 			})
 			if err == context.Canceled {
-				c.exportmux.Unlock()
 				return
 			}
 			if err != nil {
-				c.exportmux.Unlock()
 				log.Fatalf("querying peg-outs: %s", err)
 			}
 			for i, txid := range txids {
 				err = c.doPostPegOut(ctx, assetXDRs[i], anchors[i], txid, amounts[i], seqnums[i], peggedOuts[i], exporters[i], temps[i], pubkeys[i])
 				if err != nil {
-					c.exportmux.Unlock()
 					if err == context.Canceled {
 						return
 					}
 					log.Fatal(err)
 				}
 			}
-			c.exportmux.Unlock()
-			select {
-			case <-t:
-				continue
-			case <-ctx.Done():
-				return
+		case p := <-pegouts:
+			err := c.doPostPegOut(ctx, p.AssetXDR, p.Anchor, p.Txid, p.Amount, p.Seqnum, p.State, p.Exporter, p.Temp, p.Pubkey)
+			if err != nil {
+				if err == context.Canceled {
+					return
+				}
+				log.Fatal(err)
 			}
-		}
-	}(ctx)
-
-	for {
-		// The lock and unlock pattern for the export database is as in the above go routine.
-		c.exportmux.Lock()
-		// Read in new peg-outs via channel.
-		var peg pegOut
-		select {
-		case <-ctx.Done():
-			c.exportmux.Unlock()
-			return
-		case peg = <-c.pegouts:
-		}
-		err := c.doPostPegOut(ctx, peg.AssetXDR, peg.Anchor, peg.Txid, peg.Amount, peg.Seqnum, peg.State, peg.Exporter, peg.Temp, peg.Pubkey)
-		c.exportmux.Unlock()
-		if err != nil {
-			if err == context.Canceled {
-				return
-			}
-			log.Fatal(err)
 		}
 	}
 }
