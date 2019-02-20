@@ -99,17 +99,6 @@ pub enum ScalarWitness {
     Scalar(Scalar),
 }
 
-impl Neg for ScalarWitness {
-    type Output = ScalarWitness;
-
-    fn neg(self) -> ScalarWitness {
-        match self {
-            ScalarWitness::Integer(a) => ScalarWitness::Integer(-a),
-            ScalarWitness::Scalar(a) => ScalarWitness::Scalar(-a),
-        }
-    }
-}
-
 impl Commitment {
     pub fn to_point(&self) -> CompressedRistretto {
         match self {
@@ -145,6 +134,17 @@ impl ScalarWitness {
             None => Ok(None),
             Some(ScalarWitness::Integer(i)) => Ok(Some(i)),
             Some(ScalarWitness::Scalar(_)) => Err(VMError::TypeNotSignedInteger),
+        }
+    }
+}
+
+impl Neg for ScalarWitness {
+    type Output = ScalarWitness;
+
+    fn neg(self) -> ScalarWitness {
+        match self {
+            ScalarWitness::Integer(a) => ScalarWitness::Integer(-a),
+            ScalarWitness::Scalar(a) => ScalarWitness::Scalar(-a),
         }
     }
 }
