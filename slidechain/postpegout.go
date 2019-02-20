@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/chain/txvm/crypto/ed25519"
-	i10rjson "github.com/chain/txvm/encoding/json"
 	"github.com/chain/txvm/errors"
 	"github.com/chain/txvm/protocol/bc"
 	"github.com/chain/txvm/protocol/txvm"
@@ -40,7 +39,6 @@ func (c *Custodian) doPostPegOut(ctx context.Context, assetXDR string, anchor, t
 	if err != nil {
 		return errors.Wrap(err, "marshaling reference data")
 	}
-	refdataHex := i10rjson.HexBytes(refdata)
 	b := new(txvmutil.Builder)
 	b.Tuple(func(contract *txvmutil.TupleBuilder) { // {'C', ...}
 		contract.PushdataByte(txvm.ContractCode)
@@ -60,7 +58,7 @@ func (c *Custodian) doPostPegOut(ctx context.Context, assetXDR string, anchor, t
 		})
 		contract.Tuple(func(tup *txvmutil.TupleBuilder) { // {'S', refdata}
 			tup.PushdataByte(txvm.BytesCode)
-			tup.PushdataBytes(refdataHex)
+			tup.PushdataBytes(refdata)
 		})
 	})
 	b.PushdataInt64(int64(peggedOut)).Op(op.Put)                        // con stack: snapshot; arg stack: selector
