@@ -202,7 +202,7 @@ func (c *Custodian) watchPegOuts(ctx context.Context) {
 				log.Fatalf("querying peg-outs: %s", err)
 			}
 			for i, txid := range txids {
-				err = c.doPostExport(ctx, assetXDRs[i], anchors[i], txid, amounts[i], seqnums[i], peggedOuts[i], exporters[i], temps[i], pubkeys[i])
+				err = c.doPostPegOut(ctx, assetXDRs[i], anchors[i], txid, amounts[i], seqnums[i], peggedOuts[i], exporters[i], temps[i], pubkeys[i])
 				if err != nil {
 					c.exportmux.Unlock()
 					if err == context.Canceled {
@@ -232,7 +232,7 @@ func (c *Custodian) watchPegOuts(ctx context.Context) {
 			return
 		case peg = <-c.pegouts:
 		}
-		err := c.doPostExport(ctx, peg.AssetXDR, peg.Anchor, peg.Txid, peg.Amount, peg.Seqnum, peg.State, peg.Exporter, peg.Temp, peg.Pubkey)
+		err := c.doPostPegOut(ctx, peg.AssetXDR, peg.Anchor, peg.Txid, peg.Amount, peg.Seqnum, peg.State, peg.Exporter, peg.Temp, peg.Pubkey)
 		c.exportmux.Unlock()
 		if err != nil {
 			if err == context.Canceled {

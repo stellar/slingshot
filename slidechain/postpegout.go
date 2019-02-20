@@ -3,7 +3,6 @@ package slidechain
 import (
 	"context"
 	"encoding/json"
-	"log"
 	"math"
 	"time"
 
@@ -17,7 +16,7 @@ import (
 	"github.com/stellar/go/xdr"
 )
 
-func (c *Custodian) doPostExport(ctx context.Context, assetXDR string, anchor, txid []byte, amount, seqnum int64, peggedOut pegOutState, exporter, temp string, pubkey []byte) error {
+func (c *Custodian) doPostPegOut(ctx context.Context, assetXDR string, anchor, txid []byte, amount, seqnum int64, peggedOut pegOutState, exporter, temp string, pubkey []byte) error {
 	var asset xdr.Asset
 	err := xdr.SafeUnmarshalBase64(assetXDR, &asset)
 	if err != nil {
@@ -28,7 +27,6 @@ func (c *Custodian) doPostExport(ctx context.Context, assetXDR string, anchor, t
 		return errors.Wrap(err, "marshaling asset bytes")
 	}
 	assetID := bc.NewHash(txvm.AssetID(importIssuanceSeed[:], assetBytes))
-	log.Printf("asset xdr in doPostExport: %s", string(assetXDR))
 	ref := pegOut{
 		AssetXDR: assetXDR,
 		Temp:     temp,
@@ -83,18 +81,18 @@ func (c *Custodian) doPostExport(ctx context.Context, assetXDR string, anchor, t
 	prog2 := b.Build()
 	tx, err := bc.NewTx(prog2, 3, math.MaxInt64)
 	if err != nil {
-		return errors.Wrap(err, "making post-export tx")
+		return errors.Wrap(err, "making post-peg-out tx")
 	}
 	if err != nil {
-		return errors.Wrap(err, "building post-export tx")
+		return errors.Wrap(err, "building post-peg-out tx")
 	}
 	r, err := c.S.submitTx(ctx, tx)
 	if err != nil {
-		return errors.Wrap(err, "submitting post-export tx")
+		return errors.Wrap(err, "submitting post-peg-out tx")
 	}
 	err = c.S.waitOnTx(ctx, tx.ID, r)
 	if err != nil {
-		return errors.Wrap(err, "waiting on post-export tx to hit txvm")
+		return errors.Wrap(err, "waiting on post-peg-out tx to hit txvm")
 	}
 	_, err = c.DB.ExecContext(ctx, `DELETE FROM exports WHERE txid=$1`, txid)
 	return errors.Wrapf(err, "deleting export for tx %x", txid)
