@@ -292,10 +292,7 @@ where
 
     fn neg(&mut self) -> Result<(), VMError> {
         let mut expr = self.pop_item()?.to_expression()?;
-        for (_, n) in expr.terms.iter_mut() {
-            -*n;
-        }
-        self.push_item(expr);
+        self.push_item(-expr);
         Ok(())
     }
 
