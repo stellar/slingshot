@@ -27,7 +27,7 @@ import (
 )
 
 type pegOut struct {
-	Txid     []byte      `json:"txid",omitempty`
+	Txid     []byte      `json:"txid,omitempty"`
 	AssetXDR string      `json:"asset"`
 	Temp     string      `json:"temp"`
 	Seqnum   int64       `json:"seqnum"`
@@ -35,7 +35,7 @@ type pegOut struct {
 	Amount   int64       `json:"amount"`
 	Anchor   []byte      `json:"anchor"`
 	Pubkey   []byte      `json:"pubkey"`
-	State    pegOutState `json:"state",omitempty`
+	State    pegOutState `json:"state,omitempty"`
 }
 
 type pegOutState int
