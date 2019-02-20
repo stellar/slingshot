@@ -25,6 +25,15 @@ import (
 	"github.com/stellar/go/xdr"
 )
 
+type pegOutState int
+
+const (
+	pegOutNotYet pegOutState = iota
+	pegOutOK
+	pegOutRetry
+	pegOutFail
+)
+
 const baseFee = 100
 
 // Runs as a goroutine.
@@ -51,7 +60,7 @@ func (c *Custodian) pegOutFromExports(ctx context.Context) {
 		case <-ch:
 		}
 
-		const q = `SELECT txid, amount, asset_xdr, exporter, temp, seqnum FROM exports WHERE exported=0`
+		const q = `SELECT txid, amount, asset_xdr, exporter, temp, seqnum FROM exports WHERE pegged_out IN ($1, $2)`
 
 		var (
 			txids     [][]byte
@@ -61,7 +70,7 @@ func (c *Custodian) pegOutFromExports(ctx context.Context) {
 			temps     []string
 			seqnums   []int
 		)
-		err := sqlutil.ForQueryRows(ctx, c.DB, q, func(txid []byte, amount int, assetXDR []byte, exporter string, temp string, seqnum int) {
+		err := sqlutil.ForQueryRows(ctx, c.DB, q, pegOutNotYet, pegOutRetry, func(txid []byte, amount int, assetXDR []byte, exporter string, temp string, seqnum int) {
 			txids = append(txids, txid)
 			amounts = append(amounts, amount)
 			assetXDRs = append(assetXDRs, assetXDR)
@@ -91,11 +100,23 @@ func (c *Custodian) pegOutFromExports(ctx context.Context) {
 
 			log.Printf("pegging out export %x: %d of %s to %s", txid, amounts[i], asset.String(), exporters[i])
 			// TODO(vniu): flag txs that fail with unretriable errors in the db
+			var peggedOut pegOutState
 			err = c.pegOut(ctx, exporter, asset, int64(amounts[i]), tempID, xdr.SequenceNumber(seqnums[i]))
 			if err != nil {
-				log.Fatalf("pegging out tx: %s", err)
+				peggedOut = pegOutFail
+				if herr, ok := errors.Root(err).(*horizon.Error); ok {
+					resultCodes, err := herr.ResultCodes()
+					if err != nil {
+						log.Fatalf("getting error codes from failed submission of tx %s", txid)
+					}
+					if resultCodes.TransactionCode == xdr.TransactionResultCodeTxBadSeq.String() { // retriable error
+						peggedOut = pegOutRetry
+					}
+				}
+			} else {
+				peggedOut = pegOutOK
 			}
-			_, err = c.DB.ExecContext(ctx, `UPDATE exports SET exported=1 WHERE txid=$1`, txid)
+			_, err = c.DB.ExecContext(ctx, `UPDATE exports SET pegged_out=$1 WHERE txid=$2`, peggedOut, txid)
 			if err != nil {
 				log.Fatalf("updating export table: %s", err)
 			}
