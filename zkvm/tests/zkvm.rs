@@ -12,6 +12,18 @@ fn issue_contract(
     nonce_pred: &Predicate,
     recipient_pred: &Predicate,
 ) -> Vec<Instruction> {
+    let mut instructions = issue_helper(qty, flv, issuance_pred, nonce_pred); // stack: issued-value
+    instructions.push(Instruction::Push(recipient_pred.clone().into())); // stack: issued-value, pred
+    instructions.push(Instruction::Output(1)); // stack: empty
+    instructions
+}
+
+fn issue_helper(
+    qty: u64,
+    flv: Scalar,
+    issuance_pred: &Predicate,
+    nonce_pred: &Predicate,
+) -> Vec<Instruction> {
     vec![
         Instruction::Push(
             Commitment::from(CommitmentWitness {
@@ -22,15 +34,13 @@ fn issue_contract(
         ), // stack: qty
         Instruction::Var, // stack: qty-var
         Instruction::Push(Commitment::from(CommitmentWitness::unblinded(flv)).into()), // stack: qty-var, flv
-        Instruction::Var,                                 // stack: qty-var, flv-var
-        Instruction::Push(issuance_pred.clone().into()),  // stack: qty-var, flv-var, pred
-        Instruction::Issue,                               // stack: issue-contract
-        Instruction::Push(nonce_pred.clone().into()),     // stack: issue-contract, pred
-        Instruction::Nonce,                               // stack: issue-contract, nonce-contract
-        Instruction::Signtx,                              // stack: issue-contract
-        Instruction::Signtx,                              // stack: issued-value
-        Instruction::Push(recipient_pred.clone().into()), // stack: issued-value, pred
-        Instruction::Output(1),                           // stack: empty
+        Instruction::Var,                                // stack: qty-var, flv-var
+        Instruction::Push(issuance_pred.clone().into()), // stack: qty-var, flv-var, pred
+        Instruction::Issue,                              // stack: issue-contract
+        Instruction::Push(nonce_pred.clone().into()),    // stack: issue-contract, pred
+        Instruction::Nonce,                              // stack: issue-contract, nonce-contract
+        Instruction::Signtx,                             // stack: issue-contract
+        Instruction::Signtx,                             // stack: issued-value
     ]
 }
 
@@ -78,4 +88,30 @@ fn issue() {
             assert_eq!(v.log, txlog);
         }
     };
+}
+
+// questions:
+// - do we have to use separate nonce predicates for the two inputs (to ensure uniqueness if they're same qty?)
+fn spend_2_2(
+    input_1: u64,
+    input_2: u64,
+    _output_1: u64,
+    _output_2: u64,
+    flv: Scalar,
+    issuance_pred: &Predicate,
+    nonce_pred: &Predicate,
+    recipient_1_pred: &Predicate,
+    recipient_2_pred: &Predicate,
+) -> Vec<Instruction> {
+    let mut instructions = vec![];
+    instructions.append(&mut issue_helper(input_1, flv, issuance_pred, nonce_pred)); // stack: issued-value-1
+    instructions.append(&mut issue_helper(input_2, flv, issuance_pred, nonce_pred)); // stack: issued-value-1, issued-value-2
+                                                                                     // TODO: add cloak
+
+    instructions.push(Instruction::Push(recipient_2_pred.clone().into())); // stack: issued-value-1, issued-value-2, recipient-2-pred
+    instructions.push(Instruction::Output(1)); // stack: issued-value-1
+    instructions.push(Instruction::Push(recipient_1_pred.clone().into())); // stack: issued-value-1, recipient-1-pred
+    instructions.push(Instruction::Output(1)); // stack: empty
+
+    instructions
 }
