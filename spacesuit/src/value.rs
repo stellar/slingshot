@@ -34,7 +34,7 @@ pub struct AllocatedQuantity {
 }
 
 /// Represents a signed integer with absolute value in the 64-bit range.
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd)]
 pub struct SignedInteger(i128);
 
 impl Value {
