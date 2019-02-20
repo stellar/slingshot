@@ -326,9 +326,13 @@ impl Neg for Expression {
             Expression::Constant(a) => Expression::Constant(-a),
             Expression::Terms(terms, assignment) => {
                 for (_, n) in terms.iter_mut() {
-                    -*n;
+                    *n = -*n;
                 }
-                Expression::Terms(terms, assignment)
+
+                let x = match assignment {
+                    Some(a) => -a,
+                };
+                Expression::Terms(terms, Some(x))
             }
         }
     }
