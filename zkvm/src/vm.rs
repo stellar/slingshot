@@ -5,6 +5,7 @@ use curve25519_dalek::scalar::Scalar;
 use spacesuit;
 use spacesuit::SignedInteger;
 use std::iter::FromIterator;
+use std::ops::Neg;
 
 use crate::contract::{Contract, FrozenContract, FrozenItem, FrozenValue, PortableItem};
 use crate::encoding::Subslice;
@@ -291,11 +292,16 @@ where
     }
 
     fn neg(&mut self) -> Result<(), VMError> {
-        let mut expr = self.pop_item()?.to_expression()?;
-        for (_, n) in expr.terms.iter_mut() {
-            -*n;
-        }
-        self.push_item(expr);
+        let expr = self.pop_item()?.to_expression()?;
+        let neg_expr = Expression {
+            terms: expr
+                .terms
+                .iter()
+                .map(|t| (t.0, t.1.neg()))
+                .collect::<Vec<_>>(),
+            assignment: expr.assignment,
+        };
+        self.push_item(neg_expr);
         Ok(())
     }
 
