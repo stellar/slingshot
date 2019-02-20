@@ -3,7 +3,7 @@
 //! Operations:
 //! - disjunction: P = L + f(L,R)*B
 //! - program_commitment: P = h(prog)*B2
-use curve25519_dalek::ristretto::CompressedRistretto;
+use curve25519_dalek::ristretto::{RistrettoPoint,CompressedRistretto};
 use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
 
@@ -15,17 +15,18 @@ use crate::transcript::TranscriptProtocol;
 
 /// Represents a ZkVM predicate with its optional witness data.
 #[derive(Clone, Debug)]
-pub struct Predicate {
-    point: CompressedRistretto,
-    witness: Option<PredicateWitness>,
+pub enum Predicate {
+    Compressed(CompressedRistretto),
+    Decompressed(PredicateWitness),
 }
 
 /// Prover's representation of the predicate tree with all the secret witness data.
 #[derive(Clone, Debug)]
 pub enum PredicateWitness {
+    Opaque(RistrettoPoint),
     Key(Scalar),
     Program(Vec<Instruction>),
-    Or(Box<Predicate>, Box<Predicate>),
+    Or(Box<PredicateWitness>, Box<PredicateWitness>),
 }
 
 impl Predicate {
