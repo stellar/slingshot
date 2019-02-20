@@ -30,3 +30,4 @@ path = "../spacesuit"
 
 [dev-dependencies]
 criterion = "0.2"
+hex = "^0.3"
