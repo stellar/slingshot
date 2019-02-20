@@ -13,6 +13,7 @@ use crate::ops::Instruction;
 use crate::predicate::Predicate;
 use crate::transcript::TranscriptProtocol;
 
+use std::ops::Add;
 use std::ops::Neg;
 
 #[derive(Debug)]
@@ -145,6 +146,32 @@ impl Neg for ScalarWitness {
         match self {
             ScalarWitness::Integer(a) => ScalarWitness::Integer(-a),
             ScalarWitness::Scalar(a) => ScalarWitness::Scalar(-a),
+        }
+    }
+}
+impl Add for ScalarWitness {
+    type Output = ScalarWitness;
+
+    fn add(self, rhs: ScalarWitness) -> ScalarWitness {
+        match (self, rhs) {
+            (ScalarWitness::Integer(a), ScalarWitness::Integer(b)) => {
+                let res = a + b;
+
+                if res > spacesuit::SignedInteger::from(std::u64::MAX) {
+                    return ScalarWitness::Scalar(res.into());
+                }
+
+                ScalarWitness::Integer(res)
+            }
+            (ScalarWitness::Scalar(a), ScalarWitness::Scalar(b)) => ScalarWitness::Scalar(a + b),
+            (ScalarWitness::Integer(a), ScalarWitness::Scalar(b)) => {
+                let x: Scalar = a.into();
+                ScalarWitness::Scalar(x + b)
+            }
+            (ScalarWitness::Scalar(a), ScalarWitness::Integer(b)) => {
+                let x: Scalar = b.into();
+                ScalarWitness::Scalar(x + a)
+            }
         }
     }
 }
@@ -334,6 +361,52 @@ impl Neg for Expression {
                     None => None,
                 };
                 Expression::Terms(terms, x)
+            }
+        }
+    }
+}
+
+impl Add for Expression {
+    type Output = Expression;
+
+    fn add(self, rhs: Expression) -> Expression {
+        match (self, rhs) {
+            (Expression::Constant(a), Expression::Constant(b)) => Expression::Constant(a + b),
+            (Expression::Constant(a), Expression::Terms(mut terms, assignment)) => {
+                // concatenate constant term to term vector in non-constant expression
+                terms.push((r1cs::Variable::One(), a.into()));
+
+                // Add assignments
+                let ass = match assignment {
+                    Some(b) => Some(a + b),
+                    _ => None,
+                };
+                Expression::Terms(terms, ass)
+            }
+            (Expression::Terms(mut terms, assignment), Expression::Constant(b)) => {
+                // concatenate constant term to term vector in non-constant expression
+                terms.push((r1cs::Variable::One(), b.into()));
+
+                // Add assignments
+                let ass = match assignment {
+                    Some(a) => Some(a + b),
+                    _ => None,
+                };
+
+                Expression::Terms(terms, ass)
+            }
+            (Expression::Terms(t1, a1), Expression::Terms(t2, a2)) => {
+                // concatenate terms from both non-constant expressions
+                let mut terms: Vec<ExpressionTerm> = Vec::new();
+                terms.extend(t1);
+                terms.extend(t2);
+
+                // Add assignments
+                let ass = match (a1, a2) {
+                    (Some(a), Some(b)) => Some(a + b),
+                    _ => None,
+                };
+                Expression::Terms(terms, ass)
             }
         }
     }
