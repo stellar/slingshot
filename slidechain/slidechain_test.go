@@ -316,7 +316,6 @@ func TestEndToEnd(t *testing.T) {
 		var exporterPubKeyBytes [32]byte
 		copy(exporterPubKeyBytes[:], exporterPub)
 
-		// TODO(debnil): Test non-native asset types.
 		native := xdr.Asset{
 			Type: xdr.AssetTypeAssetTypeNative,
 		}
