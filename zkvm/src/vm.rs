@@ -647,10 +647,11 @@ where
 
     fn variable_to_expression(&mut self, var: Variable) -> Result<Expression, VMError> {
         let (_, r1cs_var) = self.attach_variable(var)?;
-        Ok(Expression {
-            terms: vec![(r1cs_var, Scalar::one())],
-            assignment: self.variable_assignment(var),
-        })
+
+        Ok(Expression::Terms(
+            vec![(r1cs_var, Scalar::one())],
+            self.variable_assignment(var),
+        ))
     }
 
     /// Returns Ok(Some((qty,flv))) assignment pair if it's missing or consistent.
