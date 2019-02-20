@@ -323,6 +323,25 @@ impl Expression {
     }
 }
 
+impl Neg for Expression {
+    type Output = Expression;
+
+    fn neg(self) -> Expression {
+        match self{
+            Expression::Constant(a) => {
+                Expression::Constant(-a)
+            }, 
+            Expression::Terms(terms,assignment)=> {
+
+                for (_, n) in terms.iter_mut() {
+                    -*n;
+                }
+                Expression::Terms(terms, assignment)
+            }
+        }
+    }
+}
+
 // Upcasting integers/scalars into ScalarWitness
 
 impl From<u64> for ScalarWitness {
