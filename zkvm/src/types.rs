@@ -314,12 +314,7 @@ impl Value {
 
 impl Expression {
     pub fn constant<S: Into<Scalar>>(a: S) -> Self {
-        let a: Scalar = a.into();
-
-        Expression {
-            terms: vec![(r1cs::Variable::One(), a)],
-            assignment: Some(ScalarWitness::Scalar(a)),
-        }
+        Expression::Constant(ScalarWitness::Scalar(a.into()))
     }
 }
 
@@ -327,12 +322,9 @@ impl Neg for Expression {
     type Output = Expression;
 
     fn neg(self) -> Expression {
-        match self{
-            Expression::Constant(a) => {
-                Expression::Constant(-a)
-            }, 
-            Expression::Terms(terms,assignment)=> {
-
+        match self {
+            Expression::Constant(a) => Expression::Constant(-a),
+            Expression::Terms(terms, assignment) => {
                 for (_, n) in terms.iter_mut() {
                     -*n;
                 }
