@@ -138,20 +138,12 @@ func (c *Custodian) watchExports(ctx context.Context) {
 			}
 
 			logItem := tx.Log[1]
-			var info struct {
-				AssetXDR []byte `json:"asset"`
-				Temp     string `json:"temp"`
-				Seqnum   int64  `json:"seqnum"`
-				Exporter string `json:"exporter"`
-				Amount   int64  `json:"amount"`
-				Anchor   []byte `json:"anchor"`
-				Pubkey   []byte `json:"pubkey"`
-			}
+			var info pegOut
 			err := json.Unmarshal(i10rjson.HexBytes(logItem[2].(txvm.Bytes)), &info)
 			if err != nil {
 				continue
 			}
-			exportedAssetBytes := txvm.AssetID(importIssuanceSeed[:], info.AssetXDR)
+			exportedAssetBytes := txvm.AssetID(importIssuanceSeed[:], []byte(info.AssetXDR))
 
 			// Record the export in the db,
 			// then wake up a goroutine that executes peg-outs on the main chain.
@@ -183,20 +175,21 @@ func (c *Custodian) watchPegOuts(ctx context.Context) {
 			// We do this to avoid double-processing any peg-out tx, via selecting it in both go-routines.
 			// We unlock at the end of an iteration of this go-routine or before any early return.
 			c.exportmux.Lock()
-			const q = `SELECT amount, asset_xdr, exporter, temp, seqnum, anchor, pubkey FROM exports WHERE (pegged_out=1 OR pegged_out=3)`
+			const q = `SELECT amount, asset_xdr, exporter, temp, seqnum, anchor, pubkey FROM exports WHERE (pegged_out=$1 OR pegged_out=$2)`
 			var (
-				txids, assetXDRs, anchors, pubkeys [][]byte
-				amounts, seqnums, peggedOuts       []int64
-				exporters, temps                   []string
+				txids, anchors, pubkeys     [][]byte
+				amounts, seqnums            []int64
+				assetXDRs, exporters, temps []string
+				peggedOuts                  []pegOutState
 			)
-			err := sqlutil.ForQueryRows(ctx, c.DB, q, func(txid []byte, amount int64, assetXDR []byte, exporter, temp string, seqnum, peggedOut int64, anchor, pubkey []byte) {
+			err := sqlutil.ForQueryRows(ctx, c.DB, q, pegOutOK, pegOutRetry, func(txid []byte, amount int64, assetXDR string, exporter, temp string, seqnum, peggedOut int64, anchor, pubkey []byte) {
 				txids = append(txids, txid)
 				amounts = append(amounts, amount)
 				assetXDRs = append(assetXDRs, assetXDR)
 				exporters = append(exporters, exporter)
 				temps = append(temps, temp)
 				seqnums = append(seqnums, seqnum)
-				peggedOuts = append(peggedOuts, peggedOut)
+				peggedOuts = append(peggedOuts, pegOutState(peggedOut))
 				anchors = append(anchors, anchor)
 				pubkeys = append(pubkeys, pubkey)
 			})
@@ -239,26 +232,7 @@ func (c *Custodian) watchPegOuts(ctx context.Context) {
 			return
 		case peg = <-c.pegouts:
 		}
-		const q = `SELECT amount, asset_xdr, exporter, temp, seqnum, anchor, pubkey FROM exports WHERE txid=$1 AND pegged_out=$2`
-		var (
-			assetXDR, anchor, pubkey []byte
-			amount, seqnum           int64
-			exporter, temp           string
-		)
-		err := sqlutil.ForQueryRows(ctx, c.DB, q, peg.txid, peg.state, func(qAmount int64, qAssetXDR []byte, qExporter, qTemp string, qSeqnum int64, qAnchor, qPubkey []byte) {
-			assetXDR, anchor, pubkey = qAssetXDR, qAnchor, qPubkey
-			amount, seqnum = qAmount, qSeqnum
-			exporter, temp = qExporter, qTemp
-		})
-		if err == context.Canceled {
-			c.exportmux.Unlock()
-			return
-		}
-		if err != nil {
-			c.exportmux.Unlock()
-			log.Fatalf("querying peg-outs: %s", err)
-		}
-		err = c.doPostExport(ctx, assetXDR, anchor, peg.txid, amount, seqnum, int64(peg.state), exporter, temp, pubkey)
+		err := c.doPostExport(ctx, peg.AssetXDR, peg.Anchor, peg.Txid, peg.Amount, peg.Seqnum, peg.State, peg.Exporter, peg.Temp, peg.Pubkey)
 		c.exportmux.Unlock()
 		if err != nil {
 			if err == context.Canceled {

@@ -27,7 +27,7 @@ CREATE TABLE IF NOT EXISTS exports (
   txid BLOB NOT NULL PRIMARY KEY,
   exporter TEXT NOT NULL,
   amount INTEGER NOT NULL,
-  asset_xdr BLOB NOT NULL,
+  asset_xdr TEXT NOT NULL,
   temp TEXT NOT NULL,
   seqnum INTEGER NOT NULL,
   pegged_out INTEGER NOT NULL DEFAULT 0,

@@ -27,18 +27,15 @@ import (
 )
 
 type pegOut struct {
-	txid  []byte
-	state pegOutState
-}
-
-type pegRef struct {
-	AssetXDR string `json:"asset"`
-	Temp     string `json:"temp"`
-	Seqnum   int64  `json:"seqnum"`
-	Exporter string `json:"exporter"`
-	Amount   int64  `json:"amount"`
-	Anchor   []byte `json:"anchor"`
-	Pubkey   []byte `json:"pubkey"`
+	Txid     []byte      `json:"txid",omitempty`
+	AssetXDR string      `json:"asset"`
+	Temp     string      `json:"temp"`
+	Seqnum   int64       `json:"seqnum"`
+	Exporter string      `json:"exporter"`
+	Amount   int64       `json:"amount"`
+	Anchor   []byte      `json:"anchor"`
+	Pubkey   []byte      `json:"pubkey"`
+	State    pegOutState `json:"state",omitempty`
 }
 
 type pegOutState int
@@ -119,27 +116,29 @@ func (c *Custodian) pegOutFromExports(ctx context.Context) {
 		case <-ch:
 		}
 
-		const q = `SELECT txid, amount, asset_xdr, exporter, temp, seqnum FROM exports WHERE pegged_out=$1`
+		const q = `SELECT txid, anchor, pubkey, amount, seqnum, asset_xdr, exporter, temp FROM exports WHERE pegged_out=$1`
 
 		var (
-			txids, assetXDRs [][]byte
-			amounts, seqnums []int
-			exporters, temps []string
+			txids, anchors, pubkeys     [][]byte
+			amounts, seqnums            []int64
+			assetXDRs, exporters, temps []string
 		)
-		err := sqlutil.ForQueryRows(ctx, c.DB, q, pegOutNotYet, func(txid []byte, amount int, assetXDR []byte, exporter string, temp string, seqnum int) {
+		err := sqlutil.ForQueryRows(ctx, c.DB, q, pegOutNotYet, func(txid, anchor, pubkey []byte, amount, seqnum int64, assetXDR, exporter, temp string) {
 			txids = append(txids, txid)
 			amounts = append(amounts, amount)
 			assetXDRs = append(assetXDRs, assetXDR)
 			exporters = append(exporters, exporter)
 			temps = append(temps, temp)
 			seqnums = append(seqnums, seqnum)
+			anchors = append(anchors, anchor)
+			pubkeys = append(pubkeys, pubkey)
 		})
 		if err != nil {
 			log.Fatalf("reading export rows: %s", err)
 		}
 		for i, txid := range txids {
 			var asset xdr.Asset
-			err = xdr.SafeUnmarshal(assetXDRs[i], &asset)
+			err = xdr.SafeUnmarshalBase64(assetXDRs[i], &asset)
 			if err != nil {
 				log.Fatalf("unmarshalling asset from XDR %x: %s", assetXDRs[i], err)
 			}
@@ -157,7 +156,7 @@ func (c *Custodian) pegOutFromExports(ctx context.Context) {
 			log.Printf("pegging out export %x: %d of %s to %s", txid, amounts[i], asset.String(), exporters[i])
 			var peggedOut pegOutState
 			for i := 0; i < 5; i++ {
-				err = c.pegOut(ctx, exporter, asset, int64(amounts[i]), tempID, xdr.SequenceNumber(seqnums[i]))
+				err = c.pegOut(ctx, exporter, asset, amounts[i], tempID, xdr.SequenceNumber(seqnums[i]))
 				if err == nil { // successful peg-out
 					peggedOut = pegOutOK
 					break
@@ -184,7 +183,17 @@ func (c *Custodian) pegOutFromExports(ctx context.Context) {
 				log.Fatalf("updating export table: %s", err)
 			}
 			// Send peg-out info to goroutine for post-peg-out txvm txs
-			c.pegouts <- pegOut{txid: txid, state: peggedOut}
+			c.pegouts <- pegOut{
+				Txid:     txid,
+				AssetXDR: assetXDRs[i],
+				Temp:     temps[i],
+				Seqnum:   seqnums[i],
+				Exporter: exporters[i],
+				Amount:   amounts[i],
+				State:    peggedOut,
+				Anchor:   anchors[i],
+				Pubkey:   pubkeys[i],
+			}
 		}
 	}
 }
@@ -363,23 +372,14 @@ func BuildExportTx(ctx context.Context, asset xdr.Asset, exportAmt, inputAmt int
 	// Then, we split off the zero-value for finalize, creating the retire anchor.
 	retireAnchor1 := txvm.VMHash("Split2", anchor)
 	retireAnchor := txvm.VMHash("Split1", retireAnchor1[:])
-	log.Printf("asset xdr in BuildExportTx: %s", assetXDR)
-	ref := struct {
-		AssetXDR string `json:"asset"`
-		Temp     string `json:"temp"`
-		Seqnum   int64  `json:"seqnum"`
-		Exporter string `json:"exporter"`
-		Amount   int64  `json:"amount"`
-		Anchor   []byte `json:"anchor"`
-		Pubkey   []byte `json:"pubkey"`
-	}{
-		string(assetXDR),
-		temp,
-		int64(seqnum),
-		kp.Address(),
-		exportAmt,
-		retireAnchor[:],
-		pubkey,
+	ref := pegOut{
+		AssetXDR: assetXDR,
+		Temp:     temp,
+		Seqnum:   int64(seqnum),
+		Exporter: kp.Address(),
+		Amount:   exportAmt,
+		Anchor:   retireAnchor[:],
+		Pubkey:   pubkey,
 	}
 	exportRefdata, err := json.Marshal(ref)
 	if err != nil {

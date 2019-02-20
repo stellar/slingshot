@@ -1,7 +1,6 @@
 package slidechain
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"log"
@@ -18,9 +17,9 @@ import (
 	"github.com/stellar/go/xdr"
 )
 
-func (c *Custodian) doPostExport(ctx context.Context, assetXDR, anchor, txid []byte, amount, seqnum, peggedOut int64, exporter, temp string, pubkey []byte) error {
+func (c *Custodian) doPostExport(ctx context.Context, assetXDR string, anchor, txid []byte, amount, seqnum int64, peggedOut pegOutState, exporter, temp string, pubkey []byte) error {
 	var asset xdr.Asset
-	err := asset.UnmarshalBinary(assetXDR)
+	err := xdr.SafeUnmarshalBase64(assetXDR, &asset)
 	if err != nil {
 		return errors.Wrap(err, "unmarshaling asset xdr")
 	}
@@ -30,22 +29,14 @@ func (c *Custodian) doPostExport(ctx context.Context, assetXDR, anchor, txid []b
 	}
 	assetID := bc.NewHash(txvm.AssetID(importIssuanceSeed[:], assetBytes))
 	log.Printf("asset xdr in doPostExport: %s", string(assetXDR))
-	ref := struct {
-		AssetXDR []byte `json:"asset"`
-		Temp     string `json:"temp"`
-		Seqnum   int64  `json:"seqnum"`
-		Exporter string `json:"exporter"`
-		Amount   int64  `json:"amount"`
-		Anchor   []byte `json:"anchor"`
-		Pubkey   []byte `json:"pubkey"`
-	}{
-		assetXDR,
-		temp,
-		seqnum,
-		exporter,
-		amount,
-		anchor,
-		pubkey,
+	ref := pegOut{
+		AssetXDR: assetXDR,
+		Temp:     temp,
+		Seqnum:   seqnum,
+		Exporter: exporter,
+		Amount:   amount,
+		Anchor:   anchor,
+		Pubkey:   pubkey,
 	}
 	refdata, err := json.Marshal(ref)
 	if err != nil {
@@ -74,7 +65,7 @@ func (c *Custodian) doPostExport(ctx context.Context, assetXDR, anchor, txid []b
 			tup.PushdataBytes(refdataHex)
 		})
 	})
-	b.PushdataInt64(peggedOut).Op(op.Put)                               // con stack: snapshot; arg stack: selector
+	b.PushdataInt64(int64(peggedOut)).Op(op.Put)                        // con stack: snapshot; arg stack: selector
 	b.Op(op.Input).Op(op.Call)                                          // arg stack: sigchecker
 	b.PushdataBytes(c.InitBlockHash.Bytes())                            // con stack: blockid; arg stack: sigchecker
 	b.PushdataInt64(int64(bc.Millis(time.Now().Add(10 * time.Minute)))) // con stack: blockid, expmss; arg stack: sigchecker
@@ -107,63 +98,4 @@ func (c *Custodian) doPostExport(ctx context.Context, assetXDR, anchor, txid []b
 	}
 	_, err = c.DB.ExecContext(ctx, `DELETE FROM exports WHERE txid=$1`, txid)
 	return errors.Wrapf(err, "deleting export for tx %x", txid)
-}
-
-// IsPostExportTx returns whether or not a txvm transaction matches the slidechain post-export tx format.
-//
-// Expected log is
-// {"I", ...}
-// {"X", ...}
-// {"L", ...}
-// {"N", ...}
-// {"R", ...}
-// {"F", ...}
-func IsPostExportTx(tx *bc.Tx, asset xdr.Asset, amount int64, temp, exporter string, seqnum int64, anchor, pubkey []byte) bool {
-	if len(tx.Log) != 6 {
-		return false
-	}
-	if tx.Log[0][0].(txvm.Bytes)[0] != txvm.InputCode {
-		return false
-	}
-	if tx.Log[1][0].(txvm.Bytes)[0] != txvm.RetireCode {
-		return false
-	}
-	if tx.Log[2][0].(txvm.Bytes)[0] != txvm.LogCode {
-		return false
-	}
-	if tx.Log[3][0].(txvm.Bytes)[0] != txvm.NonceCode {
-		return false
-	}
-	if tx.Log[4][0].(txvm.Bytes)[0] != txvm.TimerangeCode {
-		return false
-	}
-	if tx.Log[5][0].(txvm.Bytes)[0] != txvm.FinalizeCode {
-		return false
-	}
-	assetXDR, err := xdr.MarshalBase64(asset)
-	if err != nil {
-		return false
-	}
-	ref := struct {
-		AssetXDR string `json:"asset"`
-		Temp     string `json:"temp"`
-		Seqnum   int64  `json:"seqnum"`
-		Exporter string `json:"exporter"`
-		Amount   int64  `json:"amount"`
-		Anchor   []byte `json:"anchor"`
-		Pubkey   []byte `json:"pubkey"`
-	}{
-		assetXDR,
-		temp,
-		seqnum,
-		exporter,
-		amount,
-		anchor,
-		pubkey,
-	}
-	refdata, err := json.Marshal(ref)
-	if !bytes.Equal(refdata, tx.Log[2][2].(txvm.Bytes)) {
-		return false
-	}
-	return true
 }

@@ -410,7 +410,7 @@ func TestEndToEnd(t *testing.T) {
 			block := item.(*bc.Block)
 			for _, tx := range block.Transactions {
 				// Look for export transaction.
-				if IsExportTx(tx, native, int64(exportAmount), temp, exporter.Address(), int64(seqnum), retireAnchor[:], exporterPubKeyBytes[:]) {
+				if isExportTx(tx, native, int64(exportAmount), temp, exporter.Address(), int64(seqnum), retireAnchor[:], exporterPubKeyBytes[:]) {
 					t.Logf("found export tx %x", tx.Program)
 					log.Print("Found export tx, exiting loop...")
 					found = true
@@ -484,7 +484,7 @@ func TestEndToEnd(t *testing.T) {
 			}
 			block := item.(*bc.Block)
 			for _, tx := range block.Transactions {
-				if IsPostExportTx(tx, native, int64(exportAmount), temp, exporter.Address(), int64(seqnum), retireAnchor[:], exporterPubKeyBytes[:]) {
+				if isPostExportTx(tx, native, int64(exportAmount), temp, exporter.Address(), int64(seqnum), retireAnchor[:], exporterPubKeyBytes[:]) {
 					t.Logf("found post-export tx %x", tx.Program)
 					found = true
 					break
@@ -540,7 +540,7 @@ func isImportTx(tx *bc.Tx, amount int64, assetXDR []byte, recipPubKey ed25519.Pu
 	return true
 }
 
-// IsExportTx returns whether or not a txvm transaction matches the slidechain export tx format.
+// isExportTx returns whether or not a txvm transaction matches the slidechain export tx format.
 //
 // Expected log is:
 // If input and export amounts are equal,
@@ -556,7 +556,7 @@ func isImportTx(tx *bc.Tx, amount int64, assetXDR []byte, recipPubKey ed25519.Pu
 // {"O", ...}
 // {"O", caller, outputid}
 // {"F", ...}
-func IsExportTx(tx *bc.Tx, asset xdr.Asset, inputAmt int64, temp, exporter string, seqnum int64, anchor, pubkey []byte) bool {
+func isExportTx(tx *bc.Tx, asset xdr.Asset, exportAmt int64, temp, exporter string, seqnum int64, anchor, pubkey []byte) bool {
 	if len(tx.Log) != 4 && len(tx.Log) != 6 {
 		return false
 	}
@@ -578,25 +578,68 @@ func IsExportTx(tx *bc.Tx, asset xdr.Asset, inputAmt int64, temp, exporter strin
 		return false
 	}
 	log.Printf("asset xdr in IsExportTx: %s", assetXDR)
-	ref := struct {
-		AssetXDR string `json:"asset"`
-		Temp     string `json:"temp"`
-		Seqnum   int64  `json:"seqnum"`
-		Exporter string `json:"exporter"`
-		Amount   int64  `json:"amount"`
-		Anchor   []byte `json:"anchor"`
-		Pubkey   []byte `json:"pubkey"`
-	}{
-		assetXDR,
-		temp,
-		seqnum,
-		exporter,
-		inputAmt,
-		anchor,
-		pubkey,
+	ref := pegOut{
+		AssetXDR: assetXDR,
+		Temp:     temp,
+		Seqnum:   seqnum,
+		Exporter: exporter,
+		Amount:   exportAmt,
+		Anchor:   anchor,
+		Pubkey:   pubkey,
 	}
 	refdata, err := json.Marshal(ref)
 	if !bytes.Equal(refdata, tx.Log[1][2].(txvm.Bytes)) {
+		return false
+	}
+	return true
+}
+
+// isPostExportTx returns whether or not a txvm transaction matches the slidechain post-export tx format.
+//
+// Expected log is
+// {"I", ...}
+// {"X", ...}
+// {"L", ...}
+// {"N", ...}
+// {"R", ...}
+// {"F", ...}
+func isPostExportTx(tx *bc.Tx, asset xdr.Asset, amount int64, temp, exporter string, seqnum int64, anchor, pubkey []byte) bool {
+	if len(tx.Log) != 6 {
+		return false
+	}
+	if tx.Log[0][0].(txvm.Bytes)[0] != txvm.InputCode {
+		return false
+	}
+	if tx.Log[1][0].(txvm.Bytes)[0] != txvm.RetireCode {
+		return false
+	}
+	if tx.Log[2][0].(txvm.Bytes)[0] != txvm.LogCode {
+		return false
+	}
+	if tx.Log[3][0].(txvm.Bytes)[0] != txvm.NonceCode {
+		return false
+	}
+	if tx.Log[4][0].(txvm.Bytes)[0] != txvm.TimerangeCode {
+		return false
+	}
+	if tx.Log[5][0].(txvm.Bytes)[0] != txvm.FinalizeCode {
+		return false
+	}
+	assetXDR, err := xdr.MarshalBase64(asset)
+	if err != nil {
+		return false
+	}
+	ref := pegOut{
+		AssetXDR: assetXDR,
+		Temp:     temp,
+		Seqnum:   seqnum,
+		Exporter: exporter,
+		Amount:   amount,
+		Anchor:   anchor,
+		Pubkey:   pubkey,
+	}
+	refdata, err := json.Marshal(ref)
+	if !bytes.Equal(refdata, tx.Log[2][2].(txvm.Bytes)) {
 		return false
 	}
 	return true
