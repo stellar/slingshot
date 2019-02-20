@@ -691,12 +691,21 @@ where
     }
 
     fn add_range_proof(&mut self, bitrange: usize, expr: Expression) -> Result<(), VMError> {
-        spacesuit::range_proof(
-            self.delegate.cs(),
-            r1cs::LinearCombination::from_iter(expr.terms),
-            ScalarWitness::option_to_integer(expr.assignment)?,
-            bitrange,
-        )
-        .map_err(|_| VMError::R1CSInconsistency)
+        match expr {
+            Expression::Constant(x) => spacesuit::range_proof(
+                self.delegate.cs(),
+                x.into(),
+                ScalarWitness::option_to_integer(Some(x))?,
+                bitrange,
+            )
+            .map_err(|_| VMError::R1CSInconsistency),
+            Expression::Terms(terms, assignment) => spacesuit::range_proof(
+                self.delegate.cs(),
+                r1cs::LinearCombination::from_iter(terms),
+                ScalarWitness::option_to_integer(assignment)?,
+                bitrange,
+            )
+            .map_err(|_| VMError::R1CSInconsistency),
+        }
     }
 }
