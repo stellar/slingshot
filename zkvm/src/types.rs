@@ -49,11 +49,11 @@ pub struct Variable {
     // the witness is located indirectly in vm::VariableCommitment
 }
 
+pub type ExpressionTerm = (r1cs::Variable, Scalar);
 #[derive(Clone, Debug)]
-pub struct Expression {
-    /// Terms of the expression
-    pub(crate) terms: Vec<(r1cs::Variable, Scalar)>,
-    pub(crate) assignment: Option<ScalarWitness>,
+pub enum Expression { 
+  Constant(ScalarWitness), 
+  Terms(Vec<ExpressionTerm>, Option<ScalarWitness>)
 }
 
 #[derive(Clone, Debug)]
