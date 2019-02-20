@@ -13,6 +13,8 @@ use crate::ops::Instruction;
 use crate::predicate::Predicate;
 use crate::transcript::TranscriptProtocol;
 
+use std::ops::Neg;
+
 #[derive(Debug)]
 pub enum Item {
     Data(Data),
@@ -51,9 +53,9 @@ pub struct Variable {
 
 pub type ExpressionTerm = (r1cs::Variable, Scalar);
 #[derive(Clone, Debug)]
-pub enum Expression { 
-  Constant(ScalarWitness), 
-  Terms(Vec<ExpressionTerm>, Option<ScalarWitness>)
+pub enum Expression {
+    Constant(ScalarWitness),
+    Terms(Vec<ExpressionTerm>, Option<ScalarWitness>),
 }
 
 #[derive(Clone, Debug)]
@@ -95,6 +97,17 @@ pub struct CommitmentWitness {
 pub enum ScalarWitness {
     Integer(SignedInteger),
     Scalar(Scalar),
+}
+
+impl Neg for ScalarWitness {
+    type Output = ScalarWitness;
+
+    fn neg(self) -> ScalarWitness {
+        match self {
+            ScalarWitness::Integer(a) => ScalarWitness::Integer(-a),
+            ScalarWitness::Scalar(a) => ScalarWitness::Scalar(-a),
+        }
+    }
 }
 
 impl Commitment {
