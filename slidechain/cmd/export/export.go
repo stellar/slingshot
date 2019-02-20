@@ -100,9 +100,6 @@ func main() {
 		}
 	}
 	anchorBytes := mustDecodeHex(*anchor)
-	if err != nil {
-		log.Fatal("decoding initial block id: ", err)
-	}
 	var custodian xdr.AccountId
 	resp, err := http.Get(*slidechaind + "/account")
 	if err != nil {
@@ -133,7 +130,7 @@ func main() {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode/100 != 2 {
-		log.Fatalf("bad status code %d getting latest block height", resp.StatusCode)
+		log.Fatalf("bad status code %d from POST /submit?wait=1", resp.StatusCode)
 	}
 	log.Printf("successfully submitted export transaction: %x", tx.ID)
 }

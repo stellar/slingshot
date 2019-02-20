@@ -39,6 +39,10 @@ func (c *Custodian) doPostPegOut(ctx context.Context, assetXDR string, anchor, t
 	if err != nil {
 		return errors.Wrap(err, "marshaling reference data")
 	}
+	var p int64
+	if peggedOut == pegOutOK {
+		p = 1
+	}
 	b := new(txvmutil.Builder)
 	b.Tuple(func(contract *txvmutil.TupleBuilder) { // {'C', ...}
 		contract.PushdataByte(txvm.ContractCode)
@@ -61,7 +65,7 @@ func (c *Custodian) doPostPegOut(ctx context.Context, assetXDR string, anchor, t
 			tup.PushdataBytes(refdata)
 		})
 	})
-	b.PushdataInt64(int64(peggedOut)).Op(op.Put)                        // con stack: snapshot; arg stack: selector
+	b.PushdataInt64(p).Op(op.Put)                                       // con stack: snapshot; arg stack: selector
 	b.Op(op.Input).Op(op.Call)                                          // arg stack: sigchecker
 	b.PushdataBytes(c.InitBlockHash.Bytes())                            // con stack: blockid; arg stack: sigchecker
 	b.PushdataInt64(int64(bc.Millis(time.Now().Add(10 * time.Minute)))) // con stack: blockid, expmss; arg stack: sigchecker

@@ -93,8 +93,9 @@ var (
 )
 
 // Runs as a goroutine.
-func (c *Custodian) pegOutFromExports(ctx context.Context, pegouts chan pegOut) {
+func (c *Custodian) pegOutFromExports(ctx context.Context, pegouts chan<- pegOut) {
 	defer log.Print("pegOutFromExports exiting")
+	defer close(pegouts)
 
 	ch := make(chan struct{})
 	go func() {
@@ -116,14 +117,14 @@ func (c *Custodian) pegOutFromExports(ctx context.Context, pegouts chan pegOut) 
 		case <-ch:
 		}
 
-		const q = `SELECT txid, anchor, pubkey, amount, seqnum, asset_xdr, exporter, temp FROM exports WHERE pegged_out=$1`
+		const q = `SELECT txid, anchor, pubkey, amount, seqnum, asset_xdr, exporter, temp FROM exports WHERE pegged_out=$1 OR pegged_out=$2`
 
 		var (
 			txids, anchors, pubkeys     [][]byte
 			amounts, seqnums            []int64
 			assetXDRs, exporters, temps []string
 		)
-		err := sqlutil.ForQueryRows(ctx, c.DB, q, pegOutNotYet, func(txid, anchor, pubkey []byte, amount, seqnum int64, assetXDR, exporter, temp string) {
+		err := sqlutil.ForQueryRows(ctx, c.DB, q, pegOutNotYet, pegOutRetry, func(txid, anchor, pubkey []byte, amount, seqnum int64, assetXDR, exporter, temp string) {
 			txids = append(txids, txid)
 			amounts = append(amounts, amount)
 			assetXDRs = append(assetXDRs, assetXDR)
@@ -154,46 +155,45 @@ func (c *Custodian) pegOutFromExports(ctx context.Context, pegouts chan pegOut) 
 			}
 
 			log.Printf("pegging out export %x: %d of %s to %s", txid, amounts[i], asset.String(), exporters[i])
-			var peggedOut pegOutState
-			for i := 0; i < 5; i++ {
-				err = c.pegOut(ctx, exporter, asset, amounts[i], tempID, xdr.SequenceNumber(seqnums[i]))
-				if err != nil {
-					if herr, ok := errors.Root(err).(*horizon.Error); ok {
-						resultCodes, err := herr.ResultCodes()
-						if err != nil {
-							log.Fatalf("getting error codes from failed submission of tx %s", txid)
-						}
-						if resultCodes.TransactionCode != xdr.TransactionResultCodeTxBadSeq.String() { // non-retriable error
-							peggedOut = pegOutFail
-							break
-						}
-					} else {
-						log.Fatalf("could not get error code from failed submission of tx %s", txid)
-					}
-					_, err = c.DB.ExecContext(ctx, `UPDATE exports SET pegged_out=$1 WHERE txid=$2`, pegOutRetry, txid)
+			peggedOut := pegOutFail
+			err := c.pegOut(ctx, exporter, asset, amounts[i], tempID, xdr.SequenceNumber(seqnums[i]))
+			if err != nil {
+				if herr, ok := errors.Root(err).(*horizon.Error); ok {
+					resultCodes, err := herr.ResultCodes()
 					if err != nil {
-						log.Fatalf("updating export table for retriable tx: %s", err)
+						log.Fatalf("getting error codes from failed submission of tx %s", txid)
 					}
-					continue
+					if resultCodes.TransactionCode == xdr.TransactionResultCodeTxBadSeq.String() { // retriable error
+						peggedOut = pegOutRetry
+					}
 				}
+			} else {
 				peggedOut = pegOutOK
-				break
 			}
-			_, err = c.DB.ExecContext(ctx, `UPDATE exports SET pegged_out=$1 WHERE txid=$2`, peggedOut, txid)
+			result, err := c.DB.ExecContext(ctx, `UPDATE exports SET pegged_out=$1 where txid=$2`, peggedOut, txid)
 			if err != nil {
 				log.Fatalf("updating export table: %s", err)
 			}
-			// Send peg-out info to goroutine for post-peg-out txvm txs
-			pegouts <- pegOut{
-				Txid:     txid,
-				AssetXDR: assetXDRs[i],
-				Temp:     temps[i],
-				Seqnum:   seqnums[i],
-				Exporter: exporters[i],
-				Amount:   amounts[i],
-				State:    peggedOut,
-				Anchor:   anchors[i],
-				Pubkey:   pubkeys[i],
+			numAffected, err := result.RowsAffected()
+			if err != nil {
+				log.Fatalf("checking rows affected by update query for txid %s: %s", txid, err)
+			}
+			if numAffected != 1 {
+				log.Fatalf("multiple rows affected by update query for txid %s", txid)
+			}
+			// Send peg-out info to goroutine for successful or non-retriably failed post-peg-out txvm txs.
+			if peggedOut == pegOutOK || peggedOut == pegOutFail {
+				pegouts <- pegOut{
+					Txid:     txid,
+					AssetXDR: assetXDRs[i],
+					Temp:     temps[i],
+					Seqnum:   seqnums[i],
+					Exporter: exporters[i],
+					Amount:   amounts[i],
+					State:    peggedOut,
+					Anchor:   anchors[i],
+					Pubkey:   pubkeys[i],
+				}
 			}
 		}
 	}
@@ -424,8 +424,5 @@ func BuildExportTx(ctx context.Context, asset xdr.Asset, exportAmt, inputAmt int
 
 	prog2 := b.Build()
 	tx, err := bc.NewTx(prog2, 3, math.MaxInt64)
-	if err != nil {
-		return nil, errors.Wrap(err, "making export tx")
-	}
-	return tx, nil
+	return tx, errors.Wrap(err, "making export tx")
 }

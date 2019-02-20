@@ -16,8 +16,8 @@ import (
 )
 
 // Runs as a goroutine until ctx is canceled.
-func (c *Custodian) watchPegs(ctx context.Context) {
-	defer log.Println("watchPegs exiting")
+func (c *Custodian) watchPegIns(ctx context.Context) {
+	defer log.Println("watchPegIns exiting")
 	backoff := i10rnet.Backoff{Base: 100 * time.Millisecond}
 
 	var cur horizon.Cursor
@@ -162,8 +162,8 @@ func (c *Custodian) watchExports(ctx context.Context) {
 	}
 }
 
-// Runs as a goroutine
-func (c *Custodian) watchPegOuts(ctx context.Context, pegouts chan pegOut) {
+// Runs as a goroutine.
+func (c *Custodian) watchPegOuts(ctx context.Context, pegouts <-chan pegOut) {
 	defer log.Print("watchPegOuts exiting")
 
 	ticker := time.NewTicker(time.Minute)
@@ -171,6 +171,7 @@ func (c *Custodian) watchPegOuts(ctx context.Context, pegouts chan pegOut) {
 	for {
 		select {
 		case <-ctx.Done():
+			return
 		case <-ticker.C:
 			const q = `SELECT amount, asset_xdr, exporter, temp, seqnum, anchor, pubkey FROM exports WHERE (pegged_out=$1 OR pegged_out=$2)`
 			var (
@@ -205,13 +206,18 @@ func (c *Custodian) watchPegOuts(ctx context.Context, pegouts chan pegOut) {
 					log.Fatal(err)
 				}
 			}
-		case p := <-pegouts:
-			err := c.doPostPegOut(ctx, p.AssetXDR, p.Anchor, p.Txid, p.Amount, p.Seqnum, p.State, p.Exporter, p.Temp, p.Pubkey)
-			if err != nil {
-				if err == context.Canceled {
-					return
+		case p, ok := <-pegouts:
+			if ok {
+				err := c.doPostPegOut(ctx, p.AssetXDR, p.Anchor, p.Txid, p.Amount, p.Seqnum, p.State, p.Exporter, p.Temp, p.Pubkey)
+				if err != nil {
+					if err == context.Canceled {
+						return
+					}
+					log.Fatal(err)
 				}
-				log.Fatal(err)
+			} else {
+				log.Printf("peg-outs channel closed")
+				return
 			}
 		}
 	}

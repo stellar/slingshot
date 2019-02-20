@@ -60,8 +60,8 @@ func TestPegOut(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	var anchor, pubkey [32]byte // anchor and pubkey do not matter to test this functionality
-	_, err = c.DB.Exec("INSERT INTO exports (txid, amount, asset_xdr, temp, seqnum, exporter, anchor, pubkey) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)", "", amount, lumenXDR, temp, seqnum, kp.Address(), anchor[:], pubkey[:])
+	var zero32 [32]byte // anchor and pubkey do not matter to test this functionality
+	_, err = c.DB.Exec("INSERT INTO exports (txid, amount, asset_xdr, temp, seqnum, exporter, anchor, pubkey) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)", "", amount, lumenXDR, temp, seqnum, kp.Address(), zero32[:], zero32[:])
 	if err != nil && err != context.Canceled {
 		t.Fatal(err)
 	}
