@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/bobg/sqlutil"
-	i10rjson "github.com/chain/txvm/encoding/json"
 	"github.com/chain/txvm/protocol/bc"
 	"github.com/chain/txvm/protocol/txvm"
 	i10rnet "github.com/interstellar/starlight/net"
@@ -139,7 +138,7 @@ func (c *Custodian) watchExports(ctx context.Context) {
 
 			logItem := tx.Log[1]
 			var info pegOut
-			err := json.Unmarshal(i10rjson.HexBytes(logItem[2].(txvm.Bytes)), &info)
+			err := json.Unmarshal(logItem[2].(txvm.Bytes), &info)
 			if err != nil {
 				continue
 			}
@@ -180,7 +179,7 @@ func (c *Custodian) watchPegOuts(ctx context.Context, pegouts chan pegOut) {
 				assetXDRs, exporters, temps []string
 				peggedOuts                  []pegOutState
 			)
-			err := sqlutil.ForQueryRows(ctx, c.DB, q, pegOutOK, pegOutRetry, func(txid []byte, amount int64, assetXDR string, exporter, temp string, seqnum, peggedOut int64, anchor, pubkey []byte) {
+			err := sqlutil.ForQueryRows(ctx, c.DB, q, pegOutOK, pegOutFail, func(txid []byte, amount int64, assetXDR string, exporter, temp string, seqnum, peggedOut int64, anchor, pubkey []byte) {
 				txids = append(txids, txid)
 				amounts = append(amounts, amount)
 				assetXDRs = append(assetXDRs, assetXDR)
@@ -191,10 +190,10 @@ func (c *Custodian) watchPegOuts(ctx context.Context, pegouts chan pegOut) {
 				anchors = append(anchors, anchor)
 				pubkeys = append(pubkeys, pubkey)
 			})
-			if err == context.Canceled {
-				return
-			}
 			if err != nil {
+				if err == context.Canceled {
+					return
+				}
 				log.Fatalf("querying peg-outs: %s", err)
 			}
 			for i, txid := range txids {

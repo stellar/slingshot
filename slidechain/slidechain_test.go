@@ -297,7 +297,7 @@ func TestEndToEnd(t *testing.T) {
 
 		// Prepare Stellar account to peg-in funds and txvm account to receive funds.
 		inputAmount := 5 * xlm.Lumen
-		exportAmount := 3 * xlm.Lumen
+		exportAmount := 5 * xlm.Lumen
 		exporterPub, exporterPrv, err := ed25519.GenerateKey(nil)
 		if err != nil {
 			t.Fatalf("error generating txvm recipient keypair: %s", err)
@@ -574,7 +574,6 @@ func isExportTx(tx *bc.Tx, asset xdr.Asset, exportAmt int64, temp, exporter stri
 	if err != nil {
 		return false
 	}
-	log.Printf("asset xdr in IsExportTx: %s", assetXDR)
 	ref := pegOut{
 		AssetXDR: assetXDR,
 		Temp:     temp,
