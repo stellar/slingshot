@@ -191,44 +191,30 @@ fn spend_1_2_contract(
     recipient_2_pred: Predicate,
 ) -> Vec<Instruction> {
     // TODO: just list all the instructions in one vector, instead of pushing
-    let mut instructions = vec![];
-
-    instructions.push(Instruction::Push(
-        Input::new(
-            vec![(
-                Commitment::from(CommitmentWitness::blinded(input)),
-                Commitment::from(CommitmentWitness::blinded(flv)),
-            )],
-            input_pred,
-            TxID([0; 32]),
-        )
-        .into(),
-    )); // stack: input-data
-    instructions.push(Instruction::Input); // stack: input-contract
-    instructions.push(Instruction::Signtx); // stack: input-value
-
-    instructions.push(Instruction::Push(
-        Commitment::from(CommitmentWitness::blinded(output_1)).into(),
-    )); // stack: input-value, output-1-quantity
-    instructions.push(Instruction::Push(
-        Commitment::from(CommitmentWitness::blinded(flv)).into(),
-    )); // stack: input-value, output-1-quantity, output-1-flavor
-
-    instructions.push(Instruction::Push(
-        Commitment::from(CommitmentWitness::blinded(output_2)).into(),
-    )); // stack: input-value, output-1-quantity, output-2-quantity
-    instructions.push(Instruction::Push(
-        Commitment::from(CommitmentWitness::blinded(flv)).into(),
-    )); // stack: input-value, output-1-quantity, output-2-quantity, output-2-flavor
-
-    instructions.push(Instruction::Cloak(1, 2)); // stack: output-1, output-2
-
-    instructions.push(Instruction::Push(recipient_2_pred.into())); // stack: output-1, output-2, recipient-2-pred
-    instructions.push(Instruction::Output(1)); // stack: output-1
-    instructions.push(Instruction::Push(recipient_1_pred.into())); // stack: output-1, recipient-1-pred
-    instructions.push(Instruction::Output(1)); // stack: empty
-
-    instructions
+    vec![
+        Instruction::Push(
+            Input::new(
+                vec![(
+                    Commitment::from(CommitmentWitness::blinded(input)),
+                    Commitment::from(CommitmentWitness::blinded(flv)),
+                )],
+                input_pred,
+                TxID([0; 32]),
+            )
+            .into(),
+        ), // stack: input-data
+        Instruction::Input,  // stack: input-contract
+        Instruction::Signtx, // stack: input-value
+        Instruction::Push(Commitment::from(CommitmentWitness::blinded(output_1)).into()), // stack: input-value, output-1-quantity
+        Instruction::Push(Commitment::from(CommitmentWitness::blinded(flv)).into()), // stack: input-value, output-1-quantity, output-1-flavor
+        Instruction::Push(Commitment::from(CommitmentWitness::blinded(output_2)).into()), // stack: input-value, output-1-quantity, output-2-quantity
+        Instruction::Push(Commitment::from(CommitmentWitness::blinded(flv)).into()), // stack: input-value, output-1-quantity, output-2-quantity, output-2-flavor
+        Instruction::Cloak(1, 2), // stack: output-1, output-2
+        Instruction::Push(recipient_2_pred.into()), // stack: output-1, output-2, recipient-2-pred
+        Instruction::Output(1),   // stack: output-1
+        Instruction::Push(recipient_1_pred.into()), // stack: output-1, recipient-1-pred
+        Instruction::Output(1),   // stack: empty
+    ]
 }
 
 #[test]
