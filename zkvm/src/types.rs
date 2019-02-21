@@ -7,8 +7,7 @@ use merlin::Transcript;
 use spacesuit::SignedInteger;
 
 use crate::contract::{Contract, Input, PortableItem};
-use crate::encoding;
-use crate::encoding::Subslice;
+use crate::encoding::SliceReader;
 use crate::errors::VMError;
 use crate::ops::Instruction;
 use crate::predicate::Predicate;
@@ -251,7 +250,7 @@ impl Data {
     pub fn to_predicate(self) -> Result<Predicate, VMError> {
         match self {
             Data::Opaque(data) => {
-                let point = Subslice::new(&data).read_point()?;
+                let point = SliceReader::parse(&data, |r| r.read_point())?;
                 Ok(Predicate::opaque(point))
             }
             Data::Witness(witness) => match witness {
@@ -264,7 +263,7 @@ impl Data {
     pub fn to_commitment(self) -> Result<Commitment, VMError> {
         match self {
             Data::Opaque(data) => {
-                let point = Subslice::new(&data).read_point()?;
+                let point = SliceReader::parse(&data, |r| r.read_point())?;
                 Ok(Commitment::Closed(point))
             }
             Data::Witness(witness) => match witness {

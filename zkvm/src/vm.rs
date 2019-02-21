@@ -8,7 +8,7 @@ use std::iter::FromIterator;
 use std::ops::Neg;
 
 use crate::contract::{Contract, FrozenContract, FrozenItem, FrozenValue, PortableItem};
-use crate::encoding::Subslice;
+use crate::encoding::SliceReader;
 use crate::errors::VMError;
 use crate::ops::Instruction;
 use crate::point_ops::PointOp;
@@ -307,11 +307,7 @@ where
 
     fn r#const(&mut self) -> Result<(), VMError> {
         let data = self.pop_item()?.to_data()?.to_bytes();
-        let mut slice = Subslice::new(&data);
-        let scalar = slice.read_scalar()?;
-        if slice.len() != 0 {
-            return Err(VMError::FormatError);
-        }
+        let scalar = SliceReader::parse(&data, |r| r.read_scalar())?;
         self.push_item(Expression::constant(scalar));
         Ok(())
     }
