@@ -8,9 +8,9 @@ use zkvm::*;
 fn issue_contract(
     qty: u64,
     flv: Scalar,
-    issuance_pred: &Predicate,
-    nonce_pred: &Predicate,
-    recipient_pred: &Predicate,
+    issuance_pred: Predicate,
+    nonce_pred: Predicate,
+    recipient_pred: Predicate,
 ) -> Vec<Instruction> {
     vec![
         Instruction::Push(
@@ -22,15 +22,15 @@ fn issue_contract(
         ), // stack: qty
         Instruction::Var, // stack: qty-var
         Instruction::Push(Commitment::from(CommitmentWitness::unblinded(flv)).into()), // stack: qty-var, flv
-        Instruction::Var,                                 // stack: qty-var, flv-var
-        Instruction::Push(issuance_pred.clone().into()),  // stack: qty-var, flv-var, pred
-        Instruction::Issue,                               // stack: issue-contract
-        Instruction::Push(nonce_pred.clone().into()),     // stack: issue-contract, pred
-        Instruction::Nonce,                               // stack: issue-contract, nonce-contract
-        Instruction::Signtx,                              // stack: issue-contract
-        Instruction::Signtx,                              // stack: issued-value
-        Instruction::Push(recipient_pred.clone().into()), // stack: issued-value, pred
-        Instruction::Output(1),                           // stack: empty
+        Instruction::Var,                         // stack: qty-var, flv-var
+        Instruction::Push(issuance_pred.into()),  // stack: qty-var, flv-var, pred
+        Instruction::Issue,                       // stack: issue-contract
+        Instruction::Push(nonce_pred.into()),     // stack: issue-contract, pred
+        Instruction::Nonce,                       // stack: issue-contract, nonce-contract
+        Instruction::Signtx,                      // stack: issue-contract
+        Instruction::Signtx,                      // stack: issued-value
+        Instruction::Push(recipient_pred.into()), // stack: issued-value, pred
+        Instruction::Output(1),                   // stack: empty
     ]
 }
 
@@ -51,7 +51,7 @@ fn issue() {
         let flavor = t.challenge_scalar(b"flavor");
 
         // Build program
-        let program = issue_contract(1u64, flavor, &issuance_pred, &nonce_pred, &recipient_pred);
+        let program = issue_contract(1u64, flavor, issuance_pred, nonce_pred, recipient_pred);
 
         // Build tx
         let bp_gens = BulletproofGens::new(64, 1);
