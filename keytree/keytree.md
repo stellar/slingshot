@@ -4,7 +4,7 @@ This is a _key blinding scheme_ for deriving hierarchies of public keys.
 
 The most important feature of this scheme is that a set of _public_ keys can be derived from a _public_ key,
 without the use of private keys. This allows a piece of software to generate unique receiving addresses
-without having the private key material available. E.g. an online merchant may keep only public keys on the server and generate invoices with unique keys without compromising security of the private keys.
+without having the private key material available (e.g., an online merchant may keep only public keys on the server and generate invoices with unique keys without compromising security of the private keys).
 
 ## Definitions
 
