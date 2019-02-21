@@ -146,7 +146,7 @@ fn spend_2_2() {
         );
 
         // Build tx
-        let bp_gens = BulletproofGens::new(64, 1);
+        let bp_gens = BulletproofGens::new(128, 1);
         // TBD: add TxHeader type to make this call more readable
         let txresult = Prover::build_tx(program, 0u64, 0u64, 0u64, &bp_gens);
         let (tx, txid, txlog) = match txresult {
@@ -157,7 +157,7 @@ fn spend_2_2() {
     };
 
     // Verify tx
-    let bp_gens = BulletproofGens::new(64, 1);
+    let bp_gens = BulletproofGens::new(128, 1);
     match Verifier::verify_tx(tx, &bp_gens) {
         Err(err) => return assert!(false, err.to_string()),
         Ok(v) => {
@@ -235,7 +235,7 @@ fn spend_1_2() {
         );
 
         // Build tx
-        let bp_gens = BulletproofGens::new(64, 1);
+        let bp_gens = BulletproofGens::new(256, 1);
         // TBD: add TxHeader type to make this call more readable
         let txresult = Prover::build_tx(program, 0u64, 0u64, 0u64, &bp_gens);
         let (tx, txid, txlog) = match txresult {
@@ -246,7 +246,7 @@ fn spend_1_2() {
     };
 
     // Verify tx
-    let bp_gens = BulletproofGens::new(64, 1);
+    let bp_gens = BulletproofGens::new(256, 1);
     match Verifier::verify_tx(tx, &bp_gens) {
         Err(err) => return assert!(false, err.to_string()),
         Ok(v) => {
