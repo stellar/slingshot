@@ -5,20 +5,19 @@ use byteorder::{ByteOrder, LittleEndian};
 use core::ops::Range;
 use curve25519_dalek::ristretto::CompressedRistretto;
 use curve25519_dalek::scalar::Scalar;
-use std::ops::Deref;
 
 use crate::errors::VMError;
 
 #[derive(Copy, Clone, Debug)]
-pub struct Subslice<'a> {
+pub struct SliceReader<'a> {
     whole: &'a [u8],
     start: usize,
     end: usize,
 }
 
-impl<'a> Subslice<'a> {
-    pub fn new(data: &'a [u8]) -> Self {
-        Subslice {
+impl<'a> SliceReader<'a> {
+    fn new(data: &'a [u8]) -> Self {
+        SliceReader {
             start: 0,
             end: data.len(),
             whole: data,
@@ -29,7 +28,7 @@ impl<'a> Subslice<'a> {
         if range.end > data.len() || range.start > data.len() {
             return Err(VMError::FormatError);
         }
-        Ok(Subslice {
+        Ok(SliceReader {
             start: range.start,
             end: range.end,
             whole: data,
@@ -44,26 +43,45 @@ impl<'a> Subslice<'a> {
         self.start..self.end
     }
 
-    /// Copies the contents of the subslice into a `Vec<u8>`.
-    pub fn to_vec(&self) -> Vec<u8> {
-        let mut buf = Vec::with_capacity(self.len());
-        buf.extend_from_slice(&self);
-        buf
+    pub fn slice<F, T>(&mut self, slice_fn: F) -> Result<(T, &[u8]), VMError>
+    where
+        F: FnOnce(&mut SliceReader) -> Result<T, VMError>,
+    {
+        let start = self.start;
+        let result = slice_fn(self)?;
+        let end = self.start;
+        Ok((result, &self.whole[start..end]))
     }
 
-    /// Returns a Subslice of the first `prefix_size` of bytes and advances
+    pub fn parse<F, T>(data: &[u8], parse_fn: F) -> Result<T, VMError>
+    where
+        F: FnOnce(SliceReader) -> Result<T, VMError>,
+    {
+        let reader = SliceReader::new(data);
+        let result = parse_fn(reader)?;
+        if reader.len() != 0 {
+            return Err(VMError::FormatError);
+        }
+        Ok(result)
+    }
+
+    pub fn skip_trailing_bytes(&mut self) -> usize {
+        unimplemented!()
+    }
+
+    /// Returns a slice of the first `prefix_size` of bytes and advances
     /// the internal offset.
-    pub fn read_bytes(&mut self, prefix_size: usize) -> Result<Subslice, VMError> {
+    pub fn read_bytes(&mut self, prefix_size: usize) -> Result<&[u8], VMError> {
         if prefix_size > self.len() {
             return Err(VMError::FormatError);
         }
-        let prefix = Subslice {
+        let prefix = SliceReader {
             start: self.start,
             end: self.start + prefix_size,
             whole: self.whole,
         };
         self.start = self.start + prefix_size;
-        Ok(prefix)
+        Ok(&prefix.whole[prefix.range()])
     }
 
     pub fn read_u8(&mut self) -> Result<u8, VMError> {
@@ -98,14 +116,6 @@ impl<'a> Subslice<'a> {
     pub fn read_scalar(&mut self) -> Result<Scalar, VMError> {
         let buf = self.read_u8x32()?;
         Scalar::from_canonical_bytes(buf).ok_or(VMError::FormatError)
-    }
-}
-
-impl<'a> Deref for Subslice<'a> {
-    type Target = [u8];
-
-    fn deref(&self) -> &[u8] {
-        &self.whole[self.start..self.end]
     }
 }
 

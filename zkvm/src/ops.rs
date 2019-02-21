@@ -2,7 +2,7 @@ use core::borrow::Borrow;
 use core::mem;
 
 use crate::encoding;
-use crate::encoding::Subslice;
+use crate::encoding::SliceReader;
 use crate::errors::VMError;
 use crate::types::Data;
 
@@ -118,7 +118,7 @@ impl Instruction {
     ///
     /// Return `VMError::FormatError` if there are not enough bytes to parse an
     /// instruction.
-    pub fn parse(program: &mut Subslice) -> Result<Self, VMError> {
+    pub fn parse(program: &mut SliceReader) -> Result<Self, VMError> {
         let byte = program.read_u8()?;
 
         // Interpret the opcode. Unknown opcodes are extension opcodes.

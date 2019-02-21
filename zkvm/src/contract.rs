@@ -1,5 +1,5 @@
 use crate::encoding;
-use crate::encoding::Subslice;
+use crate::encoding::SliceReader;
 use crate::errors::VMError;
 use crate::predicate::Predicate;
 use crate::txlog::{TxID, UTXO};
@@ -70,12 +70,7 @@ impl Contract {
 
 impl Input {
     pub fn from_bytes(data: Vec<u8>) -> Result<Self, VMError> {
-        let mut reader = Subslice::new(&data);
-        let contract = Self::decode(&mut reader)?;
-        // Check that reader bytes have been fully consumed
-        if reader.len() != 0 {
-            return Err(VMError::FormatError);
-        }
+        let contract = SliceReader::parse(&data, |mut r| Self::decode(&mut r))?;
         Ok(contract)
     }
 
@@ -84,14 +79,12 @@ impl Input {
         self.contract.encode(buf);
     }
 
-    fn decode<'a>(reader: &mut Subslice<'a>) -> Result<Self, VMError> {
+    fn decode<'a>(reader: &mut SliceReader<'a>) -> Result<Self, VMError> {
         // Input  =  PreviousTxID || PreviousOutput
         // PreviousTxID  =  <32 bytes>
         let txid = TxID(reader.read_u8x32()?);
-        // Hash the contract into utxo before the subslice
-        // is advanced by the contract.decode method
-        let utxo = UTXO::from_output(&reader, &txid);
-        let contract = FrozenContract::decode(reader)?;
+        let (contract, contract_bytes) = reader.slice(|r| FrozenContract::decode(r))?;
+        let utxo = UTXO::from_output(contract_bytes, &txid);
         Ok(Input {
             contract,
             utxo,
@@ -124,7 +117,7 @@ impl FrozenContract {
         }
     }
 
-    fn decode<'a>(output: &mut Subslice<'a>) -> Result<Self, VMError> {
+    fn decode<'a>(output: &mut SliceReader<'a>) -> Result<Self, VMError> {
         //    Output  =  Predicate  ||  LE32(k)  ||  Item[0]  || ... ||  Item[k-1]
         // Predicate  =  <32 bytes>
         //      Item  =  enum { Data, Value }
