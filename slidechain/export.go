@@ -25,6 +25,14 @@ import (
 	"github.com/stellar/go/xdr"
 )
 
+type pegOutState int
+
+const (
+	pegOutFail pegOutState = iota
+	pegOutOK
+	pegOutRetry
+)
+
 const baseFee = 100
 
 // Runs as a goroutine.
@@ -51,7 +59,7 @@ func (c *Custodian) pegOutFromExports(ctx context.Context) {
 		case <-ch:
 		}
 
-		const q = `SELECT txid, amount, asset_xdr, exporter, temp, seqnum FROM exports WHERE exported=0`
+		const q = `SELECT txid, amount, asset_xdr, exporter, temp, seqnum FROM exports`
 
 		var (
 			txids     [][]byte
@@ -90,14 +98,30 @@ func (c *Custodian) pegOutFromExports(ctx context.Context) {
 			}
 
 			log.Printf("pegging out export %x: %d of %s to %s", txid, amounts[i], asset.String(), exporters[i])
-			// TODO(vniu): flag txs that fail with unretriable errors in the db
+
+			peggedOut := pegOutOK
 			err = c.pegOut(ctx, exporter, asset, int64(amounts[i]), tempID, xdr.SequenceNumber(seqnums[i]))
 			if err != nil {
-				log.Fatalf("pegging out tx: %s", err)
+				peggedOut = pegOutFail
+				if herr, ok := errors.Root(err).(*horizon.Error); ok {
+					resultCodes, err := herr.ResultCodes()
+					if err != nil {
+						log.Fatalf("getting error codes from failed submission of tx %s", txid)
+					}
+					if resultCodes.TransactionCode == xdr.TransactionResultCodeTxBadSeq.String() {
+						peggedOut = pegOutRetry
+					}
+				}
 			}
-			_, err = c.DB.ExecContext(ctx, `UPDATE exports SET exported=1 WHERE txid=$1`, txid)
-			if err != nil {
-				log.Fatalf("updating export table: %s", err)
+			// Delete successful and failed peg-outs from exports.
+			if peggedOut != pegOutRetry {
+				_, err = c.DB.ExecContext(ctx, `DELETE FROM exports WHERE txid=$2`, txid)
+				if err != nil {
+					log.Fatalf("updating export table: %s", err)
+				}
+			}
+			if peggedOut == pegOutFail {
+				log.Fatalf("peg-out failed for tx %s", txid)
 			}
 		}
 	}
