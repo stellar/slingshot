@@ -202,7 +202,9 @@ impl Instruction {
         match self {
             Instruction::Push(data) => {
                 write(Opcode::Push);
-                data.encode(program);
+                let mut bytes = data.to_bytes();
+                encoding::write_u32(bytes.len() as u32, program);
+                program.append(&mut bytes);
             }
             Instruction::Drop => write(Opcode::Drop),
             Instruction::Dup(idx) => {
