@@ -120,6 +120,9 @@ func (c *Custodian) pegOutFromExports(ctx context.Context) {
 					log.Fatalf("updating export table: %s", err)
 				}
 			}
+			if peggedOut == pegOutFail {
+				log.Fatalf("peg-out failed for tx %s", txid)
+			}
 		}
 	}
 }
