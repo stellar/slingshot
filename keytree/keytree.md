@@ -33,7 +33,7 @@ B = e2f2ae0a6abc4e71a884a961c500515f58e30b6aa582dd8db6a65945e08d2d76
 
 ### Derivation key
 
-Uniformely random secret 32-byte string used to derive blinding factors.
+Uniformly random secret 32-byte string used to derive blinding factors.
 
 ### Xprv
 
