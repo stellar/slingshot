@@ -99,7 +99,7 @@ func (c *Custodian) pegOutFromExports(ctx context.Context) {
 			}
 
 			log.Printf("pegging out export %x: %d of %s to %s", txid, amounts[i], asset.String(), exporters[i])
-			// TODO(vniu): flag txs that fail with unretriable errors in the db
+
 			var peggedOut pegOutState
 			err = c.pegOut(ctx, exporter, asset, int64(amounts[i]), tempID, xdr.SequenceNumber(seqnums[i]))
 			if err != nil {
@@ -109,7 +109,7 @@ func (c *Custodian) pegOutFromExports(ctx context.Context) {
 					if err != nil {
 						log.Fatalf("getting error codes from failed submission of tx %s", txid)
 					}
-					if resultCodes.TransactionCode == xdr.TransactionResultCodeTxBadSeq.String() { // retriable error
+					if resultCodes.TransactionCode == xdr.TransactionResultCodeTxBadSeq.String() {
 						peggedOut = pegOutRetry
 					}
 				}
