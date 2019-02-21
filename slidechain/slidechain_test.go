@@ -377,12 +377,12 @@ func TestEndToEnd(t *testing.T) {
 			}
 		}
 		t.Log("submitting pre-export tx...")
-		temp, seqnum, err := SubmitPreExportTx(hclient, exporter, c.AccountID.Address(), native, int64(exportAmount))
+		tempAddr, seqnum, err := SubmitPreExportTx(hclient, exporter, c.AccountID.Address(), native, int64(exportAmount))
 		if err != nil {
 			t.Fatalf("pre-submit tx error: %s", err)
 		}
 		t.Log("building export tx...")
-		exportTx, err := BuildExportTx(ctx, native, int64(exportAmount), int64(inputAmount), temp, anchor, exporterPrv, seqnum)
+		exportTx, err := BuildExportTx(ctx, native, int64(exportAmount), int64(inputAmount), tempAddr, anchor, exporterPrv, seqnum)
 		if err != nil {
 			t.Fatalf("error building retirement tx %s", err)
 		}
@@ -410,7 +410,7 @@ func TestEndToEnd(t *testing.T) {
 			block := item.(*bc.Block)
 			for _, tx := range block.Transactions {
 				// Look for export transaction.
-				if isExportTx(tx, native, int64(exportAmount), temp, exporter.Address(), int64(seqnum), retireAnchor[:], exporterPubKeyBytes[:]) {
+				if isExportTx(tx, native, int64(exportAmount), tempAddr, exporter.Address(), int64(seqnum), retireAnchor[:], exporterPubKeyBytes[:]) {
 					t.Logf("found export tx %x", tx.Program)
 					found = true
 					break
@@ -433,7 +433,7 @@ func TestEndToEnd(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				if env.Tx.SourceAccount.Address() != temp {
+				if env.Tx.SourceAccount.Address() != tempAddr {
 					t.Log("source accounts don't match, skipping...")
 					return
 				}
@@ -483,7 +483,7 @@ func TestEndToEnd(t *testing.T) {
 			}
 			block := item.(*bc.Block)
 			for _, tx := range block.Transactions {
-				if isPostPegOutTx(tx, native, int64(exportAmount), temp, exporter.Address(), int64(seqnum), retireAnchor[:], exporterPubKeyBytes[:]) {
+				if isPostPegOutTx(tx, native, int64(exportAmount), tempAddr, exporter.Address(), int64(seqnum), retireAnchor[:], exporterPubKeyBytes[:]) {
 					t.Logf("found post-peg-out tx %x", tx.Program)
 					found = true
 					break
@@ -555,7 +555,7 @@ func isImportTx(tx *bc.Tx, amount int64, assetXDR []byte, recipPubKey ed25519.Pu
 // {"O", ...}
 // {"O", caller, outputid}
 // {"F", ...}
-func isExportTx(tx *bc.Tx, asset xdr.Asset, exportAmt int64, temp, exporter string, seqnum int64, anchor, pubkey []byte) bool {
+func isExportTx(tx *bc.Tx, asset xdr.Asset, exportAmt int64, tempAddr, exporter string, seqnum int64, anchor, pubkey []byte) bool {
 	if len(tx.Log) != 4 && len(tx.Log) != 6 {
 		return false
 	}
@@ -578,7 +578,7 @@ func isExportTx(tx *bc.Tx, asset xdr.Asset, exportAmt int64, temp, exporter stri
 	}
 	ref := pegOut{
 		AssetXDR: assetXDR,
-		Temp:     temp,
+		TempAddr: tempAddr,
 		Seqnum:   seqnum,
 		Exporter: exporter,
 		Amount:   exportAmt,
@@ -601,7 +601,7 @@ func isExportTx(tx *bc.Tx, asset xdr.Asset, exportAmt int64, temp, exporter stri
 // {"N", ...}
 // {"R", ...}
 // {"F", ...}
-func isPostPegOutTx(tx *bc.Tx, asset xdr.Asset, amount int64, temp, exporter string, seqnum int64, anchor, pubkey []byte) bool {
+func isPostPegOutTx(tx *bc.Tx, asset xdr.Asset, amount int64, tempAddr, exporter string, seqnum int64, anchor, pubkey []byte) bool {
 	if len(tx.Log) != 6 {
 		return false
 	}
@@ -629,7 +629,7 @@ func isPostPegOutTx(tx *bc.Tx, asset xdr.Asset, amount int64, temp, exporter str
 	}
 	ref := pegOut{
 		AssetXDR: assetXDR,
-		Temp:     temp,
+		TempAddr: tempAddr,
 		Seqnum:   seqnum,
 		Exporter: exporter,
 		Amount:   amount,

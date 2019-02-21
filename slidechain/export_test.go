@@ -55,13 +55,13 @@ func TestPegOut(t *testing.T) {
 		t.Fatalf("error funding account %s: %s", kp.Address(), err)
 	}
 
-	temp, seqnum, err := SubmitPreExportTx(c.hclient, kp, c.AccountID.Address(), lumen, int64(amount))
+	tempAddr, seqnum, err := SubmitPreExportTx(c.hclient, kp, c.AccountID.Address(), lumen, int64(amount))
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	var zero32 [32]byte // anchor and pubkey do not matter to test this functionality
-	_, err = c.DB.Exec("INSERT INTO exports (txid, amount, asset_xdr, temp, seqnum, exporter, anchor, pubkey) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)", "", amount, lumenXDR, temp, seqnum, kp.Address(), zero32[:], zero32[:])
+	_, err = c.DB.Exec("INSERT INTO exports (txid, amount, asset_xdr, temp_addr, seqnum, exporter, anchor, pubkey) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)", []byte("txid"), amount, lumenXDR, tempAddr, seqnum, kp.Address(), zero32[:], zero32[:])
 	if err != nil && err != context.Canceled {
 		t.Fatal(err)
 	}
@@ -80,7 +80,7 @@ func TestPegOut(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				if env.Tx.SourceAccount.Address() != temp {
+				if env.Tx.SourceAccount.Address() != tempAddr {
 					log.Println("source accounts don't match, skipping...")
 					return
 				}

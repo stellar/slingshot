@@ -15,7 +15,7 @@ import (
 	"github.com/stellar/go/xdr"
 )
 
-func (c *Custodian) doPostPegOut(ctx context.Context, assetXDR string, anchor, txid []byte, amount, seqnum int64, peggedOut pegOutState, exporter, temp string, pubkey []byte) error {
+func (c *Custodian) doPostPegOut(ctx context.Context, assetXDR string, anchor, txid []byte, amount, seqnum int64, peggedOut pegOutState, exporter, tempAddr string, pubkey []byte) error {
 	var asset xdr.Asset
 	err := xdr.SafeUnmarshalBase64(assetXDR, &asset)
 	if err != nil {
@@ -28,7 +28,7 @@ func (c *Custodian) doPostPegOut(ctx context.Context, assetXDR string, anchor, t
 	assetID := bc.NewHash(txvm.AssetID(importIssuanceSeed[:], assetBytes))
 	ref := pegOut{
 		AssetXDR: assetXDR,
-		Temp:     temp,
+		TempAddr: tempAddr,
 		Seqnum:   seqnum,
 		Exporter: exporter,
 		Amount:   amount,

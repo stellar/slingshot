@@ -28,7 +28,7 @@ CREATE TABLE IF NOT EXISTS exports (
   exporter TEXT NOT NULL,
   amount INTEGER NOT NULL,
   asset_xdr TEXT NOT NULL,
-  temp TEXT NOT NULL,
+  temp_addr TEXT NOT NULL,
   seqnum INTEGER NOT NULL,
   pegged_out INTEGER NOT NULL DEFAULT 0,
   anchor BLOB NOT NULL,
