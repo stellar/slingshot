@@ -93,8 +93,8 @@ fn issue() {
 fn spend_2_2_contract(
     input_1: u64,
     input_2: u64,
-    _output_1: u64,
-    _output_2: u64,
+    output_1: u64,
+    output_2: u64,
     flv: Scalar,
     issuance_pred: Predicate,
     nonce_pred: Predicate,
@@ -104,7 +104,22 @@ fn spend_2_2_contract(
     let mut instructions = vec![];
     instructions.append(&mut issue_helper(input_1, flv, issuance_pred.clone(), nonce_pred.clone())); // stack: issued-value-1
     instructions.append(&mut issue_helper(input_2, flv, issuance_pred, nonce_pred)); // stack: issued-value-1, issued-value-2
-                                                                                     // TODO: add cloak
+
+    instructions.push(Instruction::Push(
+        Commitment::from(CommitmentWitness::blinded(output_1)).into(),
+    )); // stack: issued-value-1, issued-value-2, output-1-quantity
+    instructions.push(Instruction::Push(
+        Commitment::from(CommitmentWitness::blinded(flv)).into(),
+    )); // stack: issued-value-1, issued-value-2, output-1-quantity, output-1-flavor
+
+    instructions.push(Instruction::Push(
+        Commitment::from(CommitmentWitness::blinded(output_2)).into(),
+    )); // stack: ... output-2-quantity
+    instructions.push(Instruction::Push(
+        Commitment::from(CommitmentWitness::blinded(flv)).into(),
+    )); // stack: ... output-2-quantity, output-2-flavor
+
+    instructions.push(Instruction::Cloak(2, 2)); // stack: output-1, output-2
 
     instructions.push(Instruction::Push(recipient_2_pred.clone().into())); // stack: issued-value-1, issued-value-2, recipient-2-pred
     instructions.push(Instruction::Output(1)); // stack: issued-value-1
@@ -146,7 +161,7 @@ fn spend_2_2() {
         );
 
         // Build tx
-        let bp_gens = BulletproofGens::new(128, 1);
+        let bp_gens = BulletproofGens::new(512, 1);
         // TBD: add TxHeader type to make this call more readable
         let txresult = Prover::build_tx(program, 0u64, 0u64, 0u64, &bp_gens);
         let (tx, txid, txlog) = match txresult {
@@ -157,7 +172,7 @@ fn spend_2_2() {
     };
 
     // Verify tx
-    let bp_gens = BulletproofGens::new(128, 1);
+    let bp_gens = BulletproofGens::new(512, 1);
     match Verifier::verify_tx(tx, &bp_gens) {
         Err(err) => return assert!(false, err.to_string()),
         Ok(v) => {
@@ -179,7 +194,6 @@ fn spend_1_2_contract(
     let mut instructions = vec![];
     instructions.append(&mut issue_helper(input_1, flv, issuance_pred, nonce_pred)); // stack: issued-value
 
-    // TODO: just use the blinded() function instead?
     instructions.push(Instruction::Push(
         Commitment::from(CommitmentWitness::blinded(output_1)).into(),
     )); // stack: issued-value, output-1-quantity
