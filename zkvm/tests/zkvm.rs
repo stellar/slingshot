@@ -186,28 +186,24 @@ fn spend_1_2_contract(
     output_1: u64,
     output_2: u64,
     flv: Scalar,
-    input_pred: &Predicate,
-    nonce_pred: &Predicate,
-    recipient_1_pred: &Predicate,
-    recipient_2_pred: &Predicate,
+    input_pred: Predicate,
+    recipient_1_pred: Predicate,
+    recipient_2_pred: Predicate,
 ) -> Vec<Instruction> {
     // TODO: just list all the instructions in one vector, instead of pushing
     let mut instructions = vec![];
-    let input_data = Input {
-        contract: FrozenContract {
-            payload: vec![FrozenItem::Value(FrozenValue {
-                qty: Commitment::from(CommitmentWitness::blinded(input)),
-                flv: Commitment::from(CommitmentWitness::blinded(flv)),
-            })],
-            predicate: *input_pred,
-        },
-        utxo: UTXO([0; 32]),
-        txid: TxID([0; 32]),
-    };
 
-    instructions.push(Instruction::Push(Data::Witness(DataWitness::Input(
-        input_data.into(),
-    )))); // stack: input-data
+    instructions.push(Instruction::Push(
+        Input::new(
+            vec![(
+                Commitment::from(CommitmentWitness::blinded(input)),
+                Commitment::from(CommitmentWitness::blinded(flv)),
+            )],
+            input_pred,
+            TxID([0; 32]),
+        )
+        .into(),
+    )); // stack: input-data
     instructions.push(Instruction::Input); // stack: input-contract
     instructions.push(Instruction::Signtx); // stack: input-value
 
@@ -227,9 +223,9 @@ fn spend_1_2_contract(
 
     instructions.push(Instruction::Cloak(1, 2)); // stack: output-1, output-2
 
-    instructions.push(Instruction::Push(recipient_2_pred.clone().into())); // stack: output-1, output-2, recipient-2-pred
+    instructions.push(Instruction::Push(recipient_2_pred.into())); // stack: output-1, output-2, recipient-2-pred
     instructions.push(Instruction::Output(1)); // stack: output-1
-    instructions.push(Instruction::Push(recipient_1_pred.clone().into())); // stack: output-1, recipient-1-pred
+    instructions.push(Instruction::Push(recipient_1_pred.into())); // stack: output-1, recipient-1-pred
     instructions.push(Instruction::Output(1)); // stack: empty
 
     instructions
@@ -241,8 +237,6 @@ fn spend_1_2() {
         // Generate predicates
         let issuance_pred =
             Predicate::from_witness(PredicateWitness::Key(Scalar::from(0u64))).unwrap();
-        let nonce_pred =
-            Predicate::from_witness(PredicateWitness::Key(Scalar::from(1u64))).unwrap();
         let recipient_1_pred =
             Predicate::from_witness(PredicateWitness::Key(Scalar::from(2u64))).unwrap();
         let recipient_2_pred =
@@ -259,10 +253,9 @@ fn spend_1_2() {
             9u64,
             1u64,
             flavor,
-            &issuance_pred,
-            &nonce_pred,
-            &recipient_1_pred,
-            &recipient_2_pred,
+            issuance_pred,
+            recipient_1_pred,
+            recipient_2_pred,
         );
 
         // Build tx

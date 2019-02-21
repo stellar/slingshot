@@ -403,8 +403,9 @@ where
     /// _items... predicate_ **output:_k_** → ø
     fn output(&mut self, k: usize) -> Result<(), VMError> {
         let contract = self.pop_contract(k)?;
-        let mut buf = Vec::with_capacity(contract.min_serialized_length());
-        self.freeze_contract(contract).encode(&mut buf);
+        let frozen_contract = self.freeze_contract(contract);
+        let mut buf = Vec::with_capacity(frozen_contract.min_serialized_length());
+        frozen_contract.encode(&mut buf);
         self.txlog.push(Entry::Output(buf));
         Ok(())
     }
