@@ -70,7 +70,7 @@ impl Contract {
 
 impl Input {
     pub fn from_bytes(data: Vec<u8>) -> Result<Self, VMError> {
-        let contract = SliceReader::parse(&data, |mut r| Self::decode(&mut r))?;
+        let contract = SliceReader::parse(&data, |r| Self::decode(r))?;
         Ok(contract)
     }
 
