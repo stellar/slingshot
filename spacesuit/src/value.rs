@@ -107,6 +107,20 @@ impl SignedInteger {
             Some(self.0 as u64)
         }
     }
+
+    pub fn checked_add(self, other: SignedInteger) -> Option<SignedInteger> {
+        match self.0.checked_add(other.0) {
+            Some(x) => Some(SignedInteger(x)),
+            None => None,
+        }
+    }
+
+    pub fn checked_mul(self, other: SignedInteger) -> Option<SignedInteger> {
+        match self.0.checked_mul(other.0) {
+            Some(x) => Some(SignedInteger(x)),
+            None => None,
+        }
+    }
 }
 
 impl From<u64> for SignedInteger {
