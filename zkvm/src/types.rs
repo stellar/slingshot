@@ -250,7 +250,7 @@ impl Data {
     pub fn to_predicate(self) -> Result<Predicate, VMError> {
         match self {
             Data::Opaque(data) => {
-                let point = SliceReader::parse(&data, |mut r| r.read_point())?;
+                let point = SliceReader::parse(&data, |r| r.read_point())?;
                 Ok(Predicate::opaque(point))
             }
             Data::Witness(witness) => match witness {
@@ -263,7 +263,7 @@ impl Data {
     pub fn to_commitment(self) -> Result<Commitment, VMError> {
         match self {
             Data::Opaque(data) => {
-                let point = SliceReader::parse(&data, |mut r| r.read_point())?;
+                let point = SliceReader::parse(&data, |r| r.read_point())?;
                 Ok(Commitment::Closed(point))
             }
             Data::Witness(witness) => match witness {

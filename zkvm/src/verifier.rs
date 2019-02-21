@@ -55,14 +55,13 @@ impl<'a, 'b> Delegate<r1cs::Verifier<'a, 'b>> for Verifier<'a, 'b> {
         &mut self,
         run: &mut Self::RunType,
     ) -> Result<Option<Instruction>, VMError> {
-        let mut program = SliceReader::new_with_range(&run.program, run.offset..run.program.len())?;
-
-        // Reached the end of the program - no more instructions to execute.
-        if program.len() == 0 {
+        let (instr, remainder) = SliceReader::parse(&run.program[run.offset..], |r| {
+            Ok((Instruction::parse(r)?, r.skip_trailing_bytes()))
+        })?;
+        if remainder == 0 {
             return Ok(None);
         }
-        let instr = Instruction::parse(&mut program)?;
-        run.offset = program.range().start;
+        run.offset = run.program.len() - remainder;
         Ok(Some(instr))
     }
 

@@ -2,13 +2,12 @@
 //! All methods err using VMError::FormatError for convenience.
 
 use byteorder::{ByteOrder, LittleEndian};
-use core::ops::Range;
 use curve25519_dalek::ristretto::CompressedRistretto;
 use curve25519_dalek::scalar::Scalar;
 
 use crate::errors::VMError;
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Debug)]
 pub struct SliceReader<'a> {
     whole: &'a [u8],
     start: usize,
@@ -24,28 +23,13 @@ impl<'a> SliceReader<'a> {
         }
     }
 
-    pub fn new_with_range(data: &'a [u8], range: Range<usize>) -> Result<Self, VMError> {
-        if range.end > data.len() || range.start > data.len() {
-            return Err(VMError::FormatError);
-        }
-        Ok(SliceReader {
-            start: range.start,
-            end: range.end,
-            whole: data,
-        })
-    }
-
     pub fn len(&self) -> usize {
         self.end - self.start
     }
 
-    pub fn range(&self) -> Range<usize> {
-        self.start..self.end
-    }
-
     pub fn slice<F, T>(&mut self, slice_fn: F) -> Result<(T, &[u8]), VMError>
     where
-        F: FnOnce(&mut SliceReader) -> Result<T, VMError>,
+        F: FnOnce(&mut Self) -> Result<T, VMError>,
     {
         let start = self.start;
         let result = slice_fn(self)?;
@@ -53,20 +37,22 @@ impl<'a> SliceReader<'a> {
         Ok((result, &self.whole[start..end]))
     }
 
-    pub fn parse<F, T>(data: &[u8], parse_fn: F) -> Result<T, VMError>
+    pub fn parse<F, T>(data: &'a [u8], parse_fn: F) -> Result<T, VMError>
     where
-        F: FnOnce(SliceReader) -> Result<T, VMError>,
+        F: FnOnce(&mut Self) -> Result<T, VMError>,
     {
-        let reader = SliceReader::new(data);
-        let result = parse_fn(reader)?;
+        let mut reader = Self::new(data);
+        let result = parse_fn(&mut reader)?;
         if reader.len() != 0 {
-            return Err(VMError::FormatError);
+            return Err(VMError::TrailingBytes);
         }
         Ok(result)
     }
 
     pub fn skip_trailing_bytes(&mut self) -> usize {
-        unimplemented!()
+        let trailing = self.end - self.start;
+        self.start = self.end;
+        trailing
     }
 
     /// Returns a slice of the first `prefix_size` of bytes and advances
@@ -75,13 +61,9 @@ impl<'a> SliceReader<'a> {
         if prefix_size > self.len() {
             return Err(VMError::FormatError);
         }
-        let prefix = SliceReader {
-            start: self.start,
-            end: self.start + prefix_size,
-            whole: self.whole,
-        };
-        self.start = self.start + prefix_size;
-        Ok(&prefix.whole[prefix.range()])
+        let prefix = &self.whole[self.start..(self.start + prefix_size)];
+        self.start += prefix_size;
+        Ok(prefix)
     }
 
     pub fn read_u8(&mut self) -> Result<u8, VMError> {
