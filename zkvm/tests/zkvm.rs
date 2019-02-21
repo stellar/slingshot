@@ -182,31 +182,48 @@ fn spend_2_2() {
 }
 
 fn spend_1_2_contract(
-    input_1: u64,
+    input: u64,
     output_1: u64,
     output_2: u64,
     flv: Scalar,
-    issuance_pred: &Predicate,
+    input_pred: &Predicate,
     nonce_pred: &Predicate,
     recipient_1_pred: &Predicate,
     recipient_2_pred: &Predicate,
 ) -> Vec<Instruction> {
+    // TODO: just list all the instructions in one vector, instead of pushing
     let mut instructions = vec![];
-    instructions.append(&mut issue_helper(input_1, flv, issuance_pred, nonce_pred)); // stack: issued-value
+    let input_data = Input {
+        contract: FrozenContract {
+            payload: vec![FrozenItem::Value(FrozenValue {
+                qty: Commitment::from(CommitmentWitness::blinded(input)),
+                flv: Commitment::from(CommitmentWitness::blinded(flv)),
+            })],
+            predicate: *input_pred,
+        },
+        utxo: UTXO([0; 32]),
+        txid: TxID([0; 32]),
+    };
+
+    instructions.push(Instruction::Push(Data::Witness(DataWitness::Input(
+        input_data.into(),
+    )))); // stack: input-data
+    instructions.push(Instruction::Input); // stack: input-contract
+    instructions.push(Instruction::Signtx); // stack: input-value
 
     instructions.push(Instruction::Push(
         Commitment::from(CommitmentWitness::blinded(output_1)).into(),
-    )); // stack: issued-value, output-1-quantity
+    )); // stack: input-value, output-1-quantity
     instructions.push(Instruction::Push(
         Commitment::from(CommitmentWitness::blinded(flv)).into(),
-    )); // stack: issued-value, output-1-quantity, output-1-flavor
+    )); // stack: input-value, output-1-quantity, output-1-flavor
 
     instructions.push(Instruction::Push(
         Commitment::from(CommitmentWitness::blinded(output_2)).into(),
-    )); // stack: ... output-2-quantity
+    )); // stack: input-value, output-1-quantity, output-2-quantity
     instructions.push(Instruction::Push(
         Commitment::from(CommitmentWitness::blinded(flv)).into(),
-    )); // stack: ... output-2-quantity, output-2-flavor
+    )); // stack: input-value, output-1-quantity, output-2-quantity, output-2-flavor
 
     instructions.push(Instruction::Cloak(1, 2)); // stack: output-1, output-2
 
