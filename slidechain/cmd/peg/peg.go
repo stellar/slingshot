@@ -163,7 +163,7 @@ func submitPrepegTx(tx *bc.Tx, slidechaind string) error {
 }
 
 func recordPeg(txid bc.Hash, assetXDR []byte, amount, expMS int64, pubkey ed25519.PublicKey, slidechaind string) error {
-	p := slidechain.Peg{
+	p := slidechain.PegIn{
 		Amount:      amount,
 		AssetXDR:    assetXDR,
 		RecipPubkey: pubkey,
