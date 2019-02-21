@@ -12,18 +12,6 @@ fn issue_contract(
     nonce_pred: Predicate,
     recipient_pred: Predicate,
 ) -> Vec<Instruction> {
-    let mut instructions = issue_helper(qty, flv, issuance_pred, nonce_pred); // stack: issued-value
-    instructions.push(Instruction::Push(recipient_pred.clone().into())); // stack: issued-value, pred
-    instructions.push(Instruction::Output(1)); // stack: empty
-    instructions
-}
-
-fn issue_helper(
-    qty: u64,
-    flv: Scalar,
-    issuance_pred: Predicate,
-    nonce_pred: Predicate,
-) -> Vec<Instruction> {
     vec![
         Instruction::Push(
             Commitment::from(CommitmentWitness {
@@ -41,6 +29,8 @@ fn issue_helper(
         Instruction::Nonce,                       // stack: issue-contract, nonce-contract
         Instruction::Signtx,                      // stack: issue-contract
         Instruction::Signtx,                      // stack: issued-value
+        Instruction::Push(recipient_pred.into()), // stack: issued-value, pred
+        Instruction::Output(1),                   // stack: empty
     ]
 }
 
@@ -96,51 +86,64 @@ fn spend_2_2_contract(
     output_1: u64,
     output_2: u64,
     flv: Scalar,
-    issuance_pred: Predicate,
-    nonce_pred: Predicate,
-    recipient_1_pred: Predicate,
-    recipient_2_pred: Predicate,
+    input_1_pred: Predicate,
+    input_2_pred: Predicate,
+    output_1_pred: Predicate,
+    output_2_pred: Predicate,
 ) -> Vec<Instruction> {
-    let mut instructions = vec![];
-    instructions.append(&mut issue_helper(input_1, flv, issuance_pred.clone(), nonce_pred.clone())); // stack: issued-value-1
-    instructions.append(&mut issue_helper(input_2, flv, issuance_pred, nonce_pred)); // stack: issued-value-1, issued-value-2
-
-    instructions.push(Instruction::Push(
-        Commitment::from(CommitmentWitness::blinded(output_1)).into(),
-    )); // stack: issued-value-1, issued-value-2, output-1-quantity
-    instructions.push(Instruction::Push(
-        Commitment::from(CommitmentWitness::blinded(flv)).into(),
-    )); // stack: issued-value-1, issued-value-2, output-1-quantity, output-1-flavor
-
-    instructions.push(Instruction::Push(
-        Commitment::from(CommitmentWitness::blinded(output_2)).into(),
-    )); // stack: ... output-2-quantity
-    instructions.push(Instruction::Push(
-        Commitment::from(CommitmentWitness::blinded(flv)).into(),
-    )); // stack: ... output-2-quantity, output-2-flavor
-
-    instructions.push(Instruction::Cloak(2, 2)); // stack: output-1, output-2
-
-    instructions.push(Instruction::Push(recipient_2_pred.clone().into())); // stack: issued-value-1, issued-value-2, recipient-2-pred
-    instructions.push(Instruction::Output(1)); // stack: issued-value-1
-    instructions.push(Instruction::Push(recipient_1_pred.clone().into())); // stack: issued-value-1, recipient-1-pred
-    instructions.push(Instruction::Output(1)); // stack: empty
-
-    instructions
+    vec![
+        Instruction::Push(
+            Input::new(
+                vec![(
+                    Commitment::from(CommitmentWitness::blinded(input_1)),
+                    Commitment::from(CommitmentWitness::blinded(flv)),
+                )],
+                input_1_pred,
+                TxID([0; 32]),
+            )
+            .into(),
+        ), // stack: input-1-data
+        Instruction::Input,  // stack: input-1-contract
+        Instruction::Signtx, // stack: input-1-value
+        Instruction::Push(
+            Input::new(
+                vec![(
+                    Commitment::from(CommitmentWitness::blinded(input_2)),
+                    Commitment::from(CommitmentWitness::blinded(flv)),
+                )],
+                input_2_pred,
+                TxID([0; 32]),
+            )
+            .into(),
+        ), // stack: input-2-data
+        Instruction::Input,  // stack: input-2-contract
+        Instruction::Signtx, // stack: input-2-value
+        Instruction::Push(Commitment::from(CommitmentWitness::blinded(output_1)).into()), // stack: input-value, output-1-quantity
+        Instruction::Push(Commitment::from(CommitmentWitness::blinded(flv)).into()), // stack: input-value, output-1-quantity, output-1-flavor
+        Instruction::Push(Commitment::from(CommitmentWitness::blinded(output_2)).into()), // stack: input-value, output-1-quantity, output-2-quantity
+        Instruction::Push(Commitment::from(CommitmentWitness::blinded(flv)).into()), // stack: input-value, output-1-quantity, output-2-quantity, output-2-flavor
+        Instruction::Cloak(2, 2), // stack: output-1, output-2
+        Instruction::Push(output_2_pred.into()), // stack: output-1, output-2, output-2-pred
+        Instruction::Output(1),   // stack: output-1
+        Instruction::Push(output_1_pred.into()), // stack: output-1, output-1-pred
+        Instruction::Output(1),   // stack: empty
+    ]
 }
 
 #[test]
 fn spend_2_2() {
     let (tx, _txid, txlog) = {
         // Generate predicates
-        let issuance_pred =
+        let input_1_pred =
             Predicate::from_witness(PredicateWitness::Key(Scalar::from(0u64))).unwrap();
-        let nonce_pred =
+        let input_2_pred =
             Predicate::from_witness(PredicateWitness::Key(Scalar::from(1u64))).unwrap();
-        let recipient_1_pred =
+        let output_1_pred =
             Predicate::from_witness(PredicateWitness::Key(Scalar::from(2u64))).unwrap();
-        let recipient_2_pred =
+        let output_2_pred =
             Predicate::from_witness(PredicateWitness::Key(Scalar::from(3u64))).unwrap();
+        let issuance_pred =
+            Predicate::from_witness(PredicateWitness::Key(Scalar::from(4u64))).unwrap();
 
         // Generate flavor scalar
         let mut t = Transcript::new(b"ZkVM.issue");
@@ -154,10 +157,10 @@ fn spend_2_2() {
             9u64,
             1u64,
             flavor,
-            &issuance_pred,
-            &nonce_pred,
-            &recipient_1_pred,
-            &recipient_2_pred,
+            input_1_pred,
+            input_2_pred,
+            output_1_pred,
+            output_2_pred,
         );
 
         // Build tx
@@ -187,10 +190,9 @@ fn spend_1_2_contract(
     output_2: u64,
     flv: Scalar,
     input_pred: Predicate,
-    recipient_1_pred: Predicate,
-    recipient_2_pred: Predicate,
+    output_1_pred: Predicate,
+    output_2_pred: Predicate,
 ) -> Vec<Instruction> {
-    // TODO: just list all the instructions in one vector, instead of pushing
     vec![
         Instruction::Push(
             Input::new(
@@ -209,11 +211,11 @@ fn spend_1_2_contract(
         Instruction::Push(Commitment::from(CommitmentWitness::blinded(flv)).into()), // stack: input-value, output-1-quantity, output-1-flavor
         Instruction::Push(Commitment::from(CommitmentWitness::blinded(output_2)).into()), // stack: input-value, output-1-quantity, output-2-quantity
         Instruction::Push(Commitment::from(CommitmentWitness::blinded(flv)).into()), // stack: input-value, output-1-quantity, output-2-quantity, output-2-flavor
-        Instruction::Cloak(1, 2), // stack: output-1, output-2
-        Instruction::Push(recipient_2_pred.into()), // stack: output-1, output-2, recipient-2-pred
-        Instruction::Output(1),   // stack: output-1
-        Instruction::Push(recipient_1_pred.into()), // stack: output-1, recipient-1-pred
-        Instruction::Output(1),   // stack: empty
+        Instruction::Cloak(1, 2),                // stack: output-1, output-2
+        Instruction::Push(output_2_pred.into()), // stack: output-1, output-2, output-2-pred
+        Instruction::Output(1),                  // stack: output-1
+        Instruction::Push(output_1_pred.into()), // stack: output-1, output-1-pred
+        Instruction::Output(1),                  // stack: empty
     ]
 }
 
@@ -223,9 +225,11 @@ fn spend_1_2() {
         // Generate predicates
         let issuance_pred =
             Predicate::from_witness(PredicateWitness::Key(Scalar::from(0u64))).unwrap();
-        let recipient_1_pred =
+        let input_pred =
+            Predicate::from_witness(PredicateWitness::Key(Scalar::from(1u64))).unwrap();
+        let output_1_pred =
             Predicate::from_witness(PredicateWitness::Key(Scalar::from(2u64))).unwrap();
-        let recipient_2_pred =
+        let output_2_pred =
             Predicate::from_witness(PredicateWitness::Key(Scalar::from(3u64))).unwrap();
 
         // Generate flavor scalar
@@ -239,9 +243,9 @@ fn spend_1_2() {
             9u64,
             1u64,
             flavor,
-            issuance_pred,
-            recipient_1_pred,
-            recipient_2_pred,
+            input_pred,
+            output_1_pred,
+            output_2_pred,
         );
 
         // Build tx
