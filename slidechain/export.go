@@ -116,6 +116,9 @@ func (c *Custodian) pegOutFromExports(ctx context.Context) {
 			} else {
 				peggedOut = pegOutOK
 			}
+			if peggedOut == pegOutFail {
+				log.Fatalf("pegging out tx: %s", err)
+			}
 			_, err = c.DB.ExecContext(ctx, `UPDATE exports SET pegged_out=$1 WHERE txid=$2`, peggedOut, txid)
 			if err != nil {
 				log.Fatalf("updating export table: %s", err)
