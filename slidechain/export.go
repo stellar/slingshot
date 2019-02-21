@@ -28,10 +28,9 @@ import (
 type pegOutState int
 
 const (
-	pegOutNotYet pegOutState = iota
+	pegOutFail pegOutState = iota
 	pegOutOK
 	pegOutRetry
-	pegOutFail
 )
 
 const baseFee = 100
@@ -60,7 +59,7 @@ func (c *Custodian) pegOutFromExports(ctx context.Context) {
 		case <-ch:
 		}
 
-		const q = `SELECT txid, amount, asset_xdr, exporter, temp, seqnum FROM exports WHERE pegged_out IN ($1, $2)`
+		const q = `SELECT txid, amount, asset_xdr, exporter, temp, seqnum FROM exports`
 
 		var (
 			txids     [][]byte
@@ -70,7 +69,7 @@ func (c *Custodian) pegOutFromExports(ctx context.Context) {
 			temps     []string
 			seqnums   []int
 		)
-		err := sqlutil.ForQueryRows(ctx, c.DB, q, pegOutNotYet, pegOutRetry, func(txid []byte, amount int, assetXDR []byte, exporter string, temp string, seqnum int) {
+		err := sqlutil.ForQueryRows(ctx, c.DB, q, func(txid []byte, amount int, assetXDR []byte, exporter string, temp string, seqnum int) {
 			txids = append(txids, txid)
 			amounts = append(amounts, amount)
 			assetXDRs = append(assetXDRs, assetXDR)
@@ -100,7 +99,7 @@ func (c *Custodian) pegOutFromExports(ctx context.Context) {
 
 			log.Printf("pegging out export %x: %d of %s to %s", txid, amounts[i], asset.String(), exporters[i])
 
-			var peggedOut pegOutState
+			peggedOut := pegOutOK
 			err = c.pegOut(ctx, exporter, asset, int64(amounts[i]), tempID, xdr.SequenceNumber(seqnums[i]))
 			if err != nil {
 				peggedOut = pegOutFail
@@ -113,15 +112,13 @@ func (c *Custodian) pegOutFromExports(ctx context.Context) {
 						peggedOut = pegOutRetry
 					}
 				}
-			} else {
-				peggedOut = pegOutOK
 			}
-			if peggedOut == pegOutFail {
-				log.Fatalf("pegging out tx: %s", err)
-			}
-			_, err = c.DB.ExecContext(ctx, `UPDATE exports SET pegged_out=$1 WHERE txid=$2`, peggedOut, txid)
-			if err != nil {
-				log.Fatalf("updating export table: %s", err)
+			// Delete successful and failed peg-outs from exports.
+			if peggedOut != pegOutRetry {
+				_, err = c.DB.ExecContext(ctx, `DELETE FROM exports WHERE txid=$2`, txid)
+				if err != nil {
+					log.Fatalf("updating export table: %s", err)
+				}
 			}
 		}
 	}

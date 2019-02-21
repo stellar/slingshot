@@ -29,8 +29,7 @@ CREATE TABLE IF NOT EXISTS exports (
   amount INTEGER NOT NULL,
   asset_xdr BLOB NOT NULL,
   temp TEXT NOT NULL,
-  seqnum INTEGER NOT NULL,
-  pegged_out INTEGER NOT NULL DEFAULT 0
+  seqnum INTEGER NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS custodian (
