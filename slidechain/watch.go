@@ -133,12 +133,7 @@ func (c *Custodian) watchExports(ctx context.Context) {
 				if infoItem[0].(txvm.Bytes)[0] != txvm.LogCode {
 					continue
 				}
-				var info struct {
-					AssetXDR []byte `json:"asset"`
-					Temp     string `json:"temp"`
-					Seqnum   int64  `json:"seqnum"`
-					Exporter string `json:"exporter"`
-				}
+				var info pegOut
 				err := json.Unmarshal(infoItem[2].(txvm.Bytes), &info)
 				if err != nil {
 					continue

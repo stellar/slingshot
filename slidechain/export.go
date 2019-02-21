@@ -25,6 +25,13 @@ import (
 	"github.com/stellar/go/xdr"
 )
 
+type pegOut struct {
+	AssetXDR []byte `json:"asset"`
+	Temp     string `json:"temp"`
+	Seqnum   int64  `json:"seqnum"`
+	Exporter string `json:"exporter"`
+}
+
 type pegOutState int
 
 const (
@@ -279,10 +286,6 @@ func BuildExportTx(ctx context.Context, asset xdr.Asset, amount, inputAmt int64,
 	if inputAmt < amount {
 		return nil, fmt.Errorf("cannot have input amount %d less than export amount %d", inputAmt, amount)
 	}
-	assetXDR, err := xdr.MarshalBase64(asset)
-	if err != nil {
-		return nil, err
-	}
 	assetBytes, err := asset.MarshalBinary()
 	if err != nil {
 		return nil, err
@@ -295,13 +298,8 @@ func BuildExportTx(ctx context.Context, asset xdr.Asset, amount, inputAmt int64,
 		return nil, err
 	}
 	pubkey := prv.Public().(ed25519.PublicKey)
-	ref := struct {
-		AssetXDR string `json:"asset"`
-		Temp     string `json:"temp"`
-		Seqnum   int64  `json:"seqnum"`
-		Exporter string `json:"exporter"`
-	}{
-		assetXDR,
+	ref := pegOut{
+		assetBytes,
 		temp,
 		int64(seqnum),
 		kp.Address(),
@@ -379,10 +377,6 @@ func IsExportTx(tx *bc.Tx, asset xdr.Asset, inputAmt int64, temp, exporter strin
 	if err != nil {
 		return false
 	}
-	assetXDR, err := xdr.MarshalBase64(asset)
-	if err != nil {
-		return false
-	}
 	wantAssetID := txvm.AssetID(importIssuanceSeed[:], assetBytes)
 	if !bytes.Equal(wantAssetID[:], tx.Log[2][3].(txvm.Bytes)) {
 		return false
@@ -390,13 +384,8 @@ func IsExportTx(tx *bc.Tx, asset xdr.Asset, inputAmt int64, temp, exporter strin
 	if tx.Log[3][0].(txvm.Bytes)[0] != txvm.LogCode {
 		return false
 	}
-	ref := struct {
-		AssetXDR string `json:"asset"`
-		Temp     string `json:"temp"`
-		Seqnum   int64  `json:"seqnum"`
-		Exporter string `json:"exporter"`
-	}{
-		assetXDR,
+	ref := pegOut{
+		assetBytes,
 		temp,
 		seqnum,
 		exporter,
