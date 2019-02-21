@@ -7,6 +7,7 @@ use merlin::Transcript;
 use spacesuit::SignedInteger;
 
 use crate::contract::{Contract, Input, PortableItem};
+use crate::encoding;
 use crate::encoding::Subslice;
 use crate::errors::VMError;
 use crate::ops::Instruction;
@@ -114,6 +115,26 @@ impl CommitmentWitness {
     pub fn to_point(&self) -> CompressedRistretto {
         let gens = PedersenGens::default();
         gens.commit(self.value.into(), self.blinding).compress()
+    }
+
+    pub fn unblinded<T>(x: T) -> Self
+    where
+        T: Into<ScalarWitness>,
+    {
+        CommitmentWitness {
+            blinding: Scalar::zero(),
+            value: x.into(),
+        }
+    }
+
+    pub fn blinded<T>(x: T) -> Self
+    where
+        T: Into<ScalarWitness>,
+    {
+        CommitmentWitness {
+            blinding: Scalar::random(&mut rand::thread_rng()),
+            value: x.into(),
+        }
     }
 }
 
@@ -270,7 +291,9 @@ impl Data {
                 buf.extend_from_slice(x);
                 return;
             }
-            Data::Witness(w) => w.encode(buf),
+            Data::Witness(w) => {
+                w.encode(buf);
+            }
         };
     }
 }
@@ -307,6 +330,20 @@ impl Expression {
             terms: vec![(r1cs::Variable::One(), a)],
             assignment: Some(ScalarWitness::Scalar(a)),
         }
+    }
+}
+
+// Upcasting witness/points into Commitment
+
+impl From<CommitmentWitness> for Commitment {
+    fn from(x: CommitmentWitness) -> Self {
+        Commitment::Open(Box::new(x))
+    }
+}
+
+impl From<CompressedRistretto> for Commitment {
+    fn from(x: CompressedRistretto) -> Self {
+        Commitment::Closed(x)
     }
 }
 
