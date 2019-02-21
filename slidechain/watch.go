@@ -16,8 +16,8 @@ import (
 )
 
 // Runs as a goroutine until ctx is canceled.
-func (c *Custodian) watchPegs(ctx context.Context) {
-	defer log.Println("watchPegs exiting")
+func (c *Custodian) watchPegIns(ctx context.Context) {
+	defer log.Println("watchPegIns exiting")
 	backoff := i10rnet.Backoff{Base: 100 * time.Millisecond}
 
 	var cur horizon.Cursor

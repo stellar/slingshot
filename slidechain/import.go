@@ -54,8 +54,8 @@ func (c *Custodian) buildImportTx(
 	return tx2, nil
 }
 
-func (c *Custodian) importFromPegs(ctx context.Context, ready chan struct{}) {
-	defer log.Print("importFromPegs exiting")
+func (c *Custodian) importFromPegIns(ctx context.Context, ready chan struct{}) {
+	defer log.Print("importFromPegIns exiting")
 
 	ch := make(chan struct{})
 	go func() {
