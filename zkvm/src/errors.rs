@@ -15,7 +15,7 @@ pub enum VMError {
     #[fail(display = "Format in invalid")]
     FormatError,
 
-    /// This error occurs when there are trailing bytes left unread.
+    /// This error occurs when there are trailing bytes left unread by the parser.
     #[fail(display = "Invalid trailing bytes.")]
     TrailingBytes,
 

@@ -55,12 +55,12 @@ impl<'a, 'b> Delegate<r1cs::Verifier<'a, 'b>> for Verifier<'a, 'b> {
         &mut self,
         run: &mut Self::RunType,
     ) -> Result<Option<Instruction>, VMError> {
+        if run.offset == run.program.len() {
+            return Ok(None);
+        }
         let (instr, remainder) = SliceReader::parse(&run.program[run.offset..], |r| {
             Ok((Instruction::parse(r)?, r.skip_trailing_bytes()))
         })?;
-        if remainder == 0 {
-            return Ok(None);
-        }
         run.offset = run.program.len() - remainder;
         Ok(Some(instr))
     }
