@@ -384,7 +384,7 @@ impl Add for Expression {
             (Expression::Terms(mut left_terms, left_assignment), Expression::Constant(right)) => {
                 // append constant term to term vector in non-constant expression
                 left_terms.push((r1cs::Variable::One(), right.into()));
-                Expression::Terms(left_terms, left_assignment.map(|a| a + right))
+                Expression::Terms(left_terms, left_assignment.map(|l| l + r))
             }
             (
                 Expression::Terms(mut left_terms, left_assignment),
