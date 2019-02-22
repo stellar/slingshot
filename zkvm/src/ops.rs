@@ -289,23 +289,23 @@ impl Program {
         self.0.push(Instruction::Push(data.into()));
         self
     }
-    fn var<'a>(&'a mut self) -> &'a mut Program {
+    fn var(&mut self) -> &mut Program {
         self.0.push(Instruction::Var);
         self
     }
-    fn nonce<'a>(&'a mut self) -> &'a mut Program {
+    fn nonce(&mut self) -> &mut Program {
         self.0.push(Instruction::Nonce);
         self
     }
-    fn issue<'a>(&'a mut self) -> &'a mut Program {
+    fn issue(&mut self) -> &mut Program {
         self.0.push(Instruction::Issue);
         self
     }
-    fn sign_tx<'a>(&'a mut self) -> &'a mut Program {
+    fn sign_tx(&mut self) -> &mut Program {
         self.0.push(Instruction::Signtx);
         self
     }
-    fn output<'a>(&'a mut self, size: usize) -> &'a mut Program {
+    fn output(&mut self, size: usize) -> &mut Program {
         self.0.push(Instruction::Output(size));
         self
     }
