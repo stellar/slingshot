@@ -38,16 +38,13 @@ fn issue_contract(
 fn issue() {
     let (tx, txid, txlog) = {
         // Generate predicates
-        let issuance_pred =
-            Predicate::from_witness(PredicateWitness::Key(Scalar::from(0u64))).unwrap();
-        let nonce_pred =
-            Predicate::from_witness(PredicateWitness::Key(Scalar::from(1u64))).unwrap();
-        let recipient_pred =
-            Predicate::from_witness(PredicateWitness::Key(Scalar::from(2u64))).unwrap();
+        let issuance_pred = Predicate::from_signing_key(Scalar::from(0u64));
+        let nonce_pred = Predicate::from_signing_key(Scalar::from(1u64));
+        let recipient_pred = Predicate::from_signing_key(Scalar::from(2u64));
 
         // Generate flavor scalar
         let mut t = Transcript::new(b"ZkVM.issue");
-        t.commit_bytes(b"predicate", issuance_pred.point().as_bytes());
+        t.commit_bytes(b"predicate", issuance_pred.to_point().as_bytes());
         let flavor = t.challenge_scalar(b"flavor");
 
         // Build program

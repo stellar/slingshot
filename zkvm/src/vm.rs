@@ -12,7 +12,7 @@ use crate::encoding::SliceReader;
 use crate::errors::VMError;
 use crate::ops::Instruction;
 use crate::point_ops::PointOp;
-use crate::predicate::{Predicate, PredicateWitness};
+use crate::predicate::Predicate;
 use crate::signature::*;
 use crate::txlog::{Entry, TxID, TxLog};
 use crate::types::*;
@@ -331,7 +331,7 @@ where
 
     fn nonce(&mut self) -> Result<(), VMError> {
         let predicate = self.pop_item()?.to_data()?.to_predicate()?;
-        let point = predicate.point();
+        let point = predicate.to_point();
         let contract = Contract {
             predicate,
             payload: Vec::new(),

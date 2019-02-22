@@ -95,7 +95,7 @@ impl Input {
 
 impl FrozenContract {
     pub fn encode(&self, buf: &mut Vec<u8>) {
-        buf.extend_from_slice(&self.predicate.point().to_bytes());
+        buf.extend_from_slice(&self.predicate.to_point().to_bytes());
         encoding::write_u32(self.payload.len() as u32, buf);
 
         for p in self.payload.iter() {
@@ -124,7 +124,7 @@ impl FrozenContract {
         //      Data  =  0x00  ||  LE32(len)  ||  <bytes>
         //     Value  =  0x01  ||  <32 bytes> ||  <32 bytes>
 
-        let predicate = Predicate::opaque(output.read_point()?);
+        let predicate = Predicate::Opaque(output.read_point()?);
         let k = output.read_size()?;
 
         // sanity check: avoid allocating unreasonably more memory
