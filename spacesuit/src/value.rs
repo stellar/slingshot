@@ -131,9 +131,9 @@ impl Add for SignedInteger {
     fn add(self, rhs: SignedInteger) -> Option<SignedInteger> {
         let s = self.0 + rhs.0;
         if s <= (u64::max as i128) && s >= -(u64::max as i128) {
-            return Some(SignedInteger(s));
+            Some(SignedInteger(s))
         } else {
-            return None;
+            None
         }
     }
 }
@@ -144,9 +144,9 @@ impl Mul for SignedInteger {
     fn mul(self, rhs: SignedInteger) -> Option<SignedInteger> {
         let p = self.0 * rhs.0;
         if p <= (u64::max as i128) && p >= -(u64::max as i128) {
-            return Some(SignedInteger(p));
+            Some(SignedInteger(p))
         } else {
-            return None;
+            None
         }
     }
 }
