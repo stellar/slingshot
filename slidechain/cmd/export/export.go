@@ -85,9 +85,9 @@ func main() {
 	}
 	*slidechaind = strings.TrimRight(*slidechaind, "/")
 
-	// Build + submit pre-export tx
+	// Build and submit the pre-export transaction.
 
-	// Check that stellar account exists
+	// Check that stellar account exists.
 	var seed [32]byte
 	rawbytes := mustDecodeHex(*prv)
 	copy(seed[:], rawbytes)
@@ -114,7 +114,7 @@ func main() {
 		log.Fatalf("error submitting pre-export tx: %s", err)
 	}
 
-	// Export funds from slidechain
+	// Export funds from slidechain.
 	tx, err := slidechain.BuildExportTx(ctx, asset, exportAmount, inputAmount, tempAddr, mustDecodeHex(*anchor), mustDecodeHex(*prv), seqnum)
 	if err != nil {
 		log.Fatalf("error building export tx: %s", err)
@@ -124,9 +124,16 @@ func main() {
 		log.Fatal(err)
 	}
 
-	resp, err = http.Post(*slidechaind+"/submit?wait=1", "application/octet-stream", bytes.NewReader(txbits))
+	// Submit the transaction and block until it's included in the txvm chain (or returns an error).
+	req, err := http.NewRequest("POST", *slidechaind+"/submit?wait=1", bytes.NewReader(txbits))
 	if err != nil {
-		log.Fatalf("error submitting tx to slidechaind: %s", err)
+		log.Fatalf("error building request for latest block: %s", err)
+	}
+	req = req.WithContext(ctx)
+	client := http.DefaultClient
+	resp, err = client.Do(req)
+	if err != nil {
+		log.Fatalf("error submitting and waiting on tx to slidechaind: %s", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode/100 != 2 {
