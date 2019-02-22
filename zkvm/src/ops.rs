@@ -6,6 +6,8 @@ use crate::encoding::SliceReader;
 use crate::errors::VMError;
 use crate::types::Data;
 
+pub struct Program(Vec<Instruction>);
+
 #[derive(Clone, Debug)]
 pub enum Instruction {
     Push(Data), // size of the string
