@@ -292,7 +292,7 @@ where
     }
 
     fn neg(&mut self) -> Result<(), VMError> {
-        let mut expr = self.pop_item()?.to_expression()?;
+        let expr = self.pop_item()?.to_expression()?;
         self.push_item(-expr);
         Ok(())
     }
