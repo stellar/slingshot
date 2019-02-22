@@ -26,7 +26,7 @@ import (
 
 type pegOut struct {
 	AssetXDR []byte `json:"asset"`
-	Temp     string `json:"temp"`
+	TempAddr string `json:"temp"`
 	Seqnum   int64  `json:"seqnum"`
 	Exporter string `json:"exporter"`
 }
@@ -145,20 +145,20 @@ func (c *Custodian) pegOut(ctx context.Context, exporter xdr.AccountId, asset xd
 	return nil
 }
 
-func buildPegOutTx(custodian, exporter, temp, network string, asset xdr.Asset, amount int64, seqnum xdr.SequenceNumber) (*b.TransactionBuilder, error) {
+func buildPegOutTx(custodianAddr, exporterAddr, tempAddr, network string, asset xdr.Asset, amount int64, seqnum xdr.SequenceNumber) (*b.TransactionBuilder, error) {
 	var paymentOp b.PaymentBuilder
 	switch asset.Type {
 	case xdr.AssetTypeAssetTypeNative:
 		lumens := xlm.Amount(amount)
 		paymentOp = b.Payment(
-			b.SourceAccount{AddressOrSeed: custodian},
-			b.Destination{AddressOrSeed: exporter},
+			b.SourceAccount{AddressOrSeed: custodianAddr},
+			b.Destination{AddressOrSeed: exporterAddr},
 			b.NativeAmount{Amount: lumens.HorizonString()},
 		)
 	case xdr.AssetTypeAssetTypeCreditAlphanum4:
 		paymentOp = b.Payment(
-			b.SourceAccount{AddressOrSeed: custodian},
-			b.Destination{AddressOrSeed: exporter},
+			b.SourceAccount{AddressOrSeed: custodianAddr},
+			b.Destination{AddressOrSeed: exporterAddr},
 			b.CreditAmount{
 				Code:   string(asset.AlphaNum4.AssetCode[:]),
 				Issuer: asset.AlphaNum4.Issuer.Address(),
@@ -167,8 +167,8 @@ func buildPegOutTx(custodian, exporter, temp, network string, asset xdr.Asset, a
 		)
 	case xdr.AssetTypeAssetTypeCreditAlphanum12:
 		paymentOp = b.Payment(
-			b.SourceAccount{AddressOrSeed: custodian},
-			b.Destination{AddressOrSeed: exporter},
+			b.SourceAccount{AddressOrSeed: custodianAddr},
+			b.Destination{AddressOrSeed: exporterAddr},
 			b.CreditAmount{
 				Code:   string(asset.AlphaNum12.AssetCode[:]),
 				Issuer: asset.AlphaNum12.Issuer.Address(),
@@ -177,11 +177,11 @@ func buildPegOutTx(custodian, exporter, temp, network string, asset xdr.Asset, a
 		)
 	}
 	mergeAccountOp := b.AccountMerge(
-		b.Destination{AddressOrSeed: exporter},
+		b.Destination{AddressOrSeed: exporterAddr},
 	)
 	return b.Transaction(
 		b.Network{Passphrase: network},
-		b.SourceAccount{AddressOrSeed: temp},
+		b.SourceAccount{AddressOrSeed: tempAddr},
 		b.Sequence{Sequence: uint64(seqnum) + 1},
 		b.BaseFee{Amount: baseFee},
 		mergeAccountOp,
