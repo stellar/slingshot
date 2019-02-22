@@ -82,7 +82,8 @@ Xpub {
 1. Create Merlin `t = Transcript::new("Keytree.intermediate")`.
 2. Commit [xpub](#xpub) to transcript (if xprv is provided, compute xpub from xprv):
 	```
-	t.commit_bytes("xpub", xpub)
+	t.commit_bytes("pt", xpub.point)
+	t.commit_bytes("dk", xpub.dk)
 	```
 3. Provide the transcript to the user to commit an arbitrary selector data (could be structured):
 	```
