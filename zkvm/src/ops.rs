@@ -279,3 +279,18 @@ impl Instruction {
         }
     }
 }
+
+impl Program {
+    fn new() -> Self {
+        Program(vec![])
+    }
+
+    fn push<'a, T: Into<Data>>(&'a mut self, data: T) -> &'a mut Program {
+        self.0.push(Instruction::Push(data.into()));
+        self
+    }
+    fn var<'a>(&'a mut self) -> &'a mut Program {
+        self.0.push(Instruction::Var);
+        self
+    }
+}
