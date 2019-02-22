@@ -394,7 +394,7 @@ impl Add for Expression {
                 left_terms.extend(right_terms);
                 Expression::Terms(
                     left_terms,
-                    left_assignment.and_then(|a| right_assignment.map(|b| a + b)),
+                    left_assignment.and_then(|l| right_assignment.map(|r| l + r)),
                 )
             }
         }
