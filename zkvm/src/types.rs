@@ -157,7 +157,9 @@ impl Add for ScalarWitness {
             (ScalarWitness::Integer(a), ScalarWitness::Integer(b)) => {
                 let res = a + b;
 
-                if res > spacesuit::SignedInteger::from(std::u64::MAX) {
+                let max = spacesuit::SignedInteger::from(std::u64::MAX);
+                let min = -max;
+                if res > max || res < min {
                     return ScalarWitness::Scalar(res.into());
                 }
 
