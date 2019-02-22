@@ -61,10 +61,14 @@ struct Xpub {
 
 ### Generate key
 
-1. Take RNG
-2. Generate random 64-byte string, reduce mod |G| into secret scalar.
-3. Generate random 32-byte string into derivation key.
-4. Package in [xprv](#xprv).
+1. Acquire a secure random number generator.
+2. Generate a random 64-byte string, reduce it modulo Ristretto group order into a secret `scalar`.
+3. Generate a random 32-byte string as a _derivation key_ `dk`.
+4. Package the scalar and a derivation key in a [Xprv](#xprv) structure:
+	```
+	xprv = Xprv { scalar, dk }
+	```
+5. Return the resulting extended private key `xprv`.
 
 ### Convert xprv to xpub
 
@@ -85,10 +89,11 @@ Xpub {
 	t.commit_bytes("pt", xpub.point)
 	t.commit_bytes("dk", xpub.dk)
 	```
-3. Provide the transcript to the user to commit an arbitrary selector data (could be structured):
+3. Provide the transcript to the user to commit an arbitrary derivation path or index:
 	```
-	t.commit_bytes(label, data)
+	t.commit_bytes(label, data) 
 	```
+	E.g. `t.commit_u64("account", account_id)` for an account within a hierarchy of keys.
 4. Squeeze a blinding factor `f`:
 	```
 	f = t.challenge_scalar("f")
@@ -120,6 +125,7 @@ Similar to the intermediate derivation, but for safety is domain-separated so th
 	```
 	t.commit_bytes(label, data)
 	```
+	E.g. `t.commit_u64("invoice", invoice_index)` for a receiving address.
 4. Squeeze a blinding factor `f`:
 	```
 	f = t.challenge_scalar("f")
