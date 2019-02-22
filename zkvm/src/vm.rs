@@ -206,7 +206,7 @@ where
                 Instruction::Maxtime => self.maxtime()?,
                 Instruction::Expr => self.expr()?,
                 Instruction::Neg => self.neg()?,
-                Instruction::Add => unimplemented!(),
+                Instruction::Add => self.add()?,
                 Instruction::Mul => unimplemented!(),
                 Instruction::Eq => unimplemented!(),
                 Instruction::Range(_) => unimplemented!(),
@@ -293,6 +293,14 @@ where
     fn neg(&mut self) -> Result<(), VMError> {
         let mut expr = self.pop_item()?.to_expression()?;
         self.push_item(-expr);
+        Ok(())
+    }
+
+    fn add(&mut self) -> Result<(), VMError> {
+        let expr2 = self.pop_item()?.to_expression()?;
+        let expr1 = self.pop_item()?.to_expression()?;
+        let expr3 = expr1 + expr2;
+        self.push_item(expr3);
         Ok(())
     }
 
@@ -691,21 +699,18 @@ where
     }
 
     fn add_range_proof(&mut self, bitrange: usize, expr: Expression) -> Result<(), VMError> {
-        match expr {
-            Expression::Constant(x) => spacesuit::range_proof(
-                self.delegate.cs(),
-                x.into(),
-                ScalarWitness::option_to_integer(Some(x))?,
-                bitrange,
-            )
-            .map_err(|_| VMError::R1CSInconsistency),
-            Expression::Terms(terms, assignment) => spacesuit::range_proof(
-                self.delegate.cs(),
-                r1cs::LinearCombination::from_iter(terms),
-                ScalarWitness::option_to_integer(assignment)?,
-                bitrange,
-            )
-            .map_err(|_| VMError::R1CSInconsistency),
-        }
+        let (lc, assignment) = match expr {
+            Expression::Constant(x) => (r1cs::LinearCombination::from(x), Some(x)),
+            Expression::Terms(terms, assignment) => {
+                (r1cs::LinearCombination::from_iter(terms), assignment)
+            }
+        };
+        spacesuit::range_proof(
+            self.delegate.cs(),
+            lc,
+            ScalarWitness::option_to_integer(assignment)?,
+            bitrange,
+        )
+        .map_err(|_| VMError::R1CSInconsistency)
     }
 }
