@@ -379,25 +379,12 @@ impl Add for Expression {
             (Expression::Constant(left), Expression::Terms(mut right_terms, right_assignment)) => {
                 // prepend constant term to `term vector` in non-constant expression
                 right_terms.insert(0, (r1cs::Variable::One(), left.into()));
-
-                // Add assignments
-                let assignment = match right_assignment {
-                    Some(right_assignment) => Some(left + right_assignment),
-                    _ => None,
-                };
-                Expression::Terms(right_terms, assignment)
+                Expression::Terms(right_terms, right_assignment.map(|b| left + b))
             }
             (Expression::Terms(mut left_terms, left_assignment), Expression::Constant(right)) => {
                 // append constant term to term vector in non-constant expression
                 left_terms.push((r1cs::Variable::One(), right.into()));
-
-                // Add assignments
-                let ass = match left_assignment {
-                    Some(left_assignment) => Some(left_assignment + right),
-                    _ => None,
-                };
-
-                Expression::Terms(left_terms, ass)
+                Expression::Terms(left_terms, left_assignment.map(|a| a + right))
             }
             (
                 Expression::Terms(mut left_terms, left_assignment),
@@ -405,13 +392,10 @@ impl Add for Expression {
             ) => {
                 // append right terms to left terms in non-constant expression
                 left_terms.extend(right_terms);
-
-                // Add assignments
-                let assignments = match (left_assignment, right_assignment) {
-                    (Some(a), Some(b)) => Some(a + b),
-                    _ => None,
-                };
-                Expression::Terms(left_terms, assignments)
+                Expression::Terms(
+                    left_terms,
+                    left_assignment.and_then(|a| right_assignment.map(|b| a + b)),
+                )
             }
         }
     }
