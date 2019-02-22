@@ -27,10 +27,17 @@ pub enum Predicate {
 /// Prover's representation of the predicate tree with all the secret witness data.
 #[derive(Clone, Debug)]
 pub enum PredicateWitness {
-    // Externally provided opaque predicate, but known to be a valid Ristretto point.
+    /// Representation of an opaque branch of the predicate tree
+    /// (but known to be a valid Ristretto point).
     Opaque(RistrettoPoint),
+
+    /// Secret signing key for the predicate-as-a-verification-key.
     Key(Scalar),
+
+    /// Representation of a predicate as commitment to a program.
     Program(Vec<Instruction>),
+
+    /// Disjunction of two predicates.
     Or(Box<PredicateWitness>, Box<PredicateWitness>),
 }
 
