@@ -52,7 +52,7 @@ Stands for _extended public key_: consists of a [point](#point) and a [derivatio
 
 ```rust
 struct Xpub {
-  scalar: CompressedRistretto,
+  point: CompressedRistretto,
   dk: [u8; 32]
 }
 ```
