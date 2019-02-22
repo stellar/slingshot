@@ -165,15 +165,9 @@ impl Add for ScalarWitness {
                     ScalarWitness::Integer(res)
                 }
             }
-            (ScalarWitness::Scalar(a), ScalarWitness::Scalar(b)) => ScalarWitness::Scalar(a + b),
-            (ScalarWitness::Integer(a), ScalarWitness::Scalar(b)) => {
-                let x: Scalar = a.into();
-                ScalarWitness::Scalar(x + b)
-            }
-            (ScalarWitness::Scalar(a), ScalarWitness::Integer(b)) => {
-                let x: Scalar = b.into();
-                ScalarWitness::Scalar(x + a)
-            }
+            (a, b) => ScalarWitness::Scalar(
+                <ScalarWitness as Into<Scalar>>::into(a) + <ScalarWitness as Into<Scalar>>::into(b),
+            ),
         }
     }
 }
