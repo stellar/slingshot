@@ -266,7 +266,7 @@ func TestImport(t *testing.T) {
 }
 
 func TestEndToEnd(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 	// TODO(debnil): Test non-native assets.
 	var tests = []struct {
@@ -397,38 +397,26 @@ func TestEndToEnd(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			resp, err := http.Post(sv.URL+"/submit", "application/octet-stream", bytes.NewReader(txbits))
+
+			// Submit the transaction and block until it's included in the txvm chain (or returns an error).
+			t.Log("submitting and waiting on export tx on txvm...")
+			req, err := http.NewRequest("POST", sv.URL+"/submit?wait=1", bytes.NewReader(txbits))
+			if err != nil {
+				log.Fatalf("error building request for latest block: %s", err)
+			}
+			req = req.WithContext(ctx)
+			client := http.DefaultClient
+			resp, err := client.Do(req)
 			if err != nil {
 				t.Fatal(err)
 			}
+			defer resp.Body.Close()
 			if resp.StatusCode/100 != 2 {
 				t.Fatalf("status code %d from POST /submit", resp.StatusCode)
 			}
-			t.Log("checking for retirement tx on txvm...")
-
-			found = false
-			for {
-				item, ok := r.Read(ctx)
-				if !ok {
-					t.Fatal("cannot read a block")
-				}
-				block := item.(*bc.Block)
-				for _, tx := range block.Transactions {
-					// Look for export transaction.
-					if isExportTx(tx, native, int64(exportAmount), temp, exporter.Address(), int64(seqnum)) {
-						t.Logf("found export tx %x", tx.Program)
-						log.Printf("found export tx %x", tx.Program)
-						found = true
-						break
-					}
-				}
-				if found == true {
-					break
-				}
-			}
-			t.Log("checking for successful retirement...")
 
 			// Check for successful retirement.
+			t.Log("checking for successful retirement...")
 			retire := make(chan struct{})
 			go func() {
 				var cur horizon.Cursor
