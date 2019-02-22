@@ -6,14 +6,12 @@ import (
 	"encoding/hex"
 	"flag"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/chain/txvm/protocol/bc"
 	"github.com/golang/protobuf/proto"
 	"github.com/interstellar/slingshot/slidechain"
 	"github.com/interstellar/slingshot/slidechain/stellar"
@@ -87,11 +85,11 @@ func main() {
 	}
 	*slidechaind = strings.TrimRight(*slidechaind, "/")
 
-	// Build + submit pre-export tx
+	// Build and submit the pre-export transaction.
 
-	// Check that stellar account exists
+	// Check that stellar account exists.
 	var seed [32]byte
-	rawbytes := mustDecode(*prv)
+	rawbytes := mustDecodeHex(*prv)
 	copy(seed[:], rawbytes)
 	kp, err := keypair.FromRawSeed(seed)
 	hclient := horizon.DefaultTestNetClient
@@ -116,8 +114,8 @@ func main() {
 		log.Fatalf("error submitting pre-export tx: %s", err)
 	}
 
-	// Export funds from slidechain
-	tx, err := slidechain.BuildExportTx(ctx, asset, exportAmount, inputAmount, tempAddr, mustDecode(*anchor), mustDecode(*prv), seqnum)
+	// Export funds from slidechain.
+	tx, err := slidechain.BuildExportTx(ctx, asset, exportAmount, inputAmount, tempAddr, mustDecodeHex(*anchor), mustDecodeHex(*prv), seqnum)
 	if err != nil {
 		log.Fatalf("error building export tx: %s", err)
 	}
@@ -126,73 +124,28 @@ func main() {
 		log.Fatal(err)
 	}
 
-	// Get latest block height
-	resp, err = http.Get(*slidechaind + "/get?height=0")
+	// Submit the transaction and block until it's included in the txvm chain (or returns an error).
+	req, err := http.NewRequest("POST", *slidechaind+"/submit?wait=1", bytes.NewReader(txbits))
 	if err != nil {
-		log.Fatalf("error getting latest block height: %s", err)
+		log.Fatalf("error building request for latest block: %s", err)
+	}
+	req = req.WithContext(ctx)
+	client := http.DefaultClient
+	resp, err = client.Do(req)
+	if err != nil {
+		log.Fatalf("error submitting and waiting on tx to slidechaind: %s", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode/100 != 2 {
-		log.Fatalf("bad status code %d getting latest block height", resp.StatusCode)
-	}
-	block := new(bc.Block)
-	bits, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		log.Fatalf("error reading block from response body: %s", err)
-	}
-	err = block.FromBytes(bits)
-	if err != nil {
-		log.Fatalf("error unmarshaling block: %s", err)
-	}
-
-	resp, err = http.Post(*slidechaind+"/submit", "application/octet-stream", bytes.NewReader(txbits))
-	if err != nil {
-		log.Fatalf("error submitting tx to slidechaind: %s", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode/100 != 2 {
-		log.Fatalf("status code %d from POST /submit", resp.StatusCode)
+		log.Fatalf("bad status code %d from POST /submit?wait=1", resp.StatusCode)
 	}
 	log.Printf("successfully submitted export transaction: %x", tx.ID)
-
-	client := http.DefaultClient
-	for height := block.Height + 1; ; height++ {
-		req, err := http.NewRequest("GET", fmt.Sprintf(*slidechaind+"/get?height=%d", height), nil)
-		if err != nil {
-			log.Fatalf("error building request for latest block: %s", err)
-		}
-		req = req.WithContext(ctx)
-		resp, err = client.Do(req)
-		if err != nil {
-			log.Fatalf("error getting block at height %d: %s", height, err)
-		}
-		defer resp.Body.Close()
-		if resp.StatusCode/100 != 2 {
-			log.Fatalf("bad status code %d getting latest block height", resp.StatusCode)
-		}
-		b := new(bc.Block)
-		bits, err := ioutil.ReadAll(resp.Body)
-		if err != nil {
-			log.Fatalf("error reading block from response body: %s", err)
-		}
-		err = b.FromBytes(bits)
-		if err != nil {
-			log.Fatalf("error unmarshaling block: %s", err)
-		}
-		for _, tx := range b.Transactions {
-			// Look for export transaction
-			if slidechain.IsExportTx(tx, asset, inputAmount, tempAddr, kp.Address(), int64(seqnum)) {
-				log.Println("export tx included in txvm chain")
-				return
-			}
-		}
-	}
 }
 
-func mustDecode(src string) []byte {
+func mustDecodeHex(src string) []byte {
 	bytes, err := hex.DecodeString(src)
 	if err != nil {
-		log.Fatalf("error decoding %s: %s", src, err)
+		panic(fmt.Errorf("error decoding %s: %s", src, err))
 	}
 	return bytes
 }

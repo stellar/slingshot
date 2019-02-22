@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -414,7 +415,7 @@ func TestEndToEnd(t *testing.T) {
 				block := item.(*bc.Block)
 				for _, tx := range block.Transactions {
 					// Look for export transaction.
-					if IsExportTx(tx, native, int64(exportAmount), temp, exporter.Address(), int64(seqnum)) {
+					if isExportTx(tx, native, int64(exportAmount), temp, exporter.Address(), int64(seqnum)) {
 						t.Logf("found export tx %x", tx.Program)
 						log.Printf("found export tx %x", tx.Program)
 						found = true
@@ -522,6 +523,71 @@ func isImportTx(tx *bc.Tx, amount int64, assetXDR []byte, recipPubKey ed25519.Pu
 		return false
 	}
 	// No need to test tx.Log[4], it has to be a finalize entry.
+	return true
+}
+
+// Expected log is:
+// For an export that fully consumes the input:
+// {"I", ...}
+// {"L", ...}
+// {"X", vm seed, inputAmount, asset id, anchor}
+// {"L", vm seed, refdata}
+// {"R", ...} timerange
+// {"L", ...}
+// {"F", ...}
+//
+// For an export that partially consumes the input:
+// {"I", ...}
+// {"L", ...}
+// {"X", vm seed, inputAmount, asset id, anchor}
+// {"L", vm seed, refdata}
+// {"L", ...}
+// {"L", ...}
+// {"O", caller, outputid}
+// {"R", ...}
+// {"L", ...}
+// {"F", ...}
+func isExportTx(tx *bc.Tx, asset xdr.Asset, inputAmt int64, temp, exporter string, seqnum int64) bool {
+	// The export transaction when we export the full input amount has seven operations, and when we export
+	// part of the input and output the rest back to the exporter, it has ten operations
+	if len(tx.Log) != 7 && len(tx.Log) != 10 {
+		return false
+	}
+	if tx.Log[0][0].(txvm.Bytes)[0] != txvm.InputCode {
+		return false
+	}
+	if tx.Log[1][0].(txvm.Bytes)[0] != txvm.LogCode {
+		return false
+	}
+	if tx.Log[2][0].(txvm.Bytes)[0] != txvm.RetireCode {
+		return false
+	}
+	if int64(tx.Log[2][2].(txvm.Int)) != inputAmt {
+		return false
+	}
+	assetBytes, err := asset.MarshalBinary()
+	if err != nil {
+		return false
+	}
+	wantAssetID := txvm.AssetID(importIssuanceSeed[:], assetBytes)
+	if !bytes.Equal(wantAssetID[:], tx.Log[2][3].(txvm.Bytes)) {
+		return false
+	}
+	if tx.Log[3][0].(txvm.Bytes)[0] != txvm.LogCode {
+		return false
+	}
+	ref := pegOut{
+		assetBytes,
+		temp,
+		seqnum,
+		exporter,
+	}
+	refdata, err := json.Marshal(ref)
+	if !bytes.Equal(refdata, tx.Log[3][2].(txvm.Bytes)) {
+		return false
+	}
+	// Beyond this, the two transactions diverge but must either finalize
+	// or output the remaining unconsumed input
 	return true
 }
 
