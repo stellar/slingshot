@@ -160,10 +160,10 @@ impl Add for ScalarWitness {
                 let max = spacesuit::SignedInteger::from(std::u64::MAX);
                 let min = -max;
                 if res > max || res < min {
-                    return ScalarWitness::Scalar(res.into());
+                    ScalarWitness::Scalar(res.into())
+                } else {
+                    ScalarWitness::Integer(res)
                 }
-
-                ScalarWitness::Integer(res)
             }
             (ScalarWitness::Scalar(a), ScalarWitness::Scalar(b)) => ScalarWitness::Scalar(a + b),
             (ScalarWitness::Integer(a), ScalarWitness::Scalar(b)) => {
@@ -342,8 +342,8 @@ impl Value {
 }
 
 impl Expression {
-    pub fn constant<S: Into<Scalar>>(a: S) -> Self {
-        Expression::Constant(ScalarWitness::Scalar(a.into()))
+    pub fn constant<S: Into<ScalarWitness>>(a: S) -> Self {
+        Expression::Constant(a.into())
     }
 }
 
