@@ -6,13 +6,12 @@ use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
 use spacesuit::SignedInteger;
 
-use crate::encoding;
-use crate::encoding::Subslice;
+use crate::contract::{Contract, Input, PortableItem};
+use crate::encoding::SliceReader;
 use crate::errors::VMError;
 use crate::ops::Instruction;
 use crate::predicate::Predicate;
 use crate::transcript::TranscriptProtocol;
-use crate::txlog::{TxID, UTXO};
 
 #[derive(Debug)]
 pub enum Item {
@@ -25,22 +24,10 @@ pub enum Item {
     Constraint(Constraint),
 }
 
-#[derive(Debug)]
-pub enum PortableItem {
-    Data(Data),
-    Value(Value),
-}
-
 #[derive(Clone, Debug)]
 pub enum Data {
     Opaque(Vec<u8>),
     Witness(DataWitness),
-}
-
-#[derive(Debug)]
-pub struct Contract {
-    pub(crate) payload: Vec<PortableItem>,
-    pub(crate) predicate: Predicate,
 }
 
 #[derive(Debug)]
@@ -84,27 +71,14 @@ pub enum Commitment {
     Open(Box<CommitmentWitness>),
 }
 
-#[derive(Clone, Debug)]
-pub enum Input {
-    Opaque(Vec<u8>),
-    Witness(Box<InputWitness>),
-}
-
-#[derive(Clone, Debug)]
-pub struct InputWitness {
-    contract: FrozenContract,
-    utxo: UTXO,
-    txid: TxID,
-}
-
 /// Prover's representation of the witness.
 #[derive(Clone, Debug)]
 pub enum DataWitness {
     Program(Vec<Instruction>),
     Predicate(Box<Predicate>),
-    Commitment(Box<CommitmentWitness>),
-    Scalar(Box<Scalar>),
-    Input(Box<InputWitness>),
+    Commitment(Box<Commitment>),
+    Scalar(Box<ScalarWitness>),
+    Input(Box<Input>),
 }
 
 /// Prover's representation of the commitment secret: witness and blinding factor
@@ -112,29 +86,6 @@ pub enum DataWitness {
 pub struct CommitmentWitness {
     pub value: ScalarWitness,
     pub blinding: Scalar,
-}
-
-/// Representation of a Contract inside an Input that can be cloned.
-#[derive(Clone, Debug)]
-pub struct FrozenContract {
-    pub(crate) payload: Vec<FrozenItem>,
-    pub(crate) predicate: Predicate,
-}
-
-/// Representation of a PortableItem inside an Input that can be cloned.
-#[derive(Clone, Debug)]
-pub enum FrozenItem {
-    Data(Data),
-    Value(FrozenValue),
-}
-
-/// Representation of a Value inside an Input that can be cloned.
-/// Note: values do not necessarily have open commitments. Some can be reblinded,
-/// others can be passed-through to an output without going through `cloak` and the constraint system.
-#[derive(Clone, Debug)]
-pub struct FrozenValue {
-    pub(crate) qty: Commitment,
-    pub(crate) flv: Commitment,
 }
 
 /// Represents a concrete kind of a number represented by a scalar:
@@ -154,14 +105,7 @@ impl Commitment {
         }
     }
 
-    pub fn ensure_closed(&self) -> Result<CompressedRistretto, VMError> {
-        match self {
-            Commitment::Open(_) => Err(VMError::DataNotOpaque),
-            Commitment::Closed(x) => Ok(*x),
-        }
-    }
-
-    fn encode(&self, buf: &mut Vec<u8>) {
+    pub(crate) fn encode(&self, buf: &mut Vec<u8>) {
         buf.extend_from_slice(&self.to_point().to_bytes());
     }
 }
@@ -172,15 +116,24 @@ impl CommitmentWitness {
         gens.commit(self.value.into(), self.blinding).compress()
     }
 
-    fn encode(&self, buf: &mut Vec<u8>) {
-        buf.extend_from_slice(&self.to_point().to_bytes());
+    pub fn unblinded<T>(x: T) -> Self
+    where
+        T: Into<ScalarWitness>,
+    {
+        CommitmentWitness {
+            blinding: Scalar::zero(),
+            value: x.into(),
+        }
     }
-}
 
-impl InputWitness {
-    fn encode(&self, buf: &mut Vec<u8>) {
-        buf.extend_from_slice(&self.txid.0);
-        self.contract.encode(buf);
+    pub fn blinded<T>(x: T) -> Self
+    where
+        T: Into<ScalarWitness>,
+    {
+        CommitmentWitness {
+            blinding: Scalar::random(&mut rand::thread_rng()),
+            value: x.into(),
+        }
     }
 }
 
@@ -297,7 +250,7 @@ impl Data {
     pub fn to_predicate(self) -> Result<Predicate, VMError> {
         match self {
             Data::Opaque(data) => {
-                let point = Subslice::new(&data).read_point()?;
+                let point = SliceReader::parse(&data, |r| r.read_point())?;
                 Ok(Predicate::opaque(point))
             }
             Data::Witness(witness) => match witness {
@@ -310,11 +263,11 @@ impl Data {
     pub fn to_commitment(self) -> Result<Commitment, VMError> {
         match self {
             Data::Opaque(data) => {
-                let point = Subslice::new(&data).read_point()?;
+                let point = SliceReader::parse(&data, |r| r.read_point())?;
                 Ok(Commitment::Closed(point))
             }
             Data::Witness(witness) => match witness {
-                DataWitness::Commitment(w) => Ok(Commitment::Open(w)),
+                DataWitness::Commitment(w) => Ok(*w),
                 _ => Err(VMError::TypeNotCommitment),
             },
         }
@@ -322,9 +275,9 @@ impl Data {
 
     pub fn to_input(self) -> Result<Input, VMError> {
         match self {
-            Data::Opaque(data) => Ok(Input::Opaque(data)),
+            Data::Opaque(data) => Input::from_bytes(data),
             Data::Witness(witness) => match witness {
-                DataWitness::Input(w) => Ok(Input::Witness(w)),
+                DataWitness::Input(i) => Ok(*i),
                 _ => Err(VMError::TypeNotInput),
             },
         }
@@ -337,7 +290,9 @@ impl Data {
                 buf.extend_from_slice(x);
                 return;
             }
-            Data::Witness(w) => w.encode(buf),
+            Data::Witness(w) => {
+                w.encode(buf);
+            }
         };
     }
 }
@@ -347,45 +302,12 @@ impl DataWitness {
         match self {
             DataWitness::Program(instr) => Instruction::encode_program(instr.iter(), buf),
             DataWitness::Predicate(pw) => pw.encode(buf),
-            DataWitness::Commitment(cw) => cw.encode(buf),
-            DataWitness::Scalar(s) => buf.extend_from_slice(&s.to_bytes()),
+            DataWitness::Commitment(c) => c.encode(buf),
+            DataWitness::Scalar(s) => {
+                let s: Scalar = (*s.clone()).into();
+                buf.extend_from_slice(&s.to_bytes())
+            }
             DataWitness::Input(b) => b.encode(buf),
-        }
-    }
-}
-
-impl Contract {
-    pub fn min_serialized_length(&self) -> usize {
-        let mut size = 32 + 4;
-        for item in self.payload.iter() {
-            match item {
-                PortableItem::Data(d) => size += 1 + 4 + d.min_serialized_length(),
-                PortableItem::Value(_) => size += 1 + 64,
-            }
-        }
-        size
-    }
-}
-
-impl FrozenContract {
-    fn encode(&self, buf: &mut Vec<u8>) {
-        buf.extend_from_slice(&self.predicate.point().to_bytes());
-        for p in self.payload.iter() {
-            match p {
-                // Data = 0x00 || LE32(len) || <bytes>
-                FrozenItem::Data(d) => {
-                    buf.push(0u8);
-                    let mut bytes = d.to_bytes();
-                    encoding::write_u32(bytes.len() as u32, buf);
-                    buf.extend_from_slice(&mut bytes);
-                }
-                // Value = 0x01 || <32 bytes> || <32 bytes>
-                FrozenItem::Value(v) => {
-                    buf.push(1u8);
-                    buf.extend_from_slice(&v.qty.to_point().to_bytes());
-                    buf.extend_from_slice(&v.flv.to_point().to_bytes());
-                }
-            }
         }
     }
 }
@@ -396,6 +318,84 @@ impl Value {
         let mut t = Transcript::new(b"ZkVM.issue");
         t.commit_bytes(b"predicate", predicate.point().as_bytes());
         t.challenge_scalar(b"flavor")
+    }
+}
+
+impl Expression {
+    pub fn constant<S: Into<Scalar>>(a: S) -> Self {
+        let a: Scalar = a.into();
+
+        Expression {
+            terms: vec![(r1cs::Variable::One(), a)],
+            assignment: Some(ScalarWitness::Scalar(a)),
+        }
+    }
+}
+
+// Upcasting witness/points into Commitment
+
+impl From<CommitmentWitness> for Commitment {
+    fn from(x: CommitmentWitness) -> Self {
+        Commitment::Open(Box::new(x))
+    }
+}
+
+impl From<CompressedRistretto> for Commitment {
+    fn from(x: CompressedRistretto) -> Self {
+        Commitment::Closed(x)
+    }
+}
+
+// Upcasting integers/scalars into ScalarWitness
+
+impl From<u64> for ScalarWitness {
+    fn from(x: u64) -> Self {
+        ScalarWitness::Integer(x.into())
+    }
+}
+
+impl From<Scalar> for ScalarWitness {
+    fn from(x: Scalar) -> Self {
+        ScalarWitness::Scalar(x)
+    }
+}
+
+// Upcasting all witness data types to Data and DataWitness
+
+// Anything convertible to DataWitness is also convertible to Data
+impl<T> From<T> for Data
+where
+    T: Into<DataWitness>,
+{
+    fn from(w: T) -> Self {
+        Data::Witness(w.into())
+    }
+}
+
+impl<T> From<T> for DataWitness
+where
+    T: Into<ScalarWitness>,
+{
+    fn from(x: T) -> Self {
+        DataWitness::Scalar(Box::new(x.into()))
+    }
+}
+
+impl From<Predicate> for DataWitness {
+    fn from(x: Predicate) -> Self {
+        DataWitness::Predicate(Box::new(x))
+    }
+}
+
+impl From<Commitment> for DataWitness {
+    fn from(x: Commitment) -> Self {
+        DataWitness::Commitment(Box::new(x))
+    }
+}
+
+impl From<Input> for DataWitness {
+    fn from(x: Input) -> Self {
+        DataWitness::Input(Box::new(x))
     }
 }
 

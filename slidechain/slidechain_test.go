@@ -338,7 +338,7 @@ func TestEndToEnd(t *testing.T) {
 			t.Fatal("unsuccessfully waited on pre-peg-in tx hitting txvm")
 		}
 		uniqueNonceHash := UniqueNonceHash(c.InitBlockHash.Bytes(), expMS)
-		err = c.insertPeg(ctx, uniqueNonceHash[:], exporterPubKeyBytes[:], expMS)
+		err = c.insertPegIn(ctx, uniqueNonceHash[:], exporterPubKeyBytes[:], expMS)
 		if err != nil {
 			t.Fatal("could not record peg")
 		}

@@ -2,67 +2,67 @@
 //! All methods err using VMError::FormatError for convenience.
 
 use byteorder::{ByteOrder, LittleEndian};
-use core::ops::Range;
 use curve25519_dalek::ristretto::CompressedRistretto;
 use curve25519_dalek::scalar::Scalar;
-use std::ops::Deref;
 
 use crate::errors::VMError;
 
-#[derive(Copy, Clone, Debug)]
-pub struct Subslice<'a> {
+#[derive(Debug)]
+pub struct SliceReader<'a> {
     whole: &'a [u8],
     start: usize,
     end: usize,
 }
 
-impl<'a> Subslice<'a> {
-    pub fn new(data: &'a [u8]) -> Self {
-        Subslice {
+impl<'a> SliceReader<'a> {
+    fn new(data: &'a [u8]) -> Self {
+        SliceReader {
             start: 0,
             end: data.len(),
             whole: data,
         }
     }
 
-    pub fn new_with_range(data: &'a [u8], range: Range<usize>) -> Result<Self, VMError> {
-        if range.end > data.len() || range.start > data.len() {
-            return Err(VMError::FormatError);
-        }
-        Ok(Subslice {
-            start: range.start,
-            end: range.end,
-            whole: data,
-        })
-    }
-
     pub fn len(&self) -> usize {
         self.end - self.start
     }
 
-    pub fn range(&self) -> Range<usize> {
-        self.start..self.end
+    pub fn slice<F, T>(&mut self, slice_fn: F) -> Result<(T, &[u8]), VMError>
+    where
+        F: FnOnce(&mut Self) -> Result<T, VMError>,
+    {
+        let start = self.start;
+        let result = slice_fn(self)?;
+        let end = self.start;
+        Ok((result, &self.whole[start..end]))
     }
 
-    /// Copies the contents of the subslice into a `Vec<u8>`.
-    pub fn to_vec(&self) -> Vec<u8> {
-        let mut buf = Vec::with_capacity(self.len());
-        buf.extend_from_slice(&self);
-        buf
+    pub fn parse<F, T>(data: &'a [u8], parse_fn: F) -> Result<T, VMError>
+    where
+        F: FnOnce(&mut Self) -> Result<T, VMError>,
+    {
+        let mut reader = Self::new(data);
+        let result = parse_fn(&mut reader)?;
+        if reader.len() != 0 {
+            return Err(VMError::TrailingBytes);
+        }
+        Ok(result)
     }
 
-    /// Returns a Subslice of the first `prefix_size` of bytes and advances
+    pub fn skip_trailing_bytes(&mut self) -> usize {
+        let trailing = self.end - self.start;
+        self.start = self.end;
+        trailing
+    }
+
+    /// Returns a slice of the first `prefix_size` of bytes and advances
     /// the internal offset.
-    pub fn read_bytes(&mut self, prefix_size: usize) -> Result<Subslice, VMError> {
+    pub fn read_bytes(&mut self, prefix_size: usize) -> Result<&[u8], VMError> {
         if prefix_size > self.len() {
             return Err(VMError::FormatError);
         }
-        let prefix = Subslice {
-            start: self.start,
-            end: self.start + prefix_size,
-            whole: self.whole,
-        };
-        self.start = self.start + prefix_size;
+        let prefix = &self.whole[self.start..(self.start + prefix_size)];
+        self.start += prefix_size;
         Ok(prefix)
     }
 
@@ -101,14 +101,6 @@ impl<'a> Subslice<'a> {
     }
 }
 
-impl<'a> Deref for Subslice<'a> {
-    type Target = [u8];
-
-    fn deref(&self) -> &[u8] {
-        &self.whole[self.start..self.end]
-    }
-}
-
 // Writing API
 // This currently writes into the Vec, but later can be changed to support Arenas to minimize allocations
 
@@ -124,17 +116,12 @@ pub fn write_u32<'a>(x: u32, target: &mut Vec<u8>) {
     target.extend_from_slice(&buf);
 }
 
-/// Reads a 32-byte array and returns the subsequent slice
+/// Writes a 32-byte array and returns the subsequent slice
 pub fn write_bytes(x: &[u8], target: &mut Vec<u8>) {
     target.extend_from_slice(&x);
 }
 
-/// Reads a compressed point
+/// Writes a compressed point
 pub fn write_point(x: &CompressedRistretto, target: &mut Vec<u8>) {
-    write_bytes(x.as_bytes(), target);
-}
-
-/// Reads a scalar
-pub fn write_scalar(x: &Scalar, target: &mut Vec<u8>) {
     write_bytes(x.as_bytes(), target);
 }

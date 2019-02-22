@@ -31,7 +31,7 @@ impl<'a, 'b> Delegate<r1cs::Verifier<'a, 'b>> for Verifier<'a, 'b> {
         &mut self,
         com: &Commitment,
     ) -> Result<(CompressedRistretto, r1cs::Variable), VMError> {
-        let point = com.ensure_closed()?;
+        let point = com.to_point();
         let var = self.cs.commit(point);
         Ok((point, var))
     }
@@ -55,14 +55,13 @@ impl<'a, 'b> Delegate<r1cs::Verifier<'a, 'b>> for Verifier<'a, 'b> {
         &mut self,
         run: &mut Self::RunType,
     ) -> Result<Option<Instruction>, VMError> {
-        let mut program = Subslice::new_with_range(&run.program, run.offset..run.program.len())?;
-
-        // Reached the end of the program - no more instructions to execute.
-        if program.len() == 0 {
+        if run.offset == run.program.len() {
             return Ok(None);
         }
-        let instr = Instruction::parse(&mut program)?;
-        run.offset = program.range().start;
+        let (instr, remainder) = SliceReader::parse(&run.program[run.offset..], |r| {
+            Ok((Instruction::parse(r)?, r.skip_trailing_bytes()))
+        })?;
+        run.offset = run.program.len() - remainder;
         Ok(Some(instr))
     }
 
