@@ -55,7 +55,7 @@ pub type ExpressionTerm = (r1cs::Variable, Scalar);
 #[derive(Clone, Debug)]
 pub enum Expression {
     Constant(ScalarWitness),
-    Terms(Vec<ExpressionTerm>, Option<ScalarWitness>),
+    LinearCombination(Vec<ExpressionTerm>, Option<ScalarWitness>),
 }
 
 #[derive(Clone, Debug)]
