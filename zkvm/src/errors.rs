@@ -112,7 +112,4 @@ pub enum VMError {
 
     #[fail(display = "Data item must be opaque")]
     DataNotOpaque,
-
-    #[fail(display = "Predicate item must be opaque")]
-    PredicateNotOpaque,
 }

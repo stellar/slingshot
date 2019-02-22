@@ -281,7 +281,7 @@ impl Data {
         match self {
             Data::Opaque(data) => {
                 let point = SliceReader::parse(&data, |r| r.read_point())?;
-                Ok(Predicate::opaque(point))
+                Ok(Predicate::Opaque(point))
             }
             Data::Witness(witness) => match witness {
                 DataWitness::Predicate(boxed_pred) => Ok(*boxed_pred),
@@ -346,7 +346,7 @@ impl Value {
     /// Computes a flavor as defined by the `issue` instruction from a predicate.
     pub fn issue_flavor(predicate: &Predicate) -> Scalar {
         let mut t = Transcript::new(b"ZkVM.issue");
-        t.commit_bytes(b"predicate", predicate.point().as_bytes());
+        t.commit_bytes(b"predicate", predicate.to_point().as_bytes());
         t.challenge_scalar(b"flavor")
     }
 }
