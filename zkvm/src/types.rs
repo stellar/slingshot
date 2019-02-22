@@ -174,17 +174,13 @@ impl Add for ScalarWitness {
 
     fn add(self, rhs: ScalarWitness) -> ScalarWitness {
         match (self, rhs) {
-            (ScalarWitness::Integer(a), ScalarWitness::Integer(b)) => {
-                let res = a + b;
-
-                let max = spacesuit::SignedInteger::from(std::u64::MAX);
-                let min = -max;
-                if res > max || res < min {
-                    ScalarWitness::Scalar(res.into())
-                } else {
-                    ScalarWitness::Integer(res)
-                }
-            }
+            (ScalarWitness::Integer(a), ScalarWitness::Integer(b)) => match a + b {
+                Some(res) => ScalarWitness::Integer(res),
+                None => ScalarWitness::Scalar(
+                    <SignedInteger as Into<Scalar>>::into(a)
+                        + <SignedInteger as Into<Scalar>>::into(b),
+                ),
+            },
             (a, b) => ScalarWitness::Scalar(
                 <ScalarWitness as Into<Scalar>>::into(a) + <ScalarWitness as Into<Scalar>>::into(b),
             ),
@@ -392,14 +388,14 @@ impl Add for Expression {
             (Expression::Constant(left), Expression::Constant(right)) => {
                 Expression::Constant(left + right)
             }
-            (Expression::Constant(left), Expression::Terms(mut right_terms, right_assignment)) => {
+            (Expression::Constant(l), Expression::Terms(mut right_terms, right_assignment)) => {
                 // prepend constant term to `term vector` in non-constant expression
-                right_terms.insert(0, (r1cs::Variable::One(), left.into()));
+                right_terms.insert(0, (r1cs::Variable::One(), l.into()));
                 Expression::Terms(right_terms, right_assignment.map(|r| l + r))
             }
-            (Expression::Terms(mut left_terms, left_assignment), Expression::Constant(right)) => {
+            (Expression::Terms(mut left_terms, left_assignment), Expression::Constant(r)) => {
                 // append constant term to term vector in non-constant expression
-                left_terms.push((r1cs::Variable::One(), right.into()));
+                left_terms.push((r1cs::Variable::One(), r.into()));
                 Expression::Terms(left_terms, left_assignment.map(|l| l + r))
             }
             (
