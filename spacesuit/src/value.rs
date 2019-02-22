@@ -107,6 +107,10 @@ impl SignedInteger {
             Some(self.0 as u64)
         }
     }
+
+    pub fn to_scalar(self) -> Scalar {
+        <SignedInteger as Into<Scalar>>::into(self)
+    }
 }
 
 impl From<u64> for SignedInteger {

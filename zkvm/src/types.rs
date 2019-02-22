@@ -13,8 +13,7 @@ use crate::ops::Instruction;
 use crate::predicate::Predicate;
 use crate::transcript::TranscriptProtocol;
 
-use std::ops::{Neg,Add};
-use std::ops::Neg;
+use std::ops::{Add, Neg};
 
 #[derive(Debug)]
 pub enum Item {
@@ -149,6 +148,13 @@ impl ScalarWitness {
         }
     }
 
+    pub fn to_scalar(self) -> Scalar {
+        match self {
+            ScalarWitness::Integer(i) => <SignedInteger as Into<Scalar>>::into(i),
+            ScalarWitness::Scalar(s) => s,
+        }
+    }
+
     /// Converts `Option<ScalarWitness>` into optional integer if it is one.
     pub fn option_to_integer(assignment: Option<Self>) -> Result<Option<SignedInteger>, VMError> {
         match assignment {
@@ -176,24 +182,16 @@ impl Add for ScalarWitness {
         match (self, rhs) {
             (ScalarWitness::Integer(a), ScalarWitness::Integer(b)) => match a + b {
                 Some(res) => ScalarWitness::Integer(res),
-                None => ScalarWitness::Scalar(
-                    <SignedInteger as Into<Scalar>>::into(a)
-                        + <SignedInteger as Into<Scalar>>::into(b),
-                ),
+                None => ScalarWitness::Scalar(a.to_scalar() + b.to_scalar()),
             },
-            (a, b) => ScalarWitness::Scalar(
-                <ScalarWitness as Into<Scalar>>::into(a) + <ScalarWitness as Into<Scalar>>::into(b),
-            ),
+            (a, b) => ScalarWitness::Scalar(a.to_scalar() + b.to_scalar()),
         }
     }
 }
 
 impl Into<Scalar> for ScalarWitness {
     fn into(self) -> Scalar {
-        match self {
-            ScalarWitness::Integer(i) => i.into(),
-            ScalarWitness::Scalar(s) => s,
-        }
+        self.to_scalar()
     }
 }
 
