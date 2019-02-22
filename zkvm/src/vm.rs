@@ -650,7 +650,7 @@ where
     fn variable_to_expression(&mut self, var: Variable) -> Result<Expression, VMError> {
         let (_, r1cs_var) = self.attach_variable(var)?;
 
-        Ok(Expression::Terms(
+        Ok(Expression::LinearCombination(
             vec![(r1cs_var, Scalar::one())],
             self.variable_assignment(var),
         ))
@@ -698,7 +698,7 @@ where
     fn add_range_proof(&mut self, bitrange: usize, expr: Expression) -> Result<(), VMError> {
         let (lc, assignment) = match expr {
             Expression::Constant(x) => (r1cs::LinearCombination::from(x), Some(x)),
-            Expression::Terms(terms, assignment) => {
+            Expression::LinearCombination(terms, assignment) => {
                 (r1cs::LinearCombination::from_iter(terms), assignment)
             }
         };

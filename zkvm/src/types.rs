@@ -363,7 +363,7 @@ impl Neg for Expression {
     fn neg(self) -> Expression {
         match self {
             Expression::Constant(a) => Expression::Constant(-a),
-            Expression::Terms(mut terms, assignment) => {
+            Expression::LinearCombination(mut terms, assignment) => {
                 for (_, n) in terms.iter_mut() {
                     *n = -*n;
                 }
@@ -372,7 +372,7 @@ impl Neg for Expression {
                     Some(a) => Some(-a),
                     None => None,
                 };
-                Expression::Terms(terms, assignment.map(|a| -a))
+                Expression::LinearCombination(terms, assignment.map(|a| -a))
             }
         }
     }
@@ -386,23 +386,23 @@ impl Add for Expression {
             (Expression::Constant(left), Expression::Constant(right)) => {
                 Expression::Constant(left + right)
             }
-            (Expression::Constant(l), Expression::Terms(mut right_terms, right_assignment)) => {
+            (Expression::Constant(l), Expression::LinearCombination(mut right_terms, right_assignment)) => {
                 // prepend constant term to `term vector` in non-constant expression
                 right_terms.insert(0, (r1cs::Variable::One(), l.into()));
-                Expression::Terms(right_terms, right_assignment.map(|r| l + r))
+                Expression::LinearCombination(right_terms, right_assignment.map(|r| l + r))
             }
-            (Expression::Terms(mut left_terms, left_assignment), Expression::Constant(r)) => {
+            (Expression::LinearCombination(mut left_terms, left_assignment), Expression::Constant(r)) => {
                 // append constant term to term vector in non-constant expression
                 left_terms.push((r1cs::Variable::One(), r.into()));
-                Expression::Terms(left_terms, left_assignment.map(|l| l + r))
+                Expression::LinearCombination(left_terms, left_assignment.map(|l| l + r))
             }
             (
-                Expression::Terms(mut left_terms, left_assignment),
-                Expression::Terms(right_terms, right_assignment),
+                Expression::LinearCombination(mut left_terms, left_assignment),
+                Expression::LinearCombination(right_terms, right_assignment),
             ) => {
                 // append right terms to left terms in non-constant expression
                 left_terms.extend(right_terms);
-                Expression::Terms(
+                Expression::LinearCombination(
                     left_terms,
                     left_assignment.and_then(|l| right_assignment.map(|r| l + r)),
                 )
