@@ -3,7 +3,7 @@ use core::ops::Neg;
 use curve25519_dalek::ristretto::CompressedRistretto;
 use curve25519_dalek::scalar::Scalar;
 use rand::{CryptoRng, Rng};
-use std::ops::Add;
+use std::ops::{Add, Mul};
 use subtle::{Choice, ConditionallySelectable};
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -107,20 +107,6 @@ impl SignedInteger {
             Some(self.0 as u64)
         }
     }
-
-    pub fn checked_add(self, other: SignedInteger) -> Option<SignedInteger> {
-        match self.0.checked_add(other.0) {
-            Some(x) => Some(SignedInteger(x)),
-            None => None,
-        }
-    }
-
-    pub fn checked_mul(self, other: SignedInteger) -> Option<SignedInteger> {
-        match self.0.checked_mul(other.0) {
-            Some(x) => Some(SignedInteger(x)),
-            None => None,
-        }
-    }
 }
 
 impl From<u64> for SignedInteger {
@@ -140,10 +126,24 @@ impl Into<Scalar> for SignedInteger {
 }
 
 impl Add for SignedInteger {
-    type Output = SignedInteger;
+    type Output = Option<SignedInteger>;
 
-    fn add(self, rhs: SignedInteger) -> SignedInteger {
-        SignedInteger(self.0 + rhs.0)
+    fn add(self, rhs: SignedInteger) -> Option<SignedInteger> {
+        match self.0.checked_add(rhs.0) {
+            Some(x) => Some(SignedInteger(x)),
+            None => None,
+        }
+    }
+}
+
+impl Mul for SignedInteger {
+    type Output = Option<SignedInteger>;
+
+    fn mul(self, rhs: SignedInteger) -> Option<SignedInteger> {
+        match self.0.checked_mul(rhs.0) {
+            Some(x) => Some(SignedInteger(x)),
+            None => None,
+        }
     }
 }
 

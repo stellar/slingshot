@@ -208,7 +208,14 @@ fn combine_by_flavor<CS: ConstraintSystem>(
         // If same_flavor, merge: D.0 = A.0 + B.0, D.1 = A.1, D.2 = A.2.
         // Else, move: D = B.
         let mut D = B.clone();
-        D.q.conditional_assign(&(A.q + B.q), same_flavor);
+        match A.q + B.q {
+            Some(x) => D.q.conditional_assign(&x, same_flavor),
+            None => {
+                return Err(R1CSError::GadgetError {
+                    description: "Overflow adding quantities".to_string(),
+                });
+            }
+        };
         D.f.conditional_assign(&A.f, same_flavor);
         mid.push(D);
 
