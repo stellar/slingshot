@@ -1,3 +1,10 @@
+//! Spacesuit is a pure-Rust implementation of Cloak protocol by Interstellar.
+//! Cloak is a protocol for confidential assets based on the
+//! [Bulletproofs](https://crypto.stanford.edu/bulletproofs/) zero-knowledge proof system.
+//! _Cloaked transactions_ exchange values of different “asset types” (which we call flavors).
+//! See the [Cloak specification](https://github.com/interstellar/slingshot/blob/main/spacesuit/spec.md) for details.
+#![deny(missing_docs)]
+
 extern crate bulletproofs;
 extern crate core;
 extern crate curve25519_dalek;
