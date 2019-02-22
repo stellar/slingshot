@@ -109,7 +109,7 @@ impl SignedInteger {
     }
 
     pub fn to_scalar(self) -> Scalar {
-        <SignedInteger as Into<Scalar>>::into(self)
+        self.into()
     }
 }
 

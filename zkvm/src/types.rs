@@ -150,7 +150,7 @@ impl ScalarWitness {
 
     pub fn to_scalar(self) -> Scalar {
         match self {
-            ScalarWitness::Integer(i) => <SignedInteger as Into<Scalar>>::into(i),
+            ScalarWitness::Integer(i) => i.into(),
             ScalarWitness::Scalar(s) => s,
         }
     }
