@@ -293,4 +293,20 @@ impl Program {
         self.0.push(Instruction::Var);
         self
     }
+    fn nonce<'a>(&'a mut self) -> &'a mut Program {
+        self.0.push(Instruction::Nonce);
+        self
+    }
+    fn issue<'a>(&'a mut self) -> &'a mut Program {
+        self.0.push(Instruction::Issue);
+        self
+    }
+    fn sign_tx<'a>(&'a mut self) -> &'a mut Program {
+        self.0.push(Instruction::Signtx);
+        self
+    }
+    fn output<'a>(&'a mut self, size: usize) -> &'a mut Program {
+        self.0.push(Instruction::Output(size));
+        self
+    }
 }
