@@ -109,13 +109,13 @@ func main() {
 	if err != nil {
 		log.Fatalf("error unmarshaling custodian account id: %s", err)
 	}
-	temp, seqnum, err := slidechain.SubmitPreExportTx(hclient, kp, custodian.Address(), asset, exportAmount)
+	tempAddr, seqnum, err := slidechain.SubmitPreExportTx(hclient, kp, custodian.Address(), asset, exportAmount)
 	if err != nil {
 		log.Fatalf("error submitting pre-export tx: %s", err)
 	}
 
 	// Export funds from slidechain
-	tx, err := slidechain.BuildExportTx(ctx, asset, exportAmount, inputAmount, temp, mustDecodeHex(*anchor), mustDecodeHex(*prv), seqnum)
+	tx, err := slidechain.BuildExportTx(ctx, asset, exportAmount, inputAmount, tempAddr, mustDecodeHex(*anchor), mustDecodeHex(*prv), seqnum)
 	if err != nil {
 		log.Fatalf("error building export tx: %s", err)
 	}
