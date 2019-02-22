@@ -373,42 +373,45 @@ impl Add for Expression {
 
     fn add(self, rhs: Expression) -> Expression {
         match (self, rhs) {
-            (Expression::Constant(a), Expression::Constant(b)) => Expression::Constant(a + b),
+            (Expression::Constant(left), Expression::Constant(right)) => {
+                Expression::Constant(left + right)
+            }
             (Expression::Constant(left), Expression::Terms(mut right_terms, right_assignment)) => {
-                // concatenate constant term to term vector in non-constant expression
-                terms.push((r1cs::Variable::One(), a.into()));
+                // prepend constant term to `term vector` in non-constant expression
+                right_terms.insert(0, (r1cs::Variable::One(), left.into()));
 
                 // Add assignments
-                let ass = match assignment {
-                    Some(b) => Some(a + b),
+                let assignment = match right_assignment {
+                    Some(right_assignment) => Some(left + right_assignment),
                     _ => None,
                 };
-                Expression::Terms(terms, ass)
+                Expression::Terms(right_terms, assignment)
             }
-            (Expression::Terms(mut terms, assignment), Expression::Constant(b)) => {
-                // concatenate constant term to term vector in non-constant expression
-                terms.push((r1cs::Variable::One(), b.into()));
+            (Expression::Terms(mut left_terms, left_assignment), Expression::Constant(right)) => {
+                // append constant term to term vector in non-constant expression
+                left_terms.push((r1cs::Variable::One(), right.into()));
 
                 // Add assignments
-                let ass = match assignment {
-                    Some(a) => Some(a + b),
+                let ass = match left_assignment {
+                    Some(left_assignment) => Some(left_assignment + right),
                     _ => None,
                 };
 
-                Expression::Terms(terms, ass)
+                Expression::Terms(left_terms, ass)
             }
-            (Expression::Terms(t1, a1), Expression::Terms(t2, a2)) => {
-                // concatenate terms from both non-constant expressions
-                let mut terms: Vec<ExpressionTerm> = Vec::new();
-                terms.extend(t1);
-                terms.extend(t2);
+            (
+                Expression::Terms(mut left_terms, left_assignment),
+                Expression::Terms(right_terms, right_assignment),
+            ) => {
+                // append right terms to left terms in non-constant expression
+                left_terms.extend(right_terms);
 
                 // Add assignments
-                let ass = match (a1, a2) {
+                let assignments = match (left_assignment, right_assignment) {
                     (Some(a), Some(b)) => Some(a + b),
                     _ => None,
                 };
-                Expression::Terms(terms, ass)
+                Expression::Terms(left_terms, assignments)
             }
         }
     }
