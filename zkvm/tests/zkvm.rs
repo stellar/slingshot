@@ -77,6 +77,48 @@ fn issue() {
     };
 }
 
+fn input_helper(qty: u64, flv: Scalar, pred: Predicate) -> Vec<Instruction> {
+    vec![
+        Instruction::Push(
+            Input::new(
+                vec![(
+                    Commitment::from(CommitmentWitness::blinded(qty)),
+                    Commitment::from(CommitmentWitness::blinded(flv)),
+                )],
+                pred,
+                TxID([0; 32]),
+            )
+            .into(),
+        ), // stack: input-data
+        Instruction::Input,  // stack: input-contract
+        Instruction::Signtx, // stack: input-value
+    ]
+}
+
+fn cloak_helper(outputs: Vec<(u64, Scalar)>, input_count: usize) -> Vec<Instruction> {
+    let output_count = outputs.len();
+    let mut instructions = vec![];
+
+    for (qty, flv) in outputs {
+        instructions.push(Instruction::Push(
+            Commitment::from(CommitmentWitness::blinded(qty)).into(),
+        ));
+        instructions.push(Instruction::Push(
+            Commitment::from(CommitmentWitness::blinded(flv)).into(),
+        ));
+    }
+    instructions.push(Instruction::Cloak(input_count, output_count));
+    instructions
+}
+
+fn output_helper(pred: Predicate) -> Vec<Instruction> {
+    vec![
+        // stack: output
+        Instruction::Push(pred.into()), // stack: output, pred
+        Instruction::Output(1),         // stack: empty
+    ]
+}
+
 // questions:
 // - do we have to use separate nonce predicates for the two inputs (to ensure uniqueness if they're same qty?)
 // - is it enough (for testing) to get the value from the issue contract? (how do we create a "utxo" in one tx?)
@@ -122,11 +164,11 @@ fn spend_2_2_contract(
         Instruction::Push(Commitment::from(CommitmentWitness::blinded(flv)).into()), // stack: input-value, output-1-quantity, output-1-flavor
         Instruction::Push(Commitment::from(CommitmentWitness::blinded(output_2)).into()), // stack: input-value, output-1-quantity, output-2-quantity
         Instruction::Push(Commitment::from(CommitmentWitness::blinded(flv)).into()), // stack: input-value, output-1-quantity, output-2-quantity, output-2-flavor
-        Instruction::Cloak(2, 2), // stack: output-1, output-2
+        Instruction::Cloak(2, 2),                // stack: output-1, output-2
         Instruction::Push(output_2_pred.into()), // stack: output-1, output-2, output-2-pred
-        Instruction::Output(1),   // stack: output-1
+        Instruction::Output(1),                  // stack: output-1
         Instruction::Push(output_1_pred.into()), // stack: output-1, output-1-pred
-        Instruction::Output(1),   // stack: empty
+        Instruction::Output(1),                  // stack: empty
     ]
 }
 
