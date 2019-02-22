@@ -374,7 +374,7 @@ impl Neg for Expression {
                     Some(a) => Some(-a),
                     None => None,
                 };
-                Expression::Terms(terms, x)
+                Expression::Terms(terms, assignment.map(|a| -a))
             }
         }
     }
