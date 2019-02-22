@@ -3,7 +3,7 @@
 #![allow(non_snake_case)]
 
 use bulletproofs::PedersenGens;
-use curve25519_dalek::ristretto::{RistrettoPoint,CompressedRistretto};
+use curve25519_dalek::ristretto::{CompressedRistretto, RistrettoPoint};
 use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
 

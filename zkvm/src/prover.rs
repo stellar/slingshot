@@ -8,7 +8,7 @@ use std::collections::VecDeque;
 use crate::errors::VMError;
 use crate::ops::Instruction;
 use crate::point_ops::PointOp;
-use crate::predicate::{Predicate, PredicateWitness};
+use crate::predicate::Predicate;
 use crate::signature::Signature;
 use crate::txlog::{TxID, TxLog};
 use crate::types::*;
@@ -45,13 +45,9 @@ impl<'a, 'b> Delegate<r1cs::Prover<'a, 'b>> for Prover<'a, 'b> {
     }
 
     fn process_tx_signature(&mut self, pred: Predicate) -> Result<(), VMError> {
-        match pred.as_witness() {
-            None => Err(VMError::WitnessMissing),
-            Some(w) => match w {
-                PredicateWitness::Key(s) => Ok(self.signtx_keys.push(s.clone())),
-                _ => Err(VMError::TypeNotKey),
-            },
-        }
+        let k = pred.to_signing_key()?;
+        self.signtx_keys.push(k);
+        Ok(())
     }
 
     fn next_instruction(
