@@ -367,11 +367,6 @@ impl Neg for Expression {
                 for (_, n) in terms.iter_mut() {
                     *n = -*n;
                 }
-
-                let x = match assignment {
-                    Some(a) => Some(-a),
-                    None => None,
-                };
                 Expression::LinearCombination(terms, assignment.map(|a| -a))
             }
         }
@@ -386,12 +381,18 @@ impl Add for Expression {
             (Expression::Constant(left), Expression::Constant(right)) => {
                 Expression::Constant(left + right)
             }
-            (Expression::Constant(l), Expression::LinearCombination(mut right_terms, right_assignment)) => {
+            (
+                Expression::Constant(l),
+                Expression::LinearCombination(mut right_terms, right_assignment),
+            ) => {
                 // prepend constant term to `term vector` in non-constant expression
                 right_terms.insert(0, (r1cs::Variable::One(), l.into()));
                 Expression::LinearCombination(right_terms, right_assignment.map(|r| l + r))
             }
-            (Expression::LinearCombination(mut left_terms, left_assignment), Expression::Constant(r)) => {
+            (
+                Expression::LinearCombination(mut left_terms, left_assignment),
+                Expression::Constant(r),
+            ) => {
                 // append constant term to term vector in non-constant expression
                 left_terms.push((r1cs::Variable::One(), r.into()));
                 Expression::LinearCombination(left_terms, left_assignment.map(|l| l + r))
