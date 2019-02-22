@@ -155,9 +155,9 @@ func (c *Custodian) watchExports(ctx context.Context) {
 				// then wake up a goroutine that executes peg-outs on the main chain.
 				const q = `
 					INSERT INTO exports 
-					(txid, exporter, amount, asset_xdr, temp, seqnum)
+					(txid, exporter, amount, asset_xdr, temp_addr, seqnum)
 					VALUES ($1, $2, $3, $4, $5, $6)`
-				_, err = c.DB.ExecContext(ctx, q, tx.ID.Bytes(), exporter.Address(), retiredAmount, info.AssetXDR, info.Temp, info.Seqnum)
+				_, err = c.DB.ExecContext(ctx, q, tx.ID.Bytes(), exporter.Address(), retiredAmount, info.AssetXDR, info.TempAddr, info.Seqnum)
 				if err != nil {
 					log.Fatalf("recording export tx: %s", err)
 				}

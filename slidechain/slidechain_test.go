@@ -373,12 +373,12 @@ func TestEndToEnd(t *testing.T) {
 			}
 		}
 		t.Log("submitting pre-export tx...")
-		temp, seqnum, err := SubmitPreExportTx(hclient, exporter, c.AccountID.Address(), native, int64(amount))
+		tempAddr, seqnum, err := SubmitPreExportTx(hclient, exporter, c.AccountID.Address(), native, int64(amount))
 		if err != nil {
 			t.Fatalf("pre-submit tx error: %s", err)
 		}
 		t.Log("building export tx...")
-		exportTx, err := BuildExportTx(ctx, native, int64(amount), int64(amount), temp, anchor, exporterPrv, seqnum)
+		exportTx, err := BuildExportTx(ctx, native, int64(amount), int64(amount), tempAddr, anchor, exporterPrv, seqnum)
 		if err != nil {
 			t.Fatalf("error building retirement tx %s", err)
 		}
@@ -404,7 +404,7 @@ func TestEndToEnd(t *testing.T) {
 			block := item.(*bc.Block)
 			for _, tx := range block.Transactions {
 				// Look for export transaction.
-				if IsExportTx(tx, native, int64(amount), temp, exporter.Address(), int64(seqnum)) {
+				if IsExportTx(tx, native, int64(amount), tempAddr, exporter.Address(), int64(seqnum)) {
 					t.Logf("found export tx %x", tx.Program)
 					found = true
 					break
@@ -427,7 +427,7 @@ func TestEndToEnd(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				if env.Tx.SourceAccount.Address() != temp {
+				if env.Tx.SourceAccount.Address() != tempAddr {
 					t.Log("source accounts don't match, skipping...")
 					return
 				}
