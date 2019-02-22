@@ -275,34 +275,34 @@ func TestEndToEnd(t *testing.T) {
 		{5 * xlm.Lumen, 5 * xlm.Lumen},
 		{5 * xlm.Lumen, 3 * xlm.Lumen},
 	}
-	for _, tt := range tests {
-		withTestServer(ctx, t, func(ctx context.Context, db *sql.DB, s *submitter, sv *httptest.Server, ch *protocol.Chain) {
-			hclient := &horizon.Client{
-				URL:  "https://horizon-testnet.stellar.org",
-				HTTP: new(http.Client),
-			}
-			root, err := hclient.Root()
-			if err != nil {
-				t.Fatalf("error getting horizon client root: %s", err)
-			}
-			accountID, seed, err := custodianAccount(ctx, db, hclient)
-			if err != nil {
-				t.Fatalf("error creating custodian account: %s", err)
-			}
-			c := &Custodian{
-				seed:          seed,
-				AccountID:     *accountID,
-				S:             s,
-				DB:            db,
-				hclient:       hclient,
-				InitBlockHash: ch.InitialBlockHash,
-				imports:       sync.NewCond(new(sync.Mutex)),
-				exports:       sync.NewCond(new(sync.Mutex)),
-				network:       root.NetworkPassphrase,
-				privkey:       custodianPrv,
-			}
-			c.launch(ctx)
+	withTestServer(ctx, t, func(ctx context.Context, db *sql.DB, s *submitter, sv *httptest.Server, ch *protocol.Chain) {
+		hclient := &horizon.Client{
+			URL:  "https://horizon-testnet.stellar.org",
+			HTTP: new(http.Client),
+		}
+		root, err := hclient.Root()
+		if err != nil {
+			t.Fatalf("error getting horizon client root: %s", err)
+		}
+		accountID, seed, err := custodianAccount(ctx, db, hclient)
+		if err != nil {
+			t.Fatalf("error creating custodian account: %s", err)
+		}
+		c := &Custodian{
+			seed:          seed,
+			AccountID:     *accountID,
+			S:             s,
+			DB:            db,
+			hclient:       hclient,
+			InitBlockHash: ch.InitialBlockHash,
+			imports:       sync.NewCond(new(sync.Mutex)),
+			exports:       sync.NewCond(new(sync.Mutex)),
+			network:       root.NetworkPassphrase,
+			privkey:       custodianPrv,
+		}
+		c.launch(ctx)
 
+		for _, tt := range tests {
 			// Prepare Stellar account to peg-in funds and txvm account to receive funds.
 			inputAmount := tt.inputAmount
 			exportAmount := tt.exportAmount
@@ -479,8 +479,8 @@ func TestEndToEnd(t *testing.T) {
 				t.Fatal("context timed out: no peg-out tx seen")
 			case <-retire:
 			}
-		})
-	}
+		}
+	})
 }
 
 // Expected log is:
