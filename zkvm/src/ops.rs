@@ -281,31 +281,35 @@ impl Instruction {
 }
 
 impl Program {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Program(vec![])
     }
 
-    fn push<T: Into<Data>>(&mut self, data: T) -> &mut Program {
+    pub fn to_vec(&self) -> Vec<Instruction> {
+        self.0.clone()
+    }
+
+    pub fn push<T: Into<Data>>(&mut self, data: T) -> &mut Program {
         self.0.push(Instruction::Push(data.into()));
         self
     }
-    fn var(&mut self) -> &mut Program {
+    pub fn var(&mut self) -> &mut Program {
         self.0.push(Instruction::Var);
         self
     }
-    fn nonce(&mut self) -> &mut Program {
+    pub fn nonce(&mut self) -> &mut Program {
         self.0.push(Instruction::Nonce);
         self
     }
-    fn issue(&mut self) -> &mut Program {
+    pub fn issue(&mut self) -> &mut Program {
         self.0.push(Instruction::Issue);
         self
     }
-    fn sign_tx(&mut self) -> &mut Program {
+    pub fn sign_tx(&mut self) -> &mut Program {
         self.0.push(Instruction::Signtx);
         self
     }
-    fn output(&mut self, size: usize) -> &mut Program {
+    pub fn output(&mut self, size: usize) -> &mut Program {
         self.0.push(Instruction::Output(size));
         self
     }

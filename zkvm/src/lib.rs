@@ -17,7 +17,7 @@ mod vm;
 
 pub use self::contract::{Contract, FrozenContract, FrozenItem, FrozenValue, Input, PortableItem};
 pub use self::errors::VMError;
-pub use self::ops::{Instruction, Opcode};
+pub use self::ops::{Instruction, Opcode, Program};
 pub use self::predicate::{Predicate, PredicateWitness};
 pub use self::prover::Prover;
 pub use self::signature::VerificationKey;

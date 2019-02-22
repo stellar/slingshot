@@ -12,26 +12,24 @@ fn issue_contract(
     nonce_pred: Predicate,
     recipient_pred: Predicate,
 ) -> Vec<Instruction> {
-    vec![
-        Instruction::Push(
-            Commitment::from(CommitmentWitness {
-                value: qty.into(),
-                blinding: Scalar::from(1u64),
-            })
-            .into(),
-        ), // stack: qty
-        Instruction::Var, // stack: qty-var
-        Instruction::Push(Commitment::from(CommitmentWitness::unblinded(flv)).into()), // stack: qty-var, flv
-        Instruction::Var,                         // stack: qty-var, flv-var
-        Instruction::Push(issuance_pred.into()),  // stack: qty-var, flv-var, pred
-        Instruction::Issue,                       // stack: issue-contract
-        Instruction::Push(nonce_pred.into()),     // stack: issue-contract, pred
-        Instruction::Nonce,                       // stack: issue-contract, nonce-contract
-        Instruction::Signtx,                      // stack: issue-contract
-        Instruction::Signtx,                      // stack: issued-value
-        Instruction::Push(recipient_pred.into()), // stack: issued-value, pred
-        Instruction::Output(1),                   // stack: empty
-    ]
+    let mut instructions = Program::new();
+    instructions
+        .push(Commitment::from(CommitmentWitness {
+            value: qty.into(),
+            blinding: Scalar::from(1u64),
+        })) // stack: qty
+        .var() // stack: qty-var
+        .push(Commitment::from(CommitmentWitness::unblinded(flv))) // stack: qty-var, flv
+        .var() // stack: qty-var, flv-var
+        .push(issuance_pred) // stack: qty-var, flv-var, pred
+        .issue() // stack: issue-contract
+        .push(nonce_pred) // stack: issue-contract, pred
+        .nonce() // stack: issue-contract, nonce-contract
+        .sign_tx() // stack: issue-contract
+        .sign_tx() // stack: issued-value
+        .push(recipient_pred) // stack: issued-value, pred
+        .output(1) // stack: empty
+        .to_vec()
 }
 
 #[test]
