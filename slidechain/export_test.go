@@ -54,12 +54,12 @@ func TestPegOut(t *testing.T) {
 		t.Fatalf("error funding account %s: %s", kp.Address(), err)
 	}
 
-	temp, seqnum, err := SubmitPreExportTx(c.hclient, kp, c.AccountID.Address(), lumen, int64(amount))
+	tempAddr, seqnum, err := SubmitPreExportTx(c.hclient, kp, c.AccountID.Address(), lumen, int64(amount))
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	_, err = c.DB.Exec("INSERT INTO exports (txid, amount, asset_xdr, temp, seqnum, exporter) VALUES ($1, $2, $3, $4, $5, $6)", "", amount, lumenXDR, temp, seqnum, kp.Address())
+	_, err = c.DB.Exec("INSERT INTO exports (txid, amount, asset_xdr, temp_addr, seqnum, exporter) VALUES ($1, $2, $3, $4, $5, $6)", "", amount, lumenXDR, tempAddr, seqnum, kp.Address())
 	if err != nil && err != context.Canceled {
 		t.Fatal(err)
 	}
@@ -78,7 +78,7 @@ func TestPegOut(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				if env.Tx.SourceAccount.Address() != temp {
+				if env.Tx.SourceAccount.Address() != tempAddr {
 					log.Println("source accounts don't match, skipping...")
 					return
 				}
