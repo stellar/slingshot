@@ -29,7 +29,7 @@ pub enum Predicate {
 pub enum PredicateWitness {
     /// Representation of an opaque branch of the predicate tree
     /// (but known to be a valid Ristretto point).
-    Opaque(RistrettoPoint),
+    OpaqueBranch(RistrettoPoint),
 
     /// Secret signing key for the predicate-as-a-verification-key.
     Key(Scalar),
@@ -84,7 +84,7 @@ impl Predicate {
 
     /// Creates an opaque predicate witness from a compressed point
     pub fn opaque_witness(point: CompressedRistretto) -> Result<Self, VMError> {
-        Ok(Predicate::Witness(PredicateWitness::Opaque(
+        Ok(Predicate::Witness(PredicateWitness::OpaqueBranch(
             point.decompress().ok_or(VMError::FormatError)?,
         )))
     }
@@ -141,7 +141,7 @@ impl Predicate {
 impl PredicateWitness {
     fn to_uncompressed_point(&self) -> RistrettoPoint {
         match self {
-            PredicateWitness::Opaque(p) => *p,
+            PredicateWitness::OpaqueBranch(p) => *p,
             PredicateWitness::Key(s) => VerificationKey::from_secret_uncompressed(s),
             PredicateWitness::Or(l, r) => {
                 let l = l.to_uncompressed_point();

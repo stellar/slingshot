@@ -142,12 +142,12 @@ impl Signature {
 }
 
 impl VerificationKey {
-    // Constructs a VerificationKey from the private key.
+    // Constructs a VerificationKey from a private key.
     pub fn from_secret(privkey: &Scalar) -> Self {
         VerificationKey(Self::from_secret_uncompressed(privkey).compress())
     }
 
-    // Constructs a VerificationKey from the private key.
+    // Constructs an uncompressed VerificationKey point from a private key.
     pub(crate) fn from_secret_uncompressed(privkey: &Scalar) -> RistrettoPoint {
         let gens = PedersenGens::default();
         (privkey * gens.B)
