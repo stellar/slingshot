@@ -146,7 +146,7 @@ impl Mul for SignedInteger {
         let max = u64::max_value() as i128;
         match self.0.checked_mul(rhs.0) {
             Some(p) if p <= max && p >= -max => Some(SignedInteger(p)),
-            _ => None
+            _ => None,
         }
     }
 }
