@@ -204,8 +204,8 @@ mod tests {
         let gens = PedersenGens::default();
 
         // dummy predicates
-        let left = Predicate::opaque_witness(gens.B.compress()).unwrap();
-        let right = Predicate::opaque_witness(gens.B_blinding.compress()).unwrap();
+        let left = Predicate::opaque_branch(gens.B.compress()).unwrap();
+        let right = Predicate::opaque_branch(gens.B_blinding.compress()).unwrap();
 
         let pred = left.clone().or(right.clone()).unwrap();
         let op = pred.prove_or(&left, &right);
@@ -217,8 +217,8 @@ mod tests {
         let gens = PedersenGens::default();
 
         // dummy predicates
-        let left = Predicate::opaque_witness(gens.B.compress()).unwrap();
-        let right = Predicate::opaque_witness(gens.B_blinding.compress()).unwrap();
+        let left = Predicate::opaque_branch(gens.B.compress()).unwrap();
+        let right = Predicate::opaque_branch(gens.B_blinding.compress()).unwrap();
 
         let pred = Predicate::Opaque(gens.B.compress());
         let op = pred.prove_or(&left, &right);
@@ -230,8 +230,8 @@ mod tests {
         let gens = PedersenGens::default();
 
         // dummy predicates
-        let left = Predicate::opaque_witness(gens.B.compress()).unwrap();
-        let right = Predicate::opaque_witness(gens.B_blinding.compress()).unwrap();
+        let left = Predicate::opaque_branch(gens.B.compress()).unwrap();
+        let right = Predicate::opaque_branch(gens.B_blinding.compress()).unwrap();
 
         let pred = left.clone().or(right.clone()).unwrap();
         let op = pred.prove_or(&right, &left);
