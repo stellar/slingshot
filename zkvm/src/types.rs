@@ -379,7 +379,7 @@ impl Add for Expression {
             (Expression::Constant(left), Expression::Terms(mut right_terms, right_assignment)) => {
                 // prepend constant term to `term vector` in non-constant expression
                 right_terms.insert(0, (r1cs::Variable::One(), left.into()));
-                Expression::Terms(right_terms, right_assignment.map(|b| left + b))
+                Expression::Terms(right_terms, right_assignment.map(|r| l + r))
             }
             (Expression::Terms(mut left_terms, left_assignment), Expression::Constant(right)) => {
                 // append constant term to term vector in non-constant expression
