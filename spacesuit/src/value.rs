@@ -142,11 +142,15 @@ impl Mul for SignedInteger {
     type Output = Option<SignedInteger>;
 
     fn mul(self, rhs: SignedInteger) -> Option<SignedInteger> {
-        let p = self.0 * rhs.0;
-        if p <= (u64::max as i128) && p >= -(u64::max as i128) {
-            Some(SignedInteger(p))
-        } else {
-            None
+        match self.0.checked_mul(rhs.0) {
+            Some(p) => {
+                if p <= (u64::max as i128) && p >= -(u64::max as i128) {
+                    Some(SignedInteger(p))
+                } else {
+                    None
+                }
+            }
+            None => None,
         }
     }
 }
