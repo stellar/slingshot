@@ -117,14 +117,14 @@ func (c *Custodian) pegOutFromExports(ctx context.Context, pegouts chan<- pegOut
 		case <-ch:
 		}
 
-		const q = `SELECT txid, anchor, pubkey, amount, seqnum, asset_xdr, exporter, temp_addr FROM exports WHERE pegged_out IN ($1, $2)`
+		const q = `SELECT txid, anchor, pubkey, asset_xdr, amount, seqnum, exporter, temp_addr FROM exports WHERE pegged_out IN ($1, $2)`
 
 		var (
-			txids, anchors, pubkeys         [][]byte
-			amounts, seqnums                []int64
-			assetXDRs, exporters, tempAddrs []string
+			txids, anchors, assetXDRs, pubkeys [][]byte
+			amounts, seqnums                   []int64
+			exporters, tempAddrs               []string
 		)
-		err := sqlutil.ForQueryRows(ctx, c.DB, q, pegOutNotYet, pegOutRetry, func(txid, anchor, pubkey []byte, amount, seqnum int64, assetXDR, exporter, tempAddr string) {
+		err := sqlutil.ForQueryRows(ctx, c.DB, q, pegOutNotYet, pegOutRetry, func(txid, anchor, pubkey, assetXDR []byte, amount, seqnum int64, exporter, tempAddr string) {
 			txids = append(txids, txid)
 			amounts = append(amounts, amount)
 			assetXDRs = append(assetXDRs, assetXDR)
@@ -139,7 +139,7 @@ func (c *Custodian) pegOutFromExports(ctx context.Context, pegouts chan<- pegOut
 		}
 		for i, txid := range txids {
 			var asset xdr.Asset
-			err = xdr.SafeUnmarshalBase64(assetXDRs[i], &asset)
+			err = xdr.SafeUnmarshal(assetXDRs[i], &asset)
 			if err != nil {
 				log.Fatalf("unmarshalling asset from XDR %x: %s", assetXDRs[i], err)
 			}
@@ -169,8 +169,6 @@ func (c *Custodian) pegOutFromExports(ctx context.Context, pegouts chan<- pegOut
 						peggedOut = pegOutRetry
 					}
 				}
-			} else {
-				peggedOut = pegOutOK
 			}
 			result, err := c.DB.ExecContext(ctx, `UPDATE exports SET pegged_out=$1 where txid=$2`, peggedOut, txid)
 			if err != nil {
@@ -213,11 +211,7 @@ func (c *Custodian) pegOut(ctx context.Context, exporter xdr.AccountId, asset xd
 	return nil
 }
 
-<<<<<<< HEAD
-func buildPegOutTx(custodian, exporter, tempAddr, network string, asset xdr.Asset, amount int64, seqnum xdr.SequenceNumber) (*b.TransactionBuilder, error) {
-=======
 func buildPegOutTx(custodianAddr, exporterAddr, tempAddr, network string, asset xdr.Asset, amount int64, seqnum xdr.SequenceNumber) (*b.TransactionBuilder, error) {
->>>>>>> main
 	var paymentOp b.PaymentBuilder
 	switch asset.Type {
 	case xdr.AssetTypeAssetTypeNative:
@@ -353,15 +347,15 @@ func SubmitPreExportTx(hclient horizon.ClientInterface, kp *keypair.Full, custod
 // BuildExportTx builds a txvm retirement tx for an asset issued
 // onto slidechain. It will retire `amount` of the asset, and the
 // remaining input will be output back to the original account.
-func BuildExportTx(ctx context.Context, asset xdr.Asset, amount, inputAmt int64, tempAddr string, anchor []byte, prv ed25519.PrivateKey, seqnum xdr.SequenceNumber) (*bc.Tx, error) {
-	if inputAmt < amount {
-		return nil, fmt.Errorf("cannot have input amount %d less than export amount %d", inputAmt, amount)
+func BuildExportTx(ctx context.Context, asset xdr.Asset, exportAmt, inputAmt int64, tempAddr string, anchor []byte, prv ed25519.PrivateKey, seqnum xdr.SequenceNumber) (*bc.Tx, error) {
+	if inputAmt < exportAmt {
+		return nil, fmt.Errorf("cannot have input amount %d less than export amount %d", inputAmt, exportAmt)
 	}
-	assetBytes, err := asset.MarshalBinary()
+	assetXDR, err := asset.MarshalBinary()
 	if err != nil {
 		return nil, err
 	}
-	assetID := bc.NewHash(txvm.AssetID(importIssuanceSeed[:], assetBytes))
+	assetID := bc.NewHash(txvm.AssetID(importIssuanceSeed[:], assetXDR))
 	var rawSeed [32]byte
 	copy(rawSeed[:], prv)
 	kp, err := keypair.FromRawSeed(rawSeed)

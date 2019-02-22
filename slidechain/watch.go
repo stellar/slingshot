@@ -175,12 +175,12 @@ func (c *Custodian) watchPegOuts(ctx context.Context, pegouts <-chan pegOut) {
 		case <-ticker.C:
 			const q = `SELECT amount, asset_xdr, exporter, temp_addr, seqnum, anchor, pubkey FROM exports WHERE (pegged_out=$1 OR pegged_out=$2)`
 			var (
-				txids, anchors, pubkeys         [][]byte
-				amounts, seqnums                []int64
-				assetXDRs, exporters, tempAddrs []string
-				peggedOuts                      []pegOutState
+				txids, anchors, assetXDRs, pubkeys [][]byte
+				amounts, seqnums                   []int64
+				exporters, tempAddrs               []string
+				peggedOuts                         []pegOutState
 			)
-			err := sqlutil.ForQueryRows(ctx, c.DB, q, pegOutOK, pegOutFail, func(txid []byte, amount int64, assetXDR string, exporter, tempAddr string, seqnum, peggedOut int64, anchor, pubkey []byte) {
+			err := sqlutil.ForQueryRows(ctx, c.DB, q, pegOutOK, pegOutFail, func(txid []byte, amount int64, assetXDR []byte, exporter, tempAddr string, seqnum, peggedOut int64, anchor, pubkey []byte) {
 				txids = append(txids, txid)
 				amounts = append(amounts, amount)
 				assetXDRs = append(assetXDRs, assetXDR)

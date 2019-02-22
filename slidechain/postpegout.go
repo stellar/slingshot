@@ -15,17 +15,13 @@ import (
 	"github.com/stellar/go/xdr"
 )
 
-func (c *Custodian) doPostPegOut(ctx context.Context, assetXDR string, anchor, txid []byte, amount, seqnum int64, peggedOut pegOutState, exporter, tempAddr string, pubkey []byte) error {
+func (c *Custodian) doPostPegOut(ctx context.Context, assetXDR, anchor, txid []byte, amount, seqnum int64, peggedOut pegOutState, exporter, tempAddr string, pubkey []byte) error {
 	var asset xdr.Asset
-	err := xdr.SafeUnmarshalBase64(assetXDR, &asset)
+	err := asset.UnmarshalBinary(assetXDR)
 	if err != nil {
 		return errors.Wrap(err, "unmarshaling asset xdr")
 	}
-	assetBytes, err := asset.MarshalBinary()
-	if err != nil {
-		return errors.Wrap(err, "marshaling asset bytes")
-	}
-	assetID := bc.NewHash(txvm.AssetID(importIssuanceSeed[:], assetBytes))
+	assetID := bc.NewHash(txvm.AssetID(importIssuanceSeed[:], assetXDR))
 	ref := pegOut{
 		AssetXDR: assetXDR,
 		TempAddr: tempAddr,

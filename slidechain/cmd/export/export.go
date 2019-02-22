@@ -99,7 +99,6 @@ func main() {
 			log.Fatalf("error funding Stellar account %s: %s", kp.Address(), err)
 		}
 	}
-	anchorBytes := mustDecodeHex(*anchor)
 	var custodian xdr.AccountId
 	resp, err := http.Get(*slidechaind + "/account")
 	if err != nil {
@@ -122,7 +121,7 @@ func main() {
 	}
 	txbits, err := proto.Marshal(&tx.RawTx)
 	if err != nil {
-		log.Fatalf("error marshaling tx: %s", err)
+		log.Fatalf(err)
 	}
 
 	// Submit the transaction and block until it's included in the txvm chain (or returns an error).

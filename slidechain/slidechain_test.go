@@ -565,7 +565,7 @@ func isPostPegOutTx(tx *bc.Tx, asset xdr.Asset, amount int64, tempAddr, exporter
 	if tx.Log[5][0].(txvm.Bytes)[0] != txvm.FinalizeCode {
 		return false
 	}
-	assetXDR, err := xdr.MarshalBase64(asset)
+	assetXDR, err := xdr.MarshalBinary(asset)
 	if err != nil {
 		return false
 	}

@@ -41,7 +41,7 @@ func TestPegOut(t *testing.T) {
 
 	var lumen xdr.Asset
 	lumen.Type = xdr.AssetTypeAssetTypeNative
-	lumenXDR, err := xdr.MarshalBase64(lumen)
+	lumenXDR, err := lumen.MarshalBinary()
 	if err != nil {
 		t.Fatal(err)
 	}
