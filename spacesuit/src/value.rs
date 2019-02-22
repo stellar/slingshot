@@ -3,7 +3,7 @@ use core::ops::Neg;
 use curve25519_dalek::ristretto::CompressedRistretto;
 use curve25519_dalek::scalar::Scalar;
 use rand::{CryptoRng, Rng};
-use std::ops::Add;
+use std::ops::{Add, Mul};
 use subtle::{Choice, ConditionallySelectable};
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -126,10 +126,28 @@ impl Into<Scalar> for SignedInteger {
 }
 
 impl Add for SignedInteger {
-    type Output = SignedInteger;
+    type Output = Option<SignedInteger>;
 
-    fn add(self, rhs: SignedInteger) -> SignedInteger {
-        SignedInteger(self.0 + rhs.0)
+    fn add(self, rhs: SignedInteger) -> Option<SignedInteger> {
+        let max = u64::max_value() as i128;
+        let s = self.0 + rhs.0;
+        if s <= max && s >= -max {
+            Some(SignedInteger(s))
+        } else {
+            None
+        }
+    }
+}
+
+impl Mul for SignedInteger {
+    type Output = Option<SignedInteger>;
+
+    fn mul(self, rhs: SignedInteger) -> Option<SignedInteger> {
+        let max = u64::max_value() as i128;
+        match self.0.checked_mul(rhs.0) {
+            Some(p) if p <= max && p >= -max => Some(SignedInteger(p)),
+            _ => None
+        }
     }
 }
 
