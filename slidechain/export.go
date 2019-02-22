@@ -355,7 +355,7 @@ func BuildExportTx(ctx context.Context, asset xdr.Asset, amount, inputAmt int64,
 // {"R", ...}
 // {"L", ...}
 // {"F", ...}
-func IsExportTx(tx *bc.Tx, asset xdr.Asset, inputAmt int64, temp, exporter string, seqnum int64) bool {
+func IsExportTx(tx *bc.Tx, asset xdr.Asset, exportAmt int64, temp, exporter string, seqnum int64) bool {
 	// The export transaction when we export the full input amount has seven operations, and when we export
 	// part of the input and output the rest back to the exporter, it has ten operations
 	if len(tx.Log) != 7 && len(tx.Log) != 10 {
@@ -370,7 +370,7 @@ func IsExportTx(tx *bc.Tx, asset xdr.Asset, inputAmt int64, temp, exporter strin
 	if tx.Log[2][0].(txvm.Bytes)[0] != txvm.RetireCode {
 		return false
 	}
-	if int64(tx.Log[2][2].(txvm.Int)) != inputAmt {
+	if int64(tx.Log[2][2].(txvm.Int)) != exportAmt {
 		return false
 	}
 	assetBytes, err := asset.MarshalBinary()
