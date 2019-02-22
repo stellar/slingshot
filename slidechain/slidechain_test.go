@@ -266,8 +266,16 @@ func TestImport(t *testing.T) {
 }
 
 func TestEndToEnd(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
+	// TODO(debnil): Test non-native assets.
+	var tests = []struct {
+		inputAmount  xlm.Amount
+		exportAmount xlm.Amount
+	}{
+		{5 * xlm.Lumen, 5 * xlm.Lumen},
+		{5 * xlm.Lumen, 3 * xlm.Lumen},
+	}
 	withTestServer(ctx, t, func(ctx context.Context, db *sql.DB, s *submitter, sv *httptest.Server, ch *protocol.Chain) {
 		hclient := &horizon.Client{
 			URL:  "https://horizon-testnet.stellar.org",
@@ -295,12 +303,6 @@ func TestEndToEnd(t *testing.T) {
 		}
 		c.launch(ctx)
 
-		// Prepare Stellar account to peg-in funds and txvm account to receive funds.
-		// TODO(debnil): Test different input and export amounts. Currently, a table-
-		// driven test is resulting in the database closed error.
-		// TODO(debnil): Test non-native asset types.
-		inputAmount := 5 * xlm.Lumen
-		exportAmount := 5 * xlm.Lumen
 		exporterPub, exporterPrv, err := ed25519.GenerateKey(nil)
 		if err != nil {
 			t.Fatalf("error generating txvm recipient keypair: %s", err)
@@ -323,155 +325,148 @@ func TestEndToEnd(t *testing.T) {
 		if err != nil {
 			t.Fatalf("error marshaling native asset to xdr: %s", err)
 		}
-		expMS := int64(bc.Millis(time.Now().Add(10 * time.Minute)))
-		// Build, submit, and wait on pre-peg-in TxVM tx.
-		prepegTx, err := BuildPrepegTx(c.InitBlockHash.Bytes(), nativeAssetBytes, exporterPubKeyBytes[:], int64(inputAmount), expMS)
-		if err != nil {
-			t.Fatal("could not build pre-peg-in tx")
-		}
-		r, err := c.S.submitTx(ctx, prepegTx)
-		if err != nil {
-			t.Fatal("could not submit pre-peg-in tx")
-		}
-		err = c.S.waitOnTx(ctx, prepegTx.ID, r)
-		if err != nil {
-			t.Fatal("unsuccessfully waited on pre-peg-in tx hitting txvm")
-		}
-		uniqueNonceHash := UniqueNonceHash(c.InitBlockHash.Bytes(), expMS)
-		err = c.insertPegIn(ctx, uniqueNonceHash[:], exporterPubKeyBytes[:], expMS)
-		if err != nil {
-			t.Fatal("could not record peg")
-		}
 
-		// Build transaction to peg-in funds.
-		pegInTx, err := stellar.BuildPegInTx(exporter.Address(), uniqueNonceHash, inputAmount.HorizonString(), "", "", c.AccountID.Address(), hclient)
-		if err != nil {
-			t.Fatalf("error building peg-in tx: %s", err)
-		}
-		succ, err := stellar.SignAndSubmitTx(hclient, pegInTx, exporter.Seed())
-		if err != nil {
-			t.Fatalf("error signing and submitting tx: %s", err)
-		}
-		t.Logf("successfully submitted peg-in tx: id %s, ledger %d", succ.Hash, succ.Ledger)
-
-		// Check to verify import.
-		var anchor []byte
-		found := false
-		for {
-			item, ok := r.Read(ctx)
-			if !ok {
-				t.Fatal("cannot read a block")
-			}
-			block := item.(*bc.Block)
-			for _, tx := range block.Transactions {
-				if isImportTx(tx, int64(inputAmount), nativeAssetBytes, exporterPub) {
-					t.Logf("found import tx %x", tx.Program)
-					found = true
-					txresult := txresult.New(tx)
-					anchor = txresult.Outputs[0].Value.Anchor
-					break
-				}
-			}
-			if found == true {
-				break
-			}
-		}
-		t.Log("submitting pre-export tx...")
-		tempAddr, seqnum, err := SubmitPreExportTx(hclient, exporter, c.AccountID.Address(), native, int64(exportAmount))
-		if err != nil {
-			t.Fatalf("pre-submit tx error: %s", err)
-		}
-		t.Log("building export tx...")
-		exportTx, err := BuildExportTx(ctx, native, int64(exportAmount), int64(inputAmount), tempAddr, anchor, exporterPrv, seqnum)
-		if err != nil {
-			t.Fatalf("error building retirement tx %s", err)
-		}
-		txbits, err := proto.Marshal(&exportTx.RawTx)
-		if err != nil {
-			t.Fatal(err)
-		}
-		resp, err := http.Post(sv.URL+"/submit", "application/octet-stream", bytes.NewReader(txbits))
-		if err != nil {
-			t.Fatal(err)
-		}
-		if resp.StatusCode/100 != 2 {
-			t.Fatalf("status code %d from POST /submit", resp.StatusCode)
-		}
-		t.Log("checking for retirement tx on txvm...")
-
-		retireAnchor1 := txvm.VMHash("Split2", anchor)
-		retireAnchor := txvm.VMHash("Split1", retireAnchor1[:])
-		found = false
-		for {
-			item, ok := r.Read(ctx)
-			if !ok {
-				t.Fatal("cannot read a block")
-			}
-			block := item.(*bc.Block)
-			for _, tx := range block.Transactions {
-				// Look for export transaction.
-				if isExportTx(tx, native, int64(exportAmount), tempAddr, exporter.Address(), int64(seqnum), retireAnchor[:], exporterPubKeyBytes[:]) {
-					t.Logf("found export tx %x", tx.Program)
-					found = true
-					break
-				}
-			}
-			if found == true {
-				break
-			}
-		}
-
-		t.Log("checking for successful retirement...")
-		// Check for successful retirement.
-		retire := make(chan struct{})
-		go func() {
-			var cur horizon.Cursor
-			err := c.hclient.StreamTransactions(ctx, exporter.Address(), &cur, func(tx horizon.Transaction) {
-				t.Logf("received tx: %s", tx.EnvelopeXdr)
-				var env xdr.TransactionEnvelope
-				err := xdr.SafeUnmarshalBase64(tx.EnvelopeXdr, &env)
-				if err != nil {
-					t.Fatal(err)
-				}
-				if env.Tx.SourceAccount.Address() != tempAddr {
-					t.Log("source accounts don't match, skipping...")
-					return
-				}
-				defer close(retire)
-				if len(env.Tx.Operations) != 2 {
-					t.Fatalf("too many operations got %d, want 2", len(env.Tx.Operations))
-				}
-				op := env.Tx.Operations[0]
-				if op.Body.Type != xdr.OperationTypeAccountMerge {
-					t.Fatalf("wrong operation type: got %s, want %s", op.Body.Type, xdr.OperationTypeAccountMerge)
-				}
-				if op.Body.Destination.Address() != exporter.Address() {
-					t.Fatalf("wrong account merge destination: got %s, want %s", op.Body.Destination.Address(), exporter.Address())
-				}
-				op = env.Tx.Operations[1]
-				if op.Body.Type != xdr.OperationTypePayment {
-					t.Fatalf("wrong operation type: got %s, want %s", op.Body.Type, xdr.OperationTypePayment)
-				}
-				paymentOp := op.Body.PaymentOp
-				if paymentOp.Destination.Address() != exporter.Address() {
-					t.Fatalf("incorrect payment destination got %s, want %s", paymentOp.Destination.Address(), exporter.Address())
-				}
-				if paymentOp.Amount != xdr.Int64(exportAmount) {
-					t.Fatalf("got incorrect payment amount %d, want %d", paymentOp.Amount, exportAmount)
-				}
-				if paymentOp.Asset.Type != xdr.AssetTypeAssetTypeNative {
-					t.Fatalf("got incorrect payment asset %s, want lumens", paymentOp.Asset.String())
-				}
-			})
+		for _, tt := range tests {
+			// Prepare Stellar account to peg-in funds and txvm account to receive funds.
+			inputAmount := tt.inputAmount
+			exportAmount := tt.exportAmount
+			expMS := int64(bc.Millis(time.Now().Add(10 * time.Minute)))
+			// Build, submit, and wait on pre-peg-in TxVM tx.
+			prepegTx, err := BuildPrepegTx(c.InitBlockHash.Bytes(), nativeAssetBytes, exporterPubKeyBytes[:], int64(inputAmount), expMS)
 			if err != nil {
-				t.Fatalf("error streaming from Horizon: %s", err)
+				t.Fatal("could not build pre-peg-in tx")
 			}
-		}()
+			r, err := c.S.submitTx(ctx, prepegTx)
+			if err != nil {
+				t.Fatal("could not submit pre-peg-in tx")
+			}
+			err = c.S.waitOnTx(ctx, prepegTx.ID, r)
+			if err != nil {
+				t.Fatal("unsuccessfully waited on pre-peg-in tx hitting txvm")
+			}
+			uniqueNonceHash := UniqueNonceHash(c.InitBlockHash.Bytes(), expMS)
+			err = c.insertPegIn(ctx, uniqueNonceHash[:], exporterPubKeyBytes[:], expMS)
+			if err != nil {
+				t.Fatal("could not record peg")
+			}
 
-		select {
-		case <-ctx.Done():
-			t.Fatal("context timed out: no peg-out tx seen")
-		case <-retire:
+			// Build transaction to peg-in funds.
+			pegInTx, err := stellar.BuildPegInTx(exporter.Address(), uniqueNonceHash, inputAmount.HorizonString(), "", "", c.AccountID.Address(), hclient)
+			if err != nil {
+				t.Fatalf("error building peg-in tx: %s", err)
+			}
+			succ, err := stellar.SignAndSubmitTx(hclient, pegInTx, exporter.Seed())
+			if err != nil {
+				t.Fatalf("error signing and submitting tx: %s", err)
+			}
+			t.Logf("successfully submitted peg-in tx: id %s, ledger %d", succ.Hash, succ.Ledger)
+
+			// Check to verify import.
+			var anchor []byte
+			found := false
+			for {
+				item, ok := r.Read(ctx)
+				if !ok {
+					t.Fatal("cannot read a block")
+				}
+				block := item.(*bc.Block)
+				for _, tx := range block.Transactions {
+					if isImportTx(tx, int64(inputAmount), nativeAssetBytes, exporterPub) {
+						t.Logf("found import tx %x", tx.Program)
+						found = true
+						txresult := txresult.New(tx)
+						anchor = txresult.Outputs[0].Value.Anchor
+						break
+					}
+				}
+				if found == true {
+					break
+				}
+			}
+			t.Log("submitting pre-export tx...")
+			temp, seqnum, err := SubmitPreExportTx(hclient, exporter, c.AccountID.Address(), native, int64(exportAmount))
+			if err != nil {
+				t.Fatalf("pre-submit tx error: %s", err)
+			}
+			t.Log("building export tx...")
+			exportTx, err := BuildExportTx(ctx, native, int64(exportAmount), int64(inputAmount), temp, anchor, exporterPrv, seqnum)
+			if err != nil {
+				t.Fatalf("error building retirement tx %s", err)
+			}
+			txbits, err := proto.Marshal(&exportTx.RawTx)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			// Submit the transaction and block until it's included in the txvm chain (or returns an error).
+			t.Log("submitting and waiting on export tx on txvm...")
+			req, err := http.NewRequest("POST", sv.URL+"/submit?wait=1", bytes.NewReader(txbits))
+			if err != nil {
+				log.Fatalf("error building request for latest block: %s", err)
+			}
+			req = req.WithContext(ctx)
+			client := http.DefaultClient
+			resp, err := client.Do(req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer resp.Body.Close()
+			if resp.StatusCode/100 != 2 {
+				t.Fatalf("status code %d from POST /submit?wait=1", resp.StatusCode)
+			}
+
+			// Check for successful retirement.
+			t.Log("checking for successful retirement...")
+			retire := make(chan struct{})
+			go func() {
+				var cur horizon.Cursor
+				err := c.hclient.StreamTransactions(ctx, exporter.Address(), &cur, func(tx horizon.Transaction) {
+					t.Logf("received tx: %s", tx.EnvelopeXdr)
+					var env xdr.TransactionEnvelope
+					err := xdr.SafeUnmarshalBase64(tx.EnvelopeXdr, &env)
+					if err != nil {
+						t.Fatal(err)
+					}
+					if env.Tx.SourceAccount.Address() != temp {
+						t.Log("source accounts don't match, skipping...")
+						return
+					}
+					defer close(retire)
+					if len(env.Tx.Operations) != 2 {
+						t.Fatalf("too many operations got %d, want 2", len(env.Tx.Operations))
+					}
+					op := env.Tx.Operations[0]
+					if op.Body.Type != xdr.OperationTypeAccountMerge {
+						t.Fatalf("wrong operation type: got %s, want %s", op.Body.Type, xdr.OperationTypeAccountMerge)
+					}
+					if op.Body.Destination.Address() != exporter.Address() {
+						t.Fatalf("wrong account merge destination: got %s, want %s", op.Body.Destination.Address(), exporter.Address())
+					}
+					op = env.Tx.Operations[1]
+					if op.Body.Type != xdr.OperationTypePayment {
+						t.Fatalf("wrong operation type: got %s, want %s", op.Body.Type, xdr.OperationTypePayment)
+					}
+					paymentOp := op.Body.PaymentOp
+					if paymentOp.Destination.Address() != exporter.Address() {
+						t.Fatalf("incorrect payment destination got %s, want %s", paymentOp.Destination.Address(), exporter.Address())
+					}
+					if paymentOp.Amount != xdr.Int64(exportAmount) {
+						t.Fatalf("got incorrect payment amount %d, want %d", paymentOp.Amount, exportAmount)
+					}
+					if paymentOp.Asset.Type != xdr.AssetTypeAssetTypeNative {
+						t.Fatalf("got incorrect payment asset %s, want lumens", paymentOp.Asset.String())
+					}
+				})
+				if err != nil {
+					t.Fatalf("error streaming from Horizon: %s", err)
+				}
+			}()
+
+			select {
+			case <-ctx.Done():
+				t.Fatal("context timed out: no peg-out tx seen")
+			case <-retire:
+			}
 		}
 
 		// Check for successful post-peg-out txvm tx.
@@ -536,59 +531,6 @@ func isImportTx(tx *bc.Tx, amount int64, assetXDR []byte, recipPubKey ed25519.Pu
 		return false
 	}
 	// No need to test tx.Log[4], it has to be a finalize entry.
-	return true
-}
-
-// isExportTx returns whether or not a txvm transaction matches the slidechain export tx format.
-//
-// Expected log is:
-// If input and export amounts are equal,
-// {"I", ...}
-// {"L", ...}
-// {"O", caller, outputid}
-// {"F", ...}
-//
-// Else,
-// {"I", ...}
-// {"L", ..., refdata}
-// {"L", ...}
-// {"O", ...}
-// {"O", caller, outputid}
-// {"F", ...}
-func isExportTx(tx *bc.Tx, asset xdr.Asset, exportAmt int64, tempAddr, exporter string, seqnum int64, anchor, pubkey []byte) bool {
-	if len(tx.Log) != 4 && len(tx.Log) != 6 {
-		return false
-	}
-	if tx.Log[0][0].(txvm.Bytes)[0] != txvm.InputCode {
-		return false
-	}
-	if tx.Log[1][0].(txvm.Bytes)[0] != txvm.LogCode {
-		return false
-	}
-	lastIndex := len(tx.Log) - 1
-	if tx.Log[lastIndex-1][0].(txvm.Bytes)[0] != txvm.OutputCode {
-		return false
-	}
-	if tx.Log[lastIndex][0].(txvm.Bytes)[0] != txvm.FinalizeCode {
-		return false
-	}
-	assetXDR, err := xdr.MarshalBase64(asset)
-	if err != nil {
-		return false
-	}
-	ref := pegOut{
-		AssetXDR: assetXDR,
-		TempAddr: tempAddr,
-		Seqnum:   seqnum,
-		Exporter: exporter,
-		Amount:   exportAmt,
-		Anchor:   anchor,
-		Pubkey:   pubkey,
-	}
-	refdata, err := json.Marshal(ref)
-	if !bytes.Equal(refdata, tx.Log[1][2].(txvm.Bytes)) {
-		return false
-	}
 	return true
 }
 
