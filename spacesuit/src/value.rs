@@ -129,10 +129,11 @@ impl Add for SignedInteger {
     type Output = Option<SignedInteger>;
 
     fn add(self, rhs: SignedInteger) -> Option<SignedInteger> {
-        match self.0.checked_add(rhs.0) {
-            Some(x) => Some(SignedInteger(x)),
-            None => None,
+        let s = self.0 + rhs.0;
+        if s <= (u64::max as i128) && s >= (u64::min as i128) {
+            return Some(SignedInteger(s));
         }
+        None
     }
 }
 
@@ -140,10 +141,11 @@ impl Mul for SignedInteger {
     type Output = Option<SignedInteger>;
 
     fn mul(self, rhs: SignedInteger) -> Option<SignedInteger> {
-        match self.0.checked_mul(rhs.0) {
-            Some(x) => Some(SignedInteger(x)),
-            None => None,
+        let p = self.0 * rhs.0;
+        if p <= (u64::max as i128) && p >= (u64::min as i128) {
+            return Some(SignedInteger(p));
         }
+        None
     }
 }
 
