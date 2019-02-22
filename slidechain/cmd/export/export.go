@@ -121,7 +121,7 @@ func main() {
 	}
 	txbits, err := proto.Marshal(&tx.RawTx)
 	if err != nil {
-		log.Fatalf(err)
+		log.Fatal(err)
 	}
 
 	// Submit the transaction and block until it's included in the txvm chain (or returns an error).
