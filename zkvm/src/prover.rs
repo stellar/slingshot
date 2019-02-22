@@ -45,7 +45,7 @@ impl<'a, 'b> Delegate<r1cs::Prover<'a, 'b>> for Prover<'a, 'b> {
     }
 
     fn process_tx_signature(&mut self, pred: Predicate) -> Result<(), VMError> {
-        match pred.witness() {
+        match pred.as_witness() {
             None => Err(VMError::WitnessMissing),
             Some(w) => match w {
                 PredicateWitness::Key(s) => Ok(self.signtx_keys.push(s.clone())),

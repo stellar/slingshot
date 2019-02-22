@@ -331,7 +331,7 @@ where
 
     fn nonce(&mut self) -> Result<(), VMError> {
         let predicate = self.pop_item()?.to_data()?.to_predicate()?;
-        let point = predicate.point();
+        let point = predicate.to_point();
         let contract = Contract {
             predicate,
             payload: Vec::new(),
