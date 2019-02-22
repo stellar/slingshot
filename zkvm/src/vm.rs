@@ -532,7 +532,7 @@ where
         let mut contract = self.pop_item()?.to_contract()?;
         let p = &contract.predicate;
 
-        self.delegate.verify_point_op(|| p.prove_or(&l, &r));
+        self.delegate.verify_point_op(|| p.prove_or(&l, &r))?;
 
         assign(&mut contract, l, r);
 
