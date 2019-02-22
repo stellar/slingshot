@@ -5,32 +5,21 @@ use merlin::Transcript;
 
 use zkvm::*;
 
-fn predicate_helper(
-    pred_num: usize,
-    flavor_num: usize,
-) -> (Vec<Predicate>, Vec<(Scalar, Predicate)>) {
+fn predicate_helper(pred_num: usize) -> (Vec<Predicate>, Scalar, Predicate) {
     let predicates = (0..pred_num)
         .into_iter()
         .map(|n| Predicate::from_witness(PredicateWitness::Key(Scalar::from(n as u64))).unwrap())
         .collect();
 
-    let flavor_pairs = (0..flavor_num)
-        .into_iter()
-        .map(|n| {
-            // Generate issuance predicate
-            let issuance_pred =
-                Predicate::from_witness(PredicateWitness::Key(Scalar::from(n as u64 + 100)))
-                    .unwrap();
-            // Generate flavor scalar
-            let mut t = Transcript::new(b"ZkVM.issue");
-            t.commit_bytes(b"predicate", issuance_pred.point().as_bytes());
-            let flavor = t.challenge_scalar(b"flavor");
+    // Generate issuance predicate
+    let issuance_pred =
+        Predicate::from_witness(PredicateWitness::Key(Scalar::from(100u64))).unwrap();
+    // Generate flavor scalar
+    let mut t = Transcript::new(b"ZkVM.issue");
+    t.commit_bytes(b"predicate", issuance_pred.point().as_bytes());
+    let flavor = t.challenge_scalar(b"flavor");
 
-            (flavor, issuance_pred)
-        })
-        .collect();
-
-    (predicates, flavor_pairs)
+    (predicates, flavor, issuance_pred)
 }
 
 fn test_helper(program: Vec<Instruction>) -> Result<TxID, VMError> {
@@ -44,7 +33,7 @@ fn test_helper(program: Vec<Instruction>) -> Result<TxID, VMError> {
     // Verify tx
     let bp_gens = BulletproofGens::new(256, 1);
     match Verifier::verify_tx(tx, &bp_gens) {
-        Err(err) => assert!(false, err.to_string()),
+        Err(err) => return Err(err),
         Ok(v) => {
             assert_eq!(v.log, txlog);
         }
@@ -137,18 +126,17 @@ fn issue_contract(
 #[test]
 fn issue() {
     // Generate predicates and flavor
-    let (predicates, flavor_pairs) = predicate_helper(2, 1);
+    let (predicates, flavor, issuance_pred) = predicate_helper(2);
 
-    // Build program
-    let program = issue_contract(
+    let correct_program = issue_contract(
         1u64,
-        flavor_pairs[0].0,         // flavor scalar
-        flavor_pairs[0].1.clone(), // issuance predicate
-        predicates[0].clone(),     // nonce predicate
-        predicates[1].clone(),     // output predicate
+        flavor,
+        issuance_pred,
+        predicates[0].clone(), // nonce predicate
+        predicates[1].clone(), // output predicate
     );
 
-    match test_helper(program) {
+    match test_helper(correct_program) {
         Err(err) => return assert!(false, err.to_string()),
         Ok(txid) => {
             // Check txid
@@ -157,6 +145,18 @@ fn issue() {
                 hex::encode(txid.0)
             );
         }
+    }
+
+    let wrong_program = issue_contract(
+        1u64,
+        flavor,
+        predicates[0].clone(), // WRONG issuance predicate
+        predicates[0].clone(), // nonce predicate
+        predicates[1].clone(), // output predicate
+    );
+
+    if test_helper(wrong_program).is_ok() {
+        panic!("Issuing with wrong issuance predicate should fail, but didn't");
     }
 }
 
@@ -177,20 +177,31 @@ fn spend_1_1_contract(
 #[test]
 fn spend_1_1() {
     // Generate predicates and flavor
-    let (predicates, flavor_pairs) = predicate_helper(2, 1);
+    let (predicates, flavor, _) = predicate_helper(2);
 
-    // Build program
-    let program = spend_1_1_contract(
+    let correct_program = spend_1_1_contract(
         10u64,
         10u64,
-        flavor_pairs[0].0,     // flavor scalar
+        flavor,
         predicates[0].clone(), // input predicate
         predicates[1].clone(), // output predicate
     );
 
-    match test_helper(program) {
-        Err(err) => return assert!(false, err.to_string()),
-        _ => return,
+    match test_helper(correct_program) {
+        Err(err) => panic!(err.to_string()),
+        _ => (),
+    }
+
+    let wrong_program = spend_1_1_contract(
+        5u64,
+        10u64,
+        flavor,
+        predicates[0].clone(), // input predicate
+        predicates[1].clone(), // output predicate
+    );
+
+    if test_helper(wrong_program).is_ok() {
+        panic!("Input $5, output $10 should have failed but didn't");
     }
 }
 
@@ -214,22 +225,35 @@ fn spend_1_2_contract(
 #[test]
 fn spend_1_2() {
     // Generate predicates and flavor
-    let (predicates, flavor_pairs) = predicate_helper(3, 1);
+    let (predicates, flavor, _) = predicate_helper(3);
 
-    // Build program
-    let program = spend_1_2_contract(
+    let correct_program = spend_1_2_contract(
         10u64,
         9u64,
         1u64,
-        flavor_pairs[0].0,     // flavor scalar
+        flavor,
         predicates[0].clone(), // input predicate
         predicates[1].clone(), // output 1 predicate
         predicates[2].clone(), // output 2 predicate
     );
 
-    match test_helper(program) {
-        Err(err) => return assert!(false, err.to_string()),
-        _ => return,
+    match test_helper(correct_program) {
+        Err(err) => assert!(false, err.to_string()),
+        _ => (),
+    }
+
+    let wrong_program = spend_1_2_contract(
+        10u64,
+        11u64,
+        1u64,
+        flavor,
+        predicates[0].clone(), // input predicate
+        predicates[1].clone(), // output 1 predicate
+        predicates[2].clone(), // output 2 predicate
+    );
+
+    if test_helper(wrong_program).is_ok() {
+        panic!("Input $10, output $11 and $1 should have failed but didn't");
     }
 }
 
@@ -253,22 +277,35 @@ fn spend_2_1_contract(
 #[test]
 fn spend_2_1() {
     // Generate predicates and flavor
-    let (predicates, flavor_pairs) = predicate_helper(3, 1);
+    let (predicates, flavor, _) = predicate_helper(3);
 
-    // Build program
-    let program = spend_2_1_contract(
+    let correct_program = spend_2_1_contract(
         6u64,
         4u64,
         10u64,
-        flavor_pairs[0].0,     // flavor scalar
+        flavor,
         predicates[0].clone(), // input 1 predicate
         predicates[1].clone(), // input 2 predicate
         predicates[2].clone(), // output predicate
     );
 
-    match test_helper(program) {
-        Err(err) => return assert!(false, err.to_string()),
-        _ => return,
+    match test_helper(correct_program) {
+        Err(err) => assert!(false, err.to_string()),
+        _ => (),
+    }
+
+    let wrong_program = spend_2_1_contract(
+        6u64,
+        4u64,
+        11u64,
+        flavor,
+        predicates[0].clone(), // input 1 predicate
+        predicates[1].clone(), // input 2 predicate
+        predicates[2].clone(), // output predicate
+    );
+
+    if test_helper(wrong_program).is_ok() {
+        panic!("Input $6 and $4, output $11 and $1 should have failed but didn't");
     }
 }
 
@@ -295,24 +332,39 @@ fn spend_2_2_contract(
 #[test]
 fn spend_2_2() {
     // Generate predicates and flavor
-    let (predicates, flavor_pairs) = predicate_helper(4, 1);
+    let (predicates, flavor, _) = predicate_helper(4);
 
-    // Build program
-    let program = spend_2_2_contract(
+    let correct_program = spend_2_2_contract(
         6u64,
         4u64,
         9u64,
         1u64,
-        flavor_pairs[0].0,     // flavor scalar
+        flavor,
         predicates[0].clone(), // input 1 predicate
         predicates[1].clone(), // input 2 predicate
         predicates[2].clone(), // output 1 predicate
         predicates[3].clone(), // output 2 predicate
     );
 
-    match test_helper(program) {
-        Err(err) => return assert!(false, err.to_string()),
-        _ => return,
+    match test_helper(correct_program) {
+        Err(err) => assert!(false, err.to_string()),
+        _ => (),
+    }
+
+    let wrong_program = spend_2_2_contract(
+        6u64,
+        4u64,
+        11u64,
+        1u64,
+        flavor,
+        predicates[0].clone(), // input 1 predicate
+        predicates[1].clone(), // input 2 predicate
+        predicates[2].clone(), // output 1 predicate
+        predicates[3].clone(), // output 2 predicate
+    );
+
+    if test_helper(wrong_program).is_ok() {
+        panic!("Input $6 and $4, output $11 and $1 should have failed but didn't");
     }
 }
 
@@ -340,24 +392,40 @@ fn issue_and_spend_contract(
 #[test]
 fn issue_and_spend() {
     // Generate predicates and flavor
-    let (predicates, flavor_pairs) = predicate_helper(4, 1);
+    let (predicates, flavor, issuance_pred) = predicate_helper(4);
 
-    // Build program
-    let program = issue_and_spend_contract(
+    let correct_program = issue_and_spend_contract(
         4u64,
         6u64,
         9u64,
         1u64,
-        flavor_pairs[0].0,         // flavor scalar
-        flavor_pairs[0].1.clone(), // issuance predicate
-        predicates[0].clone(),     // nonce predicate
-        predicates[1].clone(),     // input predicate
-        predicates[2].clone(),     // output 1 predicate
-        predicates[3].clone(),     // output 2 predicate
+        flavor,
+        issuance_pred.clone(),
+        predicates[0].clone(), // nonce predicate
+        predicates[1].clone(), // input predicate
+        predicates[2].clone(), // output 1 predicate
+        predicates[3].clone(), // output 2 predicate
     );
 
-    match test_helper(program) {
-        Err(err) => return assert!(false, err.to_string()),
-        _ => return,
+    match test_helper(correct_program) {
+        Err(err) => assert!(false, err.to_string()),
+        _ => (),
+    }
+
+    let wrong_program = issue_and_spend_contract(
+        4u64,
+        6u64,
+        11u64,
+        1u64,
+        flavor,
+        issuance_pred,
+        predicates[0].clone(), // nonce predicate
+        predicates[1].clone(), // input predicate
+        predicates[2].clone(), // output 1 predicate
+        predicates[3].clone(), // output 2 predicate
+    );
+
+    if test_helper(wrong_program).is_ok() {
+        panic!("Issue $6 and input $4, output $11 and $1 should have failed but didn't");
     }
 }
