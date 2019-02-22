@@ -7,7 +7,7 @@ use merlin::Transcript;
 use spacesuit::SignedInteger;
 
 use crate::contract::{Contract, Input, PortableItem};
-use crate::encoding::Subslice;
+use crate::encoding::SliceReader;
 use crate::errors::VMError;
 use crate::ops::Instruction;
 use crate::predicate::Predicate;
@@ -117,6 +117,26 @@ impl CommitmentWitness {
     pub fn to_point(&self) -> CompressedRistretto {
         let gens = PedersenGens::default();
         gens.commit(self.value.into(), self.blinding).compress()
+    }
+
+    pub fn unblinded<T>(x: T) -> Self
+    where
+        T: Into<ScalarWitness>,
+    {
+        CommitmentWitness {
+            blinding: Scalar::zero(),
+            value: x.into(),
+        }
+    }
+
+    pub fn blinded<T>(x: T) -> Self
+    where
+        T: Into<ScalarWitness>,
+    {
+        CommitmentWitness {
+            blinding: Scalar::random(&mut rand::thread_rng()),
+            value: x.into(),
+        }
     }
 }
 
@@ -266,7 +286,7 @@ impl Data {
     pub fn to_predicate(self) -> Result<Predicate, VMError> {
         match self {
             Data::Opaque(data) => {
-                let point = Subslice::new(&data).read_point()?;
+                let point = SliceReader::parse(&data, |r| r.read_point())?;
                 Ok(Predicate::opaque(point))
             }
             Data::Witness(witness) => match witness {
@@ -279,7 +299,7 @@ impl Data {
     pub fn to_commitment(self) -> Result<Commitment, VMError> {
         match self {
             Data::Opaque(data) => {
-                let point = Subslice::new(&data).read_point()?;
+                let point = SliceReader::parse(&data, |r| r.read_point())?;
                 Ok(Commitment::Closed(point))
             }
             Data::Witness(witness) => match witness {
@@ -306,7 +326,9 @@ impl Data {
                 buf.extend_from_slice(x);
                 return;
             }
-            Data::Witness(w) => w.encode(buf),
+            Data::Witness(w) => {
+                w.encode(buf);
+            }
         };
     }
 }
@@ -392,6 +414,20 @@ impl Add for Expression {
                 )
             }
         }
+    }
+}
+
+// Upcasting witness/points into Commitment
+
+impl From<CommitmentWitness> for Commitment {
+    fn from(x: CommitmentWitness) -> Self {
+        Commitment::Open(Box::new(x))
+    }
+}
+
+impl From<CompressedRistretto> for Commitment {
+    fn from(x: CompressedRistretto) -> Self {
+        Commitment::Closed(x)
     }
 }
 

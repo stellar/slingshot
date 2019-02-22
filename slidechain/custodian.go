@@ -190,8 +190,8 @@ func (c *Custodian) Account(w http.ResponseWriter, req *http.Request) {
 // launch kicks off the Custodian's long-running goroutines
 // that stream txs, import, and export.
 func (c *Custodian) launch(ctx context.Context) {
-	go c.watchPegs(ctx)
-	go c.importFromPegs(ctx, nil)
+	go c.watchPegIns(ctx)
+	go c.importFromPegIns(ctx, nil)
 	go c.watchExports(ctx)
 	go c.pegOutFromExports(ctx)
 }

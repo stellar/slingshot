@@ -16,8 +16,8 @@ import (
 )
 
 // Runs as a goroutine until ctx is canceled.
-func (c *Custodian) watchPegs(ctx context.Context) {
-	defer log.Println("watchPegs exiting")
+func (c *Custodian) watchPegIns(ctx context.Context) {
+	defer log.Println("watchPegIns exiting")
 	backoff := i10rnet.Backoff{Base: 100 * time.Millisecond}
 
 	var cur horizon.Cursor
@@ -133,12 +133,7 @@ func (c *Custodian) watchExports(ctx context.Context) {
 				if infoItem[0].(txvm.Bytes)[0] != txvm.LogCode {
 					continue
 				}
-				var info struct {
-					AssetXDR []byte `json:"asset"`
-					Temp     string `json:"temp"`
-					Seqnum   int64  `json:"seqnum"`
-					Exporter string `json:"exporter"`
-				}
+				var info pegOut
 				err := json.Unmarshal(infoItem[2].(txvm.Bytes), &info)
 				if err != nil {
 					continue
@@ -160,9 +155,9 @@ func (c *Custodian) watchExports(ctx context.Context) {
 				// then wake up a goroutine that executes peg-outs on the main chain.
 				const q = `
 					INSERT INTO exports 
-					(txid, exporter, amount, asset_xdr, temp, seqnum)
+					(txid, exporter, amount, asset_xdr, temp_addr, seqnum)
 					VALUES ($1, $2, $3, $4, $5, $6)`
-				_, err = c.DB.ExecContext(ctx, q, tx.ID.Bytes(), exporter.Address(), retiredAmount, info.AssetXDR, info.Temp, info.Seqnum)
+				_, err = c.DB.ExecContext(ctx, q, tx.ID.Bytes(), exporter.Address(), retiredAmount, info.AssetXDR, info.TempAddr, info.Seqnum)
 				if err != nil {
 					log.Fatalf("recording export tx: %s", err)
 				}
