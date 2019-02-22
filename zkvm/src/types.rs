@@ -374,7 +374,7 @@ impl Add for Expression {
     fn add(self, rhs: Expression) -> Expression {
         match (self, rhs) {
             (Expression::Constant(a), Expression::Constant(b)) => Expression::Constant(a + b),
-            (Expression::Constant(a), Expression::Terms(mut terms, assignment)) => {
+            (Expression::Constant(left), Expression::Terms(mut right_terms, right_assignment)) => {
                 // concatenate constant term to term vector in non-constant expression
                 terms.push((r1cs::Variable::One(), a.into()));
 
