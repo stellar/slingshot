@@ -140,4 +140,7 @@ Similar to the intermediate derivation, but for safety is domain-separated so th
 	```
 
 
+## Test vectors
+
+TBD.
 
