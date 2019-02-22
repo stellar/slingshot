@@ -95,7 +95,7 @@ fn input_helper(qty: u64, flv: Scalar, pred: Predicate) -> Vec<Instruction> {
     ]
 }
 
-fn cloak_helper(outputs: Vec<(u64, Scalar)>, input_count: usize) -> Vec<Instruction> {
+fn cloak_helper(input_count: usize, outputs: Vec<(u64, Scalar)>) -> Vec<Instruction> {
     let output_count = outputs.len();
     let mut instructions = vec![];
 
@@ -119,9 +119,13 @@ fn output_helper(pred: Predicate) -> Vec<Instruction> {
     ]
 }
 
-// questions:
-// - do we have to use separate nonce predicates for the two inputs (to ensure uniqueness if they're same qty?)
-// - is it enough (for testing) to get the value from the issue contract? (how do we create a "utxo" in one tx?)
+fn predicate_helper(
+    pred_num: usize,
+    flavor_num: usize,
+) -> (Vec<Predicate>, Vec<(Predicate, Scalar)>) {
+    unimplemented!();
+}
+
 fn spend_2_2_contract(
     input_1: u64,
     input_2: u64,
@@ -133,43 +137,16 @@ fn spend_2_2_contract(
     output_1_pred: Predicate,
     output_2_pred: Predicate,
 ) -> Vec<Instruction> {
-    vec![
-        Instruction::Push(
-            Input::new(
-                vec![(
-                    Commitment::from(CommitmentWitness::blinded(input_1)),
-                    Commitment::from(CommitmentWitness::blinded(flv)),
-                )],
-                input_1_pred,
-                TxID([0; 32]),
-            )
-            .into(),
-        ), // stack: input-1-data
-        Instruction::Input,  // stack: input-1-contract
-        Instruction::Signtx, // stack: input-1-value
-        Instruction::Push(
-            Input::new(
-                vec![(
-                    Commitment::from(CommitmentWitness::blinded(input_2)),
-                    Commitment::from(CommitmentWitness::blinded(flv)),
-                )],
-                input_2_pred,
-                TxID([0; 32]),
-            )
-            .into(),
-        ), // stack: input-2-data
-        Instruction::Input,  // stack: input-2-contract
-        Instruction::Signtx, // stack: input-2-value
-        Instruction::Push(Commitment::from(CommitmentWitness::blinded(output_1)).into()), // stack: input-value, output-1-quantity
-        Instruction::Push(Commitment::from(CommitmentWitness::blinded(flv)).into()), // stack: input-value, output-1-quantity, output-1-flavor
-        Instruction::Push(Commitment::from(CommitmentWitness::blinded(output_2)).into()), // stack: input-value, output-1-quantity, output-2-quantity
-        Instruction::Push(Commitment::from(CommitmentWitness::blinded(flv)).into()), // stack: input-value, output-1-quantity, output-2-quantity, output-2-flavor
-        Instruction::Cloak(2, 2),                // stack: output-1, output-2
-        Instruction::Push(output_2_pred.into()), // stack: output-1, output-2, output-2-pred
-        Instruction::Output(1),                  // stack: output-1
-        Instruction::Push(output_1_pred.into()), // stack: output-1, output-1-pred
-        Instruction::Output(1),                  // stack: empty
-    ]
+    let mut instructions = vec![];
+    instructions.append(&mut input_helper(input_1, flv, input_1_pred));
+    instructions.append(&mut input_helper(input_2, flv, input_2_pred));
+
+    instructions.append(&mut cloak_helper(2, vec![(output_1, flv), (output_2, flv)]));
+
+    instructions.append(&mut output_helper(output_2_pred));
+    instructions.append(&mut output_helper(output_1_pred));
+
+    instructions
 }
 
 #[test]
@@ -235,30 +212,15 @@ fn spend_1_2_contract(
     output_1_pred: Predicate,
     output_2_pred: Predicate,
 ) -> Vec<Instruction> {
-    vec![
-        Instruction::Push(
-            Input::new(
-                vec![(
-                    Commitment::from(CommitmentWitness::blinded(input)),
-                    Commitment::from(CommitmentWitness::blinded(flv)),
-                )],
-                input_pred,
-                TxID([0; 32]),
-            )
-            .into(),
-        ), // stack: input-data
-        Instruction::Input,  // stack: input-contract
-        Instruction::Signtx, // stack: input-value
-        Instruction::Push(Commitment::from(CommitmentWitness::blinded(output_1)).into()), // stack: input-value, output-1-quantity
-        Instruction::Push(Commitment::from(CommitmentWitness::blinded(flv)).into()), // stack: input-value, output-1-quantity, output-1-flavor
-        Instruction::Push(Commitment::from(CommitmentWitness::blinded(output_2)).into()), // stack: input-value, output-1-quantity, output-2-quantity
-        Instruction::Push(Commitment::from(CommitmentWitness::blinded(flv)).into()), // stack: input-value, output-1-quantity, output-2-quantity, output-2-flavor
-        Instruction::Cloak(1, 2),                // stack: output-1, output-2
-        Instruction::Push(output_2_pred.into()), // stack: output-1, output-2, output-2-pred
-        Instruction::Output(1),                  // stack: output-1
-        Instruction::Push(output_1_pred.into()), // stack: output-1, output-1-pred
-        Instruction::Output(1),                  // stack: empty
-    ]
+    let mut instructions = vec![];
+    instructions.append(&mut input_helper(input, flv, input_pred));
+
+    instructions.append(&mut cloak_helper(1, vec![(output_1, flv), (output_2, flv)]));
+
+    instructions.append(&mut output_helper(output_2_pred));
+    instructions.append(&mut output_helper(output_1_pred));
+
+    instructions
 }
 
 #[test]
