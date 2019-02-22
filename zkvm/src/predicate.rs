@@ -39,7 +39,7 @@ impl Predicate {
     pub fn to_point(&self) -> CompressedRistretto {
         match self {
             Predicate::Opaque(p) => *p,
-            Predicate::Witness(w) => w.to_point(),
+            Predicate::Witness(w) => w.to_uncompressed_point().compress(),
         }
     }
 
@@ -132,18 +132,14 @@ impl Predicate {
 }
 
 impl PredicateWitness {
-    /// Converts witness to a compressed point
-    fn to_point(&self) -> CompressedRistretto {
-        self.as_uncompressed_point().compress()
-    }
-
-    fn as_uncompressed_point(&self) -> RistrettoPoint {
+    fn to_uncompressed_point(&self) -> RistrettoPoint {
         match self {
             PredicateWitness::Opaque(p) => *p,
             PredicateWitness::Key(s) => VerificationKey::from_secret_uncompressed(s),
             PredicateWitness::Or(l, r) => {
-                let l = l.as_uncompressed_point();
-                let f = Predicate::commit_or(l.compress(), r.to_point());
+                let l = l.to_uncompressed_point();
+                let r = r.to_uncompressed_point();
+                let f = Predicate::commit_or(l.compress(), r.compress());
                 l + f * PedersenGens::default().B
             }
             PredicateWitness::Program(prog) => {
