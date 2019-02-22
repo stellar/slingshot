@@ -302,32 +302,33 @@ func TestEndToEnd(t *testing.T) {
 		}
 		c.launch(ctx)
 
+		exporterPub, exporterPrv, err := ed25519.GenerateKey(nil)
+		if err != nil {
+			t.Fatalf("error generating txvm recipient keypair: %s", err)
+		}
+		var exporterSeed [32]byte
+		copy(exporterSeed[:], exporterPrv)
+		exporter, err := keypair.FromRawSeed(exporterSeed)
+		err = stellar.FundAccount(exporter.Address())
+		if err != nil {
+			t.Fatalf("error funding account %s: %s", exporter.Address(), err)
+		}
+
+		var exporterPubKeyBytes [32]byte
+		copy(exporterPubKeyBytes[:], exporterPub)
+
+		native := xdr.Asset{
+			Type: xdr.AssetTypeAssetTypeNative,
+		}
+		nativeAssetBytes, err := native.MarshalBinary()
+		if err != nil {
+			t.Fatalf("error marshaling native asset to xdr: %s", err)
+		}
+
 		for _, tt := range tests {
 			// Prepare Stellar account to peg-in funds and txvm account to receive funds.
 			inputAmount := tt.inputAmount
 			exportAmount := tt.exportAmount
-			exporterPub, exporterPrv, err := ed25519.GenerateKey(nil)
-			if err != nil {
-				t.Fatalf("error generating txvm recipient keypair: %s", err)
-			}
-			var exporterSeed [32]byte
-			copy(exporterSeed[:], exporterPrv)
-			exporter, err := keypair.FromRawSeed(exporterSeed)
-			err = stellar.FundAccount(exporter.Address())
-			if err != nil {
-				t.Fatalf("error funding account %s: %s", exporter.Address(), err)
-			}
-
-			var exporterPubKeyBytes [32]byte
-			copy(exporterPubKeyBytes[:], exporterPub)
-
-			native := xdr.Asset{
-				Type: xdr.AssetTypeAssetTypeNative,
-			}
-			nativeAssetBytes, err := native.MarshalBinary()
-			if err != nil {
-				t.Fatalf("error marshaling native asset to xdr: %s", err)
-			}
 			expMS := int64(bc.Millis(time.Now().Add(10 * time.Minute)))
 			// Build, submit, and wait on pre-peg-in TxVM tx.
 			prepegTx, err := BuildPrepegTx(c.InitBlockHash.Bytes(), nativeAssetBytes, exporterPubKeyBytes[:], int64(inputAmount), expMS)
@@ -403,7 +404,6 @@ func TestEndToEnd(t *testing.T) {
 				t.Fatalf("status code %d from POST /submit", resp.StatusCode)
 			}
 			t.Log("checking for retirement tx on txvm...")
-			log.Print("checking for retirement tx on txvm...")
 
 			found = false
 			for {
@@ -426,7 +426,6 @@ func TestEndToEnd(t *testing.T) {
 				}
 			}
 			t.Log("checking for successful retirement...")
-			log.Print("checking for successful retirement...")
 
 			// Check for successful retirement.
 			retire := make(chan struct{})
