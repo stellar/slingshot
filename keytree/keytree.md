@@ -57,6 +57,12 @@ struct Xpub {
 }
 ```
 
+Xpub is _semi-private_: it must be shared only with parties that are allowed to link together payments
+that belong to the same root key. For instance, an online checkout software needs an Xpub
+to generate individual public keys per invoice.
+
+If you need to share an individual public key, use [leaf key derivation](#derive-a-leaf-key).
+
 ## Operations
 
 ### Generate key
@@ -70,7 +76,7 @@ struct Xpub {
 	```
 5. Return the resulting extended private key `xprv`.
 
-### Convert xprv to xpub
+### Convert Xprv to Xpub
 
 Multiply base point by xprv's scalar.
 
