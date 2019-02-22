@@ -111,13 +111,13 @@ func main() {
 	if err != nil {
 		log.Fatalf("error unmarshaling custodian account id: %s", err)
 	}
-	temp, seqnum, err := slidechain.SubmitPreExportTx(hclient, kp, custodian.Address(), asset, exportAmount)
+	tempAddr, seqnum, err := slidechain.SubmitPreExportTx(hclient, kp, custodian.Address(), asset, exportAmount)
 	if err != nil {
 		log.Fatalf("error submitting pre-export tx: %s", err)
 	}
 
 	// Export funds from slidechain
-	tx, err := slidechain.BuildExportTx(ctx, asset, exportAmount, inputAmount, temp, mustDecode(*anchor), mustDecode(*prv), seqnum)
+	tx, err := slidechain.BuildExportTx(ctx, asset, exportAmount, inputAmount, tempAddr, mustDecode(*anchor), mustDecode(*prv), seqnum)
 	if err != nil {
 		log.Fatalf("error building export tx: %s", err)
 	}
@@ -181,7 +181,7 @@ func main() {
 		}
 		for _, tx := range b.Transactions {
 			// Look for export transaction
-			if slidechain.IsExportTx(tx, asset, inputAmount, temp, kp.Address(), int64(seqnum)) {
+			if slidechain.IsExportTx(tx, asset, inputAmount, tempAddr, kp.Address(), int64(seqnum)) {
 				log.Println("export tx included in txvm chain")
 				return
 			}
