@@ -82,14 +82,14 @@ impl Predicate {
         }
     }
 
-    /// Creates an opaque predicate witness from a compressed point
-    pub fn opaque_witness(point: CompressedRistretto) -> Result<Self, VMError> {
+    /// Creates a predicate with witness being an opaque branch of the tree.
+    pub fn opaque_branch(point: CompressedRistretto) -> Result<Self, VMError> {
         Ok(Predicate::Witness(PredicateWitness::OpaqueBranch(
             point.decompress().ok_or(VMError::FormatError)?,
         )))
     }
 
-    /// Creates a predicate with a signing key witness
+    /// Creates a predicate with a signing key witness.
     pub fn from_signing_key(secret_key: Scalar) -> Self {
         Predicate::Witness(PredicateWitness::Key(secret_key).into())
     }
