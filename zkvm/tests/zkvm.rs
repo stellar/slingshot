@@ -53,6 +53,32 @@ fn test_helper(program: Vec<Instruction>) -> Result<TxID, VMError> {
     Ok(txid)
 }
 
+fn issue_helper(
+    qty: u64,
+    flv: Scalar,
+    issuance_pred: Predicate,
+    nonce_pred: Predicate,
+) -> Vec<Instruction> {
+    vec![
+        Instruction::Push(
+            Commitment::from(CommitmentWitness {
+                value: qty.into(),
+                blinding: Scalar::from(1u64),
+            })
+            .into(),
+        ), // stack: qty
+        Instruction::Var, // stack: qty-var
+        Instruction::Push(Commitment::from(CommitmentWitness::unblinded(flv)).into()), // stack: qty-var, flv
+        Instruction::Var,                        // stack: qty-var, flv-var
+        Instruction::Push(issuance_pred.into()), // stack: qty-var, flv-var, issuance-pred
+        Instruction::Issue,                      // stack: issue-contract
+        Instruction::Push(nonce_pred.into()),    // stack: issue-contract, nonce-pred
+        Instruction::Nonce,                      // stack: issue-contract, nonce-contract
+        Instruction::Signtx,                     // stack: issue-contract
+        Instruction::Signtx,                     // stack: issued-value
+    ]
+}
+
 fn input_helper(qty: u64, flv: Scalar, pred: Predicate) -> Vec<Instruction> {
     vec![
         Instruction::Push(
@@ -102,26 +128,10 @@ fn issue_contract(
     nonce_pred: Predicate,
     output_pred: Predicate,
 ) -> Vec<Instruction> {
-    vec![
-        Instruction::Push(
-            Commitment::from(CommitmentWitness {
-                value: qty.into(),
-                blinding: Scalar::from(1u64),
-            })
-            .into(),
-        ), // stack: qty
-        Instruction::Var, // stack: qty-var
-        Instruction::Push(Commitment::from(CommitmentWitness::unblinded(flv)).into()), // stack: qty-var, flv
-        Instruction::Var,                        // stack: qty-var, flv-var
-        Instruction::Push(issuance_pred.into()), // stack: qty-var, flv-var, pred
-        Instruction::Issue,                      // stack: issue-contract
-        Instruction::Push(nonce_pred.into()),    // stack: issue-contract, pred
-        Instruction::Nonce,                      // stack: issue-contract, nonce-contract
-        Instruction::Signtx,                     // stack: issue-contract
-        Instruction::Signtx,                     // stack: issued-value
-        Instruction::Push(output_pred.into()),   // stack: issued-value, pred
-        Instruction::Output(1),                  // stack: empty
-    ]
+    let mut instructions = vec![];
+    instructions.append(&mut issue_helper(qty, flv, issuance_pred, nonce_pred)); // stack: issued-val
+    instructions.append(&mut output_helper(output_pred)); // stack: empty
+    instructions
 }
 
 #[test]
@@ -132,7 +142,7 @@ fn issue() {
     // Build program
     let program = issue_contract(
         1u64,
-        flavor_pairs[0].0,         // flavor
+        flavor_pairs[0].0,         // flavor scalar
         flavor_pairs[0].1.clone(), // issuance predicate
         predicates[0].clone(),     // nonce predicate
         predicates[1].clone(),     // output predicate
@@ -173,9 +183,9 @@ fn spend_1_1() {
     let program = spend_1_1_contract(
         10u64,
         10u64,
-        flavor_pairs[0].0,
-        predicates[0].clone(),
-        predicates[1].clone(),
+        flavor_pairs[0].0,     // flavor scalar
+        predicates[0].clone(), // input predicate
+        predicates[1].clone(), // output predicate
     );
 
     match test_helper(program) {
@@ -194,13 +204,10 @@ fn spend_1_2_contract(
     output_2_pred: Predicate,
 ) -> Vec<Instruction> {
     let mut instructions = vec![];
-    instructions.append(&mut input_helper(input, flv, input_pred));
-
-    instructions.append(&mut cloak_helper(1, vec![(output_1, flv), (output_2, flv)]));
-
-    instructions.append(&mut output_helper(output_2_pred));
-    instructions.append(&mut output_helper(output_1_pred));
-
+    instructions.append(&mut input_helper(input, flv, input_pred)); // stack: input
+    instructions.append(&mut cloak_helper(1, vec![(output_1, flv), (output_2, flv)])); // stack: output-1, output-2
+    instructions.append(&mut output_helper(output_2_pred)); // stack: output-1
+    instructions.append(&mut output_helper(output_1_pred)); // stack: empty
     instructions
 }
 
@@ -214,10 +221,10 @@ fn spend_1_2() {
         10u64,
         9u64,
         1u64,
-        flavor_pairs[0].0,
-        predicates[0].clone(),
-        predicates[1].clone(),
-        predicates[2].clone(),
+        flavor_pairs[0].0,     // flavor scalar
+        predicates[0].clone(), // input predicate
+        predicates[1].clone(), // output 1 predicate
+        predicates[2].clone(), // output 2 predicate
     );
 
     match test_helper(program) {
@@ -236,10 +243,10 @@ fn spend_2_1_contract(
     output_pred: Predicate,
 ) -> Vec<Instruction> {
     let mut instructions = vec![];
-    instructions.append(&mut input_helper(input_1, flv, input_1_pred));
-    instructions.append(&mut input_helper(input_2, flv, input_2_pred));
-    instructions.append(&mut cloak_helper(2, vec![(output, flv)]));
-    instructions.append(&mut output_helper(output_pred));
+    instructions.append(&mut input_helper(input_1, flv, input_1_pred)); // stack: input-1
+    instructions.append(&mut input_helper(input_2, flv, input_2_pred)); // stack: input-1, input-2
+    instructions.append(&mut cloak_helper(2, vec![(output, flv)])); // stack: output
+    instructions.append(&mut output_helper(output_pred)); // stack: empty
     instructions
 }
 
@@ -253,10 +260,10 @@ fn spend_2_1() {
         6u64,
         4u64,
         10u64,
-        flavor_pairs[0].0,
-        predicates[0].clone(),
-        predicates[1].clone(),
-        predicates[2].clone(),
+        flavor_pairs[0].0,     // flavor scalar
+        predicates[0].clone(), // input 1 predicate
+        predicates[1].clone(), // input 2 predicate
+        predicates[2].clone(), // output predicate
     );
 
     match test_helper(program) {
@@ -277,14 +284,11 @@ fn spend_2_2_contract(
     output_2_pred: Predicate,
 ) -> Vec<Instruction> {
     let mut instructions = vec![];
-    instructions.append(&mut input_helper(input_1, flv, input_1_pred));
-    instructions.append(&mut input_helper(input_2, flv, input_2_pred));
-
-    instructions.append(&mut cloak_helper(2, vec![(output_1, flv), (output_2, flv)]));
-
-    instructions.append(&mut output_helper(output_2_pred));
-    instructions.append(&mut output_helper(output_1_pred));
-
+    instructions.append(&mut input_helper(input_1, flv, input_1_pred)); // stack: input-1
+    instructions.append(&mut input_helper(input_2, flv, input_2_pred)); // stack: input-1, input-2
+    instructions.append(&mut cloak_helper(2, vec![(output_1, flv), (output_2, flv)])); // stack: output-1, output-2
+    instructions.append(&mut output_helper(output_2_pred)); // stack: output-1
+    instructions.append(&mut output_helper(output_1_pred)); // stack: empty
     instructions
 }
 
@@ -299,11 +303,57 @@ fn spend_2_2() {
         4u64,
         9u64,
         1u64,
-        flavor_pairs[0].0,
-        predicates[0].clone(),
-        predicates[1].clone(),
-        predicates[2].clone(),
-        predicates[3].clone(),
+        flavor_pairs[0].0,     // flavor scalar
+        predicates[0].clone(), // input 1 predicate
+        predicates[1].clone(), // input 2 predicate
+        predicates[2].clone(), // output 1 predicate
+        predicates[3].clone(), // output 2 predicate
+    );
+
+    match test_helper(program) {
+        Err(err) => return assert!(false, err.to_string()),
+        _ => return,
+    }
+}
+
+fn issue_and_spend_contract(
+    issue_qty: u64,
+    input_qty: u64,
+    output_1: u64,
+    output_2: u64,
+    flv: Scalar,
+    issuance_pred: Predicate,
+    nonce_pred: Predicate,
+    input_pred: Predicate,
+    output_1_pred: Predicate,
+    output_2_pred: Predicate,
+) -> Vec<Instruction> {
+    let mut instructions = vec![];
+    instructions.append(&mut issue_helper(issue_qty, flv, issuance_pred, nonce_pred)); // stack: issued-val
+    instructions.append(&mut input_helper(input_qty, flv, input_pred)); // stack: issued-val, input-val
+    instructions.append(&mut cloak_helper(2, vec![(output_1, flv), (output_2, flv)])); // stack: output-1, output-2
+    instructions.append(&mut output_helper(output_2_pred)); // stack: output-1
+    instructions.append(&mut output_helper(output_1_pred)); // stack: empty
+    instructions
+}
+
+#[test]
+fn issue_and_spend() {
+    // Generate predicates and flavor
+    let (predicates, flavor_pairs) = predicate_helper(4, 1);
+
+    // Build program
+    let program = issue_and_spend_contract(
+        4u64,
+        6u64,
+        9u64,
+        1u64,
+        flavor_pairs[0].0,         // flavor scalar
+        flavor_pairs[0].1.clone(), // issuance predicate
+        predicates[0].clone(),     // nonce predicate
+        predicates[1].clone(),     // input predicate
+        predicates[2].clone(),     // output 1 predicate
+        predicates[3].clone(),     // output 2 predicate
     );
 
     match test_helper(program) {
