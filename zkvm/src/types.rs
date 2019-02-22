@@ -13,7 +13,7 @@ use crate::ops::Instruction;
 use crate::predicate::Predicate;
 use crate::transcript::TranscriptProtocol;
 
-use std::ops::Add;
+use std::ops::{Neg,Add};
 use std::ops::Neg;
 
 #[derive(Debug)]
