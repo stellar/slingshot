@@ -293,7 +293,38 @@ macro_rules! def_op {
 }
 
 impl Program {
+    def_op!(drop, Drop);
+    def_op!(r#const, Const);
     def_op!(var, Var);
+    def_op!(alloc, Alloc);
+    def_op!(mintime, Mintime);
+    def_op!(maxtime, Maxtime);
+    def_op!(expr, Expr);
+    def_op!(neg, Neg);
+    def_op!(add, Add);
+    def_op!(mul, Mul);
+    def_op!(eq, Eq);
+    def_op!(and, And);
+    def_op!(or, Or);
+    def_op!(verify, Verify);
+    def_op!(blind, Blind);
+    def_op!(reblind, Reblind);
+    def_op!(unblind, Unblind);
+    def_op!(issue, Issue);
+    def_op!(borrow, Borrow);
+    def_op!(retire, Retire);
+    def_op!(qty, Qty);
+    def_op!(flavor, Flavor);
+    def_op!(import, Import);
+    def_op!(export, Export);
+    def_op!(input, Input);
+    def_op!(nonce, Nonce);
+    def_op!(log, Log);
+    def_op!(sign_tx, Signtx);
+    def_op!(call, Call);
+    def_op!(left, Left);
+    def_op!(right, Right);
+    def_op!(delegate, Delegate);
 
     pub fn new() -> Self {
         Program(vec![])
@@ -308,11 +339,6 @@ impl Program {
         self
     }
 
-    pub fn drop(&mut self) -> &mut Program {
-        self.0.push(Instruction::Drop);
-        self
-    }
-
     pub fn dup(&mut self, size: usize) -> &mut Program {
         self.0.push(Instruction::Dup(size));
         self
@@ -323,128 +349,13 @@ impl Program {
         self
     }
 
-    pub fn r#const(&mut self) -> &mut Program {
-        self.0.push(Instruction::Const);
-        self
-    }
-
-    pub fn alloc(&mut self) -> &mut Program {
-        self.0.push(Instruction::Alloc);
-        self
-    }
-
-    pub fn mintime(&mut self) -> &mut Program {
-        self.0.push(Instruction::Mintime);
-        self
-    }
-
-    pub fn maxtime(&mut self) -> &mut Program {
-        self.0.push(Instruction::Maxtime);
-        self
-    }
-
-    pub fn expr(&mut self) -> &mut Program {
-        self.0.push(Instruction::Expr);
-        self
-    }
-
-    pub fn neg(&mut self) -> &mut Program {
-        self.0.push(Instruction::Neg);
-        self
-    }
-
-    pub fn add(&mut self) -> &mut Program {
-        self.0.push(Instruction::Add);
-        self
-    }
-
-    pub fn mul(&mut self) -> &mut Program {
-        self.0.push(Instruction::Mul);
-        self
-    }
-
-    pub fn eq(&mut self) -> &mut Program {
-        self.0.push(Instruction::Eq);
-        self
-    }
-
     pub fn range(&mut self, bit_width: u8) -> &mut Program {
         self.0.push(Instruction::Range(bit_width));
         self
     }
 
-    pub fn and(&mut self) -> &mut Program {
-        self.0.push(Instruction::And);
-        self
-    }
-
-    pub fn or(&mut self) -> &mut Program {
-        self.0.push(Instruction::Or);
-        self
-    }
-
-    pub fn verify(&mut self) -> &mut Program {
-        self.0.push(Instruction::Verify);
-        self
-    }
-
-    pub fn blind(&mut self) -> &mut Program {
-        self.0.push(Instruction::Blind);
-        self
-    }
-
-    pub fn reblind(&mut self) -> &mut Program {
-        self.0.push(Instruction::Reblind);
-        self
-    }
-
-    pub fn unblind(&mut self) -> &mut Program {
-        self.0.push(Instruction::Unblind);
-        self
-    }
-
-    pub fn issue(&mut self) -> &mut Program {
-        self.0.push(Instruction::Issue);
-        self
-    }
-
-    pub fn borrow(&mut self) -> &mut Program {
-        self.0.push(Instruction::Borrow);
-        self
-    }
-
-    pub fn retire(&mut self) -> &mut Program {
-        self.0.push(Instruction::Retire);
-        self
-    }
-
-    pub fn qty(&mut self) -> &mut Program {
-        self.0.push(Instruction::Qty);
-        self
-    }
-
-    pub fn flavor(&mut self) -> &mut Program {
-        self.0.push(Instruction::Flavor);
-        self
-    }
-
     pub fn cloak(&mut self, m: usize, n: usize) -> &mut Program {
         self.0.push(Instruction::Cloak(m, n));
-        self
-    }
-
-    pub fn import(&mut self) -> &mut Program {
-        self.0.push(Instruction::Import);
-        self
-    }
-
-    pub fn export(&mut self) -> &mut Program {
-        self.0.push(Instruction::Export);
-        self
-    }
-
-    pub fn input(&mut self) -> &mut Program {
-        self.0.push(Instruction::Input);
         self
     }
 
@@ -458,38 +369,4 @@ impl Program {
         self
     }
 
-    pub fn nonce(&mut self) -> &mut Program {
-        self.0.push(Instruction::Nonce);
-        self
-    }
-
-    pub fn log(&mut self) -> &mut Program {
-        self.0.push(Instruction::Log);
-        self
-    }
-
-    pub fn sign_tx(&mut self) -> &mut Program {
-        self.0.push(Instruction::Signtx);
-        self
-    }
-
-    pub fn call(&mut self) -> &mut Program {
-        self.0.push(Instruction::Call);
-        self
-    }
-
-    pub fn left(&mut self) -> &mut Program {
-        self.0.push(Instruction::Left);
-        self
-    }
-
-    pub fn right(&mut self) -> &mut Program {
-        self.0.push(Instruction::Right);
-        self
-    }
-
-    pub fn delegate(&mut self) -> &mut Program {
-        self.0.push(Instruction::Delegate);
-        self
-    }
 }

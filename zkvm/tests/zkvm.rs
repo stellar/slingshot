@@ -28,8 +28,8 @@ fn issue_contract(
         .sign_tx() // stack: issue-contract
         .sign_tx() // stack: issued-value
         .push(recipient_pred) // stack: issued-value, pred
-        .output(1) // stack: empty
-        .to_vec()
+        .output(1); // stack: empty
+        instructions.to_vec()
 }
 
 #[test]
