@@ -293,24 +293,169 @@ impl Program {
         self.0.push(Instruction::Push(data.into()));
         self
     }
+
+    pub fn output(&mut self, size: usize) -> &mut Program {
+        self.0.push(Instruction::Output(size));
+        self
+    }
+
+    pub fn drop(&mut self) -> &mut Program {
+        self.0.push(Instruction::Drop);
+        self
+    }
+
+    pub fn r#const(&mut self) -> &mut Program {
+        self.0.push(Instruction::Const);
+        self
+    }
+
     pub fn var(&mut self) -> &mut Program {
         self.0.push(Instruction::Var);
         self
     }
-    pub fn nonce(&mut self) -> &mut Program {
-        self.0.push(Instruction::Nonce);
+
+    pub fn alloc(&mut self) -> &mut Program {
+        self.0.push(Instruction::Alloc);
         self
     }
+
+    pub fn mintime(&mut self) -> &mut Program {
+        self.0.push(Instruction::Mintime);
+        self
+    }
+
+    pub fn maxtime(&mut self) -> &mut Program {
+        self.0.push(Instruction::Maxtime);
+        self
+    }
+
+    pub fn expr(&mut self) -> &mut Program {
+        self.0.push(Instruction::Expr);
+        self
+    }
+
+    pub fn neg(&mut self) -> &mut Program {
+        self.0.push(Instruction::Neg);
+        self
+    }
+
+    pub fn add(&mut self) -> &mut Program {
+        self.0.push(Instruction::Add);
+        self
+    }
+
+    pub fn mul(&mut self) -> &mut Program {
+        self.0.push(Instruction::Mul);
+        self
+    }
+
+    pub fn eq(&mut self) -> &mut Program {
+        self.0.push(Instruction::Eq);
+        self
+    }
+
+    pub fn and(&mut self) -> &mut Program {
+        self.0.push(Instruction::And);
+        self
+    }
+
+    pub fn or(&mut self) -> &mut Program {
+        self.0.push(Instruction::Or);
+        self
+    }
+
+    pub fn verify(&mut self) -> &mut Program {
+        self.0.push(Instruction::Verify);
+        self
+    }
+
+    pub fn blind(&mut self) -> &mut Program {
+        self.0.push(Instruction::Blind);
+        self
+    }
+
+    pub fn reblind(&mut self) -> &mut Program {
+        self.0.push(Instruction::Reblind);
+        self
+    }
+
+    pub fn unblind(&mut self) -> &mut Program {
+        self.0.push(Instruction::Unblind);
+        self
+    }
+
     pub fn issue(&mut self) -> &mut Program {
         self.0.push(Instruction::Issue);
         self
     }
+
+    pub fn borrow(&mut self) -> &mut Program {
+        self.0.push(Instruction::Borrow);
+        self
+    }
+
+    pub fn retire(&mut self) -> &mut Program {
+        self.0.push(Instruction::Retire);
+        self
+    }
+
+    pub fn qty(&mut self) -> &mut Program {
+        self.0.push(Instruction::Qty);
+        self
+    }
+
+    pub fn flavor(&mut self) -> &mut Program {
+        self.0.push(Instruction::Flavor);
+        self
+    }
+
+    pub fn import(&mut self) -> &mut Program {
+        self.0.push(Instruction::Import);
+        self
+    }
+
+    pub fn export(&mut self) -> &mut Program {
+        self.0.push(Instruction::Export);
+        self
+    }
+
+    pub fn input(&mut self) -> &mut Program {
+        self.0.push(Instruction::Input);
+        self
+    }
+
+    pub fn nonce(&mut self) -> &mut Program {
+        self.0.push(Instruction::Nonce);
+        self
+    }
+
+    pub fn log(&mut self) -> &mut Program {
+        self.0.push(Instruction::Log);
+        self
+    }
+
     pub fn sign_tx(&mut self) -> &mut Program {
         self.0.push(Instruction::Signtx);
         self
     }
-    pub fn output(&mut self, size: usize) -> &mut Program {
-        self.0.push(Instruction::Output(size));
+
+    pub fn call(&mut self) -> &mut Program {
+        self.0.push(Instruction::Call);
+        self
+    }
+
+    pub fn left(&mut self) -> &mut Program {
+        self.0.push(Instruction::Left);
+        self
+    }
+
+    pub fn right(&mut self) -> &mut Program {
+        self.0.push(Instruction::Right);
+        self
+    }
+
+    pub fn delegate(&mut self) -> &mut Program {
+        self.0.push(Instruction::Delegate);
         self
     }
 }
