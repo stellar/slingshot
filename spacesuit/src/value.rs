@@ -6,14 +6,21 @@ use rand::{CryptoRng, Rng};
 use std::ops::{Add, Mul};
 use subtle::{Choice, ConditionallySelectable};
 
+/// A pair of a secret _quantity_ (64-bit integer)
+/// and a secret _flavor_ (scalar).
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub struct Value {
-    pub q: SignedInteger, // quantity
-    pub f: Scalar,        // flavor
+    /// Secret quantity
+    pub q: SignedInteger,
+    /// Secret flavor
+    pub f: Scalar,
 }
 
+/// A pair of Pedersen commitments to a secret quantity and flavor.
 pub struct CommittedValue {
+    /// Pedersen commitment to a quantity
     pub q: CompressedRistretto,
+    /// Pedersen commitment to a flavor
     pub f: CompressedRistretto,
 }
 
@@ -21,15 +28,20 @@ pub struct CommittedValue {
 /// 2-tuples of variables and assignments
 #[derive(Copy, Clone, Debug)]
 pub struct AllocatedValue {
-    pub q: Variable, // quantity
-    pub f: Variable, // flavor
+    /// R1CS variable representing the quantity
+    pub q: Variable,
+    /// R1CS variable representing the flavor
+    pub f: Variable,
+    /// Secret assignment to the above variables
     pub assignment: Option<Value>,
 }
 
 /// Represents a variable for quantity, along with its assignment.
 #[derive(Copy, Clone, Debug)]
 pub struct AllocatedQuantity {
+    /// R1CS variable representing the quantity
     pub variable: Variable,
+    /// Secret assignment to the variable
     pub assignment: Option<SignedInteger>,
 }
 
@@ -58,7 +70,7 @@ impl Value {
         })
     }
 
-    pub fn allocate_unassigned<CS: ConstraintSystem>(
+    pub(crate) fn allocate_unassigned<CS: ConstraintSystem>(
         cs: &mut CS,
     ) -> Result<AllocatedValue, R1CSError> {
         let (q_var, f_var, _) = cs.allocate(|| {
@@ -86,7 +98,7 @@ impl AllocatedValue {
     }
 
     // /// Make another `AllocatedValue`, with the same assignment and newly allocated variables.
-    pub fn reallocate<CS: ConstraintSystem>(
+    pub(crate) fn reallocate<CS: ConstraintSystem>(
         &self,
         cs: &mut CS,
     ) -> Result<AllocatedValue, R1CSError> {
@@ -98,8 +110,8 @@ impl AllocatedValue {
 }
 
 impl SignedInteger {
-    // Returns Some(x) if self is non-negative
-    // Otherwise returns None.
+    /// Returns Some(x) if self is non-negative
+    /// Otherwise returns None.
     pub fn to_u64(&self) -> Option<u64> {
         if self.0 < 0 {
             None
@@ -169,9 +181,13 @@ impl Neg for SignedInteger {
     }
 }
 
+/// Extension trait for committing Values to the Prover's constraint system.
+/// TBD: make this private by refactoring the benchmarks.
 pub trait ProverCommittable {
+    /// Result of committing Self to a constraint system.
     type Output;
 
+    /// Commits the type to a constraint system.
     fn commit<R: Rng + CryptoRng>(&self, prover: &mut Prover, rng: &mut R) -> Self::Output;
 }
 
@@ -202,8 +218,13 @@ impl ProverCommittable for Vec<Value> {
     }
 }
 
+/// Extension trait for committing Values to the Verifier's constraint system.
+/// TBD: make this private by refactoring the benchmarks.
 pub trait VerifierCommittable {
+    /// Result of committing Self to a constraint system.
     type Output;
+
+    /// Commits the type to a constraint system.
     fn commit(&self, verifier: &mut Verifier) -> Self::Output;
 }
 
