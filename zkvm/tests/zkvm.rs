@@ -8,15 +8,14 @@ use zkvm::*;
 fn predicate_helper(pred_num: usize) -> (Vec<Predicate>, Scalar, Predicate) {
     let predicates = (0..pred_num)
         .into_iter()
-        .map(|n| Predicate::from_witness(PredicateWitness::Key(Scalar::from(n as u64))).unwrap())
+        .map(|n| Predicate::from_signing_key(Scalar::from(n as u64)))
         .collect();
 
     // Generate issuance predicate
-    let issuance_pred =
-        Predicate::from_witness(PredicateWitness::Key(Scalar::from(100u64))).unwrap();
+    let issuance_pred = Predicate::from_signing_key(Scalar::from(100u64));
     // Generate flavor scalar
     let mut t = Transcript::new(b"ZkVM.issue");
-    t.commit_bytes(b"predicate", issuance_pred.point().as_bytes());
+    t.commit_bytes(b"predicate", issuance_pred.to_point().as_bytes());
     let flavor = t.challenge_scalar(b"flavor");
 
     (predicates, flavor, issuance_pred)
