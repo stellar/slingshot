@@ -38,6 +38,7 @@ func TestPegOut(t *testing.T) {
 
 	pegouts := make(chan pegOut)
 	go c.pegOutFromExports(ctx, pegouts)
+	go c.watchPegOuts(ctx, pegouts)
 
 	var lumen xdr.Asset
 	lumen.Type = xdr.AssetTypeAssetTypeNative
@@ -61,7 +62,7 @@ func TestPegOut(t *testing.T) {
 	}
 
 	var zero32 [32]byte // anchor and pubkey do not matter to test this functionality
-	_, err = c.DB.Exec("INSERT INTO exports (txid, amount, asset_xdr, temp_addr, seqnum, exporter, anchor, pubkey) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)", []byte("txid"), amount, lumenXDR, tempAddr, seqnum, kp.Address(), zero32[:], zero32[:])
+	_, err = c.DB.Exec("INSERT INTO exports (txid, amount, asset_xdr, temp_addr, seqnum, exporter, anchor, pubkey) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)", []byte("test"), amount, lumenXDR, tempAddr, seqnum, kp.Address(), zero32[:], zero32[:])
 	if err != nil && err != context.Canceled {
 		t.Fatal(err)
 	}

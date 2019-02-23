@@ -116,7 +116,6 @@ func (c *Custodian) pegOutFromExports(ctx context.Context, pegouts chan<- pegOut
 			return
 		case <-ch:
 		}
-
 		const q = `SELECT txid, anchor, pubkey, asset_xdr, amount, seqnum, exporter, temp_addr FROM exports WHERE pegged_out IN ($1, $2)`
 
 		var (
@@ -170,7 +169,7 @@ func (c *Custodian) pegOutFromExports(ctx context.Context, pegouts chan<- pegOut
 					}
 				}
 			}
-			result, err := c.DB.ExecContext(ctx, `UPDATE exports SET pegged_out=$1 where txid=$2`, peggedOut, txid)
+			result, err := c.DB.ExecContext(ctx, `UPDATE exports SET pegged_out=$1 WHERE txid=$2`, peggedOut, txid)
 			if err != nil {
 				log.Fatalf("updating export table: %s", err)
 			}
