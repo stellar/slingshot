@@ -82,25 +82,25 @@ impl Input {
     // Creates a FrozenContract from payload (which is a vector of (qty, flv)) and pred.
     // Serializes the contract, and uses the serialized contract and txid to generate a utxo.
     // Returns an Input with the contract, txid, and utxo.
-    pub fn new(payload: Vec<(Commitment, Commitment)>, pred: Predicate, txid: TxID) -> Self {
-        let frozen_values: Vec<FrozenItem> = payload
+    pub fn new<I>(payload: I, predicate: Predicate, txid: TxID) -> Self
+    where
+        I: IntoIterator<Item = (Commitment, Commitment)>,
+    {
+        let payload: Vec<FrozenItem> = payload
             .into_iter()
-            .map(|(qty, flv)| FrozenItem::Value(FrozenValue { qty: qty, flv: flv }))
+            .map(|(qty, flv)| FrozenItem::Value(FrozenValue { qty, flv }))
             .collect();
 
-        let frozen_contract = FrozenContract {
-            payload: frozen_values,
-            predicate: pred,
-        };
+        let contract = FrozenContract { payload, predicate };
 
-        let mut contract_buf = Vec::with_capacity(frozen_contract.min_serialized_length());
-        frozen_contract.encode(&mut contract_buf);
+        let mut contract_buf = Vec::with_capacity(contract.min_serialized_length());
+        contract.encode(&mut contract_buf);
         let utxo = UTXO::from_output(&contract_buf, &txid);
 
         Input {
-            contract: frozen_contract,
-            utxo: utxo,
-            txid: txid,
+            contract,
+            utxo,
+            txid,
         }
     }
 }

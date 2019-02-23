@@ -1,7 +1,6 @@
 use bulletproofs::BulletproofGens;
 use curve25519_dalek::scalar::Scalar;
 use hex;
-use merlin::Transcript;
 
 use zkvm::*;
 
@@ -14,9 +13,7 @@ fn predicate_helper(pred_num: usize) -> (Vec<Predicate>, Scalar, Predicate) {
     // Generate issuance predicate
     let issuance_pred = Predicate::from_signing_key(Scalar::from(100u64));
     // Generate flavor scalar
-    let mut t = Transcript::new(b"ZkVM.issue");
-    t.commit_bytes(b"predicate", issuance_pred.to_point().as_bytes());
-    let flavor = t.challenge_scalar(b"flavor");
+    let flavor = Value::issue_flavor(&issuance_pred);
 
     (predicates, flavor, issuance_pred)
 }
