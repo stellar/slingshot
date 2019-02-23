@@ -368,5 +368,4 @@ impl Program {
         self.0.push(Instruction::Contract(payload_count));
         self
     }
-
 }
