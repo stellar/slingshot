@@ -6,6 +6,8 @@ use crate::encoding::SliceReader;
 use crate::errors::VMError;
 use crate::types::Data;
 
+/// A builder type for assembling a sequence of `Instruction`s with chained method calls.
+/// E.g. `let prog = Program::new().push(...).input().push(...).output(1).to_vec()`.
 pub struct Program(Vec<Instruction>);
 
 #[derive(Clone, Debug)]
