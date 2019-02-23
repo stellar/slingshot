@@ -294,13 +294,18 @@ impl Program {
         self
     }
 
-    pub fn output(&mut self, size: usize) -> &mut Program {
-        self.0.push(Instruction::Output(size));
+    pub fn drop(&mut self) -> &mut Program {
+        self.0.push(Instruction::Drop);
         self
     }
 
-    pub fn drop(&mut self) -> &mut Program {
-        self.0.push(Instruction::Drop);
+    pub fn dup(&mut self, size: usize) -> &mut Program {
+        self.0.push(Instruction::Dup(size));
+        self
+    }
+
+    pub fn roll(&mut self, size: usize) -> &mut Program {
+        self.0.push(Instruction::Roll(size));
         self
     }
 
@@ -351,6 +356,11 @@ impl Program {
 
     pub fn eq(&mut self) -> &mut Program {
         self.0.push(Instruction::Eq);
+        self
+    }
+
+    pub fn range(&mut self, bit_width: u8) -> &mut Program {
+        self.0.push(Instruction::Range(bit_width));
         self
     }
 
@@ -409,6 +419,11 @@ impl Program {
         self
     }
 
+    pub fn cloak(&mut self, m: usize, n: usize) -> &mut Program {
+        self.0.push(Instruction::Cloak(m, n));
+        self
+    }
+
     pub fn import(&mut self) -> &mut Program {
         self.0.push(Instruction::Import);
         self
@@ -421,6 +436,16 @@ impl Program {
 
     pub fn input(&mut self) -> &mut Program {
         self.0.push(Instruction::Input);
+        self
+    }
+
+    pub fn output(&mut self, payload_count: usize) -> &mut Program {
+        self.0.push(Instruction::Output(payload_count));
+        self
+    }
+
+    pub fn contract(&mut self, payload_count: usize) -> &mut Program {
+        self.0.push(Instruction::Contract(payload_count));
         self
     }
 
@@ -456,6 +481,11 @@ impl Program {
 
     pub fn delegate(&mut self) -> &mut Program {
         self.0.push(Instruction::Delegate);
+        self
+    }
+
+    pub fn ext(&mut self, n: u8) -> &mut Program {
+        self.0.push(Instruction::Ext(n));
         self
     }
 }
