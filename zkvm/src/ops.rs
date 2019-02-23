@@ -486,9 +486,4 @@ impl Program {
         self.0.push(Instruction::Delegate);
         self
     }
-
-    pub fn ext(&mut self, n: u8) -> &mut Program {
-        self.0.push(Instruction::Ext(n));
-        self
-    }
 }
