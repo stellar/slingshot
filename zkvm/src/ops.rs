@@ -8,6 +8,7 @@ use crate::types::Data;
 
 /// A builder type for assembling a sequence of `Instruction`s with chained method calls.
 /// E.g. `let prog = Program::new().push(...).input().push(...).output(1).to_vec()`.
+#[derive(Clone,Debug)]
 pub struct Program(Vec<Instruction>);
 
 #[derive(Clone, Debug)]
@@ -287,8 +288,8 @@ impl Program {
         Program(vec![])
     }
 
-    pub fn to_vec(&self) -> Vec<Instruction> {
-        self.0.clone()
+    pub fn to_vec(self) -> Vec<Instruction> {
+        self.0
     }
 
     pub fn push<T: Into<Data>>(&mut self, data: T) -> &mut Program {
