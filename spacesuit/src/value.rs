@@ -119,7 +119,7 @@ impl SignedInteger {
             Some(self.0 as u64)
         }
     }
-
+    /// Converts self into a scalar
     pub fn to_scalar(self) -> Scalar {
         self.into()
     }
