@@ -180,7 +180,7 @@ impl Neg for SignedInteger {
 /// Extension trait for committing Values to the Prover's constraint system.
 /// TBD: make this private by refactoring the benchmarks.
 pub trait ProverCommittable {
-    /// Type for a result of committing this type to a constraint system.
+    /// Result of committing Self to a constraint system.
     type Output;
 
     /// Commits the type to a constraint system.
@@ -217,7 +217,7 @@ impl ProverCommittable for Vec<Value> {
 /// Extension trait for committing Values to the Verifier's constraint system.
 /// TBD: make this private by refactoring the benchmarks.
 pub trait VerifierCommittable {
-    /// Type for a result of committing this type to a constraint system.
+    /// Result of committing Self to a constraint system.
     type Output;
 
     /// Commits the type to a constraint system.
