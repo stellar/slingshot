@@ -12,7 +12,7 @@ use crate::encoding::SliceReader;
 use crate::errors::VMError;
 use crate::ops::Instruction;
 use crate::point_ops::PointOp;
-use crate::predicate::{Predicate, PredicateWitness};
+use crate::predicate::Predicate;
 use crate::signature::*;
 use crate::txlog::{Entry, TxID, TxLog};
 use crate::types::*;
@@ -207,7 +207,7 @@ where
                 Instruction::Maxtime => self.maxtime()?,
                 Instruction::Expr => self.expr()?,
                 Instruction::Neg => self.neg()?,
-                Instruction::Add => unimplemented!(),
+                Instruction::Add => self.add()?,
                 Instruction::Mul => unimplemented!(),
                 Instruction::Eq => unimplemented!(),
                 Instruction::Range(_) => unimplemented!(),
@@ -293,15 +293,15 @@ where
 
     fn neg(&mut self) -> Result<(), VMError> {
         let expr = self.pop_item()?.to_expression()?;
-        let neg_expr = Expression {
-            terms: expr
-                .terms
-                .iter()
-                .map(|t| (t.0, t.1.neg()))
-                .collect::<Vec<_>>(),
-            assignment: expr.assignment,
-        };
-        self.push_item(neg_expr);
+        self.push_item(-expr);
+        Ok(())
+    }
+
+    fn add(&mut self) -> Result<(), VMError> {
+        let expr2 = self.pop_item()?.to_expression()?;
+        let expr1 = self.pop_item()?.to_expression()?;
+        let expr3 = expr1 + expr2;
+        self.push_item(expr3);
         Ok(())
     }
 
@@ -331,7 +331,7 @@ where
 
     fn nonce(&mut self) -> Result<(), VMError> {
         let predicate = self.pop_item()?.to_data()?.to_predicate()?;
-        let point = predicate.point();
+        let point = predicate.to_point();
         let contract = Contract {
             predicate,
             payload: Vec::new(),
@@ -649,10 +649,11 @@ where
 
     fn variable_to_expression(&mut self, var: Variable) -> Result<Expression, VMError> {
         let (_, r1cs_var) = self.attach_variable(var)?;
-        Ok(Expression {
-            terms: vec![(r1cs_var, Scalar::one())],
-            assignment: self.variable_assignment(var),
-        })
+
+        Ok(Expression::LinearCombination(
+            vec![(r1cs_var, Scalar::one())],
+            self.variable_assignment(var),
+        ))
     }
 
     /// Returns Ok(Some((qty,flv))) assignment pair if it's missing or consistent.
@@ -695,10 +696,16 @@ where
     }
 
     fn add_range_proof(&mut self, bitrange: usize, expr: Expression) -> Result<(), VMError> {
+        let (lc, assignment) = match expr {
+            Expression::Constant(x) => (r1cs::LinearCombination::from(x), Some(x)),
+            Expression::LinearCombination(terms, assignment) => {
+                (r1cs::LinearCombination::from_iter(terms), assignment)
+            }
+        };
         spacesuit::range_proof(
             self.delegate.cs(),
-            r1cs::LinearCombination::from_iter(expr.terms),
-            ScalarWitness::option_to_integer(expr.assignment)?,
+            lc,
+            ScalarWitness::option_to_integer(assignment)?,
             bitrange,
         )
         .map_err(|_| VMError::R1CSInconsistency)
