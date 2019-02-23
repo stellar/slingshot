@@ -8,7 +8,7 @@ use crate::types::Data;
 
 /// A builder type for assembling a sequence of `Instruction`s with chained method calls.
 /// E.g. `let prog = Program::new().push(...).input().push(...).output(1).to_vec()`.
-#[derive(Clone,Debug)]
+#[derive(Clone, Debug)]
 pub struct Program(Vec<Instruction>);
 
 #[derive(Clone, Debug)]
@@ -283,7 +283,18 @@ impl Instruction {
     }
 }
 
+macro_rules! def_op {
+    ($func_name:ident, $op:ident) => (
+           pub fn $func_name(&mut self) -> &mut Program{
+             self.0.push(Instruction::$op);
+             self
+        }
+    );
+}
+
 impl Program {
+    def_op!(var, Var);
+
     pub fn new() -> Self {
         Program(vec![])
     }
@@ -314,11 +325,6 @@ impl Program {
 
     pub fn r#const(&mut self) -> &mut Program {
         self.0.push(Instruction::Const);
-        self
-    }
-
-    pub fn var(&mut self) -> &mut Program {
-        self.0.push(Instruction::Var);
         self
     }
 
