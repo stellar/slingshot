@@ -13,6 +13,8 @@ use crate::ops::Instruction;
 use crate::predicate::Predicate;
 use crate::transcript::TranscriptProtocol;
 
+use std::ops::{Add, Neg};
+
 #[derive(Debug)]
 pub enum Item {
     Data(Data),
@@ -49,11 +51,11 @@ pub struct Variable {
     // the witness is located indirectly in vm::VariableCommitment
 }
 
+pub type ExpressionTerm = (r1cs::Variable, Scalar);
 #[derive(Clone, Debug)]
-pub struct Expression {
-    /// Terms of the expression
-    pub(crate) terms: Vec<(r1cs::Variable, Scalar)>,
-    pub(crate) assignment: Option<ScalarWitness>,
+pub enum Expression {
+    Constant(ScalarWitness),
+    LinearCombination(Vec<ExpressionTerm>, Option<ScalarWitness>),
 }
 
 #[derive(Clone, Debug)]
@@ -146,6 +148,13 @@ impl ScalarWitness {
         }
     }
 
+    pub fn to_scalar(self) -> Scalar {
+        match self {
+            ScalarWitness::Integer(i) => i.into(),
+            ScalarWitness::Scalar(s) => s,
+        }
+    }
+
     /// Converts `Option<ScalarWitness>` into optional integer if it is one.
     pub fn option_to_integer(assignment: Option<Self>) -> Result<Option<SignedInteger>, VMError> {
         match assignment {
@@ -156,12 +165,33 @@ impl ScalarWitness {
     }
 }
 
+impl Neg for ScalarWitness {
+    type Output = ScalarWitness;
+
+    fn neg(self) -> ScalarWitness {
+        match self {
+            ScalarWitness::Integer(a) => ScalarWitness::Integer(-a),
+            ScalarWitness::Scalar(a) => ScalarWitness::Scalar(-a),
+        }
+    }
+}
+impl Add for ScalarWitness {
+    type Output = ScalarWitness;
+
+    fn add(self, rhs: ScalarWitness) -> ScalarWitness {
+        match (self, rhs) {
+            (ScalarWitness::Integer(a), ScalarWitness::Integer(b)) => match a + b {
+                Some(res) => ScalarWitness::Integer(res),
+                None => ScalarWitness::Scalar(a.to_scalar() + b.to_scalar()),
+            },
+            (a, b) => ScalarWitness::Scalar(a.to_scalar() + b.to_scalar()),
+        }
+    }
+}
+
 impl Into<Scalar> for ScalarWitness {
     fn into(self) -> Scalar {
-        match self {
-            ScalarWitness::Integer(i) => i.into(),
-            ScalarWitness::Scalar(s) => s,
-        }
+        self.to_scalar()
     }
 }
 
@@ -251,7 +281,7 @@ impl Data {
         match self {
             Data::Opaque(data) => {
                 let point = SliceReader::parse(&data, |r| r.read_point())?;
-                Ok(Predicate::opaque(point))
+                Ok(Predicate::Opaque(point))
             }
             Data::Witness(witness) => match witness {
                 DataWitness::Predicate(boxed_pred) => Ok(*boxed_pred),
@@ -316,18 +346,68 @@ impl Value {
     /// Computes a flavor as defined by the `issue` instruction from a predicate.
     pub fn issue_flavor(predicate: &Predicate) -> Scalar {
         let mut t = Transcript::new(b"ZkVM.issue");
-        t.commit_bytes(b"predicate", predicate.point().as_bytes());
+        t.commit_bytes(b"predicate", predicate.to_point().as_bytes());
         t.challenge_scalar(b"flavor")
     }
 }
 
 impl Expression {
-    pub fn constant<S: Into<Scalar>>(a: S) -> Self {
-        let a: Scalar = a.into();
+    pub fn constant<S: Into<ScalarWitness>>(a: S) -> Self {
+        Expression::Constant(a.into())
+    }
+}
 
-        Expression {
-            terms: vec![(r1cs::Variable::One(), a)],
-            assignment: Some(ScalarWitness::Scalar(a)),
+impl Neg for Expression {
+    type Output = Expression;
+
+    fn neg(self) -> Expression {
+        match self {
+            Expression::Constant(a) => Expression::Constant(-a),
+            Expression::LinearCombination(mut terms, assignment) => {
+                for (_, n) in terms.iter_mut() {
+                    *n = -*n;
+                }
+                Expression::LinearCombination(terms, assignment.map(|a| -a))
+            }
+        }
+    }
+}
+
+impl Add for Expression {
+    type Output = Expression;
+
+    fn add(self, rhs: Expression) -> Expression {
+        match (self, rhs) {
+            (Expression::Constant(left), Expression::Constant(right)) => {
+                Expression::Constant(left + right)
+            }
+            (
+                Expression::Constant(l),
+                Expression::LinearCombination(mut right_terms, right_assignment),
+            ) => {
+                // prepend constant term to `term vector` in non-constant expression
+                right_terms.insert(0, (r1cs::Variable::One(), l.into()));
+                Expression::LinearCombination(right_terms, right_assignment.map(|r| l + r))
+            }
+            (
+                Expression::LinearCombination(mut left_terms, left_assignment),
+                Expression::Constant(r),
+            ) => {
+                // append constant term to term vector in non-constant expression
+                left_terms.push((r1cs::Variable::One(), r.into()));
+                Expression::LinearCombination(left_terms, left_assignment.map(|l| l + r))
+            }
+            (
+                Expression::LinearCombination(mut left_terms, left_assignment),
+                Expression::LinearCombination(right_terms, right_assignment),
+            ) => {
+                // append right terms to left terms in non-constant expression
+                left_terms.extend(right_terms);
+                Expression::LinearCombination(
+                    left_terms,
+                    left_assignment.and_then(|l| right_assignment.map(|r| l + r)),
+                )
+            }
         }
     }
 }
