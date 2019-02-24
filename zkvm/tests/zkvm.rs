@@ -98,10 +98,10 @@ fn issue_contract(
     nonce_pred: Predicate,
     output_pred: Predicate,
 ) -> Vec<Instruction> {
-    let mut instructions = vec![];
-    instructions.append(&mut issue_helper(qty, flv, issuance_pred, nonce_pred)); // stack: issued-val
-    instructions.append(&mut output_helper(output_pred)); // stack: empty
-    instructions
+    let mut program = Program::new();
+    issue_helper(&mut program, qty, flv, issuance_pred, nonce_pred); // stack: issued-val
+    output_helper(&mut program, output_pred); // stack: empty
+    program.to_vec()
 }
 
 #[test]
