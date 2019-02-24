@@ -39,29 +39,26 @@ fn test_helper(program: Vec<Instruction>) -> Result<TxID, VMError> {
 }
 
 fn issue_helper(
+    program: &mut Program,
     qty: u64,
     flv: Scalar,
     issuance_pred: Predicate,
     nonce_pred: Predicate,
-) -> Vec<Instruction> {
-    vec![
-        Instruction::Push(
-            Commitment::from(CommitmentWitness {
-                value: qty.into(),
-                blinding: Scalar::from(1u64),
-            })
-            .into(),
-        ), // stack: qty
-        Instruction::Var, // stack: qty-var
-        Instruction::Push(Commitment::from(CommitmentWitness::unblinded(flv)).into()), // stack: qty-var, flv
-        Instruction::Var,                        // stack: qty-var, flv-var
-        Instruction::Push(issuance_pred.into()), // stack: qty-var, flv-var, issuance-pred
-        Instruction::Issue,                      // stack: issue-contract
-        Instruction::Push(nonce_pred.into()),    // stack: issue-contract, nonce-pred
-        Instruction::Nonce,                      // stack: issue-contract, nonce-contract
-        Instruction::Signtx,                     // stack: issue-contract
-        Instruction::Signtx,                     // stack: issued-value
-    ]
+) {
+    program
+        .push(Commitment::from(CommitmentWitness {
+            value: qty.into(),
+            blinding: Scalar::from(1u64),
+        })) // stack: qty
+        .var() // stack: qty-var
+        .push(Commitment::from(CommitmentWitness::unblinded(flv))) // stack: qty-var, flv
+        .var() // stack: qty-var, flv-var
+        .push(issuance_pred) // stack: qty-var, flv-var, pred
+        .issue() // stack: issue-contract
+        .push(nonce_pred) // stack: issue-contract, pred
+        .nonce() // stack: issue-contract, nonce-contract
+        .sign_tx() // stack: issue-contract
+        .sign_tx(); // stack: issued-value
 }
 
 fn input_helper(qty: u64, flv: Scalar, pred: Predicate) -> Vec<Instruction> {
