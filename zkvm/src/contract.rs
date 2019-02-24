@@ -55,19 +55,6 @@ pub struct FrozenValue {
     pub(crate) flv: Commitment,
 }
 
-impl Contract {
-    pub fn min_serialized_length(&self) -> usize {
-        let mut size = 32 + 4;
-        for item in self.payload.iter() {
-            match item {
-                PortableItem::Data(d) => size += 1 + 4 + d.min_serialized_length(),
-                PortableItem::Value(_) => size += 1 + 64,
-            }
-        }
-        size
-    }
-}
-
 impl Input {
     pub fn from_bytes(data: Vec<u8>) -> Result<Self, VMError> {
         let contract = SliceReader::parse(&data, |r| Self::decode(r))?;
@@ -91,9 +78,45 @@ impl Input {
             txid,
         })
     }
+
+    // Creates a FrozenContract from payload (which is a vector of (qty, flv)) and pred.
+    // Serializes the contract, and uses the serialized contract and txid to generate a utxo.
+    // Returns an Input with the contract, txid, and utxo.
+    pub fn new<I>(payload: I, predicate: Predicate, txid: TxID) -> Self
+    where
+        I: IntoIterator<Item = (Commitment, Commitment)>,
+    {
+        let payload: Vec<FrozenItem> = payload
+            .into_iter()
+            .map(|(qty, flv)| FrozenItem::Value(FrozenValue { qty, flv }))
+            .collect();
+
+        let contract = FrozenContract { payload, predicate };
+
+        let mut contract_buf = Vec::with_capacity(contract.min_serialized_length());
+        contract.encode(&mut contract_buf);
+        let utxo = UTXO::from_output(&contract_buf, &txid);
+
+        Input {
+            contract,
+            utxo,
+            txid,
+        }
+    }
 }
 
 impl FrozenContract {
+    pub fn min_serialized_length(&self) -> usize {
+        let mut size = 32 + 4;
+        for item in self.payload.iter() {
+            match item {
+                FrozenItem::Data(d) => size += 1 + 4 + d.min_serialized_length(),
+                FrozenItem::Value(_) => size += 1 + 64,
+            }
+        }
+        size
+    }
+
     pub fn encode(&self, buf: &mut Vec<u8>) {
         buf.extend_from_slice(&self.predicate.to_point().to_bytes());
         encoding::write_u32(self.payload.len() as u32, buf);
