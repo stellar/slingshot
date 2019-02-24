@@ -361,13 +361,13 @@ fn issue_and_spend_contract(
     output_1_pred: Predicate,
     output_2_pred: Predicate,
 ) -> Vec<Instruction> {
-    let mut instructions = vec![];
-    instructions.append(&mut issue_helper(issue_qty, flv, issuance_pred, nonce_pred)); // stack: issued-val
-    instructions.append(&mut input_helper(input_qty, flv, input_pred)); // stack: issued-val, input-val
-    instructions.append(&mut cloak_helper(2, vec![(output_1, flv), (output_2, flv)])); // stack: output-1, output-2
-    instructions.append(&mut output_helper(output_2_pred)); // stack: output-1
-    instructions.append(&mut output_helper(output_1_pred)); // stack: empty
-    instructions
+    let mut program = Program::new();
+    issue_helper(&mut program,issue_qty, flv, issuance_pred, nonce_pred); // stack: issued-val
+    input_helper(&mut program,input_qty, flv, input_pred); // stack: issued-val, input-val
+    cloak_helper(&mut program,2, vec![(output_1, flv), (output_2, flv)]); // stack: output-1, output-2
+    output_helper(&mut program,output_2_pred); // stack: output-1
+    output_helper(&mut program,output_1_pred); // stack: empty
+    program.to_vec()
 }
 
 #[test]
