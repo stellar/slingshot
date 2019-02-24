@@ -148,11 +148,11 @@ fn spend_1_1_contract(
     input_pred: Predicate,
     output_pred: Predicate,
 ) -> Vec<Instruction> {
-    let mut instructions = vec![];
-    instructions.append(&mut input_helper(input, flv, input_pred));
-    instructions.append(&mut cloak_helper(1, vec![(output, flv)]));
-    instructions.append(&mut output_helper(output_pred));
-    instructions
+    let mut program = Program::new();
+    input_helper(&mut program, input, flv, input_pred);
+    cloak_helper(&mut program,1, vec![(output, flv)]);
+    output_helper(&mut program,output_pred);
+    program.to_vec()
 }
 
 #[test]
