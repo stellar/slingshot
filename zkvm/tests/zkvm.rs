@@ -75,20 +75,14 @@ fn input_helper(program: &mut Program, qty: u64, flv: Scalar, pred: Predicate) {
         .sign_tx(); // stack: input-value
 }
 
-fn cloak_helper(input_count: usize, outputs: Vec<(u64, Scalar)>) -> Vec<Instruction> {
+fn cloak_helper(program: &mut Program, input_count: usize, outputs: Vec<(u64, Scalar)>) {
     let output_count = outputs.len();
-    let mut instructions = vec![];
 
     for (qty, flv) in outputs {
-        instructions.push(Instruction::Push(
-            Commitment::from(CommitmentWitness::blinded(qty)).into(),
-        ));
-        instructions.push(Instruction::Push(
-            Commitment::from(CommitmentWitness::blinded(flv)).into(),
-        ));
+        program.push(Commitment::from(CommitmentWitness::blinded(qty)));
+        program.push(Commitment::from(CommitmentWitness::blinded(flv)));
     }
-    instructions.push(Instruction::Cloak(input_count, output_count));
-    instructions
+    program.cloak(input_count, output_count);
 }
 
 fn output_helper(pred: Predicate) -> Vec<Instruction> {
