@@ -61,22 +61,18 @@ fn issue_helper(
         .sign_tx(); // stack: issued-value
 }
 
-fn input_helper(qty: u64, flv: Scalar, pred: Predicate) -> Vec<Instruction> {
-    vec![
-        Instruction::Push(
-            Input::new(
-                vec![(
-                    Commitment::from(CommitmentWitness::blinded(qty)),
-                    Commitment::from(CommitmentWitness::blinded(flv)),
-                )],
-                pred,
-                TxID([0; 32]),
-            )
-            .into(),
-        ), // stack: input-data
-        Instruction::Input,  // stack: input-contract
-        Instruction::Signtx, // stack: input-value
-    ]
+fn input_helper(program: &mut Program, qty: u64, flv: Scalar, pred: Predicate) {
+    program
+        .push(Input::new(
+            vec![(
+                Commitment::from(CommitmentWitness::blinded(qty)),
+                Commitment::from(CommitmentWitness::blinded(flv)),
+            )],
+            pred,
+            TxID([0; 32]),
+        )) // stack: input-data
+        .input() // stack: input-contract
+        .sign_tx(); // stack: input-value
 }
 
 fn cloak_helper(input_count: usize, outputs: Vec<(u64, Scalar)>) -> Vec<Instruction> {
