@@ -290,41 +290,52 @@ macro_rules! def_op {
              self
         }
     );
+    ($func_name:ident, $op:ident, $type:ty) => (
+           pub fn $func_name(&mut self, size :$type) -> &mut Program{
+             self.0.push(Instruction::$op(size));
+             self
+        }
+    );
 }
 
 impl Program {
-    def_op!(drop, Drop);
-    def_op!(r#const, Const);
-    def_op!(var, Var);
-    def_op!(alloc, Alloc);
-    def_op!(mintime, Mintime);
-    def_op!(maxtime, Maxtime);
-    def_op!(expr, Expr);
-    def_op!(neg, Neg);
     def_op!(add, Add);
-    def_op!(mul, Mul);
-    def_op!(eq, Eq);
+    def_op!(alloc, Alloc);
     def_op!(and, And);
-    def_op!(or, Or);
-    def_op!(verify, Verify);
     def_op!(blind, Blind);
-    def_op!(reblind, Reblind);
-    def_op!(unblind, Unblind);
-    def_op!(issue, Issue);
     def_op!(borrow, Borrow);
-    def_op!(retire, Retire);
-    def_op!(qty, Qty);
+    def_op!(call, Call);
+    def_op!(r#const, Const);
+    def_op!(contract, Contract, usize);
+    def_op!(delegate, Delegate);
+    def_op!(drop, Drop);
+    def_op!(dup, Dup, usize);
+    def_op!(eq, Eq);
+    def_op!(export, Export);
+    def_op!(expr, Expr);
     def_op!(flavor, Flavor);
     def_op!(import, Import);
-    def_op!(export, Export);
     def_op!(input, Input);
-    def_op!(nonce, Nonce);
-    def_op!(log, Log);
-    def_op!(sign_tx, Signtx);
-    def_op!(call, Call);
+    def_op!(issue, Issue);
     def_op!(left, Left);
+    def_op!(log, Log);
+    def_op!(maxtime, Maxtime);
+    def_op!(mintime, Mintime);
+    def_op!(mul, Mul);
+    def_op!(neg, Neg);
+    def_op!(nonce, Nonce);
+    def_op!(or, Or);
+    def_op!(output, Output, usize);
+    def_op!(qty, Qty);
+    def_op!(range, Range, u8);
+    def_op!(reblind, Reblind);
+    def_op!(retire, Retire);
     def_op!(right, Right);
-    def_op!(delegate, Delegate);
+    def_op!(roll, Roll, usize);
+    def_op!(sign_tx, Signtx);
+    def_op!(unblind, Unblind);
+    def_op!(var, Var);
+    def_op!(verify, Verify);
 
     pub fn new() -> Self {
         Program(vec![])
@@ -339,33 +350,8 @@ impl Program {
         self
     }
 
-    pub fn dup(&mut self, size: usize) -> &mut Program {
-        self.0.push(Instruction::Dup(size));
-        self
-    }
-
-    pub fn roll(&mut self, size: usize) -> &mut Program {
-        self.0.push(Instruction::Roll(size));
-        self
-    }
-
-    pub fn range(&mut self, bit_width: u8) -> &mut Program {
-        self.0.push(Instruction::Range(bit_width));
-        self
-    }
-
     pub fn cloak(&mut self, m: usize, n: usize) -> &mut Program {
         self.0.push(Instruction::Cloak(m, n));
-        self
-    }
-
-    pub fn output(&mut self, payload_count: usize) -> &mut Program {
-        self.0.push(Instruction::Output(payload_count));
-        self
-    }
-
-    pub fn contract(&mut self, payload_count: usize) -> &mut Program {
-        self.0.push(Instruction::Contract(payload_count));
         self
     }
 }
