@@ -85,12 +85,10 @@ fn cloak_helper(program: &mut Program, input_count: usize, outputs: Vec<(u64, Sc
     program.cloak(input_count, output_count);
 }
 
-fn output_helper(pred: Predicate) -> Vec<Instruction> {
-    vec![
-        // stack: output
-        Instruction::Push(pred.into()), // stack: output, pred
-        Instruction::Output(1),         // stack: empty
-    ]
+fn output_helper(program: &mut Program, pred: Predicate) {
+    // stack: output
+    program.push(pred); // stack: output, pred
+    program.output(1); // stack: empty
 }
 
 fn issue_contract(
