@@ -341,6 +341,16 @@ impl Program {
         Program(vec![])
     }
 
+      pub fn build<F>(builder: F) -> Self
+    where
+        F: FnOnce(&mut Self)-> &mut Self,
+    {
+        let mut program = Self::new();
+        builder(&mut program);
+        program
+        
+    }
+
     pub fn to_vec(self) -> Vec<Instruction> {
         self.0
     }
