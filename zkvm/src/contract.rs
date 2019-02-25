@@ -28,14 +28,14 @@ pub enum PortableItem {
 
 #[derive(Clone, Debug)]
 pub struct Input {
-    contract: FrozenContract,
+    prev_output: Output,
     utxo: UTXO,
     txid: TxID,
 }
 
 /// Representation of a Contract inside an Input that can be cloned.
 #[derive(Clone, Debug)]
-pub(crate) struct FrozenContract {
+pub(crate) struct Output {
     payload: Vec<FrozenItem>,
     predicate: Predicate,
 }
@@ -69,14 +69,11 @@ impl Input {
             .map(|(qty, flv)| FrozenItem::Value(FrozenValue { qty, flv }))
             .collect();
 
-        let contract = FrozenContract { payload, predicate };
-
-        let mut contract_buf = Vec::with_capacity(contract.serialized_length());
-        contract.encode(&mut contract_buf);
-        let utxo = UTXO::from_output(&contract_buf, &txid);
+        let prev_output = Output { payload, predicate };
+        let utxo = UTXO::from_output(&prev_output.clone().to_vec(), &txid);
 
         Input {
-            contract,
+            prev_output,
             utxo,
             txid,
         }
@@ -84,19 +81,19 @@ impl Input {
 
     /// Parses an input from a byte array.
     pub fn from_bytes(data: Vec<u8>) -> Result<Self, VMError> {
-        let contract = SliceReader::parse(&data, |r| Self::decode(r))?;
-        Ok(contract)
+        let output = SliceReader::parse(&data, |r| Self::decode(r))?;
+        Ok(output)
     }
 
     /// Precise serialized length in bytes for the Input
     pub fn serialized_length(&self) -> usize {
-        32 + self.contract.serialized_length()
+        32 + self.prev_output.serialized_length()
     }
 
     /// Serializes the input to a byte array.
     pub fn encode(&self, buf: &mut Vec<u8>) {
-        buf.extend_from_slice(&self.txid.0);
-        self.contract.encode(buf);
+        encoding::write_bytes(&self.txid.0, buf);
+        self.prev_output.encode(buf);
     }
 
     /// Unfreezes the input by converting it to the Contract an UTXO ID.
@@ -104,24 +101,24 @@ impl Input {
     where
         F: FnMut(Commitment) -> Variable,
     {
-        (self.contract.unfreeze(com_to_var), self.utxo)
+        (self.prev_output.unfreeze(com_to_var), self.utxo)
     }
 
     fn decode<'a>(reader: &mut SliceReader<'a>) -> Result<Self, VMError> {
         // Input  =  PreviousTxID || PreviousOutput
         // PreviousTxID  =  <32 bytes>
         let txid = TxID(reader.read_u8x32()?);
-        let (contract, contract_bytes) = reader.slice(|r| FrozenContract::decode(r))?;
+        let (prev_output, contract_bytes) = reader.slice(|r| Output::decode(r))?;
         let utxo = UTXO::from_output(contract_bytes, &txid);
         Ok(Input {
-            contract,
+            prev_output,
             utxo,
             txid,
         })
     }
 }
 
-impl FrozenContract {
+impl Output {
     /// Converts self to vector of bytes
     pub(crate) fn to_vec(self) -> Vec<u8> {
         let mut buf = Vec::with_capacity(self.serialized_length());
@@ -143,29 +140,29 @@ impl FrozenContract {
 
     /// Serializes the contract to a byte array
     fn encode(&self, buf: &mut Vec<u8>) {
-        buf.extend_from_slice(&self.predicate.to_point().to_bytes());
+        encoding::write_point(&self.predicate.to_point(), buf);
         encoding::write_u32(self.payload.len() as u32, buf);
 
         for p in self.payload.iter() {
             match p {
                 // Data = 0x00 || LE32(len) || <bytes>
                 FrozenItem::Data(d) => {
-                    buf.push(DATA_TYPE);
-                    let mut bytes = d.to_bytes();
+                    encoding::write_u8(DATA_TYPE, buf);
+                    let bytes = d.to_bytes();
                     encoding::write_u32(bytes.len() as u32, buf);
-                    buf.extend_from_slice(&mut bytes);
+                    encoding::write_bytes(&bytes, buf);
                 }
                 // Value = 0x01 || <32 bytes> || <32 bytes>
                 FrozenItem::Value(v) => {
-                    buf.push(VALUE_TYPE);
-                    buf.extend_from_slice(&v.qty.to_point().to_bytes());
-                    buf.extend_from_slice(&v.flv.to_point().to_bytes());
+                    encoding::write_u8(VALUE_TYPE, buf);
+                    encoding::write_point(&v.qty.to_point(), buf);
+                    encoding::write_point(&v.flv.to_point(), buf);
                 }
             }
         }
     }
 
-    /// Converts FrozenContract to a Contract and uses provided closure
+    /// Converts Output to a Contract and uses provided closure
     /// to allocate R1CS variables for the Values stored in the contract’s payload.
     fn unfreeze<F>(self, mut com_to_var: F) -> Contract
     where
@@ -221,14 +218,14 @@ impl FrozenContract {
             payload.push(item);
         }
 
-        Ok(FrozenContract { predicate, payload })
+        Ok(Output { predicate, payload })
     }
 }
 
 impl Contract {
-    /// Converts Contract to a FrozenContract and uses provided closure
+    /// Converts Contract to an Output and uses provided closure
     /// to get the commitments for the variables inside the contract’s Values.
-    pub(crate) fn freeze<F>(self, mut var_to_com: F) -> FrozenContract
+    pub(crate) fn freeze<F>(self, mut var_to_com: F) -> Output
     where
         F: FnMut(Variable) -> Commitment,
     {
@@ -245,6 +242,6 @@ impl Contract {
             .collect::<Vec<_>>();
         let predicate = self.predicate;
 
-        FrozenContract { payload, predicate }
+        Output { payload, predicate }
     }
 }
