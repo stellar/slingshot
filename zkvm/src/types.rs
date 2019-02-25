@@ -269,12 +269,11 @@ impl Item {
 }
 
 impl Data {
-    /// Returns a guaranteed lower bound on the number of bytes
-    /// needed to serialize the Data.
-    pub fn min_serialized_length(&self) -> usize {
+    /// Returns the number of bytes needed to serialize the Data.
+    pub fn serialized_length(&self) -> usize {
         match self {
             Data::Opaque(data) => data.len(),
-            Data::Witness(_) => 0,
+            Data::Witness(x) => x.serialized_len(),
         }
     }
 
@@ -283,7 +282,7 @@ impl Data {
         match self {
             Data::Opaque(data) => data.clone(),
             Data::Witness(w) => {
-                let mut bytes: Vec<u8> = Vec::with_capacity(self.min_serialized_length());
+                let mut bytes: Vec<u8> = Vec::with_capacity(self.serialized_length());
                 w.encode(&mut bytes);
                 bytes.clone()
             }
@@ -352,6 +351,15 @@ impl DataWitness {
                 buf.extend_from_slice(&s.to_bytes())
             }
             DataWitness::Input(b) => b.encode(buf),
+        }
+    }
+
+    fn serialized_len(&self) -> usize {
+        match self {
+            DataWitness::Program(instr) => instr.iter().map(|p| p.serialized_length()).sum(),
+            DataWitness::Input(b) => 32 + b.contract.serialized_length(),
+            // All other types are encoded as 32-bit points or scalars
+            _ => 32 as usize,
         }
     }
 }
