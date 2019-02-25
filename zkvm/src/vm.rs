@@ -12,6 +12,7 @@ use crate::errors::VMError;
 use crate::ops::Instruction;
 use crate::point_ops::PointOp;
 use crate::predicate::Predicate;
+use crate::scalar_witness::ScalarWitness;
 use crate::signature::*;
 use crate::txlog::{Entry, TxID, TxLog};
 use crate::types::*;

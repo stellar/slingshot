@@ -11,9 +11,10 @@ use crate::encoding::SliceReader;
 use crate::errors::VMError;
 use crate::ops::Instruction;
 use crate::predicate::Predicate;
+use crate::scalar_witness::ScalarWitness;
 use crate::transcript::TranscriptProtocol;
 
-use std::ops::{Add, Mul, Neg};
+use std::ops::{Add, Neg};
 
 #[derive(Debug)]
 pub enum Item {
@@ -90,15 +91,6 @@ pub struct CommitmentWitness {
     pub blinding: Scalar,
 }
 
-/// Represents a concrete kind of a number represented by a scalar:
-/// `ScalarKind::Integer` represents a signed integer with 64-bit absolute value (aka i65)
-/// `ScalarKind::Scalar` represents a scalar modulo group order.
-#[derive(Copy, Clone, Debug)]
-pub enum ScalarWitness {
-    Integer(SignedInteger),
-    Scalar(Scalar),
-}
-
 impl Commitment {
     /// Returns the number of bytes needed to serialize the Commitment.
     pub fn serialized_length(&self) -> usize {
@@ -142,86 +134,6 @@ impl CommitmentWitness {
             blinding: Scalar::random(&mut rand::thread_rng()),
             value: x.into(),
         }
-    }
-}
-
-impl ScalarWitness {
-    /// Returns the number of bytes needed to serialize the ScalarWitness.
-    pub fn serialized_length(&self) -> usize {
-        32
-    }
-
-    pub(crate) fn encode(&self, buf: &mut Vec<u8>) {
-        buf.extend_from_slice(&self.to_scalar().to_bytes())
-    }
-
-    /// Converts the witness to an integer if it is an integer
-    pub fn to_integer(self) -> Result<SignedInteger, VMError> {
-        match self {
-            ScalarWitness::Integer(i) => Ok(i),
-            ScalarWitness::Scalar(_) => Err(VMError::TypeNotSignedInteger),
-        }
-    }
-
-    // Converts the witness to a scalar.
-    pub fn to_scalar(self) -> Scalar {
-        match self {
-            ScalarWitness::Integer(i) => i.into(),
-            ScalarWitness::Scalar(s) => s,
-        }
-    }
-
-    /// Converts `Option<ScalarWitness>` into optional integer if it is one.
-    pub fn option_to_integer(assignment: Option<Self>) -> Result<Option<SignedInteger>, VMError> {
-        match assignment {
-            None => Ok(None),
-            Some(ScalarWitness::Integer(i)) => Ok(Some(i)),
-            Some(ScalarWitness::Scalar(_)) => Err(VMError::TypeNotSignedInteger),
-        }
-    }
-}
-
-impl Neg for ScalarWitness {
-    type Output = ScalarWitness;
-
-    fn neg(self) -> ScalarWitness {
-        match self {
-            ScalarWitness::Integer(a) => ScalarWitness::Integer(-a),
-            ScalarWitness::Scalar(a) => ScalarWitness::Scalar(-a),
-        }
-    }
-}
-impl Add for ScalarWitness {
-    type Output = ScalarWitness;
-
-    fn add(self, rhs: ScalarWitness) -> ScalarWitness {
-        match (self, rhs) {
-            (ScalarWitness::Integer(a), ScalarWitness::Integer(b)) => match a + b {
-                Some(res) => ScalarWitness::Integer(res),
-                None => ScalarWitness::Scalar(a.to_scalar() + b.to_scalar()),
-            },
-            (a, b) => ScalarWitness::Scalar(a.to_scalar() + b.to_scalar()),
-        }
-    }
-}
-
-impl Mul for ScalarWitness {
-    type Output = ScalarWitness;
-
-    fn mul(self, rhs: ScalarWitness) -> ScalarWitness {
-        match (self, rhs) {
-            (ScalarWitness::Integer(a), ScalarWitness::Integer(b)) => match a * b {
-                Some(res) => ScalarWitness::Integer(res),
-                None => ScalarWitness::Scalar(a.to_scalar() * b.to_scalar()),
-            },
-            (a, b) => ScalarWitness::Scalar(a.to_scalar() * b.to_scalar()),
-        }
-    }
-}
-
-impl Into<Scalar> for ScalarWitness {
-    fn into(self) -> Scalar {
-        self.to_scalar()
     }
 }
 
