@@ -1,19 +1,18 @@
 //! Core ZkVM stack types: data, variables, values, contracts etc.
 
-use bulletproofs::{r1cs, PedersenGens};
-use curve25519_dalek::ristretto::CompressedRistretto;
+use bulletproofs::r1cs;
 use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
 use spacesuit::SignedInteger;
 
+use crate::constraints::{Commitment, Constraint, Expression, Variable};
 use crate::contract::{Contract, Input, PortableItem};
 use crate::encoding::SliceReader;
 use crate::errors::VMError;
 use crate::ops::Instruction;
 use crate::predicate::Predicate;
+use crate::scalar_witness::ScalarWitness;
 use crate::transcript::TranscriptProtocol;
-
-use std::ops::{Add, Neg};
 
 #[derive(Debug)]
 pub enum Item {
@@ -45,34 +44,6 @@ pub struct WideValue {
     pub(crate) witness: Option<(SignedInteger, Scalar)>,
 }
 
-#[derive(Copy, Clone, Debug)]
-pub struct Variable {
-    pub(crate) index: usize,
-    // the witness is located indirectly in vm::VariableCommitment
-}
-
-pub type ExpressionTerm = (r1cs::Variable, Scalar);
-#[derive(Clone, Debug)]
-pub enum Expression {
-    Constant(ScalarWitness),
-    LinearCombination(Vec<ExpressionTerm>, Option<ScalarWitness>),
-}
-
-#[derive(Clone, Debug)]
-pub enum Constraint {
-    Eq(Expression, Expression),
-    And(Vec<Constraint>),
-    Or(Vec<Constraint>),
-    // no witness needed as it's normally true/false and we derive it on the fly during processing.
-    // this also allows us not to wrap this enum in a struct.
-}
-
-#[derive(Clone, Debug)]
-pub enum Commitment {
-    Closed(CompressedRistretto),
-    Open(Box<CommitmentWitness>),
-}
-
 /// Prover's representation of the witness.
 #[derive(Clone, Debug)]
 pub enum DataWitness {
@@ -81,118 +52,6 @@ pub enum DataWitness {
     Commitment(Box<Commitment>),
     Scalar(Box<ScalarWitness>),
     Input(Box<Input>),
-}
-
-/// Prover's representation of the commitment secret: witness and blinding factor
-#[derive(Clone, Debug)]
-pub struct CommitmentWitness {
-    pub value: ScalarWitness,
-    pub blinding: Scalar,
-}
-
-/// Represents a concrete kind of a number represented by a scalar:
-/// `ScalarKind::Integer` represents a signed integer with 64-bit absolute value (aka i65)
-/// `ScalarKind::Scalar` represents a scalar modulo group order.
-#[derive(Copy, Clone, Debug)]
-pub enum ScalarWitness {
-    Integer(SignedInteger),
-    Scalar(Scalar),
-}
-
-impl Commitment {
-    pub fn to_point(&self) -> CompressedRistretto {
-        match self {
-            Commitment::Closed(x) => *x,
-            Commitment::Open(w) => w.to_point(),
-        }
-    }
-
-    pub(crate) fn encode(&self, buf: &mut Vec<u8>) {
-        buf.extend_from_slice(&self.to_point().to_bytes());
-    }
-}
-
-impl CommitmentWitness {
-    pub fn to_point(&self) -> CompressedRistretto {
-        let gens = PedersenGens::default();
-        gens.commit(self.value.into(), self.blinding).compress()
-    }
-
-    pub fn unblinded<T>(x: T) -> Self
-    where
-        T: Into<ScalarWitness>,
-    {
-        CommitmentWitness {
-            blinding: Scalar::zero(),
-            value: x.into(),
-        }
-    }
-
-    pub fn blinded<T>(x: T) -> Self
-    where
-        T: Into<ScalarWitness>,
-    {
-        CommitmentWitness {
-            blinding: Scalar::random(&mut rand::thread_rng()),
-            value: x.into(),
-        }
-    }
-}
-
-impl ScalarWitness {
-    /// Converts the witness to an integer if it is an integer
-    pub fn to_integer(self) -> Result<SignedInteger, VMError> {
-        match self {
-            ScalarWitness::Integer(i) => Ok(i),
-            ScalarWitness::Scalar(_) => Err(VMError::TypeNotSignedInteger),
-        }
-    }
-
-    pub fn to_scalar(self) -> Scalar {
-        match self {
-            ScalarWitness::Integer(i) => i.into(),
-            ScalarWitness::Scalar(s) => s,
-        }
-    }
-
-    /// Converts `Option<ScalarWitness>` into optional integer if it is one.
-    pub fn option_to_integer(assignment: Option<Self>) -> Result<Option<SignedInteger>, VMError> {
-        match assignment {
-            None => Ok(None),
-            Some(ScalarWitness::Integer(i)) => Ok(Some(i)),
-            Some(ScalarWitness::Scalar(_)) => Err(VMError::TypeNotSignedInteger),
-        }
-    }
-}
-
-impl Neg for ScalarWitness {
-    type Output = ScalarWitness;
-
-    fn neg(self) -> ScalarWitness {
-        match self {
-            ScalarWitness::Integer(a) => ScalarWitness::Integer(-a),
-            ScalarWitness::Scalar(a) => ScalarWitness::Scalar(-a),
-        }
-    }
-}
-impl Add for ScalarWitness {
-    type Output = ScalarWitness;
-
-    fn add(self, rhs: ScalarWitness) -> ScalarWitness {
-        match (self, rhs) {
-            (ScalarWitness::Integer(a), ScalarWitness::Integer(b)) => match a + b {
-                Some(res) => ScalarWitness::Integer(res),
-                None => ScalarWitness::Scalar(a.to_scalar() + b.to_scalar()),
-            },
-            (a, b) => ScalarWitness::Scalar(a.to_scalar() + b.to_scalar()),
-        }
-    }
-}
-
-impl Into<Scalar> for ScalarWitness {
-    fn into(self) -> Scalar {
-        self.to_scalar()
-    }
 }
 
 impl Item {
@@ -255,12 +114,11 @@ impl Item {
 }
 
 impl Data {
-    /// Returns a guaranteed lower bound on the number of bytes
-    /// needed to serialize the Data.
-    pub fn min_serialized_length(&self) -> usize {
+    /// Returns the number of bytes needed to serialize the Data.
+    pub fn serialized_length(&self) -> usize {
         match self {
             Data::Opaque(data) => data.len(),
-            Data::Witness(_) => 0,
+            Data::Witness(x) => x.serialized_length(),
         }
     }
 
@@ -269,7 +127,7 @@ impl Data {
         match self {
             Data::Opaque(data) => data.clone(),
             Data::Witness(w) => {
-                let mut bytes: Vec<u8> = Vec::with_capacity(self.min_serialized_length());
+                let mut bytes: Vec<u8> = Vec::with_capacity(self.serialized_length());
                 w.encode(&mut bytes);
                 bytes.clone()
             }
@@ -331,13 +189,20 @@ impl DataWitness {
     fn encode(&self, buf: &mut Vec<u8>) {
         match self {
             DataWitness::Program(instr) => Instruction::encode_program(instr.iter(), buf),
-            DataWitness::Predicate(pw) => pw.encode(buf),
+            DataWitness::Predicate(p) => p.encode(buf),
             DataWitness::Commitment(c) => c.encode(buf),
-            DataWitness::Scalar(s) => {
-                let s: Scalar = (*s.clone()).into();
-                buf.extend_from_slice(&s.to_bytes())
-            }
+            DataWitness::Scalar(s) => s.encode(buf),
             DataWitness::Input(b) => b.encode(buf),
+        }
+    }
+
+    fn serialized_length(&self) -> usize {
+        match self {
+            DataWitness::Program(instr) => instr.iter().map(|p| p.serialized_length()).sum(),
+            DataWitness::Input(b) => 32 + b.contract.serialized_length(),
+            DataWitness::Predicate(p) => p.serialized_length(),
+            DataWitness::Commitment(c) => c.serialized_length(),
+            DataWitness::Scalar(s) => s.serialized_length(),
         }
     }
 }
@@ -348,95 +213,6 @@ impl Value {
         let mut t = Transcript::new(b"ZkVM.issue");
         t.commit_bytes(b"predicate", predicate.to_point().as_bytes());
         t.challenge_scalar(b"flavor")
-    }
-}
-
-impl Expression {
-    pub fn constant<S: Into<ScalarWitness>>(a: S) -> Self {
-        Expression::Constant(a.into())
-    }
-}
-
-impl Neg for Expression {
-    type Output = Expression;
-
-    fn neg(self) -> Expression {
-        match self {
-            Expression::Constant(a) => Expression::Constant(-a),
-            Expression::LinearCombination(mut terms, assignment) => {
-                for (_, n) in terms.iter_mut() {
-                    *n = -*n;
-                }
-                Expression::LinearCombination(terms, assignment.map(|a| -a))
-            }
-        }
-    }
-}
-
-impl Add for Expression {
-    type Output = Expression;
-
-    fn add(self, rhs: Expression) -> Expression {
-        match (self, rhs) {
-            (Expression::Constant(left), Expression::Constant(right)) => {
-                Expression::Constant(left + right)
-            }
-            (
-                Expression::Constant(l),
-                Expression::LinearCombination(mut right_terms, right_assignment),
-            ) => {
-                // prepend constant term to `term vector` in non-constant expression
-                right_terms.insert(0, (r1cs::Variable::One(), l.into()));
-                Expression::LinearCombination(right_terms, right_assignment.map(|r| l + r))
-            }
-            (
-                Expression::LinearCombination(mut left_terms, left_assignment),
-                Expression::Constant(r),
-            ) => {
-                // append constant term to term vector in non-constant expression
-                left_terms.push((r1cs::Variable::One(), r.into()));
-                Expression::LinearCombination(left_terms, left_assignment.map(|l| l + r))
-            }
-            (
-                Expression::LinearCombination(mut left_terms, left_assignment),
-                Expression::LinearCombination(right_terms, right_assignment),
-            ) => {
-                // append right terms to left terms in non-constant expression
-                left_terms.extend(right_terms);
-                Expression::LinearCombination(
-                    left_terms,
-                    left_assignment.and_then(|l| right_assignment.map(|r| l + r)),
-                )
-            }
-        }
-    }
-}
-
-// Upcasting witness/points into Commitment
-
-impl From<CommitmentWitness> for Commitment {
-    fn from(x: CommitmentWitness) -> Self {
-        Commitment::Open(Box::new(x))
-    }
-}
-
-impl From<CompressedRistretto> for Commitment {
-    fn from(x: CompressedRistretto) -> Self {
-        Commitment::Closed(x)
-    }
-}
-
-// Upcasting integers/scalars into ScalarWitness
-
-impl From<u64> for ScalarWitness {
-    fn from(x: u64) -> Self {
-        ScalarWitness::Integer(x.into())
-    }
-}
-
-impl From<Scalar> for ScalarWitness {
-    fn from(x: Scalar) -> Self {
-        ScalarWitness::Scalar(x)
     }
 }
 

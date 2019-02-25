@@ -16,11 +16,13 @@ mod cloak;
 mod mix;
 mod range_proof;
 mod shuffle;
+mod signed_integer;
 mod value;
 
 pub use cloak::cloak;
 pub use range_proof::range_proof;
-pub use value::{AllocatedQuantity, AllocatedValue, CommittedValue, SignedInteger, Value};
+pub use signed_integer::SignedInteger;
+pub use value::{AllocatedValue, CommittedValue, Value};
 
 // TBD: figure out if we need to export these at all
 pub use value::{ProverCommittable, VerifierCommittable};

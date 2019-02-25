@@ -42,6 +42,11 @@ pub enum PredicateWitness {
 }
 
 impl Predicate {
+    /// Returns the number of bytes needed to serialize the Predicate.
+    pub fn serialized_length(&self) -> usize {
+        32
+    }
+
     /// Converts predicate to a compressed point
     pub fn to_point(&self) -> CompressedRistretto {
         match self {

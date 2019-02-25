@@ -1,7 +1,7 @@
 use bulletproofs::r1cs::{ConstraintSystem, LinearCombination, R1CSError};
 use curve25519_dalek::scalar::Scalar;
 
-use crate::value::SignedInteger;
+use crate::signed_integer::SignedInteger;
 
 /// Enforces that the quantity of v is in the range [0, 2^n).
 pub fn range_proof<CS: ConstraintSystem>(

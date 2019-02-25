@@ -5,14 +5,15 @@ use curve25519_dalek::scalar::Scalar;
 use spacesuit;
 use spacesuit::SignedInteger;
 use std::iter::FromIterator;
-use std::ops::Neg;
 
+use crate::constraints::{Commitment, Expression, Variable};
 use crate::contract::{Contract, FrozenContract, FrozenItem, FrozenValue, PortableItem};
 use crate::encoding::SliceReader;
 use crate::errors::VMError;
 use crate::ops::Instruction;
 use crate::point_ops::PointOp;
 use crate::predicate::Predicate;
+use crate::scalar_witness::ScalarWitness;
 use crate::signature::*;
 use crate::txlog::{Entry, TxID, TxLog};
 use crate::types::*;
@@ -404,7 +405,7 @@ where
     fn output(&mut self, k: usize) -> Result<(), VMError> {
         let contract = self.pop_contract(k)?;
         let frozen_contract = self.freeze_contract(contract);
-        let mut buf = Vec::with_capacity(frozen_contract.min_serialized_length());
+        let mut buf = Vec::with_capacity(frozen_contract.serialized_length());
         frozen_contract.encode(&mut buf);
         self.txlog.push(Entry::Output(buf));
         Ok(())

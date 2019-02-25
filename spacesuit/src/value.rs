@@ -1,10 +1,9 @@
 use bulletproofs::r1cs::{ConstraintSystem, Prover, R1CSError, Variable, Verifier};
-use core::ops::Neg;
 use curve25519_dalek::ristretto::CompressedRistretto;
 use curve25519_dalek::scalar::Scalar;
 use rand::{CryptoRng, Rng};
-use std::ops::{Add, Mul};
-use subtle::{Choice, ConditionallySelectable};
+
+use crate::signed_integer::SignedInteger;
 
 /// A pair of a secret _quantity_ (64-bit integer)
 /// and a secret _flavor_ (scalar).
@@ -36,19 +35,6 @@ pub struct AllocatedValue {
     pub assignment: Option<Value>,
 }
 
-/// Represents a variable for quantity, along with its assignment.
-#[derive(Copy, Clone, Debug)]
-pub struct AllocatedQuantity {
-    /// R1CS variable representing the quantity
-    pub variable: Variable,
-    /// Secret assignment to the variable
-    pub assignment: Option<SignedInteger>,
-}
-
-/// Represents a signed integer with absolute value in the 64-bit range.
-#[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd)]
-pub struct SignedInteger(i128);
-
 impl Value {
     /// Returns a zero quantity with a zero flavor.
     pub fn zero() -> Value {
@@ -69,115 +55,33 @@ impl Value {
             assignment: Some(*self),
         })
     }
+}
 
-    pub(crate) fn allocate_unassigned<CS: ConstraintSystem>(
+impl AllocatedValue {
+    /// Creates an unassigned allocated value.
+    pub(crate) fn unassigned<CS: ConstraintSystem>(
         cs: &mut CS,
     ) -> Result<AllocatedValue, R1CSError> {
-        let (q_var, f_var, _) = cs.allocate(|| {
+        let (q, f, _) = cs.allocate(|| {
             Err(R1CSError::GadgetError {
-                description: "Tried to allocate variables q_var and f_var from function"
+                description: "Tried to assign variables in `AllocatedValue::unassigned`"
                     .to_string(),
             })
         })?;
 
-        Ok(AllocatedValue {
-            q: q_var,
-            f: f_var,
+        Ok(Self {
+            q,
+            f,
             assignment: None,
         })
     }
-}
 
-impl AllocatedValue {
-    /// Returns a quantity variable with its assignment.
-    pub fn quantity(&self) -> AllocatedQuantity {
-        AllocatedQuantity {
-            variable: self.q,
-            assignment: self.assignment.map(|v| v.q),
-        }
-    }
-
-    // /// Make another `AllocatedValue`, with the same assignment and newly allocated variables.
-    pub(crate) fn reallocate<CS: ConstraintSystem>(
-        &self,
+    /// Creates a list of unassigned allocated values.
+    pub(crate) fn unassigned_vec<CS: ConstraintSystem>(
         cs: &mut CS,
-    ) -> Result<AllocatedValue, R1CSError> {
-        match self.assignment {
-            Some(value) => value.allocate(cs),
-            None => Value::allocate_unassigned(cs),
-        }
-    }
-}
-
-impl SignedInteger {
-    /// Returns Some(x) if self is non-negative
-    /// Otherwise returns None.
-    pub fn to_u64(&self) -> Option<u64> {
-        if self.0 < 0 {
-            None
-        } else {
-            Some(self.0 as u64)
-        }
-    }
-    /// Converts self into a scalar
-    pub fn to_scalar(self) -> Scalar {
-        self.into()
-    }
-}
-
-impl From<u64> for SignedInteger {
-    fn from(u: u64) -> SignedInteger {
-        SignedInteger(u as i128)
-    }
-}
-
-impl Into<Scalar> for SignedInteger {
-    fn into(self) -> Scalar {
-        if self.0 < 0 {
-            Scalar::zero() - Scalar::from((-self.0) as u64)
-        } else {
-            Scalar::from(self.0 as u64)
-        }
-    }
-}
-
-impl Add for SignedInteger {
-    type Output = Option<SignedInteger>;
-
-    fn add(self, rhs: SignedInteger) -> Option<SignedInteger> {
-        let max = u64::max_value() as i128;
-        let s = self.0 + rhs.0;
-        if s <= max && s >= -max {
-            Some(SignedInteger(s))
-        } else {
-            None
-        }
-    }
-}
-
-impl Mul for SignedInteger {
-    type Output = Option<SignedInteger>;
-
-    fn mul(self, rhs: SignedInteger) -> Option<SignedInteger> {
-        let max = u64::max_value() as i128;
-        match self.0.checked_mul(rhs.0) {
-            Some(p) if p <= max && p >= -max => Some(SignedInteger(p)),
-            _ => None,
-        }
-    }
-}
-
-impl ConditionallySelectable for SignedInteger {
-    fn conditional_select(a: &Self, b: &Self, choice: Choice) -> Self {
-        SignedInteger(i128::conditional_select(&a.0, &b.0, choice))
-    }
-}
-
-impl Neg for SignedInteger {
-    type Output = SignedInteger;
-
-    fn neg(self) -> SignedInteger {
-        SignedInteger(-self.0)
+        n: usize,
+    ) -> Result<Vec<AllocatedValue>, R1CSError> {
+        (0..n).map(|_| Self::unassigned(cs)).collect()
     }
 }
 

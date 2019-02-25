@@ -1,9 +1,10 @@
+use crate::constraints::Commitment;
 use crate::encoding;
 use crate::encoding::SliceReader;
 use crate::errors::VMError;
 use crate::predicate::Predicate;
 use crate::txlog::{TxID, UTXO};
-use crate::types::{Commitment, Data, Value};
+use crate::types::{Data, Value};
 
 /// Prefix for the data type in the Output Structure
 pub const DATA_TYPE: u8 = 0x00;
@@ -93,7 +94,7 @@ impl Input {
 
         let contract = FrozenContract { payload, predicate };
 
-        let mut contract_buf = Vec::with_capacity(contract.min_serialized_length());
+        let mut contract_buf = Vec::with_capacity(contract.serialized_length());
         contract.encode(&mut contract_buf);
         let utxo = UTXO::from_output(&contract_buf, &txid);
 
@@ -106,11 +107,11 @@ impl Input {
 }
 
 impl FrozenContract {
-    pub fn min_serialized_length(&self) -> usize {
+    pub fn serialized_length(&self) -> usize {
         let mut size = 32 + 4;
         for item in self.payload.iter() {
             match item {
-                FrozenItem::Data(d) => size += 1 + 4 + d.min_serialized_length(),
+                FrozenItem::Data(d) => size += 1 + 4 + d.serialized_length(),
                 FrozenItem::Value(_) => size += 1 + 64,
             }
         }
