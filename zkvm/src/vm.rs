@@ -309,9 +309,46 @@ where
     fn mul(&mut self) -> Result<(), VMError> {
         let expr2 = self.pop_item()?.to_expression()?;
         let expr1 = self.pop_item()?.to_expression()?;
-        let expr3 = expr1 * expr2;
+
+        // Note: we cannot implement `mul` for `Expression` because we need to have access
+        // to the `ConstraintSystem` API in order to make a multiplier in the
+        // `LinearCombination * LinearCombination` case.
+        let expr3 = match (expr1, expr2) {
+            (Expression::Constant(left), Expression::Constant(right)) => {
+                Expression::Constant(left * right)
+            }
+            (
+                Expression::Constant(l),
+                Expression::LinearCombination(mut right_terms, right_assignment),
+            ) => {
+                // Multiply coefficients in right_terms by l,
+                // Multiply assignment in right_assignment by l
+                for (_, n) in right_terms.iter_mut() {
+                    *n = *n * l.to_scalar();
+                }
+                Expression::LinearCombination(right_terms, right_assignment.map(|r| r * l))
+            }
+            (
+                Expression::LinearCombination(mut left_terms, left_assignment),
+                Expression::Constant(r),
+            ) => {
+                // Multiply coefficients in left_terms by r,
+                // Multiply assignment in left_assignment by r
+                for (_, n) in left_terms.iter_mut() {
+                    *n = *n * r.to_scalar();
+                }
+                Expression::LinearCombination(left_terms, left_assignment.map(|l| l * r))
+            }
+            (
+                Expression::LinearCombination(left_terms, left_assignment),
+                Expression::LinearCombination(right_terms, right_assignment),
+            ) => {
+                let result_terms = unimplemented!();
+            }
+        };
+
         self.push_item(expr3);
-        Ok(())        
+        Ok(())
     }
 
     fn r#const(&mut self) -> Result<(), VMError> {
