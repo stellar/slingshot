@@ -1,10 +1,11 @@
 #![allow(non_snake_case)]
 
+use crate::signed_integer::SignedInteger;
+use crate::value::{AllocatedValue, Value};
 use bulletproofs::r1cs::{ConstraintSystem, R1CSError, RandomizedConstraintSystem};
 use curve25519_dalek::scalar::Scalar;
 use std::iter;
 use subtle::{ConditionallySelectable, ConstantTimeEq};
-use value::{AllocatedValue, SignedInteger, Value};
 
 /// Enforces that the outputs are either a merge of the inputs :`D = A + B && C = 0`,
 /// or the outputs are equal to the inputs `C = A && D = B`. See spec for more details.
