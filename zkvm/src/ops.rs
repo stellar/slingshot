@@ -6,6 +6,11 @@ use crate::encoding::SliceReader;
 use crate::errors::VMError;
 use crate::types::Data;
 
+/// A builder type for assembling a sequence of `Instruction`s with chained method calls.
+/// E.g. `let prog = Program::new().push(...).input().push(...).output(1).to_vec()`.
+#[derive(Clone, Debug)]
+pub struct Program(Vec<Instruction>);
+
 #[derive(Clone, Debug)]
 pub enum Instruction {
     Push(Data), // size of the string
@@ -289,5 +294,92 @@ impl Instruction {
         for i in iterator.into_iter() {
             i.borrow().encode(program);
         }
+    }
+}
+
+macro_rules! def_op {
+    ($func_name:ident, $op:ident) => (
+           pub fn $func_name(&mut self) -> &mut Program{
+             self.0.push(Instruction::$op);
+             self
+        }
+    );
+    ($func_name:ident, $op:ident, $type:ty) => (
+           pub fn $func_name(&mut self, arg :$type) -> &mut Program{
+             self.0.push(Instruction::$op(arg));
+             self
+        }
+    );
+}
+
+impl Program {
+    def_op!(add, Add);
+    def_op!(alloc, Alloc);
+    def_op!(and, And);
+    def_op!(blind, Blind);
+    def_op!(borrow, Borrow);
+    def_op!(call, Call);
+    def_op!(r#const, Const);
+    def_op!(contract, Contract, usize);
+    def_op!(delegate, Delegate);
+    def_op!(drop, Drop);
+    def_op!(dup, Dup, usize);
+    def_op!(eq, Eq);
+    def_op!(export, Export);
+    def_op!(expr, Expr);
+    def_op!(flavor, Flavor);
+    def_op!(import, Import);
+    def_op!(input, Input);
+    def_op!(issue, Issue);
+    def_op!(left, Left);
+    def_op!(log, Log);
+    def_op!(maxtime, Maxtime);
+    def_op!(mintime, Mintime);
+    def_op!(mul, Mul);
+    def_op!(neg, Neg);
+    def_op!(nonce, Nonce);
+    def_op!(or, Or);
+    def_op!(output, Output, usize);
+    def_op!(qty, Qty);
+    def_op!(range, Range, u8);
+    def_op!(reblind, Reblind);
+    def_op!(retire, Retire);
+    def_op!(right, Right);
+    def_op!(roll, Roll, usize);
+    def_op!(sign_tx, Signtx);
+    def_op!(unblind, Unblind);
+    def_op!(var, Var);
+    def_op!(verify, Verify);
+
+    /// Creates an empty `Program`.
+    pub fn new() -> Self {
+        Program(vec![])
+    }
+
+    /// Creates an empty `Program` and passes its &mut to the closure to let it add the instructions.
+    /// Returns the resulting program.
+    pub fn build<F>(builder: F) -> Self
+    where
+        F: FnOnce(&mut Self) -> &mut Self,
+    {
+        let mut program = Self::new();
+        builder(&mut program);
+        program
+    }
+
+    /// Converts the program to a plain vector of instructions.
+    pub fn to_vec(self) -> Vec<Instruction> {
+        self.0
+    }
+
+    /// Adds a `push` instruction with an immediate data type that can be converted into `Data`.
+    pub fn push<T: Into<Data>>(&mut self, data: T) -> &mut Program {
+        self.0.push(Instruction::Push(data.into()));
+        self
+    }
+
+    pub fn cloak(&mut self, m: usize, n: usize) -> &mut Program {
+        self.0.push(Instruction::Cloak(m, n));
+        self
     }
 }

@@ -4,6 +4,79 @@ use hex;
 
 use zkvm::*;
 
+trait ProgramHelper {
+    fn issue_helper(
+        &mut self,
+        qty: u64,
+        flv: Scalar,
+        issuance_pred: Predicate,
+        nonce_pred: Predicate,
+    ) -> &mut Self;
+
+    fn input_helper(&mut self, qty: u64, flv: Scalar, pred: Predicate) -> &mut Self;
+
+    fn cloak_helper(&mut self, input_count: usize, outputs: Vec<(u64, Scalar)>) -> &mut Self;
+
+    fn output_helper(&mut self, pred: Predicate) -> &mut Self;
+}
+
+impl ProgramHelper for Program {
+    fn issue_helper(
+        &mut self,
+        qty: u64,
+        flv: Scalar,
+        issuance_pred: Predicate,
+        nonce_pred: Predicate,
+    ) -> &mut Self {
+        self.push(Commitment::from(CommitmentWitness {
+            value: qty.into(),
+            blinding: Scalar::from(1u64),
+        })) // stack: qty
+        .var() // stack: qty-var
+        .push(Commitment::from(CommitmentWitness::unblinded(flv))) // stack: qty-var, flv
+        .var() // stack: qty-var, flv-var
+        .push(issuance_pred) // stack: qty-var, flv-var, pred
+        .issue() // stack: issue-contract
+        .push(nonce_pred) // stack: issue-contract, pred
+        .nonce() // stack: issue-contract, nonce-contract
+        .sign_tx() // stack: issue-contract
+        .sign_tx(); // stack: issued-value
+        self
+    }
+
+    fn input_helper(&mut self, qty: u64, flv: Scalar, pred: Predicate) -> &mut Self {
+        self.push(Input::new(
+            vec![(
+                Commitment::from(CommitmentWitness::blinded(qty)),
+                Commitment::from(CommitmentWitness::blinded(flv)),
+            )],
+            pred,
+            TxID([0; 32]),
+        )) // stack: input-data
+        .input() // stack: input-contract
+        .sign_tx(); // stack: input-value
+        self
+    }
+
+    fn cloak_helper(&mut self, input_count: usize, outputs: Vec<(u64, Scalar)>) -> &mut Self {
+        let output_count = outputs.len();
+
+        for (qty, flv) in outputs {
+            self.push(Commitment::from(CommitmentWitness::blinded(qty)));
+            self.push(Commitment::from(CommitmentWitness::blinded(flv)));
+        }
+        self.cloak(input_count, output_count);
+        self
+    }
+
+    fn output_helper(&mut self, pred: Predicate) -> &mut Self {
+        // stack: output
+        self.push(pred); // stack: output, pred
+        self.output(1); // stack: empty
+        self
+    }
+}
+
 fn predicate_helper(pred_num: usize) -> (Vec<Predicate>, Scalar, Predicate) {
     let predicates = (0..pred_num)
         .into_iter()
@@ -38,74 +111,6 @@ fn test_helper(program: Vec<Instruction>) -> Result<TxID, VMError> {
     Ok(txid)
 }
 
-fn issue_helper(
-    qty: u64,
-    flv: Scalar,
-    issuance_pred: Predicate,
-    nonce_pred: Predicate,
-) -> Vec<Instruction> {
-    vec![
-        Instruction::Push(
-            Commitment::from(CommitmentWitness {
-                value: qty.into(),
-                blinding: Scalar::from(1u64),
-            })
-            .into(),
-        ), // stack: qty
-        Instruction::Var, // stack: qty-var
-        Instruction::Push(Commitment::from(CommitmentWitness::unblinded(flv)).into()), // stack: qty-var, flv
-        Instruction::Var,                        // stack: qty-var, flv-var
-        Instruction::Push(issuance_pred.into()), // stack: qty-var, flv-var, issuance-pred
-        Instruction::Issue,                      // stack: issue-contract
-        Instruction::Push(nonce_pred.into()),    // stack: issue-contract, nonce-pred
-        Instruction::Nonce,                      // stack: issue-contract, nonce-contract
-        Instruction::Signtx,                     // stack: issue-contract
-        Instruction::Signtx,                     // stack: issued-value
-    ]
-}
-
-fn input_helper(qty: u64, flv: Scalar, pred: Predicate) -> Vec<Instruction> {
-    vec![
-        Instruction::Push(
-            Input::new(
-                vec![(
-                    Commitment::from(CommitmentWitness::blinded(qty)),
-                    Commitment::from(CommitmentWitness::blinded(flv)),
-                )],
-                pred,
-                TxID([0; 32]),
-            )
-            .into(),
-        ), // stack: input-data
-        Instruction::Input,  // stack: input-contract
-        Instruction::Signtx, // stack: input-value
-    ]
-}
-
-fn cloak_helper(input_count: usize, outputs: Vec<(u64, Scalar)>) -> Vec<Instruction> {
-    let output_count = outputs.len();
-    let mut instructions = vec![];
-
-    for (qty, flv) in outputs {
-        instructions.push(Instruction::Push(
-            Commitment::from(CommitmentWitness::blinded(qty)).into(),
-        ));
-        instructions.push(Instruction::Push(
-            Commitment::from(CommitmentWitness::blinded(flv)).into(),
-        ));
-    }
-    instructions.push(Instruction::Cloak(input_count, output_count));
-    instructions
-}
-
-fn output_helper(pred: Predicate) -> Vec<Instruction> {
-    vec![
-        // stack: output
-        Instruction::Push(pred.into()), // stack: output, pred
-        Instruction::Output(1),         // stack: empty
-    ]
-}
-
 fn issue_contract(
     qty: u64,
     flv: Scalar,
@@ -113,10 +118,11 @@ fn issue_contract(
     nonce_pred: Predicate,
     output_pred: Predicate,
 ) -> Vec<Instruction> {
-    let mut instructions = vec![];
-    instructions.append(&mut issue_helper(qty, flv, issuance_pred, nonce_pred)); // stack: issued-val
-    instructions.append(&mut output_helper(output_pred)); // stack: empty
-    instructions
+    Program::build(|p| {
+        p.issue_helper(qty, flv, issuance_pred, nonce_pred) // stack: issued-val
+            .output_helper(output_pred) // stack: empty
+    })
+    .to_vec()
 }
 
 #[test]
@@ -163,11 +169,12 @@ fn spend_1_1_contract(
     input_pred: Predicate,
     output_pred: Predicate,
 ) -> Vec<Instruction> {
-    let mut instructions = vec![];
-    instructions.append(&mut input_helper(input, flv, input_pred));
-    instructions.append(&mut cloak_helper(1, vec![(output, flv)]));
-    instructions.append(&mut output_helper(output_pred));
-    instructions
+    Program::build(|p| {
+        p.input_helper(input, flv, input_pred)
+            .cloak_helper(1, vec![(output, flv)])
+            .output_helper(output_pred)
+    })
+    .to_vec()
 }
 
 #[test]
@@ -210,12 +217,13 @@ fn spend_1_2_contract(
     output_1_pred: Predicate,
     output_2_pred: Predicate,
 ) -> Vec<Instruction> {
-    let mut instructions = vec![];
-    instructions.append(&mut input_helper(input, flv, input_pred)); // stack: input
-    instructions.append(&mut cloak_helper(1, vec![(output_1, flv), (output_2, flv)])); // stack: output-1, output-2
-    instructions.append(&mut output_helper(output_2_pred)); // stack: output-1
-    instructions.append(&mut output_helper(output_1_pred)); // stack: empty
-    instructions
+    Program::build(|p| {
+        p.input_helper(input, flv, input_pred) // stack: input
+            .cloak_helper(1, vec![(output_1, flv), (output_2, flv)]) // stack: output-1, output-2
+            .output_helper(output_2_pred) // stack: output-1
+            .output_helper(output_1_pred) // stack: empty
+    })
+    .to_vec()
 }
 
 #[test]
@@ -262,12 +270,13 @@ fn spend_2_1_contract(
     input_2_pred: Predicate,
     output_pred: Predicate,
 ) -> Vec<Instruction> {
-    let mut instructions = vec![];
-    instructions.append(&mut input_helper(input_1, flv, input_1_pred)); // stack: input-1
-    instructions.append(&mut input_helper(input_2, flv, input_2_pred)); // stack: input-1, input-2
-    instructions.append(&mut cloak_helper(2, vec![(output, flv)])); // stack: output
-    instructions.append(&mut output_helper(output_pred)); // stack: empty
-    instructions
+    Program::build(|p| {
+        p.input_helper(input_1, flv, input_1_pred) // stack: input-1
+            .input_helper(input_2, flv, input_2_pred) // stack: input-1, input-2
+            .cloak_helper(2, vec![(output, flv)]) // stack: output
+            .output_helper(output_pred) // stack: empty
+    })
+    .to_vec()
 }
 
 #[test]
@@ -316,13 +325,14 @@ fn spend_2_2_contract(
     output_1_pred: Predicate,
     output_2_pred: Predicate,
 ) -> Vec<Instruction> {
-    let mut instructions = vec![];
-    instructions.append(&mut input_helper(input_1, flv, input_1_pred)); // stack: input-1
-    instructions.append(&mut input_helper(input_2, flv, input_2_pred)); // stack: input-1, input-2
-    instructions.append(&mut cloak_helper(2, vec![(output_1, flv), (output_2, flv)])); // stack: output-1, output-2
-    instructions.append(&mut output_helper(output_2_pred)); // stack: output-1
-    instructions.append(&mut output_helper(output_1_pred)); // stack: empty
-    instructions
+    Program::build(|p| {
+        p.input_helper(input_1, flv, input_1_pred) // stack: input-1
+            .input_helper(input_2, flv, input_2_pred) // stack: input-1, input-2
+            .cloak_helper(2, vec![(output_1, flv), (output_2, flv)]) // stack: output-1, output-2
+            .output_helper(output_2_pred) // stack: output-1
+            .output_helper(output_1_pred) // stack: empty
+    })
+    .to_vec()
 }
 
 #[test]
@@ -376,13 +386,14 @@ fn issue_and_spend_contract(
     output_1_pred: Predicate,
     output_2_pred: Predicate,
 ) -> Vec<Instruction> {
-    let mut instructions = vec![];
-    instructions.append(&mut issue_helper(issue_qty, flv, issuance_pred, nonce_pred)); // stack: issued-val
-    instructions.append(&mut input_helper(input_qty, flv, input_pred)); // stack: issued-val, input-val
-    instructions.append(&mut cloak_helper(2, vec![(output_1, flv), (output_2, flv)])); // stack: output-1, output-2
-    instructions.append(&mut output_helper(output_2_pred)); // stack: output-1
-    instructions.append(&mut output_helper(output_1_pred)); // stack: empty
-    instructions
+    Program::build(|p| {
+        p.issue_helper(issue_qty, flv, issuance_pred, nonce_pred) // stack: issued-val
+            .input_helper(input_qty, flv, input_pred) // stack: issued-val, input-val
+            .cloak_helper(2, vec![(output_1, flv), (output_2, flv)]) // stack: output-1, output-2
+            .output_helper(output_2_pred) // stack: output-1
+            .output_helper(output_1_pred) // stack: empty
+    })
+    .to_vec()
 }
 
 #[test]
