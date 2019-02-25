@@ -1,9 +1,10 @@
+use crate::constraints::Commitment;
 use crate::encoding;
 use crate::encoding::SliceReader;
 use crate::errors::VMError;
 use crate::predicate::Predicate;
 use crate::txlog::{TxID, UTXO};
-use crate::types::{Commitment, Data, Value};
+use crate::types::{Data, Value};
 
 /// Prefix for the data type in the Output Structure
 pub const DATA_TYPE: u8 = 0x00;

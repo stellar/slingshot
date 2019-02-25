@@ -5,13 +5,13 @@ use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
 use std::collections::VecDeque;
 
+use crate::constraints::Commitment;
 use crate::errors::VMError;
 use crate::ops::Instruction;
 use crate::point_ops::PointOp;
 use crate::predicate::Predicate;
 use crate::signature::Signature;
 use crate::txlog::{TxID, TxLog};
-use crate::types::*;
 use crate::vm::{Delegate, Tx, VM};
 
 pub struct Prover<'a, 'b> {

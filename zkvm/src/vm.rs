@@ -6,6 +6,7 @@ use spacesuit;
 use spacesuit::SignedInteger;
 use std::iter::FromIterator;
 
+use crate::constraints::{Commitment, Expression, Variable};
 use crate::contract::{Contract, FrozenContract, FrozenItem, FrozenValue, PortableItem};
 use crate::encoding::SliceReader;
 use crate::errors::VMError;

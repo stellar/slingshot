@@ -1,6 +1,7 @@
 #[macro_use]
 extern crate failure;
 
+mod constraints;
 mod contract;
 mod encoding;
 mod errors;
@@ -16,7 +17,8 @@ mod types;
 mod verifier;
 mod vm;
 
-pub use self::contract::{Contract, FrozenContract, FrozenItem, FrozenValue, Input, PortableItem};
+pub use self::constraints::{Commitment, Constraint, Expression, Variable};
+pub use self::contract::Input;
 pub use self::errors::VMError;
 pub use self::ops::{Instruction, Opcode};
 pub use self::predicate::Predicate;
@@ -25,6 +27,12 @@ pub use self::scalar_witness::ScalarWitness;
 pub use self::signature::VerificationKey;
 pub use self::transcript::TranscriptProtocol;
 pub use self::txlog::{Entry, TxID, UTXO};
-pub use self::types::{Commitment, CommitmentWitness, Data, DataWitness, Item, Value, WideValue};
+pub use self::types::{Data, Item, Value, WideValue};
 pub use self::verifier::Verifier;
 pub use self::vm::{Tx, VerifiedTx};
+
+// TBD: review if we actually need to export these:
+pub use self::constraints::CommitmentWitness;
+pub use self::contract::PortableItem;
+pub use self::contract::{FrozenContract, FrozenItem, FrozenValue};
+pub use self::types::DataWitness;
