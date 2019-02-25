@@ -13,7 +13,7 @@ use crate::ops::Instruction;
 use crate::predicate::Predicate;
 use crate::transcript::TranscriptProtocol;
 
-use std::ops::{Add, Neg};
+use std::ops::{Add, Mul, Neg};
 
 #[derive(Debug)]
 pub enum Item {
@@ -185,6 +185,20 @@ impl Add for ScalarWitness {
                 None => ScalarWitness::Scalar(a.to_scalar() + b.to_scalar()),
             },
             (a, b) => ScalarWitness::Scalar(a.to_scalar() + b.to_scalar()),
+        }
+    }
+}
+
+impl Mul for ScalarWitness {
+    type Output = ScalarWitness;
+
+    fn mul(self, rhs: ScalarWitness) -> ScalarWitness {
+        match (self, rhs) {
+            (ScalarWitness::Integer(a), ScalarWitness::Integer(b)) => match a * b {
+                Some(res) => ScalarWitness::Integer(res),
+                None => ScalarWitness::Scalar(a.to_scalar() * b.to_scalar()),
+            },
+            (a, b) => ScalarWitness::Scalar(a.to_scalar() * b.to_scalar()),
         }
     }
 }
