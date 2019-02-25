@@ -75,6 +75,14 @@ impl AllocatedValue {
             assignment: None,
         })
     }
+
+    /// Creates a list of unassigned allocated values.
+    pub(crate) fn unassigned_vec<CS: ConstraintSystem>(
+        cs: &mut CS,
+        n: usize,
+    ) -> Result<Vec<AllocatedValue>, R1CSError> {
+        (0..n).map(|_| Self::unassigned(cs)).collect()
+    }
 }
 
 /// Extension trait for committing Values to the Prover's constraint system.

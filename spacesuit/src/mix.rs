@@ -45,17 +45,9 @@ pub fn k_mix<CS: ConstraintSystem>(
     cs: &mut CS,
     inputs: Vec<AllocatedValue>,
 ) -> Result<(Vec<AllocatedValue>, Vec<AllocatedValue>), R1CSError> {
-    // If there is only one input and output, just constrain the input
-    // and output to be equal to each other.
+    // If there is only one input and output, simply reuse the input wires as output wires.
     if inputs.len() == 1 {
-        let i = inputs[0];
-        let o = match i.assignment {
-            Some(iv) => iv.allocate(cs)?,
-            None => AllocatedValue::unassigned(cs)?,
-        };
-        cs.constrain(i.q - o.q);
-        cs.constrain(i.f - o.f);
-        return Ok((vec![i], vec![o]));
+        return Ok((inputs.clone(), inputs));
     }
 
     let (mix_in, mix_mid, mix_out) = make_intermediate_values(&inputs, cs)?;
@@ -125,15 +117,9 @@ fn make_intermediate_values<CS: ConstraintSystem>(
             Ok((mix_in, mix_mid, mix_out))
         }
         None => {
-            let mix_in = (0..inputs.len())
-                .map(|_| AllocatedValue::unassigned(cs))
-                .collect::<Result<Vec<_>, _>>()?;
-            let mix_mid = (0..inputs.len() - 2)
-                .map(|_| AllocatedValue::unassigned(cs))
-                .collect::<Result<Vec<_>, _>>()?;
-            let mix_out = (0..inputs.len())
-                .map(|_| AllocatedValue::unassigned(cs))
-                .collect::<Result<Vec<_>, _>>()?;
+            let mix_in = AllocatedValue::unassigned_vec(cs, inputs.len())?;
+            let mix_mid = AllocatedValue::unassigned_vec(cs, inputs.len() - 2)?;
+            let mix_out = AllocatedValue::unassigned_vec(cs, inputs.len())?;
             Ok((mix_in, mix_mid, mix_out))
         }
     }
