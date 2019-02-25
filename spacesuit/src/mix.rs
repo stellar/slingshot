@@ -49,7 +49,10 @@ pub fn k_mix<CS: ConstraintSystem>(
     // and output to be equal to each other.
     if inputs.len() == 1 {
         let i = inputs[0];
-        let o = i.reallocate(cs)?;
+        let o = match i.assignment {
+            Some(iv) => iv.allocate(cs)?,
+            None => AllocatedValue::unassigned(cs)?,
+        };
         cs.constrain(i.q - o.q);
         cs.constrain(i.f - o.f);
         return Ok((vec![i], vec![o]));
@@ -123,13 +126,13 @@ fn make_intermediate_values<CS: ConstraintSystem>(
         }
         None => {
             let mix_in = (0..inputs.len())
-                .map(|_| Value::allocate_unassigned(cs))
+                .map(|_| AllocatedValue::unassigned(cs))
                 .collect::<Result<Vec<_>, _>>()?;
             let mix_mid = (0..inputs.len() - 2)
-                .map(|_| Value::allocate_unassigned(cs))
+                .map(|_| AllocatedValue::unassigned(cs))
                 .collect::<Result<Vec<_>, _>>()?;
             let mix_out = (0..inputs.len())
-                .map(|_| Value::allocate_unassigned(cs))
+                .map(|_| AllocatedValue::unassigned(cs))
                 .collect::<Result<Vec<_>, _>>()?;
             Ok((mix_in, mix_mid, mix_out))
         }

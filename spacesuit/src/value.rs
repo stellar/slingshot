@@ -35,15 +35,6 @@ pub struct AllocatedValue {
     pub assignment: Option<Value>,
 }
 
-/// Represents a variable for quantity, along with its assignment.
-#[derive(Copy, Clone, Debug)]
-pub struct AllocatedQuantity {
-    /// R1CS variable representing the quantity
-    pub variable: Variable,
-    /// Secret assignment to the variable
-    pub assignment: Option<SignedInteger>,
-}
-
 impl Value {
     /// Returns a zero quantity with a zero flavor.
     pub fn zero() -> Value {
@@ -64,43 +55,25 @@ impl Value {
             assignment: Some(*self),
         })
     }
+}
 
-    pub(crate) fn allocate_unassigned<CS: ConstraintSystem>(
+impl AllocatedValue {
+    /// Creates an unassigned allocated value.
+    pub(crate) fn unassigned<CS: ConstraintSystem>(
         cs: &mut CS,
     ) -> Result<AllocatedValue, R1CSError> {
-        let (q_var, f_var, _) = cs.allocate(|| {
+        let (q, f, _) = cs.allocate(|| {
             Err(R1CSError::GadgetError {
-                description: "Tried to allocate variables q_var and f_var from function"
+                description: "Tried to assign variables in `AllocatedValue::unassigned`"
                     .to_string(),
             })
         })?;
 
-        Ok(AllocatedValue {
-            q: q_var,
-            f: f_var,
+        Ok(Self {
+            q,
+            f,
             assignment: None,
         })
-    }
-}
-
-impl AllocatedValue {
-    /// Returns a quantity variable with its assignment.
-    pub fn quantity(&self) -> AllocatedQuantity {
-        AllocatedQuantity {
-            variable: self.q,
-            assignment: self.assignment.map(|v| v.q),
-        }
-    }
-
-    // /// Make another `AllocatedValue`, with the same assignment and newly allocated variables.
-    pub(crate) fn reallocate<CS: ConstraintSystem>(
-        &self,
-        cs: &mut CS,
-    ) -> Result<AllocatedValue, R1CSError> {
-        match self.assignment {
-            Some(value) => value.allocate(cs),
-            None => Value::allocate_unassigned(cs),
-        }
     }
 }
 
