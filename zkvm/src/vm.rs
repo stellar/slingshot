@@ -421,7 +421,7 @@ where
     fn output(&mut self, k: usize) -> Result<(), VMError> {
         let contract = self.pop_contract(k)?;
         let frozen_contract = contract.freeze(|v| self.variable_to_commitment(v));
-        self.txlog.push(Entry::Output(frozen_contract.to_vec()));
+        self.txlog.push(Entry::Output(frozen_contract.to_bytes()));
         Ok(())
     }
 
