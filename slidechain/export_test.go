@@ -124,6 +124,6 @@ func TestPegOut(t *testing.T) {
 	case <-ch:
 	}
 	// Wait for peg-out to be written.
-	// Avoids prematurely closing the database when this goroutine exits.
+	// Avoids closing the database while the watch peg-outs goroutine still needs it.
 	<-pegouts
 }

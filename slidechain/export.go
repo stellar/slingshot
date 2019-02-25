@@ -204,10 +204,7 @@ func (c *Custodian) pegOut(ctx context.Context, exporter xdr.AccountId, asset xd
 		return errors.Wrap(err, "building peg-out tx")
 	}
 	_, err = stellar.SignAndSubmitTx(c.hclient, tx, c.seed)
-	if err != nil {
-		return errors.Wrap(err, "submitting peg-out tx")
-	}
-	return nil
+	return errors.Wrap(err, "submitting peg-out tx")
 }
 
 func buildPegOutTx(custodianAddr, exporterAddr, tempAddr, network string, asset xdr.Asset, amount int64, seqnum xdr.SequenceNumber) (*b.TransactionBuilder, error) {

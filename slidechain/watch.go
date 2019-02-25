@@ -142,7 +142,7 @@ func (c *Custodian) watchExports(ctx context.Context) {
 			if err != nil {
 				continue
 			}
-			exportedAssetBytes := txvm.AssetID(importIssuanceSeed[:], []byte(info.AssetXDR))
+			exportedAssetBytes := txvm.AssetID(importIssuanceSeed[:], info.AssetXDR)
 
 			// Record the export in the db,
 			// then wake up a goroutine that executes peg-outs on the main chain.
@@ -173,7 +173,7 @@ func (c *Custodian) watchPegOuts(ctx context.Context, pegouts <-chan pegOut) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			const q = `SELECT amount, asset_xdr, exporter, temp_addr, seqnum, anchor, pubkey FROM exports WHERE (pegged_out=$1 OR pegged_out=$2)`
+			const q = `SELECT amount, asset_xdr, exporter, temp_addr, seqnum, anchor, pubkey FROM exports WHERE pegged_out IN ($1, $2)`
 			var (
 				txids, anchors, assetXDRs, pubkeys [][]byte
 				amounts, seqnums                   []int64
@@ -203,7 +203,7 @@ func (c *Custodian) watchPegOuts(ctx context.Context, pegouts <-chan pegOut) {
 					if err == context.Canceled {
 						return
 					}
-					log.Fatal(err)
+					log.Fatalf("doing post-peg-out: %s", err)
 				}
 			}
 		case p, ok := <-pegouts:
@@ -213,7 +213,7 @@ func (c *Custodian) watchPegOuts(ctx context.Context, pegouts <-chan pegOut) {
 					if err == context.Canceled {
 						return
 					}
-					log.Fatal(err)
+					log.Fatalf("doing post-peg-out: %s", err)
 				}
 			} else {
 				log.Printf("peg-outs channel closed")
