@@ -73,7 +73,6 @@ func UniqueNonceHash(bcid []byte, expMS int64) [32]byte {
 func consumeTokenProgSnapshot(bcid, assetXDR, recipPubkey []byte, amount, expMS int64) ([]byte, error) {
 	buf := new(bytes.Buffer)
 	// Push components of consume token snapshot.
-	// TODO(debnil): Figure out invalid item type error.
 	fmt.Fprintf(buf, "'C' x'%x' x'%x'\n", createTokenSeed[:], consumeTokenProg)
 	// Push con stack: quorum, {recip}, zeroval, amount, asset
 	// Note that plain data items must be converted to tuples to be contract arguments.
