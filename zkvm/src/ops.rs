@@ -337,6 +337,7 @@ impl Program {
     def_op!(var, Var);
     def_op!(verify, Verify);
 
+    /// Creates an empty `Program`.
     pub fn new() -> Self {
         Program(vec![])
     }
