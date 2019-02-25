@@ -342,6 +342,8 @@ impl Program {
         Program(vec![])
     }
 
+    /// Creates an empty `Program` and passes its &mut to the closure to let it add the instructions.
+    /// Returns the resulting program.
     pub fn build<F>(builder: F) -> Self
     where
         F: FnOnce(&mut Self) -> &mut Self,
