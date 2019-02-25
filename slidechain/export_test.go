@@ -38,7 +38,6 @@ func TestPegOut(t *testing.T) {
 
 	pegouts := make(chan pegOut)
 	go c.pegOutFromExports(ctx, pegouts)
-	go c.watchPegOuts(ctx, pegouts)
 
 	var lumen xdr.Asset
 	lumen.Type = xdr.AssetTypeAssetTypeNative
@@ -124,4 +123,7 @@ func TestPegOut(t *testing.T) {
 		t.Fatal("context timed out: no peg-out tx seen")
 	case <-ch:
 	}
+	// Wait for peg-out to be written.
+	// Avoids prematurely closing the database when this goroutine exits.
+	<-pegouts
 }

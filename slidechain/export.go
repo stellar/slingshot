@@ -376,12 +376,12 @@ func BuildExportTx(ctx context.Context, asset xdr.Asset, exportAmt, inputAmt int
 		Anchor:   retireAnchor[:],
 		Pubkey:   pubkey,
 	}
-	exportRefdata, err := json.Marshal(ref)
+	refdata, err := json.Marshal(ref)
 	if err != nil {
 		return nil, errors.Wrap(err, "marshaling reference data")
 	}
 	b := new(txvmutil.Builder)
-	b.PushdataBytes(exportRefdata)                                                                                       // con stack: json
+	b.PushdataBytes(refdata)                                                                                             // con stack: json
 	b.Op(op.Put)                                                                                                         // arg stack: json
 	standard.SpendMultisig(b, 1, []ed25519.PublicKey{pubkey}, inputAmt, assetID, anchor, standard.PayToMultisigSeed1[:]) // arg stack: inputval, sigcheck
 	b.Op(op.Get).Op(op.Get)                                                                                              // con stack: sigcheck, inputval
@@ -397,7 +397,7 @@ func BuildExportTx(ctx context.Context, asset xdr.Asset, exportAmt, inputAmt int
 		b.Op(op.Drop) // con stack: sigcheck, retireval
 	}
 	// con stack: sigcheck, retireval
-	b.PushdataBytes(exportRefdata).Op(op.Put)                               // con stack: sigcheck, retireval; arg stack: json
+	b.PushdataBytes(refdata).Op(op.Put)                                     // con stack: sigcheck, retireval; arg stack: json
 	b.PushdataInt64(0).Op(op.Split).PushdataInt64(1).Op(op.Roll).Op(op.Put) // con stack: sigcheck, zeroval; arg stack: json, retireval
 	b.Tuple(func(tup *txvmutil.TupleBuilder) { tup.PushdataBytes(pubkey) }) // con stack: sigcheck, zeroval; arg stack: json, retireval, {pubkey}
 	b.Op(op.Put)                                                            // con stack: sigchecker, zeroval; arg stack: json, retireval, {pubkey}
