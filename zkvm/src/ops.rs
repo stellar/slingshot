@@ -291,8 +291,8 @@ macro_rules! def_op {
         }
     );
     ($func_name:ident, $op:ident, $type:ty) => (
-           pub fn $func_name(&mut self, size :$type) -> &mut Program{
-             self.0.push(Instruction::$op(size));
+           pub fn $func_name(&mut self, arg :$type) -> &mut Program{
+             self.0.push(Instruction::$op(arg));
              self
         }
     );
