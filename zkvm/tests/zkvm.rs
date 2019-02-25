@@ -118,10 +118,11 @@ fn issue_contract(
     nonce_pred: Predicate,
     output_pred: Predicate,
 ) -> Vec<Instruction> {
-    let mut program = Program::new();
-    program.issue_helper(qty, flv, issuance_pred, nonce_pred); // stack: issued-val
-    program.output_helper(output_pred); // stack: empty
-    program.to_vec()
+    Program::build(|p| {
+        p.issue_helper(qty, flv, issuance_pred, nonce_pred) // stack: issued-val
+            .output_helper(output_pred) // stack: empty
+    })
+    .to_vec()
 }
 
 #[test]
