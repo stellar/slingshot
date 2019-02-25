@@ -273,7 +273,7 @@ impl Data {
     pub fn serialized_length(&self) -> usize {
         match self {
             Data::Opaque(data) => data.len(),
-            Data::Witness(x) => x.serialized_len(),
+            Data::Witness(x) => x.serialized_length(),
         }
     }
 
@@ -354,7 +354,7 @@ impl DataWitness {
         }
     }
 
-    fn serialized_len(&self) -> usize {
+    fn serialized_length(&self) -> usize {
         match self {
             DataWitness::Program(instr) => instr.iter().map(|p| p.serialized_length()).sum(),
             DataWitness::Input(b) => 32 + b.contract.serialized_length(),
