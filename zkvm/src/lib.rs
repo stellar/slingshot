@@ -34,5 +34,4 @@ pub use self::vm::{Tx, VerifiedTx};
 // TBD: review if we actually need to export these:
 pub use self::constraints::CommitmentWitness;
 pub use self::contract::PortableItem;
-pub use self::contract::{FrozenContract, FrozenItem, FrozenValue};
 pub use self::types::DataWitness;
