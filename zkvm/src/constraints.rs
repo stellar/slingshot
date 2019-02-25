@@ -39,8 +39,8 @@ pub enum Commitment {
 /// Prover's representation of the commitment secret: witness and blinding factor
 #[derive(Clone, Debug)]
 pub struct CommitmentWitness {
-    pub value: ScalarWitness,
-    pub blinding: Scalar,
+    value: ScalarWitness,
+    blinding: Scalar,
 }
 
 impl Commitment {
@@ -60,32 +60,41 @@ impl Commitment {
     pub(crate) fn encode(&self, buf: &mut Vec<u8>) {
         buf.extend_from_slice(&self.to_point().to_bytes());
     }
+
+    pub fn unblinded<T: Into<ScalarWitness>>(x: T) -> Self {
+        Commitment::Open(Box::new(CommitmentWitness {
+            blinding: Scalar::zero(),
+            value: x.into(),
+        }))
+    }
+
+    pub fn blinded<T: Into<ScalarWitness>>(x: T) -> Self {
+        Commitment::Open(Box::new(CommitmentWitness {
+            blinding: Scalar::random(&mut rand::thread_rng()),
+            value: x.into(),
+        }))
+    }
+
+    pub fn blinded_with_factor<T: Into<ScalarWitness>>(x: T, blinding: Scalar) -> Self {
+        Commitment::Open(Box::new(CommitmentWitness {
+            blinding,
+            value: x.into(),
+        }))
+    }
+
+    /// Returns a pair of secrets: the committed scalar or integer, and the blinding factor
+    pub fn witness(&self) -> Option<(ScalarWitness, Scalar)> {
+        match self {
+            Commitment::Closed(_) => None,
+            Commitment::Open(w) => Some((w.value, w.blinding)),
+        }
+    }
 }
 
 impl CommitmentWitness {
-    pub fn to_point(&self) -> CompressedRistretto {
+    fn to_point(&self) -> CompressedRistretto {
         let gens = PedersenGens::default();
         gens.commit(self.value.into(), self.blinding).compress()
-    }
-
-    pub fn unblinded<T>(x: T) -> Self
-    where
-        T: Into<ScalarWitness>,
-    {
-        CommitmentWitness {
-            blinding: Scalar::zero(),
-            value: x.into(),
-        }
-    }
-
-    pub fn blinded<T>(x: T) -> Self
-    where
-        T: Into<ScalarWitness>,
-    {
-        CommitmentWitness {
-            blinding: Scalar::random(&mut rand::thread_rng()),
-            value: x.into(),
-        }
     }
 }
 
@@ -161,5 +170,11 @@ impl From<CommitmentWitness> for Commitment {
 impl From<CompressedRistretto> for Commitment {
     fn from(x: CompressedRistretto) -> Self {
         Commitment::Closed(x)
+    }
+}
+
+impl Into<CompressedRistretto> for Commitment {
+    fn into(self) -> CompressedRistretto {
+        self.to_point()
     }
 }
