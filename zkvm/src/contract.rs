@@ -100,7 +100,7 @@ impl Input {
     }
 
     /// Unfreezes the input by converting it to the Contract an UTXO ID.
-    pub(crate) fn unfreeze<F>(self, mut com_to_var: F) -> (Contract, UTXO)
+    pub(crate) fn unfreeze<F>(self, com_to_var: F) -> (Contract, UTXO)
     where
         F: FnMut(Commitment) -> Variable,
     {
@@ -167,7 +167,7 @@ impl FrozenContract {
 
     /// Converts FrozenContract to a Contract and uses provided closure
     /// to allocate R1CS variables for the Values stored in the contract’s payload.
-    pub(crate) fn unfreeze<F>(self, mut com_to_var: F) -> Contract
+    fn unfreeze<F>(self, mut com_to_var: F) -> Contract
     where
         F: FnMut(Commitment) -> Variable,
     {
