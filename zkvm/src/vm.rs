@@ -7,7 +7,7 @@ use spacesuit::SignedInteger;
 use std::iter::FromIterator;
 
 use crate::constraints::{Commitment, Constraint, Expression, Variable};
-use crate::contract::{Contract, FrozenContract, FrozenItem, FrozenValue, PortableItem};
+use crate::contract::{Contract, PortableItem};
 use crate::encoding::SliceReader;
 use crate::errors::VMError;
 use crate::ops::Instruction;
@@ -410,9 +410,9 @@ where
     /// _input_ **input** → _contract_
     fn input(&mut self) -> Result<(), VMError> {
         let input = self.pop_item()?.to_data()?.to_input()?;
-        let contract = input.contract.unfreeze(|c| self.commitment_to_variable(c));
+        let (contract, utxo) = input.unfreeze(|c| self.commitment_to_variable(c));
         self.push_item(contract);
-        self.txlog.push(Entry::Input(input.utxo));
+        self.txlog.push(Entry::Input(utxo));
         self.unique = true;
         Ok(())
     }
@@ -421,9 +421,7 @@ where
     fn output(&mut self, k: usize) -> Result<(), VMError> {
         let contract = self.pop_contract(k)?;
         let frozen_contract = contract.freeze(|v| self.variable_to_commitment(v));
-        let mut buf = Vec::with_capacity(frozen_contract.serialized_length());
-        frozen_contract.encode(&mut buf);
-        self.txlog.push(Entry::Output(buf));
+        self.txlog.push(Entry::Output(frozen_contract.to_vec()));
         Ok(())
     }
 
