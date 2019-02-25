@@ -672,11 +672,10 @@ where
     }
 
     fn variable_assignment(&mut self, var: Variable) -> Option<ScalarWitness> {
-        let v_com = &self.variable_commitments[var.index];
-        match &v_com.commitment {
-            Commitment::Closed(_) => None,
-            Commitment::Open(w) => Some(w.value),
-        }
+        self.variable_commitments[var.index]
+            .commitment
+            .witness()
+            .map(|(content, _)| content)
     }
 
     fn unfreeze_contract(&mut self, contract: FrozenContract) -> Contract {

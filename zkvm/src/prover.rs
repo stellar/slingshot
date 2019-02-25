@@ -30,11 +30,8 @@ impl<'a, 'b> Delegate<r1cs::Prover<'a, 'b>> for Prover<'a, 'b> {
         &mut self,
         com: &Commitment,
     ) -> Result<(CompressedRistretto, r1cs::Variable), VMError> {
-        let (v, v_blinding) = match com {
-            Commitment::Open(w) => (w.value.into(), w.blinding),
-            Commitment::Closed(_) => return Err(VMError::WitnessMissing),
-        };
-        Ok(self.cs.commit(v, v_blinding))
+        let (v, v_blinding) = com.witness().ok_or(VMError::WitnessMissing)?;
+        Ok(self.cs.commit(v.into(), v_blinding))
     }
 
     fn verify_point_op<F>(&mut self, _point_op_fn: F) -> Result<(), VMError>

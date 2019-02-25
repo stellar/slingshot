@@ -28,28 +28,22 @@ impl ProgramHelper for Program {
         issuance_pred: Predicate,
         nonce_pred: Predicate,
     ) -> &mut Self {
-        self.push(Commitment::from(CommitmentWitness {
-            value: qty.into(),
-            blinding: Scalar::from(1u64),
-        })) // stack: qty
-        .var() // stack: qty-var
-        .push(Commitment::from(CommitmentWitness::unblinded(flv))) // stack: qty-var, flv
-        .var() // stack: qty-var, flv-var
-        .push(issuance_pred) // stack: qty-var, flv-var, pred
-        .issue() // stack: issue-contract
-        .push(nonce_pred) // stack: issue-contract, pred
-        .nonce() // stack: issue-contract, nonce-contract
-        .sign_tx() // stack: issue-contract
-        .sign_tx(); // stack: issued-value
+        self.push(Commitment::blinded_with_factor(qty, Scalar::from(1u64))) // stack: qty
+            .var() // stack: qty-var
+            .push(Commitment::unblinded(flv)) // stack: qty-var, flv
+            .var() // stack: qty-var, flv-var
+            .push(issuance_pred) // stack: qty-var, flv-var, pred
+            .issue() // stack: issue-contract
+            .push(nonce_pred) // stack: issue-contract, pred
+            .nonce() // stack: issue-contract, nonce-contract
+            .sign_tx() // stack: issue-contract
+            .sign_tx(); // stack: issued-value
         self
     }
 
     fn input_helper(&mut self, qty: u64, flv: Scalar, pred: Predicate) -> &mut Self {
         self.push(Input::new(
-            vec![(
-                Commitment::from(CommitmentWitness::blinded(qty)),
-                Commitment::from(CommitmentWitness::blinded(flv)),
-            )],
+            vec![(Commitment::blinded(qty), Commitment::blinded(flv))],
             pred,
             TxID([0; 32]),
         )) // stack: input-data
@@ -62,8 +56,8 @@ impl ProgramHelper for Program {
         let output_count = outputs.len();
 
         for (qty, flv) in outputs {
-            self.push(Commitment::from(CommitmentWitness::blinded(qty)));
-            self.push(Commitment::from(CommitmentWitness::blinded(flv)));
+            self.push(Commitment::blinded(qty));
+            self.push(Commitment::blinded(flv));
         }
         self.cloak(input_count, output_count);
         self
