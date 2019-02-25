@@ -410,7 +410,7 @@ where
     /// _input_ **input** → _contract_
     fn input(&mut self) -> Result<(), VMError> {
         let input = self.pop_item()?.to_data()?.to_input()?;
-        let contract = self.unfreeze_contract(input.contract);
+        let contract = input.contract.unfreeze(|c| self.commitment_to_variable(c));
         self.push_item(contract);
         self.txlog.push(Entry::Input(input.utxo));
         self.unique = true;
@@ -420,7 +420,7 @@ where
     /// _items... predicate_ **output:_k_** → ø
     fn output(&mut self, k: usize) -> Result<(), VMError> {
         let contract = self.pop_contract(k)?;
-        let frozen_contract = self.freeze_contract(contract);
+        let frozen_contract = contract.freeze(|v| self.variable_to_commitment(v));
         let mut buf = Vec::with_capacity(frozen_contract.serialized_length());
         frozen_contract.encode(&mut buf);
         self.txlog.push(Entry::Output(buf));
@@ -673,42 +673,6 @@ where
             .commitment
             .witness()
             .map(|(content, _)| content)
-    }
-
-    fn unfreeze_contract(&mut self, contract: FrozenContract) -> Contract {
-        let payload = contract
-            .payload
-            .into_iter()
-            .map(|p| match p {
-                FrozenItem::Data(d) => PortableItem::Data(d),
-                FrozenItem::Value(v) => PortableItem::Value(Value {
-                    qty: self.commitment_to_variable(v.qty),
-                    flv: self.commitment_to_variable(v.flv),
-                }),
-            })
-            .collect::<Vec<_>>();
-        Contract {
-            payload: payload,
-            predicate: contract.predicate,
-        }
-    }
-
-    fn freeze_contract(&mut self, contract: Contract) -> FrozenContract {
-        let frozen_items = contract
-            .payload
-            .into_iter()
-            .map(|i| match i {
-                PortableItem::Data(d) => FrozenItem::Data(d),
-                PortableItem::Value(v) => FrozenItem::Value(FrozenValue {
-                    flv: self.variable_to_commitment(v.flv),
-                    qty: self.variable_to_commitment(v.qty),
-                }),
-            })
-            .collect::<Vec<_>>();
-        FrozenContract {
-            payload: frozen_items,
-            predicate: contract.predicate,
-        }
     }
 
     fn add_range_proof(&mut self, bitrange: usize, expr: Expression) -> Result<(), VMError> {

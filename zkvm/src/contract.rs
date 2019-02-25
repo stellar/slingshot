@@ -1,4 +1,4 @@
-use crate::constraints::Commitment;
+use crate::constraints::{Commitment, Variable};
 use crate::encoding;
 use crate::encoding::SliceReader;
 use crate::errors::VMError;
@@ -141,6 +141,27 @@ impl FrozenContract {
         }
     }
 
+    /// Converts FrozenContract to a Contract and uses provided closure
+    /// to allocate R1CS variables for the Values stored in the contract’s payload.
+    pub(crate) fn unfreeze<F>(self, mut com_to_var: F) -> Contract
+    where
+        F: FnMut(Commitment) -> Variable,
+    {
+        let payload = self
+            .payload
+            .into_iter()
+            .map(|p| match p {
+                FrozenItem::Data(d) => PortableItem::Data(d),
+                FrozenItem::Value(v) => PortableItem::Value(Value {
+                    qty: com_to_var(v.qty),
+                    flv: com_to_var(v.flv),
+                }),
+            })
+            .collect::<Vec<_>>();
+        let predicate = self.predicate;
+        Contract { payload, predicate }
+    }
+
     fn decode<'a>(output: &mut SliceReader<'a>) -> Result<Self, VMError> {
         //    Output  =  Predicate  ||  LE32(k)  ||  Item[0]  || ... ||  Item[k-1]
         // Predicate  =  <32 bytes>
@@ -177,5 +198,29 @@ impl FrozenContract {
         }
 
         Ok(FrozenContract { predicate, payload })
+    }
+}
+
+impl Contract {
+    /// Converts Contract to a FrozenContract and uses provided closure
+    /// to get the commitments for the variables inside the contract’s Values.
+    pub(crate) fn freeze<F>(self, mut var_to_com: F) -> FrozenContract
+    where
+        F: FnMut(Variable) -> Commitment,
+    {
+        let payload = self
+            .payload
+            .into_iter()
+            .map(|i| match i {
+                PortableItem::Data(d) => FrozenItem::Data(d),
+                PortableItem::Value(v) => FrozenItem::Value(FrozenValue {
+                    flv: var_to_com(v.flv),
+                    qty: var_to_com(v.qty),
+                }),
+            })
+            .collect::<Vec<_>>();
+        let predicate = self.predicate;
+
+        FrozenContract { payload, predicate }
     }
 }
