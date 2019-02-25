@@ -209,7 +209,7 @@ where
                 Instruction::Expr => self.expr()?,
                 Instruction::Neg => self.neg()?,
                 Instruction::Add => self.add()?,
-                Instruction::Mul => unimplemented!(),
+                Instruction::Mul => self.mul()?,
                 Instruction::Eq => unimplemented!(),
                 Instruction::Range(_) => unimplemented!(),
                 Instruction::And => unimplemented!(),
@@ -304,6 +304,14 @@ where
         let expr3 = expr1 + expr2;
         self.push_item(expr3);
         Ok(())
+    }
+
+    fn mul(&mut self) -> Result<(), VMError> {
+        let expr2 = self.pop_item()?.to_expression()?;
+        let expr1 = self.pop_item()?.to_expression()?;
+        let expr3 = expr1 * expr2;
+        self.push_item(expr3);
+        Ok(())        
     }
 
     fn r#const(&mut self) -> Result<(), VMError> {
