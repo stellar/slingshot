@@ -3,13 +3,13 @@ use bulletproofs::{BulletproofGens, PedersenGens};
 use curve25519_dalek::ristretto::CompressedRistretto;
 use merlin::Transcript;
 
+use crate::constraints::Commitment;
 use crate::encoding::*;
 use crate::errors::VMError;
 use crate::ops::Instruction;
 use crate::point_ops::PointOp;
 use crate::predicate::Predicate;
 use crate::signature::VerificationKey;
-use crate::types::*;
 
 use crate::vm::{Delegate, Tx, VerifiedTx, VM};
 

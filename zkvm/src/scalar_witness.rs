@@ -90,6 +90,22 @@ impl Mul for ScalarWitness {
     }
 }
 
+// Upcasting integers/scalars into ScalarWitness.
+
+impl From<u64> for ScalarWitness {
+    fn from(x: u64) -> Self {
+        ScalarWitness::Integer(x.into())
+    }
+}
+
+impl From<Scalar> for ScalarWitness {
+    fn from(x: Scalar) -> Self {
+        ScalarWitness::Scalar(x)
+    }
+}
+
+// Converting scalar witness to an opaque Scalar.
+
 impl Into<Scalar> for ScalarWitness {
     fn into(self) -> Scalar {
         self.to_scalar()
