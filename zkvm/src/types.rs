@@ -358,7 +358,7 @@ impl DataWitness {
         match self {
             DataWitness::Program(instr) => instr.iter().map(|p| p.serialized_length()).sum(),
             DataWitness::Input(b) => 32 + b.contract.serialized_length(),
-            // All other types are encoded as 32-bit points or scalars
+            // All other types are encoded as 32-byte points or scalars
             _ => 32 as usize,
         }
     }
