@@ -120,6 +120,7 @@ impl SignedInteger {
         }
     }
 
+    /// Converts the integer to Scalar.
     pub fn to_scalar(self) -> Scalar {
         self.into()
     }
