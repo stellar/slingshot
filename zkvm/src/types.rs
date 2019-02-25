@@ -100,6 +100,12 @@ pub enum ScalarWitness {
 }
 
 impl Commitment {
+    /// Returns the number of bytes needed to serialize the Commitment.
+    pub fn serialized_length(&self) -> usize {
+        32
+    }
+
+    /// Converts a Commitment to a compressed point.
     pub fn to_point(&self) -> CompressedRistretto {
         match self {
             Commitment::Closed(x) => *x,
@@ -140,6 +146,15 @@ impl CommitmentWitness {
 }
 
 impl ScalarWitness {
+    /// Returns the number of bytes needed to serialize the ScalarWitness.
+    pub fn serialized_length(&self) -> usize {
+        32
+    }
+
+    pub(crate) fn encode(&self, buf: &mut Vec<u8>) {
+        buf.extend_from_slice(&self.to_scalar().to_bytes())
+    }
+
     /// Converts the witness to an integer if it is an integer
     pub fn to_integer(self) -> Result<SignedInteger, VMError> {
         match self {
@@ -148,6 +163,7 @@ impl ScalarWitness {
         }
     }
 
+    // Converts the witness to a scalar.
     pub fn to_scalar(self) -> Scalar {
         match self {
             ScalarWitness::Integer(i) => i.into(),
@@ -269,12 +285,11 @@ impl Item {
 }
 
 impl Data {
-    /// Returns a guaranteed lower bound on the number of bytes
-    /// needed to serialize the Data.
-    pub fn min_serialized_length(&self) -> usize {
+    /// Returns the number of bytes needed to serialize the Data.
+    pub fn serialized_length(&self) -> usize {
         match self {
             Data::Opaque(data) => data.len(),
-            Data::Witness(_) => 0,
+            Data::Witness(x) => x.serialized_length(),
         }
     }
 
@@ -283,7 +298,7 @@ impl Data {
         match self {
             Data::Opaque(data) => data.clone(),
             Data::Witness(w) => {
-                let mut bytes: Vec<u8> = Vec::with_capacity(self.min_serialized_length());
+                let mut bytes: Vec<u8> = Vec::with_capacity(self.serialized_length());
                 w.encode(&mut bytes);
                 bytes.clone()
             }
@@ -345,13 +360,20 @@ impl DataWitness {
     fn encode(&self, buf: &mut Vec<u8>) {
         match self {
             DataWitness::Program(instr) => Instruction::encode_program(instr.iter(), buf),
-            DataWitness::Predicate(pw) => pw.encode(buf),
+            DataWitness::Predicate(p) => p.encode(buf),
             DataWitness::Commitment(c) => c.encode(buf),
-            DataWitness::Scalar(s) => {
-                let s: Scalar = (*s.clone()).into();
-                buf.extend_from_slice(&s.to_bytes())
-            }
+            DataWitness::Scalar(s) => s.encode(buf),
             DataWitness::Input(b) => b.encode(buf),
+        }
+    }
+
+    fn serialized_length(&self) -> usize {
+        match self {
+            DataWitness::Program(instr) => instr.iter().map(|p| p.serialized_length()).sum(),
+            DataWitness::Input(b) => 32 + b.contract.serialized_length(),
+            DataWitness::Predicate(p) => p.serialized_length(),
+            DataWitness::Commitment(c) => c.serialized_length(),
+            DataWitness::Scalar(s) => s.serialized_length(),
         }
     }
 }

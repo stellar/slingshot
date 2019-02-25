@@ -111,6 +111,20 @@ impl Opcode {
 }
 
 impl Instruction {
+    /// Returns the number of bytes required to serialize this instruction.
+    pub fn serialized_length(&self) -> usize {
+        match self {
+            Instruction::Push(data) => 1 + 4 + data.serialized_length(),
+            Instruction::Dup(_) => 1 + 4,
+            Instruction::Roll(_) => 1 + 4,
+            Instruction::Range(_) => 1 + 1,
+            Instruction::Cloak(_, _) => 1 + 4 + 4,
+            Instruction::Output(_) => 1 + 4,
+            Instruction::Contract(_) => 1 + 4,
+            _ => 1,
+        }
+    }
+
     /// Returns a parsed instruction from a subslice of the program string, modifying
     /// the subslice according to the bytes the instruction occupies
     /// E.g. a push instruction with 5-byte string occupies 1+4+5=10 bytes,
