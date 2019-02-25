@@ -353,6 +353,7 @@ impl Program {
         program
     }
 
+    /// Converts the program to a plain vector of instructions.
     pub fn to_vec(self) -> Vec<Instruction> {
         self.0
     }
