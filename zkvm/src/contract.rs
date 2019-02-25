@@ -35,14 +35,14 @@ pub struct Input {
 
 /// Representation of a Contract inside an Input that can be cloned.
 #[derive(Clone, Debug)]
-pub struct FrozenContract {
+pub(crate) struct FrozenContract {
     pub(crate) payload: Vec<FrozenItem>,
     pub(crate) predicate: Predicate,
 }
 
 /// Representation of a PortableItem inside an Input that can be cloned.
 #[derive(Clone, Debug)]
-pub enum FrozenItem {
+pub(crate) enum FrozenItem {
     Data(Data),
     Value(FrozenValue),
 }
@@ -51,7 +51,7 @@ pub enum FrozenItem {
 /// Note: values do not necessarily have open commitments. Some can be reblinded,
 /// others can be passed-through to an output without going through `cloak` and the constraint system.
 #[derive(Clone, Debug)]
-pub struct FrozenValue {
+pub(crate) struct FrozenValue {
     pub(crate) qty: Commitment,
     pub(crate) flv: Commitment,
 }
