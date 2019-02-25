@@ -358,6 +358,7 @@ impl Program {
         self.0
     }
 
+    /// Adds a `push` instruction with an immediate data type that can be converted into `Data`.
     pub fn push<T: Into<Data>>(&mut self, data: T) -> &mut Program {
         self.0.push(Instruction::Push(data.into()));
         self
