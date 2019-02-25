@@ -5,11 +5,12 @@ use spacesuit::SignedInteger;
 
 use crate::errors::VMError;
 use std::ops::{Add, Mul, Neg};
+use std::u64;
 
 /// Represents a concrete kind of a number represented by a scalar:
 /// `ScalarKind::Integer` represents a signed integer with 64-bit absolute value (think "i65")
 /// `ScalarKind::Scalar` represents a scalar modulo group order.
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub enum ScalarWitness {
     Integer(SignedInteger),
     Scalar(Scalar),
@@ -52,6 +53,8 @@ impl ScalarWitness {
     }
 }
 
+// Implementing arithmetic operatons for ScalarWitness
+
 impl Neg for ScalarWitness {
     type Output = ScalarWitness;
 
@@ -62,6 +65,7 @@ impl Neg for ScalarWitness {
         }
     }
 }
+
 impl Add for ScalarWitness {
     type Output = ScalarWitness;
 
@@ -178,6 +182,68 @@ mod tests {
         );
     }
 
-    // TBD: arithmetic tests
-    // TBD: also test int-to-scalar promotion on overflow
+    #[test]
+    fn add() {
+        assert_eq!(
+            ScalarWitness::from(2u64) + ScalarWitness::from(5u64),
+            ScalarWitness::from(7u64)
+        );
+
+        assert_eq!(
+            -ScalarWitness::from(10u64) + ScalarWitness::from(5u64),
+            -ScalarWitness::from(5u64)
+        );
+
+        assert_eq!(
+            ScalarWitness::from(1000u64) + ScalarWitness::from(Scalar::from(0xffu64)),
+            ScalarWitness::from(Scalar::from(1000u64) + Scalar::from(0xffu64))
+        );
+
+        assert_eq!(
+            -ScalarWitness::from(Scalar::from(0xffu64))
+                + ScalarWitness::from(Scalar::from(0xffu64)),
+            ScalarWitness::from(Scalar::zero())
+        );
+    }
+
+    #[test]
+    fn mul() {
+        assert_eq!(
+            ScalarWitness::from(5u64) * ScalarWitness::from(6u64),
+            ScalarWitness::from(30u64)
+        );
+
+        assert_eq!(
+            -ScalarWitness::from(2u64) * ScalarWitness::from(7u64),
+            -ScalarWitness::from(14u64)
+        );
+
+        assert_eq!(
+            ScalarWitness::from(100u64) * ScalarWitness::from(Scalar::from(0xffu64)),
+            ScalarWitness::from(Scalar::from(100u64) * Scalar::from(0xffu64))
+        );
+
+        assert_eq!(
+            ScalarWitness::from(Scalar::from(0xffu64)) * ScalarWitness::from(Scalar::from(0xfeu64)),
+            ScalarWitness::from(Scalar::from(0xffu64) * Scalar::from(0xfeu64))
+        );
+    }
+
+    #[test]
+    fn overflow() {
+        assert_eq!(
+            ScalarWitness::from(u64::MAX) * ScalarWitness::from(u64::MAX),
+            ScalarWitness::from(Scalar::from(u64::MAX) * Scalar::from(u64::MAX))
+        );
+
+        assert_eq!(
+            ScalarWitness::from(u64::MAX) + ScalarWitness::from(u64::MAX),
+            ScalarWitness::from(Scalar::from(u64::MAX) + Scalar::from(u64::MAX))
+        );
+
+        assert_eq!(
+            -ScalarWitness::from(u64::MAX) + (-ScalarWitness::from(u64::MAX)),
+            ScalarWitness::from(-Scalar::from(u64::MAX) - Scalar::from(u64::MAX))
+        );
+    }
 }
