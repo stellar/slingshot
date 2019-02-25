@@ -5,7 +5,6 @@ use curve25519_dalek::scalar::Scalar;
 use spacesuit;
 use spacesuit::SignedInteger;
 use std::iter::FromIterator;
-use std::ops::Neg;
 
 use crate::contract::{Contract, FrozenContract, FrozenItem, FrozenValue, PortableItem};
 use crate::encoding::SliceReader;
