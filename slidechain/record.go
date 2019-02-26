@@ -22,14 +22,15 @@ type PegIn struct {
 	ExpMS       int64  `json:"exp_ms"`
 }
 
-// RecordPegIn records a peg-in transaction in the database.
+// DoPegIn submits the pre-peg-in transaction to TxVM and records a peg-in transaction in the database.
 // TODO(debnil): Make record RPC do pre-peg tx submission as well, instead of requiring a separate server round-trip first.
-func (c *Custodian) RecordPegIn(w http.ResponseWriter, req *http.Request) {
+func (c *Custodian) DoPegIn(w http.ResponseWriter, req *http.Request) {
 	data, err := ioutil.ReadAll(req.Body)
 	if err != nil {
 		net.Errorf(w, http.StatusInternalServerError, "sending response: %s", err)
 		return
 	}
+	// Unmarshal peg-in.
 	var p PegIn
 	err = json.Unmarshal(data, &p)
 	if err != nil {
@@ -40,25 +41,26 @@ func (c *Custodian) RecordPegIn(w http.ResponseWriter, req *http.Request) {
 	var rawTx bc.RawTx
 	err = proto.Unmarshal(p.Transaction, &rawTx)
 	if err != nil {
-		net.Errorf(w, http.StatusInternalServerError, "parsing transaction from request: %s", err)
+		net.Errorf(w, http.StatusInternalServerError, "sending response: %s", err)
 		return
 	}
 	tx, err := bc.NewTx(rawTx.Program, rawTx.Version, rawTx.Runlimit)
 	if err != nil {
-		net.Errorf(w, http.StatusInternalServerError, "building tx: %s", err)
+		net.Errorf(w, http.StatusInternalServerError, "sending response: %s", err)
 		return
 	}
 	// Submit pre-peg-in transaction and wait on success.
 	ctx := req.Context()
-	r, err := c.S.submitTx(ctx, tx, defaultBlockInterval)
+	r, err := c.S.submitTx(ctx, tx)
 	if err != nil {
-		net.Errorf(w, http.StatusInternalServerError, "submitting tx: %s", err)
+		net.Errorf(w, http.StatusInternalServerError, "sending response: %s", err)
 		return
 	}
 	err = c.S.waitOnTx(ctx, tx.ID, r)
 	if err != nil {
-		net.Errorf(w, http.StatusInternalServerError, "waiting on tx: %s", err)
+		net.Errorf(w, http.StatusInternalServerError, "sending response: %s", err)
 	}
+	// Record peg in database.
 	nonceHash := UniqueNonceHash(c.InitBlockHash.Bytes(), p.ExpMS)
 	err = c.insertPegIn(ctx, nonceHash[:], p.RecipPubkey, p.ExpMS)
 	if err != nil {

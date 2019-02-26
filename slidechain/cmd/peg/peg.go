@@ -108,7 +108,7 @@ func main() {
 		log.Fatal("converting amount to int64: ", err)
 	}
 	expMS := int64(bc.Millis(time.Now().Add(10 * time.Minute)))
-	err = doPrepegTx(bcidBytes[:], assetXDR, amountInt, expMS, recipientPubkey[:], *slidechaind)
+	err = doPegIn(bcidBytes[:], assetXDR, amountInt, expMS, recipientPubkey[:], *slidechaind)
 	if err != nil {
 		log.Fatal("doing pre-peg-in tx: ", err)
 	}
@@ -128,21 +128,13 @@ func main() {
 	log.Printf("successfully submitted peg-in tx hash %s on ledger %d", succ.Hash, succ.Ledger)
 }
 
-// DoPrepegTx builds, submits the pre-peg TxVM transaction, and waits for it to hit the chain.
-func doPrepegTx(bcid, assetXDR []byte, amount, expMS int64, pubkey ed25519.PublicKey, slidechaind string) error {
+// doPegIn builds, submits the pre-peg TxVM transaction, and waits for it to hit the chain.
+func doPegIn(bcid, assetXDR []byte, amount, expMS int64, pubkey ed25519.PublicKey, slidechaind string) error {
 	prepegTx, err := slidechain.BuildPrepegTx(bcid, assetXDR, pubkey, amount, expMS)
 	if err != nil {
 		return errors.Wrap(err, "building pre-peg-in tx")
 	}
-	err = submitAndRecordPrepeg(prepegTx, assetXDR, amount, expMS, pubkey, slidechaind)
-	if err != nil {
-		return errors.Wrap(err, "recording peg")
-	}
-	return nil
-}
-
-func submitAndRecordPrepeg(tx *bc.Tx, assetXDR []byte, amount, expMS int64, pubkey ed25519.PublicKey, slidechaind string) error {
-	prepegTxBits, err := proto.Marshal(&tx.RawTx)
+	prepegTxBits, err := proto.Marshal(&prepegTx.RawTx)
 	if err != nil {
 		return errors.Wrap(err, "marshaling pre-peg tx")
 	}
@@ -157,7 +149,7 @@ func submitAndRecordPrepeg(tx *bc.Tx, assetXDR []byte, amount, expMS int64, pubk
 	if err != nil {
 		return errors.Wrap(err, "marshaling peg")
 	}
-	resp, err := http.Post(slidechaind+"/record", "application/octet-stream", bytes.NewReader(pegBits))
+	resp, err := http.Post(slidechaind+"/pegin", "application/octet-stream", bytes.NewReader(pegBits))
 	if err != nil {
 		return errors.Wrap(err, "recording to slidechaind")
 	}
@@ -165,6 +157,6 @@ func submitAndRecordPrepeg(tx *bc.Tx, assetXDR []byte, amount, expMS int64, pubk
 	if resp.StatusCode/100 != 2 {
 		return fmt.Errorf("status code %d from POST /record", resp.StatusCode)
 	}
-	log.Printf("successfully recorded peg for tx %x", tx.ID.Bytes())
+	log.Printf("successfully recorded peg for tx %x", prepegTx.ID.Bytes())
 	return nil
 }
