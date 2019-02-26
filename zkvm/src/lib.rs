@@ -12,6 +12,7 @@ mod prover;
 mod scalar_witness;
 mod signature;
 mod transcript;
+mod treasury;
 mod txlog;
 mod types;
 mod verifier;
@@ -29,3 +30,5 @@ pub use self::txlog::{Entry, TxID, UTXO};
 pub use self::types::{Data, Item, Value, WideValue};
 pub use self::verifier::Verifier;
 pub use self::vm::{Tx, TxHeader, VerifiedTx};
+
+pub use self::treasury::Treasury;
