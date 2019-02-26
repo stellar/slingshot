@@ -99,14 +99,13 @@ func main() {
 	if err != nil {
 		log.Fatal("parsing horizon string: ", err)
 	}
-	amountInt64 := int64(amountXLM)
 
 	assetXDR, err := asset.MarshalBinary()
 	if err != nil {
 		log.Fatal("marshaling asset xdr: ", err)
 	}
 	expMS := int64(bc.Millis(time.Now().Add(10 * time.Minute)))
-	err = doPrepegTx(bcidBytes[:], assetXDR, amountInt64, expMS, recipientPubkey[:], *slidechaind)
+	err = doPrepegTx(bcidBytes[:], assetXDR, int64(amountXLM), expMS, recipientPubkey[:], *slidechaind)
 	if err != nil {
 		log.Fatal("doing pre-peg-in tx: ", err)
 	}
