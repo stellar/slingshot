@@ -123,10 +123,8 @@ func (s *submitter) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	}
 	wait := (waitStr != "")
 
-	var (
-		blockInterval time.Duration
-		err           error
-	)
+	var err error
+	blockInterval := defaultBlockInterval
 	blockIntervalStr := req.FormValue("blockInterval")
 	if blockIntervalStr != "" {
 		blockInterval, err = time.ParseDuration(blockIntervalStr)
@@ -134,8 +132,6 @@ func (s *submitter) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			net.Errorf(w, http.StatusBadRequest, "parsing block interval duration: %s", err)
 			return
 		}
-	} else {
-		blockInterval = defaultBlockInterval
 	}
 
 	bits, err := ioutil.ReadAll(req.Body)
