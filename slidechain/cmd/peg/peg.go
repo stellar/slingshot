@@ -128,7 +128,8 @@ func main() {
 	log.Printf("successfully submitted peg-in tx hash %s on ledger %d", succ.Hash, succ.Ledger)
 }
 
-// doPegIn builds, submits the pre-peg TxVM transaction, and waits for it to hit the chain.
+// doPegIn builds the pre-peg-in tx and calls the peg-in Slidechain RPC.
+// That RPC submits and waits for the pre-peg TxVM transaction and records the peg-in in the database.
 func doPegIn(bcid, assetXDR []byte, amount, expMS int64, pubkey ed25519.PublicKey, slidechaind string) error {
 	prepegTx, err := slidechain.BuildPrepegTx(bcid, assetXDR, pubkey, amount, expMS)
 	if err != nil {
@@ -155,7 +156,7 @@ func doPegIn(bcid, assetXDR []byte, amount, expMS int64, pubkey ed25519.PublicKe
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode/100 != 2 {
-		return fmt.Errorf("status code %d from POST /record", resp.StatusCode)
+		return fmt.Errorf("status code %d from POST /pegin", resp.StatusCode)
 	}
 	log.Printf("successfully recorded peg for tx %x", prepegTx.ID.Bytes())
 	return nil
