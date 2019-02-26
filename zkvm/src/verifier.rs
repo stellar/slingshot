@@ -90,6 +90,7 @@ impl<'a, 'b> Verifier<'a, 'b> {
         let signtx_point_op = tx
             .signature
             .verify_aggregated(&mut signtx_transcript, &verifier.signtx_keys);
+
         verifier.deferred_operations.push(signtx_point_op);
         // Verify all deferred crypto operations.
         PointOp::verify_batch(&verifier.deferred_operations[..])?;

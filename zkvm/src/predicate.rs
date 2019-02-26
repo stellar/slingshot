@@ -32,8 +32,10 @@ pub enum PredicateWitness {
     /// (but known to be a valid Ristretto point).
     OpaqueBranch(RistrettoPoint),
 
-    /// Secret signing key for the predicate-as-a-verification-key.
-    Key(Scalar),
+    /// Signing key for the predicate-as-a-verification-key.
+    /// Prover will provide secret signing key separately when
+    /// constructing aggregated signature.
+    Key(RistrettoPoint),
 
     /// Representation of a predicate as commitment to a program.
     Program(Vec<Instruction>),
@@ -96,12 +98,12 @@ impl Predicate {
     }
 
     /// Creates a predicate with a signing key witness.
-    pub fn from_signing_key(secret_key: Scalar) -> Self {
-        Predicate::Witness(PredicateWitness::Key(secret_key).into())
+    pub fn from_key(key: RistrettoPoint) -> Self {
+        Predicate::Witness(PredicateWitness::Key(key))
     }
 
     /// Downcasts the predicate to a signing key
-    pub fn to_signing_key(self) -> Result<Scalar, VMError> {
+    pub fn to_key(self) -> Result<RistrettoPoint, VMError> {
         match self.to_witness()? {
             PredicateWitness::Key(s) => Ok(s),
             _ => Err(VMError::TypeNotKey),
@@ -148,7 +150,7 @@ impl PredicateWitness {
     fn to_uncompressed_point(&self) -> RistrettoPoint {
         match self {
             PredicateWitness::OpaqueBranch(p) => *p,
-            PredicateWitness::Key(s) => VerificationKey::from_secret_uncompressed(s),
+            PredicateWitness::Key(s) => *s,
             PredicateWitness::Or(l, r) => {
                 let l = l.to_uncompressed_point();
                 let r = r.to_uncompressed_point();

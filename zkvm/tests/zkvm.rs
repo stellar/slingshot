@@ -1,4 +1,4 @@
-use bulletproofs::BulletproofGens;
+use bulletproofs::{BulletproofGens, PedersenGens};
 use curve25519_dalek::scalar::Scalar;
 use hex;
 
@@ -71,21 +71,35 @@ impl ProgramHelper for Program {
     }
 }
 
-fn predicate_helper(pred_num: usize) -> (Vec<Predicate>, Scalar, Predicate) {
-    let predicates = (0..pred_num)
+/// Generates the given number of signing key Predicates, returning
+/// the Predicates and the secret signing keys.
+fn predicate_helper(pred_num: usize) -> (Vec<Predicate>, Vec<Scalar>) {
+    let gens = PedersenGens::default();
+
+    let scalars: Vec<Scalar> = (0..pred_num)
         .into_iter()
-        .map(|n| Predicate::from_signing_key(Scalar::from(n as u64)))
+        .map(|s| Scalar::from(s as u64))
         .collect();
 
-    // Generate issuance predicate
-    let issuance_pred = Predicate::from_signing_key(Scalar::from(100u64));
-    // Generate flavor scalar
-    let flavor = Value::issue_flavor(&issuance_pred);
+    let predicates: Vec<Predicate> = scalars
+        .iter()
+        .map(|s| Predicate::from_key(s * gens.B))
+        .collect();
 
-    (predicates, flavor, issuance_pred)
+    (predicates, scalars)
 }
 
-fn test_helper(program: Vec<Instruction>) -> Result<TxID, VMError> {
+/// Returns the secret Scalar and Predicate used to issue
+/// a flavor, along with the flavor Scalar.
+fn issuance_helper() -> (Scalar, Predicate, Scalar) {
+    let gens = PedersenGens::default();
+    let scalar = Scalar::from(100u64);
+    let predicate = Predicate::from_key(scalar * gens.B);
+    let flavor = Value::issue_flavor(&predicate);
+    (scalar, predicate, flavor)
+}
+
+fn test_helper(program: Vec<Instruction>, keys: &Vec<Scalar>) -> Result<TxID, VMError> {
     let (tx, txid, txlog) = {
         // Build tx
         let bp_gens = BulletproofGens::new(256, 1);
@@ -94,7 +108,21 @@ fn test_helper(program: Vec<Instruction>) -> Result<TxID, VMError> {
             mintime: 0u64,
             maxtime: 0u64,
         };
-        Prover::build_tx(program, header, &bp_gens)?
+        let gens = PedersenGens::default();
+        Prover::build_tx(program, header, &bp_gens, |t, verification_keys| {
+            let signtx_keys: Vec<Scalar> = verification_keys
+                .iter()
+                .filter_map(|vk| {
+                    for k in keys {
+                        if (k * gens.B).compress() == *vk {
+                            return Some(*k);
+                        }
+                    }
+                    None
+                })
+                .collect();
+            Signature::sign_aggregated(t, &signtx_keys)
+        })?
     };
 
     // Verify tx
@@ -125,8 +153,10 @@ fn issue_contract(
 
 #[test]
 fn issue() {
-    // Generate predicates and flavor
-    let (predicates, flavor, issuance_pred) = predicate_helper(2);
+    // Generate predicates
+    let (predicates, mut scalars) = predicate_helper(2);
+    let (issuance_scalar, issuance_pred, flavor) = issuance_helper();
+    scalars.push(issuance_scalar);
 
     let correct_program = issue_contract(
         1u64,
@@ -136,7 +166,7 @@ fn issue() {
         predicates[1].clone(), // output predicate
     );
 
-    match test_helper(correct_program) {
+    match test_helper(correct_program, &scalars) {
         Err(err) => return assert!(false, err.to_string()),
         Ok(txid) => {
             // Check txid
@@ -155,7 +185,7 @@ fn issue() {
         predicates[1].clone(), // output predicate
     );
 
-    if test_helper(wrong_program).is_ok() {
+    if test_helper(wrong_program, &scalars).is_ok() {
         panic!("Issuing with wrong issuance predicate should fail, but didn't");
     }
 }
@@ -178,7 +208,8 @@ fn spend_1_1_contract(
 #[test]
 fn spend_1_1() {
     // Generate predicates and flavor
-    let (predicates, flavor, _) = predicate_helper(2);
+    let (predicates, scalars) = predicate_helper(2);
+    let flavor = Scalar::from(1u64);
 
     let correct_program = spend_1_1_contract(
         10u64,
@@ -188,7 +219,7 @@ fn spend_1_1() {
         predicates[1].clone(), // output predicate
     );
 
-    match test_helper(correct_program) {
+    match test_helper(correct_program, &scalars) {
         Err(err) => panic!(err.to_string()),
         _ => (),
     }
@@ -201,7 +232,7 @@ fn spend_1_1() {
         predicates[1].clone(), // output predicate
     );
 
-    if test_helper(wrong_program).is_ok() {
+    if test_helper(wrong_program, &scalars).is_ok() {
         panic!("Input $5, output $10 should have failed but didn't");
     }
 }
@@ -227,7 +258,8 @@ fn spend_1_2_contract(
 #[test]
 fn spend_1_2() {
     // Generate predicates and flavor
-    let (predicates, flavor, _) = predicate_helper(3);
+    let (predicates, scalars) = predicate_helper(3);
+    let flavor = Scalar::from(1u64);
 
     let correct_program = spend_1_2_contract(
         10u64,
@@ -239,7 +271,7 @@ fn spend_1_2() {
         predicates[2].clone(), // output 2 predicate
     );
 
-    match test_helper(correct_program) {
+    match test_helper(correct_program, &scalars) {
         Err(err) => assert!(false, err.to_string()),
         _ => (),
     }
@@ -254,7 +286,7 @@ fn spend_1_2() {
         predicates[2].clone(), // output 2 predicate
     );
 
-    if test_helper(wrong_program).is_ok() {
+    if test_helper(wrong_program, &scalars).is_ok() {
         panic!("Input $10, output $11 and $1 should have failed but didn't");
     }
 }
@@ -280,7 +312,8 @@ fn spend_2_1_contract(
 #[test]
 fn spend_2_1() {
     // Generate predicates and flavor
-    let (predicates, flavor, _) = predicate_helper(3);
+    let (predicates, scalars) = predicate_helper(3);
+    let flavor = Scalar::from(1u64);
 
     let correct_program = spend_2_1_contract(
         6u64,
@@ -292,7 +325,7 @@ fn spend_2_1() {
         predicates[2].clone(), // output predicate
     );
 
-    match test_helper(correct_program) {
+    match test_helper(correct_program, &scalars) {
         Err(err) => assert!(false, err.to_string()),
         _ => (),
     }
@@ -307,7 +340,7 @@ fn spend_2_1() {
         predicates[2].clone(), // output predicate
     );
 
-    if test_helper(wrong_program).is_ok() {
+    if test_helper(wrong_program, &scalars).is_ok() {
         panic!("Input $6 and $4, output $11 and $1 should have failed but didn't");
     }
 }
@@ -336,7 +369,8 @@ fn spend_2_2_contract(
 #[test]
 fn spend_2_2() {
     // Generate predicates and flavor
-    let (predicates, flavor, _) = predicate_helper(4);
+    let (predicates, scalars) = predicate_helper(4);
+    let flavor = Scalar::from(1u64);
 
     let correct_program = spend_2_2_contract(
         6u64,
@@ -350,7 +384,7 @@ fn spend_2_2() {
         predicates[3].clone(), // output 2 predicate
     );
 
-    match test_helper(correct_program) {
+    match test_helper(correct_program, &scalars) {
         Err(err) => assert!(false, err.to_string()),
         _ => (),
     }
@@ -367,7 +401,7 @@ fn spend_2_2() {
         predicates[3].clone(), // output 2 predicate
     );
 
-    if test_helper(wrong_program).is_ok() {
+    if test_helper(wrong_program, &scalars).is_ok() {
         panic!("Input $6 and $4, output $11 and $1 should have failed but didn't");
     }
 }
@@ -397,7 +431,9 @@ fn issue_and_spend_contract(
 #[test]
 fn issue_and_spend() {
     // Generate predicates and flavor
-    let (predicates, flavor, issuance_pred) = predicate_helper(4);
+    let (predicates, mut scalars) = predicate_helper(4);
+    let (issuance_scalar, issuance_pred, flavor) = issuance_helper();
+    scalars.push(issuance_scalar);
 
     let correct_program = issue_and_spend_contract(
         4u64,
@@ -412,7 +448,7 @@ fn issue_and_spend() {
         predicates[3].clone(), // output 2 predicate
     );
 
-    match test_helper(correct_program) {
+    match test_helper(correct_program, &scalars) {
         Err(err) => assert!(false, err.to_string()),
         _ => (),
     }
@@ -430,7 +466,7 @@ fn issue_and_spend() {
         predicates[3].clone(), // output 2 predicate
     );
 
-    if test_helper(wrong_program).is_ok() {
+    if test_helper(wrong_program, &scalars).is_ok() {
         panic!("Issue $6 and input $4, output $11 and $1 should have failed but didn't");
     }
 }
