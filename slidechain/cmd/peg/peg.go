@@ -108,7 +108,7 @@ func main() {
 		log.Fatal("converting amount to int64: ", err)
 	}
 	expMS := int64(bc.Millis(time.Now().Add(10 * time.Minute)))
-	err = doPegIn(bcidBytes[:], assetXDR, amountInt, expMS, recipientPubkey[:], *slidechaind)
+	err = doPrePegIn(bcidBytes[:], assetXDR, amountInt, expMS, recipientPubkey[:], *slidechaind)
 	if err != nil {
 		log.Fatal("doing pre-peg-in tx: ", err)
 	}
@@ -128,9 +128,9 @@ func main() {
 	log.Printf("successfully submitted peg-in tx hash %s on ledger %d", succ.Hash, succ.Ledger)
 }
 
-// doPegIn builds the pre-peg-in tx and calls the peg-in Slidechain RPC.
+// doPrePegIn builds the pre-peg-in tx and calls the peg-in Slidechain RPC.
 // That RPC submits and waits for the pre-peg TxVM transaction and records the peg-in in the database.
-func doPegIn(bcid, assetXDR []byte, amount, expMS int64, pubkey ed25519.PublicKey, slidechaind string) error {
+func doPrePegIn(bcid, assetXDR []byte, amount, expMS int64, pubkey ed25519.PublicKey, slidechaind string) error {
 	prepegTx, err := slidechain.BuildPrepegTx(bcid, assetXDR, pubkey, amount, expMS)
 	if err != nil {
 		return errors.Wrap(err, "building pre-peg-in tx")
@@ -150,13 +150,13 @@ func doPegIn(bcid, assetXDR []byte, amount, expMS int64, pubkey ed25519.PublicKe
 	if err != nil {
 		return errors.Wrap(err, "marshaling peg")
 	}
-	resp, err := http.Post(slidechaind+"/pegin", "application/octet-stream", bytes.NewReader(pegBits))
+	resp, err := http.Post(slidechaind+"/prepegin", "application/octet-stream", bytes.NewReader(pegBits))
 	if err != nil {
 		return errors.Wrap(err, "recording to slidechaind")
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode/100 != 2 {
-		return fmt.Errorf("status code %d from POST /pegin", resp.StatusCode)
+		return fmt.Errorf("status code %d from POST /prepegin", resp.StatusCode)
 	}
 	log.Printf("successfully recorded peg for tx %x", prepegTx.ID.Bytes())
 	return nil

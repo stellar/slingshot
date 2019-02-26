@@ -22,8 +22,8 @@ type PegIn struct {
 	ExpMS       int64  `json:"exp_ms"`
 }
 
-// DoPegIn submits and waits on the pre-peg-in transaction to TxVM, and records a peg-in in the database.
-func (c *Custodian) DoPegIn(w http.ResponseWriter, req *http.Request) {
+// DoPrePegIn submits and waits on the pre-peg-in transaction to TxVM, and records a peg-in in the database.
+func (c *Custodian) DoPrePegIn(w http.ResponseWriter, req *http.Request) {
 	data, err := ioutil.ReadAll(req.Body)
 	if err != nil {
 		net.Errorf(w, http.StatusInternalServerError, "sending response: %s", err)
