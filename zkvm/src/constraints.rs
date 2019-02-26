@@ -5,7 +5,7 @@ use bulletproofs::{r1cs, PedersenGens};
 use curve25519_dalek::ristretto::CompressedRistretto;
 use curve25519_dalek::scalar::Scalar;
 use std::iter::FromIterator;
-use std::ops::{Add, Neg};
+use std::ops::{Add, Neg, Sub};
 
 use crate::scalar_witness::ScalarWitness;
 
@@ -213,6 +213,14 @@ impl Add for Expression {
                 )
             }
         }
+    }
+}
+
+impl Sub for Expression {
+    type Output = Expression;
+
+    fn sub(self, rhs: Expression) -> Expression {
+        self + -rhs
     }
 }
 

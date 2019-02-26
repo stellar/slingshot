@@ -210,7 +210,7 @@ where
                 Instruction::Neg => self.neg()?,
                 Instruction::Add => self.add()?,
                 Instruction::Mul => self.mul()?,
-                Instruction::Eq => unimplemented!(),
+                Instruction::Eq => self.eq()?,
                 Instruction::Range(_) => unimplemented!(),
                 Instruction::And => unimplemented!(),
                 Instruction::Or => unimplemented!(),
@@ -310,6 +310,14 @@ where
         let expr2 = self.pop_item()?.to_expression()?;
         let expr1 = self.pop_item()?.to_expression()?;
         let expr3 = expr1.multiply(expr2, self.delegate.cs());
+        self.push_item(expr3);
+        Ok(())
+    }
+
+    fn eq(&mut self) -> Result<(), VMError> {
+        let expr2 = self.pop_item()?.to_expression()?;
+        let expr1 = self.pop_item()?.to_expression()?;
+        let expr3 = expr1 - expr2;
         self.push_item(expr3);
         Ok(())
     }
