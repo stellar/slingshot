@@ -89,8 +89,12 @@ fn test_helper(program: Vec<Instruction>) -> Result<TxID, VMError> {
     let (tx, txid, txlog) = {
         // Build tx
         let bp_gens = BulletproofGens::new(256, 1);
-        // TBD: add TxHeader type to make this call more readable
-        Prover::build_tx(program, 0u64, 0u64, 0u64, &bp_gens)?
+        let header = TxHeader {
+            version: 0u64,
+            mintime: 0u64,
+            maxtime: 0u64,
+        };
+        Prover::build_tx(program, header, &bp_gens)?
     };
 
     // Verify tx

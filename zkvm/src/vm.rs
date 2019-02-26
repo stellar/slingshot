@@ -21,8 +21,9 @@ use crate::types::*;
 /// Current tx version determines which extension opcodes are treated as noops (see VM.extension flag).
 pub const CURRENT_VERSION: u64 = 1;
 
-/// Instance of a transaction that contains all necessary data to validate it.
-pub struct Tx {
+/// Header metadata for the transaction
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct TxHeader {
     /// Version of the transaction
     pub version: u64,
 
@@ -31,6 +32,12 @@ pub struct Tx {
 
     /// Timestamp after which tx is invalid (sec)
     pub maxtime: u64,
+}
+
+/// Instance of a transaction that contains all necessary data to validate it.
+pub struct Tx {
+    /// Header metadata
+    pub header: TxHeader,
 
     /// Program representing the transaction
     pub program: Vec<u8>,
@@ -44,14 +51,8 @@ pub struct Tx {
 
 /// Represents a verified transaction: a txid and a list of state updates.
 pub struct VerifiedTx {
-    /// Version of the transaction
-    pub version: u64,
-
-    /// Timestamp before which tx is invalid (sec)
-    pub mintime: u64,
-
-    /// Timestamp after which tx is invalid (sec)
-    pub maxtime: u64,
+    /// Header metadata
+    pub header: TxHeader,
 
     /// Transaction ID
     pub id: TxID,
@@ -137,23 +138,17 @@ where
     D: Delegate<CS>,
 {
     /// Instantiates a new VM instance.
-    pub fn new(
-        version: u64,
-        mintime: u64,
-        maxtime: u64,
-        run: D::RunType,
-        delegate: &'d mut D,
-    ) -> Self {
+    pub fn new(header: TxHeader, run: D::RunType, delegate: &'d mut D) -> Self {
         VM {
-            mintime,
-            maxtime,
-            extension: version > CURRENT_VERSION,
+            mintime: header.mintime,
+            maxtime: header.maxtime,
+            extension: header.version > CURRENT_VERSION,
             unique: false,
             delegate,
             stack: Vec::new(),
             current_run: run,
             run_stack: Vec::new(),
-            txlog: vec![Entry::Header(version, mintime, maxtime)],
+            txlog: vec![Entry::Header(header)],
             variable_commitments: Vec::new(),
         }
     }
