@@ -12,7 +12,7 @@ use crate::point_ops::PointOp;
 use crate::predicate::Predicate;
 use crate::signature::Signature;
 use crate::txlog::{TxID, TxLog};
-use crate::vm::{Delegate, Tx, VM};
+use crate::vm::{Delegate, Tx, TxHeader, VM};
 
 pub struct Prover<'a, 'b> {
     signtx_keys: Vec<Scalar>,
@@ -62,9 +62,7 @@ impl<'a, 'b> Delegate<r1cs::Prover<'a, 'b>> for Prover<'a, 'b> {
 impl<'a, 'b> Prover<'a, 'b> {
     pub fn build_tx<'g>(
         program: Vec<Instruction>,
-        version: u64,
-        mintime: u64,
-        maxtime: u64,
+        header: TxHeader,
         bp_gens: &'g BulletproofGens,
     ) -> Result<(Tx, TxID, TxLog), VMError> {
         // Prepare the constraint system
@@ -82,9 +80,7 @@ impl<'a, 'b> Prover<'a, 'b> {
         };
 
         let vm = VM::new(
-            version,
-            mintime,
-            maxtime,
+            header,
             ProverRun {
                 program: program.into(),
             },
@@ -103,9 +99,7 @@ impl<'a, 'b> Prover<'a, 'b> {
 
         Ok((
             Tx {
-                version,
-                mintime,
-                maxtime,
+                header,
                 signature,
                 proof,
                 program: bytecode,

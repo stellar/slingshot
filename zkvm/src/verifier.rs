@@ -79,13 +79,7 @@ impl<'a, 'b> Verifier<'a, 'b> {
             cs: cs,
         };
 
-        let vm = VM::new(
-            tx.version,
-            tx.mintime,
-            tx.maxtime,
-            VerifierRun::new(tx.program),
-            &mut verifier,
-        );
+        let vm = VM::new(tx.header, VerifierRun::new(tx.program), &mut verifier);
 
         let (txid, txlog) = vm.run()?;
 
@@ -107,9 +101,7 @@ impl<'a, 'b> Verifier<'a, 'b> {
             .map_err(|_| VMError::InvalidR1CSProof)?;
 
         Ok(VerifiedTx {
-            version: tx.version,
-            mintime: tx.mintime,
-            maxtime: tx.maxtime,
+            header: tx.header,
             id: txid,
             log: txlog,
         })

@@ -29,7 +29,7 @@ pub use self::transcript::TranscriptProtocol;
 pub use self::txlog::{Entry, TxID, UTXO};
 pub use self::types::{Data, Item, Value, WideValue};
 pub use self::verifier::Verifier;
-pub use self::vm::{Tx, VerifiedTx};
+pub use self::vm::{Tx, TxHeader, VerifiedTx};
 
 // TBD: review if we actually need to export these:
 pub use self::constraints::CommitmentWitness;
