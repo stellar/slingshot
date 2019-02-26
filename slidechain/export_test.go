@@ -31,7 +31,7 @@ func TestPegOut(t *testing.T) {
 	}
 	defer db.Close()
 	hclient := mockhorizon.New()
-	c, err := newCustodian(ctx, db, hclient)
+	c, err := newCustodian(ctx, db, hclient, DefaultBlockInterval)
 	if err != nil {
 		t.Fatal(err)
 	}
