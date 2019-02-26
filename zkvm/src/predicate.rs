@@ -8,6 +8,7 @@ use curve25519_dalek::ristretto::{CompressedRistretto, RistrettoPoint};
 use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
 
+use crate::encoding;
 use crate::errors::VMError;
 use crate::ops::Instruction;
 use crate::point_ops::PointOp;
@@ -57,7 +58,7 @@ impl Predicate {
 
     /// Encodes the Predicate in program bytecode.
     pub fn encode(&self, prog: &mut Vec<u8>) {
-        prog.extend_from_slice(&self.to_point().to_bytes())
+        encoding::write_point(&self.to_point(), prog);
     }
 
     /// Verifies whether the current predicate is a disjunction of two others.

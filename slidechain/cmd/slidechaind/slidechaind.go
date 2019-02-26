@@ -23,9 +23,10 @@ func main() {
 	ctx := context.Background()
 
 	var (
-		addr   = flag.String("addr", "localhost:2423", "server listen address")
-		dbfile = flag.String("db", "slidechain.db", "path to db")
-		url    = flag.String("horizon", "https://horizon-testnet.stellar.org", "horizon server url")
+		addr          = flag.String("addr", "localhost:2423", "server listen address")
+		dbfile        = flag.String("db", "slidechain.db", "path to db")
+		url           = flag.String("horizon", "https://horizon-testnet.stellar.org", "horizon server url")
+		blockInterval = flag.Duration("interval", slidechain.DefaultBlockInterval, "expected interval between txvm blocks")
 	)
 
 	flag.Parse()
@@ -35,7 +36,7 @@ func main() {
 		log.Fatalf("error opening db: %s", err)
 	}
 	defer db.Close()
-	c, err := slidechain.GetCustodian(ctx, db, *url)
+	c, err := slidechain.GetCustodian(ctx, db, *url, *blockInterval)
 	if err != nil {
 		log.Fatal(err)
 	}

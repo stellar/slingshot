@@ -28,7 +28,11 @@ pub enum Item {
 #[derive(Clone, Debug)]
 pub enum Data {
     Opaque(Vec<u8>),
-    Witness(DataWitness),
+    Program(Vec<Instruction>),
+    Predicate(Box<Predicate>),
+    Commitment(Box<Commitment>),
+    Scalar(Box<ScalarWitness>),
+    Input(Box<Input>),
 }
 
 #[derive(Debug)]
@@ -42,16 +46,6 @@ pub struct WideValue {
     pub(crate) r1cs_qty: r1cs::Variable,
     pub(crate) r1cs_flv: r1cs::Variable,
     pub(crate) witness: Option<(SignedInteger, Scalar)>,
-}
-
-/// Prover's representation of the witness.
-#[derive(Clone, Debug)]
-pub enum DataWitness {
-    Program(Vec<Instruction>),
-    Predicate(Box<Predicate>),
-    Commitment(Box<Commitment>),
-    Scalar(Box<ScalarWitness>),
-    Input(Box<Input>),
 }
 
 impl Item {
@@ -118,20 +112,19 @@ impl Data {
     pub fn serialized_length(&self) -> usize {
         match self {
             Data::Opaque(data) => data.len(),
-            Data::Witness(x) => x.serialized_length(),
+            Data::Program(program) => program.iter().map(|p| p.serialized_length()).sum(),
+            Data::Predicate(predicate) => predicate.serialized_length(),
+            Data::Commitment(commitment) => commitment.serialized_length(),
+            Data::Scalar(scalar) => scalar.serialized_length(),
+            Data::Input(input) => input.serialized_length(),
         }
     }
 
     /// Converts the Data into a vector of bytes
     pub fn to_bytes(&self) -> Vec<u8> {
-        match self {
-            Data::Opaque(data) => data.clone(),
-            Data::Witness(w) => {
-                let mut bytes: Vec<u8> = Vec::with_capacity(self.serialized_length());
-                w.encode(&mut bytes);
-                bytes.clone()
-            }
-        }
+        let mut buf = Vec::with_capacity(self.serialized_length());
+        self.encode(&mut buf);
+        buf
     }
 
     /// Downcast to a Predicate type.
@@ -141,10 +134,8 @@ impl Data {
                 let point = SliceReader::parse(&data, |r| r.read_point())?;
                 Ok(Predicate::Opaque(point))
             }
-            Data::Witness(witness) => match witness {
-                DataWitness::Predicate(boxed_pred) => Ok(*boxed_pred),
-                _ => Err(VMError::TypeNotPredicate),
-            },
+            Data::Predicate(p) => Ok(*p),
+            _ => Err(VMError::TypeNotPredicate),
         }
     }
 
@@ -154,56 +145,29 @@ impl Data {
                 let point = SliceReader::parse(&data, |r| r.read_point())?;
                 Ok(Commitment::Closed(point))
             }
-            Data::Witness(witness) => match witness {
-                DataWitness::Commitment(w) => Ok(*w),
-                _ => Err(VMError::TypeNotCommitment),
-            },
+            Data::Commitment(c) => Ok(*c),
+            _ => Err(VMError::TypeNotCommitment),
         }
     }
 
     pub fn to_input(self) -> Result<Input, VMError> {
         match self {
             Data::Opaque(data) => Input::from_bytes(data),
-            Data::Witness(witness) => match witness {
-                DataWitness::Input(i) => Ok(*i),
-                _ => Err(VMError::TypeNotInput),
-            },
+            Data::Input(i) => Ok(*i),
+            _ => Err(VMError::TypeNotInput),
         }
     }
 
     /// Encodes blinded Data values.
     pub fn encode(&self, buf: &mut Vec<u8>) {
         match self {
-            Data::Opaque(x) => {
-                buf.extend_from_slice(x);
-                return;
-            }
-            Data::Witness(w) => {
-                w.encode(buf);
-            }
+            Data::Opaque(x) => buf.extend_from_slice(x),
+            Data::Program(program) => Instruction::encode_program(program.iter(), buf),
+            Data::Predicate(predicate) => predicate.encode(buf),
+            Data::Commitment(commitment) => commitment.encode(buf),
+            Data::Scalar(scalar) => scalar.encode(buf),
+            Data::Input(input) => input.encode(buf),
         };
-    }
-}
-
-impl DataWitness {
-    fn encode(&self, buf: &mut Vec<u8>) {
-        match self {
-            DataWitness::Program(instr) => Instruction::encode_program(instr.iter(), buf),
-            DataWitness::Predicate(p) => p.encode(buf),
-            DataWitness::Commitment(c) => c.encode(buf),
-            DataWitness::Scalar(s) => s.encode(buf),
-            DataWitness::Input(b) => b.encode(buf),
-        }
-    }
-
-    fn serialized_length(&self) -> usize {
-        match self {
-            DataWitness::Program(instr) => instr.iter().map(|p| p.serialized_length()).sum(),
-            DataWitness::Input(b) => 32 + b.contract.serialized_length(),
-            DataWitness::Predicate(p) => p.serialized_length(),
-            DataWitness::Commitment(c) => c.serialized_length(),
-            DataWitness::Scalar(s) => s.serialized_length(),
-        }
     }
 }
 
@@ -216,42 +180,32 @@ impl Value {
     }
 }
 
-// Upcasting all witness data types to Data and DataWitness
+// Upcasting all witness data types to Data
 
-// Anything convertible to DataWitness is also convertible to Data
 impl<T> From<T> for Data
-where
-    T: Into<DataWitness>,
-{
-    fn from(w: T) -> Self {
-        Data::Witness(w.into())
-    }
-}
-
-impl<T> From<T> for DataWitness
 where
     T: Into<ScalarWitness>,
 {
     fn from(x: T) -> Self {
-        DataWitness::Scalar(Box::new(x.into()))
+        Data::Scalar(Box::new(x.into()))
     }
 }
 
-impl From<Predicate> for DataWitness {
+impl From<Predicate> for Data {
     fn from(x: Predicate) -> Self {
-        DataWitness::Predicate(Box::new(x))
+        Data::Predicate(Box::new(x))
     }
 }
 
-impl From<Commitment> for DataWitness {
+impl From<Commitment> for Data {
     fn from(x: Commitment) -> Self {
-        DataWitness::Commitment(Box::new(x))
+        Data::Commitment(Box::new(x))
     }
 }
 
-impl From<Input> for DataWitness {
+impl From<Input> for Data {
     fn from(x: Input) -> Self {
-        DataWitness::Input(Box::new(x))
+        Data::Input(Box::new(x))
     }
 }
 

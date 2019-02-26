@@ -3,6 +3,7 @@
 use curve25519_dalek::scalar::Scalar;
 use spacesuit::SignedInteger;
 
+use crate::encoding;
 use crate::errors::VMError;
 use std::ops::{Add, Mul, Neg};
 use std::u64;
@@ -24,7 +25,7 @@ impl ScalarWitness {
 
     /// Converts to a scalar and encodes it to a vec of bytes.
     pub(crate) fn encode(&self, buf: &mut Vec<u8>) {
-        buf.extend_from_slice(&self.to_scalar().to_bytes())
+        encoding::write_bytes(&self.to_scalar().to_bytes(), buf);
     }
 
     /// Converts the witness to an integer if it is an integer

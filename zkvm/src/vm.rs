@@ -7,7 +7,7 @@ use spacesuit::SignedInteger;
 use std::iter::FromIterator;
 
 use crate::constraints::{Commitment, Constraint, Expression, Variable};
-use crate::contract::{Contract, FrozenContract, FrozenItem, FrozenValue, PortableItem};
+use crate::contract::{Contract, PortableItem};
 use crate::encoding::SliceReader;
 use crate::errors::VMError;
 use crate::ops::Instruction;
@@ -21,8 +21,9 @@ use crate::types::*;
 /// Current tx version determines which extension opcodes are treated as noops (see VM.extension flag).
 pub const CURRENT_VERSION: u64 = 1;
 
-/// Instance of a transaction that contains all necessary data to validate it.
-pub struct Tx {
+/// Header metadata for the transaction
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct TxHeader {
     /// Version of the transaction
     pub version: u64,
 
@@ -31,6 +32,12 @@ pub struct Tx {
 
     /// Timestamp after which tx is invalid (sec)
     pub maxtime: u64,
+}
+
+/// Instance of a transaction that contains all necessary data to validate it.
+pub struct Tx {
+    /// Header metadata
+    pub header: TxHeader,
 
     /// Program representing the transaction
     pub program: Vec<u8>,
@@ -44,14 +51,8 @@ pub struct Tx {
 
 /// Represents a verified transaction: a txid and a list of state updates.
 pub struct VerifiedTx {
-    /// Version of the transaction
-    pub version: u64,
-
-    /// Timestamp before which tx is invalid (sec)
-    pub mintime: u64,
-
-    /// Timestamp after which tx is invalid (sec)
-    pub maxtime: u64,
+    /// Header metadata
+    pub header: TxHeader,
 
     /// Transaction ID
     pub id: TxID,
@@ -137,23 +138,17 @@ where
     D: Delegate<CS>,
 {
     /// Instantiates a new VM instance.
-    pub fn new(
-        version: u64,
-        mintime: u64,
-        maxtime: u64,
-        run: D::RunType,
-        delegate: &'d mut D,
-    ) -> Self {
+    pub fn new(header: TxHeader, run: D::RunType, delegate: &'d mut D) -> Self {
         VM {
-            mintime,
-            maxtime,
-            extension: version > CURRENT_VERSION,
+            mintime: header.mintime,
+            maxtime: header.maxtime,
+            extension: header.version > CURRENT_VERSION,
             unique: false,
             delegate,
             stack: Vec::new(),
             current_run: run,
             run_stack: Vec::new(),
-            txlog: vec![Entry::Header(version, mintime, maxtime)],
+            txlog: vec![Entry::Header(header)],
             variable_commitments: Vec::new(),
         }
     }
@@ -331,7 +326,7 @@ where
 
     fn var(&mut self) -> Result<(), VMError> {
         let comm = self.pop_item()?.to_data()?.to_commitment()?;
-        let v = self.make_variable(comm);
+        let v = self.commitment_to_variable(comm);
         self.push_item(v);
         Ok(())
     }
@@ -401,18 +396,18 @@ where
 
     fn retire(&mut self) -> Result<(), VMError> {
         let value = self.pop_item()?.to_value()?;
-        let qty = self.get_variable_commitment(value.qty);
-        let flv = self.get_variable_commitment(value.flv);
-        self.txlog.push(Entry::Retire(qty, flv));
+        let qty = self.variable_to_commitment(value.qty);
+        let flv = self.variable_to_commitment(value.flv);
+        self.txlog.push(Entry::Retire(qty.into(), flv.into()));
         Ok(())
     }
 
     /// _input_ **input** → _contract_
     fn input(&mut self) -> Result<(), VMError> {
         let input = self.pop_item()?.to_data()?.to_input()?;
-        let contract = self.unfreeze_contract(input.contract);
+        let (contract, utxo) = input.unfreeze(|c| self.commitment_to_variable(c));
         self.push_item(contract);
-        self.txlog.push(Entry::Input(input.utxo));
+        self.txlog.push(Entry::Input(utxo));
         self.unique = true;
         Ok(())
     }
@@ -420,29 +415,9 @@ where
     /// _items... predicate_ **output:_k_** → ø
     fn output(&mut self, k: usize) -> Result<(), VMError> {
         let contract = self.pop_contract(k)?;
-        let frozen_contract = self.freeze_contract(contract);
-        let mut buf = Vec::with_capacity(frozen_contract.serialized_length());
-        frozen_contract.encode(&mut buf);
-        self.txlog.push(Entry::Output(buf));
+        let frozen_contract = contract.freeze(|v| self.variable_to_commitment(v));
+        self.txlog.push(Entry::Output(frozen_contract.to_bytes()));
         Ok(())
-    }
-
-    fn freeze_contract(&mut self, contract: Contract) -> FrozenContract {
-        let frozen_items = contract
-            .payload
-            .into_iter()
-            .map(|i| match i {
-                PortableItem::Data(d) => FrozenItem::Data(d),
-                PortableItem::Value(v) => FrozenItem::Value(FrozenValue {
-                    flv: Commitment::Closed(self.get_variable_commitment(v.flv)),
-                    qty: Commitment::Closed(self.get_variable_commitment(v.qty)),
-                }),
-            })
-            .collect::<Vec<_>>();
-        FrozenContract {
-            payload: frozen_items,
-            predicate: contract.predicate,
-        }
     }
 
     fn contract(&mut self, k: usize) -> Result<(), VMError> {
@@ -492,8 +467,8 @@ where
             let flv = self.pop_item()?.to_data()?.to_commitment()?;
             let qty = self.pop_item()?.to_data()?.to_commitment()?;
 
-            let flv = self.make_variable(flv);
-            let qty = self.make_variable(qty);
+            let flv = self.commitment_to_variable(flv);
+            let qty = self.commitment_to_variable(qty);
 
             let value = Value { qty, flv };
             let cloak_value = self.value_to_cloak_value(&value)?;
@@ -598,7 +573,7 @@ where
         self.stack.push(item.into())
     }
 
-    fn make_variable(&mut self, commitment: Commitment) -> Variable {
+    fn commitment_to_variable(&mut self, commitment: Commitment) -> Variable {
         let index = self.variable_commitments.len();
 
         self.variable_commitments.push(VariableCommitment {
@@ -608,16 +583,15 @@ where
         Variable { index }
     }
 
-    fn get_variable_commitment(&self, var: Variable) -> CompressedRistretto {
-        let var_com = &self.variable_commitments[var.index].commitment;
-        var_com.to_point()
+    fn variable_to_commitment(&self, var: Variable) -> Commitment {
+        self.variable_commitments[var.index].commitment.clone()
     }
 
     fn attach_variable(
         &mut self,
         var: Variable,
     ) -> Result<(CompressedRistretto, r1cs::Variable), VMError> {
-        // This subscript never fails because the variable is created only via `make_variable`.
+        // This subscript never fails because the variable is created only via `commitment_to_variable`.
         let v_com = &self.variable_commitments[var.index];
         match v_com.variable {
             Some(v) => Ok((v_com.commitment.to_point(), v)),
@@ -692,24 +666,6 @@ where
             .commitment
             .witness()
             .map(|(content, _)| content)
-    }
-
-    fn unfreeze_contract(&mut self, contract: FrozenContract) -> Contract {
-        let payload = contract
-            .payload
-            .into_iter()
-            .map(|p| match p {
-                FrozenItem::Data(d) => PortableItem::Data(d),
-                FrozenItem::Value(v) => PortableItem::Value(Value {
-                    qty: self.make_variable(v.qty),
-                    flv: self.make_variable(v.flv),
-                }),
-            })
-            .collect::<Vec<_>>();
-        Contract {
-            payload: payload,
-            predicate: contract.predicate,
-        }
     }
 
     fn add_range_proof(&mut self, bitrange: usize, expr: Expression) -> Result<(), VMError> {
