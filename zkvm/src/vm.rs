@@ -207,8 +207,8 @@ where
                 Instruction::Mul => self.mul()?,
                 Instruction::Eq => self.eq()?,
                 Instruction::Range(_) => unimplemented!(),
-                Instruction::And => unimplemented!(),
-                Instruction::Or => unimplemented!(),
+                Instruction::And => self.and()?,
+                Instruction::Or => self.or()?,
                 Instruction::Verify => unimplemented!(),
                 Instruction::Blind => unimplemented!(),
                 Instruction::Reblind => unimplemented!(),
@@ -314,6 +314,22 @@ where
         let expr1 = self.pop_item()?.to_expression()?;
         let constraint = Constraint::Eq(expr1, expr2);
         self.push_item(constraint);
+        Ok(())
+    }
+
+    fn and(&mut self) -> Result<(), VMError> {
+        let c2 = self.pop_item()?.to_constraint()?;
+        let c1 = self.pop_item()?.to_constraint()?;
+        let c3 = Constraint::And(vec![c1, c2]);
+        self.push_item(c3);
+        Ok(())
+    }
+
+    fn or(&mut self) -> Result<(), VMError> {
+        let c2 = self.pop_item()?.to_constraint()?;
+        let c1 = self.pop_item()?.to_constraint()?;
+        let c3 = Constraint::Or(vec![c1, c2]);
+        self.push_item(c3);
         Ok(())
     }
 
