@@ -103,12 +103,10 @@ func main() {
 		amountInt = int64(amountXLM)
 		amountStr = amountXLM.HorizonString()
 	}
-
 	assetXDR, err := asset.MarshalBinary()
 	if err != nil {
 		log.Fatal("marshaling asset xdr: ", err)
 	}
-
 	expMS := int64(bc.Millis(time.Now().Add(10 * time.Minute)))
 	err = doPrepegTx(bcidBytes[:], assetXDR, amountInt, expMS, recipientPubkey[:], *slidechaind)
 	if err != nil {
