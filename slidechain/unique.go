@@ -3,7 +3,6 @@ package slidechain
 import (
 	"bytes"
 	"fmt"
-	"log"
 	"math"
 
 	"github.com/chain/txvm/errors"
@@ -99,6 +98,5 @@ func BuildPrepegTx(bcid, assetXDR, recip []byte, amount, expMS int64) (*bc.Tx, e
 		return nil, errors.Wrap(err, "populating new pre-peg tx")
 	}
 	prepegTx.Runlimit = math.MaxInt64 - runlimit
-	log.Printf("printing pre-peg-in tx: %x", prepegTx.Program)
 	return prepegTx, nil
 }

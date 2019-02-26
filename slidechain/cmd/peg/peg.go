@@ -16,7 +16,6 @@ import (
 	"github.com/chain/txvm/protocol/bc"
 	"github.com/golang/protobuf/proto"
 	"github.com/stellar/go/clients/horizon"
-	"github.com/stellar/go/keypair"
 	"github.com/stellar/go/xdr"
 
 	"github.com/interstellar/slingshot/slidechain"
@@ -26,10 +25,10 @@ import (
 
 func main() {
 	var (
-		custodian = flag.String("custodian", "", "Stellar account ID of custodian account")
-		amount    = flag.Int("amount", -1, "amount to peg, in lumens")
-		recipient = flag.String("recipient", "", "hex-encoded txvm public key for the recipient of the pegged funds")
-		// seed        = flag.String("seed", "", "seed of Stellar source account")
+		custodian   = flag.String("custodian", "", "Stellar account ID of custodian account")
+		amount      = flag.Int("amount", -1, "amount to peg, in lumens")
+		recipient   = flag.String("recipient", "", "hex-encoded txvm public key for the recipient of the pegged funds")
+		seed        = flag.String("seed", "", "seed of Stellar source account")
 		horizonURL  = flag.String("horizon", "https://horizon-testnet.stellar.org", "horizon URL")
 		code        = flag.String("code", "", "asset code for non-Lumen asset")
 		issuer      = flag.String("issuer", "", "asset issuer for non-Lumen asset")
@@ -50,10 +49,6 @@ func main() {
 	if *bcidHex == "" {
 		log.Fatal("must specify initial block ID")
 	}
-	var (
-		seed     [32]byte
-		exporter *keypair.Full
-	)
 	if *recipient == "" {
 		log.Print("no recipient specified, generating txvm keypair...")
 		pubkey, privkey, err := ed25519.GenerateKey(nil)
@@ -62,25 +57,12 @@ func main() {
 		}
 		*recipient = hex.EncodeToString(pubkey)
 		log.Printf("pegging funds to keypair %x / %x", privkey, pubkey)
-		copy(seed[:], privkey)
-		exporter, err = keypair.FromRawSeed(seed)
-		if err != nil {
-			log.Fatalf("error generating stellar account from seed %x: %s", seed, err)
-		}
-		err = stellar.FundAccount(exporter.Address())
-		if err != nil {
-			log.Fatalf("error funding account %s: %s", exporter.Address(), err)
-		}
 	}
-	// if *seed == "" {
-	// 	log.Print("no seed specified, generating and funding a new account...")
-	// 	kp := stellar.NewFundedAccount()
-	// 	*seed = kp.Seed()
-	// }
-
-	// if _, err := strconv.ParseFloat(*amount, 64); err != nil {
-	// 	log.Printf("invalid amount string %s: %s", *amount, err)
-	// }
+	if *seed == "" {
+		log.Print("no seed specified, generating and funding a new account...")
+		kp := stellar.NewFundedAccount()
+		*seed = kp.Seed()
+	}
 
 	var recipientPubkey [32]byte
 	if len(*recipient) != 64 {
@@ -117,10 +99,6 @@ func main() {
 	if err != nil {
 		log.Fatal("marshaling asset xdr: ", err)
 	}
-	// amountInt, err := strconv.ParseInt(*amount, 10, 64)
-	// if err != nil {
-	// 	log.Fatal("converting amount to int64: ", err)
-	// }
 	amountXLM := xlm.Amount(*amount) * xlm.Lumen
 	expMS := int64(bc.Millis(time.Now().Add(10 * time.Minute)))
 	err = doPrepegTx(bcidBytes[:], assetXDR, int64(amountXLM), expMS, recipientPubkey[:], *slidechaind)
@@ -132,11 +110,11 @@ func main() {
 		HTTP: new(http.Client),
 	}
 	nonceHash := slidechain.UniqueNonceHash(bcidBytes[:], expMS)
-	tx, err := stellar.BuildPegInTx(exporter.Address(), nonceHash, amountXLM.HorizonString(), *code, *issuer, *custodian, hclient)
+	tx, err := stellar.BuildPegInTx(*seed, nonceHash, amountXLM.HorizonString(), *code, *issuer, *custodian, hclient)
 	if err != nil {
 		log.Fatal("building transaction: ", err)
 	}
-	succ, err := stellar.SignAndSubmitTx(hclient, tx, exporter.Seed())
+	succ, err := stellar.SignAndSubmitTx(hclient, tx, *seed)
 	if err != nil {
 		log.Fatal("submitting peg-in tx: ", err)
 	}
