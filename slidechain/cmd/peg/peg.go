@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -26,7 +27,7 @@ import (
 func main() {
 	var (
 		custodian   = flag.String("custodian", "", "Stellar account ID of custodian account")
-		amount      = flag.Int("amount", -1, "amount to peg, in lumens")
+		amount      = flag.Int64("amount", -1, "amount to peg, in lumens")
 		recipient   = flag.String("recipient", "", "hex-encoded txvm public key for the recipient of the pegged funds")
 		seed        = flag.String("seed", "", "seed of Stellar source account")
 		horizonURL  = flag.String("horizon", "https://horizon-testnet.stellar.org", "horizon URL")
@@ -95,13 +96,21 @@ func main() {
 		}
 	}
 
+	amountInt := *amount
+	amountStr := strconv.FormatInt(*amount, 10)
+	if *code == "" && *issuer == "" {
+		amountXLM := xlm.Amount(*amount) * xlm.Lumen
+		amountInt = int64(amountXLM)
+		amountStr = amountXLM.HorizonString()
+	}
+
 	assetXDR, err := asset.MarshalBinary()
 	if err != nil {
 		log.Fatal("marshaling asset xdr: ", err)
 	}
-	amountXLM := xlm.Amount(*amount) * xlm.Lumen
+
 	expMS := int64(bc.Millis(time.Now().Add(10 * time.Minute)))
-	err = doPrepegTx(bcidBytes[:], assetXDR, int64(amountXLM), expMS, recipientPubkey[:], *slidechaind)
+	err = doPrepegTx(bcidBytes[:], assetXDR, amountInt, expMS, recipientPubkey[:], *slidechaind)
 	if err != nil {
 		log.Fatal("doing pre-peg-in tx: ", err)
 	}
@@ -110,7 +119,7 @@ func main() {
 		HTTP: new(http.Client),
 	}
 	nonceHash := slidechain.UniqueNonceHash(bcidBytes[:], expMS)
-	tx, err := stellar.BuildPegInTx(*seed, nonceHash, amountXLM.HorizonString(), *code, *issuer, *custodian, hclient)
+	tx, err := stellar.BuildPegInTx(*seed, nonceHash, amountStr, *code, *issuer, *custodian, hclient)
 	if err != nil {
 		log.Fatal("building transaction: ", err)
 	}
