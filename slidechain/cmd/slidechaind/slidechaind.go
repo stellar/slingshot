@@ -50,6 +50,6 @@ func main() {
 	http.Handle("/submit", c.S)
 	http.HandleFunc("/get", c.S.Get)
 	http.HandleFunc("/account", c.Account)
-	http.HandleFunc("/pegin", c.DoPegIn)
+	http.HandleFunc("/pegin", c.PegIn)
 	http.Serve(listener, nil)
 }

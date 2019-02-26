@@ -24,7 +24,7 @@ type PegIn struct {
 
 // DoPegIn submits the pre-peg-in transaction to TxVM and records a peg-in transaction in the database.
 // TODO(debnil): Make record RPC do pre-peg tx submission as well, instead of requiring a separate server round-trip first.
-func (c *Custodian) DoPegIn(w http.ResponseWriter, req *http.Request) {
+func (c *Custodian) PegIn(w http.ResponseWriter, req *http.Request) {
 	data, err := ioutil.ReadAll(req.Body)
 	if err != nil {
 		net.Errorf(w, http.StatusInternalServerError, "sending response: %s", err)
