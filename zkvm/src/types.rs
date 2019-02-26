@@ -112,9 +112,7 @@ impl Data {
     pub fn serialized_length(&self) -> usize {
         match self {
             Data::Opaque(data) => data.len(),
-            Data::Program(program) => {
-                program.iter().map(|p| p.serialized_length()).sum()
-            }
+            Data::Program(program) => program.iter().map(|p| p.serialized_length()).sum(),
             Data::Predicate(predicate) => predicate.serialized_length(),
             Data::Commitment(commitment) => commitment.serialized_length(),
             Data::Scalar(scalar) => scalar.serialized_length(),
@@ -127,30 +125,6 @@ impl Data {
         let mut buf = Vec::with_capacity(self.serialized_length());
         self.encode(&mut buf);
         buf
-        /*
-        match self {
-            Data::Opaque(data) => data.clone(),
-            Data::Program(program) => {
-                let mut buf = Vec::new();
-                Instruction::encode_program(program.iter(), &mut buf);
-                buf
-            },
-            Data::Predicate(predicate) => {
-                predicate.to_point().to_bytes().to_vec()
-            },
-            Data::Commitment(commitment) => {
-                commitment.to_point().to_bytes().to_vec()
-            },
-            Data::Scalar(scalar) => {
-                scalar.to_scalar().to_bytes().to_vec()
-            },
-            Data::Input(input) => {
-                let mut bytes = Vec::new();
-                input.encode(&mut bytes);
-                bytes
-            }
-        }
-        */
     }
 
     /// Downcast to a Predicate type.
@@ -159,7 +133,7 @@ impl Data {
             Data::Opaque(data) => {
                 let point = SliceReader::parse(&data, |r| r.read_point())?;
                 Ok(Predicate::Opaque(point))
-            },
+            }
             Data::Predicate(p) => Ok(*p),
             _ => Err(VMError::TypeNotPredicate),
         }
@@ -170,7 +144,7 @@ impl Data {
             Data::Opaque(data) => {
                 let point = SliceReader::parse(&data, |r| r.read_point())?;
                 Ok(Commitment::Closed(point))
-            },
+            }
             Data::Commitment(c) => Ok(*c),
             _ => Err(VMError::TypeNotCommitment),
         }
