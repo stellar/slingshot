@@ -7,6 +7,7 @@ use curve25519_dalek::scalar::Scalar;
 use std::iter::FromIterator;
 use std::ops::{Add, Neg};
 
+use crate::encoding;
 use crate::scalar_witness::ScalarWitness;
 
 #[derive(Copy, Clone, Debug)]
@@ -58,7 +59,7 @@ impl Commitment {
     }
 
     pub(crate) fn encode(&self, buf: &mut Vec<u8>) {
-        buf.extend_from_slice(&self.to_point().to_bytes());
+        encoding::write_point(&self.to_point(), buf);
     }
 
     pub fn unblinded<T: Into<ScalarWitness>>(x: T) -> Self {

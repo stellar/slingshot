@@ -192,17 +192,17 @@ impl DataWitness {
             DataWitness::Predicate(p) => p.encode(buf),
             DataWitness::Commitment(c) => c.encode(buf),
             DataWitness::Scalar(s) => s.encode(buf),
-            DataWitness::Input(b) => b.encode(buf),
+            DataWitness::Input(input) => input.encode(buf),
         }
     }
 
     fn serialized_length(&self) -> usize {
         match self {
             DataWitness::Program(instr) => instr.iter().map(|p| p.serialized_length()).sum(),
-            DataWitness::Input(b) => 32 + b.contract.serialized_length(),
             DataWitness::Predicate(p) => p.serialized_length(),
             DataWitness::Commitment(c) => c.serialized_length(),
             DataWitness::Scalar(s) => s.serialized_length(),
+            DataWitness::Input(input) => input.serialized_length(),
         }
     }
 }
