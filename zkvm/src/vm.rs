@@ -6,7 +6,7 @@ use spacesuit;
 use spacesuit::SignedInteger;
 use std::iter::FromIterator;
 
-use crate::constraints::{Commitment, Expression, Variable};
+use crate::constraints::{Commitment, Constraint, Expression, Variable};
 use crate::contract::{Contract, FrozenContract, FrozenItem, FrozenValue, PortableItem};
 use crate::encoding::SliceReader;
 use crate::errors::VMError;
@@ -317,8 +317,8 @@ where
     fn eq(&mut self) -> Result<(), VMError> {
         let expr2 = self.pop_item()?.to_expression()?;
         let expr1 = self.pop_item()?.to_expression()?;
-        let expr3 = expr1 - expr2;
-        self.push_item(expr3);
+        let constraint = Constraint::Eq(expr1, expr2);
+        self.push_item(constraint);
         Ok(())
     }
 
