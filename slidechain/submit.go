@@ -41,7 +41,7 @@ type submitter struct {
 
 	chain *protocol.Chain
 
-	BlockInterval time.Duration
+	blockInterval time.Duration
 }
 
 func (s *submitter) submitTx(ctx context.Context, tx *bc.Tx) (*multichan.R, error) {
@@ -51,7 +51,7 @@ func (s *submitter) submitTx(ctx context.Context, tx *bc.Tx) (*multichan.R, erro
 	r := s.w.Reader()
 	if s.bb == nil {
 		s.bb = protocol.NewBlockBuilder()
-		nextBlockTime := time.Now().Add(s.BlockInterval)
+		nextBlockTime := time.Now().Add(s.blockInterval)
 
 		st := s.chain.State()
 		if st.Header == nil {
@@ -66,7 +66,7 @@ func (s *submitter) submitTx(ctx context.Context, tx *bc.Tx) (*multichan.R, erro
 			return nil, errors.Wrap(err, "starting a new tx pool")
 		}
 		log.Printf("starting new block, will commit at %s", nextBlockTime)
-		time.AfterFunc(s.BlockInterval, func() {
+		time.AfterFunc(s.blockInterval, func() {
 			s.bbmu.Lock()
 			defer s.bbmu.Unlock()
 

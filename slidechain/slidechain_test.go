@@ -556,7 +556,7 @@ func withTestServer(ctx context.Context, t *testing.T, fn func(context.Context, 
 		w:             w,
 		chain:         chain,
 		initialBlock:  initialBlock,
-		BlockInterval: DefaultBlockInterval,
+		blockInterval: DefaultBlockInterval,
 	}
 
 	mux := http.NewServeMux()

@@ -102,7 +102,7 @@ func newCustodian(ctx context.Context, db *sql.DB, hclient horizon.ClientInterfa
 			w:             multichan.New((*bc.Block)(nil)),
 			chain:         chain,
 			initialBlock:  initialBlock,
-			BlockInterval: blockInterval,
+			blockInterval: blockInterval,
 		},
 		DB:            db,
 		hclient:       hclient,
