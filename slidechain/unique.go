@@ -3,8 +3,10 @@ package slidechain
 import (
 	"bytes"
 	"fmt"
+	"math"
 
 	"github.com/chain/txvm/errors"
+	"github.com/chain/txvm/protocol/bc"
 	"github.com/chain/txvm/protocol/txvm"
 	"github.com/chain/txvm/protocol/txvm/asm"
 )
@@ -70,23 +72,31 @@ func UniqueNonceHash(bcid []byte, expMS int64) [32]byte {
 	return txvm.NonceHash(nonce)
 }
 
-func consumeTokenProgSnapshot(bcid, assetXDR, recipPubkey []byte, amount, expMS int64) ([]byte, error) {
+// BuildPrepegTx builds the pre-peg-in TxVM transaction to create a uniqueness token.
+func BuildPrepegTx(bcid, assetXDR, recip []byte, amount, expMS int64) (*bc.Tx, error) {
 	buf := new(bytes.Buffer)
-	// Push components of consume token snapshot.
-	fmt.Fprintf(buf, "'C' x'%x' x'%x'\n", createTokenSeed[:], consumeTokenProg)
-	// Push con stack: quorum, {recip}, zeroval, amount, asset
-	// Note that plain data items must be converted to tuples to be contract arguments.
-	fmt.Fprintf(buf, "{'Z', 1}\n")
-	fmt.Fprintf(buf, "{'T', {x'%x'}}\n", recipPubkey)
-	nonceHash := UniqueNonceHash(bcid, expMS)
-	fmt.Fprintf(buf, "{'V', %d, x'%x', x'%x'}\n", 0, zeroSeed[:], nonceHash[:])
-	fmt.Fprintf(buf, "{'Z', %d}\n", amount)
-	fmt.Fprintf(buf, "{'S', x'%x'}\n", assetXDR)
-	// Construct tuple and assemble bytecode.
-	fmt.Fprintf(buf, "8 tuple\n")
+	// Set up pre-peg tx arg stack: asset, amount, zeroval, {recip}, quorum
+	fmt.Fprintf(buf, "x'%x' put\n", assetXDR)
+	fmt.Fprintf(buf, "%d put\n", amount)
+	fmt.Fprintf(buf, "x'%x' %d nonce 0 split put\n", bcid, expMS)
+	fmt.Fprintf(buf, "{x'%x'} put\n", recip)
+	fmt.Fprintf(buf, "1 put\n") // The signer quorum size of 1 is fixed.
+	// Call create token contract.
+	fmt.Fprintf(buf, "x'%x' contract call\n", createTokenProg)
+	fmt.Fprintf(buf, "finalize\n")
 	tx, err := asm.Assemble(buf.String())
 	if err != nil {
-		return nil, errors.Wrap(err, "assembling consume token snapshot")
+		return nil, errors.Wrap(err, "assembling pre-peg tx")
 	}
-	return tx, nil
+	_, err = txvm.Validate(tx, 3, math.MaxInt64)
+	if err != nil {
+		return nil, errors.Wrap(err, "validating pre-peg tx")
+	}
+	var runlimit int64
+	prepegTx, err := bc.NewTx(tx, 3, math.MaxInt64, txvm.GetRunlimit(&runlimit))
+	if err != nil {
+		return nil, errors.Wrap(err, "populating new pre-peg tx")
+	}
+	prepegTx.Runlimit = math.MaxInt64 - runlimit
+	return prepegTx, nil
 }
