@@ -103,14 +103,6 @@ impl Expression {
         Expression::Constant(a.into())
     }
 
-    // Converts an `Expression` into an `r1cs` `LinearCombination`.
-    pub fn to_r1cs_lc(&self) -> r1cs::LinearCombination {
-        match self {
-            Expression::Constant(c) => c.to_scalar().into(),
-            Expression::LinearCombination(terms, _) => r1cs::LinearCombination::from_iter(terms),
-        }
-    }
-
     pub fn multiply<CS: r1cs::ConstraintSystem>(self, rhs: Self, cs: &mut CS) -> Self {
         match (self, rhs) {
             // Constant * Constant

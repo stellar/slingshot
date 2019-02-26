@@ -674,10 +674,6 @@ where
         ))
     }
 
-    fn multiply(&mut self, left: Expression, right: Expression) -> (Variable, Variable, Variable) {
-        unimplemented!()
-    }
-
     /// Returns Ok(Some((qty,flv))) assignment pair if it's missing or consistent.
     /// Return Err if the witness is present, but is inconsistent.
     fn value_witness(&mut self, value: &Value) -> Result<Option<(SignedInteger, Scalar)>, VMError> {
