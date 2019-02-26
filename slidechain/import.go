@@ -27,7 +27,8 @@ func (c *Custodian) buildImportTx(
 	fmt.Fprintf(buf, "{'C', x'%x', x'%x',", createTokenSeed[:], consumeTokenProg)
 	fmt.Fprintf(buf, " {'Z', %d}, {'T', {x'%x'}},", int64(1), recipPubkey)
 	nonceHash := UniqueNonceHash(c.InitBlockHash.Bytes(), expMS)
-	fmt.Fprintf(buf, " {'V', %d, x'%x', x'%x'},", 0, zeroSeed[:], nonceHash[:])
+	snapshotNonceHash := txvm.VMHash("Split2", nonceHash[:])
+	fmt.Fprintf(buf, " {'V', %d, x'%x', x'%x'},", 0, zeroSeed[:], snapshotNonceHash[:])
 	fmt.Fprintf(buf, " {'Z', %d}, {'S', x'%x'}}", amount, assetXDR)
 	fmt.Fprintf(buf, " input put\n")                                       // arg stack: consumeTokenContract
 	fmt.Fprintf(buf, "x'%x' contract call\n", importIssuanceProg)          // arg stack: sigchecker, issuedval, {recip}, quorum
