@@ -98,9 +98,10 @@ func newCustodian(ctx context.Context, db *sql.DB, hclient horizon.ClientInterfa
 		seed:      seed,
 		AccountID: *custAccountID,
 		S: &submitter{
-			w:            multichan.New((*bc.Block)(nil)),
-			chain:        chain,
-			initialBlock: initialBlock,
+			w:             multichan.New((*bc.Block)(nil)),
+			chain:         chain,
+			initialBlock:  initialBlock,
+			BlockInterval: DefaultBlockInterval,
 		},
 		DB:            db,
 		hclient:       hclient,

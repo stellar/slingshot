@@ -17,7 +17,8 @@ import (
 	"github.com/interstellar/slingshot/slidechain/net"
 )
 
-const defaultBlockInterval = 5 * time.Second
+// DefaultBlockInterval is the default duration between expected blocks on TxVM.
+const DefaultBlockInterval = 5 * time.Second
 
 type submitter struct {
 	// Protects bb.
@@ -39,16 +40,18 @@ type submitter struct {
 	initialBlock *bc.Block
 
 	chain *protocol.Chain
+
+	BlockInterval time.Duration
 }
 
-func (s *submitter) submitTx(ctx context.Context, tx *bc.Tx, blockInterval time.Duration) (*multichan.R, error) {
+func (s *submitter) submitTx(ctx context.Context, tx *bc.Tx) (*multichan.R, error) {
 	s.bbmu.Lock()
 	defer s.bbmu.Unlock()
 
 	r := s.w.Reader()
 	if s.bb == nil {
 		s.bb = protocol.NewBlockBuilder()
-		nextBlockTime := time.Now().Add(blockInterval)
+		nextBlockTime := time.Now().Add(s.BlockInterval)
 
 		st := s.chain.State()
 		if st.Header == nil {
@@ -63,7 +66,7 @@ func (s *submitter) submitTx(ctx context.Context, tx *bc.Tx, blockInterval time.
 			return nil, errors.Wrap(err, "starting a new tx pool")
 		}
 		log.Printf("starting new block, will commit at %s", nextBlockTime)
-		time.AfterFunc(blockInterval, func() {
+		time.AfterFunc(s.BlockInterval, func() {
 			s.bbmu.Lock()
 			defer s.bbmu.Unlock()
 
@@ -124,7 +127,7 @@ func (s *submitter) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	wait := (waitStr != "")
 
 	var err error
-	blockInterval := defaultBlockInterval
+	blockInterval := DefaultBlockInterval
 	blockIntervalStr := req.FormValue("blockInterval")
 	if blockIntervalStr != "" {
 		blockInterval, err = time.ParseDuration(blockIntervalStr)
@@ -133,6 +136,7 @@ func (s *submitter) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 	}
+	s.BlockInterval = blockInterval
 
 	bits, err := ioutil.ReadAll(req.Body)
 	if err != nil {
@@ -153,7 +157,7 @@ func (s *submitter) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	r, err := s.submitTx(ctx, tx, blockInterval)
+	r, err := s.submitTx(ctx, tx)
 	if err != nil {
 		net.Errorf(w, http.StatusBadRequest, "submitting tx: %s", err)
 		return

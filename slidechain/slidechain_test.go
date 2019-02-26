@@ -229,7 +229,7 @@ func TestImport(t *testing.T) {
 			if err != nil {
 				t.Fatal("could not build pre-peg-in tx")
 			}
-			_, err = c.S.submitTx(ctx, prepegTx, defaultBlockInterval)
+			_, err = c.S.submitTx(ctx, prepegTx)
 			if err != nil {
 				t.Fatal("could not submit pre-peg-in tx")
 			}
@@ -335,7 +335,7 @@ func TestEndToEnd(t *testing.T) {
 			if err != nil {
 				t.Fatal("could not build pre-peg-in tx")
 			}
-			r, err := c.S.submitTx(ctx, prepegTx, defaultBlockInterval)
+			r, err := c.S.submitTx(ctx, prepegTx)
 			if err != nil {
 				t.Fatal("could not submit pre-peg-in tx")
 			}
@@ -553,9 +553,10 @@ func withTestServer(ctx context.Context, t *testing.T, fn func(context.Context, 
 
 	w := multichan.New((*bc.Block)(nil))
 	s := &submitter{
-		w:            w,
-		chain:        chain,
-		initialBlock: initialBlock,
+		w:             w,
+		chain:         chain,
+		initialBlock:  initialBlock,
+		BlockInterval: DefaultBlockInterval,
 	}
 
 	mux := http.NewServeMux()

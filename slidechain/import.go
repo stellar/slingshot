@@ -128,7 +128,7 @@ func (c *Custodian) doImport(ctx context.Context, nonceHash []byte, amount int64
 		return errors.Wrap(err, "computing transaction ID")
 	}
 	importTx.Runlimit = math.MaxInt64 - runlimit
-	_, err = c.S.submitTx(ctx, importTx, defaultBlockInterval)
+	_, err = c.S.submitTx(ctx, importTx)
 	if err != nil {
 		return errors.Wrap(err, "submitting import tx")
 	}
