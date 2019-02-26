@@ -1,21 +1,19 @@
 use bulletproofs::BulletproofGens;
 use curve25519_dalek::scalar::Scalar;
+use postgres::{Connection, TlsMode};
 use zkvm::*;
 
 pub struct Treasury {
-    // TBD: add store to track tokens in circulation
+    conn: Connection,
 }
 
 // TBD: define annotated struct for embedding metadata
 // and other info with token flavors
 
 impl Treasury {
-    /// Creates a new token flavor, returning the flavor Predicate
-    /// and its Scalar representation
-    pub fn create_token() -> (Predicate, Scalar) {
-        let flavor_pred = Predicate::from_signing_key(Scalar::random(&mut rand::thread_rng()));
-        let flavor_scalar = Value::issue_flavor(&flavor_pred);
-        (flavor_pred, flavor_scalar)
+    /// Creates a new token for the given Predicate.
+    pub fn create_token(pred: Predicate) {
+        unimplemented!()
     }
 
     /// Issues a token of the specified flavor and quantity to a destination
@@ -56,10 +54,7 @@ pub fn issue_token(
 ) -> &mut Program {
     let nonce = Predicate::from_signing_key(Scalar::random(&mut rand::thread_rng()));
     program
-        .push(Commitment::blinded_with_factor(
-            qty,
-            Scalar::random(&mut rand::thread_rng()),
-        ))
+        .push(Commitment::blinded(qty))
         .var()
         .push(Commitment::unblinded(Value::issue_flavor(&flavor)))
         .var()
