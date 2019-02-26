@@ -19,7 +19,13 @@ How does the `Prover` know how to sign transaction and make a proof? The proverâ
 
 ## Witness types
 
-TBD.
+_Witness_ is a secret data necessary to create a zero-knowledge proof or a signature.
+There is a number of witness types corresponding to a specific VM operation.
 
+For example, a [`signtx`](zkvm-spec.md#signtx) instruction expects a [predicate point](zkvm-spec.md#predicate) to be a [verification key](zkvm-spec.md#verification-key). In the `Prover` such key is represented as a `Data::Witness` type that holds `PredicateWitness::Key`. When the proverâ€™s VM pops such item from the stack and remembers it, the `Prover` accumulates all such secret keys and creates a [transaction signature](zkvm-spec.md#transaction-signature) at the end of the execution.
 
+TBD: overview of all witness types.
 
+## Integer-preserving operations
+
+TBD: rationale for `ScalarWitness`.
