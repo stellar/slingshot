@@ -126,17 +126,15 @@ func (s *submitter) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	}
 	wait := (waitStr != "")
 
-	var err error
-	blockInterval := DefaultBlockInterval
 	blockIntervalStr := req.FormValue("blockInterval")
 	if blockIntervalStr != "" {
-		blockInterval, err = time.ParseDuration(blockIntervalStr)
+		blockInterval, err := time.ParseDuration(blockIntervalStr)
 		if err != nil {
 			net.Errorf(w, http.StatusBadRequest, "parsing block interval duration: %s", err)
 			return
 		}
+		s.BlockInterval = blockInterval
 	}
-	s.BlockInterval = blockInterval
 
 	bits, err := ioutil.ReadAll(req.Body)
 	if err != nil {
