@@ -6,7 +6,7 @@ use spacesuit;
 use spacesuit::SignedInteger;
 use std::iter::FromIterator;
 
-use crate::constraints::{Commitment, Expression, Variable};
+use crate::constraints::{Commitment, Constraint, Expression, Variable};
 use crate::contract::{Contract, FrozenContract, FrozenItem, FrozenValue, PortableItem};
 use crate::encoding::SliceReader;
 use crate::errors::VMError;
@@ -209,8 +209,8 @@ where
                 Instruction::Expr => self.expr()?,
                 Instruction::Neg => self.neg()?,
                 Instruction::Add => self.add()?,
-                Instruction::Mul => unimplemented!(),
-                Instruction::Eq => unimplemented!(),
+                Instruction::Mul => self.mul()?,
+                Instruction::Eq => self.eq()?,
                 Instruction::Range(_) => unimplemented!(),
                 Instruction::And => unimplemented!(),
                 Instruction::Or => unimplemented!(),
@@ -303,6 +303,22 @@ where
         let expr1 = self.pop_item()?.to_expression()?;
         let expr3 = expr1 + expr2;
         self.push_item(expr3);
+        Ok(())
+    }
+
+    fn mul(&mut self) -> Result<(), VMError> {
+        let expr2 = self.pop_item()?.to_expression()?;
+        let expr1 = self.pop_item()?.to_expression()?;
+        let expr3 = expr1.multiply(expr2, self.delegate.cs());
+        self.push_item(expr3);
+        Ok(())
+    }
+
+    fn eq(&mut self) -> Result<(), VMError> {
+        let expr2 = self.pop_item()?.to_expression()?;
+        let expr1 = self.pop_item()?.to_expression()?;
+        let constraint = Constraint::Eq(expr1, expr2);
+        self.push_item(constraint);
         Ok(())
     }
 

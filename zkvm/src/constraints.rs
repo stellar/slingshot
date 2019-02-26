@@ -4,6 +4,7 @@
 use bulletproofs::{r1cs, PedersenGens};
 use curve25519_dalek::ristretto::CompressedRistretto;
 use curve25519_dalek::scalar::Scalar;
+use std::iter::FromIterator;
 use std::ops::{Add, Neg};
 
 use crate::scalar_witness::ScalarWitness;
@@ -14,11 +15,10 @@ pub struct Variable {
     // the witness is located indirectly in vm::VariableCommitment
 }
 
-pub type ExpressionTerm = (r1cs::Variable, Scalar);
 #[derive(Clone, Debug)]
 pub enum Expression {
     Constant(ScalarWitness),
-    LinearCombination(Vec<ExpressionTerm>, Option<ScalarWitness>),
+    LinearCombination(Vec<(r1cs::Variable, Scalar)>, Option<ScalarWitness>),
 }
 
 #[derive(Clone, Debug)]
@@ -101,6 +101,55 @@ impl CommitmentWitness {
 impl Expression {
     pub fn constant<S: Into<ScalarWitness>>(a: S) -> Self {
         Expression::Constant(a.into())
+    }
+
+    pub fn multiply<CS: r1cs::ConstraintSystem>(self, rhs: Self, cs: &mut CS) -> Self {
+        match (self, rhs) {
+            // Constant * Constant
+            (Expression::Constant(left), Expression::Constant(right)) => {
+                Expression::Constant(left * right)
+            }
+            // Constant * LinearCombination
+            (
+                Expression::Constant(l),
+                Expression::LinearCombination(mut right_terms, right_assignment),
+            ) => {
+                // Multiply coefficients in right_terms by l,
+                // Multiply assignment in right_assignment by l
+                for (_, n) in right_terms.iter_mut() {
+                    *n = *n * l.to_scalar();
+                }
+                Expression::LinearCombination(right_terms, right_assignment.map(|r| r * l))
+            }
+            // LinearCombination * Constant
+            (
+                Expression::LinearCombination(mut left_terms, left_assignment),
+                Expression::Constant(r),
+            ) => {
+                // Multiply coefficients in left_terms by r,
+                // Multiply assignment in left_assignment by r
+                for (_, n) in left_terms.iter_mut() {
+                    *n = *n * r.to_scalar();
+                }
+                Expression::LinearCombination(left_terms, left_assignment.map(|l| l * r))
+            }
+            // LinearCombination * LinearCombination
+            // Creates a multiplication gate in r1cs
+            (
+                Expression::LinearCombination(left_terms, left_assignment),
+                Expression::LinearCombination(right_terms, right_assignment),
+            ) => {
+                let (_, _, output_var) = cs.multiply(
+                    r1cs::LinearCombination::from_iter(left_terms),
+                    r1cs::LinearCombination::from_iter(right_terms),
+                );
+                let output_assignment = match (left_assignment, right_assignment) {
+                    (Some(l), Some(r)) => Some(l * r),
+                    (_, _) => None,
+                };
+                Expression::LinearCombination(vec![(output_var, Scalar::one())], output_assignment)
+            }
+        }
     }
 }
 
