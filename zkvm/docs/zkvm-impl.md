@@ -19,12 +19,36 @@ How does the `Prover` know how to sign transaction and make a proof? The prover�
 
 ## Witness types
 
-_Witness_ is a secret data necessary to create a zero-knowledge proof or a signature.
-There is a number of witness types corresponding to a specific VM operation.
+_Witness_ is a type necessary to create a zero-knowledge proof or a signature.
+There is a number of witness types corresponding to each specific VM operation.
 
-For example, a [`signtx`](zkvm-spec.md#signtx) instruction expects a [predicate point](zkvm-spec.md#predicate) to be a [verification key](zkvm-spec.md#verification-key). In the `Prover` such key is represented as a `Data::Witness` type that holds `PredicateWitness::Key`. When the prover’s VM pops such item from the stack and remembers it, the `Prover` accumulates all such secret keys and creates a [transaction signature](zkvm-spec.md#transaction-signature) at the end of the execution.
+### Commitments
 
-TBD: overview of all witness types.
+For the verifier, Pedersen commitments are opaque 32-byte [compressed points](zkvm-spec.md#point). For the verifier, these are represented by a `Data::Commitment` variant that holds a `Commitment` structure which can be `::Closed` or `::Open`.
+
+The `var` instruction in the prover’s VM expects an `::Open` commitment. An open commitment contains the secret value and its blinding factor explicitly, that are used to compute the R1CS proof.
+
+### Predicates
+
+TBD. predicate tree with opaque or non-opaque branches in order to support `call`/`left`/`right` operations.
+
+### Variables
+
+TBD. assignment within commitments stored within VM. VM manages variables in order to make commitments replaceable with `reblind`.
+
+### Expressions
+
+TBD. assignments stored as Option<ScalarWitness>.
+
+### Constraints
+
+TBD. assignments are not stored explicitly, but computed on the fly from the assignments in the underlying expressions.
+
+
+### Signing keys
+
+A [`signtx`](zkvm-spec.md#signtx) instruction expects a [predicate point](zkvm-spec.md#predicate) to be a [verification key](zkvm-spec.md#verification-key). In the `Prover` such key is represented as a `Data::Witness` type that holds `PredicateWitness::Key`. When the prover’s VM pops such item from the stack and remembers it, the `Prover` accumulates all such secret keys and creates a [transaction signature](zkvm-spec.md#transaction-signature) at the end of the execution.
+
 
 ## Integer-preserving operations
 
