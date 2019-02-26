@@ -96,11 +96,10 @@ func main() {
 		}
 	}
 
-	amountInt := *amount
 	amountStr := strconv.FormatInt(*amount, 10)
 	if *code == "" && *issuer == "" {
 		amountXLM := xlm.Amount(*amount) * xlm.Lumen
-		amountInt = int64(amountXLM)
+		*amount = int64(amountXLM)
 		amountStr = amountXLM.HorizonString()
 	}
 	assetXDR, err := asset.MarshalBinary()
@@ -108,7 +107,7 @@ func main() {
 		log.Fatal("marshaling asset xdr: ", err)
 	}
 	expMS := int64(bc.Millis(time.Now().Add(10 * time.Minute)))
-	err = doPrepegTx(bcidBytes[:], assetXDR, amountInt, expMS, recipientPubkey[:], *slidechaind)
+	err = doPrepegTx(bcidBytes[:], assetXDR, *amount, expMS, recipientPubkey[:], *slidechaind)
 	if err != nil {
 		log.Fatal("doing pre-peg-in tx: ", err)
 	}
