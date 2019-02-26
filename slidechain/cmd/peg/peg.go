@@ -140,7 +140,7 @@ func doPegIn(bcid, assetXDR []byte, amount, expMS int64, pubkey ed25519.PublicKe
 		return errors.Wrap(err, "marshaling pre-peg tx")
 	}
 	p := slidechain.PegIn{
-		Transaction: prepegTxBits,
+		PrepegTx:    prepegTxBits,
 		Amount:      amount,
 		AssetXDR:    assetXDR,
 		RecipPubkey: pubkey,

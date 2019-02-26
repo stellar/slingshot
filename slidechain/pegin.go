@@ -15,15 +15,15 @@ import (
 
 // PegIn contains a marshalled pre-peg-in TxVM tx and fields for a peg-in transaction in the database.
 type PegIn struct {
-	Transaction []byte `json:"tx"`
+	PrepegTx    []byte `json:"prepeg_tx"`
 	Amount      int64  `json:"amount"`
 	AssetXDR    []byte `json:"asset_xdr"`
 	RecipPubkey []byte `json:"recip_pubkey"`
 	ExpMS       int64  `json:"exp_ms"`
 }
 
-// PegIn submits and waits on the pre-peg-in transaction to TxVM, and records a peg-in in the database.
-func (c *Custodian) PegIn(w http.ResponseWriter, req *http.Request) {
+// DoPegIn submits and waits on the pre-peg-in transaction to TxVM, and records a peg-in in the database.
+func (c *Custodian) DoPegIn(w http.ResponseWriter, req *http.Request) {
 	data, err := ioutil.ReadAll(req.Body)
 	if err != nil {
 		net.Errorf(w, http.StatusInternalServerError, "sending response: %s", err)
@@ -38,7 +38,7 @@ func (c *Custodian) PegIn(w http.ResponseWriter, req *http.Request) {
 	}
 	// Unmarshal pre-peg-in transaction.
 	var rawTx bc.RawTx
-	err = proto.Unmarshal(p.Transaction, &rawTx)
+	err = proto.Unmarshal(p.PrepegTx, &rawTx)
 	if err != nil {
 		net.Errorf(w, http.StatusInternalServerError, "sending response: %s", err)
 		return
