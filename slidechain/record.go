@@ -8,11 +8,14 @@ import (
 	"net/http"
 
 	"github.com/chain/txvm/errors"
+	"github.com/chain/txvm/protocol/bc"
+	"github.com/golang/protobuf/proto"
 	"github.com/interstellar/slingshot/slidechain/net"
 )
 
 // PegIn contains the fields for a peg-in transaction in the database.
 type PegIn struct {
+	Transaction []byte `json:"tx"`
 	Amount      int64  `json:"amount"`
 	AssetXDR    []byte `json:"asset_xdr"`
 	RecipPubkey []byte `json:"recip_pubkey"`
@@ -33,8 +36,30 @@ func (c *Custodian) RecordPegIn(w http.ResponseWriter, req *http.Request) {
 		net.Errorf(w, http.StatusInternalServerError, "sending response: %s", err)
 		return
 	}
-	nonceHash := UniqueNonceHash(c.InitBlockHash.Bytes(), p.ExpMS)
+	// Unmarshal pre-peg-in transaction.
+	var rawTx bc.RawTx
+	err = proto.Unmarshal(p.Transaction, &rawTx)
+	if err != nil {
+		net.Errorf(w, http.StatusInternalServerError, "parsing transaction from request: %s", err)
+		return
+	}
+	tx, err := bc.NewTx(rawTx.Program, rawTx.Version, rawTx.Runlimit)
+	if err != nil {
+		net.Errorf(w, http.StatusInternalServerError, "building tx: %s", err)
+		return
+	}
+	// Submit pre-peg-in transaction and wait on success.
 	ctx := req.Context()
+	r, err := c.S.submitTx(ctx, tx, defaultBlockInterval)
+	if err != nil {
+		net.Errorf(w, http.StatusInternalServerError, "submitting tx: %s", err)
+		return
+	}
+	err = c.S.waitOnTx(ctx, tx.ID, r)
+	if err != nil {
+		net.Errorf(w, http.StatusInternalServerError, "waiting on tx: %s", err)
+	}
+	nonceHash := UniqueNonceHash(c.InitBlockHash.Bytes(), p.ExpMS)
 	err = c.insertPegIn(ctx, nonceHash[:], p.RecipPubkey, p.ExpMS)
 	if err != nil {
 		net.Errorf(w, http.StatusInternalServerError, "sending response: %s", err)
