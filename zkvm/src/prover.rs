@@ -34,7 +34,7 @@ impl<'a, 'b> Delegate<r1cs::Prover<'a, 'b>> for Prover<'a, 'b> {
         Ok(self.cs.commit(v.into(), v_blinding))
     }
 
-    fn verify_point_op<F>(&mut self, point_op_fn: F) -> Result<(), VMError>
+    fn verify_point_op<F>(&mut self, _point_op_fn: F) -> Result<(), VMError>
     where
         F: FnOnce() -> PointOp,
     {
@@ -97,7 +97,6 @@ impl<'a, 'b> Prover<'a, 'b> {
         let mut signtx_transcript = Transcript::new(b"ZkVM.signtx");
         signtx_transcript.commit_bytes(b"txid", &txid.0);
         let signature = sign_tx_fn(&mut signtx_transcript, &prover.signtx_keys);
-        // let signature = Signature::sign_aggregated(&mut signtx_transcript, &prover.signtx_keys);
 
         // Generate the R1CS proof
         let proof = prover.cs.prove().map_err(|_| VMError::InvalidR1CSProof)?;
