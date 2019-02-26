@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/bobg/multichan"
 	"github.com/chain/txvm/crypto/ed25519"
@@ -49,8 +50,8 @@ type Custodian struct {
 // GetCustodian returns a Custodian object, loading the preset
 // account ID and seed from the db if it exists, otherwise generating
 // a new keypair and funding the account.
-func GetCustodian(ctx context.Context, db *sql.DB, horizonURL string) (*Custodian, error) {
-	c, err := newCustodian(ctx, db, hclient(horizonURL))
+func GetCustodian(ctx context.Context, db *sql.DB, horizonURL string, blockInterval time.Duration) (*Custodian, error) {
+	c, err := newCustodian(ctx, db, hclient(horizonURL), blockInterval)
 	if err != nil {
 		return nil, err
 	}
@@ -58,7 +59,7 @@ func GetCustodian(ctx context.Context, db *sql.DB, horizonURL string) (*Custodia
 	return c, nil
 }
 
-func newCustodian(ctx context.Context, db *sql.DB, hclient horizon.ClientInterface) (*Custodian, error) {
+func newCustodian(ctx context.Context, db *sql.DB, hclient horizon.ClientInterface, blockInterval time.Duration) (*Custodian, error) {
 	err := setSchema(db)
 	if err != nil {
 		return nil, errors.Wrap(err, "setting db schema")
@@ -101,7 +102,7 @@ func newCustodian(ctx context.Context, db *sql.DB, hclient horizon.ClientInterfa
 			w:             multichan.New((*bc.Block)(nil)),
 			chain:         chain,
 			initialBlock:  initialBlock,
-			BlockInterval: DefaultBlockInterval,
+			BlockInterval: blockInterval,
 		},
 		DB:            db,
 		hclient:       hclient,

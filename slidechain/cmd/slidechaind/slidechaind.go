@@ -36,11 +36,10 @@ func main() {
 		log.Fatalf("error opening db: %s", err)
 	}
 	defer db.Close()
-	c, err := slidechain.GetCustodian(ctx, db, *url)
+	c, err := slidechain.GetCustodian(ctx, db, *url, *blockInterval)
 	if err != nil {
 		log.Fatal(err)
 	}
-	c.S.BlockInterval = *blockInterval
 
 	listener, err := net.Listen("tcp", *addr)
 	if err != nil {
