@@ -229,7 +229,7 @@ func TestImport(t *testing.T) {
 			if err != nil {
 				t.Fatal("could not build pre-peg-in tx")
 			}
-			_, err = c.S.submitTx(ctx, prepegTx)
+			_, err = c.S.submitTx(ctx, prepegTx, defaultBlockInterval)
 			if err != nil {
 				t.Fatal("could not submit pre-peg-in tx")
 			}
@@ -335,7 +335,7 @@ func TestEndToEnd(t *testing.T) {
 			if err != nil {
 				t.Fatal("could not build pre-peg-in tx")
 			}
-			r, err := c.S.submitTx(ctx, prepegTx)
+			r, err := c.S.submitTx(ctx, prepegTx, defaultBlockInterval)
 			if err != nil {
 				t.Fatal("could not submit pre-peg-in tx")
 			}

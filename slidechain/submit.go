@@ -17,8 +17,7 @@ import (
 	"github.com/interstellar/slingshot/slidechain/net"
 )
 
-// TODO: make this configurable.
-var blockInterval = 5 * time.Second
+const defaultBlockInterval = 5 * time.Second
 
 type submitter struct {
 	// Protects bb.
@@ -42,7 +41,7 @@ type submitter struct {
 	chain *protocol.Chain
 }
 
-func (s *submitter) submitTx(ctx context.Context, tx *bc.Tx) (*multichan.R, error) {
+func (s *submitter) submitTx(ctx context.Context, tx *bc.Tx, blockInterval time.Duration) (*multichan.R, error) {
 	s.bbmu.Lock()
 	defer s.bbmu.Unlock()
 
@@ -124,6 +123,21 @@ func (s *submitter) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	}
 	wait := (waitStr != "")
 
+	var (
+		blockInterval time.Duration
+		err           error
+	)
+	blockIntervalStr := req.FormValue("blockInterval")
+	if blockIntervalStr != "" {
+		blockInterval, err = time.ParseDuration(blockIntervalStr)
+		if err != nil {
+			net.Errorf(w, http.StatusBadRequest, "parsing block interval duration: %s", err)
+			return
+		}
+	} else {
+		blockInterval = defaultBlockInterval
+	}
+
 	bits, err := ioutil.ReadAll(req.Body)
 	if err != nil {
 		net.Errorf(w, http.StatusInternalServerError, "reading request body: %s", err)
@@ -143,7 +157,7 @@ func (s *submitter) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	r, err := s.submitTx(ctx, tx)
+	r, err := s.submitTx(ctx, tx, blockInterval)
 	if err != nil {
 		net.Errorf(w, http.StatusBadRequest, "submitting tx: %s", err)
 		return
