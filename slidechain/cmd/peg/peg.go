@@ -95,6 +95,8 @@ func main() {
 		}
 	}
 
+	// XDR scales down an amount unit of every asset by a factor of 10^7.
+	// Thus, xlm.Parse works for both native and non-native assets.
 	amountXLM, err := xlm.Parse(*amount)
 	if err != nil {
 		log.Fatal("parsing horizon string: ", err)
