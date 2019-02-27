@@ -23,7 +23,7 @@ def main
     collect_links_and_anchors(file, dataset)
   end
   markdown_filepaths.each do |file|
-    #$stderr.puts "Checking links in #{file}..."
+    puts "Checking links in #{file}"
     check_links(file, dataset[file][:links], dataset)
   end
 end
@@ -141,4 +141,6 @@ main
 
 if $check_links_failed
   exit(1)
+else
+  puts "All links seem to be good."
 end
