@@ -1,7 +1,7 @@
 //! Constraint system-related types and operations:
 //! Commitments, Variables, Expressions and Constraints.
 
-use bulletproofs::{r1cs, r1cs::ConstraintSystem, r1cs::RandomizedConstraintSystem, PedersenGens};
+use bulletproofs::{r1cs, r1cs::ConstraintSystem, PedersenGens};
 use curve25519_dalek::ristretto::CompressedRistretto;
 use curve25519_dalek::scalar::Scalar;
 use std::iter::FromIterator;
@@ -48,11 +48,11 @@ pub struct CommitmentWitness {
 impl Constraint {
     pub fn verify<CS: r1cs::ConstraintSystem>(self, cs: &mut CS) -> Result<(), VMError> {
         cs.specify_randomized_constraints(move |cs| {
-            let z = cs.challenge_scalar(b"verify challenge");
-
             // Flatten the constraint into one expression
-            // Note: cloning because we can't move out of captured variable in an `Fn` closure
-            let expr = self.clone().flatten(cs, z);
+            // Note: cloning because we can't move out of captured variable in an `Fn` closure,
+            // and `Box<FnOnce>` is not fully supported yet. (We can update when that happens).
+            // Cf. https://github.com/dalek-cryptography/bulletproofs/issues/244
+            let expr = self.clone().flatten(cs);
 
             // Add the resulting expression to the constraint system
             cs.constrain(expr.to_r1cs_lc());
@@ -62,18 +62,19 @@ impl Constraint {
         .map_err(|e| VMError::R1CSError(e))
     }
 
-    fn flatten<CS: r1cs::RandomizedConstraintSystem>(self, cs: &mut CS, z: Scalar) -> Expression {
+    fn flatten<CS: r1cs::RandomizedConstraintSystem>(self, cs: &mut CS) -> Expression {
         match self {
             Constraint::Eq(expr1, expr2) => expr1 - expr2,
             Constraint::And(c1, c2) => {
-                let a = c1.flatten(cs, z);
-                let b = c2.flatten(cs, z);
+                let a = c1.flatten(cs);
+                let b = c2.flatten(cs);
                 // output expression: a + z * b
-                a + b.multiply(Expression::constant(z), cs)
+                let z = Expression::constant(cs.challenge_scalar(b"verify challenge"));
+                a + b.multiply(z, cs)
             }
             Constraint::Or(c1, c2) => {
-                let a = c1.flatten(cs, z);
-                let b = c2.flatten(cs, z);
+                let a = c1.flatten(cs);
+                let b = c2.flatten(cs);
                 // output expression: a * b
                 a.multiply(b, cs)
             }
