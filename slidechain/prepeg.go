@@ -55,7 +55,7 @@ func BuildPrePegInTx(bcid, assetXDR, recip []byte, amount, expMS int64) (*bc.Tx,
 	return tx, nil
 }
 
-// DoPrePegIn submits and waits on the pre-peg-in transaction to TxVM, and records a peg-in in the database.
+// DoPrePegIn builds, submits, and waits on the pre-peg-in transaction to TxVM, and records a peg-in in the database.
 func (c *Custodian) DoPrePegIn(w http.ResponseWriter, req *http.Request) {
 	data, err := ioutil.ReadAll(req.Body)
 	if err != nil {
