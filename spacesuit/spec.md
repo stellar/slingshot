@@ -6,6 +6,7 @@ _Cloak_ is a protocol for confidential assets based on the [Bulletproofs](https:
 * [Future directions](#future-directions)
 * [Definitions](#definitions)
     * [Scalar](#scalar)
+    * [Signed integer](#signed-integer)
     * [Value](#value)
     * [Quantity](#quantity)
     * [Flavor](#flavor)

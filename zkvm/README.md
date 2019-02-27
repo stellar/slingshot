@@ -2,6 +2,9 @@
 
 An evolution of TxVM with **cloaked assets** and **zero-knowledge smart contracts**.
 
+* [ZkVM specification](docs/zkvm-spec.md) — transaction validation rules.
+* [ZkVM API](docs/zkvm-api.md) — how to create transactions with ZkVM.
+
 ## Overview
 
 ZkVM architecture uses four concepts:
@@ -35,12 +38,7 @@ At the end of the VM execution, the entire constraint system is verified with a 
 
 All instructions that perform relatively expensive scalar-point multiplications to implement various checks (traversal of a predicate tree, checking signatures, etc) defer these operations till the end of the VM execution. Then, all such checks are verified in a batch, significantly reducing the overall verification time.
 
-## Specifications
-
-* [ZkVM specification](spec/ZkVM.md) — transaction validation rules,
-* [Blockchain specification](spec/Blockchain.md) — the blockchain state machine for the ZkVM transactions.
-
-The other protocols that are tightly integrated in the ZkVM:
+## See also
 
 * [Merlin transcripts](https://doc.dalek.rs/merlin/index.html)
 * [Ristretto group](https://ristretto.group)
