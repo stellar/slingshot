@@ -108,7 +108,8 @@ impl Predicate {
         let point = {
             let l = self.to_point();
             let f = Predicate::commit_or(l, right.to_point());
-            l.decompress().ok_or(VMError::InvalidPoint)? + f * PedersenGens::default().B
+            let l = l.decompress().ok_or(VMError::InvalidPoint)?;
+            l + f * PedersenGens::default().B
         };
         Ok(Predicate::Or(Box::new(PredicateDisjunction {
             left: self,
