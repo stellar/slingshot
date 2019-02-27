@@ -17,23 +17,22 @@ Note that `VM` execution is used twice: first, for _proving_, then for _verifyin
 
 How does the `Prover` know how to sign transaction and make a proof? The prover’s input is not an opaque sequence of instruction codes, but _witness-bearing instructions_. That is, a `push` instruction on the prover’s side does not hold an opaque string of bytes, but an accurate _witness type_ that may contain secret data and necessary structure for creating the proofs and signatures.
 
-## Witness types
+## Opaque and witness types
 
-**Witness** is a type necessary to create a zero-knowledge proof or a signature.
+We call a type **opaque** if it provides only enough information for the _verification_ of a ZkVM transaction or some sub-protocol.
 
-R1CS variables’ _witness_ is their secret _assignment_.
-
-VM instructions expect different types of witness data depending on the kind of object they operate on.
+We call a type **witness** if it contains secret data and structure necessary for the _prover_ to create a zero-knowledge proof or a signature.
 
 ### Commitments
 
-For the verifier, Pedersen commitments are opaque 32-byte [compressed points](zkvm-spec.md#point). For the verifier, these are represented by a `Data::Commitment` variant that holds a `Commitment` structure which can be `::Closed` or `::Open`.
+[Pedersen commitments](zkvm-spec.md#pedersen-commitment) are represented as enums:
 
-The `var` instruction in the prover’s VM expects an `::Open` commitment. An open commitment contains the secret value and its blinding factor explicitly, so they can be used to compute a R1CS proof.
+* `Commitment::Closed` is an _opaque type_ holding a compressed Ristretto [point](zkvm-spec.md#point) (represented by a 32-byte string).
+* `Commitment::Open ` is a _witness type_ that holds a pair of a secret value ([scalar witness](#scalar-witness)) and a secret blinding factor. These are used to create a R1CS proof using the prover’s instance of the VM.
 
 ### Predicates
 
-`Predicate` type represents either an opaque predicate, or an entire tree where unused branches can be left opaque and visited branches are stored as-is. This structure can then produce correct input for the [`call`](zkvm-spec.md#call), [`left`](zkvm-spec.md#left) and [`right`](zkvm-spec.md#right) instructions.
+`Predicate` type represents either an opaque [predicate](zkvm-spec.md#predicate), or an entire tree where unused branches can be left opaque and visited branches are stored as-is. This structure can then produce correct input for the [`call`](zkvm-spec.md#call), [`left`](zkvm-spec.md#left) and [`right`](zkvm-spec.md#right) instructions.
 
 ### Variables
 
