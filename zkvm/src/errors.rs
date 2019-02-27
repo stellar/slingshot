@@ -118,9 +118,3 @@ pub enum VMError {
     #[fail(display = "Data item must be opaque")]
     DataNotOpaque,
 }
-
-impl From<R1CSError> for VMError {
-    fn from(e: R1CSError) -> VMError {
-        VMError::R1CSError(e)
-    }
-}

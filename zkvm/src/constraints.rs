@@ -58,8 +58,6 @@ impl Constraint {
             cs.constrain(expr.to_r1cs_lc());
 
             Ok(())
-            // question: shouldn't this converseion from R1CSError -> VMError happen automatically
-            // because I implemented the `From<R1CSError> for VMError` trait?
         })
         .map_err(|e| VMError::R1CSError(e))
     }
