@@ -192,17 +192,11 @@ func (c *Custodian) watchPegOuts(ctx context.Context, pegouts <-chan pegOut) {
 				pubkeys = append(pubkeys, pubkey)
 			})
 			if err != nil {
-				if err == context.Canceled {
-					return
-				}
 				log.Fatalf("querying peg-outs: %s", err)
 			}
 			for i, txid := range txids {
 				err = c.doPostPegOut(ctx, assetXDRs[i], anchors[i], txid, amounts[i], seqnums[i], peggedOuts[i], exporters[i], tempAddrs[i], pubkeys[i])
 				if err != nil {
-					if err == context.Canceled {
-						return
-					}
 					log.Fatalf("doing post-peg-out: %s", err)
 				}
 			}
@@ -210,14 +204,10 @@ func (c *Custodian) watchPegOuts(ctx context.Context, pegouts <-chan pegOut) {
 			if ok {
 				err := c.doPostPegOut(ctx, p.AssetXDR, p.Anchor, p.Txid, p.Amount, p.Seqnum, p.State, p.Exporter, p.TempAddr, p.Pubkey)
 				if err != nil {
-					if err == context.Canceled {
-						return
-					}
 					log.Fatalf("doing post-peg-out: %s", err)
 				}
 			} else {
-				log.Printf("peg-outs channel closed")
-				return
+				log.Fatalf("peg-outs channel closed")
 			}
 		}
 	}
