@@ -1,14 +1,19 @@
 package slidechain
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"log"
+	"math"
 	"net/http"
 
 	"github.com/chain/txvm/errors"
 	"github.com/chain/txvm/protocol/bc"
+	"github.com/chain/txvm/protocol/txvm"
+	"github.com/chain/txvm/protocol/txvm/asm"
 	"github.com/golang/protobuf/proto"
 	"github.com/interstellar/slingshot/slidechain/net"
 )
@@ -20,6 +25,35 @@ type PrePegIn struct {
 	AssetXDR    []byte `json:"asset_xdr"`
 	RecipPubkey []byte `json:"recip_pubkey"`
 	ExpMS       int64  `json:"exp_ms"`
+}
+
+// BuildPrePegInTx builds the pre-peg-in TxVM transaction to create a uniqueness token.
+func BuildPrePegInTx(bcid, assetXDR, recip []byte, amount, expMS int64) (*bc.Tx, error) {
+	buf := new(bytes.Buffer)
+	// Set up pre-peg tx arg stack: asset, amount, zeroval, {recip}, quorum
+	fmt.Fprintf(buf, "x'%x' put\n", assetXDR)
+	fmt.Fprintf(buf, "%d put\n", amount)
+	fmt.Fprintf(buf, "x'%x' %d nonce 0 split put\n", bcid, expMS)
+	fmt.Fprintf(buf, "{x'%x'} put\n", recip)
+	fmt.Fprintf(buf, "1 put\n") // The signer quorum size of 1 is fixed.
+	// Call create token contract.
+	fmt.Fprintf(buf, "x'%x' contract call\n", createTokenProg)
+	fmt.Fprintf(buf, "finalize\n")
+	prog, err := asm.Assemble(buf.String())
+	if err != nil {
+		return nil, errors.Wrap(err, "assembling pre-peg tx")
+	}
+	_, err = txvm.Validate(prog, 3, math.MaxInt64)
+	if err != nil {
+		return nil, errors.Wrap(err, "validating pre-peg tx")
+	}
+	var runlimit int64
+	tx, err := bc.NewTx(prog, 3, math.MaxInt64, txvm.GetRunlimit(&runlimit))
+	if err != nil {
+		return nil, errors.Wrap(err, "populating new pre-peg tx")
+	}
+	tx.Runlimit = math.MaxInt64 - runlimit
+	return tx, nil
 }
 
 // DoPrePegIn submits and waits on the pre-peg-in transaction to TxVM, and records a peg-in in the database.

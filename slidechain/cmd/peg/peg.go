@@ -130,7 +130,7 @@ func main() {
 // doPrePegIn builds the pre-peg-in tx and calls the pre-peg-in Slidechain RPC.
 // That RPC submits and waits for the pre-peg TxVM transaction and records the peg-in in the database.
 func doPrePegIn(bcid, assetXDR []byte, amount, expMS int64, pubkey ed25519.PublicKey, slidechaind string) error {
-	prepegTx, err := slidechain.BuildPrepegTx(bcid, assetXDR, pubkey, amount, expMS)
+	prepegTx, err := slidechain.BuildPrePegInTx(bcid, assetXDR, pubkey, amount, expMS)
 	if err != nil {
 		return errors.Wrap(err, "building pre-peg-in tx")
 	}
