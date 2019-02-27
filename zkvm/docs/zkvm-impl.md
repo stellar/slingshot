@@ -25,18 +25,24 @@ We call a type **witness** if it contains secret data and structure necessary fo
 
 ### Commitments
 
-[Pedersen commitments](zkvm-spec.md#pedersen-commitment) are represented as enums:
+[Pedersen commitment](zkvm-spec.md#pedersen-commitment) is represented with an enum `Commitment`:
 
 * `Commitment::Closed` is an _opaque type_ holding a compressed Ristretto [point](zkvm-spec.md#point) (represented by a 32-byte string).
 * `Commitment::Open ` is a _witness type_ that holds a pair of a secret value ([scalar witness](#scalar-witness)) and a secret blinding factor. These are used to create a R1CS proof using the prover’s instance of the VM.
 
 ### Predicates
 
-`Predicate` type represents either an opaque [predicate](zkvm-spec.md#predicate), or an entire tree where unused branches can be left opaque and visited branches are stored as-is. This structure can then produce correct input for the [`call`](zkvm-spec.md#call), [`left`](zkvm-spec.md#left) and [`right`](zkvm-spec.md#right) instructions.
+[Predicate](zkvm-spec.md#predicate) is an enum:
+
+* `Predicate::Opaque` is an _opaque type_ to represent all predicates for the verifier’s VM. It also represents the unused opaque branches of a [predicate tree](zkvm-spec.md#predicate-tree) in the prover’s VM.
+* `Predicate::Key` is a _witness type_ representing a signing key for [`delegate`](zkvm-spec.md#delegate) and [`signtx`](zkvm-spec.md#signtx) instructions.
+* `Predicate::Or` is a _witness type_ representing a disjunction of two predicates that can be navigated with [`left`](
+zkvm-spec.md#left) and [`right`](zkvm-spec.md#right) instructions.
+* `Predicate::Program` is a _witness type_ representing a program commitment for the [`call`](zkvm-spec.md#call) instruction.
 
 ### Variables
 
-Variables are represented as indices into the commitments stored within the VM state. VM manages the "attached" state of the variables to permit replacing the commitments via [`reblind`](zkvm-spec.md#reblind). The secret assignments for the variables are stored within their commitments as [described above](#commitments).
+Variables are represented as indices into the commitments stored within the VM state. VM manages the "attached" state of the variables to permit replacing the commitments via [`reblind`](zkvm-spec.md#reblind). The secret assignments for the variables are stored within the _commitment witnesses_ as [described above](#commitments).
 
 ### Expressions
 
@@ -51,9 +57,7 @@ Constraints do not have explicit witness data. It can be computed on the fly by 
 
 ### Signing keys
 
-A [`signtx`](zkvm-spec.md#signtx) instruction expects a [predicate point](zkvm-spec.md#predicate) to be a [verification key](zkvm-spec.md#verification-key). In the `Prover` such key is represented as a `Data::Witness` type that holds `PredicateWitness::Key`. When the prover’s VM pops such item from the stack and remembers it, the `Prover` accumulates all such secret keys and creates a [transaction signature](zkvm-spec.md#transaction-signature) at the end of the execution.
-
-TBD: describe the upcoming signer API that adds a layer of indirection between the witness keys and actual secrets — for HSM-compatibility and multi-party signing scenarios.
+A [`signtx`](zkvm-spec.md#signtx) instruction expects a [predicate point](zkvm-spec.md#predicate) to be a [verification key](zkvm-spec.md#verification-key). In the `Prover` such key is represented as a `Data::Witness` type that holds `PredicateWitness::Key`. When the prover’s VM pops such item from the stack it remembers it. At the end of the VM execution, the prover queries the key storage for the corresponding secret keys and creates a [transaction signature](zkvm-spec.md#transaction-signature). Verifier uses the accumulated verification keys to verify the aggregated signature.
 
 ### Contracts
 
