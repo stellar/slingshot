@@ -4,7 +4,7 @@
 //! - disjunction: P = L + f(L,R)*B
 //! - program_commitment: P = h(prog)*B2
 use bulletproofs::PedersenGens;
-use curve25519_dalek::ristretto::{CompressedRistretto, RistrettoPoint};
+use curve25519_dalek::ristretto::CompressedRistretto;
 use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
 
@@ -30,13 +30,13 @@ pub enum Predicate {
     Program(Vec<Instruction>),
 
     /// Disjunction of two predicates.
-    Or(PredicateDisjunction),
+    Or(Box<PredicateDisjunction>),
 }
 
 #[derive(Clone, Debug)]
 pub struct PredicateDisjunction {
-    left: Box<Predicate>,
-    right: Box<Predicate>,
+    left: Predicate,
+    right: Predicate,
     // We precompute the disjunction predicate when composing it via `Predicate::or()`,
     // so that we can keep `to_point`/`encode` methods non-failable across all types.
     precomputed_point: CompressedRistretto,
@@ -53,7 +53,7 @@ impl Predicate {
         match self {
             Predicate::Opaque(p) => *p,
             Predicate::Key(k) => k.0,
-            Predicate::Or(d) => d.point,
+            Predicate::Or(d) => d.precomputed_point,
             Predicate::Program(prog) => {
                 let mut bytecode = Vec::new();
                 Instruction::encode_program(prog.iter(), &mut bytecode);
@@ -105,7 +105,16 @@ impl Predicate {
 
     /// Creates a disjunction of two predicates.
     pub fn or(self, right: Predicate) -> Result<Self, VMError> {
-        Ok(Predicate::Or(PredicateDisjunction::new(self, right)?))
+        let point = {
+            let l = self.to_point();
+            let f = Predicate::commit_or(l, right.to_point());
+            l.decompress().ok_or(VMError::InvalidPoint)? + f * PedersenGens::default().B
+        };
+        Ok(Predicate::Or(Box::new(PredicateDisjunction {
+            left: self,
+            right: right,
+            precomputed_point: point.compress(),
+        })))
     }
 
     /// Creates a program-based predicate.
@@ -130,22 +139,6 @@ impl Predicate {
 impl Into<CompressedRistretto> for Predicate {
     fn into(self) -> CompressedRistretto {
         self.to_point()
-    }
-}
-
-impl PredicateDisjunction {
-    pub fn new(left: Predicate, right: Predicate) -> Result<Self, VMError> {
-        let point = {
-            let l = left.to_point();
-            let f = Predicate::commit_or(l, right.to_point());
-            l.decompress().ok_or(VMError::InvalidPoint)? + f * PedersenGens::default().B
-        };
-
-        Ok(PredicateDisjunction {
-            left: Box::new(left),
-            right: Box::new(right),
-            point: point.compress(),
-        })
     }
 }
 

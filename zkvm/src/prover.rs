@@ -1,7 +1,6 @@
 use bulletproofs::r1cs;
 use bulletproofs::{BulletproofGens, PedersenGens};
 use curve25519_dalek::ristretto::CompressedRistretto;
-use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
 use std::collections::VecDeque;
 
@@ -94,6 +93,7 @@ impl<'a, 'b> Prover<'a, 'b> {
         let (txid, txlog) = vm.run()?;
 
         // Sign txid
+        // TBD: implement holistic Signer trait/interface for tx signing
         let mut signtx_transcript = Transcript::new(b"ZkVM.signtx");
         signtx_transcript.commit_bytes(b"txid", &txid.0);
         let signature = sign_tx_fn(&mut signtx_transcript, &prover.signtx_keys);
