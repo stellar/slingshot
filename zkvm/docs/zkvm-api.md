@@ -1,4 +1,4 @@
-# ZkVM implementation guide
+# ZkVM API
 
 The [ZkVM specification](zkvm-spec.md) covers the _verification rules_ for transactions that are already created,
 but does not describe how to _create_ such transactions. This is the goal of this document.
@@ -53,7 +53,7 @@ See also [scalar witness](#scalar-witness).
 
 ### Constraints
 
-Constraints do not have explicit witness data. It can be computed on the fly by evaluating the boolean function that the constraint represents, taking the underlying [expressions’](#expressions) assignments as input.
+Constraints do not have explicit witness data. They can be computed on the fly by evaluating the boolean function that the constraint represents, taking the underlying [expressions’](#expressions) assignments as input.
 
 ### Signing keys
 

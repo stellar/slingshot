@@ -3,7 +3,7 @@
 An evolution of TxVM with **cloaked assets** and **zero-knowledge smart contracts**.
 
 * [ZkVM specification](docs/zkvm-spec.md) — transaction validation rules.
-* [ZkVM implementation guide](docs/zkvm-impl.md) — transaction validation rules.
+* [ZkVM API](docs/zkvm-api.md) — how to create transactions with ZkVM.
 
 ## Overview
 
