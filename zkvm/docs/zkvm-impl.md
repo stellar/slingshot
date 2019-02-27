@@ -56,6 +56,12 @@ A [`signtx`](zkvm-spec.md#signtx) instruction expects a [predicate point](zkvm-s
 
 TBD: describe the upcoming signer API that adds a layer of indirection between the witness keys and actual secrets — for HSM-compatibility and multi-party signing scenarios.
 
+### Contracts
+
+An [`input`](#input) instruction decodes a serialized contract. In the prover’s VM it pops an `Input` item from the stack that contains a previously created `Output` object with usual data items (with witnesses) and “frozen values”: values where quantity and flavors are represented by [open commitments](#commitments) instead of variables.
+
+The VM extracts the `Output` object from the `Input` and converts it to a [Contract type](zkvm-spec.md#contract-type) by allocating variables for each commitment within frozen values, turning them into actual [Value](zkvm-spec.md#value-type) types.
+
 ### Scalar witness
 
 Scalar witness represents either:
