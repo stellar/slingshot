@@ -55,28 +55,28 @@ impl Constraint {
             let expr = self.clone().flatten(cs);
 
             // Add the resulting expression to the constraint system
-            cs.constrain(expr.to_r1cs_lc());
+            cs.constrain(expr);
 
             Ok(())
         })
         .map_err(|e| VMError::R1CSError(e))
     }
 
-    fn flatten<CS: r1cs::RandomizedConstraintSystem>(self, cs: &mut CS) -> Expression {
+    fn flatten<CS: r1cs::RandomizedConstraintSystem>(self, cs: &mut CS) -> r1cs::LinearCombination {
         match self {
-            Constraint::Eq(expr1, expr2) => expr1 - expr2,
+            Constraint::Eq(expr1, expr2) => expr1.to_r1cs_lc() - expr2.to_r1cs_lc(),
             Constraint::And(c1, c2) => {
                 let a = c1.flatten(cs);
                 let b = c2.flatten(cs);
-                // output expression: a + z * b
-                let z = Expression::constant(cs.challenge_scalar(b"verify challenge"));
-                a + b.multiply(z, cs)
+                let z = cs.challenge_scalar(b"ZkVM.verify.and-challenge");
+                a + z * b
             }
             Constraint::Or(c1, c2) => {
                 let a = c1.flatten(cs);
                 let b = c2.flatten(cs);
                 // output expression: a * b
-                a.multiply(b, cs)
+                let (_l, _r, o) = cs.multiply(a, b);
+                r1cs::LinearCombination::from(o)
             }
         }
     }
