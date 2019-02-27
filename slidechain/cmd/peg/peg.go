@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"net/http"
 	"strings"
@@ -107,12 +107,10 @@ func main() {
 		log.Fatal("marshaling asset xdr: ", err)
 	}
 	expMS := int64(bc.Millis(time.Now().Add(10 * time.Minute)))
-	var nonceHash [32]byte
-	nonceHashBytes, err := doPrePegIn(bcidBytes[:], assetXDR, int64(amountXLM), expMS, recipientPubkey[:], *slidechaind)
+	nonceHash, err := doPrePegIn(bcidBytes[:], assetXDR, int64(amountXLM), expMS, recipientPubkey[:], *slidechaind)
 	if err != nil {
 		log.Fatal("doing pre-peg-in tx: ", err)
 	}
-	copy(nonceHash[:], nonceHashBytes)
 	hclient := &horizon.Client{
 		URL:  strings.TrimRight(*horizonURL, "/"),
 		HTTP: new(http.Client),
@@ -130,7 +128,8 @@ func main() {
 
 // doPrePegIn calls the pre-peg-in Slidechain RPC.
 // That RPC builds, submits, and waits for the pre-peg TxVM transaction and records the peg-in in the database.
-func doPrePegIn(bcid, assetXDR []byte, amount, expMS int64, pubkey ed25519.PublicKey, slidechaind string) ([]byte, error) {
+func doPrePegIn(bcid, assetXDR []byte, amount, expMS int64, pubkey ed25519.PublicKey, slidechaind string) ([32]byte, error) {
+	var zeroBytes [32]byte
 	p := slidechain.PrePegIn{
 		BcID:        bcid,
 		Amount:      amount,
@@ -140,20 +139,21 @@ func doPrePegIn(bcid, assetXDR []byte, amount, expMS int64, pubkey ed25519.Publi
 	}
 	pegBits, err := json.Marshal(&p)
 	if err != nil {
-		return nil, errors.Wrap(err, "marshaling peg")
+		return zeroBytes, errors.Wrap(err, "marshaling peg")
 	}
 	resp, err := http.Post(slidechaind+"/prepegin", "application/octet-stream", bytes.NewReader(pegBits))
 	if err != nil {
-		return nil, errors.Wrap(err, "recording to slidechaind")
+		return zeroBytes, errors.Wrap(err, "recording to slidechaind")
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode/100 != 2 {
-		return nil, fmt.Errorf("status code %d from POST /prepegin", resp.StatusCode)
+		return zeroBytes, fmt.Errorf("status code %d from POST /prepegin", resp.StatusCode)
 	}
 
-	nonceHashBytes, err := ioutil.ReadAll(resp.Body)
+	var nonceHash [32]byte
+	_, err = io.ReadFull(resp.Body, nonceHash[:])
 	if err != nil {
-		return nil, errors.Wrap(err, "reading POST /prepegin response body")
+		return zeroBytes, errors.Wrap(err, "reading POST /prepegin response body")
 	}
-	return nonceHashBytes, nil
+	return nonceHash, nil
 }
