@@ -129,7 +129,7 @@ func main() {
 // doPrePegIn calls the pre-peg-in Slidechain RPC.
 // That RPC builds, submits, and waits for the pre-peg TxVM transaction and records the peg-in in the database.
 func doPrePegIn(bcid, assetXDR []byte, amount, expMS int64, pubkey ed25519.PublicKey, slidechaind string) ([32]byte, error) {
-	var zeroBytes [32]byte
+	var nonceHash [32]byte
 	p := slidechain.PrePegIn{
 		BcID:        bcid,
 		Amount:      amount,
@@ -139,21 +139,20 @@ func doPrePegIn(bcid, assetXDR []byte, amount, expMS int64, pubkey ed25519.Publi
 	}
 	pegBits, err := json.Marshal(&p)
 	if err != nil {
-		return zeroBytes, errors.Wrap(err, "marshaling peg")
+		return nonceHash, errors.Wrap(err, "marshaling peg")
 	}
 	resp, err := http.Post(slidechaind+"/prepegin", "application/octet-stream", bytes.NewReader(pegBits))
 	if err != nil {
-		return zeroBytes, errors.Wrap(err, "recording to slidechaind")
+		return nonceHash, errors.Wrap(err, "recording to slidechaind")
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode/100 != 2 {
-		return zeroBytes, fmt.Errorf("status code %d from POST /prepegin", resp.StatusCode)
+		return nonceHash, fmt.Errorf("status code %d from POST /prepegin", resp.StatusCode)
 	}
 
-	var nonceHash [32]byte
 	_, err = io.ReadFull(resp.Body, nonceHash[:])
 	if err != nil {
-		return zeroBytes, errors.Wrap(err, "reading POST /prepegin response body")
+		return nonceHash, errors.Wrap(err, "reading POST /prepegin response body")
 	}
 	return nonceHash, nil
 }
