@@ -19,18 +19,26 @@ use crate::transcript::TranscriptProtocol;
 #[derive(Clone, Debug)]
 pub enum Predicate {
     /// Verifier's view on the predicate in a compressed form to defer decompression cost.
-    Opaque(RistrettoPoint),
+    Opaque(CompressedRistretto),
 
     /// Signing key for the predicate-as-a-verification-key.
     /// Prover will provide secret signing key separately when
     /// constructing aggregated signature.
-    Key(RistrettoPoint),
+    Key(VerificationKey),
 
     /// Representation of a predicate as commitment to a program.
     Program(Vec<Instruction>),
 
     /// Disjunction of two predicates.
-    Or(Box<Predicate>, Box<Predicate>),
+    Or(PredicateDisjunction),
+
+}
+
+#[derive(Clone, Debug)]
+pub struct PredicateDisjunction {
+    left: Box<Predicate>,
+    right: Box<Predicate>,
+    point: CompressedRistretto,
 }
 
 impl Predicate {
@@ -41,25 +49,15 @@ impl Predicate {
 
     /// Converts predicate to a compressed point
     pub fn to_point(&self) -> CompressedRistretto {
-        self.to_uncompressed_point().compress()
-    }
-
-    /// Converts predicate to an uncompressed point
-    fn to_uncompressed_point(&self) -> RistrettoPoint {
         match self {
             Predicate::Opaque(p) => *p,
-            Predicate::Key(k) => *k,
-            Predicate::Or(l, r) => {
-                let l = l.to_uncompressed_point();
-                let r = r.to_uncompressed_point();
-                let f = Predicate::commit_or(l.compress(), r.compress());
-                l + f * PedersenGens::default().B
-            }
+            Predicate::Key(k) => k.0,
+            Predicate::Or(d) => d.point,
             Predicate::Program(prog) => {
                 let mut bytecode = Vec::new();
                 Instruction::encode_program(prog.iter(), &mut bytecode);
                 let h = Predicate::commit_program(&bytecode);
-                h * PedersenGens::default().B_blinding
+                (h * PedersenGens::default().B_blinding).compress()
             }
         }
     }
@@ -96,31 +94,17 @@ impl Predicate {
         }
     }
 
-    /// Creates a predicate with witness being an opaque branch of the tree.
-    pub fn opaque(point: CompressedRistretto) -> Result<Self, VMError> {
-        Ok(Predicate::Opaque(
-            point.decompress().ok_or(VMError::FormatError)?,
-        ))
-    }
-
-    /// Creates a predicate with a signing key witness.
-    pub fn from_key(key: CompressedRistretto) -> Result<Self, VMError> {
-        Ok(Predicate::Key(
-            key.decompress().ok_or(VMError::FormatError)?,
-        ))
-    }
-
     /// Downcasts the predicate to a signing key
-    pub fn to_key(self) -> Result<CompressedRistretto, VMError> {
+    pub fn to_key(self) -> Result<VerificationKey, VMError> {
         match self {
-            Predicate::Key(k) => Ok(k.compress()),
+            Predicate::Key(k) => Ok(k),
             _ => Err(VMError::TypeNotKey),
         }
     }
 
     /// Creates a disjunction of two predicates.
     pub fn or(self, right: Predicate) -> Result<Self, VMError> {
-        Ok(Predicate::Or(Box::new(self), Box::new(right)).into())
+        Ok(Predicate::Or(PredicateDisjunction::new(self, right)?))
     }
 
     /// Creates a program-based predicate.
@@ -142,21 +126,25 @@ impl Predicate {
     }
 }
 
-// impl From<CompressedRistretto> for Predicate {
-//     fn from(p: CompressedRistretto) -> Self {
-//         Predicate::Opaque(p)
-//     }
-// }
-
-impl From<RistrettoPoint> for Predicate {
-    fn from(p: RistrettoPoint) -> Self {
-        Predicate::Opaque(p)
-    }
-}
-
 impl Into<CompressedRistretto> for Predicate {
     fn into(self) -> CompressedRistretto {
         self.to_point()
+    }
+}
+
+impl PredicateDisjunction {
+    pub fn new(left: Predicate, right: Predicate) -> Result<Self, VMError> {
+        let point = {
+            let l = left.to_point();
+            let f = Predicate::commit_or(l, right.to_point());
+            l.decompress().ok_or(VMError::InvalidPoint)? + f * PedersenGens::default().B
+        };
+
+        Ok(PredicateDisjunction{
+            left: Box::new(left),
+            right: Box::new(right),
+            point: point.compress(),
+        })
     }
 }
 
@@ -193,8 +181,8 @@ mod tests {
         let gens = PedersenGens::default();
 
         // dummy predicates
-        let left = Predicate::Opaque(gens.B);
-        let right = Predicate::Opaque(gens.B_blinding);
+        let left = Predicate::Opaque(gens.B.compress());
+        let right = Predicate::Opaque(gens.B_blinding.compress());
 
         let pred = left.clone().or(right.clone()).unwrap();
         let op = pred.prove_or(&left, &right);
@@ -206,10 +194,10 @@ mod tests {
         let gens = PedersenGens::default();
 
         // dummy predicates
-        let left = Predicate::Opaque(gens.B);
-        let right = Predicate::Opaque(gens.B_blinding);
+        let left = Predicate::Opaque(gens.B.compress());
+        let right = Predicate::Opaque(gens.B_blinding.compress());
 
-        let pred = Predicate::Opaque(gens.B);
+        let pred = Predicate::Opaque(gens.B.compress());
         let op = pred.prove_or(&left, &right);
         assert!(op.verify().is_err());
     }
@@ -219,8 +207,8 @@ mod tests {
         let gens = PedersenGens::default();
 
         // dummy predicates
-        let left = Predicate::Opaque(gens.B);
-        let right = Predicate::Opaque(gens.B_blinding);
+        let left = Predicate::Opaque(gens.B.compress());
+        let right = Predicate::Opaque(gens.B_blinding.compress());
 
         let pred = left.clone().or(right.clone()).unwrap();
         let op = pred.prove_or(&right, &left);

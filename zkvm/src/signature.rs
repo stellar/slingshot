@@ -154,6 +154,12 @@ impl VerificationKey {
     }
 }
 
+impl From<CompressedRistretto> for VerificationKey {
+    fn from(x: CompressedRistretto) -> Self {
+        VerificationKey(x)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

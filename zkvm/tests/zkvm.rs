@@ -81,7 +81,7 @@ fn predicate_helper(pred_num: usize) -> (Vec<Predicate>, Vec<Scalar>) {
         .map(|s| Scalar::from(s as u64))
         .collect();
 
-    let predicates: Vec<Predicate> = scalars.iter().map(|s| Predicate::Key(s * gens.B)).collect();
+    let predicates: Vec<Predicate> = scalars.iter().map(|s| Predicate::Key((s * gens.B).compress().into())).collect();
 
     (predicates, scalars)
 }
@@ -91,7 +91,7 @@ fn predicate_helper(pred_num: usize) -> (Vec<Predicate>, Vec<Scalar>) {
 fn issuance_helper() -> (Scalar, Predicate, Scalar) {
     let gens = PedersenGens::default();
     let scalar = Scalar::from(100u64);
-    let predicate = Predicate::Key(scalar * gens.B);
+    let predicate = Predicate::Key((scalar * gens.B).compress().into());
     let flavor = Value::issue_flavor(&predicate);
     (scalar, predicate, flavor)
 }
@@ -111,7 +111,7 @@ fn test_helper(program: Vec<Instruction>, keys: &Vec<Scalar>) -> Result<TxID, VM
                 .iter()
                 .filter_map(|vk| {
                     for k in keys {
-                        if (k * gens.B).compress() == *vk {
+                        if (k * gens.B).compress() == vk.0 {
                             return Some(*k);
                         }
                     }

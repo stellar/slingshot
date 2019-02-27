@@ -10,12 +10,12 @@ use crate::errors::VMError;
 use crate::ops::Instruction;
 use crate::point_ops::PointOp;
 use crate::predicate::Predicate;
-use crate::signature::Signature;
+use crate::signature::{Signature, VerificationKey};
 use crate::txlog::{TxID, TxLog};
 use crate::vm::{Delegate, Tx, TxHeader, VM};
 
 pub struct Prover<'a, 'b> {
-    signtx_keys: Vec<CompressedRistretto>,
+    signtx_keys: Vec<VerificationKey>,
     cs: r1cs::Prover<'a, 'b>,
 }
 
@@ -67,7 +67,7 @@ impl<'a, 'b> Prover<'a, 'b> {
         sign_tx_fn: F,
     ) -> Result<(Tx, TxID, TxLog), VMError>
     where
-        F: FnOnce(&mut Transcript, &Vec<CompressedRistretto>) -> Signature,
+        F: FnOnce(&mut Transcript, &Vec<VerificationKey>) -> Signature,
     {
         // Prepare the constraint system
         let mut r1cs_transcript = Transcript::new(b"ZkVM.r1cs");
