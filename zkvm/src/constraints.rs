@@ -257,14 +257,6 @@ impl Add for Expression {
     }
 }
 
-impl Sub for Expression {
-    type Output = Expression;
-
-    fn sub(self, rhs: Expression) -> Expression {
-        self + -rhs
-    }
-}
-
 // Upcasting witness/points into Commitment
 
 impl From<CommitmentWitness> for Commitment {

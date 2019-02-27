@@ -1368,6 +1368,7 @@ _constr_ **verify** → ø
 2. Transforms the constraint `constr` recursively using the following rules:
     1. Replace conjunction of two _linear constraints_ `a` and `b` with a linear constraint `c` by combining both constraints with a random challenge `z`:
         ```
+        z = transcript.challenge_scalar(b"ZkVM.verify.and-challenge");
         c = a + z·b
         ```
     2. Replace disjunction of two _linear constraints_ `a` and `b` by constrainting an output `o` of a newly allocated multiplier `{r,l,o}` to zero, while adding constraints `r == a` and `l == b` to the constraint system.
