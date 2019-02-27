@@ -17,7 +17,7 @@ import (
 	"github.com/interstellar/slingshot/slidechain/net"
 )
 
-// PrePegIn contains a marshalled pre-peg-in TxVM tx and fields for a peg-in transaction in the database.
+// PrePegIn contains the fields to build a pre-peg-in TxVM tx and record the peg-in transaction in the database.
 type PrePegIn struct {
 	BcID        []byte `json:"bc_id"`
 	Amount      int64  `json:"amount"`
