@@ -70,6 +70,6 @@ $ ./export -prv [exporter prv key] -amount 50 -inputamt 100 -anchor [import anch
 `slidechaind` will print logs that it is retiring the funds and building a peg-out transaction.
 Using the logged transaction hash,
 we can check that the transaction hit the network and the funds have been pegged out on
-[Stellar Expert](stellar.expert/explorer/testnet/network-activity)
+[Stellar Expert](https://stellar.expert/explorer/testnet/network-activity)
 or using the
 [Stellar Laboratory](https://www.stellar.org/laboratory/#explorer?network=test).

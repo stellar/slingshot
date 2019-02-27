@@ -16,6 +16,8 @@ def main
   dataset = {}
   markdown_filepaths = Dir["**/*.md"]
 
+  markdown_filepaths.delete_if{|f| f =~ %r{/vendor/} }
+
   markdown_filepaths.each do |file|
     #$stderr.puts "Collecting links and anchors from #{file}..."
     collect_links_and_anchors(file, dataset)
