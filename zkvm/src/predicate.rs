@@ -37,7 +37,9 @@ pub enum Predicate {
 pub struct PredicateDisjunction {
     left: Box<Predicate>,
     right: Box<Predicate>,
-    point: CompressedRistretto,
+    // We precompute the disjunction predicate when composing it via `Predicate::or()`,
+    // so that we can keep `to_point`/`encode` methods non-failable across all types.
+    precomputed_point: CompressedRistretto,
 }
 
 impl Predicate {
