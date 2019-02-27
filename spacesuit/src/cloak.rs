@@ -4,8 +4,7 @@ use shuffle::{padded_shuffle, value_shuffle};
 use value::AllocatedValue;
 
 /// Enforces that the outputs are a valid rearrangement of the inputs, following the
-/// soundness and secrecy requirements in the spacesuit transaction spec:
-/// https://github.com/interstellar/spacesuit/blob/master/spec.md
+/// soundness and secrecy requirements in the [Cloak specification](../spec.md).
 pub fn cloak<CS: ConstraintSystem>(
     cs: &mut CS,
     inputs: Vec<AllocatedValue>,
