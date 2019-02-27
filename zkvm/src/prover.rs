@@ -5,14 +5,14 @@ use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
 use std::collections::VecDeque;
 
+use crate::constraints::Commitment;
 use crate::errors::VMError;
 use crate::ops::Instruction;
 use crate::point_ops::PointOp;
-use crate::predicate::{Predicate, PredicateWitness};
+use crate::predicate::Predicate;
 use crate::signature::Signature;
 use crate::txlog::{TxID, TxLog};
-use crate::types::*;
-use crate::vm::{Delegate, Tx, VM};
+use crate::vm::{Delegate, Tx, TxHeader, VM};
 
 pub struct Prover<'a, 'b> {
     signtx_keys: Vec<Scalar>,
@@ -30,11 +30,8 @@ impl<'a, 'b> Delegate<r1cs::Prover<'a, 'b>> for Prover<'a, 'b> {
         &mut self,
         com: &Commitment,
     ) -> Result<(CompressedRistretto, r1cs::Variable), VMError> {
-        let (v, v_blinding) = match com {
-            Commitment::Open(w) => (w.value.into(), w.blinding),
-            Commitment::Closed(_) => return Err(VMError::WitnessMissing),
-        };
-        Ok(self.cs.commit(v, v_blinding))
+        let (v, v_blinding) = com.witness().ok_or(VMError::WitnessMissing)?;
+        Ok(self.cs.commit(v.into(), v_blinding))
     }
 
     fn verify_point_op<F>(&mut self, _point_op_fn: F) -> Result<(), VMError>
@@ -45,13 +42,9 @@ impl<'a, 'b> Delegate<r1cs::Prover<'a, 'b>> for Prover<'a, 'b> {
     }
 
     fn process_tx_signature(&mut self, pred: Predicate) -> Result<(), VMError> {
-        match pred.witness() {
-            None => Err(VMError::WitnessMissing),
-            Some(w) => match w {
-                PredicateWitness::Key(s) => Ok(self.signtx_keys.push(s.clone())),
-                _ => Err(VMError::TypeNotKey),
-            },
-        }
+        let k = pred.to_signing_key()?;
+        self.signtx_keys.push(k);
+        Ok(())
     }
 
     fn next_instruction(
@@ -69,9 +62,7 @@ impl<'a, 'b> Delegate<r1cs::Prover<'a, 'b>> for Prover<'a, 'b> {
 impl<'a, 'b> Prover<'a, 'b> {
     pub fn build_tx<'g>(
         program: Vec<Instruction>,
-        version: u64,
-        mintime: u64,
-        maxtime: u64,
+        header: TxHeader,
         bp_gens: &'g BulletproofGens,
     ) -> Result<(Tx, TxID, TxLog), VMError> {
         // Prepare the constraint system
@@ -89,9 +80,7 @@ impl<'a, 'b> Prover<'a, 'b> {
         };
 
         let vm = VM::new(
-            version,
-            mintime,
-            maxtime,
+            header,
             ProverRun {
                 program: program.into(),
             },
@@ -110,9 +99,7 @@ impl<'a, 'b> Prover<'a, 'b> {
 
         Ok((
             Tx {
-                version,
-                mintime,
-                maxtime,
+                header,
                 signature,
                 proof,
                 program: bytecode,

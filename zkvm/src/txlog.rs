@@ -2,13 +2,14 @@ use curve25519_dalek::ristretto::CompressedRistretto;
 use merlin::Transcript;
 
 use crate::transcript::TranscriptProtocol;
+use crate::vm::TxHeader;
 
 pub type TxLog = Vec<Entry>;
 
 /// Entry in a transaction log
 #[derive(Clone, PartialEq, Debug)]
 pub enum Entry {
-    Header(u64, u64, u64),
+    Header(TxHeader),
     Issue(CompressedRistretto, CompressedRistretto),
     Retire(CompressedRistretto, CompressedRistretto),
     Input(UTXO),
@@ -77,10 +78,10 @@ impl TxID {
 impl Entry {
     fn commit_to_transcript(&self, t: &mut Transcript) {
         match self {
-            Entry::Header(version, mintime, maxtime) => {
-                t.commit_u64(b"tx.version", *version);
-                t.commit_u64(b"tx.mintime", *mintime);
-                t.commit_u64(b"tx.maxtime", *maxtime);
+            Entry::Header(h) => {
+                t.commit_u64(b"tx.version", h.version);
+                t.commit_u64(b"tx.mintime", h.mintime);
+                t.commit_u64(b"tx.maxtime", h.maxtime);
             }
             Entry::Issue(q, f) => {
                 t.commit_point(b"issue.q", q);

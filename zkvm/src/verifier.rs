@@ -3,13 +3,13 @@ use bulletproofs::{BulletproofGens, PedersenGens};
 use curve25519_dalek::ristretto::CompressedRistretto;
 use merlin::Transcript;
 
+use crate::constraints::Commitment;
 use crate::encoding::*;
 use crate::errors::VMError;
 use crate::ops::Instruction;
 use crate::point_ops::PointOp;
 use crate::predicate::Predicate;
 use crate::signature::VerificationKey;
-use crate::types::*;
 
 use crate::vm::{Delegate, Tx, VerifiedTx, VM};
 
@@ -45,10 +45,7 @@ impl<'a, 'b> Delegate<r1cs::Verifier<'a, 'b>> for Verifier<'a, 'b> {
     }
 
     fn process_tx_signature(&mut self, pred: Predicate) -> Result<(), VMError> {
-        match pred.witness() {
-            None => Ok(self.signtx_keys.push(VerificationKey(pred.point()))),
-            Some(_) => Err(VMError::PredicateNotOpaque),
-        }
+        Ok(self.signtx_keys.push(VerificationKey(pred.to_point())))
     }
 
     fn next_instruction(
@@ -82,13 +79,7 @@ impl<'a, 'b> Verifier<'a, 'b> {
             cs: cs,
         };
 
-        let vm = VM::new(
-            tx.version,
-            tx.mintime,
-            tx.maxtime,
-            VerifierRun::new(tx.program),
-            &mut verifier,
-        );
+        let vm = VM::new(tx.header, VerifierRun::new(tx.program), &mut verifier);
 
         let (txid, txlog) = vm.run()?;
 
@@ -110,9 +101,7 @@ impl<'a, 'b> Verifier<'a, 'b> {
             .map_err(|_| VMError::InvalidR1CSProof)?;
 
         Ok(VerifiedTx {
-            version: tx.version,
-            mintime: tx.mintime,
-            maxtime: tx.maxtime,
+            header: tx.header,
             id: txid,
             log: txlog,
         })

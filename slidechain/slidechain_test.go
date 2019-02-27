@@ -628,9 +628,10 @@ func withTestServer(ctx context.Context, t *testing.T, fn func(context.Context, 
 
 	w := multichan.New((*bc.Block)(nil))
 	s := &submitter{
-		w:            w,
-		chain:        chain,
-		initialBlock: initialBlock,
+		w:             w,
+		chain:         chain,
+		initialBlock:  initialBlock,
+		blockInterval: DefaultBlockInterval,
 	}
 
 	mux := http.NewServeMux()
