@@ -132,7 +132,7 @@ impl Data {
         match self {
             Data::Opaque(data) => {
                 let point = SliceReader::parse(&data, |r| r.read_point())?;
-                Ok(Predicate::Opaque(point))
+                Ok(Predicate::opaque(point)?)
             }
             Data::Predicate(p) => Ok(*p),
             _ => Err(VMError::TypeNotPredicate),

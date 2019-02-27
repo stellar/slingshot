@@ -81,10 +81,7 @@ fn predicate_helper(pred_num: usize) -> (Vec<Predicate>, Vec<Scalar>) {
         .map(|s| Scalar::from(s as u64))
         .collect();
 
-    let predicates: Vec<Predicate> = scalars
-        .iter()
-        .map(|s| Predicate::from_key(s * gens.B))
-        .collect();
+    let predicates: Vec<Predicate> = scalars.iter().map(|s| Predicate::Key(s * gens.B)).collect();
 
     (predicates, scalars)
 }
@@ -94,7 +91,7 @@ fn predicate_helper(pred_num: usize) -> (Vec<Predicate>, Vec<Scalar>) {
 fn issuance_helper() -> (Scalar, Predicate, Scalar) {
     let gens = PedersenGens::default();
     let scalar = Scalar::from(100u64);
-    let predicate = Predicate::from_key(scalar * gens.B);
+    let predicate = Predicate::Key(scalar * gens.B);
     let flavor = Value::issue_flavor(&predicate);
     (scalar, predicate, flavor)
 }

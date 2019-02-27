@@ -19,18 +19,7 @@ use crate::transcript::TranscriptProtocol;
 #[derive(Clone, Debug)]
 pub enum Predicate {
     /// Verifier's view on the predicate in a compressed form to defer decompression cost.
-    Opaque(CompressedRistretto),
-
-    /// Prover's view on the predicate that has valid representation.
-    Witness(PredicateWitness),
-}
-
-/// Prover's representation of the predicate tree with all the secret witness data.
-#[derive(Clone, Debug)]
-pub enum PredicateWitness {
-    /// Representation of an opaque branch of the predicate tree
-    /// (but known to be a valid Ristretto point).
-    OpaqueBranch(RistrettoPoint),
+    Opaque(RistrettoPoint),
 
     /// Signing key for the predicate-as-a-verification-key.
     /// Prover will provide secret signing key separately when
@@ -41,7 +30,7 @@ pub enum PredicateWitness {
     Program(Vec<Instruction>),
 
     /// Disjunction of two predicates.
-    Or(Box<PredicateWitness>, Box<PredicateWitness>),
+    Or(Box<Predicate>, Box<Predicate>),
 }
 
 impl Predicate {
@@ -52,9 +41,26 @@ impl Predicate {
 
     /// Converts predicate to a compressed point
     pub fn to_point(&self) -> CompressedRistretto {
+        self.to_uncompressed_point().compress()
+    }
+
+    /// Converts predicate to an uncompressed point
+    fn to_uncompressed_point(&self) -> RistrettoPoint {
         match self {
             Predicate::Opaque(p) => *p,
-            Predicate::Witness(w) => w.to_uncompressed_point().compress(),
+            Predicate::Key(k) => *k,
+            Predicate::Or(l, r) => {
+                let l = l.to_uncompressed_point();
+                let r = r.to_uncompressed_point();
+                let f = Predicate::commit_or(l.compress(), r.compress());
+                l + f * PedersenGens::default().B
+            }
+            Predicate::Program(prog) => {
+                let mut bytecode = Vec::new();
+                Instruction::encode_program(prog.iter(), &mut bytecode);
+                let h = Predicate::commit_program(&bytecode);
+                h * PedersenGens::default().B_blinding
+            }
         }
     }
 
@@ -91,45 +97,35 @@ impl Predicate {
     }
 
     /// Creates a predicate with witness being an opaque branch of the tree.
-    pub fn opaque_branch(point: CompressedRistretto) -> Result<Self, VMError> {
-        Ok(Predicate::Witness(PredicateWitness::OpaqueBranch(
+    pub fn opaque(point: CompressedRistretto) -> Result<Self, VMError> {
+        Ok(Predicate::Opaque(
             point.decompress().ok_or(VMError::FormatError)?,
-        )))
+        ))
     }
 
     /// Creates a predicate with a signing key witness.
-    pub fn from_key(key: RistrettoPoint) -> Self {
-        Predicate::Witness(PredicateWitness::Key(key))
+    pub fn from_key(key: CompressedRistretto) -> Result<Self, VMError> {
+        Ok(Predicate::Key(
+            key.decompress().ok_or(VMError::FormatError)?,
+        ))
     }
 
     /// Downcasts the predicate to a signing key
-    pub fn to_key(self) -> Result<RistrettoPoint, VMError> {
-        match self.to_witness()? {
-            PredicateWitness::Key(s) => Ok(s),
+    pub fn to_key(self) -> Result<CompressedRistretto, VMError> {
+        match self {
+            Predicate::Key(k) => Ok(k.compress()),
             _ => Err(VMError::TypeNotKey),
         }
     }
 
     /// Creates a disjunction of two predicates.
     pub fn or(self, right: Predicate) -> Result<Self, VMError> {
-        let l = self.to_witness()?;
-        let r = right.to_witness()?;
-        Ok(Predicate::Witness(
-            PredicateWitness::Or(Box::new(l), Box::new(r)).into(),
-        ))
+        Ok(Predicate::Or(Box::new(self), Box::new(right)).into())
     }
 
     /// Creates a program-based predicate.
     pub fn program(program: Vec<Instruction>) -> Self {
-        Predicate::Witness(PredicateWitness::Program(program))
-    }
-
-    /// Downcasts the predicate to witness. Returns None if the predicate is opaque.
-    fn to_witness(self) -> Result<PredicateWitness, VMError> {
-        match self {
-            Predicate::Opaque(_) => Err(VMError::WitnessMissing),
-            Predicate::Witness(w) => Ok(w),
-        }
+        Predicate::Program(program)
     }
 
     fn commit_or(left: CompressedRistretto, right: CompressedRistretto) -> Scalar {
@@ -146,29 +142,14 @@ impl Predicate {
     }
 }
 
-impl PredicateWitness {
-    fn to_uncompressed_point(&self) -> RistrettoPoint {
-        match self {
-            PredicateWitness::OpaqueBranch(p) => *p,
-            PredicateWitness::Key(s) => *s,
-            PredicateWitness::Or(l, r) => {
-                let l = l.to_uncompressed_point();
-                let r = r.to_uncompressed_point();
-                let f = Predicate::commit_or(l.compress(), r.compress());
-                l + f * PedersenGens::default().B
-            }
-            PredicateWitness::Program(prog) => {
-                let mut bytecode = Vec::new();
-                Instruction::encode_program(prog.iter(), &mut bytecode);
-                let h = Predicate::commit_program(&bytecode);
-                h * PedersenGens::default().B_blinding
-            }
-        }
-    }
-}
+// impl From<CompressedRistretto> for Predicate {
+//     fn from(p: CompressedRistretto) -> Self {
+//         Predicate::Opaque(p)
+//     }
+// }
 
-impl From<CompressedRistretto> for Predicate {
-    fn from(p: CompressedRistretto) -> Self {
+impl From<RistrettoPoint> for Predicate {
+    fn from(p: RistrettoPoint) -> Self {
         Predicate::Opaque(p)
     }
 }
@@ -212,8 +193,8 @@ mod tests {
         let gens = PedersenGens::default();
 
         // dummy predicates
-        let left = Predicate::opaque_branch(gens.B.compress()).unwrap();
-        let right = Predicate::opaque_branch(gens.B_blinding.compress()).unwrap();
+        let left = Predicate::Opaque(gens.B);
+        let right = Predicate::Opaque(gens.B_blinding);
 
         let pred = left.clone().or(right.clone()).unwrap();
         let op = pred.prove_or(&left, &right);
@@ -225,10 +206,10 @@ mod tests {
         let gens = PedersenGens::default();
 
         // dummy predicates
-        let left = Predicate::opaque_branch(gens.B.compress()).unwrap();
-        let right = Predicate::opaque_branch(gens.B_blinding.compress()).unwrap();
+        let left = Predicate::Opaque(gens.B);
+        let right = Predicate::Opaque(gens.B_blinding);
 
-        let pred = Predicate::Opaque(gens.B.compress());
+        let pred = Predicate::Opaque(gens.B);
         let op = pred.prove_or(&left, &right);
         assert!(op.verify().is_err());
     }
@@ -238,8 +219,8 @@ mod tests {
         let gens = PedersenGens::default();
 
         // dummy predicates
-        let left = Predicate::opaque_branch(gens.B.compress()).unwrap();
-        let right = Predicate::opaque_branch(gens.B_blinding.compress()).unwrap();
+        let left = Predicate::Opaque(gens.B);
+        let right = Predicate::Opaque(gens.B_blinding);
 
         let pred = left.clone().or(right.clone()).unwrap();
         let op = pred.prove_or(&right, &left);

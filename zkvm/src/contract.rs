@@ -190,7 +190,7 @@ impl Output {
         //      Data  =  0x00  ||  LE32(len)  ||  <bytes>
         //     Value  =  0x01  ||  <32 bytes> ||  <32 bytes>
 
-        let predicate = Predicate::Opaque(output.read_point()?);
+        let predicate = Predicate::opaque(output.read_point()?)?;
         let k = output.read_size()?;
 
         // sanity check: avoid allocating unreasonably more memory

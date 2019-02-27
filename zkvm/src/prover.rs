@@ -43,7 +43,7 @@ impl<'a, 'b> Delegate<r1cs::Prover<'a, 'b>> for Prover<'a, 'b> {
 
     fn process_tx_signature(&mut self, pred: Predicate) -> Result<(), VMError> {
         let k = pred.to_key()?;
-        self.signtx_keys.push(k.compress());
+        self.signtx_keys.push(k);
         Ok(())
     }
 
