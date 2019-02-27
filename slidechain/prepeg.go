@@ -86,14 +86,19 @@ func (c *Custodian) DoPrePegIn(w http.ResponseWriter, req *http.Request) {
 		net.Errorf(w, http.StatusInternalServerError, "sending response: %s", err)
 	}
 	// Record peg in database.
-	nonceHash := UniqueNonceHash(c.InitBlockHash.Bytes(), p.ExpMS)
+	nonceHash := uniqueNonceHash(c.InitBlockHash.Bytes(), p.ExpMS)
 	err = c.insertPegIn(ctx, nonceHash[:], p.RecipPubkey, p.ExpMS)
 	if err != nil {
 		net.Errorf(w, http.StatusInternalServerError, "sending response: %s", err)
 		return
 	}
 	log.Printf("recorded peg for tx with nonce hash %x in db", nonceHash[:])
-	return
+	w.Header().Set("Content-Type", "application/octet-stream")
+	_, err = w.Write(nonceHash[:])
+	if err != nil {
+		net.Errorf(w, http.StatusInternalServerError, "sending response: %s", err)
+		return
+	}
 }
 
 func (c *Custodian) insertPegIn(ctx context.Context, nonceHash, recip []byte, expMS int64) error {
