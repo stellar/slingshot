@@ -16,7 +16,6 @@ import (
 	"github.com/chain/txvm/protocol/bc"
 	"github.com/golang/protobuf/proto"
 	"github.com/stellar/go/clients/horizon"
-	"github.com/stellar/go/xdr"
 
 	"github.com/interstellar/slingshot/slidechain"
 	"github.com/interstellar/slingshot/slidechain/stellar"
@@ -77,21 +76,11 @@ func main() {
 	if err != nil {
 		log.Fatal("decoding initial block id: ", err)
 	}
-	var asset xdr.Asset
-	if *issuer != "" {
-		var issuerID xdr.AccountId
-		err = issuerID.SetAddress(*issuer)
+	asset := stellar.NativeAsset()
+	if *code != "" {
+		asset, err = stellar.NewAsset(*code, *issuer)
 		if err != nil {
-			log.Fatal("setting issuer ID: ", err)
-		}
-		err = asset.SetCredit(*code, issuerID)
-		if err != nil {
-			log.Fatal("setting asset code and issuer: ", err)
-		}
-	} else {
-		asset, err = xdr.NewAsset(xdr.AssetTypeAssetTypeNative, nil)
-		if err != nil {
-			log.Fatal("setting native asset: ", err)
+			log.Fatalf("error creating asset from code %s and issuer %s: %s", *code, *issuer, err)
 		}
 	}
 
