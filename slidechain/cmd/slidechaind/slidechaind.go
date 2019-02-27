@@ -8,15 +8,8 @@ import (
 	"net"
 	"net/http"
 
-	"github.com/chain/txvm/protocol"
-	"github.com/chain/txvm/protocol/bc"
 	"github.com/interstellar/slingshot/slidechain"
 	_ "github.com/mattn/go-sqlite3"
-)
-
-var (
-	initialBlock *bc.Block
-	chain        *protocol.Chain
 )
 
 func main() {
