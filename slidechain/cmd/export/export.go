@@ -115,7 +115,7 @@ func main() {
 	}
 
 	// Export funds from slidechain.
-	tx, err := slidechain.BuildExportTx(ctx, asset, exportAmount, inputAmount, tempAddr, mustDecodeHex(*anchor), mustDecodeHex(*prv), seqnum)
+	tx, err := slidechain.BuildExportTx(ctx, asset, exportAmount, inputAmount, tempAddr, mustDecodeHex(*anchor), rawbytes, seqnum)
 	if err != nil {
 		log.Fatalf("error building export tx: %s", err)
 	}
