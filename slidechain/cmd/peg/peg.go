@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
@@ -21,6 +20,7 @@ import (
 
 	"github.com/interstellar/slingshot/slidechain"
 	"github.com/interstellar/slingshot/slidechain/stellar"
+	"github.com/interstellar/starlight/worizon/xlm"
 )
 
 func main() {
@@ -64,10 +64,6 @@ func main() {
 		*seed = kp.Seed()
 	}
 
-	if _, err := strconv.ParseFloat(*amount, 64); err != nil {
-		log.Printf("invalid amount string %s: %s", *amount, err)
-	}
-
 	var recipientPubkey [32]byte
 	if len(*recipient) != 64 {
 		log.Fatalf("invalid recipient length: got %d want 64", len(*recipient))
@@ -99,16 +95,19 @@ func main() {
 		}
 	}
 
+	// XDR scales down an amount unit of every asset by a factor of 10^7.
+	// Thus, xlm.Parse works for both native and non-native assets.
+	amountXLM, err := xlm.Parse(*amount)
+	if err != nil {
+		log.Fatal("parsing horizon string: ", err)
+	}
+
 	assetXDR, err := asset.MarshalBinary()
 	if err != nil {
 		log.Fatal("marshaling asset xdr: ", err)
 	}
-	amountInt, err := strconv.ParseInt(*amount, 10, 64)
-	if err != nil {
-		log.Fatal("converting amount to int64: ", err)
-	}
 	expMS := int64(bc.Millis(time.Now().Add(10 * time.Minute)))
-	err = doPrepegTx(bcidBytes[:], assetXDR, amountInt, expMS, recipientPubkey[:], *slidechaind)
+	err = doPrepegTx(bcidBytes[:], assetXDR, int64(amountXLM), expMS, recipientPubkey[:], *slidechaind)
 	if err != nil {
 		log.Fatal("doing pre-peg-in tx: ", err)
 	}
