@@ -50,17 +50,14 @@ func main() {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
 	defer cancel()
-	var (
-		asset xdr.Asset
-		err   error
-	)
+
+	var err error
+	asset := stellar.NativeAsset()
 	if *code != "" {
 		asset, err = stellar.NewAsset(*code, *issuer)
 		if err != nil {
 			log.Fatalf("error creating asset from code %s and issuer %s: %s", *code, *issuer, err)
 		}
-	} else {
-		asset = stellar.NativeAsset()
 	}
 
 	// XDR scales down an amount unit of every asset by a factor of 10^7.
