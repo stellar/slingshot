@@ -8,6 +8,7 @@ use std::iter::FromIterator;
 use std::ops::{Add, Neg, Sub};
 
 use crate::encoding;
+use crate::errors::VMError;
 use crate::scalar_witness::ScalarWitness;
 
 #[derive(Copy, Clone, Debug)]
@@ -45,7 +46,7 @@ pub struct CommitmentWitness {
 }
 
 impl Constraint {
-    pub fn verify<CS: r1cs::ConstraintSystem>(self, cs: &mut CS) {
+    pub fn verify<CS: r1cs::ConstraintSystem>(self, cs: &mut CS) -> Result<(), VMError> {
         cs.specify_randomized_constraints(move |cs| {
             let z = cs.challenge_scalar(b"verify challenge");
 
@@ -57,8 +58,10 @@ impl Constraint {
             cs.constrain(expr.to_r1cs_lc());
 
             Ok(())
+            // question: shouldn't this converseion from R1CSError -> VMError happen automatically
+            // because I implemented the `From<R1CSError> for VMError` trait?
         })
-        .unwrap() // TODO: convert from R1CSError to VMError
+        .map_err(|e| VMError::R1CSError(e))
     }
 
     fn flatten<CS: r1cs::RandomizedConstraintSystem>(self, cs: &mut CS, z: Scalar) -> Expression {

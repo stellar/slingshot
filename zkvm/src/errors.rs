@@ -1,4 +1,5 @@
 //! Errors related to proving and verifying proofs.
+use bulletproofs::r1cs::R1CSError;
 
 /// Represents an error in proof creation, verification, or parsing.
 #[derive(Fail, Clone, Debug, Eq, PartialEq)]
@@ -107,9 +108,19 @@ pub enum VMError {
     #[fail(display = "R1CS detected inconsistent input")]
     R1CSInconsistency,
 
+    /// This error occurs when an R1CSError is returned from the ConstraintSystem.
+    #[fail(display = "R1CSError returned when trying to build R1CS instance")]
+    R1CSError(R1CSError),
+
     #[fail(display = "Item misses witness data.")]
     WitnessMissing,
 
     #[fail(display = "Data item must be opaque")]
     DataNotOpaque,
+}
+
+impl From<R1CSError> for VMError {
+    fn from(e: R1CSError) -> VMError {
+        VMError::R1CSError(e)
+    }
 }

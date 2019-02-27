@@ -335,7 +335,7 @@ where
 
     fn verify(&mut self) -> Result<(), VMError> {
         let constraint = self.pop_item()?.to_constraint()?;
-        constraint.verify(self.delegate.cs());
+        constraint.verify(self.delegate.cs())?;
         Ok(())
     }
 
