@@ -72,5 +72,5 @@ Scalar witness represents either:
 Arithmetic operations on scalar witnesses _preserve integers until overflow_. If an addition/multiplication of two integers overflows the range of `±(2^64-1)`, the result is promoted to a scalar modulo Ristretto group order.
 
 [Range proof](../../spacesuit/spec.md#range-proof) gadget in Cloak requires a witness to be an integer (and also checks that it is non-negative) and does not attempt to carve 64 bits out of a scalar.
-For safety, integer overflows immediately promote the integer to a scalar.
+For safety, integer overflows immediately promote the integer to a scalar: any higher-level protocol that wishes to operate on integer quantities must ensure that they never overflow.
 
