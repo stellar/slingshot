@@ -20,7 +20,7 @@ Every scalar is required to be in a canonical (reduced) form.
 
 A _point_ is an element in the [Ristretto group](https://ristretto.group).
 
-Points are encoded as 32-byte [data types](#data-type) in _compressed Ristretto form_.
+Points are encoded as _compressed Ristretto points_ (32-byte strings).
 
 
 ### Base point

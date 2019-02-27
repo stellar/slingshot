@@ -132,7 +132,7 @@ on the stack.
 
 After a ZkVM program runs, the proposed state changes in the
 transaction log are compared with the global state to determine the
-transaction’s applicability to the [blockchain](Blockchain.md).
+transaction’s applicability to the blockchain.
 
 
 
@@ -217,7 +217,7 @@ when these are exposed to the VM (for instance, from [`mul`](#mul)), they have t
 
 A [variable](#variable-type) can be in one of two states: **detached** or **attached**.
 
-A **detached variable** can be [reblinded](#reblinded): all copies of a detached variable share the same commitment,
+A **detached variable** can be [reblinded](#reblind): all copies of a detached variable share the same commitment,
 so reblinding one of them reflects the new commitments in all the copies. When an [expression](#expression-type) is formed using detached variables, all of them transition to an _attached_ state.
 
 An **attached variable** has its commitment applied to the constraint system, so it cannot be reblinded and variable cannot be detached.
@@ -235,7 +235,7 @@ the result is a linear combination with one term with weight 1:
     expr = { (1, var) }
 
 Expressions can be [added](#add) and [multiplied](#mul), producing new expressions.
-Expressions can also be [encrypted](#encrypt) into a [Pedersen commitment](#pedersen-commitment) with a predetermined
+Expressions can also be [blinded](#blind) into a [Pedersen commitment](#pedersen-commitment) with a pre-arranged
 blinding factor.
 
 Expressions can be copied and dropped at will, but cannot be ported across transactions via [outputs](#output-structure).
@@ -310,7 +310,7 @@ Used to encode lengths of [data types](#data-type), sizes of [contract payloads]
 ### LE64
 
 A non-negative 64-bit integer encoded using little-endian convention.
-Used to encode [value quantities](#value) and [timestamps](#time-bounds).
+Used to encode [value quantities](#value-type) and [timestamps](#time-bounds).
 
 
 ### Scalar
@@ -564,7 +564,7 @@ required to produce a unique [transaction ID](#transaction-id):
 * Version (uint64)
 * [Time bounds](#time-bounds) (pair of [LE64](#le64)s)
 * [Program](#program) (variable-length [data](#data-type))
-* [Transaction signature](#transction-signature) (64 bytes)
+* [Transaction signature](#transaction-signature) (64 bytes)
 * [Constraint system proof](#constraint-system-proof) (variable-length array of points and scalars)
 
 
@@ -813,7 +813,7 @@ Fiat-Shamir transform defined through the use of the [transcript](#transcript) i
 
 The blinding protocol consists of three proofs about blinding factors:
 
-1. [Blinding proof](#blinding-proof): a proof that a blinding factor is formed with a pre-determined key which can be removed using [reblind](#reblind-proof) operation. Implemented by the [`blind`](#blind) instruction.
+1. [Blinding proof](#blinding-proof): a proof that a blinding factor is formed with a pre-determined key which can be removed using [reblind](#reblinding-proof) operation. Implemented by the [`blind`](#blind) instruction.
 2. [Reblinding proof](#reblinding-proof): a proof that a blinding factor is replaced with another one without affecting the committed value. Implemented by the [`reblind`](#reblind) instruction.
 3. [Unblinding proof](#unblinding-proof): demonstrates the committed value and proves that the blinding factor is zero. Implemented by the [`unblind`](#reblind) instruction.
 
@@ -1045,7 +1045,7 @@ If the execution finishes successfully, VM performs the finishing tasks:
 6. Executes all [deferred point operations](#deferred-point-operations), including aggregated transaction signature and constraint system proof, using a single multi-scalar multiplication. Fails if the result is not an identity point.
 
 If none of the above checks failed, the resulting [transaction log](#transaction-log) is _applied_
-to the blockchain state as described in [the blockchain specification](Blockchain.md#apply-transaction-log).
+to the blockchain state as described in the blockchain specification (TBD).
 
 
 ### Deferred point operations
@@ -1084,7 +1084,7 @@ All such statements are combined using the following method:
 ### Versioning
 
 1. Each transaction has a version number. Each
-   [block](Blockchain.md#block-header) also has a version number.
+   block (reference TBD) also has a version number.
 2. Block version numbers must be monotonically non-decreasing: each
    block must have a version number equal to or greater than the
    version of the block before it.
@@ -1158,6 +1158,7 @@ Code | Instruction                | Stack diagram                              |
 0x24 | [`left`](#left)            |    _contract A B_ → _contract’_            | [Defers point operations](#deferred-point-operations)
 0x25 | [`right`](#right)          |    _contract A B_ → _contract’_            | [Defers point operations](#deferred-point-operations)
 0x26 | [`delegate`](#delegate)    |_contract prog sig_ → _results..._          | [Defers point operations](#deferred-point-operations)
+  —  | [`ext`](#ext)              |                 ø → ø                      | Fails if [extension flag](#vm-state) is not set.
 
 
 
@@ -1340,31 +1341,31 @@ Fails if `expr` is not an [expression type](#expression-type) or if `n` is not i
 
 _c1 c2_ **and** → _c3_
 
-1. Pops [constraints](#constraints-type) `c2`, then `c1`.
+1. Pops [constraints](#constraint-type) `c2`, then `c1`.
 2. Creates a _conjunction constraint_ `c3` containing `c1` and `c2`.
 3. Pushes `c3` to the stack.
 
 No changes to the [constraint system](#constraint-system) are made until [`verify`](#verify) is executed.
 
-Fails if `c1` and `c2` are not [constraints](#constraints-type).
+Fails if `c1` and `c2` are not [constraints](#constraint-type).
 
 #### or
 
 _constraint1 constraint2_ **or** → _constraint3_
 
-1. Pops [constraints](#constraints-type) `c2`, then `c1`.
+1. Pops [constraints](#constraint-type) `c2`, then `c1`.
 2. Creates a _disjunction constraint_ `c3` containing `c1` and `c2`.
 3. Pushes `c3` to the stack.
 
 No changes to the [constraint system](#constraint-system) are made until [`verify`](#verify) is executed.
 
-Fails if `c1` and `c2` are not [constraints](#constraints-type).
+Fails if `c1` and `c2` are not [constraints](#constraint-type).
 
 #### verify
 
 _constr_ **verify** → ø
 
-1. Pops [constraint](#constraints-type) `constr`.
+1. Pops [constraint](#constraint-type) `constr`.
 2. Transforms the constraint `constr` recursively using the following rules:
     1. Replace conjunction of two _linear constraints_ `a` and `b` with a linear constraint `c` by combining both constraints with a random challenge `z`:
         ```
@@ -1380,7 +1381,7 @@ _constr_ **verify** → ø
     3. Conjunctions and disjunctions of non-linear constraints are transformed via rules (1) and (2) using depth-first recursion.
 3. The resulting single linear constraint is added to the constraint system.
 
-Fails if `constr` is not a [constraint](#constraints-type).
+Fails if `constr` is not a [constraint](#constraint-type).
 
 
 #### blind
@@ -1390,14 +1391,14 @@ _proof V expr P_ **blind** → _var_
 1. Pops [point](#point) `P`.
 2. Pops [expression](#expression-type) `expr`.
 3. Pops [point](#point) `V`.
-4. Pops [data](data-type) `proof`.
+4. Pops [data](#data-type) `proof`.
 5. Creates a new [detached variable](#variable-type) `var` with commitment `V`.
 6. Verifies the [blinding proof](#blinding-proof) for commitments `V`, `P` and proof data `proof`, [deferring all point operations](#deferred-point-operations)).
 7. Adds an equality [constraint](#constraint-type) `expr == var` to the [constraint system](#constraint-system).
 8. Pushes `var` to the stack.
 
 Fails if: 
-* `proof` is not a 256-byte [data](data-type), or
+* `proof` is not a 256-byte [data](#data-type), or
 * `P`, `V` are not valid [points](#point), or
 * `expr` is not an [expression](#expression-type).
 
@@ -1465,7 +1466,7 @@ _qty flv pred_ **issue** → _contract_
 9. Creates a [contract](#contract-type) with the value as the only [payload](#contract-payload), protected by the predicate `pred`.
 
 The value is now issued into the contract that must be unlocked
-using one of the contract instructions: [`signtx`](#signx), [`delegate`](#delegate) or [`call`](#call).
+using one of the contract instructions: [`signtx`](#signtx), [`delegate`](#delegate) or [`call`](#call).
 
 Fails if:
 * `pred` is not a valid [point](#point),
@@ -1494,7 +1495,7 @@ Fails if `qty` and `flv` are not [variable types](#variable-type).
 
 _value_ **retire** → ø
 
-1. Pops a [value](#value) from the stack.
+1. Pops a [value](#value-type) from the stack.
 2. Adds a _retirement_ entry to the [transaction log](#transaction-log).
 
 Fails if the value is not a [non-negative value type](#value-type).
@@ -1519,12 +1520,12 @@ Fails if the value is not a [non-negative value type](#value-type).
 
 _widevalues commitments_ **cloak:_m_:_n_** → _values_
 
-Merges and splits `m` [wide values](#wide-value-type) into `n` [values](#values).
+Merges and splits `m` [wide values](#wide-value-type) into `n` [values](#value-type).
 
 1. Pops `2·n` [points](#point) as pairs of _flavor_ and _quantity_ for each output value, flavor is popped first in each pair.
 2. Pops `m` [wide values](#wide-value-type) as input values.
 3. Creates constraints and 64-bit range proofs for quantities per [Cloak protocol](https://github.com/interstellar/spacesuit/blob/master/spec.md).
-4. Pushes `n` [values](#values) to the stack, placing them in the same order as their corresponding commitments.
+4. Pushes `n` [values](#value-type) to the stack, placing them in the same order as their corresponding commitments.
 
 Immediate data `m` and `n` are encoded as two [LE32](#le32)s.
 
@@ -1601,7 +1602,7 @@ Fails if:
 
 _input_ **input** → _contract_
 
-1. Pops a [data](#data) `input` representing the [input structure](#input-structure) from the stack.
+1. Pops a [data](#data-type) `input` representing the [input structure](#input-structure) from the stack.
 2. Constructs a [contract](#contract-type) based on the `input` data and pushes it to the stack.
 3. For each decoded [value](#value-type), quantity variable is allocated first, flavor second.
 4. Adds [input entry](#input-entry) to the [transaction log](#transaction-log).
@@ -1752,10 +1753,13 @@ Fails if:
 3. or `contract` is not a [contract type](#contract-type).
 
 
+#### ext
 
+ø **ext** → ø
 
+All unassigned instruction codes are interpreted as no-ops. This are reserved for use in the future versions of the VM.
 
-
+See [Versioning](#versioning).
 
 
 
