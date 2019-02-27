@@ -1,7 +1,7 @@
 //! Constraint system-related types and operations:
 //! Commitments, Variables, Expressions and Constraints.
 
-use bulletproofs::{r1cs, r1cs::RandomizedConstraintSystem, PedersenGens};
+use bulletproofs::{r1cs, r1cs::ConstraintSystem, r1cs::RandomizedConstraintSystem, PedersenGens};
 use curve25519_dalek::ristretto::CompressedRistretto;
 use curve25519_dalek::scalar::Scalar;
 use std::iter::FromIterator;
@@ -9,7 +9,6 @@ use std::ops::{Add, Neg, Sub};
 
 use crate::encoding;
 use crate::scalar_witness::ScalarWitness;
-use crate::transcript::TranscriptProtocol;
 
 #[derive(Copy, Clone, Debug)]
 pub struct Variable {
@@ -46,28 +45,36 @@ pub struct CommitmentWitness {
 }
 
 impl Constraint {
-    // TBD/note: must take ownership of constraint, since we're taking it apart, right?
     pub fn verify<CS: r1cs::ConstraintSystem>(self, cs: &mut CS) {
         cs.specify_randomized_constraints(move |cs| {
             let z = cs.challenge_scalar(b"verify challenge");
-            let _expr = self.clone().flatten(cs, z); // can we NOT clone this maybe
-                                                     // add expr to cs
+
+            // Flatten the constraint into one expression
+            // Note: cloning because we can't move out of captured variable in an `Fn` closure
+            let expr = self.clone().flatten(cs, z);
+
+            // Add the resulting expression to the constraint system
+            cs.constrain(expr.to_r1cs_lc());
 
             Ok(())
-        });
+        })
+        .unwrap() // TODO: convert from R1CSError to VMError
     }
 
     fn flatten<CS: r1cs::RandomizedConstraintSystem>(self, cs: &mut CS, z: Scalar) -> Expression {
         match self {
             Constraint::Eq(expr1, expr2) => expr1 - expr2,
             Constraint::And(c1, c2) => {
-                let z = cs.challenge_scalar(b"and");
-                unimplemented!()
+                let a = c1.flatten(cs, z);
+                let b = c2.flatten(cs, z);
+                // output expression: a + z * b
+                a + b.multiply(Expression::constant(z), cs)
             }
             Constraint::Or(c1, c2) => {
                 let a = c1.flatten(cs, z);
                 let b = c2.flatten(cs, z);
-                unimplemented!()
+                // output expression: a * b
+                a.multiply(b, cs)
             }
         }
     }
@@ -133,6 +140,9 @@ impl Expression {
         Expression::Constant(a.into())
     }
 
+    // Note: we can't implement this as a `Mul` trait because we have to pass in a
+    // ConstraintSystem, because the `LinearCombination * LinearCombination` case
+    // requires the creation of a multiplier in the constraint system.
     pub fn multiply<CS: r1cs::ConstraintSystem>(self, rhs: Self, cs: &mut CS) -> Self {
         match (self, rhs) {
             // Constant * Constant
@@ -179,6 +189,13 @@ impl Expression {
                 };
                 Expression::LinearCombination(vec![(output_var, Scalar::one())], output_assignment)
             }
+        }
+    }
+
+    fn to_r1cs_lc(&self) -> r1cs::LinearCombination {
+        match self {
+            Expression::Constant(a) => a.to_scalar().into(),
+            Expression::LinearCombination(terms, _) => r1cs::LinearCombination::from_iter(terms),
         }
     }
 }
