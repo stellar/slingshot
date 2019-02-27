@@ -26,8 +26,7 @@ type PrePegIn struct {
 	ExpMS       int64  `json:"exp_ms"`
 }
 
-// BuildPrePegInTx builds the pre-peg-in TxVM transaction to create a uniqueness token.
-func BuildPrePegInTx(bcid, assetXDR, recip []byte, amount, expMS int64) (*bc.Tx, error) {
+func buildPrePegInTx(bcid, assetXDR, recip []byte, amount, expMS int64) (*bc.Tx, error) {
 	buf := new(bytes.Buffer)
 	// Set up pre-peg tx arg stack: asset, amount, zeroval, {recip}, quorum
 	fmt.Fprintf(buf, "x'%x' put\n", assetXDR)
@@ -70,7 +69,7 @@ func (c *Custodian) DoPrePegIn(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	// Build pre-peg-in transaction.
-	tx, err := BuildPrePegInTx(p.BcID, p.AssetXDR, p.RecipPubkey, p.Amount, p.ExpMS)
+	tx, err := buildPrePegInTx(p.BcID, p.AssetXDR, p.RecipPubkey, p.Amount, p.ExpMS)
 	if err != nil {
 		net.Errorf(w, http.StatusInternalServerError, "sending response: %s", err)
 		return
