@@ -13,8 +13,8 @@ import (
 	"github.com/interstellar/slingshot/slidechain/net"
 )
 
-// PegIn contains a marshalled pre-peg-in TxVM tx and fields for a peg-in transaction in the database.
-type PegIn struct {
+// PrePegIn contains a marshalled pre-peg-in TxVM tx and fields for a peg-in transaction in the database.
+type PrePegIn struct {
 	PrepegTx    []byte `json:"prepeg_tx"`
 	Amount      int64  `json:"amount"`
 	AssetXDR    []byte `json:"asset_xdr"`
@@ -29,8 +29,8 @@ func (c *Custodian) DoPrePegIn(w http.ResponseWriter, req *http.Request) {
 		net.Errorf(w, http.StatusInternalServerError, "sending response: %s", err)
 		return
 	}
-	// Unmarshal peg-in.
-	var p PegIn
+	// Unmarshal request.
+	var p PrePegIn
 	err = json.Unmarshal(data, &p)
 	if err != nil {
 		net.Errorf(w, http.StatusInternalServerError, "sending response: %s", err)
