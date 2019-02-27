@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
@@ -51,38 +50,27 @@ func main() {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Minute)
 	defer cancel()
-	var (
-		asset        xdr.Asset
-		exportAmount int64
-		inputAmount  int64
-		err          error
-	)
+
+	var err error
+	asset := stellar.NativeAsset()
 	if *code != "" {
 		asset, err = stellar.NewAsset(*code, *issuer)
 		if err != nil {
 			log.Fatalf("error creating asset from code %s and issuer %s: %s", *code, *issuer, err)
 		}
-		exportAmount, err = strconv.ParseInt(*amount, 10, 64)
-		if err != nil {
-			log.Fatalf("error parsing export amount %s: %s", *amount, err)
-		}
-		inputAmount, err = strconv.ParseInt(*input, 10, 64)
-		if err != nil {
-			log.Fatalf("error parsing input amount %s: %s", *input, err)
-		}
-	} else {
-		asset = stellar.NativeAsset()
-		exportXlm, err := xlm.Parse(*amount)
-		if err != nil {
-			log.Fatalf("error parsing export amount %s: %s", *amount, err)
-		}
-		exportAmount = int64(exportXlm)
-		inputXlm, err := xlm.Parse(*input)
-		if err != nil {
-			log.Fatalf("error parsing input amount %s: %s", *input, err)
-		}
-		inputAmount = int64(inputXlm)
 	}
+
+	// XDR scales down an amount unit of every asset by a factor of 10^7.
+	// Thus, xlm.Parse works for both native and non-native assets.
+	exportAmount, err := xlm.Parse(*amount)
+	if err != nil {
+		log.Fatalf("error parsing export amount %s: %s", *amount, err)
+	}
+	inputAmount, err := xlm.Parse(*input)
+	if err != nil {
+		log.Fatalf("error parsing input amount %s: %s", *input, err)
+	}
+
 	*slidechaind = strings.TrimRight(*slidechaind, "/")
 
 	// Build and submit the pre-export transaction.
@@ -109,13 +97,13 @@ func main() {
 	if err != nil {
 		log.Fatalf("error unmarshaling custodian account id: %s", err)
 	}
-	tempAddr, seqnum, err := slidechain.SubmitPreExportTx(hclient, kp, custodian.Address(), asset, exportAmount)
+	tempAddr, seqnum, err := slidechain.SubmitPreExportTx(hclient, kp, custodian.Address(), asset, int64(exportAmount))
 	if err != nil {
 		log.Fatalf("error submitting pre-export tx: %s", err)
 	}
 
 	// Export funds from slidechain.
-	tx, err := slidechain.BuildExportTx(ctx, asset, exportAmount, inputAmount, tempAddr, mustDecodeHex(*anchor), mustDecodeHex(*prv), seqnum)
+	tx, err := slidechain.BuildExportTx(ctx, asset, int64(exportAmount), int64(inputAmount), tempAddr, mustDecodeHex(*anchor), rawbytes, seqnum)
 	if err != nil {
 		log.Fatalf("error building export tx: %s", err)
 	}
