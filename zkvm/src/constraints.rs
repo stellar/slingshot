@@ -1,14 +1,15 @@
 //! Constraint system-related types and operations:
 //! Commitments, Variables, Expressions and Constraints.
 
-use bulletproofs::{r1cs, PedersenGens};
+use bulletproofs::{r1cs, r1cs::RandomizedConstraintSystem, PedersenGens};
 use curve25519_dalek::ristretto::CompressedRistretto;
 use curve25519_dalek::scalar::Scalar;
 use std::iter::FromIterator;
-use std::ops::{Add, Neg};
+use std::ops::{Add, Neg, Sub};
 
 use crate::encoding;
 use crate::scalar_witness::ScalarWitness;
+use crate::transcript::TranscriptProtocol;
 
 #[derive(Copy, Clone, Debug)]
 pub struct Variable {
@@ -25,8 +26,8 @@ pub enum Expression {
 #[derive(Clone, Debug)]
 pub enum Constraint {
     Eq(Expression, Expression),
-    And(Vec<Constraint>),
-    Or(Vec<Constraint>),
+    And(Box<Constraint>, Box<Constraint>),
+    Or(Box<Constraint>, Box<Constraint>),
     // no witness needed as it's normally true/false and we derive it on the fly during processing.
     // this also allows us not to wrap this enum in a struct.
 }
@@ -42,6 +43,34 @@ pub enum Commitment {
 pub struct CommitmentWitness {
     value: ScalarWitness,
     blinding: Scalar,
+}
+
+impl Constraint {
+    // TBD/note: must take ownership of constraint, since we're taking it apart, right?
+    pub fn verify<CS: r1cs::ConstraintSystem>(self, cs: &mut CS) {
+        cs.specify_randomized_constraints(move |cs| {
+            let z = cs.challenge_scalar(b"verify challenge");
+            let _expr = self.clone().flatten(cs, z); // can we NOT clone this maybe
+                                                     // add expr to cs
+
+            Ok(())
+        });
+    }
+
+    fn flatten<CS: r1cs::RandomizedConstraintSystem>(self, cs: &mut CS, z: Scalar) -> Expression {
+        match self {
+            Constraint::Eq(expr1, expr2) => expr1 - expr2,
+            Constraint::And(c1, c2) => {
+                let z = cs.challenge_scalar(b"and");
+                unimplemented!()
+            }
+            Constraint::Or(c1, c2) => {
+                let a = c1.flatten(cs, z);
+                let b = c2.flatten(cs, z);
+                unimplemented!()
+            }
+        }
+    }
 }
 
 impl Commitment {
@@ -206,6 +235,14 @@ impl Add for Expression {
                 )
             }
         }
+    }
+}
+
+impl Sub for Expression {
+    type Output = Expression;
+
+    fn sub(self, rhs: Expression) -> Expression {
+        self + -rhs
     }
 }
 

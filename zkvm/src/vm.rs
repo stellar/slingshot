@@ -209,7 +209,7 @@ where
                 Instruction::Range(_) => unimplemented!(),
                 Instruction::And => self.and()?,
                 Instruction::Or => self.or()?,
-                Instruction::Verify => unimplemented!(),
+                Instruction::Verify => self.verify()?,
                 Instruction::Blind => unimplemented!(),
                 Instruction::Reblind => unimplemented!(),
                 Instruction::Unblind => unimplemented!(),
@@ -320,7 +320,7 @@ where
     fn and(&mut self) -> Result<(), VMError> {
         let c2 = self.pop_item()?.to_constraint()?;
         let c1 = self.pop_item()?.to_constraint()?;
-        let c3 = Constraint::And(vec![c1, c2]);
+        let c3 = Constraint::And(Box::new(c1), Box::new(c2));
         self.push_item(c3);
         Ok(())
     }
@@ -328,8 +328,14 @@ where
     fn or(&mut self) -> Result<(), VMError> {
         let c2 = self.pop_item()?.to_constraint()?;
         let c1 = self.pop_item()?.to_constraint()?;
-        let c3 = Constraint::Or(vec![c1, c2]);
+        let c3 = Constraint::Or(Box::new(c1), Box::new(c2));
         self.push_item(c3);
+        Ok(())
+    }
+
+    fn verify(&mut self) -> Result<(), VMError> {
+        let constraint = self.pop_item()?.to_constraint()?;
+        constraint.verify(self.delegate.cs());
         Ok(())
     }
 
