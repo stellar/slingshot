@@ -175,10 +175,10 @@ func (c *Custodian) pegOutFromExports(ctx context.Context, pegouts chan<- pegOut
 			}
 			numAffected, err := result.RowsAffected()
 			if err != nil {
-				log.Fatalf("checking rows affected by update query for txid %s: %s", txid, err)
+				log.Fatalf("checking rows affected by update exports query for txid %s: %s", txid, err)
 			}
 			if numAffected != 1 {
-				log.Fatalf("got %d rows affected by update query for txid %s", numAffected, txid)
+				log.Fatalf("got %d rows affected by update exports query for txid %s", numAffected, txid)
 			}
 			// Send peg-out info to goroutine for successful or non-retriably failed post-peg-out txvm txs.
 			if peggedOut == pegOutOK || peggedOut == pegOutFail {
