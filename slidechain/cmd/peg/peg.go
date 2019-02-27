@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"strings"
@@ -14,7 +15,6 @@ import (
 	"github.com/chain/txvm/crypto/ed25519"
 	"github.com/chain/txvm/errors"
 	"github.com/chain/txvm/protocol/bc"
-	"github.com/golang/protobuf/proto"
 	"github.com/stellar/go/clients/horizon"
 	"github.com/stellar/go/xdr"
 
@@ -107,7 +107,7 @@ func main() {
 		log.Fatal("marshaling asset xdr: ", err)
 	}
 	expMS := int64(bc.Millis(time.Now().Add(10 * time.Minute)))
-	err = doPrepegTx(bcidBytes[:], assetXDR, int64(amountXLM), expMS, recipientPubkey[:], *slidechaind)
+	nonceHash, err := doPrePegIn(bcidBytes[:], assetXDR, int64(amountXLM), expMS, recipientPubkey[:], *slidechaind)
 	if err != nil {
 		log.Fatal("doing pre-peg-in tx: ", err)
 	}
@@ -115,7 +115,6 @@ func main() {
 		URL:  strings.TrimRight(*horizonURL, "/"),
 		HTTP: new(http.Client),
 	}
-	nonceHash := slidechain.UniqueNonceHash(bcidBytes[:], expMS)
 	tx, err := stellar.BuildPegInTx(*seed, nonceHash, *amount, *code, *issuer, *custodian, hclient)
 	if err != nil {
 		log.Fatal("building transaction: ", err)
@@ -127,42 +126,12 @@ func main() {
 	log.Printf("successfully submitted peg-in tx hash %s on ledger %d", succ.Hash, succ.Ledger)
 }
 
-// DoPrepegTx builds, submits the pre-peg TxVM transaction, and waits for it to hit the chain.
-func doPrepegTx(bcid, assetXDR []byte, amount, expMS int64, pubkey ed25519.PublicKey, slidechaind string) error {
-	prepegTx, err := slidechain.BuildPrepegTx(bcid, assetXDR, pubkey, amount, expMS)
-	if err != nil {
-		return errors.Wrap(err, "building pre-peg-in tx")
-	}
-	err = submitPrepegTx(prepegTx, slidechaind)
-	if err != nil {
-		return errors.Wrap(err, "submitting and waiting on pre-peg-in tx")
-	}
-	err = recordPeg(prepegTx.ID, assetXDR, amount, expMS, pubkey, slidechaind)
-	if err != nil {
-		return errors.Wrap(err, "recording peg")
-	}
-	return nil
-}
-
-func submitPrepegTx(tx *bc.Tx, slidechaind string) error {
-	prepegTxBits, err := proto.Marshal(&tx.RawTx)
-	if err != nil {
-		return errors.Wrap(err, "marshaling pre-peg tx")
-	}
-	resp, err := http.Post(slidechaind+"/submit?wait=1", "application/octet-stream", bytes.NewReader(prepegTxBits))
-	if err != nil {
-		return errors.Wrap(err, "submitting to slidechaind")
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode/100 != 2 {
-		return fmt.Errorf("status code %d from POST /submit", resp.StatusCode)
-	}
-	log.Printf("successfully submitted and waited on pre-peg-in tx %x", tx.ID)
-	return nil
-}
-
-func recordPeg(txid bc.Hash, assetXDR []byte, amount, expMS int64, pubkey ed25519.PublicKey, slidechaind string) error {
-	p := slidechain.PegIn{
+// doPrePegIn calls the pre-peg-in Slidechain RPC.
+// That RPC builds, submits, and waits for the pre-peg TxVM transaction and records the peg-in in the database.
+func doPrePegIn(bcid, assetXDR []byte, amount, expMS int64, pubkey ed25519.PublicKey, slidechaind string) ([32]byte, error) {
+	var nonceHash [32]byte
+	p := slidechain.PrePegIn{
+		BcID:        bcid,
 		Amount:      amount,
 		AssetXDR:    assetXDR,
 		RecipPubkey: pubkey,
@@ -170,16 +139,20 @@ func recordPeg(txid bc.Hash, assetXDR []byte, amount, expMS int64, pubkey ed2551
 	}
 	pegBits, err := json.Marshal(&p)
 	if err != nil {
-		return errors.Wrap(err, "marshaling peg")
+		return nonceHash, errors.Wrap(err, "marshaling peg")
 	}
-	resp, err := http.Post(slidechaind+"/record", "application/octet-stream", bytes.NewReader(pegBits))
+	resp, err := http.Post(slidechaind+"/prepegin", "application/octet-stream", bytes.NewReader(pegBits))
 	if err != nil {
-		return errors.Wrap(err, "recording to slidechaind")
+		return nonceHash, errors.Wrap(err, "recording to slidechaind")
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode/100 != 2 {
-		return fmt.Errorf("status code %d from POST /record", resp.StatusCode)
+		return nonceHash, fmt.Errorf("status code %d from POST /prepegin", resp.StatusCode)
 	}
-	log.Printf("successfully recorded peg for tx %x", txid.Bytes())
-	return nil
+
+	_, err = io.ReadFull(resp.Body, nonceHash[:])
+	if err != nil {
+		return nonceHash, errors.Wrap(err, "reading POST /prepegin response body")
+	}
+	return nonceHash, nil
 }

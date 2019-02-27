@@ -225,7 +225,7 @@ func TestImport(t *testing.T) {
 			// Without a successful pre-peg-in TxVM tx, the initial input in the import tx will fail.
 			log.Println("building and submitting pre-peg-in tx...")
 			expMS := int64(bc.Millis(time.Now().Add(10 * time.Minute)))
-			prepegTx, err := BuildPrepegTx(c.InitBlockHash.Bytes(), assetXDR, testRecipPubKey, 1, expMS)
+			prepegTx, err := buildPrePegInTx(c.InitBlockHash.Bytes(), assetXDR, testRecipPubKey, 1, expMS)
 			if err != nil {
 				t.Fatal("could not build pre-peg-in tx")
 			}
@@ -241,7 +241,7 @@ func TestImport(t *testing.T) {
 			ready := make(chan struct{})
 			go c.importFromPegIns(ctx, ready)
 			<-ready
-			nonceHash := UniqueNonceHash(c.InitBlockHash.Bytes(), expMS)
+			nonceHash := uniqueNonceHash(c.InitBlockHash.Bytes(), expMS)
 			_, err = db.Exec("INSERT INTO pegs (nonce_hash, amount, asset_xdr, recipient_pubkey, nonce_expms, stellar_tx) VALUES ($1, 1, $2, $3, $4, 1)", nonceHash[:], assetXDR, testRecipPubKey, expMS)
 			if err != nil {
 				t.Fatal(err)
@@ -331,7 +331,7 @@ func TestEndToEnd(t *testing.T) {
 			exportAmount := tt.exportAmount
 			expMS := int64(bc.Millis(time.Now().Add(10 * time.Minute)))
 			// Build, submit, and wait on pre-peg-in TxVM tx.
-			prepegTx, err := BuildPrepegTx(c.InitBlockHash.Bytes(), nativeAssetBytes, exporterPubKeyBytes[:], int64(inputAmount), expMS)
+			prepegTx, err := buildPrePegInTx(c.InitBlockHash.Bytes(), nativeAssetBytes, exporterPubKeyBytes[:], int64(inputAmount), expMS)
 			if err != nil {
 				t.Fatal("could not build pre-peg-in tx")
 			}
@@ -343,7 +343,7 @@ func TestEndToEnd(t *testing.T) {
 			if err != nil {
 				t.Fatal("unsuccessfully waited on pre-peg-in tx hitting txvm")
 			}
-			uniqueNonceHash := UniqueNonceHash(c.InitBlockHash.Bytes(), expMS)
+			uniqueNonceHash := uniqueNonceHash(c.InitBlockHash.Bytes(), expMS)
 			err = c.insertPegIn(ctx, uniqueNonceHash[:], exporterPubKeyBytes[:], expMS)
 			if err != nil {
 				t.Fatal("could not record peg")

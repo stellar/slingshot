@@ -51,6 +51,6 @@ func main() {
 	http.Handle("/submit", c.S)
 	http.HandleFunc("/get", c.S.Get)
 	http.HandleFunc("/account", c.Account)
-	http.HandleFunc("/record", c.RecordPegIn)
+	http.HandleFunc("/prepegin", c.DoPrePegIn)
 	http.Serve(listener, nil)
 }
