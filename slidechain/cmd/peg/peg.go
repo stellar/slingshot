@@ -14,7 +14,6 @@ import (
 	"github.com/chain/txvm/crypto/ed25519"
 	"github.com/chain/txvm/errors"
 	"github.com/chain/txvm/protocol/bc"
-	"github.com/golang/protobuf/proto"
 	"github.com/stellar/go/clients/horizon"
 	"github.com/stellar/go/xdr"
 
@@ -130,16 +129,8 @@ func main() {
 // doPrePegIn builds the pre-peg-in tx and calls the pre-peg-in Slidechain RPC.
 // That RPC submits and waits for the pre-peg TxVM transaction and records the peg-in in the database.
 func doPrePegIn(bcid, assetXDR []byte, amount, expMS int64, pubkey ed25519.PublicKey, slidechaind string) error {
-	prepegTx, err := slidechain.BuildPrePegInTx(bcid, assetXDR, pubkey, amount, expMS)
-	if err != nil {
-		return errors.Wrap(err, "building pre-peg-in tx")
-	}
-	prepegTxBits, err := proto.Marshal(&prepegTx.RawTx)
-	if err != nil {
-		return errors.Wrap(err, "marshaling pre-peg tx")
-	}
 	p := slidechain.PrePegIn{
-		PrepegTx:    prepegTxBits,
+		BcID:        bcid,
 		Amount:      amount,
 		AssetXDR:    assetXDR,
 		RecipPubkey: pubkey,
@@ -157,6 +148,5 @@ func doPrePegIn(bcid, assetXDR []byte, amount, expMS int64, pubkey ed25519.Publi
 	if resp.StatusCode/100 != 2 {
 		return fmt.Errorf("status code %d from POST /prepegin", resp.StatusCode)
 	}
-	log.Printf("successfully recorded peg for tx %x", prepegTx.ID.Bytes())
 	return nil
 }

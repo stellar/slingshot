@@ -14,13 +14,12 @@ import (
 	"github.com/chain/txvm/protocol/bc"
 	"github.com/chain/txvm/protocol/txvm"
 	"github.com/chain/txvm/protocol/txvm/asm"
-	"github.com/golang/protobuf/proto"
 	"github.com/interstellar/slingshot/slidechain/net"
 )
 
 // PrePegIn contains a marshalled pre-peg-in TxVM tx and fields for a peg-in transaction in the database.
 type PrePegIn struct {
-	PrepegTx    []byte `json:"prepeg_tx"`
+	BcID        []byte `json:"bc_id"`
 	Amount      int64  `json:"amount"`
 	AssetXDR    []byte `json:"asset_xdr"`
 	RecipPubkey []byte `json:"recip_pubkey"`
@@ -70,14 +69,8 @@ func (c *Custodian) DoPrePegIn(w http.ResponseWriter, req *http.Request) {
 		net.Errorf(w, http.StatusInternalServerError, "sending response: %s", err)
 		return
 	}
-	// Unmarshal pre-peg-in transaction.
-	var rawTx bc.RawTx
-	err = proto.Unmarshal(p.PrepegTx, &rawTx)
-	if err != nil {
-		net.Errorf(w, http.StatusInternalServerError, "sending response: %s", err)
-		return
-	}
-	tx, err := bc.NewTx(rawTx.Program, rawTx.Version, rawTx.Runlimit)
+	// Build pre-peg-in transaction.
+	tx, err := BuildPrePegInTx(p.BcID, p.AssetXDR, p.RecipPubkey, p.Amount, p.ExpMS)
 	if err != nil {
 		net.Errorf(w, http.StatusInternalServerError, "sending response: %s", err)
 		return
