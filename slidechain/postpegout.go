@@ -3,6 +3,7 @@ package slidechain
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"math"
 	"time"
 
@@ -41,6 +42,7 @@ func (c *Custodian) doPostPegOut(ctx context.Context, assetXDR, anchor, txid []b
 	if peggedOut == pegOutOK {
 		selector = 1
 	}
+	// Build post-peg-out contract.
 	b := new(txvmutil.Builder)
 	b.Tuple(func(contract *txvmutil.TupleBuilder) { // {'C', ...}
 		contract.PushdataByte(txvm.ContractCode)
@@ -69,6 +71,7 @@ func (c *Custodian) doPostPegOut(ctx context.Context, assetXDR, anchor, txid []b
 	b.PushdataInt64(int64(bc.Millis(time.Now().Add(10 * time.Minute)))) // con stack: blockid, expmss; arg stack: sigchecker
 	b.Op(op.Nonce).Op(op.Finalize)                                      // arg stack: sigchecker
 
+	// Check signature.
 	prog1 := b.Build()
 	vm, err := txvm.Validate(prog1, 3, math.MaxInt64, txvm.StopAfterFinalize)
 	if err != nil {
@@ -78,6 +81,7 @@ func (c *Custodian) doPostPegOut(ctx context.Context, assetXDR, anchor, txid []b
 	b.Op(op.Get).PushdataBytes(sig).Op(op.Put) // con stack: sigchecker; arg stack: sig
 	b.Op(op.Call)
 
+	// Build, submit, and wait for the post-peg-out tx to hit txvm.
 	prog2 := b.Build()
 	tx, err := bc.NewTx(prog2, 3, math.MaxInt64)
 	if err != nil {
@@ -91,6 +95,14 @@ func (c *Custodian) doPostPegOut(ctx context.Context, assetXDR, anchor, txid []b
 	if err != nil {
 		return errors.Wrap(err, "waiting on post-peg-out tx to hit txvm")
 	}
-	_, err = c.DB.ExecContext(ctx, `DELETE FROM exports WHERE txid=$1`, txid)
-	return errors.Wrapf(err, "deleting export for tx %x", txid)
+	// Delete relevant row from exports table.
+	result, err := c.DB.ExecContext(ctx, `DELETE FROM exports WHERE txid=$1`, txid)
+	if err != nil {
+		return errors.Wrapf(err, "deleting export for tx %x", txid)
+	}
+	numAffected, err := result.RowsAffected()
+	if numAffected != 1 {
+		return fmt.Errorf("got %d rows affected by exports delete query, want 1", numAffected)
+	}
+	return nil
 }
