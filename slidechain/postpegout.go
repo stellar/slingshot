@@ -101,6 +101,9 @@ func (c *Custodian) doPostPegOut(ctx context.Context, assetXDR, anchor, txid []b
 		return errors.Wrapf(err, "deleting export for tx %x", txid)
 	}
 	numAffected, err := result.RowsAffected()
+	if err != nil {
+		return errors.Wrapf(err, "checking rows affected by exports delete query for txid %x", txid)
+	}
 	if numAffected != 1 {
 		return fmt.Errorf("got %d rows affected by exports delete query, want 1", numAffected)
 	}
