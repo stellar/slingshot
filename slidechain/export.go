@@ -164,23 +164,23 @@ func (c *Custodian) pegOutFromExports(ctx context.Context, pegouts chan<- pegOut
 					if err != nil {
 						log.Fatalf("getting error codes from failed submission of tx %s", txid)
 					}
-					if resultCodes.TransactionCode == xdr.TransactionResultCodeTxBadSeq.String() { // retriable error
+					if resultCodes.TransactionCode == xdr.TransactionResultCodeTxBadSeq.String() {
 						peggedOut = pegOutRetry
 					}
 				}
 			}
 			result, err := c.DB.ExecContext(ctx, `UPDATE exports SET pegged_out=$1 WHERE txid=$2`, peggedOut, txid)
 			if err != nil {
-				log.Fatalf("updating export table: %s", err)
+				log.Fatalf("updating pegged_out in export table: %s", err)
 			}
 			numAffected, err := result.RowsAffected()
 			if err != nil {
 				log.Fatalf("checking rows affected by update exports query for txid %s: %s", txid, err)
 			}
 			if numAffected != 1 {
-				log.Fatalf("got %d rows affected by update exports query for txid %s", numAffected, txid)
+				log.Fatalf("got %d rows affected by update exports query for txid %s, want 1", numAffected, txid)
 			}
-			// Send peg-out info to goroutine for successful or non-retriably failed post-peg-out txvm txs.
+			// Send peg-out info to goroutine for successes and non-retriable failures.
 			if peggedOut == pegOutOK || peggedOut == pegOutFail {
 				pegouts <- pegOut{
 					Txid:     txid,

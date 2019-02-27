@@ -83,9 +83,6 @@ func (c *Custodian) doPostPegOut(ctx context.Context, assetXDR, anchor, txid []b
 	if err != nil {
 		return errors.Wrap(err, "making post-peg-out tx")
 	}
-	if err != nil {
-		return errors.Wrap(err, "building post-peg-out tx")
-	}
 	r, err := c.S.submitTx(ctx, tx)
 	if err != nil {
 		return errors.Wrap(err, "submitting post-peg-out tx")

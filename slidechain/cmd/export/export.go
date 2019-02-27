@@ -127,7 +127,7 @@ func main() {
 	// Submit the transaction and block until it's included in the txvm chain (or returns an error).
 	req, err := http.NewRequest("POST", *slidechaind+"/submit?wait=1", bytes.NewReader(txbits))
 	if err != nil {
-		log.Fatalf("error building request for export tx block: %s", err)
+		log.Fatalf("error building request for latest block: %s", err)
 	}
 	req = req.WithContext(ctx)
 	client := http.DefaultClient
