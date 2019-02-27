@@ -31,7 +31,6 @@ pub enum Predicate {
 
     /// Disjunction of two predicates.
     Or(PredicateDisjunction),
-
 }
 
 #[derive(Clone, Debug)]
@@ -140,7 +139,7 @@ impl PredicateDisjunction {
             l.decompress().ok_or(VMError::InvalidPoint)? + f * PedersenGens::default().B
         };
 
-        Ok(PredicateDisjunction{
+        Ok(PredicateDisjunction {
             left: Box::new(left),
             right: Box::new(right),
             point: point.compress(),

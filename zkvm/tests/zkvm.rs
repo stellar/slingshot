@@ -81,7 +81,10 @@ fn predicate_helper(pred_num: usize) -> (Vec<Predicate>, Vec<Scalar>) {
         .map(|s| Scalar::from(s as u64))
         .collect();
 
-    let predicates: Vec<Predicate> = scalars.iter().map(|s| Predicate::Key((s * gens.B).compress().into())).collect();
+    let predicates: Vec<Predicate> = scalars
+        .iter()
+        .map(|s| Predicate::Key((s * gens.B).compress().into()))
+        .collect();
 
     (predicates, scalars)
 }
