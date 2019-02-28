@@ -1445,7 +1445,7 @@ Fails if:
 
 #### issue
 
-_qty metadata flv pred_ **issue** → _contract_
+_qty flv metadata pred_ **issue** → _contract_
 
 1. Pops [point](#point) `pred`.
 2. Pops [data](#data) `metadata`.
