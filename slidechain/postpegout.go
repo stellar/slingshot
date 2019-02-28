@@ -83,10 +83,12 @@ func (c *Custodian) doPostPegOut(ctx context.Context, assetXDR, anchor, txid []b
 
 	// Build, submit, and wait for the post-peg-out tx to hit txvm.
 	prog2 := b.Build()
-	tx, err := bc.NewTx(prog2, 3, math.MaxInt64)
+	var runlimit int64
+	tx, err := bc.NewTx(prog2, 3, math.MaxInt64, txvm.GetRunlimit(&runlimit))
 	if err != nil {
 		return errors.Wrap(err, "making post-peg-out tx")
 	}
+	tx.Runlimit = math.MaxInt64 - runlimit
 	r, err := c.S.submitTx(ctx, tx)
 	if err != nil {
 		return errors.Wrap(err, "submitting post-peg-out tx")

@@ -166,9 +166,9 @@ func (c *Custodian) pegOutFromExports(ctx context.Context, pegouts chan<- pegOut
 			if err != nil {
 				peggedOut = pegOutFail
 				if herr, ok := errors.Root(err).(*horizon.Error); ok {
-					resultCodes, err := herr.ResultCodes()
-					if err != nil {
-						log.Fatalf("getting error codes from failed submission of tx %x", txid)
+					resultCodes, rerr := herr.ResultCodes()
+					if rerr != nil {
+						log.Fatalf("getting error codes from failed submission of tx %x with horizon err %s: %s", txid, herr, rerr)
 					}
 					if resultCodes.TransactionCode == xdr.TransactionResultCodeTxBadSeq.String() {
 						peggedOut = pegOutRetry
