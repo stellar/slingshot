@@ -1,13 +1,14 @@
 //! Constraint system-related types and operations:
 //! Commitments, Variables, Expressions and Constraints.
 
-use bulletproofs::{r1cs, PedersenGens};
+use bulletproofs::{r1cs, r1cs::ConstraintSystem, PedersenGens};
 use curve25519_dalek::ristretto::CompressedRistretto;
 use curve25519_dalek::scalar::Scalar;
 use std::iter::FromIterator;
-use std::ops::{Add, Neg};
+use std::ops::{Add, Neg, Sub};
 
 use crate::encoding;
+use crate::errors::VMError;
 use crate::scalar_witness::ScalarWitness;
 
 #[derive(Copy, Clone, Debug)]
@@ -25,8 +26,8 @@ pub enum Expression {
 #[derive(Clone, Debug)]
 pub enum Constraint {
     Eq(Expression, Expression),
-    And(Vec<Constraint>),
-    Or(Vec<Constraint>),
+    And(Box<Constraint>, Box<Constraint>),
+    Or(Box<Constraint>, Box<Constraint>),
     // no witness needed as it's normally true/false and we derive it on the fly during processing.
     // this also allows us not to wrap this enum in a struct.
 }
@@ -42,6 +43,43 @@ pub enum Commitment {
 pub struct CommitmentWitness {
     value: ScalarWitness,
     blinding: Scalar,
+}
+
+impl Constraint {
+    pub fn verify<CS: r1cs::ConstraintSystem>(self, cs: &mut CS) -> Result<(), VMError> {
+        cs.specify_randomized_constraints(move |cs| {
+            // Flatten the constraint into one expression
+            // Note: cloning because we can't move out of captured variable in an `Fn` closure,
+            // and `Box<FnOnce>` is not fully supported yet. (We can update when that happens).
+            // Cf. https://github.com/dalek-cryptography/bulletproofs/issues/244
+            let expr = self.clone().flatten(cs);
+
+            // Add the resulting expression to the constraint system
+            cs.constrain(expr);
+
+            Ok(())
+        })
+        .map_err(|e| VMError::R1CSError(e))
+    }
+
+    fn flatten<CS: r1cs::RandomizedConstraintSystem>(self, cs: &mut CS) -> r1cs::LinearCombination {
+        match self {
+            Constraint::Eq(expr1, expr2) => expr1.to_r1cs_lc() - expr2.to_r1cs_lc(),
+            Constraint::And(c1, c2) => {
+                let a = c1.flatten(cs);
+                let b = c2.flatten(cs);
+                let z = cs.challenge_scalar(b"ZkVM.verify.and-challenge");
+                a + z * b
+            }
+            Constraint::Or(c1, c2) => {
+                let a = c1.flatten(cs);
+                let b = c2.flatten(cs);
+                // output expression: a * b
+                let (_l, _r, o) = cs.multiply(a, b);
+                r1cs::LinearCombination::from(o)
+            }
+        }
+    }
 }
 
 impl Commitment {
@@ -104,6 +142,9 @@ impl Expression {
         Expression::Constant(a.into())
     }
 
+    // Note: we can't implement this as a `Mul` trait because we have to pass in a
+    // ConstraintSystem, because the `LinearCombination * LinearCombination` case
+    // requires the creation of a multiplier in the constraint system.
     pub fn multiply<CS: r1cs::ConstraintSystem>(self, rhs: Self, cs: &mut CS) -> Self {
         match (self, rhs) {
             // Constant * Constant
@@ -150,6 +191,13 @@ impl Expression {
                 };
                 Expression::LinearCombination(vec![(output_var, Scalar::one())], output_assignment)
             }
+        }
+    }
+
+    fn to_r1cs_lc(&self) -> r1cs::LinearCombination {
+        match self {
+            Expression::Constant(a) => a.to_scalar().into(),
+            Expression::LinearCombination(terms, _) => r1cs::LinearCombination::from_iter(terms),
         }
     }
 }

@@ -57,28 +57,11 @@ impl Item {
         }
     }
 
-    // Downcasts to a portable type
-    pub fn to_portable(self) -> Result<PortableItem, VMError> {
+    // Downcasts to Contract type
+    pub fn to_contract(self) -> Result<Contract, VMError> {
         match self {
-            Item::Data(x) => Ok(PortableItem::Data(x)),
-            Item::Value(x) => Ok(PortableItem::Value(x)),
-            _ => Err(VMError::TypeNotPortable),
-        }
-    }
-
-    // Downcasts to Variable type
-    pub fn to_variable(self) -> Result<Variable, VMError> {
-        match self {
-            Item::Variable(v) => Ok(v),
-            _ => Err(VMError::TypeNotVariable),
-        }
-    }
-
-    // Downcasts to Expression type (Variable is NOT casted to Expression)
-    pub fn to_expression(self) -> Result<Expression, VMError> {
-        match self {
-            Item::Expression(expr) => Ok(expr),
-            _ => Err(VMError::TypeNotExpression),
+            Item::Contract(c) => Ok(c),
+            _ => Err(VMError::TypeNotContract),
         }
     }
 
@@ -98,11 +81,36 @@ impl Item {
         }
     }
 
-    // Downcasts to Contract type
-    pub fn to_contract(self) -> Result<Contract, VMError> {
+    // Downcasts to Variable type
+    pub fn to_variable(self) -> Result<Variable, VMError> {
         match self {
-            Item::Contract(c) => Ok(c),
-            _ => Err(VMError::TypeNotContract),
+            Item::Variable(v) => Ok(v),
+            _ => Err(VMError::TypeNotVariable),
+        }
+    }
+
+    // Downcasts to Expression type (Variable is NOT casted to Expression)
+    pub fn to_expression(self) -> Result<Expression, VMError> {
+        match self {
+            Item::Expression(expr) => Ok(expr),
+            _ => Err(VMError::TypeNotExpression),
+        }
+    }
+
+    // Downcasts to Constraint type
+    pub fn to_constraint(self) -> Result<Constraint, VMError> {
+        match self {
+            Item::Constraint(c) => Ok(c),
+            _ => Err(VMError::TypeNotConstraint),
+        }
+    }
+
+    // Downcasts to a portable type
+    pub fn to_portable(self) -> Result<PortableItem, VMError> {
+        match self {
+            Item::Data(x) => Ok(PortableItem::Data(x)),
+            Item::Value(x) => Ok(PortableItem::Value(x)),
+            _ => Err(VMError::TypeNotPortable),
         }
     }
 }
