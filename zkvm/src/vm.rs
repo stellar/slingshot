@@ -207,9 +207,9 @@ where
                 Instruction::Mul => self.mul()?,
                 Instruction::Eq => self.eq()?,
                 Instruction::Range(_) => unimplemented!(),
-                Instruction::And => unimplemented!(),
-                Instruction::Or => unimplemented!(),
-                Instruction::Verify => unimplemented!(),
+                Instruction::And => self.and()?,
+                Instruction::Or => self.or()?,
+                Instruction::Verify => self.verify()?,
                 Instruction::Blind => unimplemented!(),
                 Instruction::Reblind => unimplemented!(),
                 Instruction::Unblind => unimplemented!(),
@@ -314,6 +314,28 @@ where
         let expr1 = self.pop_item()?.to_expression()?;
         let constraint = Constraint::Eq(expr1, expr2);
         self.push_item(constraint);
+        Ok(())
+    }
+
+    fn and(&mut self) -> Result<(), VMError> {
+        let c2 = self.pop_item()?.to_constraint()?;
+        let c1 = self.pop_item()?.to_constraint()?;
+        let c3 = Constraint::And(Box::new(c1), Box::new(c2));
+        self.push_item(c3);
+        Ok(())
+    }
+
+    fn or(&mut self) -> Result<(), VMError> {
+        let c2 = self.pop_item()?.to_constraint()?;
+        let c1 = self.pop_item()?.to_constraint()?;
+        let c3 = Constraint::Or(Box::new(c1), Box::new(c2));
+        self.push_item(c3);
+        Ok(())
+    }
+
+    fn verify(&mut self) -> Result<(), VMError> {
+        let constraint = self.pop_item()?.to_constraint()?;
+        constraint.verify(self.delegate.cs())?;
         Ok(())
     }
 

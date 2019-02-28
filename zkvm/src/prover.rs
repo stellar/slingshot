@@ -1,7 +1,6 @@
 use bulletproofs::r1cs;
 use bulletproofs::{BulletproofGens, PedersenGens};
 use curve25519_dalek::ristretto::CompressedRistretto;
-use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
 use std::collections::VecDeque;
 
@@ -10,12 +9,12 @@ use crate::errors::VMError;
 use crate::ops::Instruction;
 use crate::point_ops::PointOp;
 use crate::predicate::Predicate;
-use crate::signature::Signature;
+use crate::signature::{Signature, VerificationKey};
 use crate::txlog::{TxID, TxLog};
 use crate::vm::{Delegate, Tx, TxHeader, VM};
 
 pub struct Prover<'a, 'b> {
-    signtx_keys: Vec<Scalar>,
+    signtx_keys: Vec<VerificationKey>,
     cs: r1cs::Prover<'a, 'b>,
 }
 
@@ -42,7 +41,7 @@ impl<'a, 'b> Delegate<r1cs::Prover<'a, 'b>> for Prover<'a, 'b> {
     }
 
     fn process_tx_signature(&mut self, pred: Predicate) -> Result<(), VMError> {
-        let k = pred.to_signing_key()?;
+        let k = pred.to_key()?;
         self.signtx_keys.push(k);
         Ok(())
     }
@@ -60,11 +59,15 @@ impl<'a, 'b> Delegate<r1cs::Prover<'a, 'b>> for Prover<'a, 'b> {
 }
 
 impl<'a, 'b> Prover<'a, 'b> {
-    pub fn build_tx<'g>(
+    pub fn build_tx<'g, F>(
         program: Vec<Instruction>,
         header: TxHeader,
         bp_gens: &'g BulletproofGens,
-    ) -> Result<(Tx, TxID, TxLog), VMError> {
+        sign_tx_fn: F,
+    ) -> Result<(Tx, TxID, TxLog), VMError>
+    where
+        F: FnOnce(&mut Transcript, &Vec<VerificationKey>) -> Signature,
+    {
         // Prepare the constraint system
         let mut r1cs_transcript = Transcript::new(b"ZkVM.r1cs");
         let pc_gens = PedersenGens::default();
@@ -90,9 +93,10 @@ impl<'a, 'b> Prover<'a, 'b> {
         let (txid, txlog) = vm.run()?;
 
         // Sign txid
+        // TBD: implement holistic Signer trait/interface for tx signing
         let mut signtx_transcript = Transcript::new(b"ZkVM.signtx");
         signtx_transcript.commit_bytes(b"txid", &txid.0);
-        let signature = Signature::sign_aggregated(&mut signtx_transcript, &prover.signtx_keys);
+        let signature = sign_tx_fn(&mut signtx_transcript, &prover.signtx_keys);
 
         // Generate the R1CS proof
         let proof = prover.cs.prove().map_err(|_| VMError::InvalidR1CSProof)?;

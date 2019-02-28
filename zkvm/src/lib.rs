@@ -23,7 +23,7 @@ pub use self::errors::VMError;
 pub use self::ops::{Instruction, Opcode, Program};
 pub use self::predicate::Predicate;
 pub use self::prover::Prover;
-pub use self::signature::VerificationKey;
+pub use self::signature::{Signature, VerificationKey};
 pub use self::transcript::TranscriptProtocol;
 pub use self::txlog::{Entry, TxID, UTXO};
 pub use self::types::{Data, Item, Value, WideValue};

@@ -6,11 +6,10 @@ _Cloak_ is a protocol for confidential assets based on the [Bulletproofs](https:
 * [Future directions](#future-directions)
 * [Definitions](#definitions)
     * [Scalar](#scalar)
+    * [Signed integer](#signed-integer)
     * [Value](#value)
     * [Quantity](#quantity)
     * [Flavor](#flavor)
-    * [Issuer](#issuer)
-    * [Tag](#tag)
     * [Gadget](#gadget)
     * [Transaction](#transaction)
     * [K-scalar shuffle](#k-scalar-shuffle)
@@ -180,7 +179,7 @@ For K = 1:
 
 ### K-value shuffle
 
-Represents a permutation of tuples ([quantity](#quantity), [issuer](#issuer), [tag](#tag)).
+Represents a permutation of tuples ([quantity](#quantity), [flavor](#flavor)).
 
 Each tuple of [scalars](#scalar) `(q, f)` is combined into a single scalar using a free variable `w`:
 
@@ -203,16 +202,16 @@ It is implemented as allocation of two variables and two constraints enforcing z
 In case `M == N`, no padding is required as all shuffles have the same number of inputs and outputs.
 
 In case `M > N` (more inputs than outputs), the padding is applied to the _outputs_ to the middle [shuffle](#k-value-shuffle):
-prover sorts unnecessary zero [values](#values) coming from [M-merge](#k-merge) to the end of the outputs list,
+prover sorts unnecessary zero [values](#value) coming from [M-merge](#k-merge) to the end of the outputs list,
 and verifier constraints them to all-zero tuples.
 
 In case `N < M` (less inputs than outputs), the padding is applied to the _inputs_ to the middle [shuffle](#k-value-shuffle):
-prover adds required zero [values](#values) in the clear to the end of the inputs list,
+prover adds required zero [values](#value) in the clear to the end of the inputs list,
 and secretly sorts them in required position for the subsequent [splits](#k-split).
 
 ### Mix
 
-A _mix_ gadget proves that two [values](#values) either remain _unchanged_,
+A _mix_ gadget proves that two [values](#value) either remain _unchanged_,
 or are _redistributed_ with one value being zero.
     
     Mix(A,B,C,D):

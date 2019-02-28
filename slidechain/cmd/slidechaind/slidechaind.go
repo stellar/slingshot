@@ -8,15 +8,8 @@ import (
 	"net"
 	"net/http"
 
-	"github.com/chain/txvm/protocol"
-	"github.com/chain/txvm/protocol/bc"
 	"github.com/interstellar/slingshot/slidechain"
 	_ "github.com/mattn/go-sqlite3"
-)
-
-var (
-	initialBlock *bc.Block
-	chain        *protocol.Chain
 )
 
 func main() {
@@ -51,6 +44,6 @@ func main() {
 	http.Handle("/submit", c.S)
 	http.HandleFunc("/get", c.S.Get)
 	http.HandleFunc("/account", c.Account)
-	http.HandleFunc("/record", c.RecordPegIn)
+	http.HandleFunc("/prepegin", c.DoPrePegIn)
 	http.Serve(listener, nil)
 }

@@ -4,6 +4,10 @@ branches:
 matrix:
   fast_finish: true
   include:
+  - language: ruby
+    ruby: 2.3
+    script:
+      - ruby check-markdown-links.rb
   - language: go
     go: 1.11
     install: true
