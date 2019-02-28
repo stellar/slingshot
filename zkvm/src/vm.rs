@@ -393,7 +393,7 @@ where
         let (qty_point, _) = self.attach_variable(qty)?;
 
         self.delegate.verify_point_op(|| {
-            let flv_scalar = Value::issue_flavor(&predicate, &metadata);
+            let flv_scalar = Value::issue_flavor(&predicate, metadata);
             // flv_point == flavor·B    ->   0 == -flv_point + flv_scalar·B
             PointOp {
                 primary: Some(flv_scalar),

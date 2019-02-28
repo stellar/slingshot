@@ -32,7 +32,7 @@ impl ProgramHelper for Program {
             .var() // stack: qty-var
             .push(Commitment::unblinded(flv)) // stack: qty-var, flv
             .var() // stack: qty-var, flv-var
-            .push(Data::empty()) // stack: qty-var, flv-var, data
+            .push(Data::default()) // stack: qty-var, flv-var, data
             .push(issuance_pred) // stack: qty-var, flv-var, data, pred
             .issue() // stack: issue-contract
             .push(nonce_pred) // stack: issue-contract, pred
@@ -96,7 +96,7 @@ fn issuance_helper() -> (Scalar, Predicate, Scalar) {
     let gens = PedersenGens::default();
     let scalar = Scalar::from(100u64);
     let predicate = Predicate::Key((scalar * gens.B).compress().into());
-    let flavor = Value::issue_flavor(&predicate, &Data::empty());
+    let flavor = Value::issue_flavor(&predicate, Data::default());
     (scalar, predicate, flavor)
 }
 

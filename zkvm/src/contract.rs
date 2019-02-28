@@ -148,9 +148,8 @@ impl Output {
                 // Data = 0x00 || LE32(len) || <bytes>
                 FrozenItem::Data(d) => {
                     encoding::write_u8(DATA_TYPE, buf);
-                    let bytes = d.to_bytes();
-                    encoding::write_u32(bytes.len() as u32, buf);
-                    encoding::write_bytes(&bytes, buf);
+                    encoding::write_u32(d.serialized_length() as u32, buf);
+                    d.encode(buf);
                 }
                 // Value = 0x01 || <32 bytes> || <32 bytes>
                 FrozenItem::Value(v) => {
