@@ -19,7 +19,7 @@ and later _export_ them back to Stellar.
 
 ### [ZkVM](zkvm)
 
-An evolution of [TxVM](http://github.com/chain/txvm) with **cloaked assets** and **zero-knowledge smart contracts**.
+An evolution of [TxVM](https://github.com/chain/txvm) with **cloaked assets** and **zero-knowledge smart contracts**.
 
 * [README](zkvm/README.md)
 * [Specification](zkvm/docs/zkvm-spec.md)
