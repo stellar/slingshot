@@ -2,6 +2,7 @@ use bulletproofs::r1cs;
 use bulletproofs::r1cs::R1CSProof;
 use curve25519_dalek::ristretto::CompressedRistretto;
 use curve25519_dalek::scalar::Scalar;
+use merlin::Transcript;
 use spacesuit;
 use spacesuit::SignedInteger;
 use std::iter::FromIterator;
@@ -15,8 +16,10 @@ use crate::point_ops::PointOp;
 use crate::predicate::Predicate;
 use crate::scalar_witness::ScalarWitness;
 use crate::signature::*;
+use crate::transcript::TranscriptProtocol;
 use crate::txlog::{Entry, TxID, TxLog};
 use crate::types::*;
+use crate::verifier::VerifierRun;
 
 /// Current tx version determines which extension opcodes are treated as noops (see VM.extension flag).
 pub const CURRENT_VERSION: u64 = 1;
@@ -230,7 +233,7 @@ where
                 Instruction::Call => unimplemented!(),
                 Instruction::Left => self.left()?,
                 Instruction::Right => self.right()?,
-                Instruction::Delegate => unimplemented!(),
+                Instruction::Delegate => self.delegate()?,
                 Instruction::Ext(opcode) => self.ext(opcode)?,
             }
             return Ok(true);
@@ -565,6 +568,29 @@ where
         self.left_or_right(|contract, _, right| {
             contract.predicate = right;
         })
+    }
+
+    fn delegate(&mut self) -> Result<(), VMError> {
+        let sig = self.pop_item()?.to_data()?.to_bytes();
+        let prog = self.pop_item()?.to_data()?.to_bytes();
+        let contract = self.pop_item()?.to_contract()?;
+
+        let R = SliceReader::parse(&sig[0..32], |r| r.read_point())?;
+        let s = SliceReader::parse(&sig[32..64], |r| r.read_scalar())?;
+        let verification_key = contract.predicate.to_key()?;
+
+        let mut t = Transcript::new(b"ZkVM.delegate");
+        t.commit_bytes(b"prog", &prog);
+
+        self.delegate
+            .verify_point_op(|| Signature { R: R, s: s }.verify_single(&mut t, verification_key))?;
+
+        // TODO:
+        // Save current program and offset in the program stack
+        //Set new program as current, with offset 0
+        // run program
+
+        Ok(())
     }
 
     fn ext(&mut self, _: u8) -> Result<(), VMError> {
