@@ -203,7 +203,7 @@ impl Data {
         }
     }
 
-    /// Encodes the data item to a byte buffer.
+    /// Encodes the data item to an opaque bytestring.
     pub fn encode(&self, buf: &mut Vec<u8>) {
         match self {
             Data::Opaque(x) => buf.extend_from_slice(x),
