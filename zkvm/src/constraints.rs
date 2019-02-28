@@ -47,7 +47,6 @@ pub enum Constraint {
     /// Disjunction of two constraints: at least one must evaluate to true.
     /// Created by `or` instruction.
     Or(Box<Constraint>, Box<Constraint>),
-
     // TBD: add `Not(Box<Constraint>)`.
 
     // no witness needed as it's normally true/false and we derive it on the fly during processing.
