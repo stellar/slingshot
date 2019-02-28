@@ -27,7 +27,7 @@ import (
 )
 
 type pegOut struct {
-	Txid     []byte      `json:"txid,omitempty"`
+	TxID     []byte      `json:"txid,omitempty"`
 	AssetXDR []byte      `json:"asset"`
 	TempAddr string      `json:"temp"`
 	Seqnum   int64       `json:"seqnum"`
@@ -47,36 +47,42 @@ const (
 	pegOutFail
 )
 
+const baseFee = 100
+
 const (
-	baseFee                = 100
 	custodianSigCheckerFmt = `txid x"%x" get 0 checksig verify`
-	exportContract1Fmt     = `
-	              #  con stack                arg stack              log      notes
-	              #  ---------                ---------              ---      -----
-	              #                           json, value, {exporter}           
+
+	// TODO(debnil): Add a log statement in this contract, and check for
+	// its existence, with appropriate seed, in the watchExports goroutine.
+	// This more robustly checks for the export tx.
+	exportContract1Fmt = `
+	              #  con stack                arg stack              log
+	              #  ---------                ---------              ---
+	              #                           json, value, {exporter}       
 	get get get   #  {exporter}, value, json                                  
 	x'%x' output  #                                                  {O,...}
 `
 
+	// TODO(debnil): Modify this contract to produce a zeroval from the value it contains,
+	// so the caller does not have to do a new `nonce`.
 	exportContract2Fmt = `
-	                     #  con stack                          arg stack                 log                 notes
-	                     #  ---------                          ---------                 ---                 -----
-	                     #  {exporter}, value, json            selector                                      
-	get                  #  {exporter}, value, json, selector                                                
-	jumpif:$doretire     #                                                                                   
-	                     #  {exporter}, value, json                                                          
-	"" put               #  {exporter}, value, json            ""                                            
-	drop                 #  {exporter}, value                                                                
-	put put 1 put        #                                     "", value, {exporter}, 1                      
-	x'%x' contract call  #                                                               {'L',...}{'O',...}  
+	                     #  con stack                          arg stack                 log
+	                     #  ---------                          ---------                 ---
+	                     #  {exporter}, value, json            selector                                    
+	get                  #  {exporter}, value, json, selector                                              
+	jumpif:$doretire     #                                                                                 
+	                     #  {exporter}, value, json                                                        
+	"" put               #  {exporter}, value, json            ""                                          
+	drop                 #  {exporter}, value                                                              
+	put put 1 put        #                                     "", value, {exporter}, 1                    
+	x'%x' contract call  #                                                               {'L',...}{'O',...}
 	jump:$checksig       #                                                                                   
 	                     #                                                                                   
 	$doretire            #                                                                                   
 	                     #  {exporter}, value, json                                                          
 	put put drop         #                                     json, value                                   
 	x'%x' contract call  #                                                                                   
-	                     #                                                                                   
-	                     #                                                                                   
+	                     #                                                                                                        
 	$checksig            #                                                                                   
 	[%s] yield           #                                     sigchecker                                    
                                                                                    
@@ -162,7 +168,7 @@ func (c *Custodian) pegOutFromExports(ctx context.Context, pegouts chan<- pegOut
 				if herr, ok := errors.Root(err).(*horizon.Error); ok {
 					resultCodes, err := herr.ResultCodes()
 					if err != nil {
-						log.Fatalf("getting error codes from failed submission of tx %s", txid)
+						log.Fatalf("getting error codes from failed submission of tx %x", txid)
 					}
 					if resultCodes.TransactionCode == xdr.TransactionResultCodeTxBadSeq.String() {
 						peggedOut = pegOutRetry
@@ -175,15 +181,15 @@ func (c *Custodian) pegOutFromExports(ctx context.Context, pegouts chan<- pegOut
 			}
 			numAffected, err := result.RowsAffected()
 			if err != nil {
-				log.Fatalf("checking rows affected by update exports query for txid %s: %s", txid, err)
+				log.Fatalf("checking rows affected by update exports query for txid %x: %s", txid, err)
 			}
 			if numAffected != 1 {
-				log.Fatalf("got %d rows affected by update exports query for txid %s, want 1", numAffected, txid)
+				log.Fatalf("got %d rows affected by update exports query for txid %x, want 1", numAffected, txid)
 			}
 			// Send peg-out info to goroutine for successes and non-retriable failures.
 			if peggedOut == pegOutOK || peggedOut == pegOutFail {
 				pegouts <- pegOut{
-					Txid:     txid,
+					TxID:     txid,
 					AssetXDR: assetXDRs[i],
 					TempAddr: tempAddrs[i],
 					Seqnum:   seqnums[i],
@@ -385,22 +391,21 @@ func BuildExportTx(ctx context.Context, asset xdr.Asset, exportAmt, inputAmt int
 	b.PushdataInt64(exportAmt).Op(op.Split)                                                                              // con stack: sigcheck, changeval, retireval
 	b.PushdataInt64(1).Op(op.Roll)                                                                                       // con stack: sigcheck, retireval, changeval
 	if inputAmt != exportAmt {
-		b.PushdataBytes([]byte("")).Op(op.Put)                                   // con stack: sigcheck, retireval, changeval; arg stack: refdata
-		b.Op(op.Put)                                                             // con stack: sigcheck, retireval; arg stack: refdata, changeval
-		b.PushdataBytes(pubkey).PushdataInt64(1).Op(op.Tuple).Op(op.Put)         // con stack: sigcheck, retireval; arg stack: refdata, changeval, {pubkey}
-		b.PushdataInt64(1).Op(op.Put)                                            // con stack: sigcheck, retireval; arg stack: refdata, changeval, {pubkey}, 1
-		b.PushdataBytes(standard.PayToMultisigProg1).Op(op.Contract).Op(op.Call) // con stack: sigcheck, retireval
+		b.PushdataBytes(nil).Op(op.Put)                                                    // con stack: sigcheck, retireval, changeval; arg stack: refdata
+		b.Op(op.Put)                                                                       // con stack: sigcheck, retireval; arg stack: refdata, changeval
+		b.Tuple(func(tup *txvmutil.TupleBuilder) { tup.PushdataBytes(pubkey) }).Op(op.Put) // con stack: sigcheck, retireval; arg stack: refdata, changeval, {pubkey}
+		b.PushdataInt64(1).Op(op.Put)                                                      // con stack: sigcheck, retireval; arg stack: refdata, changeval, {pubkey}, 1
+		b.PushdataBytes(standard.PayToMultisigProg1).Op(op.Contract).Op(op.Call)           // con stack: sigcheck, retireval
 	} else {
 		b.Op(op.Drop) // con stack: sigcheck, retireval
 	}
 	// con stack: sigcheck, retireval
-	b.PushdataBytes(refdata).Op(op.Put)                                     // con stack: sigcheck, retireval; arg stack: json
-	b.PushdataInt64(0).Op(op.Split).PushdataInt64(1).Op(op.Roll).Op(op.Put) // con stack: sigcheck, zeroval; arg stack: json, retireval
-	b.Tuple(func(tup *txvmutil.TupleBuilder) { tup.PushdataBytes(pubkey) }) // con stack: sigcheck, zeroval; arg stack: json, retireval, {pubkey}
-	b.Op(op.Put)                                                            // con stack: sigchecker, zeroval; arg stack: json, retireval, {pubkey}
-	b.PushdataBytes(exportContract1Prog)                                    // con stack: sigchecker, zeroval, exportContract; arg stack: json, retireval, {pubkey}
-	b.Op(op.Contract).Op(op.Call)                                           // con stack: sigchecker, zeroval
-	b.Op(op.Finalize)                                                       // con stack: sigchecker
+	b.PushdataBytes(refdata).Op(op.Put)                                                // con stack: sigcheck, retireval; arg stack: json
+	b.PushdataInt64(0).Op(op.Split).PushdataInt64(1).Op(op.Roll).Op(op.Put)            // con stack: sigcheck, zeroval; arg stack: json, retireval
+	b.Tuple(func(tup *txvmutil.TupleBuilder) { tup.PushdataBytes(pubkey) }).Op(op.Put) // con stack: sigcheck, zeroval; arg stack: json, retireval, {pubkey}
+	b.PushdataBytes(exportContract1Prog)                                               // con stack: sigchecker, zeroval, exportContract; arg stack: json, retireval, {pubkey}
+	b.Op(op.Contract).Op(op.Call)                                                      // con stack: sigchecker, zeroval
+	b.Op(op.Finalize)                                                                  // con stack: sigchecker
 	prog1 := b.Build()
 	vm, err := txvm.Validate(prog1, 3, math.MaxInt64, txvm.StopAfterFinalize)
 	if err != nil {
@@ -414,6 +419,11 @@ func BuildExportTx(ctx context.Context, asset xdr.Asset, exportAmt, inputAmt int
 	b.Op(op.Call)
 
 	prog2 := b.Build()
-	tx, err := bc.NewTx(prog2, 3, math.MaxInt64)
-	return tx, errors.Wrap(err, "making export tx")
+	var runlimit int64
+	tx, err := bc.NewTx(prog2, 3, math.MaxInt64, txvm.GetRunlimit(&runlimit))
+	if err != nil {
+		return nil, errors.Wrap(err, "making export tx")
+	}
+	tx.Runlimit = math.MaxInt64 - runlimit
+	return tx, nil
 }
