@@ -382,7 +382,7 @@ where
         Ok(())
     }
 
-    /// _pred data qty flv_ **issue** → _contract_
+    /// _qty flv data pred_ **issue** → _contract_
     fn issue(&mut self) -> Result<(), VMError> {
         let predicate = self.pop_item()?.to_data()?.to_predicate()?;
         let metadata = self.pop_item()?.to_data()?;
