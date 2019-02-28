@@ -32,7 +32,8 @@ impl ProgramHelper for Program {
             .var() // stack: qty-var
             .push(Commitment::unblinded(flv)) // stack: qty-var, flv
             .var() // stack: qty-var, flv-var
-            .push(issuance_pred) // stack: qty-var, flv-var, pred
+            .push(Data::empty()) // stack: qty-var, flv-var, data
+            .push(issuance_pred) // stack: qty-var, flv-var, data, pred
             .issue() // stack: issue-contract
             .push(nonce_pred) // stack: issue-contract, pred
             .nonce() // stack: issue-contract, nonce-contract
@@ -95,7 +96,7 @@ fn issuance_helper() -> (Scalar, Predicate, Scalar) {
     let gens = PedersenGens::default();
     let scalar = Scalar::from(100u64);
     let predicate = Predicate::Key((scalar * gens.B).compress().into());
-    let flavor = Value::issue_flavor(&predicate);
+    let flavor = Value::issue_flavor(&predicate, &Data::empty());
     (scalar, predicate, flavor)
 }
 
@@ -171,7 +172,7 @@ fn issue() {
         Ok(txid) => {
             // Check txid
             assert_eq!(
-                "60ab584440f5feec0b1db7a38ab4aee33d3b017ddaeedf777a48d51fbecca249",
+                "5245c74137fec1e97159a45e737c4eb8e703fb0f1d151e842351e2ab834763be",
                 hex::encode(txid.0)
             );
         }

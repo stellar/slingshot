@@ -382,8 +382,10 @@ where
         Ok(())
     }
 
+    /// _pred data qty flv_ **issue** → _contract_
     fn issue(&mut self) -> Result<(), VMError> {
         let predicate = self.pop_item()?.to_data()?.to_predicate()?;
+        let metadata = self.pop_item()?.to_data()?;
         let flv = self.pop_item()?.to_variable()?;
         let qty = self.pop_item()?.to_variable()?;
 
@@ -391,7 +393,7 @@ where
         let (qty_point, _) = self.attach_variable(qty)?;
 
         self.delegate.verify_point_op(|| {
-            let flv_scalar = Value::issue_flavor(&predicate);
+            let flv_scalar = Value::issue_flavor(&predicate, &metadata);
             // flv_point == flavor·B    ->   0 == -flv_point + flv_scalar·B
             PointOp {
                 primary: Some(flv_scalar),

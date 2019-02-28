@@ -177,13 +177,19 @@ impl Data {
             Data::Input(input) => input.encode(buf),
         };
     }
+
+    /// Returns an empty Data type.
+    pub fn empty() -> Self {
+        Data::Opaque([].to_vec())
+    }
 }
 
 impl Value {
     /// Computes a flavor as defined by the `issue` instruction from a predicate.
-    pub fn issue_flavor(predicate: &Predicate) -> Scalar {
+    pub fn issue_flavor(predicate: &Predicate, metadata: &Data) -> Scalar {
         let mut t = Transcript::new(b"ZkVM.issue");
         t.commit_bytes(b"predicate", predicate.to_point().as_bytes());
+        t.commit_bytes(b"metadata", &metadata.to_bytes());
         t.challenge_scalar(b"flavor")
     }
 }

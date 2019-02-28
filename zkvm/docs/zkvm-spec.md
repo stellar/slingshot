@@ -1445,16 +1445,18 @@ Fails if:
 
 #### issue
 
-_qty flv pred_ **issue** → _contract_
+_qty metadata flv pred_ **issue** → _contract_
 
 1. Pops [point](#point) `pred`.
-2. Pops [variable](#variable-type) `flv`; if the variable is detached, attaches it.
-3. Pops [variable](#variable-type) `qty`; if the variable is detached, attaches it.
-4. Creates a [value](#value-type) with variables `qty` and `flv` for quantity and flavor, respectively. 
-5. Computes the _flavor_ scalar defined by the [predicate](#predicate) `pred` using the following [transcript-based](#transcript) protocol:
+2. Pops [data](#data) `metadata`.
+3. Pops [variable](#variable-type) `flv`; if the variable is detached, attaches it.
+4. Pops [variable](#variable-type) `qty`; if the variable is detached, attaches it.
+5. Creates a [value](#value-type) with variables `qty` and `flv` for quantity and flavor, respectively. 
+6. Computes the _flavor_ scalar defined by the [predicate](#predicate) `pred` using the following [transcript-based](#transcript) protocol:
     ```
     T = Transcript("ZkVM.issue")
     T.commit("predicate", pred)
+    T.commit("metadata", metadata)
     flavor = T.challenge_scalar("flavor")
     ```
 6. Checks that the `flv` has unblinded commitment to `flavor` by [deferring the point operation](#deferred-point-operations):
