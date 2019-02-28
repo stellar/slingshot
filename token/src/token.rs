@@ -1,7 +1,10 @@
 use bulletproofs::{BulletproofGens, PedersenGens};
 use curve25519_dalek::ristretto::CompressedRistretto;
 use curve25519_dalek::scalar::Scalar;
-use zkvm::*;
+use zkvm::{
+    Commitment, Data, Entry, Input, Instruction, Predicate, Program, Prover, Signature, Tx,
+    TxHeader, TxID, TxLog, VMError, Value, VerificationKey, Verifier,
+};
 
 /// Represents a ZkVM Token with unique flavor and embedded
 /// metadata protected by a user-supplied Predicate.
@@ -37,7 +40,7 @@ impl Token {
 
     /// Returns program that issues specified quantity of Token,
     /// outputting it to the destination Predicate.
-    pub fn issue_and_spend<'a>(
+    pub fn issue_to<'a>(
         program: &'a mut Program,
         token: &Token,
         qty: u64,
@@ -75,7 +78,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn issue_and_spend() {
+    fn issue_to() {
         let (tx, _, txlog) = {
             let issue_key = Scalar::from(1u64);
             let dest_key = Scalar::from(2u64);
@@ -86,7 +89,7 @@ mod tests {
             );
             let dest = Predicate::Key(VerificationKey::from_secret(&dest_key));
             let program = Program::build(|p| {
-                Token::issue_and_spend(p, &usd, 10u64, &dest)
+                Token::issue_to(p, &usd, 10u64, &dest)
                     .push(Predicate::Key(VerificationKey::from_secret(&nonce_key)))
                     .nonce()
                     .sign_tx()
@@ -121,7 +124,7 @@ mod tests {
             );
             let dest = Predicate::Key(VerificationKey::from_secret(&dest_key));
             let issue_program = Program::build(|p| {
-                Token::issue_and_spend(p, &usd, 10u64, &dest)
+                Token::issue_to(p, &usd, 10u64, &dest)
                     .push(Predicate::Key(VerificationKey::from_secret(&nonce_key)))
                     .nonce()
                     .sign_tx()
