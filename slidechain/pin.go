@@ -2,11 +2,9 @@ package slidechain
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"log"
 
-	"github.com/bobg/multichan"
 	"github.com/bobg/sqlutil"
 	"github.com/chain/txvm/errors"
 	"github.com/chain/txvm/protocol/bc"
@@ -19,15 +17,15 @@ func (c *Custodian) RunPin(ctx context.Context, name string, f func(context.Cont
 
 	r := c.S.w.Reader()
 
-	_, err := c.DB.ExecContext(`INSERT OR IGNORE INTO pin (name, height) VALUES ($1, 0)`, name)
+	_, err := c.DB.ExecContext(`INSERT OR IGNORE INTO pins (name, height) VALUES ($1, 0)`, name)
 	if err != nil {
-		// xxx
+		log.Fatalf("creating pin %s: %s", name, err)
 	}
 
 	var lastHeight uint64
-	err = c.DB.QueryRowContext(ctx, `SELECT height FROM pin WHERE name = $1`, name).Scan(&lastHeight)
+	err = c.DB.QueryRowContext(ctx, `SELECT height FROM pins WHERE name = $1`, name).Scan(&lastHeight)
 	if err != nil {
-		// xxx
+		log.Fatalf("getting height of pin %s: %s", name, err)
 	}
 
 	// Start processing after lastHeight.
@@ -43,7 +41,7 @@ func (c *Custodian) RunPin(ctx context.Context, name string, f func(context.Cont
 		return nil
 	})
 	if err != nil {
-		// xxx
+		log.Fatalf("processing backlog for pin %s: %s", name, err)
 	}
 
 	processBlock := func(block *bc.Block) error {
@@ -54,7 +52,7 @@ func (c *Custodian) RunPin(ctx context.Context, name string, f func(context.Cont
 		if err != nil {
 			return errors.Wrapf(err, "running pin %s on block %d", name, block.Height)
 		}
-		_, err = c.DB.ExecContext(ctx, `UPDATE pin SET height = $1 WHERE name = $2`, block.Height, name)
+		_, err = c.DB.ExecContext(ctx, `UPDATE pins SET height = $1 WHERE name = $2`, block.Height, name)
 		if err != nil {
 			return errors.Wrapf(err, "updating pin %s after block %d", name, block.Height)
 		}
@@ -64,7 +62,7 @@ func (c *Custodian) RunPin(ctx context.Context, name string, f func(context.Cont
 	for _, block := range blocks {
 		err = processBlock(block)
 		if err != nil {
-			// xxx
+			log.Fatalf("processing block %d: %s", block.Height, err)
 		}
 	}
 
@@ -74,7 +72,7 @@ func (c *Custodian) RunPin(ctx context.Context, name string, f func(context.Cont
 			if ctx.Err() != nil {
 				return
 			}
-			// xxx
+			log.Fatalf("error waiting for block %d", lastHeight+1)
 		}
 		block := x.(*bc.Block)
 		if block.Height <= lastHeight {
@@ -82,7 +80,7 @@ func (c *Custodian) RunPin(ctx context.Context, name string, f func(context.Cont
 		}
 		err = processBlock(block)
 		if err != nil {
-			// xxx
+			log.Fatalf("processing block %d: %s", block.Height, err)
 		}
 	}
 }
