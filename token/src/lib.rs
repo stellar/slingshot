@@ -1,1 +1,1 @@
-mod treasury;
+mod token;
