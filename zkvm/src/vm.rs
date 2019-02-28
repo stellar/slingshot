@@ -51,17 +51,17 @@ pub struct Tx {
 
 /// Represents a verified transaction: a txid and a list of state updates.
 pub struct VerifiedTx {
-    /// Header metadata
+    /// Transaction header
     pub header: TxHeader,
 
     /// Transaction ID
     pub id: TxID,
 
-    // List of inputs, outputs and nonces to be inserted/deleted in the blockchain state.
+    /// Transaction log: a list of changes to the blockchain state (UTXOs to delete/insert, etc.)
     pub log: TxLog,
 }
 
-pub struct VM<'d, CS, D>
+pub(crate) struct VM<'d, CS, D>
 where
     CS: r1cs::ConstraintSystem,
     D: Delegate<CS>,
@@ -88,7 +88,7 @@ where
     variable_commitments: Vec<VariableCommitment>,
 }
 
-pub trait Delegate<CS: r1cs::ConstraintSystem> {
+pub(crate) trait Delegate<CS: r1cs::ConstraintSystem> {
     type RunType;
 
     /// Adds a Commitment to the underlying constraint system, producing a high-level variable
