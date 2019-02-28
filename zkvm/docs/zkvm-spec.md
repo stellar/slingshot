@@ -1739,9 +1739,9 @@ _contract prog sig_ **delegate** → _results..._
     R = sig[ 0..32]
     s = sig[32..64]
     ```
-5. Performs the [signature protocol](#aggregated-signature) using the transcript `T`, secret key `dlog(contract.predicate)` and the values `R` and `s`:
+5. Performs the [signature protocol](#aggregated-signature) using the transcript `T`, public key `contract.predicate` and the values `R` and `s`:
     ```
-    (s = dlog(r) + e·dlog(P))
+    (s = dlog(R) + e·dlog(P))
     s·B  ==  R + e·P
     ```
 6. Adds the statement to the list of [deferred point operations](#deferred-point-operations).
