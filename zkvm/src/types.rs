@@ -186,7 +186,7 @@ impl Data {
 
 impl Default for Data {
     fn default() -> Self {
-        Data::Opaque([].to_vec())
+        Data::Opaque(Vec::new())
     }
 }
 
