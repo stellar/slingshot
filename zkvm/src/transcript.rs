@@ -4,6 +4,8 @@ use curve25519_dalek::ristretto::CompressedRistretto;
 use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
 
+/// Extension trait to the Merlin transcript API that allows committing scalars and points and
+/// generating challenges as scalars.
 pub trait TranscriptProtocol {
     /// Commit a `scalar` with the given `label`.
     fn commit_scalar(&mut self, label: &'static [u8], scalar: &Scalar);

@@ -4,10 +4,12 @@ use merlin::Transcript;
 use crate::transcript::TranscriptProtocol;
 use crate::vm::TxHeader;
 
+/// Transaction log. `TxLog` is a type alias for `Vec<Entry>`.
 pub type TxLog = Vec<Entry>;
 
 /// Entry in a transaction log
 #[derive(Clone, PartialEq, Debug)]
+#[allow(missing_docs)]
 pub enum Entry {
     Header(TxHeader),
     Issue(CompressedRistretto, CompressedRistretto),
