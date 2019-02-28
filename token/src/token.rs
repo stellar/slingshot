@@ -80,7 +80,7 @@ impl Token {
         )
     }
 
-    // TBD: do we want retire to take some utxo that we import and
+    // TBD: do we want retire to input some value to the stack for it to
     // then retire? or to assume that there's already the appropriate
     // value on the stack and just add the retire instruction.
     pub fn retire(&self, program: Program) {
