@@ -1448,7 +1448,7 @@ Fails if:
 _qty flv metadata pred_ **issue** → _contract_
 
 1. Pops [point](#point) `pred`.
-2. Pops [data](#data) `metadata`.
+2. Pops [data](#data-type) `metadata`.
 3. Pops [variable](#variable-type) `flv`; if the variable is detached, attaches it.
 4. Pops [variable](#variable-type) `qty`; if the variable is detached, attaches it.
 5. Creates a [value](#value-type) with variables `qty` and `flv` for quantity and flavor, respectively. 
