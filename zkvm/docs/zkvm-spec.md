@@ -1234,7 +1234,7 @@ Fails if `P` is not a valid [point](#point).
 1. Allocates a low-level variable in the [constraint system](#constraint-system) and wraps it in the [expression](#expression-type) with weight 1.
 2. Pushes the resulting expression to the stack.
 
-This is different from [`var`](#var) in that the variable is not represented by an individual commitment and therefore can be chosen freely when the transaction is formed.
+This is different from [`var`](#var): the variable created by `alloc` is _not_ represented by an individual Pedersen commitment and therefore can be chosen freely when the transaction is constructed.
 
 
 #### mintime
