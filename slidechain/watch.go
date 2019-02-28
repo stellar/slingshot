@@ -121,9 +121,6 @@ func (c *Custodian) watchExports(ctx context.Context) {
 			// Confirm that its input, log, and output entries are as expected.
 			// If so, look for a specially formatted log ("L") entry
 			// that specifies the Stellar asset code to peg out and the Stellar recipient account ID.
-			log.Print("PRINTING TX LOG AT TOP OF WATCHEXPORTS")
-			log.Print(tx.Log)
-			log.Printf("%x", exportContract1Seed)
 			if len(tx.Log) != 4 && len(tx.Log) != 6 {
 				continue
 			}
@@ -140,7 +137,6 @@ func (c *Custodian) watchExports(ctx context.Context) {
 			}
 
 			logItem := tx.Log[1]
-			log.Printf("%x", logItem[1].(txvm.Bytes))
 			var info pegOut
 			err := json.Unmarshal(logItem[2].(txvm.Bytes), &info)
 			if err != nil {
