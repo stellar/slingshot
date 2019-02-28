@@ -1138,7 +1138,7 @@ Code | Instruction                | Stack diagram                              |
 0x14 | [`unblind`](#unblind)      |        _v V expr_ → _var_                  | Modifies [CS](#constraint-system), [Defers point ops](#deferred-point-operations)
  |                                |                                            |
  |     [**Values**](#value-instructions)              |                        |
-0x15 | [`issue`](#issue)          |    _qty flv data pred_ → _contract_             | Modifies [CS](#constraint-system), [tx log](#transaction-log), [defers point ops](#deferred-point-operations)
+0x15 | [`issue`](#issue)          |    _qty flv data pred_ → _contract_        | Modifies [CS](#constraint-system), [tx log](#transaction-log), [defers point ops](#deferred-point-operations)
 0x16 | [`borrow`](#borrow)        |         _qty flv_ → _–V +V_                | Modifies [CS](#constraint-system)
 0x17 | [`retire`](#retire)        |           _value_ → ø                      | Modifies [CS](#constraint-system), [tx log](#transaction-log)
 0x18 | [`qty`](#qty)              |           _value_ → _value qtyvar_         |
