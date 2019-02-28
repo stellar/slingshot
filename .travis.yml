@@ -55,7 +55,7 @@ matrix:
     before_cache:
       - rm -rf /home/travis/.cargo/registry
     before_script:
-    - cd treasury
+    - cd token
     - rustup component add rustfmt-preview
     script:
     - cargo fmt --all -- --check
