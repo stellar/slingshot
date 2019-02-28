@@ -1,5 +1,5 @@
 [package]
-name = "treasury"
+name = "token"
 version = "0.1.0"
 authors = ["Vicki Niu <vicki.niu@gmail.com>"]
 edition = "2018"
