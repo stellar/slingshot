@@ -2,7 +2,7 @@
 require 'open-uri'
 require 'pathname'
 require 'pp'
-CHECK_HTTP_LINKS = !!ENV["CHECK_HTTP_LINKS"]
+DO_NOT_CHECK_HTTP_LINKS = !!ENV["DO_NOT_CHECK_HTTP_LINKS"]
 
 # 1. Get all links
 # 2. For each link, check if it's good:
@@ -63,14 +63,9 @@ def check_links(file, links, dataset = {})
         $check_links_failed = true
       end
     elsif ref =~ %r{^https?://}
-      if !cache[ref]
-        if !check_url(ref)
-          $stderr.puts "#{file}:#{lineno}: external file does not load: [#{name}](#{ref})"
-          $check_links_failed = true
-          cache[ref] = "failed"
-        else
-          cache[ref] = "ok"
-        end
+      if !check_url(ref, cache)
+        $stderr.puts "#{file}:#{lineno}: external file does not load: [#{name}](#{ref})"
+        $check_links_failed = true
       end
     else # cross-file link
       ref = ref.sub(%r{^\./},"")
@@ -87,7 +82,7 @@ def check_links(file, links, dataset = {})
           $check_links_failed = true
         end
       else
-        if !anchor && check_url(linked_fn)
+        if !anchor && check_url(linked_fn, cache)
           # the reference is fine: the non-markdown file exists somewhere and we link to it as a whole
         else
           $stderr.puts "#{file}:#{lineno}: referenced file does not exists: [#{name}](#{ref}) (expanded to #{linked_fn})"
@@ -98,15 +93,18 @@ def check_links(file, links, dataset = {})
   end
 end
 
-def check_url(url)
+def check_url(url, cache = {})
+  return true if cache[url]
   if url == "https://dx.doi.org/10.6028/NIST.FIPS.202"
     return true
-  elsif !CHECK_HTTP_LINKS && url =~ /^https?:/
+  elsif DO_NOT_CHECK_HTTP_LINKS && url =~ /^https?:/
     return true
   else
     # check that file exists
     x = open(url).read rescue nil
-    !!x
+    exists = !!x
+    cache[url] = exists ? "ok" : "failed"
+    exists
   end
 end
 

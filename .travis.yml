@@ -7,7 +7,7 @@ matrix:
   - language: ruby
     ruby: 2.3
     script:
-      - CHECK_HTTP_LINKS=1 ruby check-markdown-links.rb
+      - ruby check-markdown-links.rb
   - language: go
     go: 1.11
     install: true
