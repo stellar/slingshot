@@ -96,7 +96,7 @@ func (c *Custodian) doPostPegOut(ctx context.Context, assetXDR, anchor, txid []b
 		return errors.Wrap(err, "waiting on post-peg-out tx to hit txvm")
 	}
 	// Delete relevant row from exports table.
-	// TODO(debnil): Implement a mechanism to recover in case of a crash.
+	// TODO(debnil): Implement a mechanism to recover in case of a crash here.
 	// Currently, the txvm funds will be retired or refunded, but the db will not be updated.
 	result, err := c.DB.ExecContext(ctx, `DELETE FROM exports WHERE txid=$1`, txid)
 	if err != nil {
