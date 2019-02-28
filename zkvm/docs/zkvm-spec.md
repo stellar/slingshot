@@ -1138,7 +1138,7 @@ Code | Instruction                | Stack diagram                              |
 0x14 | [`unblind`](#unblind)      |        _v V expr_ → _var_                  | Modifies [CS](#constraint-system), [Defers point ops](#deferred-point-operations)
  |                                |                                            |
  |     [**Values**](#value-instructions)              |                        |
-0x15 | [`issue`](#issue)          |    _qty flv pred_ → _contract_             | Modifies [CS](#constraint-system), [tx log](#transaction-log), [defers point ops](#deferred-point-operations)
+0x15 | [`issue`](#issue)          |    _qty flv data pred_ → _contract_        | Modifies [CS](#constraint-system), [tx log](#transaction-log), [defers point ops](#deferred-point-operations)
 0x16 | [`borrow`](#borrow)        |         _qty flv_ → _–V +V_                | Modifies [CS](#constraint-system)
 0x17 | [`retire`](#retire)        |           _value_ → ø                      | Modifies [CS](#constraint-system), [tx log](#transaction-log)
 0x18 | [`qty`](#qty)              |           _value_ → _value qtyvar_         |
@@ -1445,16 +1445,18 @@ Fails if:
 
 #### issue
 
-_qty flv pred_ **issue** → _contract_
+_qty flv metadata pred_ **issue** → _contract_
 
 1. Pops [point](#point) `pred`.
-2. Pops [variable](#variable-type) `flv`; if the variable is detached, attaches it.
-3. Pops [variable](#variable-type) `qty`; if the variable is detached, attaches it.
-4. Creates a [value](#value-type) with variables `qty` and `flv` for quantity and flavor, respectively. 
-5. Computes the _flavor_ scalar defined by the [predicate](#predicate) `pred` using the following [transcript-based](#transcript) protocol:
+2. Pops [data](#data-type) `metadata`.
+3. Pops [variable](#variable-type) `flv`; if the variable is detached, attaches it.
+4. Pops [variable](#variable-type) `qty`; if the variable is detached, attaches it.
+5. Creates a [value](#value-type) with variables `qty` and `flv` for quantity and flavor, respectively. 
+6. Computes the _flavor_ scalar defined by the [predicate](#predicate) `pred` using the following [transcript-based](#transcript) protocol:
     ```
     T = Transcript("ZkVM.issue")
     T.commit("predicate", pred)
+    T.commit("metadata", metadata)
     flavor = T.challenge_scalar("flavor")
     ```
 6. Checks that the `flv` has unblinded commitment to `flavor` by [deferring the point operation](#deferred-point-operations):

@@ -129,10 +129,15 @@ impl Data {
     }
 
     /// Converts the Data into a vector of bytes
-    pub fn to_bytes(&self) -> Vec<u8> {
-        let mut buf = Vec::with_capacity(self.serialized_length());
-        self.encode(&mut buf);
-        buf
+    pub fn to_bytes(self) -> Vec<u8> {
+        match self {
+            Data::Opaque(d) => d,
+            _ => {
+                let mut buf = Vec::with_capacity(self.serialized_length());
+                self.encode(&mut buf);
+                buf
+            }
+        }
     }
 
     /// Downcast to a Predicate type.
@@ -179,11 +184,18 @@ impl Data {
     }
 }
 
+impl Default for Data {
+    fn default() -> Self {
+        Data::Opaque(Vec::new())
+    }
+}
+
 impl Value {
     /// Computes a flavor as defined by the `issue` instruction from a predicate.
-    pub fn issue_flavor(predicate: &Predicate) -> Scalar {
+    pub fn issue_flavor(predicate: &Predicate, metadata: Data) -> Scalar {
         let mut t = Transcript::new(b"ZkVM.issue");
         t.commit_bytes(b"predicate", predicate.to_point().as_bytes());
+        t.commit_bytes(b"metadata", &metadata.to_bytes());
         t.challenge_scalar(b"flavor")
     }
 }
