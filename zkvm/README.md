@@ -43,4 +43,4 @@ All instructions that perform relatively expensive scalar-point multiplications 
 * [Merlin transcripts](https://doc.dalek.rs/merlin/index.html)
 * [Ristretto group](https://ristretto.group)
 * [Bulletproofs R1CS](https://doc-internal.dalek.rs/develop/bulletproofs/notes/r1cs_proof/index.html)
-* [Cloak](https://github.com/interstellar/spacesuit/blob/master/spec.md)
+* [Cloak](../spacesuit/spec.md)

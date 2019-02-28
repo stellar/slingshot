@@ -5,7 +5,7 @@ but does not describe how to _create_ such transactions. This is the goal of thi
 
 ## Prover and Verifier APIs
 
-The [`Prover`](src/prover.rs) and [`Verifier`](src/verifier.rs) are two entry points to the ZkVM:
+The [`Prover`](../src/prover.rs) and [`Verifier`](../src/verifier.rs) are two entry points to the ZkVM:
 
 `Prover` is an API for _creating_ a transaction object `Tx` out of a stream of `Instruction`s:
 `VM` executes the instructions, producing a serialized program bytecode, aggregated transaction signature
@@ -61,7 +61,7 @@ A [`signtx`](zkvm-spec.md#signtx) instruction expects a [predicate point](zkvm-s
 
 ### Contracts
 
-An [`input`](#input) instruction decodes a serialized contract. In the prover’s VM it pops an `Input` item from the stack that contains a previously created `Output` object with usual data items (with witnesses) and “frozen values”: values where quantity and flavors are represented by [open commitments](#commitments) instead of variables.
+An [`input`](zkvm-spec.md#input) instruction decodes a serialized contract. In the prover’s VM it pops an `Input` item from the stack that contains a previously created `Output` object with usual data items (with witnesses) and “frozen values”: values where quantity and flavors are represented by [open commitments](#commitments) instead of variables.
 
 The VM extracts the `Output` object from the `Input` and converts it to a [Contract type](zkvm-spec.md#contract-type) by allocating variables for each commitment within frozen values, turning them into actual [Value](zkvm-spec.md#value-type) types.
 
