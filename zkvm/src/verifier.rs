@@ -13,6 +13,11 @@ use crate::signature::VerificationKey;
 
 use crate::vm::{Delegate, Tx, VerifiedTx, VM};
 
+/// This is the entry point API for verifying a transaction.
+/// Verifier passes the `Tx` object through the VM,
+/// verifies an aggregated transaction signature (see `signtx` instruction),
+/// verifies a R1CS proof and returns a `VerifiedTx` with the log of changes
+/// to be applied to the blockchain state.
 pub struct Verifier<'a, 'b> {
     signtx_keys: Vec<VerificationKey>,
     deferred_operations: Vec<PointOp>,
@@ -68,6 +73,8 @@ impl<'a, 'b> Delegate<r1cs::Verifier<'a, 'b>> for Verifier<'a, 'b> {
 }
 
 impl<'a, 'b> Verifier<'a, 'b> {
+    /// Verifies the `Tx` object by executing the VM and returns the `VerifiedTx`.
+    /// Returns an error if the program is malformed or any of the proofs are not valid.
     pub fn verify_tx<'g>(tx: Tx, bp_gens: &'g BulletproofGens) -> Result<VerifiedTx, VMError> {
         let mut r1cs_transcript = Transcript::new(b"ZkVM.r1cs");
         let pc_gens = PedersenGens::default();

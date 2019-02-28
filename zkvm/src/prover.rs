@@ -13,13 +13,15 @@ use crate::signature::{Signature, VerificationKey};
 use crate::txlog::{TxID, TxLog};
 use crate::vm::{Delegate, Tx, TxHeader, VM};
 
-/// Entry point for creating a transaction.
+/// This is the entry point API for creating a transaction.
+/// Prover passes the list of instructions through the VM,
+/// creates an aggregated transaction signature (for `signtx` instruction),
+/// creates a R1CS proof and returns a complete `Tx` object that can be published.
 pub struct Prover<'a, 'b> {
     signtx_keys: Vec<VerificationKey>,
     cs: r1cs::Prover<'a, 'b>,
 }
 
-/// 
 pub(crate) struct ProverRun {
     program: VecDeque<Instruction>,
 }
