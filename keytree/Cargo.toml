@@ -9,5 +9,11 @@ curve25519-dalek = { version = "1.0.1", features = ["serde"] }
 merlin = "1.0.1"
 rand = "0.6"
 
+[dependencies.bulletproofs]
+git = "https://github.com/dalek-cryptography/bulletproofs"
+branch = "develop"
+#path = "../../dalek/bulletproofs"
+features = ["yoloproofs"]
+
 [dev-dependencies]
 rand_chacha = "0.1"
