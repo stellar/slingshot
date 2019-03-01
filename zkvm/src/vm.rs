@@ -318,8 +318,8 @@ where
     }
 
     fn range(&mut self, i: u8) -> Result<(), VMError> {
-        if i <1 || i >64{
-            return Err(VMError::InvalidBitrange)
+        if i < 1 || i > 64 {
+            return Err(VMError::InvalidBitrange);
         }
         let expr = self.pop_item()?.to_expression()?;
         self.add_range_proof(i as usize, expr.clone())?;
