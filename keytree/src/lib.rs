@@ -28,11 +28,11 @@ impl Xprv {
     }
 
     /// Returns a new Xpub, generated from the provided Xprv.
-    pub fn to_xpub(xprv: &Self) -> Xpub {
-        let point = xprv.scalar * &constants::RISTRETTO_BASEPOINT_POINT;
+    pub fn to_xpub(&self) -> Xpub {
+        let point = self.scalar * &constants::RISTRETTO_BASEPOINT_POINT;
         Xpub {
             point: point.compress(),
-            dk: xprv.dk,
+            dk: self.dk,
         }
     }
 }
@@ -68,7 +68,7 @@ mod tests {
         let seed = [0u8; 32];
         let mut rng = ChaChaRng::from_seed(seed);
         let xprv = Xprv::random(&mut rng);
-        let xpub = Xprv::to_xpub(&xprv);
+        let xpub = xprv.to_xpub();
 
         // the following are hard-coded based on the previous seed
         let expected_dk = [
