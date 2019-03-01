@@ -1727,27 +1727,30 @@ or if the third from the top item is not a [contract](#contract-type).
 
 _contract prog sig_ **delegate** → _results..._
 
-1. Pops [data](#data-type) `sig`, [data](#data-type) `prog` and the [contract](#contract-type) from the stack.
-2. Instantiates the [transcript](#transcript):
+1. Pop [data](#data-type) `sig`, [data](#data-type) `prog` and the [contract](#contract-type) from the stack.
+
+2. Push the [Contract payload](#contract-payload) onto the stack.
+
+3. Instantiate the [transcript](#transcript):
     ```
     T = Transcript("ZkVM.delegate")
     ```
-3. Commits the program `prog` to the transcript:
+4. Commit the program `prog` to the transcript:
     ```
     T.commit("prog", prog)
     ```
-4. Extracts nonce commitment `R` and scalar `s` from a 64-byte data `sig`:
+5. Extract nonce commitment `R` and scalar `s` from a 64-byte data `sig`:
     ```
     R = sig[ 0..32]
     s = sig[32..64]
     ```
-5. Performs the [signature protocol](#aggregated-signature) using the transcript `T`, public key `contract.predicate` and the values `R` and `s`:
+6. Perform the [signature protocol](#aggregated-signature) using the transcript `T`, public key `contract.predicate` and the values `R` and `s`:
     ```
     (s = dlog(R) + e·dlog(P))
     s·B  ==  R + e·P
     ```
-6. Adds the statement to the list of [deferred point operations](#deferred-point-operations).
-7. Saves the current program in the program stack, sets the `prog` as current and [runs it](#vm-execution).
+7. Add the statement to the list of [deferred point operations](#deferred-point-operations).
+8. Set the `prog` as current.
 
 Fails if:
 1. the `sig` is not a 64-byte long [data](#data-type),
