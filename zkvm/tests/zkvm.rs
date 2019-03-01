@@ -44,7 +44,7 @@ impl ProgramHelper for Program {
 
     fn input_helper(&mut self, qty: u64, flv: Scalar, pred: Predicate) -> &mut Self {
         let prev_output = Output {
-            payload: vec![FrozenItem::Value(FrozenValue{
+            payload: vec![FrozenItem::Value(FrozenValue {
                 qty: Commitment::blinded(qty),
                 flv: Commitment::blinded(flv),
             })],
@@ -132,11 +132,8 @@ fn test_helper(program: Vec<Instruction>, keys: &Vec<Scalar>) -> Result<TxID, VM
     // Verify tx
     let bp_gens = BulletproofGens::new(256, 1);
 
-    match Verifier::verify_tx(tx, &bp_gens) {
-        Err(err) => return Err(err),
-        Ok(_) => (),
-    };
-    Ok(txid)
+    let vtx = Verifier::verify_tx(tx, &bp_gens)?;
+    Ok(vtx.id)
 }
 
 fn issue_contract(
