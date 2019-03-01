@@ -41,4 +41,4 @@ A _key blinding scheme_ for deriving hierarchies of public keys for [Ristretto](
 * [Specification](keytree/keytree.md)
 
 
-![motocrab-with-ristretto-and-gopher-on-storage](https://user-images.githubusercontent.com/698/53667197-2264d200-3c25-11e9-9370-70e45c74e9f2.png)
+![motocrab-with-ristretto-and-gopher-on-storage](https://user-images.githubusercontent.com/698/53667268-5f30c900-3c25-11e9-91a1-503478c2edc1.png)
