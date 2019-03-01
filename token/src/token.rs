@@ -22,17 +22,19 @@ impl Token {
         }
     }
 
+    /// Returns the Token's flavor.
+    pub fn flavor(&self) -> Scalar {
+        Value::issue_flavor(&self.issuance_predicate, Data::Opaque(self.metadata.clone()))
+    }
+
     /// Returns program that issues specified quantity of Token.
     pub fn issue<'a>(program: &'a mut Program, token: &Token, qty: u64) -> &'a mut Program {
         program
             .push(Commitment::blinded(qty)) // stack: qty
             .var() // stack: qty-var
-            .push(Commitment::unblinded(Value::issue_flavor(
-                &token.issuance_predicate,
-                Data::Opaque(token.metadata.clone()),
-            ))) // stack: qty-var, flv
+            .push(Commitment::unblinded(token.flavor())) // stack: qty-var, flv
             .var() // stack: qty-var, flv-var
-            .push(Data::Opaque(token.metadata.to_vec())) // stack: qty-var, flv-var, data
+            .push(Data::Opaque(token.metadata.clone())) // stack: qty-var, flv-var, data
             .push(token.issuance_predicate.clone()) // stack: qty-var, flv-var, data, flv-pred
             .issue() // stack: issue-contract
             .sign_tx() // stack: issued-value
@@ -95,20 +97,13 @@ mod tests {
                     .sign_tx()
             })
             .to_vec();
-            match build(program, &usd, vec![issue_key, nonce_key]) {
-                Ok(x) => x,
-                Err(err) => return assert!(false, err.to_string()),
-            }
+            build(program, vec![issue_key, nonce_key]).unwrap()
         };
 
         // Verify tx
         let bp_gens = BulletproofGens::new(256, 1);
-        match Verifier::verify_tx(tx, &bp_gens) {
-            Err(err) => return assert!(false, err.to_string()),
-            Ok(v) => {
-                assert_eq!(v.log, txlog);
-            }
-        };
+        let vtx = Verifier::verify_tx(tx, &bp_gens).unwrap();
+        assert_eq!(vtx.log, txlog);
     }
 
     #[test]
@@ -130,11 +125,7 @@ mod tests {
                     .sign_tx()
             })
             .to_vec();
-            let (_, issue_txid, issue_txlog) =
-                match build(issue_program, &usd, vec![issue_key, nonce_key]) {
-                    Ok(x) => x,
-                    Err(err) => return assert!(false, err.to_string()),
-                };
+            let (_, issue_txid, issue_txlog) = build(issue_program, vec![issue_key, nonce_key]).unwrap();
 
             let mut retire_program = Program::new();
             let (qty, flv) = match issue_txlog[1] {
@@ -142,27 +133,19 @@ mod tests {
                 _ => return assert!(false, "TxLog entry doesn't match: expected Issue"),
             };
             Token::retire(&mut retire_program, qty, flv, &dest, issue_txid);
-            match build(retire_program.to_vec(), &usd, vec![dest_key]) {
-                Ok(x) => x,
-                Err(err) => return assert!(false, err.to_string()),
-            }
+            build(retire_program.to_vec(), vec![dest_key]).unwrap()
         };
 
         // Verify tx
         let bp_gens = BulletproofGens::new(256, 1);
-        match Verifier::verify_tx(tx, &bp_gens) {
-            Err(err) => return assert!(false, err.to_string()),
-            Ok(v) => {
-                assert_eq!(v.log, txlog);
-            }
-        };
+        let vtx = Verifier::verify_tx(tx, &bp_gens).unwrap();
+        assert_eq!(vtx.log, txlog);
     }
 
     // Helper functions
     fn build(
         program: Vec<Instruction>,
-        token: &Token,
-        mut keys: Vec<Scalar>,
+        keys: Vec<Scalar>,
     ) -> Result<(Tx, TxID, TxLog), VMError> {
         let bp_gens = BulletproofGens::new(256, 1);
         let header = TxHeader {

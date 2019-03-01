@@ -8,12 +8,12 @@ use crate::errors::VMError;
 use std::ops::{Add, Mul, Neg};
 use std::u64;
 
-/// Represents a concrete kind of a number represented by a scalar:
-/// `ScalarKind::Integer` represents a signed integer with 64-bit absolute value (think "i65")
-/// `ScalarKind::Scalar` represents a scalar modulo group order.
+/// Represents a concrete kind of a number represented by a scalar.
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum ScalarWitness {
+    /// `ScalarKind::Integer` represents a signed integer with 64-bit absolute value (think "i65")
     Integer(SignedInteger),
+    /// `ScalarKind::Scalar` represents a scalar modulo group order.
     Scalar(Scalar),
 }
 
@@ -36,7 +36,7 @@ impl ScalarWitness {
         }
     }
 
-    // Converts the witness to a scalar.
+    /// Converts the witness to a scalar.
     pub fn to_scalar(self) -> Scalar {
         match self {
             ScalarWitness::Integer(i) => i.into(),
