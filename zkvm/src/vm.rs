@@ -553,6 +553,28 @@ where
         Ok(())
     }
 
+    fn call(&mut self) -> Result<(), VMError> {
+        // Pop program contract and predicate
+        let prog = self.pop_item()?.to_data()?;
+        let contract = self.pop_item()?.to_contract()?;
+        let predicate = contract.predicate;
+
+        // 0 = -P + h(prog) * B2
+        self.delegate
+            .verify_point_op(|| predicate.prove_program_predicate(&prog.to_bytes()))?;
+
+        // Place contract payload on the stack
+        for item in contract.payload.into_iter() {
+            self.push_item(item);
+        }
+        
+        // Replace current program with new program
+        let new_run = self.delegate.new_run(prog)?;
+        let paused_run = mem::replace(&mut self.current_run, new_run);
+        self.run_stack.push(paused_run);
+        Ok(())
+    }
+
     fn left_or_right<F>(&mut self, assign: F) -> Result<(), VMError>
     where
         F: FnOnce(&mut Contract, Predicate, Predicate) -> (),
