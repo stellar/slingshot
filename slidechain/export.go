@@ -59,6 +59,7 @@ const (
 	              #  con stack                arg stack              log
 	              #  ---------                ---------              ---
 	              #                           json, value, {exporter}       
+	'' log        #                                                  {L,...}
 	get get get   #  {exporter}, value, json                                  
 	x'%x' output  #                                                  {O,...}
 `
