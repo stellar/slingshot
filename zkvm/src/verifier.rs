@@ -62,6 +62,10 @@ impl<'a, 'b> Delegate<r1cs::Verifier<'a, 'b>> for Verifier<'a, 'b> {
         Ok(Some(instr))
     }
 
+    fn new_run(&self, prog: &[u8]) -> Self::RunType {
+        VerifierRun::new(prog.to_vec())
+    }
+
     fn cs(&mut self) -> &mut r1cs::Verifier<'a, 'b> {
         &mut self.cs
     }
