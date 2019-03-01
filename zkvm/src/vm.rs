@@ -6,6 +6,7 @@ use merlin::Transcript;
 use spacesuit;
 use spacesuit::SignedInteger;
 use std::iter::FromIterator;
+use std::mem;
 
 use crate::constraints::{Commitment, Constraint, Expression, Variable};
 use crate::contract::{Contract, PortableItem};
@@ -118,6 +119,8 @@ pub trait Delegate<CS: r1cs::ConstraintSystem> {
     /// Returns Ok(None) if there is no more instructions to execute.
     fn next_instruction(&mut self, run: &mut Self::RunType)
         -> Result<Option<Instruction>, VMError>;
+
+    fn next_run(&mut self, prog: &[u8]) -> Self::RunType;
 }
 
 /// And indirect reference to a high-level variable within a constraint system.
@@ -571,25 +574,29 @@ where
     }
 
     fn delegate(&mut self) -> Result<(), VMError> {
+        // Pop signature and put into signature struct
         let sig = self.pop_item()?.to_data()?.to_bytes();
-        let prog = self.pop_item()?.to_data()?.to_bytes();
-        let contract = self.pop_item()?.to_contract()?;
+        if sig.len() != 64 {
+            return Err(VMError::FormatError);
+        }
+        let mut buf = [0u8; 64];
+        buf[..].copy_from_slice(&sig);
+        let signature = Signature::from_bytes(buf)?;
 
-        let R = SliceReader::parse(&sig[0..32], |r| r.read_point())?;
-        let s = SliceReader::parse(&sig[32..64], |r| r.read_scalar())?;
+        let prog = self.pop_item()?.to_data()?.to_bytes();
+
+        let contract = self.pop_item()?.to_contract()?;
         let verification_key = contract.predicate.to_key()?;
 
         let mut t = Transcript::new(b"ZkVM.delegate");
         t.commit_bytes(b"prog", &prog);
 
         self.delegate
-            .verify_point_op(|| Signature { R: R, s: s }.verify_single(&mut t, verification_key))?;
+            .verify_point_op(|| signature.verify_single(&mut t, verification_key))?;
 
-        // TODO:
-        // Save current program and offset in the program stack
-        //Set new program as current, with offset 0
-        // run program
-
+        let new_run = self.delegate.next_run(&prog);
+        let paused_run = mem::replace(&mut self.current_run, new_run);
+        self.run_stack.push(paused_run);
         Ok(())
     }
 
