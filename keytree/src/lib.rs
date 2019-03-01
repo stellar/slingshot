@@ -1,9 +1,11 @@
 #![deny(missing_docs)]
+//! Implementation of the key tree protocol, a key blinding scheme for deriving hierarchies of public keys.
 
 use curve25519_dalek::scalar::Scalar;
 use rand::{CryptoRng, RngCore};
 
-struct Xprv {
+/// Xprv represents an extended private key.
+pub struct Xprv {
     scalar: Scalar,
     dk: [u8; 32],
 }
