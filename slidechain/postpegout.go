@@ -65,9 +65,11 @@ func (c *Custodian) doPostPegOut(ctx context.Context, assetXDR, anchor, txid []b
 			tup.PushdataBytes(anchor)
 		})
 	})
-	b.PushdataInt64(selector).Op(op.Put) // con stack: snapshot; arg stack: selector
-	b.Op(op.Input).Op(op.Call)           // arg stack: sigchecker, zeroval
-	b.Op(op.Get).Op(op.Finalize)         // arg stack: sigchecker
+	b.PushdataInt64(selector).Op(op.Put)      // con stack: snapshot; arg stack: selector
+	b.Op(op.Input).Op(op.Call)                // arg stack: zeroval, sigchecker
+	b.Op(op.Get).Op(op.Get)                   // con stack: sigchecker, zeroval
+	b.PushdataInt64(1).Op(op.Roll).Op(op.Put) // con stack: zeroval; arg stack: sigchecker
+	b.Op(op.Finalize)                         // arg stack: sigchecker
 
 	// Check signature.
 	prog1 := b.Build()

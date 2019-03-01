@@ -83,8 +83,8 @@ const (
 	x'%x' contract call  #  zeroval                                                                                   
 	                     #                                                                                                                                                                    
 	$checksig            #                                                                                            
-	[%s] yield put       #                                              sigchecker, zeroval                           
-
+	put                  #                                              zeroval
+	[%s] yield           #                                              zeroval, sigchecker
 `
 )
 
