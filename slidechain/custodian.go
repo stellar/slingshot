@@ -42,6 +42,7 @@ type Custodian struct {
 	privkey ed25519.PrivateKey
 
 	DB            *sql.DB
+	BS            *store.BlockStore
 	S             *submitter
 	InitBlockHash bc.Hash
 	AccountID     xdr.AccountId
@@ -105,6 +106,7 @@ func newCustodian(ctx context.Context, db *sql.DB, hclient horizon.ClientInterfa
 			blockInterval: blockInterval,
 		},
 		DB:            db,
+		BS:            bs,
 		hclient:       hclient,
 		imports:       sync.NewCond(new(sync.Mutex)),
 		exports:       sync.NewCond(new(sync.Mutex)),
