@@ -120,7 +120,7 @@ pub trait Delegate<CS: r1cs::ConstraintSystem> {
     fn next_instruction(&mut self, run: &mut Self::RunType)
         -> Result<Option<Instruction>, VMError>;
 
-    fn next_run(&mut self, prog: &[u8]) -> Self::RunType;
+    fn new_run(&self, prog: &[u8]) -> Self::RunType;
 }
 
 /// And indirect reference to a high-level variable within a constraint system.
