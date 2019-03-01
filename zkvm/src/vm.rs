@@ -586,9 +586,6 @@ where
     fn delegate(&mut self) -> Result<(), VMError> {
         // Signature
         let sig = self.pop_item()?.to_data()?.to_bytes();
-        if sig.len() != 64 {
-            return Err(VMError::FormatError);
-        }
         let signature = Signature::from_bytes(SliceReader::parse(&sig, |r| r.read_u8x64())?)?;
 
         // Program
@@ -599,7 +596,7 @@ where
         let contract = self.pop_item()?.to_contract()?;
         let verification_key = contract.predicate.to_key()?;
 
-        // Verify signature using Verification key, over the message `program` 
+        // Verify signature using Verification key, over the message `program`
         let mut t = Transcript::new(b"ZkVM.delegate");
         t.commit_bytes(b"prog", &prog_bytes);
         self.delegate
