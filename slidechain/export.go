@@ -64,27 +64,27 @@ const (
 `
 
 	exportContract2Fmt = `
-	                     #  con stack                                   arg stack                 log
-	                     #  ---------                                   ---------                 ---
-	                     #  {exporter}, json, val                       selector                                      
-	0 split 3 bury swap  #  zeroval, {exporter}, value, json            selector                                      
-	get                  #  zeroval, {exporter}, value, json, selector                                                
-	jumpif:$doretire     #                                                                                            
-	                     #  zeroval, {exporter}, value, json                                                          
-	"" put               #  zeroval, {exporter}, value, json            ""                                            
-	drop                 #  zeroval, {exporter}, value                                                                
-	put put 1 put        #  zeroval                                     "", value, {exporter}, 1                      
-	x'%x' contract call  #  zeroval                                                               {'L',...}{'O',...} 
-	jump:$checksig       #                                                                                            
-	                     #                                                                                            
-	$doretire            #                                                                                            
-	                     #  zeroval, {exporter}, value, json                                                          
-	put put drop         #  zeroval                                     json, value                                   
-	x'%x' contract call  #  zeroval                                                                                   
-	                     #                                                                                                                                                                    
-	$checksig            #                                                                                            
-	[%s] contract put    #  zeroval                                     sigchecker
-	put                  #                                              sigchecker, zeroval
+	                      #  con stack                                   arg stack                 log
+	                      #  ---------                                   ---------                 ---
+	                      #  {exporter}, json, val                       selector                                      
+	splitzero 3 bury swap #  zeroval, {exporter}, value, json            selector                                      
+	get                   #  zeroval, {exporter}, value, json, selector                                                
+	jumpif:$doretire      #                                                                                            
+	                      #  zeroval, {exporter}, value, json                                                          
+	"" put                #  zeroval, {exporter}, value, json            ""                                            
+	drop                  #  zeroval, {exporter}, value                                                                
+	put put 1 put         #  zeroval                                     "", value, {exporter}, 1                      
+	x'%x' contract call   #  zeroval                                                               {'L',...}{'O',...} 
+	jump:$checksig        #                                                                                            
+	                      #                                                                                            
+	$doretire             #                                                                                            
+	                      #  zeroval, {exporter}, value, json                                                          
+	put put drop          #  zeroval                                     json, value                                   
+	x'%x' contract call   #  zeroval                                                                                   
+	                      #                                                                                                                                                                    
+	$checksig             #                                                                                            
+	[%s] contract put     #  zeroval                                     sigchecker
+	put                   #                                              sigchecker, zeroval
 `
 )
 
