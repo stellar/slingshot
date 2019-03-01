@@ -86,7 +86,6 @@ func (s *submitter) submitTx(ctx context.Context, tx *bc.Tx) (*multichan.R, erro
 			if err != nil {
 				log.Fatalf("committing new block: %s", err)
 			}
-			s.w.Write(b)
 			log.Printf("committed block %d with %d transaction(s)", unsignedBlock.Height, len(unsignedBlock.Transactions))
 		})
 	}
