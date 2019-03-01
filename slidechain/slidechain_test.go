@@ -550,6 +550,11 @@ func withTestServer(ctx context.Context, t *testing.T, fn func(context.Context, 
 	if err != nil {
 		t.Fatal(err)
 	}
+	st := chain.State()
+	err = st.ApplyBlockHeader(initialBlock.BlockHeader)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	w := multichan.New((*bc.Block)(nil))
 	s := &submitter{

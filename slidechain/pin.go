@@ -17,7 +17,7 @@ func (c *Custodian) RunPin(ctx context.Context, name string, f func(context.Cont
 	r := c.S.w.Reader()
 
 	_, err := c.DB.ExecContext(ctx, `INSERT OR IGNORE INTO pins (name, height) VALUES ($1, 0)`, name)
-	if errors.Root(err) == context.Canceled {
+	if ctx.Err() != nil {
 		return
 	}
 	if err != nil {
@@ -26,7 +26,7 @@ func (c *Custodian) RunPin(ctx context.Context, name string, f func(context.Cont
 
 	var lastHeight uint64
 	err = c.DB.QueryRowContext(ctx, `SELECT height FROM pins WHERE name = $1`, name).Scan(&lastHeight)
-	if errors.Root(err) == context.Canceled {
+	if ctx.Err() != nil {
 		return
 	}
 	if err != nil {
@@ -45,7 +45,7 @@ func (c *Custodian) RunPin(ctx context.Context, name string, f func(context.Cont
 		blocks = append(blocks, &block)
 		return nil
 	})
-	if errors.Root(err) == context.Canceled {
+	if ctx.Err() != nil {
 		return
 	}
 	if err != nil {
@@ -60,7 +60,7 @@ func (c *Custodian) RunPin(ctx context.Context, name string, f func(context.Cont
 		if err != nil {
 			return errors.Wrapf(err, "running pin %s on block %d", name, block.Height)
 		}
-		_, err = c.DB.ExecContext(ctx, `UPDATE pins SET height = $1 WHERE name = $2`, block.Height, name)
+		_, err = c.DB.Exec(`UPDATE pins SET height = $1 WHERE name = $2`, block.Height, name) // n.b. not ExecContext
 		if err != nil {
 			return errors.Wrapf(err, "updating pin %s after block %d", name, block.Height)
 		}
@@ -70,11 +70,11 @@ func (c *Custodian) RunPin(ctx context.Context, name string, f func(context.Cont
 
 	for _, block := range blocks {
 		err = processBlock(block)
-		if errors.Root(err) == context.Canceled {
+		if ctx.Err() != nil {
 			return
 		}
 		if err != nil {
-			log.Fatalf("processing block %d: %s", block.Height, err)
+			log.Fatalf("processing backlog block %d: %s", block.Height, err)
 		}
 	}
 
@@ -91,11 +91,11 @@ func (c *Custodian) RunPin(ctx context.Context, name string, f func(context.Cont
 			continue
 		}
 		err = processBlock(block)
-		if errors.Root(err) == context.Canceled {
+		if ctx.Err() != nil {
 			return
 		}
 		if err != nil {
-			log.Fatalf("processing block %d: %s", block.Height, err)
+			log.Fatalf("processing live block %d: %s", block.Height, err)
 		}
 	}
 }
