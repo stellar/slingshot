@@ -118,7 +118,7 @@ pub(crate) trait Delegate<CS: r1cs::ConstraintSystem> {
     fn next_instruction(&mut self, run: &mut Self::RunType)
         -> Result<Option<Instruction>, VMError>;
 
-    fn new_run(&self, prog: &[u8]) -> Self::RunType;
+    fn new_run(&self, prog: &[u8]) -> Result<Self::RunType, VMError>;
 }
 
 /// And indirect reference to a high-level variable within a constraint system.
@@ -593,7 +593,7 @@ where
         self.delegate
             .verify_point_op(|| signature.verify_single(&mut t, verification_key))?;
 
-        let new_run = self.delegate.new_run(&prog);
+        let new_run = self.delegate.new_run(&prog)?;
         let paused_run = mem::replace(&mut self.current_run, new_run);
         self.run_stack.push(paused_run);
         Ok(())

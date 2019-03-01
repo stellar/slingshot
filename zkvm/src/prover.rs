@@ -5,6 +5,7 @@ use merlin::Transcript;
 use std::collections::VecDeque;
 
 use crate::constraints::Commitment;
+use crate::encoding::SliceReader;
 use crate::errors::VMError;
 use crate::ops::Instruction;
 use crate::point_ops::PointOp;
@@ -57,11 +58,19 @@ impl<'a, 'b> Delegate<r1cs::Prover<'a, 'b>> for Prover<'a, 'b> {
         Ok(run.program.pop_front())
     }
 
-    fn new_run(&self, program: &[u8]) -> Self::RunType {
-        // TODO
-        return ProverRun {
-            program: VecDeque::new(),
-        };
+    fn new_run(&self, program: &[u8]) -> Result<Self::RunType, VMError> {
+        let instructions = SliceReader::parse(&program, |mut r| {
+            let mut instructions: Vec<Instruction> = Vec::new();
+            for _ in 0..program.len() {
+                let instruction = Instruction::parse(&mut r)?;
+                instructions.push(instruction);
+            }
+            Ok(instructions)
+        })?;
+
+        Ok(ProverRun {
+            program: instructions.into(),
+        })
     }
 
     fn cs(&mut self) -> &mut r1cs::Prover<'a, 'b> {
