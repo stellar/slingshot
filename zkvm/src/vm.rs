@@ -231,7 +231,7 @@ where
                 Instruction::Nonce => self.nonce()?,
                 Instruction::Log => self.log()?,
                 Instruction::Signtx => self.signtx()?,
-                Instruction::Call => unimplemented!(),
+                Instruction::Call => self.call()?,
                 Instruction::Left => self.left()?,
                 Instruction::Right => self.right()?,
                 Instruction::Delegate => self.delegate()?,
