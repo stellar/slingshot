@@ -1729,7 +1729,7 @@ _contract prog sig_ **delegate** → _results..._
 
 1. Pop [data](#data-type) `sig`, [data](#data-type) `prog` and the [contract](#contract-type) from the stack.
 
-2. Push the [Contract payload](#contract-payload) onto the stack.
+2. Place the [contract payload](#contract-payload) on the stack (last item on top), discarding the contract.
 
 3. Instantiate the [transcript](#transcript):
     ```
