@@ -590,7 +590,6 @@ where
 
         // Program
         let prog = self.pop_item()?.to_data()?;
-        let prog_bytes = prog.clone().to_bytes();
 
         // Place all items in payload onto the stack
         let contract = self.pop_item()?.to_contract()?;
