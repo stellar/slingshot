@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
-	"time"
 
 	"github.com/chain/txvm/crypto/ed25519"
 	"github.com/chain/txvm/errors"
@@ -54,22 +53,20 @@ func (c *Custodian) doPostPegOut(ctx context.Context, assetXDR, anchor, txid []b
 				pktup.PushdataBytes(pubkey)
 			})
 		})
+		contract.Tuple(func(tup *txvmutil.TupleBuilder) { // {'S', refdata}
+			tup.PushdataByte(txvm.BytesCode)
+			tup.PushdataBytes(refdata)
+		})
 		contract.Tuple(func(tup *txvmutil.TupleBuilder) { // {'V', amount, assetID, anchor}
 			tup.PushdataByte(txvm.ValueCode)
 			tup.PushdataInt64(amount)
 			tup.PushdataBytes(assetID.Bytes())
 			tup.PushdataBytes(anchor)
 		})
-		contract.Tuple(func(tup *txvmutil.TupleBuilder) { // {'S', refdata}
-			tup.PushdataByte(txvm.BytesCode)
-			tup.PushdataBytes(refdata)
-		})
 	})
-	b.PushdataInt64(selector).Op(op.Put)                                // con stack: snapshot; arg stack: selector
-	b.Op(op.Input).Op(op.Call)                                          // arg stack: sigchecker
-	b.PushdataBytes(c.InitBlockHash.Bytes())                            // con stack: blockid; arg stack: sigchecker
-	b.PushdataInt64(int64(bc.Millis(time.Now().Add(10 * time.Minute)))) // con stack: blockid, expmss; arg stack: sigchecker
-	b.Op(op.Nonce).Op(op.Finalize)                                      // arg stack: sigchecker
+	b.PushdataInt64(selector).Op(op.Put) // con stack: snapshot; arg stack: selector
+	b.Op(op.Input).Op(op.Call)           // arg stack: sigchecker, zeroval
+	b.Op(op.Get).Op(op.Finalize)         // arg stack: sigchecker
 
 	// Check signature.
 	prog1 := b.Build()

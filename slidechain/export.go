@@ -58,34 +58,33 @@ const (
 	exportContract1Fmt = `
 	              #  con stack                arg stack              log
 	              #  ---------                ---------              ---
-	              #                           json, value, {exporter}       
-	get get get   #  {exporter}, value, json                                  
+	              #                           value, json, {exporter}       
+	get get get   #  {exporter}, json, value                                  
 	x'%x' output  #                                                  {O,...}
 `
 
-	// TODO(debnil): Modify this contract to produce a zeroval from the value it contains,
-	// so the caller does not have to do a new `nonce`.
 	exportContract2Fmt = `
-	                     #  con stack                          arg stack                 log
-	                     #  ---------                          ---------                 ---
-	                     #  {exporter}, value, json            selector                                    
-	get                  #  {exporter}, value, json, selector                                              
-	jumpif:$doretire     #                                                                                 
-	                     #  {exporter}, value, json                                                        
-	"" put               #  {exporter}, value, json            ""                                          
-	drop                 #  {exporter}, value                                                              
-	put put 1 put        #                                     "", value, {exporter}, 1                    
-	x'%x' contract call  #                                                               {'L',...}{'O',...}
-	jump:$checksig       #                                                                                   
-	                     #                                                                                   
-	$doretire            #                                                                                   
-	                     #  {exporter}, value, json                                                          
-	put put drop         #                                     json, value                                   
-	x'%x' contract call  #                                                                                   
-	                     #                                                                                                        
-	$checksig            #                                                                                   
-	[%s] yield           #                                     sigchecker                                    
-                                                                                   
+	                     #  con stack                                   arg stack                 log
+	                     #  ---------                                   ---------                 ---
+	                     #  {exporter}, json, val                       selector                                      
+	0 split 3 bury swap  #  zeroval, {exporter}, value, json            selector                                      
+	get                  #  zeroval, {exporter}, value, json, selector                                                
+	jumpif:$doretire     #                                                                                            
+	                     #  zeroval, {exporter}, value, json                                                          
+	"" put               #  zeroval, {exporter}, value, json            ""                                            
+	drop                 #  zeroval, {exporter}, value                                                                
+	put put 1 put        #  zeroval                                     "", value, {exporter}, 1                      
+	x'%x' contract call  #  zeroval                                                               {'L',...}{'O',...} 
+	jump:$checksig       #                                                                                            
+	                     #                                                                                            
+	$doretire            #                                                                                            
+	                     #  zeroval, {exporter}, value, json                                                          
+	put put drop         #  zeroval                                     json, value                                   
+	x'%x' contract call  #  zeroval                                                                                   
+	                     #                                                                                                                                                                    
+	$checksig            #                                                                                            
+	[%s] yield put       #                                              sigchecker, zeroval                           
+
 `
 )
 
@@ -400,10 +399,10 @@ func BuildExportTx(ctx context.Context, asset xdr.Asset, exportAmt, inputAmt int
 		b.Op(op.Drop) // con stack: sigcheck, retireval
 	}
 	// con stack: sigcheck, retireval
-	b.PushdataBytes(refdata).Op(op.Put)                                                // con stack: sigcheck, retireval; arg stack: json
-	b.PushdataInt64(0).Op(op.Split).PushdataInt64(1).Op(op.Roll).Op(op.Put)            // con stack: sigcheck, zeroval; arg stack: json, retireval
-	b.Tuple(func(tup *txvmutil.TupleBuilder) { tup.PushdataBytes(pubkey) }).Op(op.Put) // con stack: sigcheck, zeroval; arg stack: json, retireval, {pubkey}
-	b.PushdataBytes(exportContract1Prog)                                               // con stack: sigchecker, zeroval, exportContract; arg stack: json, retireval, {pubkey}
+	b.PushdataInt64(0).Op(op.Split).PushdataInt64(1).Op(op.Roll).Op(op.Put)            // con stack: sigcheck, zeroval; arg stack: retireval
+	b.PushdataBytes(refdata).Op(op.Put)                                                // con stack: sigcheck, zeroval; arg stack: retireval, json
+	b.Tuple(func(tup *txvmutil.TupleBuilder) { tup.PushdataBytes(pubkey) }).Op(op.Put) // con stack: sigcheck, zeroval; arg stack: retireval, json, {pubkey}
+	b.PushdataBytes(exportContract1Prog)                                               // con stack: sigchecker, zeroval, exportContract; arg stack: retireval, json, {pubkey}
 	b.Op(op.Contract).Op(op.Call)                                                      // con stack: sigchecker, zeroval
 	b.Op(op.Finalize)                                                                  // con stack: sigchecker
 	prog1 := b.Build()
