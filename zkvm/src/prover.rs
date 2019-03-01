@@ -57,6 +57,13 @@ impl<'a, 'b> Delegate<r1cs::Prover<'a, 'b>> for Prover<'a, 'b> {
         Ok(run.program.pop_front())
     }
 
+    fn new_run(&self, program: &[u8]) -> Self::RunType {
+        // TODO
+        return ProverRun {
+            program: VecDeque::new(),
+        };
+    }
+
     fn cs(&mut self) -> &mut r1cs::Prover<'a, 'b> {
         &mut self.cs
     }

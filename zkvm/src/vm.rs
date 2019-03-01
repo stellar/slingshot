@@ -2,6 +2,7 @@ use bulletproofs::r1cs;
 use bulletproofs::r1cs::R1CSProof;
 use curve25519_dalek::ristretto::CompressedRistretto;
 use curve25519_dalek::scalar::Scalar;
+use merlin::Transcript;
 use spacesuit;
 use spacesuit::SignedInteger;
 use std::iter::FromIterator;
