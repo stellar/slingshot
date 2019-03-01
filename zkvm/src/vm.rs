@@ -2,7 +2,6 @@ use bulletproofs::r1cs;
 use bulletproofs::r1cs::R1CSProof;
 use curve25519_dalek::ristretto::CompressedRistretto;
 use curve25519_dalek::scalar::Scalar;
-use merlin::Transcript;
 use spacesuit;
 use spacesuit::SignedInteger;
 use std::iter::FromIterator;
@@ -17,10 +16,8 @@ use crate::point_ops::PointOp;
 use crate::predicate::Predicate;
 use crate::scalar_witness::ScalarWitness;
 use crate::signature::*;
-use crate::transcript::TranscriptProtocol;
 use crate::txlog::{Entry, TxID, TxLog};
 use crate::types::*;
-use crate::verifier::VerifierRun;
 
 /// Current tx version determines which extension opcodes are treated as noops (see VM.extension flag).
 pub const CURRENT_VERSION: u64 = 1;
@@ -579,9 +576,8 @@ where
         if sig.len() != 64 {
             return Err(VMError::FormatError);
         }
-        let mut buf = [0u8; 64];
-        buf[..].copy_from_slice(&sig);
-        let signature = Signature::from_bytes(buf)?;
+
+        let signature = Signature::from_bytes(SliceReader::parse(&sig, |r| r.read_u8x64())?)?;
 
         let prog = self.pop_item()?.to_data()?.to_bytes();
 
@@ -594,7 +590,7 @@ where
         self.delegate
             .verify_point_op(|| signature.verify_single(&mut t, verification_key))?;
 
-        let new_run = self.delegate.next_run(&prog);
+        let new_run = self.delegate.new_run(&prog);
         let paused_run = mem::replace(&mut self.current_run, new_run);
         self.run_stack.push(paused_run);
         Ok(())
