@@ -12,6 +12,12 @@ pub struct Xprv {
     dk: [u8; 32],
 }
 
+/// Xpub represents an extended public key.
+pub struct Xpub {
+    point: CompressedRistretto,
+    dk: [u8; 32],
+}
+
 impl Xprv {
     /// Returns a new Xprv, generated using the provided random number generator `rng`.
     pub fn random<T: RngCore + CryptoRng>(mut rng: T) -> Self {
@@ -20,17 +26,9 @@ impl Xprv {
         rng.fill_bytes(&mut dk);
         Xprv { scalar, dk }
     }
-}
 
-/// Xpub represents an extended public key.
-pub struct Xpub {
-    point: CompressedRistretto,
-    dk: [u8; 32],
-}
-
-impl Xpub {
     /// Returns a new Xpub, generated from the provided Xprv.
-    pub fn from_xprv(xprv: Xprv) -> Self {
+    pub fn to_xpub(xprv: &Self) -> Xpub {
         let point = xprv.scalar * &constants::RISTRETTO_BASEPOINT_POINT;
         Xpub {
             point: point.compress(),
@@ -70,7 +68,7 @@ mod tests {
         let seed = [0u8; 32];
         let mut rng = ChaChaRng::from_seed(seed);
         let xprv = Xprv::random(&mut rng);
-        let xpub = Xpub::from_xprv(xprv);
+        let xpub = Xprv::to_xpub(&xprv);
 
         // the following are hard-coded based on the previous seed
         let expected_dk = [
