@@ -5,7 +5,6 @@ use merlin::Transcript;
 use std::collections::VecDeque;
 
 use crate::constraints::Commitment;
-use crate::encoding::SliceReader;
 use crate::errors::VMError;
 use crate::ops::Instruction;
 use crate::point_ops::PointOp;
@@ -13,7 +12,7 @@ use crate::predicate::Predicate;
 use crate::signature::{Signature, VerificationKey};
 use crate::txlog::{TxID, TxLog};
 use crate::vm::{Delegate, Tx, TxHeader, VM};
-
+use crate::types::{Data};
 /// This is the entry point API for creating a transaction.
 /// Prover passes the list of instructions through the VM,
 /// creates an aggregated transaction signature (for `signtx` instruction),
@@ -58,16 +57,11 @@ impl<'a, 'b> Delegate<r1cs::Prover<'a, 'b>> for Prover<'a, 'b> {
         Ok(run.program.pop_front())
     }
 
-    fn new_run(&self, program: &[u8]) -> Result<Self::RunType, VMError> {
-        let instructions = SliceReader::parse(&program, |mut r| {
-            let mut instructions: Vec<Instruction> = Vec::new();
-            for _ in 0..program.len() {
-                let instruction = Instruction::parse(&mut r)?;
-                instructions.push(instruction);
-            }
-            Ok(instructions)
-        })?;
-
+    fn new_run(&self, program: Data) -> Result<Self::RunType, VMError> {
+        let instructions = match program {
+            Data::Program(program) => Ok(program),
+            _ => Err(VMError::InconsistentWitness),
+        }?;
         Ok(ProverRun {
             program: instructions.into(),
         })
