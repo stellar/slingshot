@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"math"
 
 	"github.com/chain/txvm/crypto/ed25519"
@@ -70,6 +71,7 @@ func (c *Custodian) doPostPegOut(ctx context.Context, assetXDR, anchor, txid []b
 
 	// Check signature.
 	prog1 := b.Build()
+	log.Printf("%x", prog1)
 	vm, err := txvm.Validate(prog1, 3, math.MaxInt64, txvm.StopAfterFinalize)
 	if err != nil {
 		return errors.Wrap(err, "computing transaction ID")
