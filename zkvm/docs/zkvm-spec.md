@@ -1030,7 +1030,7 @@ Then, the VM executes the current program till completion:
 1. Each instruction is read at the current program offset, including its immediate data (if any).
 2. Program offset is advanced immediately after reading the instruction to the next instruction.
 3. The instruction is executed per [specification below](#instructions). If the instruction fails, VM exits early with an error result.
-4. If VM encounters [`call`](#call) or [`delegate`](#delegate) instruction, the current program and the offset are saved in the program stack, and the new program with offset zero is set as the current program. 
+4. If VM encounters [`call`](#call) or [`delegate`](#delegate) instruction, the new program with offset zero is set as the current program. The next iteration of the vm will start from the beginning of the new program.
 5. If the offset is less than the current program’s length, a new instruction is read (go back to step 1).
 6. Otherwise (reached the end of the current program):
    1. If the program stack is not empty, pop top item from the program stack and set it to the current program. Go to step 5.
