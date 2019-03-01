@@ -52,9 +52,6 @@ const baseFee = 100
 const (
 	custodianSigCheckerFmt = `txid x"%x" get 0 checksig verify`
 
-	// TODO(debnil): Add a log statement in this contract, and check for
-	// its existence, with appropriate seed, in the watchExports goroutine.
-	// This more robustly checks for the export tx.
 	exportContract1Fmt = `
 	              #  con stack                arg stack              log
 	              #  ---------                ---------              ---
