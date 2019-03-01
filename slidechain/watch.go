@@ -141,7 +141,7 @@ func (c *Custodian) watchExports(ctx context.Context) {
 			if exportSeedLogItem[0].(txvm.Bytes)[0] != txvm.LogCode {
 				continue
 			}
-			if bytes.Compare(exportSeedLogItem[1].(txvm.Bytes), exportContract1Seed[:]) != 0 {
+			if !bytes.Equal(exportSeedLogItem[1].(txvm.Bytes), exportContract1Seed[:]) {
 				continue
 			}
 
