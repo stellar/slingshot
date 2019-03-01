@@ -11,9 +11,12 @@ use crate::errors::VMError;
 use crate::point_ops::PointOp;
 use crate::transcript::TranscriptProtocol;
 
+/// Verification key (aka "pubkey") is a wrapper type around a Ristretto point
+/// that lets the verifier to check the signature.
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub struct VerificationKey(pub CompressedRistretto);
 
+/// A Schnorr signature.
 #[derive(Copy, Clone, Debug)]
 pub struct Signature {
     R: CompressedRistretto,
@@ -142,12 +145,12 @@ impl Signature {
 }
 
 impl VerificationKey {
-    // Constructs a VerificationKey from a private key.
+    /// Constructs a VerificationKey from a private key.
     pub fn from_secret(privkey: &Scalar) -> Self {
         VerificationKey(Self::from_secret_uncompressed(privkey).compress())
     }
 
-    // Constructs an uncompressed VerificationKey point from a private key.
+    /// Constructs an uncompressed VerificationKey point from a private key.
     pub(crate) fn from_secret_uncompressed(privkey: &Scalar) -> RistrettoPoint {
         let gens = PedersenGens::default();
         (privkey * gens.B)

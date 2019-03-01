@@ -26,6 +26,7 @@ pub enum PortableItem {
     Value(Value),
 }
 
+/// Representation of a claimed UTXO for the `input` instruction.
 #[derive(Clone, Debug)]
 pub struct Input {
     prev_output: Output,
@@ -57,9 +58,9 @@ struct FrozenValue {
 }
 
 impl Input {
-    // Creates a "frozen contract" from payload (which is a vector of (qty, flv)) and pred.
-    // Serializes the contract, and uses the serialized contract and txid to generate a utxo.
-    // Returns an Input with the contract, txid, and utxo.
+    /// Creates a "frozen contract" from payload (which is a vector of (qty, flv)) and pred.
+    /// Serializes the contract, and uses the serialized contract and txid to generate a utxo.
+    /// Returns an Input with the contract, txid, and utxo.
     pub fn new<I>(payload: I, predicate: Predicate, txid: TxID) -> Self
     where
         I: IntoIterator<Item = (Commitment, Commitment)>,
@@ -148,9 +149,8 @@ impl Output {
                 // Data = 0x00 || LE32(len) || <bytes>
                 FrozenItem::Data(d) => {
                     encoding::write_u8(DATA_TYPE, buf);
-                    let bytes = d.to_bytes();
-                    encoding::write_u32(bytes.len() as u32, buf);
-                    encoding::write_bytes(&bytes, buf);
+                    encoding::write_u32(d.serialized_length() as u32, buf);
+                    d.encode(buf);
                 }
                 // Value = 0x01 || <32 bytes> || <32 bytes>
                 FrozenItem::Value(v) => {
