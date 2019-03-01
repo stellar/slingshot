@@ -37,8 +37,10 @@ pub struct Input {
 /// Representation of a Contract inside an Input that can be cloned.
 #[derive(Clone, Debug)]
 pub struct Output {
-    payload: Vec<FrozenItem>,
-    predicate: Predicate,
+    /// Contract payload
+    pub payload: Vec<FrozenItem>,
+    /// Contract predicate
+    pub predicate: Predicate,
 }
 
 /// Representation of a PortableItem inside an Input that can be cloned.
@@ -59,9 +61,7 @@ pub struct FrozenValue {
 }
 
 impl Input {
-    /// Serializes the contract, and uses the serialized contract and txid
-    /// to generate a utxo.
-    /// Returns an Input with the contract, txid, and utxo.
+    /// Creates an Input with a given Output and transaction id
     pub fn new(prev_output: Output, txid: TxID) -> Self {
         let utxo = UTXO::from_output(&prev_output.clone().to_bytes(), &txid);
         Input {
@@ -116,11 +116,6 @@ impl Output {
         let mut buf = Vec::with_capacity(self.serialized_length());
         self.encode(&mut buf);
         buf
-    }
-
-    /// Constructs a new Output from payload and predicate
-    pub fn new(payload: Vec<FrozenItem>, predicate: Predicate) -> Self {
-        Output { payload, predicate }
     }
 
     /// Precise length of a serialized contract

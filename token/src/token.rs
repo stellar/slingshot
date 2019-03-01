@@ -31,7 +31,8 @@ impl Token {
         )
     }
 
-    /// Returns program that issues specified quantity of Token.
+    /// Adds instructions to a program to issues a given quantity
+    /// of this Token.
     pub fn issue<'a>(&self, program: &'a mut Program, qty: u64) -> &'a mut Program {
         program
             .push(Commitment::blinded(qty)) // stack: qty
@@ -44,8 +45,8 @@ impl Token {
             .sign_tx() // stack: issued-value
     }
 
-    /// Returns program that issues specified quantity of Token,
-    /// outputting it to the destination Predicate.
+    /// Adds instructions to a program to issue a given quantity
+    /// of this token to a given destination predicate.
     pub fn issue_to<'a>(
         &self,
         program: &'a mut Program,
@@ -55,8 +56,8 @@ impl Token {
         self.issue(program, qty).push(dest).output(1)
     }
 
-    /// Returns program that retires a Token.
-    /// TBD: better symmetry here to accept a Token object
+    /// Adds instructions to a program to retire a given UTXO.
+    /// TBD: accept a qty/Token pairing to retire.
     pub fn retire<'a>(
         program: &'a mut Program,
         prev_output: Output,
