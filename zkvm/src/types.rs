@@ -14,33 +14,61 @@ use crate::predicate::Predicate;
 use crate::scalar_witness::ScalarWitness;
 use crate::transcript::TranscriptProtocol;
 
+/// An item on a VM stack.
 #[derive(Debug)]
 pub enum Item {
+    /// A data item.
     Data(Data),
+
+    /// A contract.
     Contract(Contract),
+
+    /// A value type.
     Value(Value),
+
+    /// A wide value type.
     WideValue(WideValue),
+
+    /// A variable type.
     Variable(Variable),
+
+    /// An expression type.
     Expression(Expression),
+
+    /// A constraint type.
     Constraint(Constraint),
 }
 
+/// A data item.
 #[derive(Clone, Debug)]
 pub enum Data {
+    /// Opaque data item.
     Opaque(Vec<u8>),
+
+    /// A program (list of instructions).
     Program(Vec<Instruction>),
+
+    /// A predicate.
     Predicate(Box<Predicate>),
+
+    /// A Pedersen commitment.
     Commitment(Box<Commitment>),
+
+    /// A scalar witness (scalar or integer).
     Scalar(Box<ScalarWitness>),
+
+    /// An input object (claimed UTXO).
     Input(Box<Input>),
 }
 
+/// A value type.
 #[derive(Debug)]
 pub struct Value {
     pub(crate) qty: Variable,
     pub(crate) flv: Variable,
 }
 
+/// A wide value type (for negative values created by `borrow`).
 #[derive(Debug)]
 pub struct WideValue {
     pub(crate) r1cs_qty: r1cs::Variable,
@@ -49,7 +77,7 @@ pub struct WideValue {
 }
 
 impl Item {
-    // Downcasts to Data type
+    /// Downcasts item to `Data` type.
     pub fn to_data(self) -> Result<Data, VMError> {
         match self {
             Item::Data(x) => Ok(x),
@@ -57,7 +85,7 @@ impl Item {
         }
     }
 
-    // Downcasts to Contract type
+    /// Downcasts item to `Contract` type.
     pub fn to_contract(self) -> Result<Contract, VMError> {
         match self {
             Item::Contract(c) => Ok(c),
@@ -65,7 +93,7 @@ impl Item {
         }
     }
 
-    // Downcasts to Value type
+    /// Downcasts item to `Value` type.
     pub fn to_value(self) -> Result<Value, VMError> {
         match self {
             Item::Value(v) => Ok(v),
@@ -73,7 +101,7 @@ impl Item {
         }
     }
 
-    // Downcasts to WideValue type (Value is NOT casted to WideValue)
+    /// Downcasts item to `WideValue` type (Value is NOT casted to WideValue).
     pub fn to_wide_value(self) -> Result<WideValue, VMError> {
         match self {
             Item::WideValue(w) => Ok(w),
@@ -81,7 +109,7 @@ impl Item {
         }
     }
 
-    // Downcasts to Variable type
+    /// Downcasts item to `Variable` type.
     pub fn to_variable(self) -> Result<Variable, VMError> {
         match self {
             Item::Variable(v) => Ok(v),
@@ -89,7 +117,7 @@ impl Item {
         }
     }
 
-    // Downcasts to Expression type (Variable is NOT casted to Expression)
+    /// Downcasts item to `Expression` type (Variable is NOT casted to Expression).
     pub fn to_expression(self) -> Result<Expression, VMError> {
         match self {
             Item::Expression(expr) => Ok(expr),
@@ -97,7 +125,7 @@ impl Item {
         }
     }
 
-    // Downcasts to Constraint type
+    /// Downcasts item to `Constraint` type.
     pub fn to_constraint(self) -> Result<Constraint, VMError> {
         match self {
             Item::Constraint(c) => Ok(c),
@@ -105,7 +133,7 @@ impl Item {
         }
     }
 
-    // Downcasts to a portable type
+    /// Downcasts item to a portable type (`Data` or `Value`).
     pub fn to_portable(self) -> Result<PortableItem, VMError> {
         match self {
             Item::Data(x) => Ok(PortableItem::Data(x)),
@@ -128,7 +156,9 @@ impl Data {
         }
     }
 
-    /// Converts the Data into a vector of bytes
+    /// Converts the Data item into a vector of bytes.
+    /// Opaque item is converted without extra allocations,
+    /// non-opaque item is encoded to a newly allocated buffer.
     pub fn to_bytes(self) -> Vec<u8> {
         match self {
             Data::Opaque(d) => d,
@@ -140,7 +170,7 @@ impl Data {
         }
     }
 
-    /// Downcast to a Predicate type.
+    /// Downcast the data item to a `Predicate` type.
     pub fn to_predicate(self) -> Result<Predicate, VMError> {
         match self {
             Data::Opaque(data) => {
@@ -152,6 +182,7 @@ impl Data {
         }
     }
 
+    /// Downcast the data item to a `Commitment` type.
     pub fn to_commitment(self) -> Result<Commitment, VMError> {
         match self {
             Data::Opaque(data) => {
@@ -163,6 +194,7 @@ impl Data {
         }
     }
 
+    /// Downcast the data item to an `Input` type.
     pub fn to_input(self) -> Result<Input, VMError> {
         match self {
             Data::Opaque(data) => Input::from_bytes(data),
@@ -171,7 +203,7 @@ impl Data {
         }
     }
 
-    /// Encodes blinded Data values.
+    /// Encodes the data item to an opaque bytestring.
     pub fn encode(&self, buf: &mut Vec<u8>) {
         match self {
             Data::Opaque(x) => buf.extend_from_slice(x),

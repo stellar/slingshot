@@ -1,3 +1,6 @@
+#![deny(missing_docs)]
+//! ZkVM implementation.
+
 #[macro_use]
 extern crate failure;
 

@@ -96,9 +96,12 @@ end
 def check_url(url, cache = {})
   return true if cache[url]
   if url == "https://dx.doi.org/10.6028/NIST.FIPS.202"
-    return true
+    true
   elsif DO_NOT_CHECK_HTTP_LINKS && url =~ /^https?:/
-    return true
+    true
+  elsif Dir.exists?(url)
+    cache[url] = "ok"
+    true
   else
     # check that file exists
     x = open(url).read rescue nil

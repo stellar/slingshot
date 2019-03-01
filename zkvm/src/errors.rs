@@ -112,9 +112,7 @@ pub enum VMError {
     #[fail(display = "R1CSError returned when trying to build R1CS instance")]
     R1CSError(R1CSError),
 
+    /// This error occurs when a prover expects some witness data, but it is missing.
     #[fail(display = "Item misses witness data.")]
     WitnessMissing,
-
-    #[fail(display = "Data item must be opaque")]
-    DataNotOpaque,
 }

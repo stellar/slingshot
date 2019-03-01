@@ -55,10 +55,25 @@ matrix:
     before_cache:
       - rm -rf /home/travis/.cargo/registry
     before_script:
+    - cd keytree
+    - rustup component add rustfmt-preview
+    script:
+    - cargo fmt --all -- --check
+    - cargo test
+    - RUSTFLAGS="-C opt-level=0" cargo bench "DONOTMATCHANYBENCHMARK"
+  - language: rust
+    rust: nightly-2018-12-31
+    # per https://levans.fr/rust_travis_cache.html
+    cache:
+      directories:
+        - /home/travis/.cargo
+    before_cache:
+      - rm -rf /home/travis/.cargo/registry
+    before_script:
     - cd token
     - rustup component add rustfmt-preview
     script:
     - cargo fmt --all -- --check
     - cargo test
     - RUSTFLAGS="-C opt-level=0" cargo bench "DONOTMATCHANYBENCHMARK"
- 
+

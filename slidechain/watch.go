@@ -1,13 +1,13 @@
 package slidechain
 
 import (
-	"bytes"
 	"context"
 	"database/sql"
 	"encoding/json"
 	"log"
 	"time"
 
+	"github.com/bobg/sqlutil"
 	"github.com/chain/txvm/protocol/bc"
 	"github.com/chain/txvm/protocol/txvm"
 	i10rnet "github.com/interstellar/starlight/net"
@@ -117,56 +117,96 @@ func (c *Custodian) watchExports(ctx context.Context) {
 		}
 		b := got.(*bc.Block)
 		for _, tx := range b.Transactions {
-			// Look for a retire-type ("X") entry
-			// followed by a specially formatted log ("L") entry
+			// Check if the transaction has either expected length for an export tx.
+			// Confirm that its input, log, and output entries are as expected.
+			// If so, look for a specially formatted log ("L") entry
 			// that specifies the Stellar asset code to peg out and the Stellar recipient account ID.
+			if len(tx.Log) != 4 && len(tx.Log) != 6 {
+				continue
+			}
+			if tx.Log[0][0].(txvm.Bytes)[0] != txvm.InputCode {
+				continue
+			}
+			if tx.Log[1][0].(txvm.Bytes)[0] != txvm.LogCode {
+				continue
+			}
 
-			for i := 0; i < len(tx.Log)-2; i++ {
-				item := tx.Log[i]
-				if item[0].(txvm.Bytes)[0] != txvm.RetireCode {
-					continue
-				}
-				retiredAmount := int64(item[2].(txvm.Int))
-				retiredAssetIDBytes := []byte(item[3].(txvm.Bytes))
+			outputIndex := len(tx.Log) - 2
+			if tx.Log[outputIndex][0].(txvm.Bytes)[0] != txvm.OutputCode {
+				continue
+			}
 
-				infoItem := tx.Log[i+1]
-				if infoItem[0].(txvm.Bytes)[0] != txvm.LogCode {
-					continue
-				}
-				var info pegOut
-				err := json.Unmarshal(infoItem[2].(txvm.Bytes), &info)
+			logItem := tx.Log[1]
+			var info pegOut
+			err := json.Unmarshal(logItem[2].(txvm.Bytes), &info)
+			if err != nil {
+				continue
+			}
+			exportedAssetBytes := txvm.AssetID(importIssuanceSeed[:], info.AssetXDR)
+
+			// Record the export in the db,
+			// then wake up a goroutine that executes peg-outs on the main chain.
+			const q = `
+				INSERT INTO exports 
+				(txid, exporter, amount, asset_xdr, temp_addr, seqnum, anchor, pubkey)
+				VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`
+			_, err = c.DB.ExecContext(ctx, q, tx.ID.Bytes(), info.Exporter, info.Amount, info.AssetXDR, info.TempAddr, info.Seqnum, info.Anchor, info.Pubkey)
+			if err != nil {
+				log.Fatalf("recording export tx: %s", err)
+			}
+
+			log.Printf("recorded export: %d of txvm asset %x (Stellar %x) for %s", info.Amount, exportedAssetBytes, info.AssetXDR, info.Exporter)
+
+			c.exports.Broadcast()
+		}
+	}
+}
+
+// Runs as a goroutine.
+func (c *Custodian) watchPegOuts(ctx context.Context, pegouts <-chan pegOut) {
+	defer log.Print("watchPegOuts exiting")
+
+	ticker := time.NewTicker(time.Minute)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			const q = `SELECT amount, asset_xdr, exporter, temp_addr, seqnum, anchor, pubkey FROM exports WHERE pegged_out IN ($1, $2)`
+			var (
+				txids, anchors, assetXDRs, pubkeys [][]byte
+				amounts, seqnums                   []int64
+				exporters, tempAddrs               []string
+				peggedOuts                         []pegOutState
+			)
+			err := sqlutil.ForQueryRows(ctx, c.DB, q, pegOutOK, pegOutFail, func(txid []byte, amount int64, assetXDR []byte, exporter, tempAddr string, seqnum, peggedOut int64, anchor, pubkey []byte) {
+				txids = append(txids, txid)
+				amounts = append(amounts, amount)
+				assetXDRs = append(assetXDRs, assetXDR)
+				exporters = append(exporters, exporter)
+				tempAddrs = append(tempAddrs, tempAddr)
+				seqnums = append(seqnums, seqnum)
+				peggedOuts = append(peggedOuts, pegOutState(peggedOut))
+				anchors = append(anchors, anchor)
+				pubkeys = append(pubkeys, pubkey)
+			})
+			if err != nil {
+				log.Fatalf("querying peg-outs: %s", err)
+			}
+			for i, txid := range txids {
+				err = c.doPostPegOut(ctx, assetXDRs[i], anchors[i], txid, amounts[i], seqnums[i], peggedOuts[i], exporters[i], tempAddrs[i], pubkeys[i])
 				if err != nil {
-					continue
+					log.Fatalf("doing post-peg-out: %s", err)
 				}
-
-				// Check this Stellar asset code corresponds to retiredAssetIDBytes.
-				gotAssetID32 := txvm.AssetID(importIssuanceSeed[:], info.AssetXDR)
-				if !bytes.Equal(gotAssetID32[:], retiredAssetIDBytes) {
-					continue
-				}
-
-				var exporter xdr.AccountId
-				err = exporter.SetAddress(info.Exporter)
-				if err != nil {
-					continue
-				}
-
-				// Record the export in the db,
-				// then wake up a goroutine that executes peg-outs on the main chain.
-				const q = `
-					INSERT INTO exports 
-					(txid, exporter, amount, asset_xdr, temp_addr, seqnum)
-					VALUES ($1, $2, $3, $4, $5, $6)`
-				_, err = c.DB.ExecContext(ctx, q, tx.ID.Bytes(), exporter.Address(), retiredAmount, info.AssetXDR, info.TempAddr, info.Seqnum)
-				if err != nil {
-					log.Fatalf("recording export tx: %s", err)
-				}
-
-				log.Printf("recorded export: %d of txvm asset %x (Stellar %x) for %s", retiredAmount, retiredAssetIDBytes, info.AssetXDR, exporter.Address())
-
-				c.exports.Broadcast()
-
-				i++ // advance past the consumed log ("L") entry
+			}
+		case p, ok := <-pegouts:
+			if !ok {
+				log.Fatalf("peg-outs channel closed")
+			}
+			err := c.doPostPegOut(ctx, p.AssetXDR, p.Anchor, p.TxID, p.Amount, p.Seqnum, p.State, p.Exporter, p.TempAddr, p.Pubkey)
+			if err != nil {
+				log.Fatalf("doing post-peg-out: %s", err)
 			}
 		}
 	}
