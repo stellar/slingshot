@@ -1,3 +1,6 @@
+//! Definition of all instructions in ZkVM,
+//! their codes and decoding/encoding utility functions.
+
 use core::borrow::Borrow;
 use core::mem;
 
@@ -11,7 +14,9 @@ use crate::types::Data;
 #[derive(Clone, Debug)]
 pub struct Program(Vec<Instruction>);
 
+/// A decoded instruction.
 #[derive(Clone, Debug)]
+#[allow(missing_docs)]
 pub enum Instruction {
     Push(Data), // size of the string
     Drop,
@@ -55,8 +60,10 @@ pub enum Instruction {
     Ext(u8),
 }
 
+/// A bytecode representation of the instruction.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 #[repr(u8)]
+#[allow(missing_docs)]
 pub enum Opcode {
     Push = 0x00,
     Drop = 0x01,
@@ -102,10 +109,13 @@ pub enum Opcode {
 const MAX_OPCODE: u8 = 0x26;
 
 impl Opcode {
+    /// Converts the opcode to `u8`.
     pub fn to_u8(self) -> u8 {
         unsafe { mem::transmute(self) }
     }
 
+    /// Instantiates the opcode from `u8`.
+    /// Unassigned code is mapped to `None`.
     pub fn from_u8(code: u8) -> Option<Opcode> {
         if code > MAX_OPCODE {
             None
@@ -221,9 +231,8 @@ impl Instruction {
         match self {
             Instruction::Push(data) => {
                 write(Opcode::Push);
-                let mut bytes = data.to_bytes();
-                encoding::write_u32(bytes.len() as u32, program);
-                program.append(&mut bytes);
+                encoding::write_u32(data.serialized_length() as u32, program);
+                data.encode(program);
             }
             Instruction::Drop => write(Opcode::Drop),
             Instruction::Dup(idx) => {
@@ -286,6 +295,7 @@ impl Instruction {
         };
     }
 
+    /// Encodes the iterator of instructions into a buffer.
     pub fn encode_program<I>(iterator: I, program: &mut Vec<u8>)
     where
         I: IntoIterator,
@@ -299,12 +309,14 @@ impl Instruction {
 
 macro_rules! def_op {
     ($func_name:ident, $op:ident) => (
+           /// Adds a `$func_name` instruction.
            pub fn $func_name(&mut self) -> &mut Program{
              self.0.push(Instruction::$op);
              self
         }
     );
     ($func_name:ident, $op:ident, $type:ty) => (
+           /// Adds a `$func_name` instruction.
            pub fn $func_name(&mut self, arg :$type) -> &mut Program{
              self.0.push(Instruction::$op(arg));
              self
@@ -378,6 +390,7 @@ impl Program {
         self
     }
 
+    /// Adds a `cloak` instruction for `m` inputs and `n` outputs.
     pub fn cloak(&mut self, m: usize, n: usize) -> &mut Program {
         self.0.push(Instruction::Cloak(m, n));
         self

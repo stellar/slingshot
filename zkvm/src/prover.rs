@@ -13,12 +13,16 @@ use crate::signature::{Signature, VerificationKey};
 use crate::txlog::{TxID, TxLog};
 use crate::vm::{Delegate, Tx, TxHeader, VM};
 
+/// This is the entry point API for creating a transaction.
+/// Prover passes the list of instructions through the VM,
+/// creates an aggregated transaction signature (for `signtx` instruction),
+/// creates a R1CS proof and returns a complete `Tx` object that can be published.
 pub struct Prover<'a, 'b> {
     signtx_keys: Vec<VerificationKey>,
     cs: r1cs::Prover<'a, 'b>,
 }
 
-pub struct ProverRun {
+pub(crate) struct ProverRun {
     program: VecDeque<Instruction>,
 }
 
@@ -59,6 +63,9 @@ impl<'a, 'b> Delegate<r1cs::Prover<'a, 'b>> for Prover<'a, 'b> {
 }
 
 impl<'a, 'b> Prover<'a, 'b> {
+    /// Builds a transaction with a given list of instructions and a `TxHeader`.
+    /// Returns a transaction `Tx` along with its ID (`TxID`) and a transaction log (`TxLog`).
+    /// Fails if the input program is malformed, or some witness data is missing.
     pub fn build_tx<'g, F>(
         program: Vec<Instruction>,
         header: TxHeader,

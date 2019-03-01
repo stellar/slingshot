@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -383,12 +384,12 @@ func TestEndToEnd(t *testing.T) {
 				}
 			}
 			t.Log("submitting pre-export tx...")
-			temp, seqnum, err := SubmitPreExportTx(hclient, exporter, c.AccountID.Address(), native, int64(exportAmount))
+			tempAddr, seqnum, err := SubmitPreExportTx(hclient, exporter, c.AccountID.Address(), native, int64(exportAmount))
 			if err != nil {
 				t.Fatalf("pre-submit tx error: %s", err)
 			}
 			t.Log("building export tx...")
-			exportTx, err := BuildExportTx(ctx, native, int64(exportAmount), int64(inputAmount), temp, anchor, exporterPrv, seqnum)
+			exportTx, err := BuildExportTx(ctx, native, int64(exportAmount), int64(inputAmount), tempAddr, anchor, exporterPrv, seqnum)
 			if err != nil {
 				t.Fatalf("error building retirement tx %s", err)
 			}
@@ -426,7 +427,7 @@ func TestEndToEnd(t *testing.T) {
 					if err != nil {
 						t.Fatal(err)
 					}
-					if env.Tx.SourceAccount.Address() != temp {
+					if env.Tx.SourceAccount.Address() != tempAddr {
 						t.Log("source accounts don't match, skipping...")
 						return
 					}
@@ -465,6 +466,29 @@ func TestEndToEnd(t *testing.T) {
 			case <-ctx.Done():
 				t.Fatal("context timed out: no peg-out tx seen")
 			case <-retire:
+			}
+			// Check for successful post-peg-out txvm tx.
+			// We first split off the difference between inputAmt and exportAmt.
+			// Then, we split off the zero-value for finalize, creating the retire anchor.
+			retireAnchor1 := txvm.VMHash("Split2", anchor)
+			retireAnchor := txvm.VMHash("Split1", retireAnchor1[:])
+			found = false
+			for {
+				item, ok := r.Read(ctx)
+				if !ok {
+					t.Fatal("cannot read a block")
+				}
+				block := item.(*bc.Block)
+				for _, tx := range block.Transactions {
+					if isPostPegOutTx(tx, native, int64(exportAmount), tempAddr, exporter.Address(), int64(seqnum), retireAnchor[:], exporterPubKeyBytes[:]) {
+						t.Logf("found post-peg-out tx %x", tx.Program)
+						found = true
+						break
+					}
+				}
+				if found == true {
+					break
+				}
 			}
 		}
 	})
@@ -510,6 +534,57 @@ func isImportTx(tx *bc.Tx, amount int64, assetXDR []byte, recipPubKey ed25519.Pu
 		return false
 	}
 	// No need to test tx.Log[4], it has to be a finalize entry.
+	return true
+}
+
+// isPostPegOutTx returns whether or not a txvm transaction matches the slidechain post-export tx format.
+//
+// Expected log is
+// {"I", ...}
+// {"X", ...}
+// {"L", ...}
+// {"N", ...}
+// {"R", ...}
+// {"F", ...}
+func isPostPegOutTx(tx *bc.Tx, asset xdr.Asset, amount int64, tempAddr, exporter string, seqnum int64, anchor, pubkey []byte) bool {
+	if len(tx.Log) != 6 {
+		return false
+	}
+	if tx.Log[0][0].(txvm.Bytes)[0] != txvm.InputCode {
+		return false
+	}
+	if tx.Log[1][0].(txvm.Bytes)[0] != txvm.RetireCode {
+		return false
+	}
+	if tx.Log[2][0].(txvm.Bytes)[0] != txvm.LogCode {
+		return false
+	}
+	if tx.Log[3][0].(txvm.Bytes)[0] != txvm.NonceCode {
+		return false
+	}
+	if tx.Log[4][0].(txvm.Bytes)[0] != txvm.TimerangeCode {
+		return false
+	}
+	if tx.Log[5][0].(txvm.Bytes)[0] != txvm.FinalizeCode {
+		return false
+	}
+	assetXDR, err := asset.MarshalBinary()
+	if err != nil {
+		return false
+	}
+	ref := pegOut{
+		AssetXDR: assetXDR,
+		TempAddr: tempAddr,
+		Seqnum:   seqnum,
+		Exporter: exporter,
+		Amount:   amount,
+		Anchor:   anchor,
+		Pubkey:   pubkey,
+	}
+	refdata, err := json.Marshal(ref)
+	if !bytes.Equal(refdata, tx.Log[2][2].(txvm.Bytes)) {
+		return false
+	}
 	return true
 }
 
