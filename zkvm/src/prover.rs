@@ -58,9 +58,8 @@ impl<'a, 'b> Delegate<r1cs::Prover<'a, 'b>> for Prover<'a, 'b> {
     }
 
     fn new_run(&self, data: Data) -> Result<Self::RunType, VMError> {
-        let instructions = data.to_program()?;
         Ok(ProverRun {
-            program: instructions.into(),
+            program: data.to_program()?.into(),
         })
     }
 
