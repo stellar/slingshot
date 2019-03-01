@@ -316,7 +316,7 @@ where
         self.push_item(constraint);
         Ok(())
     }
-    
+
     fn range(&mut self, i: u8) -> Result<(), VMError> {
         let expr = self.pop_item()?.to_expression()?;
         self.add_range_proof(i as usize, expr.clone());
