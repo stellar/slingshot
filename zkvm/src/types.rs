@@ -186,7 +186,7 @@ impl Data {
     pub fn to_program(self) -> Result<Vec<Instruction>, VMError> {
         match self {
             Data::Program(program) => Ok(program),
-            _ => Err(VMError::InconsistentWitness),
+            _ => Err(VMError::TypeNotProgram),
         }
     }
 
