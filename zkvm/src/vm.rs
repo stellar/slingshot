@@ -603,7 +603,7 @@ where
 
         // Verify signature using Verification key, over the message `program`
         let mut t = Transcript::new(b"ZkVM.delegate");
-        t.commit_bytes(b"prog", &prog_bytes);
+        t.commit_bytes(b"prog", &prog.clone().to_bytes());
         self.delegate
             .verify_point_op(|| signature.verify_single(&mut t, verification_key))?;
 
