@@ -10,7 +10,7 @@ use crate::ops::Instruction;
 use crate::point_ops::PointOp;
 use crate::predicate::Predicate;
 use crate::signature::VerificationKey;
-use crate::types::{Data};
+use crate::types::Data;
 use crate::vm::{Delegate, Tx, VerifiedTx, VM};
 
 /// This is the entry point API for verifying a transaction.
