@@ -118,6 +118,7 @@ pub enum VMError {
     #[fail(display = "Data item must be opaque")]
     DataNotOpaque,
 
+    /// This error occurs when we supply a number not in the range [1,64]
     #[fail(display = "Bitrange for rangeproof is not between 1 and 64")]
     InvalidBitrange,
 }
