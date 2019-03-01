@@ -182,6 +182,14 @@ impl Data {
         }
     }
 
+    /// Downcast the data item to a `Program` type.
+    pub fn to_program(self) -> Result<Vec<Instruction>, VMError> {
+        match self {
+            Data::Program(program) => Ok(program),
+            _ => Err(VMError::TypeNotProgram),
+        }
+    }
+
     /// Downcast the data item to a `Commitment` type.
     pub fn to_commitment(self) -> Result<Commitment, VMError> {
         match self {

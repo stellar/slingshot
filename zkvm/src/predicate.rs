@@ -95,7 +95,7 @@ impl Predicate {
         }
     }
 
-    /// Downcasts the predicate to a signing key
+    /// Downcasts the predicate to a verification key
     pub fn to_key(self) -> Result<VerificationKey, VMError> {
         match self {
             Predicate::Key(k) => Ok(k),

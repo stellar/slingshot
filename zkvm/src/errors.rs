@@ -72,6 +72,10 @@ pub enum VMError {
     #[fail(display = "Item is not a signed integer.")]
     TypeNotSignedInteger,
 
+    /// This error occurs when a prover is supposed to provide a program.
+    #[fail(display = "Item is not a program")]
+    TypeNotProgram,
+
     /// This error occurs when a prover has an inconsistent combination of witness data
     #[fail(display = "Witness data is inconsistent.")]
     InconsistentWitness,

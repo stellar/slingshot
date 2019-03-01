@@ -2,9 +2,11 @@ use bulletproofs::r1cs;
 use bulletproofs::r1cs::R1CSProof;
 use curve25519_dalek::ristretto::CompressedRistretto;
 use curve25519_dalek::scalar::Scalar;
+use merlin::Transcript;
 use spacesuit;
 use spacesuit::SignedInteger;
 use std::iter::FromIterator;
+use std::mem;
 
 use crate::constraints::{Commitment, Constraint, Expression, Variable};
 use crate::contract::{Contract, PortableItem};
@@ -115,6 +117,8 @@ pub(crate) trait Delegate<CS: r1cs::ConstraintSystem> {
     /// Returns Ok(None) if there is no more instructions to execute.
     fn next_instruction(&mut self, run: &mut Self::RunType)
         -> Result<Option<Instruction>, VMError>;
+
+    fn new_run(&self, prog: Data) -> Result<Self::RunType, VMError>;
 }
 
 /// And indirect reference to a high-level variable within a constraint system.
@@ -230,7 +234,7 @@ where
                 Instruction::Call => unimplemented!(),
                 Instruction::Left => self.left()?,
                 Instruction::Right => self.right()?,
-                Instruction::Delegate => unimplemented!(),
+                Instruction::Delegate => self.delegate()?,
                 Instruction::Ext(opcode) => self.ext(opcode)?,
             }
             return Ok(true);
@@ -577,6 +581,36 @@ where
         self.left_or_right(|contract, _, right| {
             contract.predicate = right;
         })
+    }
+
+    fn delegate(&mut self) -> Result<(), VMError> {
+        // Signature
+        let sig = self.pop_item()?.to_data()?.to_bytes();
+        let signature = Signature::from_bytes(SliceReader::parse(&sig, |r| r.read_u8x64())?)?;
+
+        // Program
+        let prog = self.pop_item()?.to_data()?;
+
+        // Place all items in payload onto the stack
+        let contract = self.pop_item()?.to_contract()?;
+        for item in contract.payload.into_iter() {
+            self.push_item(item);
+        }
+
+        // Verification key from predicate
+        let verification_key = contract.predicate.to_key()?;
+
+        // Verify signature using Verification key, over the message `program`
+        let mut t = Transcript::new(b"ZkVM.delegate");
+        t.commit_bytes(b"prog", &prog.clone().to_bytes());
+        self.delegate
+            .verify_point_op(|| signature.verify_single(&mut t, verification_key))?;
+
+        // Replace current program with new program
+        let new_run = self.delegate.new_run(prog)?;
+        let paused_run = mem::replace(&mut self.current_run, new_run);
+        self.run_stack.push(paused_run);
+        Ok(())
     }
 
     fn ext(&mut self, _: u8) -> Result<(), VMError> {
