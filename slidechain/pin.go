@@ -11,6 +11,17 @@ import (
 )
 
 // RunPin runs as a goroutine.
+// It exits when its context is canceled.
+// Given the name of a pin and a callback function,
+// this invokes the callback for each block added to the chain.
+// Each successful callback call updates the pin's height in the database,
+// so that processing can resume where it left off after a restart.
+// In rare instances it is possible for the callback to be invoked twice on the same block,
+// so it should be idempotent.
+// If the callback returns an error,
+// the goroutine calls log.Fatal,
+// causing an exit.
+// TODO(bobg): permit caller-defined error handling.
 func (c *Custodian) RunPin(ctx context.Context, name string, f func(context.Context, *bc.Block) error) {
 	defer log.Printf("RunPin(%s) exiting", name)
 
