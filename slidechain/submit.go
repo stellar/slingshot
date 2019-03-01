@@ -13,6 +13,7 @@ import (
 	"github.com/chain/txvm/errors"
 	"github.com/chain/txvm/protocol"
 	"github.com/chain/txvm/protocol/bc"
+	"github.com/chain/txvm/protocol/state"
 	"github.com/golang/protobuf/proto"
 	"github.com/interstellar/slingshot/slidechain/net"
 )
@@ -81,7 +82,7 @@ func (s *submitter) submitTx(ctx context.Context, tx *bc.Tx) (*multichan.R, erro
 				return
 			}
 			b := &bc.Block{UnsignedBlock: unsignedBlock}
-			err = s.chain.CommitAppliedBlock(ctx, b, newSnapshot)
+			err = s.commitBlock(ctx, b, newSnapshot)
 			if err != nil {
 				log.Fatalf("committing new block: %s", err)
 			}
@@ -96,6 +97,15 @@ func (s *submitter) submitTx(ctx context.Context, tx *bc.Tx) (*multichan.R, erro
 	}
 	log.Printf("added tx %x to the pending block", tx.ID.Bytes())
 	return r, nil
+}
+
+func (s *submitter) commitBlock(ctx context.Context, b *bc.Block, snapshot *state.Snapshot) error {
+	err := s.chain.CommitAppliedBlock(ctx, b, snapshot)
+	if err != nil {
+		return err
+	}
+	s.w.Write(b)
+	return nil
 }
 
 func (s *submitter) waitOnTx(ctx context.Context, txid bc.Hash, r *multichan.R) error {

@@ -136,7 +136,7 @@ func (s *BlockStore) ExpireBlocks(ctx context.Context) {
 
 			if height > 1 {
 				log.Printf("deleting blocks 2 through %d from the db", height-1)
-				_, err = s.db.ExecContext(`DELETE FROM blocks WHERE height > 1 AND height < $1`, height)
+				_, err = s.db.ExecContext(ctx, `DELETE FROM blocks WHERE height > 1 AND height < $1`, height)
 				if err != nil {
 					log.Printf("expiring blocks: %s", err)
 				}

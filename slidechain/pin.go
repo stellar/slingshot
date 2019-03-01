@@ -8,7 +8,6 @@ import (
 	"github.com/bobg/sqlutil"
 	"github.com/chain/txvm/errors"
 	"github.com/chain/txvm/protocol/bc"
-	"github.com/golang/protobuf/proto"
 )
 
 // RunPin runs as a goroutine.
@@ -17,13 +16,19 @@ func (c *Custodian) RunPin(ctx context.Context, name string, f func(context.Cont
 
 	r := c.S.w.Reader()
 
-	_, err := c.DB.ExecContext(`INSERT OR IGNORE INTO pins (name, height) VALUES ($1, 0)`, name)
+	_, err := c.DB.ExecContext(ctx, `INSERT OR IGNORE INTO pins (name, height) VALUES ($1, 0)`, name)
+	if errors.Root(err) == context.Canceled {
+		return
+	}
 	if err != nil {
 		log.Fatalf("creating pin %s: %s", name, err)
 	}
 
 	var lastHeight uint64
 	err = c.DB.QueryRowContext(ctx, `SELECT height FROM pins WHERE name = $1`, name).Scan(&lastHeight)
+	if errors.Root(err) == context.Canceled {
+		return
+	}
 	if err != nil {
 		log.Fatalf("getting height of pin %s: %s", name, err)
 	}
@@ -33,13 +38,16 @@ func (c *Custodian) RunPin(ctx context.Context, name string, f func(context.Cont
 	var blocks []*bc.Block
 	err = sqlutil.ForQueryRows(ctx, c.DB, `SELECT bits, height FROM blocks WHERE height > $1 ORDER BY height`, lastHeight, func(bits []byte, height uint64) error {
 		var block bc.Block
-		err = proto.Unmarshal(bits, &block)
+		err = block.FromBytes(bits)
 		if err != nil {
 			return errors.Wrapf(err, "unmarshaling block %d", height)
 		}
 		blocks = append(blocks, &block)
 		return nil
 	})
+	if errors.Root(err) == context.Canceled {
+		return
+	}
 	if err != nil {
 		log.Fatalf("processing backlog for pin %s: %s", name, err)
 	}
@@ -57,10 +65,14 @@ func (c *Custodian) RunPin(ctx context.Context, name string, f func(context.Cont
 			return errors.Wrapf(err, "updating pin %s after block %d", name, block.Height)
 		}
 		lastHeight = block.Height
+		return nil
 	}
 
 	for _, block := range blocks {
 		err = processBlock(block)
+		if errors.Root(err) == context.Canceled {
+			return
+		}
 		if err != nil {
 			log.Fatalf("processing block %d: %s", block.Height, err)
 		}
@@ -79,6 +91,9 @@ func (c *Custodian) RunPin(ctx context.Context, name string, f func(context.Cont
 			continue
 		}
 		err = processBlock(block)
+		if errors.Root(err) == context.Canceled {
+			return
+		}
 		if err != nil {
 			log.Fatalf("processing block %d: %s", block.Height, err)
 		}
