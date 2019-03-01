@@ -592,8 +592,13 @@ where
         let prog = self.pop_item()?.to_data()?;
         let prog_bytes = prog.clone().to_bytes();
 
-        // Verification key
+        // Place all items in payload onto the stack
         let contract = self.pop_item()?.to_contract()?;
+        for item in contract.payload.into_iter() {
+            self.push_item(item);
+        }
+
+        // Verification key from predicate
         let verification_key = contract.predicate.to_key()?;
 
         // Verify signature using Verification key, over the message `program`
