@@ -1,3 +1,5 @@
+#![deny(missing_docs)]
+
 use curve25519_dalek::scalar::Scalar;
 use rand::{CryptoRng, RngCore};
 
@@ -7,6 +9,7 @@ struct Xprv {
 }
 
 impl Xprv {
+    /// Returns a new Xprv, generated using the provided random number generator `rng`.
     pub fn random<T: RngCore + CryptoRng>(mut rng: T) -> Self {
         let scalar = Scalar::random(&mut rng);
         let mut dk = [0u8; 32];
