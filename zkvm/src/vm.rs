@@ -118,7 +118,7 @@ pub(crate) trait Delegate<CS: r1cs::ConstraintSystem> {
     fn next_instruction(&mut self, run: &mut Self::RunType)
         -> Result<Option<Instruction>, VMError>;
 
-    fn new_run(&self, prog: &[u8]) -> Result<Self::RunType, VMError>;
+    fn new_run(&self, prog: Data) -> Result<Self::RunType, VMError>;
 }
 
 /// And indirect reference to a high-level variable within a constraint system.
@@ -574,26 +574,29 @@ where
     }
 
     fn delegate(&mut self) -> Result<(), VMError> {
-        // Pop signature and put into signature struct
+        // Signature
         let sig = self.pop_item()?.to_data()?.to_bytes();
         if sig.len() != 64 {
             return Err(VMError::FormatError);
         }
-
         let signature = Signature::from_bytes(SliceReader::parse(&sig, |r| r.read_u8x64())?)?;
 
-        let prog = self.pop_item()?.to_data()?.to_bytes();
+        // Program
+        let prog = self.pop_item()?.to_data()?;
+        let prog_bytes = prog.clone().to_bytes();
 
+        // Verification key
         let contract = self.pop_item()?.to_contract()?;
         let verification_key = contract.predicate.to_key()?;
 
+        // Verify signature using Verification key, over the message `program` 
         let mut t = Transcript::new(b"ZkVM.delegate");
-        t.commit_bytes(b"prog", &prog);
-
+        t.commit_bytes(b"prog", &prog_bytes);
         self.delegate
             .verify_point_op(|| signature.verify_single(&mut t, verification_key))?;
 
-        let new_run = self.delegate.new_run(&prog)?;
+        // Replace current program with new program
+        let new_run = self.delegate.new_run(prog)?;
         let paused_run = mem::replace(&mut self.current_run, new_run);
         self.run_stack.push(paused_run);
         Ok(())
