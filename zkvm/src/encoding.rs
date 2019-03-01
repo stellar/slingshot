@@ -90,6 +90,13 @@ impl<'a> SliceReader<'a> {
         Ok(buf)
     }
 
+    pub fn read_u8x64(&mut self) -> Result<[u8; 64], VMError> {
+        let mut buf = [0u8; 64];
+        let bytes = self.read_bytes(64)?;
+        buf[..].copy_from_slice(&bytes);
+        Ok(buf)
+    }
+
     pub fn read_point(&mut self) -> Result<CompressedRistretto, VMError> {
         let buf = self.read_u8x32()?;
         Ok(CompressedRistretto(buf))
