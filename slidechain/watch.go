@@ -145,9 +145,9 @@ func (c *Custodian) watchExports(ctx context.Context) {
 				continue
 			}
 
-			exportDataLogItem := tx.Log[1]
+			exportDataInfoItem := tx.Log[1]
 			var info pegOut
-			err := json.Unmarshal(exportDataLogItem[2].(txvm.Bytes), &info)
+			err := json.Unmarshal(exportDataInfoItem[2].(txvm.Bytes), &info)
 			if err != nil {
 				continue
 			}
