@@ -1,7 +1,7 @@
 #![deny(missing_docs)]
 //! Implementation of the key tree protocol, a key blinding scheme for deriving hierarchies of public keys.
 
-use bulletproofs::PedersenGens;
+use curve25519_dalek::constants;
 use curve25519_dalek::ristretto::CompressedRistretto;
 use curve25519_dalek::scalar::Scalar;
 use rand::{CryptoRng, RngCore};
@@ -31,8 +31,7 @@ pub struct Xpub {
 impl Xpub {
     /// Returns a new Xpub, generated from the provided Xprv.
     pub fn from_xprv(xprv: Xprv) -> Self {
-        let gens = PedersenGens::default();
-        let point = xprv.scalar * gens.B;
+        let point = xprv.scalar * &constants::RISTRETTO_BASEPOINT_POINT;
         Xpub {
             point: point.compress(),
             dk: xprv.dk,
