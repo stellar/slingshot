@@ -56,8 +56,10 @@ pub enum FrozenItem {
 /// others can be passed-through to an output without going through `cloak` and the constraint system.
 #[derive(Clone, Debug)]
 pub struct FrozenValue {
-    qty: Commitment,
-    flv: Commitment,
+    /// Commitment to value's quantity
+    pub qty: Commitment,
+    /// Commitment to value's flavor
+    pub flv: Commitment,
 }
 
 impl Input {
@@ -234,12 +236,5 @@ impl Contract {
         let predicate = self.predicate;
 
         Output { payload, predicate }
-    }
-}
-
-impl FrozenValue {
-    /// Construct a new FrozenValue from quantity and flavor
-    pub fn new(qty: Commitment, flv: Commitment) -> Self {
-        FrozenValue { qty, flv }
     }
 }

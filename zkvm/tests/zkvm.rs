@@ -44,10 +44,10 @@ impl ProgramHelper for Program {
 
     fn input_helper(&mut self, qty: u64, flv: Scalar, pred: Predicate) -> &mut Self {
         let prev_output = Output {
-            payload: vec![FrozenItem::Value(FrozenValue::new(
-                Commitment::blinded(qty),
-                Commitment::blinded(flv),
-            ))],
+            payload: vec![FrozenItem::Value(FrozenValue{
+                qty: Commitment::blinded(qty),
+                flv: Commitment::blinded(flv),
+            })],
             predicate: pred,
         };
         self.push(Input::new(prev_output, TxID([0; 32]))) // stack: input-data
