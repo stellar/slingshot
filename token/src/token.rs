@@ -2,7 +2,7 @@ use bulletproofs::{BulletproofGens, PedersenGens};
 use curve25519_dalek::ristretto::CompressedRistretto;
 use curve25519_dalek::scalar::Scalar;
 use zkvm::{
-    Commitment, Data, Entry, Input, Instruction, Predicate, Program, Prover, Signature, Tx,
+    Commitment, Data, Entry, Input, Instruction, Output, Predicate, Program, Prover, Signature, Tx,
     TxHeader, TxID, TxLog, VMError, Value, VerificationKey, Verifier,
 };
 
@@ -32,14 +32,14 @@ impl Token {
     }
 
     /// Returns program that issues specified quantity of Token.
-    pub fn issue<'a>(program: &'a mut Program, token: Token, qty: u64) -> &'a mut Program {
+    pub fn issue<'a>(&self, program: &'a mut Program, qty: u64) -> &'a mut Program {
         program
             .push(Commitment::blinded(qty)) // stack: qty
             .var() // stack: qty-var
-            .push(Commitment::unblinded(token.flavor())) // stack: qty-var, flv
+            .push(Commitment::unblinded(self.flavor())) // stack: qty-var, flv
             .var() // stack: qty-var, flv-var
-            .push(Data::Opaque(token.metadata.clone())) // stack: qty-var, flv-var, data
-            .push(token.issuance_predicate.clone()) // stack: qty-var, flv-var, data, flv-pred
+            .push(Data::Opaque(self.metadata.clone())) // stack: qty-var, flv-var, data
+            .push(self.issuance_predicate.clone()) // stack: qty-var, flv-var, data, flv-pred
             .issue() // stack: issue-contract
             .sign_tx() // stack: issued-value
     }
@@ -47,26 +47,23 @@ impl Token {
     /// Returns program that issues specified quantity of Token,
     /// outputting it to the destination Predicate.
     pub fn issue_to<'a>(
+        &self,
         program: &'a mut Program,
-        token: Token,
         qty: u64,
         dest: Predicate,
     ) -> &'a mut Program {
-        Token::issue(program, token, qty).push(dest).output(1)
+        self.issue(program, qty).push(dest).output(1)
     }
 
     /// Returns program that retires a Token.
     /// TBD: better symmetry here to accept a Token object
     pub fn retire<'a>(
         program: &'a mut Program,
-        qty: CompressedRistretto,
-        flv: CompressedRistretto,
-        pred: Predicate,
+        prev_output: Output,
         txid: TxID,
     ) -> &'a mut Program {
-        let output = (Commitment::Closed(qty), Commitment::Closed(flv));
         program
-            .push(Input::new(vec![output], pred, txid))
+            .push(Input::new(prev_output, txid))
             .input()
             .sign_tx()
             .retire()
@@ -89,7 +86,7 @@ mod tests {
             );
             let dest = Predicate::Key(VerificationKey::from_secret(&dest_key));
             let program = Program::build(|p| {
-                Token::issue_to(p, usd.clone(), 10u64, dest.clone())
+                usd.issue_to(p, 10u64, dest.clone())
                     .push(Predicate::Key(VerificationKey::from_secret(&nonce_key)))
                     .nonce()
                     .sign_tx()
@@ -100,8 +97,7 @@ mod tests {
 
         // Verify tx
         let bp_gens = BulletproofGens::new(256, 1);
-        let vtx = Verifier::verify_tx(tx, &bp_gens).unwrap();
-        assert_eq!(vtx.log, txlog);
+        assert!(Verifier::verify_tx(tx, &bp_gens).is_ok());
     }
 
     #[test]
@@ -117,7 +113,7 @@ mod tests {
             );
             let dest = Predicate::Key(VerificationKey::from_secret(&dest_key));
             let issue_program = Program::build(|p| {
-                Token::issue_to(p, usd.clone(), 10u64, dest.clone())
+                usd.issue_to(p, 10u64, dest.clone())
                     .push(Predicate::Key(VerificationKey::from_secret(&nonce_key)))
                     .nonce()
                     .sign_tx()
@@ -127,18 +123,17 @@ mod tests {
                 build(issue_program, vec![issue_key, nonce_key]).unwrap();
 
             let mut retire_program = Program::new();
-            let (qty, flv) = match issue_txlog[1] {
-                Entry::Issue(q, f) => (q, f),
-                _ => return assert!(false, "TxLog entry doesn't match: expected Issue"),
+            let issue_output = match &issue_txlog[2] {
+                Entry::Output(x) => x.clone(),
+                _ => return assert!(false, "TxLog entry doesn't match: expected Output"),
             };
-            Token::retire(&mut retire_program, qty, flv, dest.clone(), issue_txid);
+            Token::retire(&mut retire_program, issue_output, issue_txid);
             build(retire_program.to_vec(), vec![dest_key]).unwrap()
         };
 
         // Verify tx
         let bp_gens = BulletproofGens::new(256, 1);
-        let vtx = Verifier::verify_tx(tx, &bp_gens).unwrap();
-        assert_eq!(vtx.log, txlog);
+        assert!(Verifier::verify_tx(tx, &bp_gens).is_ok());
     }
 
     // Helper functions

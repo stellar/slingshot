@@ -21,7 +21,7 @@ mod verifier;
 mod vm;
 
 pub use self::constraints::{Commitment, Constraint, Expression, Variable};
-pub use self::contract::Input;
+pub use self::contract::{FrozenItem, FrozenValue, Input, Output};
 pub use self::errors::VMError;
 pub use self::ops::{Instruction, Opcode, Program};
 pub use self::predicate::Predicate;
