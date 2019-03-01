@@ -108,9 +108,11 @@ impl Entry {
             }
             Entry::Import => {
                 // TBD: commit parameters
+                unimplemented!()
             }
             Entry::Export => {
                 // TBD: commit parameters
+                unimplemented!()
             }
         }
     }
