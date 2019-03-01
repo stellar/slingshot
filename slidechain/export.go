@@ -5,16 +5,18 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"math"
 	"strconv"
-	"time"
 
 	"github.com/bobg/sqlutil"
 	"github.com/chain/txvm/crypto/ed25519"
 	"github.com/chain/txvm/errors"
 	"github.com/chain/txvm/protocol/bc"
-	"github.com/chain/txvm/protocol/txbuilder"
-	"github.com/chain/txvm/protocol/txbuilder/txresult"
+	"github.com/chain/txvm/protocol/txbuilder/standard"
 	"github.com/chain/txvm/protocol/txvm"
+	"github.com/chain/txvm/protocol/txvm/asm"
+	"github.com/chain/txvm/protocol/txvm/op"
+	"github.com/chain/txvm/protocol/txvm/txvmutil"
 	"github.com/interstellar/slingshot/slidechain/stellar"
 	"github.com/interstellar/starlight/worizon/xlm"
 	b "github.com/stellar/go/build"
@@ -25,25 +27,81 @@ import (
 )
 
 type pegOut struct {
-	AssetXDR []byte `json:"asset"`
-	TempAddr string `json:"temp"`
-	Seqnum   int64  `json:"seqnum"`
-	Exporter string `json:"exporter"`
+	TxID     []byte      `json:"txid,omitempty"`
+	AssetXDR []byte      `json:"asset"`
+	TempAddr string      `json:"temp"`
+	Seqnum   int64       `json:"seqnum"`
+	Exporter string      `json:"exporter"`
+	Amount   int64       `json:"amount"`
+	Anchor   []byte      `json:"anchor"`
+	Pubkey   []byte      `json:"pubkey"`
+	State    pegOutState `json:"state,omitempty"`
 }
 
 type pegOutState int
 
 const (
-	pegOutFail pegOutState = iota
+	pegOutNotYet pegOutState = iota
 	pegOutOK
 	pegOutRetry
+	pegOutFail
 )
 
 const baseFee = 100
 
+const (
+	custodianSigCheckerFmt = `txid x"%x" get 0 checksig verify`
+
+	// TODO(debnil): Add a log statement in this contract, and check for
+	// its existence, with appropriate seed, in the watchExports goroutine.
+	// This more robustly checks for the export tx.
+	exportContract1Fmt = `
+	              #  con stack                arg stack              log
+	              #  ---------                ---------              ---
+	              #                           json, value, {exporter}       
+	get get get   #  {exporter}, value, json                                  
+	x'%x' output  #                                                  {O,...}
+`
+
+	// TODO(debnil): Modify this contract to produce a zeroval from the value it contains,
+	// so the caller does not have to do a new `nonce`.
+	exportContract2Fmt = `
+	                     #  con stack                          arg stack                 log
+	                     #  ---------                          ---------                 ---
+	                     #  {exporter}, value, json            selector                                    
+	get                  #  {exporter}, value, json, selector                                              
+	jumpif:$doretire     #                                                                                 
+	                     #  {exporter}, value, json                                                        
+	"" put               #  {exporter}, value, json            ""                                          
+	drop                 #  {exporter}, value                                                              
+	put put 1 put        #                                     "", value, {exporter}, 1                    
+	x'%x' contract call  #                                                               {'L',...}{'O',...}
+	jump:$checksig       #                                                                                   
+	                     #                                                                                   
+	$doretire            #                                                                                   
+	                     #  {exporter}, value, json                                                          
+	put put drop         #                                     json, value                                   
+	x'%x' contract call  #                                                                                   
+	                     #                                                                                                        
+	$checksig            #                                                                                   
+	[%s] yield           #                                     sigchecker                                    
+                                                                                   
+`
+)
+
+var (
+	custodianSigCheckerSrc = fmt.Sprintf(custodianSigCheckerFmt, custodianPub)
+	exportContract1Src     = fmt.Sprintf(exportContract1Fmt, exportContract2Prog)
+	exportContract1Prog    = asm.MustAssemble(exportContract1Src)
+	exportContract1Seed    = txvm.ContractSeed(exportContract1Prog)
+	exportContract2Src     = fmt.Sprintf(exportContract2Fmt, standard.PayToMultisigProg1, standard.RetireContract, custodianSigCheckerSrc)
+	exportContract2Prog    = asm.MustAssemble(exportContract2Src)
+)
+
 // Runs as a goroutine.
-func (c *Custodian) pegOutFromExports(ctx context.Context) {
+func (c *Custodian) pegOutFromExports(ctx context.Context, pegouts chan<- pegOut) {
 	defer log.Print("pegOutFromExports exiting")
+	defer close(pegouts)
 
 	ch := make(chan struct{})
 	go func() {
@@ -64,24 +122,22 @@ func (c *Custodian) pegOutFromExports(ctx context.Context) {
 			return
 		case <-ch:
 		}
-
-		const q = `SELECT txid, amount, asset_xdr, exporter, temp_addr, seqnum FROM exports`
+		const q = `SELECT txid, anchor, pubkey, asset_xdr, amount, seqnum, exporter, temp_addr FROM exports WHERE pegged_out IN ($1, $2)`
 
 		var (
-			txids     [][]byte
-			amounts   []int
-			assetXDRs [][]byte
-			exporters []string
-			tempAddrs []string
-			seqnums   []int
+			txids, anchors, assetXDRs, pubkeys [][]byte
+			amounts, seqnums                   []int64
+			exporters, tempAddrs               []string
 		)
-		err := sqlutil.ForQueryRows(ctx, c.DB, q, func(txid []byte, amount int, assetXDR []byte, exporter string, tempAddr string, seqnum int) {
+		err := sqlutil.ForQueryRows(ctx, c.DB, q, pegOutNotYet, pegOutRetry, func(txid, anchor, pubkey, assetXDR []byte, amount, seqnum int64, exporter, tempAddr string) {
 			txids = append(txids, txid)
 			amounts = append(amounts, amount)
 			assetXDRs = append(assetXDRs, assetXDR)
 			exporters = append(exporters, exporter)
 			tempAddrs = append(tempAddrs, tempAddr)
 			seqnums = append(seqnums, seqnum)
+			anchors = append(anchors, anchor)
+			pubkeys = append(pubkeys, pubkey)
 		})
 		if err != nil {
 			log.Fatalf("reading export rows: %s", err)
@@ -106,28 +162,43 @@ func (c *Custodian) pegOutFromExports(ctx context.Context) {
 			log.Printf("pegging out export %x: %d of %s to %s", txid, amounts[i], asset.String(), exporters[i])
 
 			peggedOut := pegOutOK
-			err = c.pegOut(ctx, exporter, asset, int64(amounts[i]), tempID, xdr.SequenceNumber(seqnums[i]))
+			err = c.pegOut(ctx, exporter, asset, amounts[i], tempID, xdr.SequenceNumber(seqnums[i]))
 			if err != nil {
 				peggedOut = pegOutFail
 				if herr, ok := errors.Root(err).(*horizon.Error); ok {
-					resultCodes, err := herr.ResultCodes()
-					if err != nil {
-						log.Fatalf("getting error codes from failed submission of tx %s", txid)
+					resultCodes, rerr := herr.ResultCodes()
+					if rerr != nil {
+						log.Fatalf("getting error codes from failed submission of tx %x (with horizon err '%s'): %s", txid, herr, rerr)
 					}
 					if resultCodes.TransactionCode == xdr.TransactionResultCodeTxBadSeq.String() {
 						peggedOut = pegOutRetry
 					}
 				}
 			}
-			// Delete successful and failed peg-outs from exports.
-			if peggedOut != pegOutRetry {
-				_, err = c.DB.ExecContext(ctx, `DELETE FROM exports WHERE txid=$2`, txid)
-				if err != nil {
-					log.Fatalf("updating export table: %s", err)
-				}
+			result, err := c.DB.ExecContext(ctx, `UPDATE exports SET pegged_out=$1 WHERE txid=$2`, peggedOut, txid)
+			if err != nil {
+				log.Fatalf("updating pegged_out in export table: %s", err)
 			}
-			if peggedOut == pegOutFail {
-				log.Fatalf("peg-out failed for tx %s", txid)
+			numAffected, err := result.RowsAffected()
+			if err != nil {
+				log.Fatalf("checking rows affected by update exports query for txid %x: %s", txid, err)
+			}
+			if numAffected != 1 {
+				log.Fatalf("got %d rows affected by update exports query for txid %x, want 1", numAffected, txid)
+			}
+			// Send peg-out info to goroutine for successes and non-retriable failures.
+			if peggedOut == pegOutOK || peggedOut == pegOutFail {
+				pegouts <- pegOut{
+					TxID:     txid,
+					AssetXDR: assetXDRs[i],
+					TempAddr: tempAddrs[i],
+					Seqnum:   seqnums[i],
+					Exporter: exporters[i],
+					Amount:   amounts[i],
+					State:    peggedOut,
+					Anchor:   anchors[i],
+					Pubkey:   pubkeys[i],
+				}
 			}
 		}
 	}
@@ -139,10 +210,7 @@ func (c *Custodian) pegOut(ctx context.Context, exporter xdr.AccountId, asset xd
 		return errors.Wrap(err, "building peg-out tx")
 	}
 	_, err = stellar.SignAndSubmitTx(c.hclient, tx, c.seed)
-	if err != nil {
-		errors.Wrap(err, "peg-out tx")
-	}
-	return nil
+	return errors.Wrap(err, "submitting peg-out tx")
 }
 
 func buildPegOutTx(custodianAddr, exporterAddr, tempAddr, network string, asset xdr.Asset, amount int64, seqnum xdr.SequenceNumber) (*b.TransactionBuilder, error) {
@@ -281,15 +349,15 @@ func SubmitPreExportTx(hclient horizon.ClientInterface, kp *keypair.Full, custod
 // BuildExportTx builds a txvm retirement tx for an asset issued
 // onto slidechain. It will retire `amount` of the asset, and the
 // remaining input will be output back to the original account.
-func BuildExportTx(ctx context.Context, asset xdr.Asset, amount, inputAmt int64, tempAddr string, anchor []byte, prv ed25519.PrivateKey, seqnum xdr.SequenceNumber) (*bc.Tx, error) {
-	if inputAmt < amount {
-		return nil, fmt.Errorf("cannot have input amount %d less than export amount %d", inputAmt, amount)
+func BuildExportTx(ctx context.Context, asset xdr.Asset, exportAmt, inputAmt int64, tempAddr string, anchor []byte, prv ed25519.PrivateKey, seqnum xdr.SequenceNumber) (*bc.Tx, error) {
+	if inputAmt < exportAmt {
+		return nil, fmt.Errorf("cannot have input amount %d less than export amount %d", inputAmt, exportAmt)
 	}
-	assetBytes, err := asset.MarshalBinary()
+	assetXDR, err := asset.MarshalBinary()
 	if err != nil {
 		return nil, err
 	}
-	assetID := bc.NewHash(txvm.AssetID(importIssuanceSeed[:], assetBytes))
+	assetID := bc.NewHash(txvm.AssetID(importIssuanceSeed[:], assetXDR))
 	var rawSeed [32]byte
 	copy(rawSeed[:], prv)
 	kp, err := keypair.FromRawSeed(rawSeed)
@@ -297,36 +365,65 @@ func BuildExportTx(ctx context.Context, asset xdr.Asset, amount, inputAmt int64,
 		return nil, err
 	}
 	pubkey := prv.Public().(ed25519.PublicKey)
+
+	// We first split off the difference between inputAmt and exportAmt.
+	// Then, we split off the zero-value for finalize, creating the retire anchor.
+	retireAnchor1 := txvm.VMHash("Split2", anchor)
+	retireAnchor := txvm.VMHash("Split1", retireAnchor1[:])
 	ref := pegOut{
-		assetBytes,
-		tempAddr,
-		int64(seqnum),
-		kp.Address(),
+		AssetXDR: assetXDR,
+		TempAddr: tempAddr,
+		Seqnum:   int64(seqnum),
+		Exporter: kp.Address(),
+		Amount:   exportAmt,
+		Anchor:   retireAnchor[:],
+		Pubkey:   pubkey,
 	}
 	refdata, err := json.Marshal(ref)
 	if err != nil {
 		return nil, errors.Wrap(err, "marshaling reference data")
 	}
-	tpl := txbuilder.NewTemplate(time.Now().Add(time.Minute), nil)
-	tpl.AddInput(1, [][]byte{prv}, nil, []ed25519.PublicKey{pubkey}, inputAmt, assetID, anchor, nil, 1)
-	tpl.AddRetirement(int64(amount), assetID, refdata)
-	if inputAmt > amount {
-		tpl.AddOutput(1, []ed25519.PublicKey{pubkey}, inputAmt-amount, assetID, nil, nil)
+	b := new(txvmutil.Builder)
+	b.PushdataBytes(refdata)                                                                                             // con stack: json
+	b.Op(op.Put)                                                                                                         // arg stack: json
+	standard.SpendMultisig(b, 1, []ed25519.PublicKey{pubkey}, inputAmt, assetID, anchor, standard.PayToMultisigSeed1[:]) // arg stack: inputval, sigcheck
+	b.Op(op.Get).Op(op.Get)                                                                                              // con stack: sigcheck, inputval
+	b.PushdataInt64(exportAmt).Op(op.Split)                                                                              // con stack: sigcheck, changeval, retireval
+	b.PushdataInt64(1).Op(op.Roll)                                                                                       // con stack: sigcheck, retireval, changeval
+	if inputAmt != exportAmt {
+		b.PushdataBytes(nil).Op(op.Put)                                                    // con stack: sigcheck, retireval, changeval; arg stack: refdata
+		b.Op(op.Put)                                                                       // con stack: sigcheck, retireval; arg stack: refdata, changeval
+		b.Tuple(func(tup *txvmutil.TupleBuilder) { tup.PushdataBytes(pubkey) }).Op(op.Put) // con stack: sigcheck, retireval; arg stack: refdata, changeval, {pubkey}
+		b.PushdataInt64(1).Op(op.Put)                                                      // con stack: sigcheck, retireval; arg stack: refdata, changeval, {pubkey}, 1
+		b.PushdataBytes(standard.PayToMultisigProg1).Op(op.Contract).Op(op.Call)           // con stack: sigcheck, retireval
+	} else {
+		b.Op(op.Drop) // con stack: sigcheck, retireval
 	}
-	err = tpl.Sign(ctx, func(_ context.Context, msg []byte, prv []byte, path [][]byte) ([]byte, error) {
-		return ed25519.Sign(prv, msg), nil
-	})
+	// con stack: sigcheck, retireval
+	b.PushdataBytes(refdata).Op(op.Put)                                                // con stack: sigcheck, retireval; arg stack: json
+	b.PushdataInt64(0).Op(op.Split).PushdataInt64(1).Op(op.Roll).Op(op.Put)            // con stack: sigcheck, zeroval; arg stack: json, retireval
+	b.Tuple(func(tup *txvmutil.TupleBuilder) { tup.PushdataBytes(pubkey) }).Op(op.Put) // con stack: sigcheck, zeroval; arg stack: json, retireval, {pubkey}
+	b.PushdataBytes(exportContract1Prog)                                               // con stack: sigchecker, zeroval, exportContract; arg stack: json, retireval, {pubkey}
+	b.Op(op.Contract).Op(op.Call)                                                      // con stack: sigchecker, zeroval
+	b.Op(op.Finalize)                                                                  // con stack: sigchecker
+	prog1 := b.Build()
+	vm, err := txvm.Validate(prog1, 3, math.MaxInt64, txvm.StopAfterFinalize)
 	if err != nil {
-		return nil, errors.Wrap(err, "signing tx")
+		return nil, errors.Wrap(err, "computing transaction ID")
 	}
-	tx, err := tpl.Tx()
+	sigProg := standard.VerifyTxID(vm.TxID)
+	msg := append(sigProg, anchor...)
+	sig := ed25519.Sign(prv, msg)
+	b.PushdataBytes(sig).Op(op.Put)
+	b.PushdataBytes(sigProg).Op(op.Put)
+	b.Op(op.Call)
+
+	prog2 := b.Build()
+	var runlimit int64
+	tx, err := bc.NewTx(prog2, 3, math.MaxInt64, txvm.GetRunlimit(&runlimit))
 	if err != nil {
-		return nil, errors.Wrap(err, "building tx")
+		return nil, errors.Wrap(err, "making export tx")
 	}
-	if inputAmt > amount {
-		txresult := txresult.New(tx)
-		output := txresult.Outputs[0].Value
-		log.Printf("output: assetid %x amount %x anchor %x", output.AssetID.Bytes(), output.Amount, output.Anchor)
-	}
+	tx.Runlimit = math.MaxInt64 - runlimit
 	return tx, nil
 }

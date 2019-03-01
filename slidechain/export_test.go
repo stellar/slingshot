@@ -36,7 +36,8 @@ func TestPegOut(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	go c.pegOutFromExports(ctx)
+	pegouts := make(chan pegOut)
+	go c.pegOutFromExports(ctx, pegouts)
 
 	var lumen xdr.Asset
 	lumen.Type = xdr.AssetTypeAssetTypeNative
@@ -59,7 +60,8 @@ func TestPegOut(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err = c.DB.Exec("INSERT INTO exports (txid, amount, asset_xdr, temp_addr, seqnum, exporter) VALUES ($1, $2, $3, $4, $5, $6)", "", amount, lumenXDR, tempAddr, seqnum, kp.Address())
+	var zero32 [32]byte // anchor and pubkey do not matter to test this functionality
+	_, err = c.DB.Exec("INSERT INTO exports (txid, amount, asset_xdr, temp_addr, seqnum, exporter, anchor, pubkey) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)", []byte("test"), amount, lumenXDR, tempAddr, seqnum, kp.Address(), zero32[:], zero32[:])
 	if err != nil && err != context.Canceled {
 		t.Fatal(err)
 	}
@@ -121,4 +123,7 @@ func TestPegOut(t *testing.T) {
 		t.Fatal("context timed out: no peg-out tx seen")
 	case <-ch:
 	}
+	// Wait for peg-out to be written.
+	// Avoids closing the database while the watch peg-outs goroutine still needs it.
+	<-pegouts
 }

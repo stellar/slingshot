@@ -52,17 +52,17 @@ pub struct Tx {
 
 /// Represents a verified transaction: a txid and a list of state updates.
 pub struct VerifiedTx {
-    /// Header metadata
+    /// Transaction header
     pub header: TxHeader,
 
     /// Transaction ID
     pub id: TxID,
 
-    // List of inputs, outputs and nonces to be inserted/deleted in the blockchain state.
+    /// Transaction log: a list of changes to the blockchain state (UTXOs to delete/insert, etc.)
     pub log: TxLog,
 }
 
-pub struct VM<'d, CS, D>
+pub(crate) struct VM<'d, CS, D>
 where
     CS: r1cs::ConstraintSystem,
     D: Delegate<CS>,
@@ -89,7 +89,7 @@ where
     variable_commitments: Vec<VariableCommitment>,
 }
 
-pub trait Delegate<CS: r1cs::ConstraintSystem> {
+pub(crate) trait Delegate<CS: r1cs::ConstraintSystem> {
     type RunType;
 
     /// Adds a Commitment to the underlying constraint system, producing a high-level variable
@@ -385,8 +385,10 @@ where
         Ok(())
     }
 
+    /// _qty flv data pred_ **issue** → _contract_
     fn issue(&mut self) -> Result<(), VMError> {
         let predicate = self.pop_item()?.to_data()?.to_predicate()?;
+        let metadata = self.pop_item()?.to_data()?;
         let flv = self.pop_item()?.to_variable()?;
         let qty = self.pop_item()?.to_variable()?;
 
@@ -394,7 +396,7 @@ where
         let (qty_point, _) = self.attach_variable(qty)?;
 
         self.delegate.verify_point_op(|| {
-            let flv_scalar = Value::issue_flavor(&predicate);
+            let flv_scalar = Value::issue_flavor(&predicate, metadata);
             // flv_point == flavor·B    ->   0 == -flv_point + flv_scalar·B
             PointOp {
                 primary: Some(flv_scalar),

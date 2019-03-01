@@ -192,10 +192,12 @@ func (c *Custodian) Account(w http.ResponseWriter, req *http.Request) {
 // launch kicks off the Custodian's long-running goroutines
 // that stream txs, import, and export.
 func (c *Custodian) launch(ctx context.Context) {
+	pegouts := make(chan pegOut)
 	go c.watchPegIns(ctx)
 	go c.importFromPegIns(ctx, nil)
 	go c.watchExports(ctx)
-	go c.pegOutFromExports(ctx)
+	go c.pegOutFromExports(ctx, pegouts)
+	go c.watchPegOuts(ctx, pegouts)
 }
 
 func mustDecodeHex(inp string) []byte {

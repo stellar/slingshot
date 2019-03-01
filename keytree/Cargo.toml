@@ -1,0 +1,13 @@
+[package]
+name = "keytree"
+version = "0.1.0"
+authors = ["Tess Rinearson <tess.rinearson@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+curve25519-dalek = { version = "1.0.1", features = ["serde"] }
+merlin = "1.0.1"
+rand = "0.6"
+
+[dev-dependencies]
+rand_chacha = "0.1"
