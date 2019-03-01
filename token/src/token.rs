@@ -8,6 +8,7 @@ use zkvm::{
 
 /// Represents a ZkVM Token with unique flavor and embedded
 /// metadata protected by a user-supplied Predicate.
+#[derive(Clone, Debug)]
 pub struct Token {
     issuance_predicate: Predicate,
     metadata: Vec<u8>,
@@ -24,11 +25,14 @@ impl Token {
 
     /// Returns the Token's flavor.
     pub fn flavor(&self) -> Scalar {
-        Value::issue_flavor(&self.issuance_predicate, Data::Opaque(self.metadata.clone()))
+        Value::issue_flavor(
+            &self.issuance_predicate,
+            Data::Opaque(self.metadata.clone()),
+        )
     }
 
     /// Returns program that issues specified quantity of Token.
-    pub fn issue<'a>(program: &'a mut Program, token: &Token, qty: u64) -> &'a mut Program {
+    pub fn issue<'a>(program: &'a mut Program, token: Token, qty: u64) -> &'a mut Program {
         program
             .push(Commitment::blinded(qty)) // stack: qty
             .var() // stack: qty-var
@@ -44,13 +48,11 @@ impl Token {
     /// outputting it to the destination Predicate.
     pub fn issue_to<'a>(
         program: &'a mut Program,
-        token: &Token,
+        token: Token,
         qty: u64,
-        dest: &Predicate,
+        dest: Predicate,
     ) -> &'a mut Program {
-        Token::issue(program, token, qty)
-            .push(dest.clone())
-            .output(1)
+        Token::issue(program, token, qty).push(dest).output(1)
     }
 
     /// Returns program that retires a Token.
@@ -59,16 +61,12 @@ impl Token {
         program: &'a mut Program,
         qty: CompressedRistretto,
         flv: CompressedRistretto,
-        pred: &Predicate,
+        pred: Predicate,
         txid: TxID,
     ) -> &'a mut Program {
         let output = (Commitment::Closed(qty), Commitment::Closed(flv));
         program
-            .push(Data::Input(Box::new(Input::new(
-                vec![output],
-                pred.clone(),
-                txid,
-            ))))
+            .push(Input::new(vec![output], pred, txid))
             .input()
             .sign_tx()
             .retire()
@@ -91,7 +89,7 @@ mod tests {
             );
             let dest = Predicate::Key(VerificationKey::from_secret(&dest_key));
             let program = Program::build(|p| {
-                Token::issue_to(p, &usd, 10u64, &dest)
+                Token::issue_to(p, usd.clone(), 10u64, dest.clone())
                     .push(Predicate::Key(VerificationKey::from_secret(&nonce_key)))
                     .nonce()
                     .sign_tx()
@@ -119,20 +117,21 @@ mod tests {
             );
             let dest = Predicate::Key(VerificationKey::from_secret(&dest_key));
             let issue_program = Program::build(|p| {
-                Token::issue_to(p, &usd, 10u64, &dest)
+                Token::issue_to(p, usd.clone(), 10u64, dest.clone())
                     .push(Predicate::Key(VerificationKey::from_secret(&nonce_key)))
                     .nonce()
                     .sign_tx()
             })
             .to_vec();
-            let (_, issue_txid, issue_txlog) = build(issue_program, vec![issue_key, nonce_key]).unwrap();
+            let (_, issue_txid, issue_txlog) =
+                build(issue_program, vec![issue_key, nonce_key]).unwrap();
 
             let mut retire_program = Program::new();
             let (qty, flv) = match issue_txlog[1] {
                 Entry::Issue(q, f) => (q, f),
                 _ => return assert!(false, "TxLog entry doesn't match: expected Issue"),
             };
-            Token::retire(&mut retire_program, qty, flv, &dest, issue_txid);
+            Token::retire(&mut retire_program, qty, flv, dest.clone(), issue_txid);
             build(retire_program.to_vec(), vec![dest_key]).unwrap()
         };
 
@@ -143,10 +142,7 @@ mod tests {
     }
 
     // Helper functions
-    fn build(
-        program: Vec<Instruction>,
-        keys: Vec<Scalar>,
-    ) -> Result<(Tx, TxID, TxLog), VMError> {
+    fn build(program: Vec<Instruction>, keys: Vec<Scalar>) -> Result<(Tx, TxID, TxLog), VMError> {
         let bp_gens = BulletproofGens::new(256, 1);
         let header = TxHeader {
             version: 0u64,
