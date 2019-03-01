@@ -63,7 +63,7 @@ pub struct FrozenValue {
 impl Input {
     /// Creates an Input with a given Output and transaction id
     pub fn new(prev_output: Output, txid: TxID) -> Self {
-        let utxo = UTXO::from_output(&prev_output.clone().to_bytes(), &txid);
+        let utxo = UTXO::from_output(&prev_output.to_bytes(), &txid);
         Input {
             prev_output,
             utxo,
@@ -112,7 +112,7 @@ impl Input {
 
 impl Output {
     /// Converts self to vector of bytes
-    pub fn to_bytes(self) -> Vec<u8> {
+    pub fn to_bytes(&self) -> Vec<u8> {
         let mut buf = Vec::with_capacity(self.serialized_length());
         self.encode(&mut buf);
         buf

@@ -102,7 +102,7 @@ impl Entry {
                 t.commit_u64(b"nonce.t", *maxtime);
             }
             Entry::Output(outstruct) => {
-                t.commit_bytes(b"output", &outstruct.clone().to_bytes());
+                t.commit_bytes(b"output", &outstruct.to_bytes());
             }
             Entry::Data(data) => {
                 t.commit_bytes(b"data", data);
