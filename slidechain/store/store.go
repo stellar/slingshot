@@ -117,7 +117,7 @@ func (s *BlockStore) ExpireBlocks(ctx context.Context) {
 		case <-ticker.C:
 			snap, err := s.LatestSnapshot(ctx)
 			if err != nil {
-				log.Printf("getting latest snapshot in ExpireBlocks: %s", err)
+				log.Printf("error getting latest snapshot in ExpireBlocks: %s", err)
 				continue
 			}
 
@@ -127,18 +127,18 @@ func (s *BlockStore) ExpireBlocks(ctx context.Context) {
 			var lowestPin uint64
 			err = s.db.QueryRowContext(ctx, q).Scan(&lowestPin)
 			if err != nil {
-				log.Printf("getting lowest pin in ExpireBlocks: %s", err)
+				log.Printf("error getting lowest pin in ExpireBlocks: %s", err)
 				continue
 			}
 			if lowestPin < height {
 				height = lowestPin
 			}
 
-			if height > 1 {
+			if height > 2 {
 				log.Printf("deleting blocks 2 through %d from the db", height-1)
 				_, err = s.db.ExecContext(ctx, `DELETE FROM blocks WHERE height > 1 AND height < $1`, height)
 				if err != nil {
-					log.Printf("expiring blocks: %s", err)
+					log.Printf("error expiring blocks: %s", err)
 				}
 			}
 		}
