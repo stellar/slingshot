@@ -1,6 +1,7 @@
 use curve25519_dalek::ristretto::CompressedRistretto;
 use merlin::Transcript;
 
+use crate::contract::Output;
 use crate::transcript::TranscriptProtocol;
 use crate::vm::TxHeader;
 
@@ -8,7 +9,7 @@ use crate::vm::TxHeader;
 pub type TxLog = Vec<Entry>;
 
 /// Entry in a transaction log
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, Debug)]
 #[allow(missing_docs)]
 pub enum Entry {
     Header(TxHeader),
@@ -16,7 +17,7 @@ pub enum Entry {
     Retire(CompressedRistretto, CompressedRistretto),
     Input(UTXO),
     Nonce(CompressedRistretto, u64),
-    Output(Vec<u8>),
+    Output(Output),
     Data(Vec<u8>),
     Import, // TBD: parameters
     Export, // TBD: parameters
@@ -101,7 +102,7 @@ impl Entry {
                 t.commit_u64(b"nonce.t", *maxtime);
             }
             Entry::Output(outstruct) => {
-                t.commit_bytes(b"output", outstruct);
+                t.commit_bytes(b"output", &outstruct.to_bytes());
             }
             Entry::Data(data) => {
                 t.commit_bytes(b"data", data);
