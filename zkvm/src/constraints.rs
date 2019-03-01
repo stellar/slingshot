@@ -5,7 +5,7 @@ use bulletproofs::{r1cs, r1cs::ConstraintSystem, PedersenGens};
 use curve25519_dalek::ristretto::CompressedRistretto;
 use curve25519_dalek::scalar::Scalar;
 use std::iter::FromIterator;
-use std::ops::{Add, Neg, Sub};
+use std::ops::{Add, Neg};
 
 use crate::encoding;
 use crate::errors::VMError;
