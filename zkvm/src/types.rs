@@ -185,6 +185,13 @@ impl Data {
     /// Downcast the data item to a `Program` type.
     pub fn to_program(self) -> Result<Vec<Instruction>, VMError> {
         match self {
+            Data::Opaque(data) => SliceReader::parse(&data, |r| {
+                let mut prog = Vec::new();
+                while r.len() > 0 {
+                    prog.push(Instruction::parse(r)?);
+                }
+                Ok(prog)
+            }),
             Data::Program(program) => Ok(program),
             _ => Err(VMError::TypeNotProgram),
         }
