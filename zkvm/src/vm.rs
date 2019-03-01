@@ -210,7 +210,7 @@ where
                 Instruction::Add => self.add()?,
                 Instruction::Mul => self.mul()?,
                 Instruction::Eq => self.eq()?,
-                Instruction::Range(_) => unimplemented!(),
+                Instruction::Range(i) => self.range(i)?,
                 Instruction::And => self.and()?,
                 Instruction::Or => self.or()?,
                 Instruction::Verify => self.verify()?,
@@ -318,6 +318,16 @@ where
         let expr1 = self.pop_item()?.to_expression()?;
         let constraint = Constraint::Eq(expr1, expr2);
         self.push_item(constraint);
+        Ok(())
+    }
+
+    fn range(&mut self, i: u8) -> Result<(), VMError> {
+        if i < 1 || i > 64 {
+            return Err(VMError::InvalidBitrange);
+        }
+        let expr = self.pop_item()?.to_expression()?;
+        self.add_range_proof(i as usize, expr.clone())?;
+        self.push_item(expr);
         Ok(())
     }
 
