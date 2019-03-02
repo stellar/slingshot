@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"log"
 	"time"
 
 	"github.com/chain/txvm/errors"
@@ -95,4 +96,51 @@ func (s *BlockStore) SaveSnapshot(_ context.Context, snapshot *state.Snapshot) e
 	}
 	_, err = s.db.Exec("INSERT OR IGNORE INTO snapshots (height, bits) VALUES ($1, $2)", snapshot.Height(), bits)
 	return errors.Wrapf(err, "writing snapshot at height %d to db", snapshot.Height())
+}
+
+// ExpireBlocks runs as a goroutine,
+// periodically removing blocks from the db when they are no longer needed.
+// A block is needed if any existing pin has not processed it yet,
+// or if no snapshot is stored at or above its height.
+// The initial block and the latest block are always needed.
+func (s *BlockStore) ExpireBlocks(ctx context.Context) {
+	defer log.Print("ExpireBlocks exiting")
+
+	ticker := time.NewTicker(5 * time.Minute)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+
+		case <-ticker.C:
+			snap, err := s.LatestSnapshot(ctx)
+			if err != nil {
+				log.Printf("error getting latest snapshot in ExpireBlocks: %s", err)
+				continue
+			}
+
+			height := snap.Header.Height
+
+			const q = `SELECT MIN(height) FROM pins`
+			var lowestPin uint64
+			err = s.db.QueryRowContext(ctx, q).Scan(&lowestPin)
+			if err != nil {
+				log.Printf("error getting lowest pin in ExpireBlocks: %s", err)
+				continue
+			}
+			if lowestPin < height {
+				height = lowestPin
+			}
+
+			if height > 2 {
+				log.Printf("deleting blocks 2 through %d from the db", height-1)
+				_, err = s.db.ExecContext(ctx, `DELETE FROM blocks WHERE height > 1 AND height < $1`, height)
+				if err != nil {
+					log.Printf("error expiring blocks: %s", err)
+				}
+			}
+		}
+	}
 }

@@ -1,6 +1,7 @@
 package slidechain
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"encoding/json"
@@ -121,7 +122,7 @@ func (c *Custodian) watchExports(ctx context.Context) {
 			// Confirm that its input, log, and output entries are as expected.
 			// If so, look for a specially formatted log ("L") entry
 			// that specifies the Stellar asset code to peg out and the Stellar recipient account ID.
-			if len(tx.Log) != 4 && len(tx.Log) != 6 {
+			if len(tx.Log) != 5 && len(tx.Log) != 7 {
 				continue
 			}
 			if tx.Log[0][0].(txvm.Bytes)[0] != txvm.InputCode {
@@ -136,9 +137,17 @@ func (c *Custodian) watchExports(ctx context.Context) {
 				continue
 			}
 
-			logItem := tx.Log[1]
+			exportSeedLogItem := tx.Log[len(tx.Log)-3]
+			if exportSeedLogItem[0].(txvm.Bytes)[0] != txvm.LogCode {
+				continue
+			}
+			if !bytes.Equal(exportSeedLogItem[1].(txvm.Bytes), exportContract1Seed[:]) {
+				continue
+			}
+
+			exportDataInfoItem := tx.Log[1]
 			var info pegOut
-			err := json.Unmarshal(logItem[2].(txvm.Bytes), &info)
+			err := json.Unmarshal(exportDataInfoItem[2].(txvm.Bytes), &info)
 			if err != nil {
 				continue
 			}

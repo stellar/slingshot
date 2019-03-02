@@ -34,6 +34,8 @@ func main() {
 		log.Fatal(err)
 	}
 
+	go c.BS.ExpireBlocks(ctx)
+
 	listener, err := net.Listen("tcp", *addr)
 	if err != nil {
 		log.Fatal(err)

@@ -36,14 +36,17 @@ pub struct Input {
 
 /// Representation of a Contract inside an Input that can be cloned.
 #[derive(Clone, Debug)]
-pub(crate) struct Output {
-    payload: Vec<FrozenItem>,
-    predicate: Predicate,
+pub struct Output {
+    /// Contract payload
+    pub payload: Vec<FrozenItem>,
+    /// Contract predicate
+    pub predicate: Predicate,
 }
 
 /// Representation of a PortableItem inside an Input that can be cloned.
 #[derive(Clone, Debug)]
-enum FrozenItem {
+#[allow(missing_docs)]
+pub enum FrozenItem {
     Data(Data),
     Value(FrozenValue),
 }
@@ -52,27 +55,17 @@ enum FrozenItem {
 /// Note: values do not necessarily have open commitments. Some can be reblinded,
 /// others can be passed-through to an output without going through `cloak` and the constraint system.
 #[derive(Clone, Debug)]
-struct FrozenValue {
-    qty: Commitment,
-    flv: Commitment,
+pub struct FrozenValue {
+    /// Commitment to value's quantity
+    pub qty: Commitment,
+    /// Commitment to value's flavor
+    pub flv: Commitment,
 }
 
 impl Input {
-    /// Creates a "frozen contract" from payload (which is a vector of (qty, flv)) and pred.
-    /// Serializes the contract, and uses the serialized contract and txid to generate a utxo.
-    /// Returns an Input with the contract, txid, and utxo.
-    pub fn new<I>(payload: I, predicate: Predicate, txid: TxID) -> Self
-    where
-        I: IntoIterator<Item = (Commitment, Commitment)>,
-    {
-        let payload: Vec<FrozenItem> = payload
-            .into_iter()
-            .map(|(qty, flv)| FrozenItem::Value(FrozenValue { qty, flv }))
-            .collect();
-
-        let prev_output = Output { payload, predicate };
-        let utxo = UTXO::from_output(&prev_output.clone().to_bytes(), &txid);
-
+    /// Creates an Input with a given Output and transaction id
+    pub fn new(prev_output: Output, txid: TxID) -> Self {
+        let utxo = UTXO::from_output(&prev_output.to_bytes(), &txid);
         Input {
             prev_output,
             utxo,
@@ -121,7 +114,7 @@ impl Input {
 
 impl Output {
     /// Converts self to vector of bytes
-    pub fn to_bytes(self) -> Vec<u8> {
+    pub fn to_bytes(&self) -> Vec<u8> {
         let mut buf = Vec::with_capacity(self.serialized_length());
         self.encode(&mut buf);
         buf

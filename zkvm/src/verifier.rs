@@ -10,7 +10,7 @@ use crate::ops::Instruction;
 use crate::point_ops::PointOp;
 use crate::predicate::Predicate;
 use crate::signature::VerificationKey;
-
+use crate::types::Data;
 use crate::vm::{Delegate, Tx, VerifiedTx, VM};
 
 /// This is the entry point API for verifying a transaction.
@@ -65,6 +65,10 @@ impl<'a, 'b> Delegate<r1cs::Verifier<'a, 'b>> for Verifier<'a, 'b> {
         })?;
         run.offset = run.program.len() - remainder;
         Ok(Some(instr))
+    }
+
+    fn new_run(&self, prog: Data) -> Result<Self::RunType, VMError> {
+        Ok(VerifierRun::new(prog.to_bytes()))
     }
 
     fn cs(&mut self) -> &mut r1cs::Verifier<'a, 'b> {
