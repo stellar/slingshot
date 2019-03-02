@@ -3,9 +3,13 @@ use bulletproofs::r1cs::R1CSError;
 pub struct BitRange(usize);
 
 impl BitRange {
-    pub fn new(n: usize) -> Result<Self,Err> {
+    /// Returns BitRange if n is <= 64>
+    /// Otherwise Errors
+    pub fn new(n: usize) -> Result<Self, R1CSError> {
         if n > 64 {
-            Err("Invalid Bitrange value. Value must be less than 64")
+            Err(R1CSError::GadgetError {
+                description: "Invalid Bitrange value. Value must be less than 64".to_string(),
+            })
         } else {
             Ok(BitRange(n))
         }
