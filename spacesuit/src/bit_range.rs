@@ -1,12 +1,13 @@
+use bulletproofs::r1cs::R1CSError;
 /// Represents a usize with value in the range [0,64]
 pub struct BitRange(usize);
 
 impl BitRange {
-    fn new(n: usize) -> Option<Self> {
+    pub fn new(n: usize) -> Result<Self,Err> {
         if n > 64 {
-            None
+            Err("Invalid Bitrange value. Value must be less than 64")
         } else {
-            Some(BitRange(n))
+            Ok(BitRange(n))
         }
     }
 }
