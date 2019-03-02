@@ -754,7 +754,7 @@ where
             .map(|(content, _)| content)
     }
 
-    fn set_program(&mut self, prog: Data) -> Result<(), VMError> {
+    fn continue_with_program(&mut self, prog: Data) -> Result<(), VMError> {
         let new_run = self.delegate.new_run(prog)?;
         let paused_run = mem::replace(&mut self.current_run, new_run);
         self.run_stack.push(paused_run);
