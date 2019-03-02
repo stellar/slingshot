@@ -569,7 +569,7 @@ where
         }
 
         // Replace current program with new program
-        self.set_program(prog)?;
+        self.continue_with_program(prog)?;
         Ok(())
     }
 
@@ -627,7 +627,7 @@ where
             .verify_point_op(|| signature.verify_single(&mut t, verification_key))?;
 
         // Replace current program with new program
-        self.set_program(prog)?;
+        self.continue_with_program(prog)?;
         Ok(())
     }
 
