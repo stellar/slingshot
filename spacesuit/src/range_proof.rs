@@ -1,3 +1,4 @@
+use bit_range::BitRange;
 use bulletproofs::r1cs::{ConstraintSystem, LinearCombination, R1CSError};
 use curve25519_dalek::scalar::Scalar;
 
@@ -8,10 +9,10 @@ pub fn range_proof<CS: ConstraintSystem>(
     cs: &mut CS,
     mut v: LinearCombination,
     v_assignment: Option<SignedInteger>,
-    n: usize,
+    n: BitRange,
 ) -> Result<(), R1CSError> {
     let mut exp_2 = Scalar::one();
-    for i in 0..n {
+    for i in 0..n.into() {
         // Create low-level variables and add them to constraints
         let (a, b, o) = cs.allocate(|| {
             let q: u64 = v_assignment

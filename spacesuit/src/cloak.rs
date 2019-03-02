@@ -1,4 +1,5 @@
 use crate::{mix::k_mix, range_proof};
+use bit_range::BitRange;
 use bulletproofs::r1cs::{ConstraintSystem, R1CSError};
 use shuffle::{padded_shuffle, value_shuffle};
 use value::AllocatedValue;
@@ -34,7 +35,12 @@ pub fn cloak<CS: ConstraintSystem>(
     // Range Proof
     // Check that each of the quantities in `outputs` lies in [0, 2^64).
     for output in outputs {
-        range_proof(cs, output.q.into(), output.assignment.map(|v| v.q), 64)?;
+        range_proof(
+            cs,
+            output.q.into(),
+            output.assignment.map(|v| v.q),
+            BitRange::new(64)?,
+        )?;
     }
 
     Ok(())
