@@ -29,10 +29,10 @@ pub struct TxHeader {
     /// Version of the transaction
     pub version: u64,
 
-    /// Timestamp before which tx is invalid (sec)
+    /// Timestamp before which tx is invalid (in milliseconds since the Unix epoch)
     pub mintime: u64,
 
-    /// Timestamp after which tx is invalid (sec)
+    /// Timestamp after which tx is invalid (in milliseconds since the Unix epoch)
     pub maxtime: u64,
 }
 
