@@ -4,6 +4,7 @@ use curve25519_dalek::ristretto::CompressedRistretto;
 use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
 use spacesuit;
+use spacesuit::BitRange;
 use spacesuit::SignedInteger;
 use std::iter::FromIterator;
 use std::mem;
@@ -321,12 +322,12 @@ where
         Ok(())
     }
 
-    fn range(&mut self, i: u8) -> Result<(), VMError> {
-        if i < 1 || i > 64 {
+    fn range(&mut self, i: BitRange) -> Result<(), VMError> {
+        if !i.is_valid() {
             return Err(VMError::InvalidBitrange);
         }
         let expr = self.pop_item()?.to_expression()?;
-        self.add_range_proof(i as usize, expr.clone())?;
+        self.add_range_proof(i, expr.clone())?;
         self.push_item(expr);
         Ok(())
     }
@@ -419,7 +420,7 @@ where
         let value = Value { qty, flv };
 
         let qty_expr = self.variable_to_expression(qty)?;
-        self.add_range_proof(64, qty_expr)?;
+        self.add_range_proof(BitRange::max(), qty_expr)?;
 
         self.txlog.push(Entry::Issue(qty_point, flv_point));
 
@@ -736,7 +737,7 @@ where
             .map(|(content, _)| content)
     }
 
-    fn add_range_proof(&mut self, bitrange: usize, expr: Expression) -> Result<(), VMError> {
+    fn add_range_proof(&mut self, bitrange: BitRange, expr: Expression) -> Result<(), VMError> {
         let (lc, assignment) = match expr {
             Expression::Constant(x) => (r1cs::LinearCombination::from(x), Some(x)),
             Expression::LinearCombination(terms, assignment) => {
