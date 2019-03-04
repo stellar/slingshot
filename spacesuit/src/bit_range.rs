@@ -12,8 +12,7 @@ impl BitRange {
         }
     }
 
-    /// max returns a BitRange
-    /// representing a 64-bit usize
+    /// Returns 64-bit range
     pub fn max() -> Self {
         BitRange(64)
     }
