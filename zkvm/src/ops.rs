@@ -184,8 +184,9 @@ impl Instruction {
             Opcode::Mul => Ok(Instruction::Mul),
             Opcode::Eq => Ok(Instruction::Eq),
             Opcode::Range => {
-                let bit_width = BitRange::new(program.read_u8()? as usize);
-                Ok(Instruction::Range(bit_width.ok_or(VMError::FormatError)?))
+                let bit_width =
+                    BitRange::new(program.read_u8()? as usize).ok_or(VMError::FormatError)?;
+                Ok(Instruction::Range(bit_width))
             }
             Opcode::And => Ok(Instruction::And),
             Opcode::Or => Ok(Instruction::Or),
