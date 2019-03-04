@@ -17,15 +17,16 @@ impl BitRange {
     pub fn max() -> Self {
         BitRange(64)
     }
-
-    /// Converts BitRange to a `u8`
-    pub fn to_u8(self) -> u8 {
-        self.0 as u8
-    }
 }
 
 impl Into<usize> for BitRange {
     fn into(self) -> usize {
         self.0
+    }
+}
+
+impl Into<u8> for BitRange {
+    fn into(self) -> u8 {
+        self.0 as u8
     }
 }

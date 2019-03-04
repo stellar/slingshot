@@ -254,9 +254,10 @@ impl Instruction {
             Instruction::Add => write(Opcode::Add),
             Instruction::Mul => write(Opcode::Mul),
             Instruction::Eq => write(Opcode::Eq),
-            Instruction::Range(bit_width) => {
+            Instruction::Range(n) => {
                 write(Opcode::Range);
-                program.push(bit_width.to_u8());
+                let bit_width: BitRange = *n;
+                program.push(bit_width.into());
             }
             Instruction::And => write(Opcode::And),
             Instruction::Or => write(Opcode::Or),
