@@ -88,15 +88,22 @@ impl TxID {
     /// Computes the Merkle proof of inclusion required to validate an
     /// entry at index i, not including the original item i.
     /// Fails when requested index is out of bounds
-    pub fn proof(
+    pub fn proof(list: &[Entry], index: usize) -> Result<Vec<MerkleHash>, VMError> {
+        if index >= list.len() {
+            return Err(VMError::InvalidMerkleProof);
+        }
+        let t = Transcript::new(b"ZkVM.txid");
+        let mut result = Vec::new();
+        Self::subproof(t, list, index, &mut result)?;
+        Ok(result)
+    }
+
+    fn subproof(
         t: Transcript,
         list: &[Entry],
         index: usize,
         result: &mut Vec<MerkleHash>,
     ) -> Result<(), VMError> {
-        if index >= list.len() {
-            return Err(VMError::InvalidMerkleProof);
-        }
         match list.len() {
             0 => Err(VMError::InvalidMerkleProof),
             1 => Ok(()),
@@ -106,12 +113,12 @@ impl TxID {
                     let mut lefthash = [0u8; 32];
                     Self::node(t.clone(), &list[..k], &mut lefthash);
                     result.insert(0, MerkleHash::Left(lefthash));
-                    Ok(Self::proof(t, &list[k..], index - k, result)?)
+                    Ok(Self::subproof(t, &list[k..], index - k, result)?)
                 } else {
                     let mut righthash = [0u8; 32];
                     Self::node(t.clone(), &list[k..], &mut righthash);
                     result.insert(0, MerkleHash::Right(righthash));
-                    Ok(Self::proof(t, &list[..k], index, result)?)
+                    Ok(Self::subproof(t, &list[..k], index, result)?)
                 }
             }
         }
@@ -210,26 +217,20 @@ mod tests {
 
     #[test]
     fn empty() {
-        let t = Transcript::new(b"ZkVM.txid");
-        let mut result = Vec::new();
-        assert!(TxID::proof(t, &[], 0, &mut result).is_err())
+        assert!(TxID::proof(&[], 0).is_err())
     }
 
     #[test]
     fn invalid_range() {
-        let t = Transcript::new(b"ZkVM.txid");
-        let mut result = Vec::new();
-        assert!(TxID::proof(t, &[], 5, &mut result).is_err())
+        assert!(TxID::proof(&[], 5).is_err())
     }
 
     #[test]
     fn valid_proof() {
         let (entry, txid, proof) = {
-            let t = Transcript::new(b"ZkVM.txid");
             let entries = txlog_helper();
-            let mut result = Vec::new();
             let index = 3;
-            TxID::proof(t, &entries, index, &mut result).unwrap();
+            let result = TxID::proof(&entries, index).unwrap();
             (entries[index].clone(), TxID::from_log(&entries), result)
         };
         txid.verify_proof(entry, proof).unwrap();
@@ -238,11 +239,9 @@ mod tests {
     #[test]
     fn invalid_proof() {
         let (entry, txid, proof) = {
-            let t = Transcript::new(b"ZkVM.txid");
             let entries = txlog_helper();
-            let mut result = Vec::new();
             let index = 3;
-            TxID::proof(t, &entries, index, &mut result).unwrap();
+            let result = TxID::proof(&entries, index).unwrap();
             (entries[index + 1].clone(), TxID::from_log(&entries), result)
         };
         assert!(txid.verify_proof(entry, proof).is_err());
