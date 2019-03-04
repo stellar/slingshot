@@ -754,16 +754,15 @@ where
             .witness()
             .map(|(content, _)| content)
     }
-  
+
     fn continue_with_program(&mut self, prog: Data) -> Result<(), VMError> {
         let new_run = self.delegate.new_run(prog)?;
         let paused_run = mem::replace(&mut self.current_run, new_run);
         self.run_stack.push(paused_run);
         Ok(())
     }
-  
-    fn add_range_proof(&mut self, bitrange: BitRange, expr: Expression) -> Result<(), VMError> {
 
+    fn add_range_proof(&mut self, bitrange: BitRange, expr: Expression) -> Result<(), VMError> {
         let (lc, assignment) = match expr {
             Expression::Constant(x) => (r1cs::LinearCombination::from(x), Some(x)),
             Expression::LinearCombination(terms, assignment) => {
