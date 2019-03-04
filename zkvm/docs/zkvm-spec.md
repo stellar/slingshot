@@ -1683,7 +1683,7 @@ _contract(P) prog_ **call** → _results..._
     ```
 4. Adds the statement to the [deferred point operations](#deferred-point-operations).
 5. Places the [payload](#contract-payload) on the stack (last item on top), discarding the contract.
-6. Saves the current program in the program stack, sets the `prog` as current and [runs it](#vm-execution).
+6. Set the `prog` as current.
 
 Fails if the top item is not a [data](#data-type) or
 the second-from-the-top is not a [contract](#contract-type).

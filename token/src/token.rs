@@ -1,10 +1,5 @@
-use bulletproofs::{BulletproofGens, PedersenGens};
-use curve25519_dalek::ristretto::CompressedRistretto;
 use curve25519_dalek::scalar::Scalar;
-use zkvm::{
-    Commitment, Data, Entry, Input, Instruction, Output, Predicate, Program, Prover, Signature, Tx,
-    TxHeader, TxID, TxLog, VMError, Value, VerificationKey, Verifier,
-};
+use zkvm::{Commitment, Data, Input, Output, Predicate, Program, TxID, Value};
 
 /// Represents a ZkVM Token with unique flavor and embedded
 /// metadata protected by a user-supplied Predicate.
@@ -74,10 +69,15 @@ impl Token {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use bulletproofs::{BulletproofGens, PedersenGens};
+    use zkvm::{
+        Entry, Instruction, Predicate, Program, Prover, Signature, Tx, TxHeader, TxID, TxLog,
+        VMError, VerificationKey, Verifier,
+    };
 
     #[test]
     fn issue_to() {
-        let (tx, _, txlog) = {
+        let (tx, _, _) = {
             let issue_key = Scalar::from(1u64);
             let dest_key = Scalar::from(2u64);
             let nonce_key = Scalar::from(3u64);
@@ -104,7 +104,7 @@ mod tests {
     #[test]
     fn issue_and_retire() {
         // Issue tx
-        let (tx, _, txlog) = {
+        let (tx, _, _) = {
             let issue_key = Scalar::from(1u64);
             let dest_key = Scalar::from(2u64);
             let nonce_key = Scalar::from(3u64);

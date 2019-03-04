@@ -232,7 +232,7 @@ where
                 Instruction::Nonce => self.nonce()?,
                 Instruction::Log => self.log()?,
                 Instruction::Signtx => self.signtx()?,
-                Instruction::Call => unimplemented!(),
+                Instruction::Call => self.call()?,
                 Instruction::Left => self.left()?,
                 Instruction::Right => self.right()?,
                 Instruction::Delegate => self.delegate()?,
@@ -554,6 +554,26 @@ where
         Ok(())
     }
 
+    fn call(&mut self) -> Result<(), VMError> {
+        // Pop program contract and predicate
+        let prog = self.pop_item()?.to_data()?;
+        let contract = self.pop_item()?.to_contract()?;
+        let predicate = contract.predicate;
+
+        // 0 = -P + h(prog) * B2
+        self.delegate
+            .verify_point_op(|| predicate.prove_program_predicate(&prog.clone().to_bytes()))?;
+
+        // Place contract payload on the stack
+        for item in contract.payload.into_iter() {
+            self.push_item(item);
+        }
+
+        // Replace current program with new program
+        self.continue_with_program(prog)?;
+        Ok(())
+    }
+
     fn left_or_right<F>(&mut self, assign: F) -> Result<(), VMError>
     where
         F: FnOnce(&mut Contract, Predicate, Predicate) -> (),
@@ -608,9 +628,7 @@ where
             .verify_point_op(|| signature.verify_single(&mut t, verification_key))?;
 
         // Replace current program with new program
-        let new_run = self.delegate.new_run(prog)?;
-        let paused_run = mem::replace(&mut self.current_run, new_run);
-        self.run_stack.push(paused_run);
+        self.continue_with_program(prog)?;
         Ok(())
     }
 
@@ -736,8 +754,16 @@ where
             .witness()
             .map(|(content, _)| content)
     }
-
+  
+    fn continue_with_program(&mut self, prog: Data) -> Result<(), VMError> {
+        let new_run = self.delegate.new_run(prog)?;
+        let paused_run = mem::replace(&mut self.current_run, new_run);
+        self.run_stack.push(paused_run);
+        Ok(())
+    }
+  
     fn add_range_proof(&mut self, bitrange: BitRange, expr: Expression) -> Result<(), VMError> {
+
         let (lc, assignment) = match expr {
             Expression::Constant(x) => (r1cs::LinearCombination::from(x), Some(x)),
             Expression::LinearCombination(terms, assignment) => {

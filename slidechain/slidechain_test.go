@@ -543,11 +543,9 @@ func isImportTx(tx *bc.Tx, amount int64, assetXDR []byte, recipPubKey ed25519.Pu
 // {"I", ...}
 // {"X", ...}
 // {"L", ...}
-// {"N", ...}
-// {"R", ...}
 // {"F", ...}
 func isPostPegOutTx(tx *bc.Tx, asset xdr.Asset, amount int64, tempAddr, exporter string, seqnum int64, anchor, pubkey []byte) bool {
-	if len(tx.Log) != 6 {
+	if len(tx.Log) != 4 {
 		return false
 	}
 	if tx.Log[0][0].(txvm.Bytes)[0] != txvm.InputCode {
@@ -559,13 +557,7 @@ func isPostPegOutTx(tx *bc.Tx, asset xdr.Asset, amount int64, tempAddr, exporter
 	if tx.Log[2][0].(txvm.Bytes)[0] != txvm.LogCode {
 		return false
 	}
-	if tx.Log[3][0].(txvm.Bytes)[0] != txvm.NonceCode {
-		return false
-	}
-	if tx.Log[4][0].(txvm.Bytes)[0] != txvm.TimerangeCode {
-		return false
-	}
-	if tx.Log[5][0].(txvm.Bytes)[0] != txvm.FinalizeCode {
+	if tx.Log[3][0].(txvm.Bytes)[0] != txvm.FinalizeCode {
 		return false
 	}
 	assetXDR, err := asset.MarshalBinary()
