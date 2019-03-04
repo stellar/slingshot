@@ -323,9 +323,6 @@ where
     }
 
     fn range(&mut self, i: BitRange) -> Result<(), VMError> {
-        if !i.is_valid() {
-            return Err(VMError::InvalidBitrange);
-        }
         let expr = self.pop_item()?.to_expression()?;
         self.add_range_proof(i, expr.clone())?;
         self.push_item(expr);
