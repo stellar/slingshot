@@ -22,6 +22,12 @@ impl BitRange {
     pub fn to_u8(self) -> u8 {
         self.0 as u8
     }
+
+    /// Checks whether the Bitrange lies
+    /// between 0 and 64
+    pub fn is_valid(&self) -> bool {
+        return self.0 > 64;
+    }
 }
 
 impl Into<usize> for BitRange {
