@@ -2,7 +2,7 @@
 pub struct BitRange(usize);
 
 impl BitRange {
-    /// Returns BitRange if n is <= 64>
+    /// Returns Some(BitRange) if `n` is ≤ 64.
     /// Otherwise returns None.
     pub fn new(n: usize) -> Option<Self> {
         if n > 64 {
