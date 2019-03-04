@@ -153,7 +153,7 @@ Exporting funds from TxVM for peg-out to Stellar requires three steps:
    Along with the funds, the smart contract stores the exporter’s pubkey
    (in case repayment is needed)
    and a JSON string of the form:
-   `{"asset":ASSET,"temp":TEMP,"seqnum":SEQNUM,"exporter":EXPORTER}`,
+   `{"asset":ASSET,"temp":TEMP,"seqnum":SEQNUM,"exporter":EXPORTER,"amount":AMOUNT,"anchor":ANCHOR,"pubkey":PUBKEY}`,
    where
    - ASSET is the Stellar asset code
      (as base64-encoded XDR)
@@ -161,7 +161,10 @@ Exporting funds from TxVM for peg-out to Stellar requires three steps:
    - TEMP is the temporary account created in step 1;
    - SEQNUM is the sequence number of the temporary account;
    - EXPORTER is the creator of the temporary account on the Stellar side,
-     and the intended recipient of the peg-out funds.
+     and the intended recipient of the peg-out funds;
+   - AMOUNT is the amount of the given asset being exported;
+   - ANCHOR is the TxVM anchor in the value stored in the contract;
+   - PUBKEY is the TxVM pubkey of the exporter.
 
 The temporary account will be closed
 (merged back to the exporter’s account)
