@@ -1,0 +1,26 @@
+[package]
+name = "utxo"
+version = "0.1.0"
+authors = ["Vicki Niu <vicki.niu@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+failure = "0.1"
+byteorder = "1"
+merlin = "1.0.1"
+postgres = "0.15"
+rand = "0.6"
+subtle = "2"
+curve25519-dalek = { version = "1.0.1", features = ["serde"] }
+
+[dependencies.bulletproofs]
+git = "https://github.com/dalek-cryptography/bulletproofs"
+branch = "develop"
+#path = "../../dalek/bulletproofs"
+features = ["yoloproofs"]
+
+[dependencies.spacesuit]
+path = "../spacesuit"
+
+[dependencies.zkvm]
+path = "../zkvm"
