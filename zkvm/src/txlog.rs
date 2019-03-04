@@ -2,6 +2,7 @@ use curve25519_dalek::ristretto::CompressedRistretto;
 use merlin::Transcript;
 
 use crate::contract::Contract;
+use crate::errors::VMError;
 use crate::transcript::TranscriptProtocol;
 use crate::vm::TxHeader;
 
@@ -30,6 +31,13 @@ pub struct TxID(pub [u8; 32]);
 /// UTXO is a unique 32-byte identifier of a transaction output
 #[derive(Copy, Clone, PartialEq, Debug)]
 pub struct UTXO(pub [u8; 32]);
+
+/// MerkleHash represents a step in a Merkle proof of inclusion.
+#[derive(Copy, Clone, PartialEq, Debug)]
+pub enum MerkleHash {
+    Left([u8; 32]),
+    Right([u8; 32]),
+}
 
 impl UTXO {
     /// Computes UTXO identifier from an output and transaction id.
@@ -76,6 +84,66 @@ impl TxID {
         entry.commit_to_transcript(&mut t);
         t.challenge_bytes(b"merkle.leaf", result);
     }
+
+    /// Computes the Merkle proof of inclusion required to validate an
+    /// entry at index i, not including the original item i.
+    /// Fails when requested index is out of bounds
+    pub fn proof(
+        t: Transcript,
+        list: &[Entry],
+        index: usize,
+        result: &mut Vec<MerkleHash>,
+    ) -> Result<(), VMError> {
+        if index >= list.len() {
+            return Err(VMError::InvalidMerkleProof);
+        }
+        match list.len() {
+            0 => Err(VMError::InvalidMerkleProof),
+            1 => Ok(()),
+            n => {
+                let k = n.next_power_of_two() / 2;
+                if index >= k {
+                    let mut lefthash = [0u8; 32];
+                    Self::node(t.clone(), &list[..k], &mut lefthash);
+                    result.insert(0, MerkleHash::Left(lefthash));
+                    Ok(Self::proof(t, &list[k..], index - k, result)?)
+                } else {
+                    let mut righthash = [0u8; 32];
+                    Self::node(t.clone(), &list[k..], &mut righthash);
+                    result.insert(0, MerkleHash::Right(righthash));
+                    Ok(Self::proof(t, &list[..k], index, result)?)
+                }
+            }
+        }
+    }
+
+    /// Verifies that an entry satisfies the Merkle proof of inclusion
+    /// for a given TxID
+    pub fn verify_proof(&self, entry: Entry, proof: Vec<MerkleHash>) -> Result<(), VMError> {
+        let transcript = Transcript::new(b"ZkVM.txid");
+        let mut result = [0u8; 32];
+        Self::node(transcript.clone(), &[entry], &mut result);
+        for node in proof.iter() {
+            let mut t = transcript.clone();
+            match node {
+                MerkleHash::Left(l) => {
+                    t.commit_bytes(b"L", l);
+                    t.commit_bytes(b"R", &result);
+                    t.challenge_bytes(b"merkle.node", &mut result);
+                }
+                MerkleHash::Right(r) => {
+                    t.commit_bytes(b"L", &result);
+                    t.commit_bytes(b"R", r);
+                    t.challenge_bytes(b"merkle.node", &mut result);
+                }
+            }
+        }
+        if self.0 == result {
+            Ok(())
+        } else {
+            Err(VMError::InvalidMerkleProof)
+        }
+    }
 }
 
 impl Entry {
@@ -116,5 +184,67 @@ impl Entry {
                 unimplemented!()
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn txlog_helper() -> Vec<Entry> {
+        vec![
+            Entry::Header(TxHeader {
+                mintime: 0,
+                maxtime: 0,
+                version: 0,
+            }),
+            Entry::Issue(
+                CompressedRistretto::from_slice(&[0u8; 32]),
+                CompressedRistretto::from_slice(&[1u8; 32]),
+            ),
+            Entry::Nonce(CompressedRistretto::from_slice(&[1u8; 32]), 0u64),
+            Entry::Nonce(CompressedRistretto::from_slice(&[2u8; 32]), 1u64),
+            Entry::Nonce(CompressedRistretto::from_slice(&[3u8; 32]), 2u64),
+        ]
+    }
+
+    #[test]
+    fn empty() {
+        let t = Transcript::new(b"ZkVM.txid");
+        let mut result = Vec::new();
+        assert!(TxID::proof(t, &[], 0, &mut result).is_err())
+    }
+
+    #[test]
+    fn invalid_range() {
+        let t = Transcript::new(b"ZkVM.txid");
+        let mut result = Vec::new();
+        assert!(TxID::proof(t, &[], 5, &mut result).is_err())
+    }
+
+    #[test]
+    fn valid_proof() {
+        let (entry, txid, proof) = {
+            let t = Transcript::new(b"ZkVM.txid");
+            let entries = txlog_helper();
+            let mut result = Vec::new();
+            let index = 3;
+            TxID::proof(t, &entries, index, &mut result).unwrap();
+            (entries[index].clone(), TxID::from_log(&entries), result)
+        };
+        txid.verify_proof(entry, proof).unwrap();
+    }
+
+    #[test]
+    fn invalid_proof() {
+        let (entry, txid, proof) = {
+            let t = Transcript::new(b"ZkVM.txid");
+            let entries = txlog_helper();
+            let mut result = Vec::new();
+            let index = 3;
+            TxID::proof(t, &entries, index, &mut result).unwrap();
+            (entries[index + 1].clone(), TxID::from_log(&entries), result)
+        };
+        assert!(txid.verify_proof(entry, proof).is_err());
     }
 }
