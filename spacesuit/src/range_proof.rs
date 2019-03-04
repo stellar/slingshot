@@ -12,7 +12,7 @@ pub fn range_proof<CS: ConstraintSystem>(
     n: BitRange,
 ) -> Result<(), R1CSError> {
     let mut exp_2 = Scalar::one();
-    let n_usize : usize = n.into();
+    let n_usize: usize = n.into();
     for i in 0..n_usize {
         // Create low-level variables and add them to constraints
         let (a, b, o) = cs.allocate(|| {
