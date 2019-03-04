@@ -1,4 +1,5 @@
 /// Represents a usize with value in the range [0,64]
+#[derive(Copy, Clone, Debug)]
 pub struct BitRange(usize);
 
 impl BitRange {
@@ -15,6 +16,11 @@ impl BitRange {
     /// Returns 64-bit range
     pub fn max() -> Self {
         BitRange(64)
+    }
+
+    /// Converts BitRange to a `u8`
+    pub fn to_u8(self) -> u8 {
+        self.0 as u8
     }
 }
 
