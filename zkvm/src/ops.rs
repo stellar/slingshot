@@ -362,8 +362,8 @@ impl Program {
 
     /// Creates a program from parsing the opaque data slice of encoded instructions.
     pub fn parse(data: &[u8]) -> Result<Self, VMError> {
-        let mut program = Self::new();
         SliceReader::parse(data, |r| {
+            let mut program = Self::new();
             while r.len() > 0 {
                 program.0.push(Instruction::parse(r)?);
             }
