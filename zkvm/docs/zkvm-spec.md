@@ -1425,14 +1425,47 @@ Immediate data `k` is encoded as [LE32](#le32).
 
 #### nonce
 
-_predicate_ **nonce** → _contract_
+_pred blockid_ **nonce** → _contract_
 
-1. Pops [predicate](#predicate) from the stack.
-2. Pushes a new [contract](#contract-type) with an empty [payload](#contract-payload) and this predicate to the stack.
-3. Adds [nonce entry](#nonce-entry) to the [transaction log](#transaction-log) with the predicate and transaction [maxtime](#time-bounds).
-4. Sets the [VM uniqueness flag](#vm-state) to `true`.
+1. Pops [32-byte string](#data-type) `blockid` from the stack.
+2. Pops [predicate](#predicate) `pred` from the stack.
+3. Adds [nonce entry](#nonce-entry) to the [transaction log](#transaction-log) with the `blockid`, predicate, transaction [maxtime](#time-bounds).
+4. Computes the nonce [anchor](#anchor) value:
+    ```
+    T = Transcript("ZkVM.nonce")
+    T.commit("blockid", blockid)
+    T.commit("predicate", pred)
+    T.commit("maxtime", LE64(tx.maxtime))
+    anchor = T.challenge_bytes()
+    ```
+5. Sets the [VM anchor](#vm-state) to `anchor`.
+6. Pushes a new [contract](#contract-type) with:
+    * an empty [payload](#contract-payload)
+    * predicate set to `pred`
+    * anchor set to `anchor`.
 
-Fails if `predicate` is not a valid [point](#point).
+Fails if:
+* `blockid` is a not a 32-byte [data string](#data-type).
+* `pred` is not a valid [point](#point).
+
+**Discussion**
+
+A nonce serves two purposes:
+
+1. It provides a unique anchor for an issuing transaction if other anchors are not available (i.e., from other values already on the stack);
+2. It binds the entire transaction to a particular blockchain, protecting not only against cross-blockchain replays, but also potential blockchain forks due to compromise of the old block-signing keys. This is a necessary feature for stateless signing devices that rely on blockchain proofs.
+
+Blockchain state machine performs the following checks:
+
+1. The `blockid` is checked against the IDs of “recent” blocks when the transaction is applied to the blockchain. It must match a recent block, or the initial block of the blockchain, or be a string of 32 zero-bytes.
+2. The nonce anchor is checked for uniqueness against “recent” nonces.
+
+To perform these checks, validators must keep a set of recent nonces and a set of recent block headers available. For scalability and to reduce resource demands on the network, these sets must be limited in size. So block signers can and should impose reasonable limits on the value of exp (which is the time by which the transaction must be included in a block or become invalid).
+
+Special cases:
+
+1. To support long-living pre-signed transactions, the protocol allows a nonce to use the blockchain’s initial block ID regardless of the `refscount` limit specified in the block headers.
+2. `blockid` is allowed to be all-zero string. This makes the nonce replayable on another chain, but still unique within any one chain.
 
 
 #### log
