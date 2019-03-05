@@ -43,8 +43,8 @@ impl ProgramHelper for Program {
     }
 
     fn input_helper(&mut self, qty: u64, flv: Scalar, pred: Predicate) -> &mut Self {
-        let prev_output = Output {
-            payload: vec![FrozenItem::Value(FrozenValue {
+        let prev_output = Contract {
+            payload: vec![PortableItem::Value(Value {
                 qty: Commitment::blinded(qty),
                 flv: Commitment::blinded(flv),
             })],
@@ -104,7 +104,7 @@ fn issuance_helper() -> (Scalar, Predicate, Scalar) {
 }
 
 fn test_helper(program: Vec<Instruction>, keys: &Vec<Scalar>) -> Result<TxID, VMError> {
-    let (tx, txid, txlog) = {
+    let (tx, _txid, _txlog) = {
         // Build tx
         let bp_gens = BulletproofGens::new(256, 1);
         let header = TxHeader {
