@@ -32,25 +32,18 @@ pub struct TxID(pub [u8; 32]);
 #[derive(Copy, Clone, PartialEq, Debug)]
 pub struct UTXO(pub [u8; 32]);
 
-/// MerkleHash represents a step in a Merkle proof of inclusion.
+/// MerkleNeighbor represents a step in a Merkle proof of inclusion.
 #[derive(Copy, Clone, PartialEq, Debug)]
-pub enum MerkleHash {
+pub enum MerkleNeighbor {
     Left([u8; 32]),
     Right([u8; 32]),
 }
 
-/// MerkleRoot defines the root of a Merkle tree.
-pub struct MerkleRoot {
-    root: MerkleNode,
-    size: usize,
-}
-
-/// MerkleNode represents a precomputed node in the Merkle tree
-/// for easily computing proofs of inclusion.
-struct MerkleNode {
-    left: Option<Box<MerkleNode>>,
-    right: Option<Box<MerkleNode>>,
-    node: [u8; 32],
+/// MerkleTree represents a node in the Merkle tree, containing either
+/// an uncomputed Entry or the precomputed hash.
+pub enum MerkleTree {
+    Leaf([u8; 32], usize),
+    Node([u8; 32], Box<MerkleTree>, Box<MerkleTree>, usize),
 }
 
 impl UTXO {
@@ -99,71 +92,21 @@ impl TxID {
         t.challenge_bytes(b"merkle.leaf", result);
     }
 
-    /// Builds a precomputed Merkle tree for the entries.
-    pub fn build_tree(list: &[Entry]) -> (Self, MerkleRoot) {
-        let t = Transcript::new(b"ZkVM.txid");
-        let root = Self::build_node(t, list);
-        (
-            TxID(root.node),
-            MerkleRoot {
-                root,
-                size: list.len(),
-            },
-        )
-    }
-
-    fn build_node(mut t: Transcript, list: &[Entry]) -> MerkleNode {
-        match list.len() {
-            0 => {
-                let mut leaf = [0u8; 32];
-                Self::empty(t, &mut leaf);
-                return MerkleNode {
-                    node: leaf,
-                    left: None,
-                    right: None,
-                };
-            }
-            1 => {
-                let mut leaf = [0u8; 32];
-                Self::leaf(t, &list[0], &mut leaf);
-                return MerkleNode {
-                    node: leaf,
-                    left: None,
-                    right: None,
-                };
-            }
-            n => {
-                let k = n.next_power_of_two() / 2;
-                let mut node = [0u8; 32];
-                let left = Self::build_node(t.clone(), &list[..k]);
-                let right = Self::build_node(t.clone(), &list[k..]);
-                t.commit_bytes(b"L", &left.node);
-                t.commit_bytes(b"R", &right.node);
-                t.challenge_bytes(b"merkle.node", &mut node);
-                return MerkleNode {
-                    node: node,
-                    left: Some(Box::new(left)),
-                    right: Some(Box::new(right)),
-                };
-            }
-        }
-    }
-
     /// Verifies that an entry satisfies the Merkle proof of inclusion
     /// for a given TxID
-    pub fn verify_proof(&self, entry: Entry, proof: Vec<MerkleHash>) -> Result<(), VMError> {
+    pub fn verify_proof(&self, entry: Entry, proof: Vec<MerkleNeighbor>) -> Result<(), VMError> {
         let transcript = Transcript::new(b"ZkVM.txid");
         let mut result = [0u8; 32];
         Self::node(transcript.clone(), &[entry], &mut result);
         for node in proof.iter() {
             let mut t = transcript.clone();
             match node {
-                MerkleHash::Left(l) => {
+                MerkleNeighbor::Left(l) => {
                     t.commit_bytes(b"L", l);
                     t.commit_bytes(b"R", &result);
                     t.challenge_bytes(b"merkle.node", &mut result);
                 }
-                MerkleHash::Right(r) => {
+                MerkleNeighbor::Right(r) => {
                     t.commit_bytes(b"L", &result);
                     t.commit_bytes(b"R", r);
                     t.challenge_bytes(b"merkle.node", &mut result);
@@ -219,48 +162,88 @@ impl Entry {
     }
 }
 
-impl MerkleRoot {
-    pub fn proof(&self, index: usize) -> Result<Vec<MerkleHash>, VMError> {
-        if index >= self.size {
-            println!("size invalid");
+impl MerkleTree {
+    /// Constructs a new MerkleTree based on the input list of entries.
+    pub fn new(list: &[Entry]) -> Option<MerkleTree> {
+        if list.len() == 0 {
+            return None;
+        }
+        let t = Transcript::new(b"ZkVM.txid");
+        Some(Self::build_node(t, list))
+    }
+
+    fn build_node(mut t: Transcript, list: &[Entry]) -> MerkleTree {
+        match list.len() {
+            0 => {
+                let mut leaf = [0u8; 32];
+                TxID::empty(t, &mut leaf);
+                return MerkleTree::Leaf(leaf, 0);
+            }
+            1 => {
+                let mut leaf = [0u8; 32];
+                TxID::leaf(t, &list[0], &mut leaf);
+                return MerkleTree::Leaf(leaf, 1);
+            }
+            n => {
+                let k = n.next_power_of_two() / 2;
+                let mut node = [0u8; 32];
+                let left = Self::build_node(t.clone(), &list[..k]);
+                let right = Self::build_node(t.clone(), &list[k..]);
+                let size = left.size() + right.size();
+                t.commit_bytes(b"L", left.hash());
+                t.commit_bytes(b"R", right.hash());
+                t.challenge_bytes(b"merkle.node", &mut node);
+                return MerkleTree::Node(node, Box::new(left), Box::new(right), size);
+            }
+        }
+    }
+
+    /// Builds a proof of inclusion for entry at the given index for the
+    /// Merkle tree.
+    pub fn proof(&self, index: usize) -> Result<Vec<MerkleNeighbor>, VMError> {
+        if index >= self.size() {
             return Err(VMError::InvalidMerkleProof);
         }
         let t = Transcript::new(b"ZkVM.txid");
         let mut result = Vec::new();
-        Self::subproof(t, index, self.size, &self.root, &mut result);
+        self.subproof(t, index, &mut result);
         Ok(result)
     }
 
-    fn subproof(
-        t: Transcript,
-        index: usize,
-        length: usize,
-        root: &MerkleNode,
-        result: &mut Vec<MerkleHash>,
-    ) {
-        let k = length.next_power_of_two() / 2;
+    fn subproof(&self, t: Transcript, index: usize, result: &mut Vec<MerkleNeighbor>) {
+        let k = self.size().next_power_of_two() / 2;
         if index >= k {
-            match &root.left {
-                Some(l) => result.insert(0, MerkleHash::Left(l.node)),
-                None => return,
-            };
-            match &root.right {
-                Some(r) => {
-                    return Self::subproof(t, index - k, length - k, &r, result);
+            match self {
+                MerkleTree::Node(_, l, r, _) => {
+                    result.insert(0, MerkleNeighbor::Left(*l.hash()));
+                    return r.subproof(t, index - k, result);
                 }
-                None => return,
-            };
+                MerkleTree::Leaf(_, _) => return,
+            }
         } else {
-            match &root.right {
-                Some(r) => result.insert(0, MerkleHash::Right(r.node)),
-                None => return,
-            };
-            match &root.left {
-                Some(l) => {
-                    return Self::subproof(t, index, k, &l, result);
+            match self {
+                MerkleTree::Node(_, l, r, _) => {
+                    result.insert(0, MerkleNeighbor::Right(*r.hash()));
+                    return l.subproof(t, k, result);
                 }
-                None => return,
-            };
+                MerkleTree::Leaf(_, _) => return,
+            }
+        }
+    }
+
+    /// Returns the hash of a Merkle tree.
+    pub fn hash(&self) -> &[u8; 32] {
+        match self {
+            MerkleTree::Leaf(h, _) => h,
+            MerkleTree::Node(h, _, _, _) => h,
+        }
+    }
+
+    /// Returns the size of a Merkle tree.
+    pub fn size(&self) -> usize {
+        match self {
+            MerkleTree::Leaf(_, s) => *s,
+            MerkleTree::Node(_, _, _, s) => *s,
         }
     }
 }
@@ -288,14 +271,13 @@ mod tests {
 
     #[test]
     fn empty() {
-        let (_, root) = TxID::build_tree(&[]);
-        assert!(root.proof(0).is_err())
+        assert!(MerkleTree::new(&[]).is_none());
     }
 
     #[test]
     fn invalid_range() {
         let entries = txlog_helper();
-        let (_, root) = TxID::build_tree(&entries);
+        let root = MerkleTree::new(&entries).unwrap();
         assert!(root.proof(5).is_err())
     }
 
@@ -303,10 +285,10 @@ mod tests {
     fn valid_proof() {
         let (entry, txid, proof) = {
             let entries = txlog_helper();
-            let (txid, root) = TxID::build_tree(&entries);
+            let root = MerkleTree::new(&entries).unwrap();
             let index = 3;
             let proof = root.proof(index).unwrap();
-            (entries[index].clone(), txid, proof)
+            (entries[index].clone(), TxID::from_log(&entries), proof)
         };
         txid.verify_proof(entry, proof).unwrap();
     }
@@ -315,10 +297,10 @@ mod tests {
     fn invalid_proof() {
         let (entry, txid, proof) = {
             let entries = txlog_helper();
-            let (txid, root) = TxID::build_tree(&entries);
+            let root = MerkleTree::new(&entries).unwrap();
             let index = 3;
             let proof = root.proof(index).unwrap();
-            (entries[index + 1].clone(), txid, proof)
+            (entries[index + 1].clone(), TxID::from_log(&entries), proof)
         };
         assert!(txid.verify_proof(entry, proof).is_err());
     }
