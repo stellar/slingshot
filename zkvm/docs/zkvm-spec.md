@@ -196,6 +196,8 @@ Contracts can be "frozen" with the [`output`](#output) instruction that places t
 and the payload into the [output structure](#output-structure) which is
 recorded in the [transaction log](#transaction-log).
 
+Each contract contains a hidden field [anchor](#anchor) that makes it globally unique for safe signing.
+
 
 ### Variable type
 
@@ -370,6 +372,24 @@ Each bound is in _seconds_ since Jan 1st, 1970 (UTC), represented by an unsigned
 Time bounds are available in the transaction as [expressions](#expression-type) provided by the instructions
 [`mintime`](#mintime) and [`maxtime`](#maxtime).
 
+
+### Anchor
+
+_Anchor_ is a 32-byte string that uniquely identifies a [contract](#contract-type).
+Anchors make [`delegate`](#delegate) signatures safe against [predicate](#predicate) key reuse:
+signature covers the contract’s anchor, therefore preventing its replay against another contract,
+even if containing the same [payload](#contract-payload) and predicate.
+
+Anchors are used in 4 contexts:
+
+1. Contracts instantiated from a UTXO ([`input`](#input) instruction) have their anchor set to the [UTXO ID](#utxo).
+2. Nonce contracts have their anchor set to the hash of the nonce parameters (see [`nonce`](#nonce) instruction).
+3. Outputs and transient contracts ([`output`](#output), [`contract`](#contract)) have their anchor derived from [the most recent anchor](#vm-state) remembered by the VM. This allows the signer to have a more predictable, localized anchor computation.
+
+VM keeps track of the last used anchor and fails if:
+
+1. by the end of the execution, no anchor was used (which means that [transaction ID](#transaction-id) is not unique), or
+2. an [`output`](#output) or [`contract`](#output) are invoked before the anchor is set (since they can’t be made unique).
 
 
 ### Transcript
@@ -825,7 +845,7 @@ The ZkVM state consists of the static attributes and the state machine attribute
     * `tx_signature`
     * `cs_proof`
 2. Extension flag (boolean)
-3. Uniqueness flag (boolean)
+3. Last anchor (optional [anchor](#anchor))
 4. Data stack (array of [items](#types))
 5. Program stack (array of [programs](#program) with their offsets)
 6. Current [program](#program) with its offset
@@ -977,7 +997,7 @@ Code | Instruction                | Stack diagram                              |
 0x1b | [`input`](#input)          |           _input_ → _contract_             | Modifies [tx log](#transaction-log)
 0x1c | [`output:k`](#output)      |   _items... pred_ → ø                      | Modifies [tx log](#transaction-log)
 0x1d | [`contract:k`](#contract)  |   _items... pred_ → _contract_             | 
-0x1e | [`nonce`](#nonce)          |            _pred_ → _contract_             | Modifies [tx log](#transaction-log)
+0x1e | [`nonce`](#nonce)          |    _pred blockid_ → _contract_             | Modifies [tx log](#transaction-log)
 0x1f | [`log`](#log)              |            _data_ → ø                      | Modifies [tx log](#transaction-log)
 0x20 | [`signtx`](#signtx)        |        _contract_ → _results..._           | Modifies [deferred verification keys](#transaction-signature)
 0x21 | [`call`](#call)            |   _contract prog_ → _results..._           | [Defers point operations](#deferred-point-operations)
