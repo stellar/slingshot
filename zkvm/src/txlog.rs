@@ -97,7 +97,7 @@ impl TxID {
     pub fn verify_proof(&self, entry: Entry, proof: Vec<MerkleNeighbor>) -> Result<(), VMError> {
         let transcript = Transcript::new(b"ZkVM.txid");
         let mut result = [0u8; 32];
-        Self::node(transcript.clone(), &[entry], &mut result);
+        Self::leaf(transcript.clone(), &entry, &mut result);
         for node in proof.iter() {
             let mut t = transcript.clone();
             match node {
