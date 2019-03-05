@@ -305,6 +305,6 @@ mod tests {
             let proof = root.proof(index).unwrap();
             (entries[index + 1].clone(), TxID::from_log(&entries), proof)
         };
-        assert!(txid.verify_proof(entry, proof).is_ok());
+        assert!(txid.verify_proof(entry, proof).is_err());
     }
 }
