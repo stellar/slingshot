@@ -119,8 +119,7 @@ impl TxID {
                 }
             }
         }
-        let eq = result.ct_eq(&self.0).unwrap_u8();
-        if eq == 1 {
+        if result.ct_eq(&self.0).unwrap_u8() == 1 {
             Ok(())
         } else {
             Err(VMError::InvalidMerkleProof)
@@ -182,8 +181,7 @@ impl MerkleTree {
         })
     }
 
-    /// Builds a proof of inclusion for entry at the given index for the
-    /// Merkle tree.
+    /// Builds a proof of inclusion for entry at the given index for the Merkle tree.
     pub fn proof(&self, index: usize) -> Result<Vec<MerkleNeighbor>, VMError> {
         if index >= self.size {
             return Err(VMError::InvalidMerkleProof);
