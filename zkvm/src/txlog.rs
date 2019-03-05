@@ -1,5 +1,6 @@
 use curve25519_dalek::ristretto::CompressedRistretto;
 use merlin::Transcript;
+use subtle::ConstantTimeEq;
 
 use crate::contract::Contract;
 use crate::errors::VMError;
@@ -99,7 +100,7 @@ impl TxID {
 
     /// Verifies that an entry satisfies the Merkle proof of inclusion
     /// for a given TxID
-    pub fn verify_proof(&self, entry: Entry, proof: Vec<MerkleNeighbor>) -> Result<(), VMError> {
+    pub fn verify_proof(&self, entry: Entry, proof: Vec<MerkleNeighbor>) -> bool {
         let transcript = Transcript::new(b"ZkVM.txid");
         let mut result = [0u8; 32];
         Self::leaf(transcript.clone(), &entry, &mut result);
@@ -118,11 +119,7 @@ impl TxID {
                 }
             }
         }
-        if self.0 == result {
-            Ok(())
-        } else {
-            Err(VMError::InvalidMerkleProof)
-        }
+        result.ct_eq(&self.0).unwrap_u8() == 1
     }
 }
 
@@ -291,7 +288,7 @@ mod tests {
             let proof = root.proof(index).unwrap();
             (entries[index].clone(), TxID::from_log(&entries), proof)
         };
-        txid.verify_proof(entry, proof).unwrap();
+        assert!(txid.verify_proof(entry, proof));
     }
 
     #[test]
@@ -303,6 +300,6 @@ mod tests {
             let proof = root.proof(index).unwrap();
             (entries[index + 1].clone(), TxID::from_log(&entries), proof)
         };
-        assert!(txid.verify_proof(entry, proof).is_err());
+        assert_eq!(txid.verify_proof(entry, proof), false);
     }
 }
