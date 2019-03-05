@@ -158,7 +158,7 @@ func (c *Custodian) watchExports(ctx context.Context) {
 			const q = `
 				INSERT INTO exports 
 				(txid, exporter, amount, asset_xdr, temp_addr, seqnum, anchor, pubkey, json)
-				VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`
+				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`
 			_, err = c.DB.ExecContext(ctx, q, tx.ID.Bytes(), info.Exporter, info.Amount, info.AssetXDR, info.TempAddr, info.Seqnum, info.Anchor, info.Pubkey, exportInfoJSON)
 			if err != nil {
 				log.Fatalf("recording export tx: %s", err)
