@@ -1,13 +1,13 @@
 //! Definition of all instructions in ZkVM,
 //! their codes and decoding/encoding utility functions.
 
-use core::borrow::Borrow;
-use core::mem;
-
 use crate::encoding;
 use crate::encoding::SliceReader;
 use crate::errors::VMError;
 use crate::types::Data;
+use core::borrow::Borrow;
+use core::mem;
+use spacesuit::BitRange;
 
 /// A builder type for assembling a sequence of `Instruction`s with chained method calls.
 /// E.g. `let prog = Program::new().push(...).input().push(...).output(1).to_vec()`.
@@ -32,7 +32,7 @@ pub enum Instruction {
     Add,
     Mul,
     Eq,
-    Range(u8), // bitwidth (1..64)
+    Range(BitRange), // bitwidth (0...64)
     And,
     Or,
     Verify,
@@ -180,7 +180,8 @@ impl Instruction {
             Opcode::Mul => Ok(Instruction::Mul),
             Opcode::Eq => Ok(Instruction::Eq),
             Opcode::Range => {
-                let bit_width = program.read_u8()?;
+                let bit_width =
+                    BitRange::new(program.read_u8()? as usize).ok_or(VMError::FormatError)?;
                 Ok(Instruction::Range(bit_width))
             }
             Opcode::And => Ok(Instruction::And),
@@ -247,9 +248,10 @@ impl Instruction {
             Instruction::Add => write(Opcode::Add),
             Instruction::Mul => write(Opcode::Mul),
             Instruction::Eq => write(Opcode::Eq),
-            Instruction::Range(bit_width) => {
+            Instruction::Range(n) => {
                 write(Opcode::Range);
-                program.push(*bit_width);
+                let bit_width: BitRange = *n;
+                program.push(bit_width.into());
             }
             Instruction::And => write(Opcode::And),
             Instruction::Or => write(Opcode::Or),
@@ -344,7 +346,7 @@ impl Program {
     def_op!(or, Or);
     def_op!(output, Output, usize);
     def_op!(qty, Qty);
-    def_op!(range, Range, u8);
+    def_op!(range, Range, BitRange);
     def_op!(retire, Retire);
     def_op!(right, Right);
     def_op!(roll, Roll, usize);

@@ -1161,7 +1161,7 @@ _expr_ **range:_n_** → _expr_
 
 Immediate data `n` is encoded as one byte.
 
-Fails if `expr` is not an [expression type](#expression-type) or if `n` is not in range [1, 64].
+Fails if `expr` is not an [expression type](#expression-type) or if `n` is not in range [0, 64].
 
 #### and
 

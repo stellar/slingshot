@@ -104,7 +104,7 @@ fn issuance_helper() -> (Scalar, Predicate, Scalar) {
 }
 
 fn test_helper(program: Vec<Instruction>, keys: &Vec<Scalar>) -> Result<TxID, VMError> {
-    let (tx, _txid, _txlog) = {
+    let (tx, _, _) = {
         // Build tx
         let bp_gens = BulletproofGens::new(256, 1);
         let header = TxHeader {

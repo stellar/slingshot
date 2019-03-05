@@ -12,6 +12,7 @@ extern crate merlin;
 extern crate rand;
 extern crate subtle;
 
+mod bit_range;
 mod cloak;
 mod mix;
 mod range_proof;
@@ -19,6 +20,7 @@ mod shuffle;
 mod signed_integer;
 mod value;
 
+pub use bit_range::BitRange;
 pub use cloak::cloak;
 pub use range_proof::range_proof;
 pub use signed_integer::SignedInteger;
