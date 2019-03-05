@@ -36,8 +36,6 @@ pub enum Instruction {
     And,
     Or,
     Verify,
-    Blind,
-    Reblind,
     Unblind,
     Issue,
     Borrow,
@@ -83,30 +81,28 @@ pub enum Opcode {
     And = 0x0f,
     Or = 0x10,
     Verify = 0x11,
-    Blind = 0x12,
-    Reblind = 0x13,
-    Unblind = 0x14,
-    Issue = 0x15,
-    Borrow = 0x16,
-    Retire = 0x17,
-    Qty = 0x18,
-    Flavor = 0x19,
-    Cloak = 0x1a,
-    Import = 0x1b,
-    Export = 0x1c,
-    Input = 0x1d,
-    Output = 0x1e,
-    Contract = 0x1f,
-    Nonce = 0x20,
-    Log = 0x21,
-    Signtx = 0x22,
-    Call = 0x23,
-    Left = 0x24,
-    Right = 0x25,
+    Unblind = 0x12,
+    Issue = 0x13,
+    Borrow = 0x14,
+    Retire = 0x15,
+    Qty = 0x16,
+    Flavor = 0x17,
+    Cloak = 0x18,
+    Import = 0x19,
+    Export = 0x1a,
+    Input = 0x1b,
+    Output = 0x1c,
+    Contract = 0x1d,
+    Nonce = 0x1e,
+    Log = 0x1f,
+    Signtx = 0x20,
+    Call = 0x21,
+    Left = 0x22,
+    Right = 0x23,
     Delegate = MAX_OPCODE,
 }
 
-const MAX_OPCODE: u8 = 0x26;
+const MAX_OPCODE: u8 = 0x24;
 
 impl Opcode {
     /// Converts the opcode to `u8`.
@@ -191,8 +187,6 @@ impl Instruction {
             Opcode::And => Ok(Instruction::And),
             Opcode::Or => Ok(Instruction::Or),
             Opcode::Verify => Ok(Instruction::Verify),
-            Opcode::Blind => Ok(Instruction::Blind),
-            Opcode::Reblind => Ok(Instruction::Reblind),
             Opcode::Unblind => Ok(Instruction::Unblind),
             Opcode::Issue => Ok(Instruction::Issue),
             Opcode::Borrow => Ok(Instruction::Borrow),
@@ -262,8 +256,6 @@ impl Instruction {
             Instruction::And => write(Opcode::And),
             Instruction::Or => write(Opcode::Or),
             Instruction::Verify => write(Opcode::Verify),
-            Instruction::Blind => write(Opcode::Blind),
-            Instruction::Reblind => write(Opcode::Reblind),
             Instruction::Unblind => write(Opcode::Unblind),
             Instruction::Issue => write(Opcode::Issue),
             Instruction::Borrow => write(Opcode::Borrow),
@@ -330,7 +322,6 @@ impl Program {
     def_op!(add, Add);
     def_op!(alloc, Alloc);
     def_op!(and, And);
-    def_op!(blind, Blind);
     def_op!(borrow, Borrow);
     def_op!(call, Call);
     def_op!(r#const, Const);
@@ -356,7 +347,6 @@ impl Program {
     def_op!(output, Output, usize);
     def_op!(qty, Qty);
     def_op!(range, Range, BitRange);
-    def_op!(reblind, Reblind);
     def_op!(retire, Retire);
     def_op!(right, Right);
     def_op!(roll, Roll, usize);

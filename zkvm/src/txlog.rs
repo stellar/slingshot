@@ -1,7 +1,7 @@
 use curve25519_dalek::ristretto::CompressedRistretto;
 use merlin::Transcript;
 
-use crate::contract::Output;
+use crate::contract::Contract;
 use crate::transcript::TranscriptProtocol;
 use crate::vm::TxHeader;
 
@@ -17,7 +17,7 @@ pub enum Entry {
     Retire(CompressedRistretto, CompressedRistretto),
     Input(UTXO),
     Nonce(CompressedRistretto, u64),
-    Output(Output),
+    Output(Contract),
     Data(Vec<u8>),
     Import, // TBD: parameters
     Export, // TBD: parameters
@@ -101,8 +101,8 @@ impl Entry {
                 t.commit_point(b"nonce.p", &pred);
                 t.commit_u64(b"nonce.t", *maxtime);
             }
-            Entry::Output(outstruct) => {
-                t.commit_bytes(b"output", &outstruct.to_bytes());
+            Entry::Output(contract) => {
+                t.commit_bytes(b"output", &contract.to_bytes());
             }
             Entry::Data(data) => {
                 t.commit_bytes(b"data", data);

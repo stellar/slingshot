@@ -43,8 +43,8 @@ impl ProgramHelper for Program {
     }
 
     fn input_helper(&mut self, qty: u64, flv: Scalar, pred: Predicate) -> &mut Self {
-        let prev_output = Output {
-            payload: vec![FrozenItem::Value(FrozenValue {
+        let prev_output = Contract {
+            payload: vec![PortableItem::Value(Value {
                 qty: Commitment::blinded(qty),
                 flv: Commitment::blinded(flv),
             })],

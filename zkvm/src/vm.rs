@@ -5,7 +5,6 @@ use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
 use spacesuit;
 use spacesuit::BitRange;
-use spacesuit::SignedInteger;
 use std::iter::FromIterator;
 use std::mem;
 
@@ -88,7 +87,6 @@ where
     current_run: D::RunType,
     run_stack: Vec<D::RunType>,
     txlog: TxLog,
-    variable_commitments: Vec<VariableCommitment>,
 }
 
 pub(crate) trait Delegate<CS: r1cs::ConstraintSystem> {
@@ -122,21 +120,6 @@ pub(crate) trait Delegate<CS: r1cs::ConstraintSystem> {
     fn new_run(&self, prog: Data) -> Result<Self::RunType, VMError>;
 }
 
-/// And indirect reference to a high-level variable within a constraint system.
-/// Variable types store index of such commitments that allows replacing them.
-#[derive(Debug)]
-pub struct VariableCommitment {
-    /// Pedersen commitment to a variable
-    commitment: Commitment,
-
-    /// Attached/detached state
-    /// None - if the variable is not attached to the CS yet,
-    /// so its commitment is replaceable via `reblind`.
-    /// Some - if variable is attached to the CS yet and has an index in CS,
-    /// so its commitment is no longer replaceable via `reblind`.
-    variable: Option<r1cs::Variable>,
-}
-
 impl<'d, CS, D> VM<'d, CS, D>
 where
     CS: r1cs::ConstraintSystem,
@@ -154,7 +137,6 @@ where
             current_run: run,
             run_stack: Vec::new(),
             txlog: vec![Entry::Header(header)],
-            variable_commitments: Vec::new(),
         }
     }
 
@@ -215,8 +197,6 @@ where
                 Instruction::And => self.and()?,
                 Instruction::Or => self.or()?,
                 Instruction::Verify => self.verify()?,
-                Instruction::Blind => unimplemented!(),
-                Instruction::Reblind => unimplemented!(),
                 Instruction::Unblind => unimplemented!(),
                 Instruction::Issue => self.issue()?,
                 Instruction::Borrow => unimplemented!(),
@@ -359,8 +339,8 @@ where
     }
 
     fn var(&mut self) -> Result<(), VMError> {
-        let comm = self.pop_item()?.to_data()?.to_commitment()?;
-        let v = self.commitment_to_variable(comm);
+        let commitment = self.pop_item()?.to_data()?.to_commitment()?;
+        let v = Variable { commitment };
         self.push_item(v);
         Ok(())
     }
@@ -401,8 +381,8 @@ where
         let flv = self.pop_item()?.to_variable()?;
         let qty = self.pop_item()?.to_variable()?;
 
-        let (flv_point, _) = self.attach_variable(flv)?;
-        let (qty_point, _) = self.attach_variable(qty)?;
+        let (flv_point, _) = self.delegate.commit_variable(&flv.commitment)?;
+        let (qty_point, _) = self.delegate.commit_variable(&qty.commitment)?;
 
         self.delegate.verify_point_op(|| {
             let flv_scalar = Value::issue_flavor(&predicate, metadata);
@@ -414,7 +394,10 @@ where
             }
         })?;
 
-        let value = Value { qty, flv };
+        let value = Value {
+            qty: qty.commitment.clone(),
+            flv: flv.commitment,
+        };
 
         let qty_expr = self.variable_to_expression(qty)?;
         self.add_range_proof(BitRange::max(), qty_expr)?;
@@ -432,16 +415,15 @@ where
 
     fn retire(&mut self) -> Result<(), VMError> {
         let value = self.pop_item()?.to_value()?;
-        let qty = self.variable_to_commitment(value.qty);
-        let flv = self.variable_to_commitment(value.flv);
-        self.txlog.push(Entry::Retire(qty.into(), flv.into()));
+        self.txlog
+            .push(Entry::Retire(value.qty.into(), value.flv.into()));
         Ok(())
     }
 
     /// _input_ **input** → _contract_
     fn input(&mut self) -> Result<(), VMError> {
         let input = self.pop_item()?.to_data()?.to_input()?;
-        let (contract, utxo) = input.unfreeze(|c| self.commitment_to_variable(c));
+        let (contract, utxo) = input.unfreeze();
         self.push_item(contract);
         self.txlog.push(Entry::Input(utxo));
         self.unique = true;
@@ -451,8 +433,7 @@ where
     /// _items... predicate_ **output:_k_** → ø
     fn output(&mut self, k: usize) -> Result<(), VMError> {
         let contract = self.pop_contract(k)?;
-        let frozen_contract = contract.freeze(|v| self.variable_to_commitment(v));
-        self.txlog.push(Entry::Output(frozen_contract));
+        self.txlog.push(Entry::Output(contract));
         Ok(())
     }
 
@@ -493,20 +474,18 @@ where
             return Err(VMError::StackUnderflow);
         }
 
-        let mut output_values: Vec<Value> = Vec::with_capacity(2 * n);
+        let mut output_values: Vec<Value> = Vec::with_capacity(n);
 
         let mut cloak_ins: Vec<spacesuit::AllocatedValue> = Vec::with_capacity(m);
-        let mut cloak_outs: Vec<spacesuit::AllocatedValue> = Vec::with_capacity(2 * n);
+        let mut cloak_outs: Vec<spacesuit::AllocatedValue> = Vec::with_capacity(n);
 
         // Make cloak outputs and output values using (qty,flv) commitments
         for _ in 0..n {
             let flv = self.pop_item()?.to_data()?.to_commitment()?;
             let qty = self.pop_item()?.to_data()?.to_commitment()?;
 
-            let flv = self.commitment_to_variable(flv);
-            let qty = self.commitment_to_variable(qty);
-
             let value = Value { qty, flv };
+
             let cloak_value = self.value_to_cloak_value(&value)?;
 
             // insert in the same order as they are on stack (the deepest item will be at index 0)
@@ -657,46 +636,14 @@ where
         self.stack.push(item.into())
     }
 
-    fn commitment_to_variable(&mut self, commitment: Commitment) -> Variable {
-        let index = self.variable_commitments.len();
-
-        self.variable_commitments.push(VariableCommitment {
-            commitment: commitment,
-            variable: None,
-        });
-        Variable { index }
-    }
-
-    fn variable_to_commitment(&self, var: Variable) -> Commitment {
-        self.variable_commitments[var.index].commitment.clone()
-    }
-
-    fn attach_variable(
-        &mut self,
-        var: Variable,
-    ) -> Result<(CompressedRistretto, r1cs::Variable), VMError> {
-        // This subscript never fails because the variable is created only via `commitment_to_variable`.
-        let v_com = &self.variable_commitments[var.index];
-        match v_com.variable {
-            Some(v) => Ok((v_com.commitment.to_point(), v)),
-            None => {
-                let (point, r1cs_var) = self.delegate.commit_variable(&v_com.commitment)?;
-                self.variable_commitments[var.index].variable = Some(r1cs_var);
-                Ok((point, r1cs_var))
-            }
-        }
-    }
-
     fn value_to_cloak_value(
         &mut self,
         value: &Value,
     ) -> Result<spacesuit::AllocatedValue, VMError> {
         Ok(spacesuit::AllocatedValue {
-            q: self.attach_variable(value.qty)?.1,
-            f: self.attach_variable(value.flv)?.1,
-            assignment: self
-                .value_witness(&value)?
-                .map(|(q, f)| spacesuit::Value { q, f }),
+            q: self.delegate.commit_variable(&value.qty)?.1,
+            f: self.delegate.commit_variable(&value.flv)?.1,
+            assignment: value.assignment()?.map(|(q, f)| spacesuit::Value { q, f }),
         })
     }
 
@@ -714,9 +661,9 @@ where
     fn item_to_wide_value(&mut self, item: Item) -> Result<WideValue, VMError> {
         match item {
             Item::Value(value) => Ok(WideValue {
-                r1cs_qty: self.attach_variable(value.qty)?.1,
-                r1cs_flv: self.attach_variable(value.flv)?.1,
-                witness: self.value_witness(&value)?,
+                r1cs_qty: self.delegate.commit_variable(&value.qty)?.1,
+                r1cs_flv: self.delegate.commit_variable(&value.flv)?.1,
+                witness: value.assignment()?,
             }),
             Item::WideValue(w) => Ok(w),
             _ => Err(VMError::TypeNotWideValue),
@@ -724,32 +671,12 @@ where
     }
 
     fn variable_to_expression(&mut self, var: Variable) -> Result<Expression, VMError> {
-        let (_, r1cs_var) = self.attach_variable(var)?;
+        let (_, r1cs_var) = self.delegate.commit_variable(&var.commitment)?;
 
         Ok(Expression::LinearCombination(
             vec![(r1cs_var, Scalar::one())],
-            self.variable_assignment(var),
+            var.commitment.assignment(),
         ))
-    }
-
-    /// Returns Ok(Some((qty,flv))) assignment pair if it's missing or consistent.
-    /// Return Err if the witness is present, but is inconsistent.
-    fn value_witness(&mut self, value: &Value) -> Result<Option<(SignedInteger, Scalar)>, VMError> {
-        match (
-            self.variable_assignment(value.qty),
-            self.variable_assignment(value.flv),
-        ) {
-            (Some(ScalarWitness::Integer(q)), Some(ScalarWitness::Scalar(f))) => Ok(Some((q, f))),
-            (None, None) => Ok(None),
-            (_, _) => return Err(VMError::InconsistentWitness),
-        }
-    }
-
-    fn variable_assignment(&mut self, var: Variable) -> Option<ScalarWitness> {
-        self.variable_commitments[var.index]
-            .commitment
-            .witness()
-            .map(|(content, _)| content)
     }
 
     fn continue_with_program(&mut self, prog: Data) -> Result<(), VMError> {
