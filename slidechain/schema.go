@@ -37,7 +37,8 @@ CREATE TABLE IF NOT EXISTS exports (
   seqnum INTEGER NOT NULL,
   pegged_out INTEGER NOT NULL DEFAULT 0,
   anchor BLOB NOT NULL,
-  pubkey BLOB NOT NULL
+  pubkey BLOB NOT NULL,
+  json BLOB NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS custodian (

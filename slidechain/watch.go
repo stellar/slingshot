@@ -145,9 +145,9 @@ func (c *Custodian) watchExports(ctx context.Context) {
 				continue
 			}
 
-			exportDataInfoItem := tx.Log[1]
+			exportInfoJSON := tx.Log[1][2].(txvm.Bytes)
 			var info pegOut
-			err := json.Unmarshal(exportDataInfoItem[2].(txvm.Bytes), &info)
+			err := json.Unmarshal(exportInfoJSON, &info)
 			if err != nil {
 				continue
 			}
@@ -157,9 +157,9 @@ func (c *Custodian) watchExports(ctx context.Context) {
 			// then wake up a goroutine that executes peg-outs on the main chain.
 			const q = `
 				INSERT INTO exports 
-				(txid, exporter, amount, asset_xdr, temp_addr, seqnum, anchor, pubkey)
+				(txid, exporter, amount, asset_xdr, temp_addr, seqnum, anchor, pubkey, json)
 				VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`
-			_, err = c.DB.ExecContext(ctx, q, tx.ID.Bytes(), info.Exporter, info.Amount, info.AssetXDR, info.TempAddr, info.Seqnum, info.Anchor, info.Pubkey)
+			_, err = c.DB.ExecContext(ctx, q, tx.ID.Bytes(), info.Exporter, info.Amount, info.AssetXDR, info.TempAddr, info.Seqnum, info.Anchor, info.Pubkey, exportInfoJSON)
 			if err != nil {
 				log.Fatalf("recording export tx: %s", err)
 			}
@@ -182,14 +182,14 @@ func (c *Custodian) watchPegOuts(ctx context.Context, pegouts <-chan pegOut) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			const q = `SELECT amount, asset_xdr, exporter, temp_addr, seqnum, anchor, pubkey FROM exports WHERE pegged_out IN ($1, $2)`
+			const q = `SELECT txid, amount, asset_xdr, exporter, temp_addr, seqnum, pegged_out, anchor, pubkey, json FROM exports WHERE pegged_out IN ($1, $2)`
 			var (
-				txids, anchors, assetXDRs, pubkeys [][]byte
-				amounts, seqnums                   []int64
-				exporters, tempAddrs               []string
-				peggedOuts                         []pegOutState
+				txids, anchors, assetXDRs, pubkeys, jsons [][]byte
+				amounts, seqnums                          []int64
+				exporters, tempAddrs                      []string
+				peggedOuts                                []pegOutState
 			)
-			err := sqlutil.ForQueryRows(ctx, c.DB, q, pegOutOK, pegOutFail, func(txid []byte, amount int64, assetXDR []byte, exporter, tempAddr string, seqnum, peggedOut int64, anchor, pubkey []byte) {
+			err := sqlutil.ForQueryRows(ctx, c.DB, q, pegOutOK, pegOutFail, func(txid []byte, amount int64, assetXDR []byte, exporter, tempAddr string, seqnum, peggedOut int64, anchor, pubkey, json []byte) {
 				txids = append(txids, txid)
 				amounts = append(amounts, amount)
 				assetXDRs = append(assetXDRs, assetXDR)
@@ -199,12 +199,13 @@ func (c *Custodian) watchPegOuts(ctx context.Context, pegouts <-chan pegOut) {
 				peggedOuts = append(peggedOuts, pegOutState(peggedOut))
 				anchors = append(anchors, anchor)
 				pubkeys = append(pubkeys, pubkey)
+				jsons = append(jsons, json)
 			})
 			if err != nil {
 				log.Fatalf("querying peg-outs: %s", err)
 			}
 			for i, txid := range txids {
-				err = c.doPostPegOut(ctx, assetXDRs[i], anchors[i], txid, amounts[i], seqnums[i], peggedOuts[i], exporters[i], tempAddrs[i], pubkeys[i])
+				err = c.doPostPegOut(ctx, assetXDRs[i], anchors[i], txid, amounts[i], seqnums[i], peggedOuts[i], exporters[i], tempAddrs[i], pubkeys[i], jsons[i])
 				if err != nil {
 					log.Fatalf("doing post-peg-out: %s", err)
 				}
@@ -213,7 +214,12 @@ func (c *Custodian) watchPegOuts(ctx context.Context, pegouts <-chan pegOut) {
 			if !ok {
 				log.Fatalf("peg-outs channel closed")
 			}
-			err := c.doPostPegOut(ctx, p.AssetXDR, p.Anchor, p.TxID, p.Amount, p.Seqnum, p.State, p.Exporter, p.TempAddr, p.Pubkey)
+			var refdata []byte
+			err := c.DB.QueryRowContext(ctx, `SELECT json FROM exports where txid=$1`, p.TxID).Scan(&refdata)
+			if err != nil {
+
+			}
+			err = c.doPostPegOut(ctx, p.AssetXDR, p.Anchor, p.TxID, p.Amount, p.Seqnum, p.State, p.Exporter, p.TempAddr, p.Pubkey, refdata)
 			if err != nil {
 				log.Fatalf("doing post-peg-out: %s", err)
 			}

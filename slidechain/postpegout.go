@@ -1,6 +1,7 @@
 package slidechain
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -15,7 +16,7 @@ import (
 	"github.com/stellar/go/xdr"
 )
 
-func (c *Custodian) doPostPegOut(ctx context.Context, assetXDR, anchor, txid []byte, amount, seqnum int64, peggedOut pegOutState, exporter, tempAddr string, pubkey []byte) error {
+func (c *Custodian) doPostPegOut(ctx context.Context, assetXDR, anchor, txid []byte, amount, seqnum int64, peggedOut pegOutState, exporter, tempAddr string, pubkey, refdata []byte) error {
 	var asset xdr.Asset
 	err := asset.UnmarshalBinary(assetXDR)
 	if err != nil {
@@ -31,9 +32,12 @@ func (c *Custodian) doPostPegOut(ctx context.Context, assetXDR, anchor, txid []b
 		Anchor:   anchor,
 		Pubkey:   pubkey,
 	}
-	refdata, err := json.Marshal(ref)
+	checkRefdata, err := json.Marshal(ref)
 	if err != nil {
 		return errors.Wrap(err, "marshaling reference data")
+	}
+	if !bytes.Equal(refdata, checkRefdata) {
+		return fmt.Errorf("incorrect reference data in post-peg-out tx")
 	}
 	// The contract needs a non-zero selector to retire funds if the peg-out succeeded.
 	// Else, it requires a zero selector so the funds are returned.
