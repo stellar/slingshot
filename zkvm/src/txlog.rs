@@ -41,9 +41,14 @@ pub enum MerkleNeighbor {
 
 /// MerkleTree represents a node in the Merkle tree, containing either
 /// an uncomputed Entry or the precomputed hash.
-pub enum MerkleTree {
-    Leaf([u8; 32], usize),
-    Node([u8; 32], Box<MerkleTree>, Box<MerkleTree>, usize),
+pub struct MerkleTree {
+    size: usize,
+    root: MerkleNode,
+}
+
+enum MerkleNode {
+    Leaf([u8; 32]),
+    Node([u8; 32], Box<MerkleNode>, Box<MerkleNode>),
 }
 
 impl UTXO {
@@ -169,81 +174,77 @@ impl MerkleTree {
             return None;
         }
         let t = Transcript::new(b"ZkVM.txid");
-        Some(Self::build_tree(t, list))
+        Some(MerkleTree {
+            size: list.len(),
+            root: MerkleNode::build_tree(t, list),
+        })
     }
 
-    fn build_tree(mut t: Transcript, list: &[Entry]) -> MerkleTree {
+    /// Builds a proof of inclusion for entry at the given index for the
+    /// Merkle tree.
+    pub fn proof(&self, index: usize) -> Result<Vec<MerkleNeighbor>, VMError> {
+        if index >= self.size {
+            return Err(VMError::InvalidMerkleProof);
+        }
+        let t = Transcript::new(b"ZkVM.txid");
+        let mut result = Vec::new();
+        self.root.subproof(t, index, self.size, &mut result);
+        Ok(result)
+    }
+}
+
+impl MerkleNode {
+    fn build_tree(mut t: Transcript, list: &[Entry]) -> Self {
         match list.len() {
             0 => {
                 let mut leaf = [0u8; 32];
                 TxID::empty(t, &mut leaf);
-                return MerkleTree::Leaf(leaf, 0);
+                return MerkleNode::Leaf(leaf);
             }
             1 => {
                 let mut leaf = [0u8; 32];
                 TxID::leaf(t, &list[0], &mut leaf);
-                return MerkleTree::Leaf(leaf, 1);
+                return MerkleNode::Leaf(leaf);
             }
             n => {
                 let k = n.next_power_of_two() / 2;
                 let mut node = [0u8; 32];
                 let left = Self::build_tree(t.clone(), &list[..k]);
                 let right = Self::build_tree(t.clone(), &list[k..]);
-                let size = left.size() + right.size();
                 t.commit_bytes(b"L", left.hash());
                 t.commit_bytes(b"R", right.hash());
                 t.challenge_bytes(b"merkle.node", &mut node);
-                return MerkleTree::Node(node, Box::new(left), Box::new(right), size);
+                return MerkleNode::Node(node, Box::new(left), Box::new(right));
             }
         }
     }
 
-    /// Builds a proof of inclusion for entry at the given index for the
-    /// Merkle tree.
-    pub fn proof(&self, index: usize) -> Result<Vec<MerkleNeighbor>, VMError> {
-        if index >= self.size() {
-            return Err(VMError::InvalidMerkleProof);
-        }
-        let t = Transcript::new(b"ZkVM.txid");
-        let mut result = Vec::new();
-        self.subproof(t, index, &mut result);
-        Ok(result)
-    }
-
-    fn subproof(&self, t: Transcript, index: usize, result: &mut Vec<MerkleNeighbor>) {
-        let k = self.size().next_power_of_two() / 2;
+    fn subproof(&self, t: Transcript, index: usize, size: usize, result: &mut Vec<MerkleNeighbor>) {
+        let k = size.next_power_of_two() / 2;
         if index >= k {
             match self {
-                MerkleTree::Node(_, l, r, _) => {
+                MerkleNode::Node(_, l, r) => {
                     result.insert(0, MerkleNeighbor::Left(*l.hash()));
-                    return r.subproof(t, index - k, result);
+                    return r.subproof(t, index - k, size - k, result);
                 }
-                MerkleTree::Leaf(_, _) => return,
+                MerkleNode::Leaf(_) => return,
             }
         } else {
             match self {
-                MerkleTree::Node(_, l, r, _) => {
+                MerkleNode::Node(_, l, r) => {
                     result.insert(0, MerkleNeighbor::Right(*r.hash()));
-                    return l.subproof(t, k, result);
+                    return l.subproof(t, index, k, result);
                 }
-                MerkleTree::Leaf(_, _) => return,
+                MerkleNode::Leaf(_) => return,
             }
         }
     }
 
     /// Returns the hash of a Merkle tree.
-    pub fn hash(&self) -> &[u8; 32] {
+    fn hash(&self) -> &[u8; 32] {
         match self {
-            MerkleTree::Leaf(h, _) => h,
-            MerkleTree::Node(h, _, _, _) => h,
-        }
-    }
-
-    /// Returns the size of a Merkle tree.
-    pub fn size(&self) -> usize {
-        match self {
-            MerkleTree::Leaf(_, s) => *s,
-            MerkleTree::Node(_, _, _, s) => *s,
+            MerkleNode::Leaf(h) => h,
+            MerkleNode::Node(h, _, _) => h,
         }
     }
 }
