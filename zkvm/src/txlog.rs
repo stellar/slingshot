@@ -227,7 +227,7 @@ impl MerkleRoot {
         }
         let t = Transcript::new(b"ZkVM.txid");
         let mut result = Vec::new();
-        Self::subproof(t, index, self.size, &self.root, &mut result)?;
+        Self::subproof(t, index, self.size, &self.root, &mut result);
         Ok(result)
     }
 
@@ -237,29 +237,29 @@ impl MerkleRoot {
         length: usize,
         root: &MerkleNode,
         result: &mut Vec<MerkleHash>,
-    ) -> Result<(), VMError> {
+    ) {
         let k = length.next_power_of_two() / 2;
         if index >= k {
             match &root.left {
                 Some(l) => result.insert(0, MerkleHash::Left(l.node)),
-                None => return Ok(()),
+                None => return,
             };
             match &root.right {
                 Some(r) => {
                     return Self::subproof(t, index - k, length - k, &r, result);
                 }
-                None => return Ok(()),
+                None => return,
             };
         } else {
             match &root.right {
                 Some(r) => result.insert(0, MerkleHash::Right(r.node)),
-                None => return Ok(()),
+                None => return,
             };
             match &root.left {
                 Some(l) => {
                     return Self::subproof(t, index, k, &l, result);
                 }
-                None => return Ok(()),
+                None => return,
             };
         }
     }
