@@ -6,7 +6,7 @@ use std::collections::VecDeque;
 
 use crate::constraints::Commitment;
 use crate::errors::VMError;
-use crate::ops::Instruction;
+use crate::ops::{Instruction, Program};
 use crate::point_ops::PointOp;
 use crate::predicate::Predicate;
 use crate::signature::{Signature, VerificationKey};
@@ -59,7 +59,7 @@ impl<'a, 'b> Delegate<r1cs::Prover<'a, 'b>> for Prover<'a, 'b> {
 
     fn new_run(&self, data: Data) -> Result<Self::RunType, VMError> {
         Ok(ProverRun {
-            program: data.to_program()?.into(),
+            program: data.to_program()?.to_vec().into(),
         })
     }
 
@@ -73,7 +73,7 @@ impl<'a, 'b> Prover<'a, 'b> {
     /// Returns a transaction `Tx` along with its ID (`TxID`) and a transaction log (`TxLog`).
     /// Fails if the input program is malformed, or some witness data is missing.
     pub fn build_tx<'g, F>(
-        program: Vec<Instruction>,
+        program: Program,
         header: TxHeader,
         bp_gens: &'g BulletproofGens,
         sign_tx_fn: F,
@@ -88,7 +88,7 @@ impl<'a, 'b> Prover<'a, 'b> {
 
         // Serialize the tx program
         let mut bytecode = Vec::new();
-        Instruction::encode_program(program.iter(), &mut bytecode);
+        program.encode(&mut bytecode);
 
         let mut prover = Prover {
             signtx_keys: Vec::new(),
@@ -98,7 +98,7 @@ impl<'a, 'b> Prover<'a, 'b> {
         let vm = VM::new(
             header,
             ProverRun {
-                program: program.into(),
+                program: program.to_vec().into(),
             },
             &mut prover,
         );

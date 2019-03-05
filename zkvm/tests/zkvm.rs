@@ -103,7 +103,7 @@ fn issuance_helper() -> (Scalar, Predicate, Scalar) {
     (scalar, predicate, flavor)
 }
 
-fn test_helper(program: Vec<Instruction>, keys: &Vec<Scalar>) -> Result<TxID, VMError> {
+fn test_helper(program: Program, keys: &Vec<Scalar>) -> Result<TxID, VMError> {
     let (tx, _, _) = {
         // Build tx
         let bp_gens = BulletproofGens::new(256, 1);
@@ -142,12 +142,11 @@ fn issue_contract(
     issuance_pred: Predicate,
     nonce_pred: Predicate,
     output_pred: Predicate,
-) -> Vec<Instruction> {
+) -> Program {
     Program::build(|p| {
         p.issue_helper(qty, flv, issuance_pred, nonce_pred) // stack: issued-val
             .output_helper(output_pred) // stack: empty
     })
-    .to_vec()
 }
 
 #[test]
@@ -195,13 +194,12 @@ fn spend_1_1_contract(
     flv: Scalar,
     input_pred: Predicate,
     output_pred: Predicate,
-) -> Vec<Instruction> {
+) -> Program {
     Program::build(|p| {
         p.input_helper(input, flv, input_pred)
             .cloak_helper(1, vec![(output, flv)])
             .output_helper(output_pred)
     })
-    .to_vec()
 }
 
 #[test]
@@ -244,14 +242,13 @@ fn spend_1_2_contract(
     input_pred: Predicate,
     output_1_pred: Predicate,
     output_2_pred: Predicate,
-) -> Vec<Instruction> {
+) -> Program {
     Program::build(|p| {
         p.input_helper(input, flv, input_pred) // stack: input
             .cloak_helper(1, vec![(output_1, flv), (output_2, flv)]) // stack: output-1, output-2
             .output_helper(output_2_pred) // stack: output-1
             .output_helper(output_1_pred) // stack: empty
     })
-    .to_vec()
 }
 
 #[test]
@@ -298,14 +295,13 @@ fn spend_2_1_contract(
     input_1_pred: Predicate,
     input_2_pred: Predicate,
     output_pred: Predicate,
-) -> Vec<Instruction> {
+) -> Program {
     Program::build(|p| {
         p.input_helper(input_1, flv, input_1_pred) // stack: input-1
             .input_helper(input_2, flv, input_2_pred) // stack: input-1, input-2
             .cloak_helper(2, vec![(output, flv)]) // stack: output
             .output_helper(output_pred) // stack: empty
     })
-    .to_vec()
 }
 
 #[test]
@@ -354,7 +350,7 @@ fn spend_2_2_contract(
     input_2_pred: Predicate,
     output_1_pred: Predicate,
     output_2_pred: Predicate,
-) -> Vec<Instruction> {
+) -> Program {
     Program::build(|p| {
         p.input_helper(input_1, flv, input_1_pred) // stack: input-1
             .input_helper(input_2, flv, input_2_pred) // stack: input-1, input-2
@@ -362,7 +358,6 @@ fn spend_2_2_contract(
             .output_helper(output_2_pred) // stack: output-1
             .output_helper(output_1_pred) // stack: empty
     })
-    .to_vec()
 }
 
 #[test]
@@ -416,7 +411,7 @@ fn issue_and_spend_contract(
     input_pred: Predicate,
     output_1_pred: Predicate,
     output_2_pred: Predicate,
-) -> Vec<Instruction> {
+) -> Program {
     Program::build(|p| {
         p.issue_helper(issue_qty, flv, issuance_pred, nonce_pred) // stack: issued-val
             .input_helper(input_qty, flv, input_pred) // stack: issued-val, input-val
@@ -424,7 +419,6 @@ fn issue_and_spend_contract(
             .output_helper(output_2_pred) // stack: output-1
             .output_helper(output_1_pred) // stack: empty
     })
-    .to_vec()
 }
 
 #[test]
