@@ -217,7 +217,7 @@ func (c *Custodian) watchPegOuts(ctx context.Context, pegouts <-chan pegOut) {
 			var refdata []byte
 			err := c.DB.QueryRowContext(ctx, `SELECT json FROM exports where txid=$1`, p.TxID).Scan(&refdata)
 			if err != nil {
-
+				log.Fatalf("selecting refdata for txid %x: %s", p.TxID, err)
 			}
 			err = c.doPostPegOut(ctx, p.AssetXDR, p.Anchor, p.TxID, p.Amount, p.Seqnum, p.State, p.Exporter, p.TempAddr, p.Pubkey, refdata)
 			if err != nil {
