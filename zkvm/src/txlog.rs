@@ -100,7 +100,7 @@ impl TxID {
 
     /// Verifies that an entry satisfies the Merkle proof of inclusion
     /// for a given TxID
-    pub fn verify_proof(&self, entry: Entry, proof: Vec<MerkleNeighbor>) -> bool {
+    pub fn verify_proof(&self, entry: Entry, proof: Vec<MerkleNeighbor>) -> Result<(), VMError> {
         let transcript = Transcript::new(b"ZkVM.txid");
         let mut result = [0u8; 32];
         Self::leaf(transcript.clone(), &entry, &mut result);
@@ -119,7 +119,12 @@ impl TxID {
                 }
             }
         }
-        result.ct_eq(&self.0).unwrap_u8() == 1
+        let eq = result.ct_eq(&self.0).unwrap_u8();
+        if eq == 1 {
+            Ok(())
+        } else {
+            Err(VMError::InvalidMerkleProof)
+        }
     }
 }
 
@@ -288,7 +293,7 @@ mod tests {
             let proof = root.proof(index).unwrap();
             (entries[index].clone(), TxID::from_log(&entries), proof)
         };
-        assert!(txid.verify_proof(entry, proof));
+        txid.verify_proof(entry, proof).unwrap();
     }
 
     #[test]
@@ -300,6 +305,6 @@ mod tests {
             let proof = root.proof(index).unwrap();
             (entries[index + 1].clone(), TxID::from_log(&entries), proof)
         };
-        assert_eq!(txid.verify_proof(entry, proof), false);
+        assert!(txid.verify_proof(entry, proof).is_ok());
     }
 }
