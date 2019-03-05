@@ -48,6 +48,18 @@ impl Xprv {
     }
 }
 
+pub fn intermediate_key(xpub: &Xpub, label: &String, data: &String) -> Xpub {
+    // question: is the following kosher? https://doc.dalek.rs/merlin/struct.Transcript.html#note
+    let mut t = Transcript::new(b"Keytree.intermediate");
+    t.commit_bytes(b"pt", xpub.point.as_bytes());
+    t.commit_bytes(b"dk", &xpub.dk);
+
+    // provide the transcript to the user to commit an arbitrary derivation path or index
+    t.commit_bytes(label.as_bytes(), data.as_bytes());
+
+    unimplemented!();
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
