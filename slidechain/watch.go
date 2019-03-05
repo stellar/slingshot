@@ -215,7 +215,7 @@ func (c *Custodian) watchPegOuts(ctx context.Context, pegouts <-chan pegOut) {
 				log.Fatalf("peg-outs channel closed")
 			}
 			var refdata []byte
-			err := c.DB.QueryRowContext(ctx, `SELECT json FROM exports where txid=$1`, p.TxID).Scan(&refdata)
+			err := c.DB.QueryRowContext(ctx, `SELECT json FROM exports WHERE txid=$1`, p.TxID).Scan(&refdata)
 			if err != nil {
 				log.Fatalf("selecting refdata for txid %x: %s", p.TxID, err)
 			}
