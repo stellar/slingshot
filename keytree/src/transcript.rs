@@ -7,8 +7,6 @@ use merlin::Transcript;
 /// Extension trait to the Merlin transcript API that allows committing scalars and points and
 /// generating challenges as scalars.
 pub trait TranscriptProtocol {
-    /// Commit a `scalar` with the given `label`.
-    fn commit_scalar(&mut self, label: &'static [u8], scalar: &Scalar);
     /// Commit a `point` with the given `label`.
     fn commit_point(&mut self, label: &'static [u8], point: &CompressedRistretto);
     /// Compute a `label`ed challenge variable.
@@ -16,10 +14,6 @@ pub trait TranscriptProtocol {
 }
 
 impl TranscriptProtocol for Transcript {
-    fn commit_scalar(&mut self, label: &'static [u8], scalar: &Scalar) {
-        self.commit_bytes(label, scalar.as_bytes());
-    }
-
     fn commit_point(&mut self, label: &'static [u8], point: &CompressedRistretto) {
         self.commit_bytes(label, point.as_bytes());
     }
