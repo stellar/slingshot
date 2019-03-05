@@ -45,7 +45,7 @@ ZkVM defines a procedural representation for blockchain transactions and the rul
     * [Merkle binary tree](#merkle-binary-tree)
     * [Aggregated signature](#aggregated-signature)
     * [Transaction signature](#transaction-signature)
-    * [Blinding protocol](#blinding-protocol)
+    * [Unblinding proof](#unblinding-proof)
 * [VM operation](#vm-operation)
     * [VM state](#vm-state)
     * [VM execution](#vm-execution)
@@ -213,19 +213,10 @@ Variables can be copied and dropped at will, but cannot be ported across transac
 Constraint system also contains _low-level variables_ that are not individually bound to [Pedersen commitments](#pedersen-commitment):
 when these are exposed to the VM (for instance, from [`mul`](#mul)), they have the [expression type](#expression-type).
 
-### Attached and detached variables
-
-A [variable](#variable-type) can be in one of two states: **detached** or **attached**.
-
-A **detached variable** can be [reblinded](#reblind): all copies of a detached variable share the same commitment,
-so reblinding one of them reflects the new commitments in all the copies. When an [expression](#expression-type) is formed using detached variables, all of them transition to an _attached_ state.
-
-An **attached variable** has its commitment applied to the constraint system, so it cannot be reblinded and variable cannot be detached.
-
 
 ### Expression type
 
-_Expression_ is a linear combination of attached [variables](#variable-type) with cleartext [scalar](#scalar) weights.
+_Expression_ is a linear combination of constraint system variables with cleartext [scalar](#scalar) weights.
 
     expr = { (weight0, var0), (weight1, var1), ...  }
 
@@ -235,8 +226,6 @@ the result is a linear combination with one term with weight 1:
     expr = { (1, var) }
 
 Expressions can be [added](#add) and [multiplied](#mul), producing new expressions.
-Expressions can also be [blinded](#blind) into a [Pedersen commitment](#pedersen-commitment) with a pre-arranged
-blinding factor.
 
 Expressions can be copied and dropped at will, but cannot be ported across transactions via [outputs](#output-structure).
 
@@ -364,8 +353,7 @@ where:
 
 Pedersen commitments can be used to allocate new [variables](#variable-type) using the [`var`](#var) instruction.
 
-Pedersen commitments can be proven to use a pre-determined blinding factor using [`blind`](#blind),
-[`reblind`](#reblind) and [`unblind`](#unblind) instructions.
+Pedersen commitments can be opened using the [`unblind`](#unblind) instruction.
 
 
 ### Verification key
@@ -809,165 +797,7 @@ Fiat-Shamir transform defined through the use of the [transcript](#transcript) i
 4. Add the verifier's statement to the list of [deferred point operations](#deferred-point-operations).
 
 
-### Blinding protocol
-
-The blinding protocol consists of three proofs about blinding factors:
-
-1. [Blinding proof](#blinding-proof): a proof that a blinding factor is formed with a pre-determined key which can be removed using [reblind](#reblinding-proof) operation. Implemented by the [`blind`](#blind) instruction.
-2. [Reblinding proof](#reblinding-proof): a proof that a blinding factor is replaced with another one without affecting the committed value. Implemented by the [`reblind`](#reblind) instruction.
-3. [Unblinding proof](#unblinding-proof): demonstrates the committed value and proves that the blinding factor is zero. Implemented by the [`unblind`](#reblind) instruction.
-
-
-#### Blinding proof
-
-Proves that a commitment `V = v·B + f·B2` has blinding factor `f = q·p`, while `q` and `p` are committed to via `Q=q·B2` and `P=p·B2`.
-
-This protocol solves a problem for a contract between two parties (_sender_ and _recipient_): where the sender computes the committed value `v` without cooperation with the recipient, but needs to form the commitment in a way that’s usable by the recipient. The recipient then can subtract the unknown factor by using a pre-agreed secret `p` and one-time nonce `Q`.
-
-```
-    W == p^{-1}·v·B
-W + Q == p^{-1}·V
-   B2 == p^{-1}·P
-    Q == q·B2
-```
-
-The proof that `Q=q·B2` is provided separately to be used in the [reblinding proof](#reblinding-proof) by a receiving party.
-
-Setup:
-
-1. Recipient generates random scalar `p` and communicates it to the sender.
-2. Sender and recipient bind their contract to `p` via commitment `P = p·B2`.
-
-Proof:
-
-1. Prover (sender) generates a random nonce `q`.
-2. Prover commits to it using [secondary base point](#base-points) `B2`: `Q = q·B2` and sends `Q` to the verifier.
-3. Prover and verifier prepare a [transcript](#transcript) for the proof of discrete log of `Q/B2`:
-    ```
-    T = Transcript("ZkVM.blind-reblind-nonce")
-    T.commit("Q", Q)
-    ```
-4. Prover and verifier perform the [signature protocol](#aggregated-signature) with base point `B2` producing a 64-byte proof `R_q || s_q`.
-5. Prover makes a commitment `Com(v, q·p) = v·B + q·p·B2`.
-6. Prover commits to the value by multiplicatively blinding it (because often secret values are distributed non-uniformly) and sends `W` to the verifier:
-    ```
-    W = p^{-1}·v·B
-    ```
-7. Prover and verifier prepare a [transcript](#transcript) for the main statement:
-    ```
-    T = Transcript("ZkVM.blind")
-    T.commit("P", P)
-    T.commit("Q", Q)
-    T.commit("V", V)
-    T.commit("W", W)
-    ```
-8. Prover creates secret nonces `r_w` and `r_p`.
-9. Prover creates nonce commitments and sends them to the verifier:
-    ```
-    R_w = r_w·B
-    R_v = r_p·V
-    R_p = r_p·P
-    ```
-10. Prover and verifier write the nonce commitments to the transcript:
-    ```
-    T.commit("R_w", R_w)
-    T.commit("R_v", R_v)
-    T.commit("R_p", R_p)
-    ```
-11. Prover and verifier compute a Fiat-Shamir challenge scalar `e` using the transcript:
-    ```
-    e = T.challenge_scalar("e")
-    ```
-12. Prover blinds secrets `p^{-1}·v` and `p^{-1}` using the nonces and the challenge and sends them to the verifier:
-    ```
-    s_w = r_w + e·p^{-1}·v
-    s_p = r_p + e·p^{-1}
-    ```
-13. Verifier checks the relation:
-    ```
-    R_w + e·W     == s_w·B
-    R_v + e·(W+Q) == s_p·V
-    R_p + e·B2    == s_p·P
-    ```
-
-The total size of the proof (excluding `P` and `V`) is 256 bytes:
-
-```
-Q || R_q || s_q || R_v || R_w || R_p || s_p || s_w  (8x32)
-```
-
-The recipient can copy the proof about the nonce `q`: `Q || R_q || s_q`
-and use it in their [reblinding proof](#reblinding-proof).
-
-#### Reblinding proof
-
-Proves that a commitment `V2` retains the same committed value `v` as `V1`, but subtracts blinding factor `p·Q` and adds another blinding factor `f·B2`. 
-
-This protocol allows the receiving party in the [blinding proof protocol](#blinding-proof) to replace the randomized blinding factor
-produced by the sender with the blinding factor of their own choice. The sender needs to randomize the commitment to avoid unsafe reuse of the blinding factor `p`. The blinding protocol forces publication of the proof for `Q == q·B2` to be reused in this protocol without the recipient knowing the secret nonce `q`.
-
-```
-V1 == v·B + (x + p·q)·B2
-V2 == v·B + (x + f)·B2
-F  == p^{-1}·f·B2
-Q  == q·B2      
-```
-
-1. Prover (recipient) and verifier perform the [signature protocol](#aggregated-signature) for the statement `Q == q·B2`. Prover copies the proof data `Q || R_q || s_q` from the [blinding proof](#blinding-proof):   
-    ```
-    T = Transcript("ZkVM.blind-reblind-nonce")
-    T.commit("Q", Q)
-    ...
-    [the rest of the signature protocol]
-    ```
-2. Prover chooses a random blinding factor `f` and commits to it, blinding it multiplicatively with `p^{-1}`, sending the commitment to the verifier:
-    ```
-    F = p^{-1}·f·B2
-    ```
-3. Prover and verifier prepare a [transcript](#transcript) for the main statement:
-    ```
-    T = Transcript("ZkVM.reblind")
-    T.commit("Q", Q)
-    T.commit("V1", V1)
-    T.commit("V2", V2)
-    T.commit("F", F)
-    ```
-8. Prover creates secret nonces `r_f` and `r_p`.
-9. Prover creates nonce commitments and sends them to the verifier:
-    ```
-    R_f = r_f·B2
-    R_v = r_p·(V2-V1)
-    ```
-10. Prover and verifier write the nonce commitments to the transcript:
-    ```
-    T.commit("R_f", R_f)
-    T.commit("R_v", R_v)
-    ```
-11. Prover and verifier compute a Fiat-Shamir challenge scalar `e` using the transcript:
-    ```
-    e = T.challenge_scalar("e")
-    ```
-12. Prover blinds secrets `p^{-1}·f` and `p^{-1}` using the nonces and the challenge and sends them to the verifier:
-    ```
-    s_f = r_f + e·p^{-1}·f
-    s_p = r_p + e·p^{-1}
-    ```
-13. Verifier checks the relation:
-    ```
-    R_f + e·F     == s_f·B2
-    R_v + e·(F-Q) == s_p·(V2-V1)
-    ```
-
-The total size of the proof (excluding `V1` and `V2`) is 256 bytes:
-```
-F || Q || R_q || s_q || R_f || R_v || s_p || s_f  (8x32)
-```
-
-Note: the commitment `P` is not present in the protocol because the protocol does not need to guarantee that exactly `p·Q` is subtracted.
-It is up to the recipient to decide how much to add or subtract from a blinding factor, the protocol only guarantees that they cannot modify the committed value and can subtract `p·Q` if they want (because discrete log of `Q` is not known to the recipient).
-
-
-#### Unblinding proof
+### Unblinding proof
 
 Unblinding proof shows the committed value `v` and proves
 that the blinding factor in the [Pedersen commitment](#pedersen-commitment) is zero:
@@ -1002,8 +832,7 @@ The ZkVM state consists of the static attributes and the state machine attribute
 7. [Transaction log](#transaction-log) (array of logged items)
 8. Transaction signature verification keys (array of [points](#point))
 9. [Deferred point operations](#deferred-point-operations)
-10. Variables: a list of allocated variables with their commitments: `enum{ detached(point), attached(point, index) }`
-11. [Constraint system](#constraint-system)
+10. [Constraint system](#constraint-system)
 
 
 ### VM execution
@@ -1019,8 +848,7 @@ The VM is initialized with the following state:
 7. Transaction log is empty.
 8. Array of signature verification keys is empty.
 9. Array of deferred point operations is empty.
-10. High-level variables: empty.
-11. Constraint system: empty (time bounds are constants that appear only within linear combinations of actual variables), with [transcript](#transcript) initialized with label `ZkVM.r1cs`:
+10. Constraint system: empty (time bounds are constants that appear only within linear combinations of actual variables), with [transcript](#transcript) initialized with label `ZkVM.r1cs`:
     ```
     r1cs_transcript = Transcript("ZkVM.r1cs")
     ```
@@ -1124,7 +952,7 @@ Code | Instruction                | Stack diagram                              |
 0x06 | [`alloc`](#alloc)          |                 ø → _expr_                 | Allocates a low-level variable in [CS](#constraint-system)
 0x07 | [`mintime`](#mintime)      |                 ø → _expr_                 |
 0x08 | [`maxtime`](#maxtime)      |                 ø → _expr_                 |
-0x09 | [`expr`](#expr)            |             _var_ → _expr_                 | [Attaches](#attached-and-detached-variables) variable to [CS](#constraint-system)
+0x09 | [`expr`](#expr)            |             _var_ → _expr_                 | Allocates a variable in [CS](#constraint-system)
 0x0a | [`neg`](#neg)              |           _expr1_ → _expr2_                |
 0x0b | [`add`](#add)              |     _expr1 expr2_ → _expr3_                |
 0x0c | [`mul`](#mul)              |     _expr1 expr2_ → _expr3_                | Potentially adds multiplier in [CS](#constraint-system)
@@ -1133,8 +961,6 @@ Code | Instruction                | Stack diagram                              |
 0x0f | [`and`](#and)              | _constr1 constr2_ → _constr3_              |
 0x10 | [`or`](#or)                | _constr1 constr2_ → _constr3_              |
 0x11 | [`verify`](#verify)        |      _constraint_ → ø                      | Modifies [CS](#constraint-system) 
-0x12 | [`blind`](#blind)          |  _proof V expr P_ → _var_                  | Modifies [CS](#constraint-system), [defers point ops](#deferred-point-operations)
-0x13 | [`reblind`](#reblind)      |   _proof V2 var1_ → _var1_                 | [Defers point operations](#deferred-point-operations)
 0x14 | [`unblind`](#unblind)      |        _v V expr_ → _var_                  | Modifies [CS](#constraint-system), [Defers point ops](#deferred-point-operations)
  |                                |                                            |
  |     [**Values**](#value-instructions)              |                        |
@@ -1222,7 +1048,7 @@ Fails if `a` is not a valid [scalar](#scalar).
 _P_ **var** → _v_
 
 1. Pops a [point](#point) `P` from the stack.
-2. Creates a [detached variable](#variable-type) `v` from a [Pedersen commitment](#pedersen-commitment) `P`.
+2. Creates a [variable](#variable-type) `v` from a [Pedersen commitment](#pedersen-commitment) `P`.
 3. Pushes `v` to the stack.
 
 Fails if `P` is not a valid [point](#point).
@@ -1258,7 +1084,7 @@ The one-term expression represents time bound as a weight on the R1CS constant `
 _var_ **expr** → _ex_
 
 1. Pops a [variable](#variable-type) `var`.
-2. If it is [detached](#attached-and-detached-variables), attaches it to the constraint system.
+2. Allocates a high-level variable in the constraint system using its Pedersen commitment.
 3. Pushes a single-term [expression](#expression-type) with weight=1 to the stack: `expr = { (1, var) }`.
 
 Fails if `var` is not a [variable type](#variable-type).
@@ -1384,44 +1210,6 @@ _constr_ **verify** → ø
 Fails if `constr` is not a [constraint](#constraint-type).
 
 
-#### blind
-
-_proof V expr P_ **blind** → _var_
-
-1. Pops [point](#point) `P`.
-2. Pops [expression](#expression-type) `expr`.
-3. Pops [point](#point) `V`.
-4. Pops [data](#data-type) `proof`.
-5. Creates a new [detached variable](#variable-type) `var` with commitment `V`.
-6. Verifies the [blinding proof](#blinding-proof) for commitments `V`, `P` and proof data `proof`, [deferring all point operations](#deferred-point-operations)).
-7. Adds an equality [constraint](#constraint-type) `expr == var` to the [constraint system](#constraint-system).
-8. Pushes `var` to the stack.
-
-Fails if: 
-* `proof` is not a 256-byte [data](#data-type), or
-* `P`, `V` are not valid [points](#point), or
-* `expr` is not an [expression](#expression-type).
-
-
-#### reblind
-
-_proof V2 var1_ **reblind** → _var1_
-
-1. Pops [variable](#variable-type) `var1`.
-2. Pops [point](#point) `V2`.
-3. Pops [data](#data-type) `proof`.
-4. Checks that `var1` is a [detached variable](#variable-type) and reads its commitment `V1` from the [VM list of variable commitments](#vm-state).
-5. Replaces commitment `V1` with `V2` for this variable.
-6. Verifies the [reblinding proof](#reblinding-proof) for the commitments `V1`, `V2` and proof data `proof`, [deferring all point operations](#deferred-point-operations)).
-7. Pushes back the detached variable `var1`.
-
-Fails if: 
-* `proof` is not a 256-byte [data](#data-type), or
-* `V2` is not a valid [point](#point), or
-* `var1` is not a [variable](#variable-type), or
-* `var1` is already attached.
-
-
 #### unblind
 
 _v V expr_ **unblind** → _var_
@@ -1429,7 +1217,7 @@ _v V expr_ **unblind** → _var_
 1. Pops [expression](#expression-type) `expr`.
 2. Pops [point](#point) `V`.
 3. Pops [scalar](#scalar) `v`.
-4. Creates a new [detached variable](#variable-type) `var` with commitment `V`.
+4. Creates a new [variable](#variable-type) `var` with commitment `V`.
 5. Verifies the [unblinding proof](#unblinding-proof) for the commitment `V` and scalar `v`, [deferring all point operations](#deferred-point-operations)).
 6. Adds an equality [constraint](#constraint-type) `expr == var` to the [constraint system](#constraint-system).
 7. Pushes `var` to the stack.
@@ -1449,8 +1237,8 @@ _qty flv metadata pred_ **issue** → _contract_
 
 1. Pops [point](#point) `pred`.
 2. Pops [data](#data-type) `metadata`.
-3. Pops [variable](#variable-type) `flv`; if the variable is detached, attaches it.
-4. Pops [variable](#variable-type) `qty`; if the variable is detached, attaches it.
+3. Pops [variable](#variable-type) `flv` and commits it to the constraint system.
+4. Pops [variable](#variable-type) `qty` and commits it to the constraint system.
 5. Creates a [value](#value-type) with variables `qty` and `flv` for quantity and flavor, respectively. 
 6. Computes the _flavor_ scalar defined by the [predicate](#predicate) `pred` using the following [transcript-based](#transcript) protocol:
     ```
@@ -1479,8 +1267,8 @@ Fails if:
 
 _qty flv_ **borrow** → _–V +V_
 
-1. Pops [variable](#variable-type) `flv`; if the variable is detached, attaches it.
-2. Pops [variable](#variable-type) `qty`; if the variable is detached, attaches it.
+1. Pops [variable](#variable-type) `flv` and commits it to the constraint system.
+2. Pops [variable](#variable-type) `qty` and commits it to the constraint system.
 3. Creates a [value](#value-type) `+V` with variables `qty` and `flv` for quantity and flavor, respectively.
 4. Adds a 64-bit range proof for `qty` variable to the [constraint system](#constraint-system) (see [Cloak protocol](../../spacesuit/spec.md) for the range proof definition).
 5. Creates [wide value](#wide-value-type) `–V`, allocating a low-level variable `qty2` for the negated quantity and reusing the flavor variable `flv`.
@@ -1536,8 +1324,8 @@ Immediate data `m` and `n` are encoded as two [LE32](#le32)s.
 
 _proof qty flv_ **import** → _value_
 
-1. Pops [variable](#variable-type) `flv`; if the variable is detached, attaches it.
-2. Pops [variable](#variable-type) `qty`; if the variable is detached, attaches it.
+1. Pops [variable](#variable-type) `flv` and commits it to the constraint system.
+2. Pops [variable](#variable-type) `qty` and commits it to the constraint system.
 3. Pops [data](#data-type) `proof`.
 4. Creates a [value](#value-type) with variables `qty` and `flv` for quantity and flavor, respectively. 
 5. Computes the _flavor_ scalar defined by the [predicate](#predicate) `pred` using the following [transcript-based](#transcript) protocol:

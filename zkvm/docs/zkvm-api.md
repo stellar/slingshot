@@ -42,7 +42,8 @@ zkvm-spec.md#left) and [`right`](zkvm-spec.md#right) instructions.
 
 ### Variables
 
-Variables are represented as indices into the commitments stored within the VM state. VM manages the "attached" state of the variables to permit replacing the commitments via [`reblind`](zkvm-spec.md#reblind). The secret assignments for the variables are stored within the _commitment witnesses_ as [described above](#commitments).
+Variables are represented as type-wrappers around Pedersen commitments.
+The secret assignments for the variables are stored within the _commitment witnesses_ as [described above](#commitments).
 
 ### Expressions
 
