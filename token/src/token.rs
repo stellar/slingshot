@@ -71,8 +71,8 @@ mod tests {
     use super::*;
     use bulletproofs::{BulletproofGens, PedersenGens};
     use zkvm::{
-        Entry, Instruction, Predicate, Program, Prover, Signature, Tx, TxHeader, TxID, TxLog,
-        VMError, VerificationKey, Verifier,
+        Entry, Predicate, Program, Prover, Signature, Tx, TxHeader, TxID, TxLog, VMError,
+        VerificationKey, Verifier,
     };
 
     #[test]
@@ -91,8 +91,7 @@ mod tests {
                     .push(Predicate::Key(VerificationKey::from_secret(&nonce_key)))
                     .nonce()
                     .sign_tx()
-            })
-            .to_vec();
+            });
             build(program, vec![issue_key, nonce_key]).unwrap()
         };
 
@@ -118,8 +117,7 @@ mod tests {
                     .push(Predicate::Key(VerificationKey::from_secret(&nonce_key)))
                     .nonce()
                     .sign_tx()
-            })
-            .to_vec();
+            });
             let (_, issue_txid, issue_txlog) =
                 build(issue_program, vec![issue_key, nonce_key]).unwrap();
 
@@ -129,7 +127,7 @@ mod tests {
                 _ => return assert!(false, "TxLog entry doesn't match: expected Output"),
             };
             Token::retire(&mut retire_program, issue_output, issue_txid);
-            build(retire_program.to_vec(), vec![dest_key]).unwrap()
+            build(retire_program, vec![dest_key]).unwrap()
         };
 
         // Verify tx
@@ -138,7 +136,7 @@ mod tests {
     }
 
     // Helper functions
-    fn build(program: Vec<Instruction>, keys: Vec<Scalar>) -> Result<(Tx, TxID, TxLog), VMError> {
+    fn build(program: Program, keys: Vec<Scalar>) -> Result<(Tx, TxID, TxLog), VMError> {
         let bp_gens = BulletproofGens::new(256, 1);
         let header = TxHeader {
             version: 0u64,

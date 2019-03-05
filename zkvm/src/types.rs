@@ -9,7 +9,7 @@ use crate::constraints::{Commitment, Constraint, Expression, Variable};
 use crate::contract::{Contract, Input, PortableItem};
 use crate::encoding::SliceReader;
 use crate::errors::VMError;
-use crate::ops::Instruction;
+use crate::ops::Program;
 use crate::predicate::Predicate;
 use crate::scalar_witness::ScalarWitness;
 use crate::transcript::TranscriptProtocol;
@@ -45,8 +45,8 @@ pub enum Data {
     /// Opaque data item.
     Opaque(Vec<u8>),
 
-    /// A program (list of instructions).
-    Program(Vec<Instruction>),
+    /// A program.
+    Program(Program),
 
     /// A predicate.
     Predicate(Box<Predicate>),
@@ -152,7 +152,7 @@ impl Data {
     pub fn serialized_length(&self) -> usize {
         match self {
             Data::Opaque(data) => data.len(),
-            Data::Program(program) => program.iter().map(|p| p.serialized_length()).sum(),
+            Data::Program(program) => program.serialized_length(),
             Data::Predicate(predicate) => predicate.serialized_length(),
             Data::Commitment(commitment) => commitment.serialized_length(),
             Data::Scalar(scalar) => scalar.serialized_length(),
@@ -187,15 +187,9 @@ impl Data {
     }
 
     /// Downcast the data item to a `Program` type.
-    pub fn to_program(self) -> Result<Vec<Instruction>, VMError> {
+    pub fn to_program(self) -> Result<Program, VMError> {
         match self {
-            Data::Opaque(data) => SliceReader::parse(&data, |r| {
-                let mut prog = Vec::new();
-                while r.len() > 0 {
-                    prog.push(Instruction::parse(r)?);
-                }
-                Ok(prog)
-            }),
+            Data::Opaque(data) => Program::parse(&data),
             Data::Program(program) => Ok(program),
             _ => Err(VMError::TypeNotProgram),
         }
@@ -226,7 +220,7 @@ impl Data {
     pub fn encode(&self, buf: &mut Vec<u8>) {
         match self {
             Data::Opaque(x) => buf.extend_from_slice(x),
-            Data::Program(program) => Instruction::encode_program(program.iter(), buf),
+            Data::Program(program) => program.encode(buf),
             Data::Predicate(predicate) => predicate.encode(buf),
             Data::Commitment(commitment) => commitment.encode(buf),
             Data::Scalar(scalar) => scalar.encode(buf),

@@ -288,17 +288,6 @@ impl Instruction {
             Instruction::Ext(x) => program.push(*x),
         };
     }
-
-    /// Encodes the iterator of instructions into a buffer.
-    pub fn encode_program<I>(iterator: I, program: &mut Vec<u8>)
-    where
-        I: IntoIterator,
-        I::Item: Borrow<Self>,
-    {
-        for i in iterator.into_iter() {
-            i.borrow().encode(program);
-        }
-    }
 }
 
 macro_rules! def_op {
@@ -371,9 +360,32 @@ impl Program {
         program
     }
 
+    /// Creates a program from parsing the opaque data slice of encoded instructions.
+    pub fn parse(data: &[u8]) -> Result<Self, VMError> {
+        SliceReader::parse(data, |r| {
+            let mut program = Self::new();
+            while r.len() > 0 {
+                program.0.push(Instruction::parse(r)?);
+            }
+            Ok(program)
+        })
+    }
+
     /// Converts the program to a plain vector of instructions.
     pub fn to_vec(self) -> Vec<Instruction> {
         self.0
+    }
+
+    /// Returns the serialized length of the program.
+    pub fn serialized_length(&self) -> usize {
+        self.0.iter().map(|p| p.serialized_length()).sum()
+    }
+
+    /// Encodes a program into a buffer.
+    pub fn encode(&self, buf: &mut Vec<u8>) {
+        for i in self.0.iter() {
+            i.borrow().encode(buf);
+        }
     }
 
     /// Adds a `push` instruction with an immediate data type that can be converted into `Data`.
