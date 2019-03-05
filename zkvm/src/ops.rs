@@ -288,17 +288,6 @@ impl Instruction {
             Instruction::Ext(x) => program.push(*x),
         };
     }
-
-    /// Encodes the iterator of instructions into a buffer.
-    pub fn encode_program<I>(iterator: I, program: &mut Vec<u8>)
-    where
-        I: IntoIterator,
-        I::Item: Borrow<Self>,
-    {
-        for i in iterator.into_iter() {
-            i.borrow().encode(program);
-        }
-    }
 }
 
 macro_rules! def_op {
