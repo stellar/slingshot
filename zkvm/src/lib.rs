@@ -14,12 +14,12 @@ mod predicate;
 mod prover;
 mod scalar_witness;
 mod signature;
+mod signer;
 mod transcript;
 mod txlog;
 mod types;
 mod verifier;
 mod vm;
-mod signer;
 
 pub use self::constraints::{Commitment, Constraint, Expression, Variable};
 pub use self::contract::{FrozenItem, FrozenValue, Input, Output};
