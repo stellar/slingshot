@@ -74,6 +74,9 @@ mod tests {
         // Common
         let pc_gens = PedersenGens::default();
         let bp_gens = BulletproofGens::new(128, 1);
+        let bit_width = BitRange::new(n).ok_or(R1CSError::GadgetError {
+            description: "Invalid Bitrange; Bitrange must be between 0 and 64".to_string(),
+        })?;
 
         // Prover's scope
         let (proof, commitment) = {
@@ -84,7 +87,7 @@ mod tests {
             let mut prover = Prover::new(&bp_gens, &pc_gens, &mut prover_transcript);
 
             let (com, var) = prover.commit(v_val.into(), Scalar::random(&mut rng));
-            assert!(range_proof(&mut prover, var.into(), Some(v_val), n).is_ok());
+            assert!(range_proof(&mut prover, var.into(), Some(v_val), bit_width).is_ok());
 
             let proof = prover.prove()?;
 
@@ -98,7 +101,7 @@ mod tests {
         let var = verifier.commit(commitment);
 
         // Verifier adds constraints to the constraint system
-        assert!(range_proof(&mut verifier, var.into(), None, n).is_ok());
+        assert!(range_proof(&mut verifier, var.into(), None, bit_width).is_ok());
 
         // Verifier verifies proof
         Ok(verifier.verify(&proof)?)
