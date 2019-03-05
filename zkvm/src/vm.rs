@@ -196,8 +196,6 @@ where
                 Instruction::And => self.and()?,
                 Instruction::Or => self.or()?,
                 Instruction::Verify => self.verify()?,
-                Instruction::Blind => unimplemented!(),
-                Instruction::Reblind => unimplemented!(),
                 Instruction::Unblind => unimplemented!(),
                 Instruction::Issue => self.issue()?,
                 Instruction::Borrow => unimplemented!(),
