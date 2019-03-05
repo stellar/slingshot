@@ -169,10 +169,10 @@ impl MerkleTree {
             return None;
         }
         let t = Transcript::new(b"ZkVM.txid");
-        Some(Self::build_node(t, list))
+        Some(Self::build_tree(t, list))
     }
 
-    fn build_node(mut t: Transcript, list: &[Entry]) -> MerkleTree {
+    fn build_tree(mut t: Transcript, list: &[Entry]) -> MerkleTree {
         match list.len() {
             0 => {
                 let mut leaf = [0u8; 32];
@@ -187,8 +187,8 @@ impl MerkleTree {
             n => {
                 let k = n.next_power_of_two() / 2;
                 let mut node = [0u8; 32];
-                let left = Self::build_node(t.clone(), &list[..k]);
-                let right = Self::build_node(t.clone(), &list[k..]);
+                let left = Self::build_tree(t.clone(), &list[..k]);
+                let right = Self::build_tree(t.clone(), &list[k..]);
                 let size = left.size() + right.size();
                 t.commit_bytes(b"L", left.hash());
                 t.commit_bytes(b"R", right.hash());
