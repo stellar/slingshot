@@ -1,5 +1,5 @@
 use curve25519_dalek::scalar::Scalar;
-use zkvm::{Commitment, Data, Input, Output, Predicate, Program, TxID, Value};
+use zkvm::{Commitment, Contract, Data, Input, Predicate, Program, TxID, Value};
 
 /// Represents a ZkVM Token with unique flavor and embedded
 /// metadata protected by a user-supplied Predicate.
@@ -55,7 +55,7 @@ impl Token {
     /// TBD: accept a qty/Token pairing to retire.
     pub fn retire<'a>(
         program: &'a mut Program,
-        prev_output: Output,
+        prev_output: Contract,
         txid: TxID,
     ) -> &'a mut Program {
         program

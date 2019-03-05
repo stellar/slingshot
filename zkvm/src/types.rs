@@ -61,11 +61,15 @@ pub enum Data {
     Input(Box<Input>),
 }
 
-/// A value type.
-#[derive(Debug)]
+/// Represents a value of an issued asset in the VM.
+/// Note: values do not necessarily have open commitments. Some can be reblinded,
+/// others can be passed-through to an output without going through `cloak` and the constraint system.
+#[derive(Clone, Debug)]
 pub struct Value {
-    pub(crate) qty: Variable,
-    pub(crate) flv: Variable,
+    /// Commitment to value's quantity
+    pub qty: Commitment,
+    /// Commitment to value's flavor
+    pub flv: Commitment,
 }
 
 /// A wide value type (for negative values created by `borrow`).
@@ -244,6 +248,16 @@ impl Value {
         t.commit_bytes(b"predicate", predicate.to_point().as_bytes());
         t.commit_bytes(b"metadata", &metadata.to_bytes());
         t.challenge_scalar(b"flavor")
+    }
+
+    /// Returns a (qty,flavor) assignment to a value, or None if both fields are unassigned.
+    /// Fails if the assigment is inconsistent.
+    pub(crate) fn assignment(&self) -> Result<Option<(SignedInteger, Scalar)>, VMError> {
+        match (self.qty.assignment(), self.flv.assignment()) {
+            (None, None) => Ok(None),
+            (Some(ScalarWitness::Integer(q)), Some(ScalarWitness::Scalar(f))) => Ok(Some((q, f))),
+            (_, _) => return Err(VMError::InconsistentWitness),
+        }
     }
 }
 
