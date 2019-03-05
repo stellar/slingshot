@@ -378,11 +378,20 @@ Time bounds are available in the transaction as [expressions](#expression-type) 
 
 _Contract ID_ is a 32-byte commitment to the [contract](#contract-type) ([anchor](#anchor), [payload](#contract-payload) and [predicate](#predicate)) that is also a unique identifier.
 
+Contract ID is a hash of the contract’s [output structure](#output-structure):
+
+```
+T = Transcript("ZkVM.contractid")
+T.commit("contract", output_structure)
+id = T.challenge_bytes()
+```
+
 Contract ID makes [`delegate`](#delegate) signatures safe against [predicate](#predicate) key reuse:
 signature covers the unique contract ID, therefore preventing its replay against another contract,
 even if containing the same [payload](#contract-payload) and predicate.
 
 Contract ID is made globally unique due to use of [anchor](#anchor).
+
 
 ### Anchor
 
