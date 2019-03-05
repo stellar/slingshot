@@ -1457,15 +1457,12 @@ A nonce serves two purposes:
 
 Blockchain state machine performs the following checks:
 
-1. The `blockid` is checked against the IDs of “recent” blocks when the transaction is applied to the blockchain. It must match a recent block, or the initial block of the blockchain, or be a string of 32 zero-bytes.
+1. The `blockid` is checked against the IDs of “recent” blocks when the transaction is applied to the blockchain. It must match a recent block, or the initial block of the blockchain.
 2. The nonce anchor is checked for uniqueness against “recent” nonces.
 
 To perform these checks, validators must keep a set of recent nonces and a set of recent block headers available. For scalability and to reduce resource demands on the network, these sets must be limited in size. So block signers can and should impose reasonable limits on the value of exp (which is the time by which the transaction must be included in a block or become invalid).
 
-Special cases:
-
-1. To support long-living pre-signed transactions, the protocol allows a nonce to use the blockchain’s initial block ID regardless of the `refscount` limit specified in the block headers.
-2. `blockid` is allowed to be all-zero string. This makes the nonce replayable on another chain, but still unique within any one chain.
+To support long-living pre-signed transactions, the protocol allows a nonce to use the blockchain’s initial block ID regardless of the `refscount` limit specified in the block headers.
 
 
 #### log
