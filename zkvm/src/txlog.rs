@@ -220,22 +220,17 @@ impl MerkleNode {
     }
 
     fn subproof(&self, t: Transcript, index: usize, size: usize, result: &mut Vec<MerkleNeighbor>) {
-        let k = size.next_power_of_two() / 2;
-        if index >= k {
-            match self {
-                MerkleNode::Node(_, l, r) => {
+        match self {
+            MerkleNode::Leaf(_) => return,
+            MerkleNode::Node(_, l, r) => {
+                let k = size.next_power_of_two() / 2;
+                if index >= k {
                     result.insert(0, MerkleNeighbor::Left(*l.hash()));
                     return r.subproof(t, index - k, size - k, result);
-                }
-                MerkleNode::Leaf(_) => return,
-            }
-        } else {
-            match self {
-                MerkleNode::Node(_, l, r) => {
+                } else {
                     result.insert(0, MerkleNeighbor::Right(*r.hash()));
                     return l.subproof(t, index, k, result);
                 }
-                MerkleNode::Leaf(_) => return,
             }
         }
     }
