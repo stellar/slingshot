@@ -30,7 +30,7 @@ enum MerkleNode {
 
 impl MerkleTree {
     /// Constructs a new MerkleTree based on the input list of entries.
-    pub fn new<M: MerkleItem>(label: &'static [u8], list: &[M]) -> Option<Self> {
+    pub fn build<M: MerkleItem>(label: &'static [u8], list: &[M]) -> Option<Self> {
         if list.len() == 0 {
             return None;
         }
@@ -196,7 +196,7 @@ mod tests {
         ($num:ident, $idx:ident) => {
             let (item, root, proof) = {
                 let items = test_items(*$num as usize);
-                let tree = MerkleTree::new(b"test", &items).unwrap();
+                let tree = MerkleTree::build(b"test", &items).unwrap();
                 let proof = tree.proof(*$idx as usize).unwrap();
                 (
                     items[*$idx as usize].clone(),
@@ -212,7 +212,7 @@ mod tests {
         ($num:ident, $idx:ident, $wrong_idx:ident) => {
             let (item, root, proof) = {
                 let items = test_items(*$num as usize);
-                let tree = MerkleTree::new(b"test", &items).unwrap();
+                let tree = MerkleTree::build(b"test", &items).unwrap();
                 let proof = tree.proof(*$idx as usize).unwrap();
                 (
                     items[*$wrong_idx as usize].clone(),
@@ -227,7 +227,7 @@ mod tests {
     #[test]
     fn invalid_range() {
         let entries = test_items(5);
-        let root = MerkleTree::new(b"test", &entries).unwrap();
+        let root = MerkleTree::build(b"test", &entries).unwrap();
         assert!(root.proof(7).is_err())
     }
 
