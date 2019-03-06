@@ -8,6 +8,7 @@ mod constraints;
 mod contract;
 mod encoding;
 mod errors;
+mod merkle;
 mod ops;
 mod point_ops;
 mod predicate;

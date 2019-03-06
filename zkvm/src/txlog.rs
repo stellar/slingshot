@@ -4,6 +4,7 @@ use subtle::ConstantTimeEq;
 
 use crate::contract::Contract;
 use crate::errors::VMError;
+use crate::merkle::{MerkleItem, MerkleTree};
 use crate::transcript::TranscriptProtocol;
 use crate::vm::TxHeader;
 
@@ -33,24 +34,6 @@ pub struct TxID(pub [u8; 32]);
 #[derive(Copy, Clone, PartialEq, Debug)]
 pub struct UTXO(pub [u8; 32]);
 
-/// MerkleNeighbor represents a step in a Merkle proof of inclusion.
-#[derive(Copy, Clone, PartialEq, Debug)]
-pub enum MerkleNeighbor {
-    Left([u8; 32]),
-    Right([u8; 32]),
-}
-
-/// MerkleTree represents a Merkle tree of hashes with a given size.
-pub struct MerkleTree {
-    size: usize,
-    root: MerkleNode,
-}
-
-enum MerkleNode {
-    Leaf([u8; 32]),
-    Node([u8; 32], Box<MerkleNode>, Box<MerkleNode>),
-}
-
 impl UTXO {
     /// Computes UTXO identifier from an output and transaction id.
     pub fn from_output(output: &[u8], txid: &TxID) -> Self {
@@ -67,36 +50,9 @@ impl TxID {
     /// Computes TxID from a tx log
     pub fn from_log(list: &[Entry]) -> Self {
         let t = Transcript::new(b"ZkVM.txid");
-        let mut result = [0u8; 32];
-        MerkleTree::node(t, list, &mut result);
-        Self(result)
-    }
-
-    /// Verifies that an entry satisfies the Merkle proof of inclusion
-    /// for a given TxID
-    pub fn verify_proof(&self, entry: Entry, proof: Vec<MerkleNeighbor>) -> Result<(), VMError> {
-        let transcript = Transcript::new(b"ZkVM.txid");
-        let mut result = [0u8; 32];
-        MerkleTree::leaf(transcript.clone(), &entry, &mut result);
-        for node in proof.iter() {
-            let mut t = transcript.clone();
-            match node {
-                MerkleNeighbor::Left(l) => {
-                    t.commit_bytes(b"L", l);
-                    t.commit_bytes(b"R", &result);
-                    t.challenge_bytes(b"merkle.node", &mut result);
-                }
-                MerkleNeighbor::Right(r) => {
-                    t.commit_bytes(b"L", &result);
-                    t.commit_bytes(b"R", r);
-                    t.challenge_bytes(b"merkle.node", &mut result);
-                }
-            }
-        }
-        if result.ct_eq(&self.0).unwrap_u8() == 1 {
-            Ok(())
-        } else {
-            Err(VMError::InvalidMerkleProof)
+        match MerkleTree::new(b"ZkVM.txid", &Entry::to_merkle_item(list)) {
+            Some(t) => Self(*t.root()),
+            None => Self([0u8; 32]),
         }
     }
 }
@@ -140,106 +96,15 @@ impl Entry {
             }
         }
     }
-}
 
-impl MerkleTree {
-    /// Constructs a new MerkleTree based on the input list of entries.
-    pub fn new(list: &[Entry]) -> Option<MerkleTree> {
-        if list.len() == 0 {
-            return None;
-        }
-        let t = Transcript::new(b"ZkVM.txid");
-        Some(MerkleTree {
-            size: list.len(),
-            root: Self::build_tree(t, list),
-        })
-    }
-
-    fn build_tree(mut t: Transcript, list: &[Entry]) -> MerkleNode {
-        match list.len() {
-            0 => {
-                let mut leaf = [0u8; 32];
-                Self::empty(t, &mut leaf);
-                return MerkleNode::Leaf(leaf);
-            }
-            1 => {
-                let mut leaf = [0u8; 32];
-                Self::leaf(t, &list[0], &mut leaf);
-                return MerkleNode::Leaf(leaf);
-            }
-            n => {
-                let k = n.next_power_of_two() / 2;
-                let mut node = [0u8; 32];
-                let left = Self::build_tree(t.clone(), &list[..k]);
-                let right = Self::build_tree(t.clone(), &list[k..]);
-                t.commit_bytes(b"L", left.hash());
-                t.commit_bytes(b"R", right.hash());
-                t.challenge_bytes(b"merkle.node", &mut node);
-                return MerkleNode::Node(node, Box::new(left), Box::new(right));
-            }
-        }
-    }
-
-    /// Builds a proof of inclusion for entry at the given index for the Merkle tree.
-    pub fn proof(&self, index: usize) -> Result<Vec<MerkleNeighbor>, VMError> {
-        if index >= self.size {
-            return Err(VMError::InvalidMerkleProof);
-        }
-        let t = Transcript::new(b"ZkVM.txid");
-        let mut result = Vec::new();
-        self.root.subproof(t, index, self.size, &mut result);
-        Ok(result)
-    }
-
-    fn node(mut t: Transcript, list: &[Entry], result: &mut [u8; 32]) {
-        match list.len() {
-            0 => Self::empty(t, result),
-            1 => Self::leaf(t, &list[0], result),
-            n => {
-                let k = n.next_power_of_two() / 2;
-                let mut righthash = [0u8; 32];
-                Self::node(t.clone(), &list[..k], result);
-                Self::node(t.clone(), &list[k..], &mut righthash);
-                t.commit_bytes(b"L", result);
-                t.commit_bytes(b"R", &righthash);
-                t.challenge_bytes(b"merkle.node", result);
-            }
-        }
-    }
-
-    fn empty(mut t: Transcript, result: &mut [u8; 32]) {
-        t.challenge_bytes(b"merkle.empty", result);
-    }
-
-    fn leaf(mut t: Transcript, entry: &Entry, result: &mut [u8; 32]) {
-        entry.commit_to_transcript(&mut t);
-        t.challenge_bytes(b"merkle.leaf", result);
+    fn to_merkle_item(entries: &[Entry]) -> Vec<&MerkleItem> {
+        entries.iter().map(|e| e as &MerkleItem).collect::<Vec<_>>()
     }
 }
 
-impl MerkleNode {
-    fn subproof(&self, t: Transcript, index: usize, size: usize, result: &mut Vec<MerkleNeighbor>) {
-        match self {
-            MerkleNode::Leaf(_) => return,
-            MerkleNode::Node(_, l, r) => {
-                let k = size.next_power_of_two() / 2;
-                if index >= k {
-                    result.insert(0, MerkleNeighbor::Left(*l.hash()));
-                    return r.subproof(t, index - k, size - k, result);
-                } else {
-                    result.insert(0, MerkleNeighbor::Right(*r.hash()));
-                    return l.subproof(t, index, k, result);
-                }
-            }
-        }
-    }
-
-    /// Returns the hash of a Merkle tree.
-    fn hash(&self) -> &[u8; 32] {
-        match self {
-            MerkleNode::Leaf(h) => h,
-            MerkleNode::Node(h, _, _) => h,
-        }
+impl MerkleItem for Entry {
+    fn commit(&self, t: &mut Transcript) {
+        self.commit_to_transcript(t);
     }
 }
 
@@ -266,13 +131,14 @@ mod tests {
 
     #[test]
     fn empty() {
-        assert!(MerkleTree::new(&[]).is_none());
+        assert!(MerkleTree::new(b"ZkVM.txid", &[]).is_none());
     }
 
     #[test]
     fn invalid_range() {
         let entries = txlog_helper();
-        let root = MerkleTree::new(&entries).unwrap();
+        let entries = Entry::to_merkle_item(&entries);
+        let root = MerkleTree::new(b"ZkVM.txid", &entries).unwrap();
         assert!(root.proof(5).is_err())
     }
 
@@ -280,23 +146,23 @@ mod tests {
     fn valid_proof() {
         let (entry, txid, proof) = {
             let entries = txlog_helper();
-            let root = MerkleTree::new(&entries).unwrap();
+            let root = MerkleTree::new(b"ZkVM.txid", &Entry::to_merkle_item(&entries)).unwrap();
             let index = 3;
             let proof = root.proof(index).unwrap();
             (entries[index].clone(), TxID::from_log(&entries), proof)
         };
-        txid.verify_proof(entry, proof).unwrap();
+        MerkleTree::verify_proof(b"ZkVM.txid", &entry, proof, &txid.0).unwrap();
     }
 
     #[test]
     fn invalid_proof() {
         let (entry, txid, proof) = {
             let entries = txlog_helper();
-            let root = MerkleTree::new(&entries).unwrap();
+            let root = MerkleTree::new(b"ZkVM.txid", &Entry::to_merkle_item(&entries)).unwrap();
             let index = 3;
             let proof = root.proof(index).unwrap();
             (entries[index + 1].clone(), TxID::from_log(&entries), proof)
         };
-        assert!(txid.verify_proof(entry, proof).is_err());
+        assert!(MerkleTree::verify_proof(b"ZkVM.txid", &entry, proof, &txid.0).is_err());
     }
 }
