@@ -47,10 +47,7 @@ impl UTXO {
 impl TxID {
     /// Computes TxID from a tx log
     pub fn from_log(list: &[Entry]) -> Self {
-        match MerkleTree::new(b"ZkVM.txid", list) {
-            Some(t) => Self(*t.root()),
-            None => Self([0u8; 32]),
-        }
+        TxID(MerkleTree::root(b"ZkVM.txid", list))
     }
 }
 

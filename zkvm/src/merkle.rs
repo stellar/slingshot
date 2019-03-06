@@ -3,18 +3,20 @@ use subtle::ConstantTimeEq;
 
 use crate::errors::VMError;
 
+/// MerkleItem defines an item in the Merkle tree.
 pub trait MerkleItem: Sized {
+    /// Commits the hash of the item to Transcript.
     fn commit(&self, t: &mut Transcript);
 }
 
-/// MerkleNeighbor represents a step in a Merkle proof of inclusion.
+/// MerkleNeighbor is a step in a Merkle proof of inclusion.
 #[derive(Copy, Clone, PartialEq, Debug)]
 pub enum MerkleNeighbor {
     Left([u8; 32]),
     Right([u8; 32]),
 }
 
-/// MerkleTree represents a Merkle tree of hashes with a given size.
+/// Merkle tree of hashes with a given size.
 pub struct MerkleTree {
     size: usize,
     label: &'static [u8],
@@ -28,10 +30,7 @@ enum MerkleNode {
 
 impl MerkleTree {
     /// Constructs a new MerkleTree based on the input list of entries.
-    pub fn new<M>(label: &'static [u8], list: &[M]) -> Option<MerkleTree>
-    where
-        M: MerkleItem,
-    {
+    pub fn new<M: MerkleItem>(label: &'static [u8], list: &[M]) -> Option<Self> {
         if list.len() == 0 {
             return None;
         }
@@ -54,15 +53,13 @@ impl MerkleTree {
         Ok(result)
     }
 
-    pub fn verify_proof<M>(
+    /// Verifies a proof of inclusion for an item given the proof and Merkle root.
+    pub fn verify_proof<M: MerkleItem>(
         label: &'static [u8],
         entry: &M,
         proof: Vec<MerkleNeighbor>,
         root: &[u8; 32],
-    ) -> Result<(), VMError>
-    where
-        M: MerkleItem,
-    {
+    ) -> Result<(), VMError> {
         let transcript = Transcript::new(label);
         let mut result = [0u8; 32];
         Self::leaf(transcript.clone(), entry, &mut result);
@@ -88,15 +85,16 @@ impl MerkleTree {
         }
     }
 
-    /// Returns the root hash of the Merkle tree
-    pub fn root(&self) -> &[u8; 32] {
-        self.root.hash()
+    /// Builds and returns the root hash of a Merkle tree constructed from
+    /// the supplied list.
+    pub fn root<M: MerkleItem>(label: &'static [u8], list: &[M]) -> [u8; 32] {
+        let mut t = Transcript::new(label);
+        let mut result = [0u8; 32];
+        Self::node(t, list, &mut result);
+        result
     }
 
-    fn build_tree<M>(mut t: Transcript, list: &[M]) -> MerkleNode
-    where
-        M: MerkleItem,
-    {
+    fn build_tree<M: MerkleItem>(mut t: Transcript, list: &[M]) -> MerkleNode {
         match list.len() {
             0 => {
                 let mut leaf = [0u8; 32];
@@ -121,10 +119,7 @@ impl MerkleTree {
         }
     }
 
-    fn node<M>(mut t: Transcript, list: &[M], result: &mut [u8; 32])
-    where
-        M: MerkleItem,
-    {
+    fn node<M: MerkleItem>(mut t: Transcript, list: &[M], result: &mut [u8; 32]) {
         match list.len() {
             0 => Self::empty(t, result),
             1 => Self::leaf(t, &list[0], result),
@@ -144,10 +139,7 @@ impl MerkleTree {
         t.challenge_bytes(b"merkle.empty", result);
     }
 
-    fn leaf<M>(mut t: Transcript, entry: &M, result: &mut [u8; 32])
-    where
-        M: MerkleItem,
-    {
+    fn leaf<M: MerkleItem>(mut t: Transcript, entry: &M, result: &mut [u8; 32]) {
         entry.commit(&mut t);
         t.challenge_bytes(b"merkle.leaf", result);
     }
@@ -206,7 +198,11 @@ mod tests {
                 let items = test_items(*$num as usize);
                 let tree = MerkleTree::new(b"test", &items).unwrap();
                 let proof = tree.proof(*$idx as usize).unwrap();
-                (items[*$idx as usize].clone(), tree.root().clone(), proof)
+                (
+                    items[*$idx as usize].clone(),
+                    tree.root.hash().clone(),
+                    proof,
+                )
             };
             MerkleTree::verify_proof(b"test", &item, proof, &root).unwrap();
         };
@@ -220,7 +216,7 @@ mod tests {
                 let proof = tree.proof(*$idx as usize).unwrap();
                 (
                     items[*$wrong_idx as usize].clone(),
-                    tree.root().clone(),
+                    tree.root.hash().clone(),
                     proof,
                 )
             };
