@@ -356,7 +356,7 @@ where
         let (_, v) = self.delegate.commit_variable(&v_commitment)?;
         self.delegate.cs().constrain(expr.to_r1cs_lc() - v);
 
-        // Push detached variable
+        // Push variable
         self.push_item(Variable {
             commitment: v_commitment,
         });
