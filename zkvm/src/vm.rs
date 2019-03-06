@@ -346,7 +346,7 @@ where
         self.delegate.verify_point_op(|| {
             // Check V = vB => V-vB = 0
             PointOp {
-                primary: Some(v_scalar),
+                primary: Some(-v_scalar),
                 secondary: None,
                 arbitrary: vec![(Scalar::one(), v_point)],
             }
