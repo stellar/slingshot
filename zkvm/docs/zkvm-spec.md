@@ -407,7 +407,7 @@ Anchors can be created by the [`nonce`](#nonce) instruction or generated from pr
 VM keeps track of the last used anchor and fails if:
 
 1. by the end of the execution, no anchor was used (which means that [transaction ID](#transaction-id) is not unique), or
-2. an [`output`](#output) or [`contract`](#output) are invoked before the anchor is set (since they can’t be made unique).
+2. an [`output`](#output) or [`contract`](#contract) is invoked before the anchor is set (since they can’t be made unique).
 
 Note: using a chain of anchors enables the signer to have a predictable anchor computation, when the signable contract is created transiently from a just-opened UTXO, without the need to know about the entire transaction.
 
