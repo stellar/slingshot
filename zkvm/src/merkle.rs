@@ -3,7 +3,7 @@ use subtle::ConstantTimeEq;
 
 use crate::errors::VMError;
 
-pub trait MerkleItem {
+pub trait MerkleItem: Sized {
     fn commit(&self, t: &mut Transcript);
 }
 
@@ -28,7 +28,10 @@ enum MerkleNode {
 
 impl MerkleTree {
     /// Constructs a new MerkleTree based on the input list of entries.
-    pub fn new(label: &'static [u8], list: &[&MerkleItem]) -> Option<MerkleTree> {
+    pub fn new<M>(label: &'static [u8], list: &[M]) -> Option<MerkleTree>
+    where
+        M: MerkleItem,
+    {
         if list.len() == 0 {
             return None;
         }
@@ -51,12 +54,15 @@ impl MerkleTree {
         Ok(result)
     }
 
-    pub fn verify_proof(
+    pub fn verify_proof<M>(
         label: &'static [u8],
-        entry: &MerkleItem,
+        entry: &M,
         proof: Vec<MerkleNeighbor>,
         root: &[u8; 32],
-    ) -> Result<(), VMError> {
+    ) -> Result<(), VMError>
+    where
+        M: MerkleItem,
+    {
         let transcript = Transcript::new(label);
         let mut result = [0u8; 32];
         Self::leaf(transcript.clone(), entry, &mut result);
@@ -87,7 +93,10 @@ impl MerkleTree {
         self.root.hash()
     }
 
-    fn build_tree(mut t: Transcript, list: &[&MerkleItem]) -> MerkleNode {
+    fn build_tree<M>(mut t: Transcript, list: &[M]) -> MerkleNode
+    where
+        M: MerkleItem,
+    {
         match list.len() {
             0 => {
                 let mut leaf = [0u8; 32];
@@ -96,7 +105,7 @@ impl MerkleTree {
             }
             1 => {
                 let mut leaf = [0u8; 32];
-                Self::leaf(t, list[0], &mut leaf);
+                Self::leaf(t, &list[0], &mut leaf);
                 return MerkleNode::Leaf(leaf);
             }
             n => {
@@ -112,10 +121,13 @@ impl MerkleTree {
         }
     }
 
-    fn node(mut t: Transcript, list: &[&MerkleItem], result: &mut [u8; 32]) {
+    fn node<M>(mut t: Transcript, list: &[M], result: &mut [u8; 32])
+    where
+        M: MerkleItem,
+    {
         match list.len() {
             0 => Self::empty(t, result),
-            1 => Self::leaf(t, list[0], result),
+            1 => Self::leaf(t, &list[0], result),
             n => {
                 let k = n.next_power_of_two() / 2;
                 let mut righthash = [0u8; 32];
@@ -132,7 +144,10 @@ impl MerkleTree {
         t.challenge_bytes(b"merkle.empty", result);
     }
 
-    fn leaf(mut t: Transcript, entry: &MerkleItem, result: &mut [u8; 32]) {
+    fn leaf<M>(mut t: Transcript, entry: &M, result: &mut [u8; 32])
+    where
+        M: MerkleItem,
+    {
         entry.commit(&mut t);
         t.challenge_bytes(b"merkle.leaf", result);
     }
@@ -185,15 +200,11 @@ mod tests {
         items
     }
 
-    fn to_merkle(items: &[TestItem]) -> Vec<&MerkleItem> {
-        items.iter().map(|i| i as &MerkleItem).collect::<Vec<_>>()
-    }
-
     macro_rules! assert_proof {
         ($num:ident, $idx:ident) => {
             let (item, root, proof) = {
                 let items = test_items(*$num as usize);
-                let tree = MerkleTree::new(b"test", &to_merkle(&items)).unwrap();
+                let tree = MerkleTree::new(b"test", &items).unwrap();
                 let proof = tree.proof(*$idx as usize).unwrap();
                 (items[*$idx as usize].clone(), tree.root().clone(), proof)
             };
@@ -205,7 +216,7 @@ mod tests {
         ($num:ident, $idx:ident, $wrong_idx:ident) => {
             let (item, root, proof) = {
                 let items = test_items(*$num as usize);
-                let tree = MerkleTree::new(b"test", &to_merkle(&items)).unwrap();
+                let tree = MerkleTree::new(b"test", &items).unwrap();
                 let proof = tree.proof(*$idx as usize).unwrap();
                 (
                     items[*$wrong_idx as usize].clone(),
@@ -218,14 +229,9 @@ mod tests {
     }
 
     #[test]
-    fn empty() {
-        assert!(MerkleTree::new(b"test", &[]).is_none());
-    }
-
-    #[test]
     fn invalid_range() {
         let entries = test_items(5);
-        let root = MerkleTree::new(b"test", &to_merkle(&entries)).unwrap();
+        let root = MerkleTree::new(b"test", &entries).unwrap();
         assert!(root.proof(7).is_err())
     }
 

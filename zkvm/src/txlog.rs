@@ -47,15 +47,15 @@ impl UTXO {
 impl TxID {
     /// Computes TxID from a tx log
     pub fn from_log(list: &[Entry]) -> Self {
-        match MerkleTree::new(b"ZkVM.txid", &Entry::to_merkle_item(list)) {
+        match MerkleTree::new(b"ZkVM.txid", list) {
             Some(t) => Self(*t.root()),
             None => Self([0u8; 32]),
         }
     }
 }
 
-impl Entry {
-    fn commit_to_transcript(&self, t: &mut Transcript) {
+impl MerkleItem for Entry {
+    fn commit(&self, t: &mut Transcript) {
         match self {
             Entry::Header(h) => {
                 t.commit_u64(b"tx.version", h.version);
@@ -93,16 +93,6 @@ impl Entry {
             }
         }
     }
-
-    fn to_merkle_item(entries: &[Entry]) -> Vec<&MerkleItem> {
-        entries.iter().map(|e| e as &MerkleItem).collect::<Vec<_>>()
-    }
-}
-
-impl MerkleItem for Entry {
-    fn commit(&self, t: &mut Transcript) {
-        self.commit_to_transcript(t);
-    }
 }
 
 #[cfg(test)]
@@ -130,7 +120,7 @@ mod tests {
     fn valid_txid_proof() {
         let (entry, txid, proof) = {
             let entries = txlog_helper();
-            let root = MerkleTree::new(b"ZkVM.txid", &Entry::to_merkle_item(&entries)).unwrap();
+            let root = MerkleTree::new(b"ZkVM.txid", &entries).unwrap();
             let index = 3;
             let proof = root.proof(index).unwrap();
             (entries[index].clone(), TxID::from_log(&entries), proof)
@@ -142,7 +132,7 @@ mod tests {
     fn invalid_txid_proof() {
         let (entry, txid, proof) = {
             let entries = txlog_helper();
-            let root = MerkleTree::new(b"ZkVM.txid", &Entry::to_merkle_item(&entries)).unwrap();
+            let root = MerkleTree::new(b"ZkVM.txid", &entries).unwrap();
             let index = 3;
             let proof = root.proof(index).unwrap();
             (entries[index + 1].clone(), TxID::from_log(&entries), proof)
