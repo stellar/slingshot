@@ -216,6 +216,18 @@ impl Data {
         }
     }
 
+    /// Downcast the data item to an `ScalarWitness` type.
+    pub fn to_scalar(self) -> Result<ScalarWitness, VMError> {
+        match self {
+            Data::Opaque(data) => {
+                let scalar = SliceReader::parse(&data, |r| r.read_scalar())?;
+                Ok(ScalarWitness::Scalar(scalar))
+            }
+            Data::Scalar(scalar_witness) => Ok(*scalar_witness),
+            _ => Err(VMError::TypeNotScalarWitness),
+        }
+    }
+
     /// Encodes the data item to an opaque bytestring.
     pub fn encode(&self, buf: &mut Vec<u8>) {
         match self {
