@@ -343,11 +343,6 @@ where
         let data = self.pop_item()?.to_data()?.to_bytes();
         let v_scalar = SliceReader::parse(&data, |r| r.read_scalar())?;
 
-        // Create a detached variable `var` using `V`
-        let var = Variable {
-            commitment: v_commitment,
-        };
-
         self.delegate.verify_point_op(|| {
             // Check V = vB => V-vB = 0
             PointOp {
@@ -357,17 +352,14 @@ where
             }
         })?;
 
-        // Check var == expr
-        let expr2 = self.variable_to_expression(var.clone())?;
+        // Add constraint `V == expr` 
+        let (_, v) = self.delegate.commit_variable(&v_commitment)?;
+        self.delegate.cs().constrain(expr.to_r1cs_lc() - v);
 
-        // self.delegate
-        //     .cs()
-        //     .constrain(expr.to_r1cs_lc() - expr2.to_r1cs_lc());
-
-        // let lc = Constraint::Eq(expr, expr2).flatten(self.delegate.cs());
-        // self.delegate.cs().constrain(lc);
-
-        self.push_item(var);
+        // Push detached variable
+        self.push_item(Variable {
+            commitment: v_commitment,
+        });
         Ok(())
     }
 

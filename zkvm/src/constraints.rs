@@ -240,7 +240,7 @@ impl Expression {
         }
     }
 
-    fn to_r1cs_lc(&self) -> r1cs::LinearCombination {
+    pub(crate) fn to_r1cs_lc(&self) -> r1cs::LinearCombination {
         match self {
             Expression::Constant(a) => a.to_scalar().into(),
             Expression::LinearCombination(terms, _) => r1cs::LinearCombination::from_iter(terms),
