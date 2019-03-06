@@ -365,7 +365,6 @@ where
 
     fn r#const(&mut self) -> Result<(), VMError> {
         let scalar_witness = self.pop_item()?.to_data()?.to_scalar()?;
-        let scalar = scalar_witness.to_scalar();
         self.push_item(Expression::constant(scalar));
         Ok(())
     }
