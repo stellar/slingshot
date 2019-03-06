@@ -10,6 +10,10 @@ The blockchain state contains:
 - `initialheader`: The initial block header (at height 1).
 - `tipheader`: The latest block header.
 - `utxos`: The IDs of all available [utxos](zkvm-spec.md#utxo).
+- `nonces`: The set of current [nonces](#nonce).
+- `refids`: The set of recent [block IDs](#block-id).
+  The size of this set is bounded by `block.header.refscount`.
+  Block IDs in this set may be referenced by nonces.
 
 # Block header
 
@@ -22,6 +26,9 @@ A block header contains:
   Each new block must have a time strictly later than the block before it.
 - `txroot`: 32-byte merkle root hash of the transactions in the block.
 - `utxoroot`: 32-byte merkle root hash of the utxo set after applying all transactions in the block.
+- `nonceroot`: 32-byte merkle root hash of the nonce set after applying all transactions in the block.
+- `refscount`: integer number of recent block IDs to store for reference.
+  A new block may specify a lower `refscount` than its predecessor but may not increase it by more than 1.
 
 # Block
 
@@ -56,7 +63,7 @@ Inputs:
 - `prevheader`, the header of the previous block.
 
 Output:
-- list of [txlog](zkvm-spec.md#transaction-log)+[txid](zkvm-spec.md#transaction-id) pairs,
+- list of [transaction logs](zkvm-spec.md#transaction-log),
   one for each transaction in block.txs.
 
 Procedure:
@@ -64,13 +71,13 @@ Procedure:
 2. Verify `block.header.height == prevheader.height+1`.
 3. Verify `block.header.previd` equals the [block ID](#block-id) of `prevheader`.
 4. Verify `block.header.timestamp > prevheader.timestamp`.
+5. Verify `block.header.refscount >= 0` and `block.header.refscount <= prevheader.refscount + 1`.
 5. For each transaction `tx` in block.txs:
    1. Verify `tx.mintime == 0` or `tx.mintime >= block.header.timestamp`.
    2. Verify `tx.maxtime == 0` or `tx.maxtime < block.header.timestamp`.
    3. If `block.header.version == 1`, verify `tx.version == 1`.
    4. [Execute](zkvm-spec.md#vm-execution) `tx` to produce transaction log `txlog`.
-   5. Compute [transaction ID](zkvm-spec.md#transaction-id) `txid` from `tx` and `txlog`.
-   6. Add the pair `txlog`+`txid` to the list of output pairs.
+   5. Add `txlog` to the list of output logs.
 
 # Apply block
 
@@ -84,16 +91,20 @@ Output:
 Procedure:
 1. [Validate](#validate-block) `block` with `prevheader` set to `state.tipheader`.
 2. Let `state′` be `state`.
-3. For each txlog from the validation step, in order:
+3. Remove items from `state′.nonces` where the expiration timestamp is less than `block.header.timestamp`.
+4. For each txlog from the validation step, in order:
    1. [Apply](#apply-transaction-log) the txlog to `state′` to produce `state′′`.
-   2. xxx error check
-   3. Set `state′ <- state′′`.
-4. Compute `utxoroot` from `state′.utxos`.
-5. Verify `block.header.utxoroot == utxoroot`.
-6. Set `state′.tipheader <- block.header`.
-7. Return `state′`.
+   2. Set `state′ <- state′′`.
+5. Compute `utxoroot` from `state′.utxos`.
+6. Verify `block.header.utxoroot == utxoroot`.
+7. Compute `nonceroot` from `state′.nonces`.
+8. Verify `block.header.nonceroot == nonceroot`.
+9. Set `state′.tipheader <- block.header`.
+10. Add `block.header` to the end of the `state′.refids` list.
+11. Prune `state′.refids` to the number of items specified by `block.header.refscount` by removing the oldest IDs.
+12. Return `state′`.
 
-# Apply transaction
+# Apply transaction log
 
 Inputs:
 - `txlog`, a [transaction log](zkvm-spec.md#transaction-log).
@@ -103,4 +114,14 @@ Output:
 - New blockchain state.
 
 Procedure:
-- 
+1. Let `state′` be `state`.
+2. For each [nonce entry](zkvm-spec.md#nonce-entry) `n` in `txlog`:
+   1. Verify `n.blockid` is one of the following:
+      - An all-zero 32-byte string, or
+      - The ID of the initial block, or
+      - One of the block ids in `state.refids`.
+   2. Verify `n` is _not_ in `state.nonces`.
+   3. Add `n` to `state′.nonces`.
+3. For each [input entry](zkvm-spec.md#input-entry) or [output entry](zkvm-spec.md#output-entry) in `txlog`:
+   1. If an input entry, remove its utxo ID from `state′.utxos`.
+   2. If an output entry, add its utxo ID to `state′.utxos`.
