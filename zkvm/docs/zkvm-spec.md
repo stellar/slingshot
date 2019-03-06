@@ -399,10 +399,10 @@ _Anchor_ is a 32-byte unique string that provides uniqueness to the [contract ID
 
 Anchors can be created by the [`nonce`](#nonce) instruction or generated from previously used unique contract IDs, tracked by the VM via [last anchor](#vm-state):
 
-1. Nonce contracts have their anchor computed from the nonce parameters (see [`nonce`](#nonce) instruction).
-2. Claimed UTXOs ([`input`](#input)) carry over the previously created anchor and set the "last anchor" to their [contract ID](#contract-id).
-3. Transient contracts ([`contract`](#contract)) consume the [last anchor](#vm-state) and replace it with their [contract ID](#contract-id).
-4. Newly created outputs ([`output`](#output)) consume the [last anchor](#vm-state) and replace it with a ratcheted one (the contract ID will be used as an anchor in a later transaction, via [`input`](#input)).
+1. Nonce contract has its anchor computed from the nonce parameters (see [`nonce`](#nonce) instruction).
+2. Claimed UTXO ([`input`](#input)) sets the VM’s [last anchor](#vm-state) to its [contract ID](#contract-id).
+3. Transient contract ([`contract`](#contract)) consumes the VM’s [last anchor](#vm-state) and replaces it with its [contract ID](#contract-id).
+4. Newly created outputs ([`output`](#output)) consume the VM’s [last anchor](#vm-state) and replace it with a ratcheted one (because the contract ID will be used as an anchor in a later transaction, via [`input`](#input)).
 
 VM keeps track of the last used anchor and fails if:
 
@@ -1425,14 +1425,16 @@ _items... predicate_ **output:_k_** → ø
 
 1. Pops [`predicate`](#predicate) from the stack.
 2. Pops `k` items from the stack.
-3. Use the [VM’s last anchor](#vm-state) as an anchor for the [output structure](#output-structure).
-4. Update the [VM’s last anchor](#vm-state) with a ratcheted [contract ID](#contract-id):
+3. Ratchets the [VM’s last anchor](#vm-state):
     ```
     T = Transcript("ZkVM.ratchet-anchor")
-    T.commit("output", output_id)
-    new_last_anchor = T.challenge_bytes("id")
+    T.commit("anchor", vm.last_anchor)
+    next_anchor = T.challenge_bytes("vm_anchor")
+    contract_anchor = T.challenge_bytes("contract_anchor")
     ```
-5. Adds an [output entry](#output-entry) to the [transaction log](#transaction-log).
+4. Updates the [VM’s last anchor](#vm-state) with a ratcheted `next_anchor`:
+5. Uses ratcheted `contract_anchor` in the [output structure](#output-structure).
+6. Adds an [output entry](#output-entry) to the [transaction log](#transaction-log).
 
 Immediate data `k` is encoded as [LE32](#le32).
 
