@@ -364,8 +364,8 @@ where
     }
 
     fn r#const(&mut self) -> Result<(), VMError> {
-        let data = self.pop_item()?.to_data()?.to_bytes();
-        let scalar = SliceReader::parse(&data, |r| r.read_scalar())?;
+        let scalar_witness = self.pop_item()?.to_data()?.to_scalar()?;
+        let scalar = scalar_witness.to_scalar();
         self.push_item(Expression::constant(scalar));
         Ok(())
     }
