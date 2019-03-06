@@ -1,7 +1,6 @@
 package slidechain
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -16,33 +15,21 @@ import (
 	"github.com/stellar/go/xdr"
 )
 
-func (c *Custodian) doPostPegOut(ctx context.Context, assetXDR, anchor, txid []byte, amount, seqnum int64, peggedOut pegOutState, exporter, tempAddr string, pubkey, refdata []byte) error {
+func (c *Custodian) doPostPegOut(ctx context.Context, p pegOut) error {
 	var asset xdr.Asset
-	err := asset.UnmarshalBinary(assetXDR)
+	err := asset.UnmarshalBinary(p.AssetXDR)
 	if err != nil {
 		return errors.Wrap(err, "unmarshaling asset xdr")
 	}
-	assetID := bc.NewHash(txvm.AssetID(importIssuanceSeed[:], assetXDR))
-	ref := pegOut{
-		AssetXDR: assetXDR,
-		TempAddr: tempAddr,
-		Seqnum:   seqnum,
-		Exporter: exporter,
-		Amount:   amount,
-		Anchor:   anchor,
-		Pubkey:   pubkey,
-	}
-	checkRefdata, err := json.Marshal(ref)
+	assetID := bc.NewHash(txvm.AssetID(importIssuanceSeed[:], p.AssetXDR))
+	refdata, err := json.Marshal(p)
 	if err != nil {
 		return errors.Wrap(err, "marshaling reference data")
-	}
-	if !bytes.Equal(refdata, checkRefdata) {
-		return fmt.Errorf("incorrect reference data in post-peg-out tx")
 	}
 	// The contract needs a non-zero selector to retire funds if the peg-out succeeded.
 	// Else, it requires a zero selector so the funds are returned.
 	var selector int64
-	if peggedOut == pegOutOK {
+	if p.State == pegOutOK {
 		selector = 1
 	}
 	// Build post-peg-out contract.
@@ -54,7 +41,7 @@ func (c *Custodian) doPostPegOut(ctx context.Context, assetXDR, anchor, txid []b
 		contract.Tuple(func(tup *txvmutil.TupleBuilder) { // {'T', pubkey}
 			tup.PushdataByte(txvm.TupleCode)
 			tup.Tuple(func(pktup *txvmutil.TupleBuilder) {
-				pktup.PushdataBytes(pubkey)
+				pktup.PushdataBytes(p.Pubkey)
 			})
 		})
 		contract.Tuple(func(tup *txvmutil.TupleBuilder) { // {'S', refdata}
@@ -63,9 +50,9 @@ func (c *Custodian) doPostPegOut(ctx context.Context, assetXDR, anchor, txid []b
 		})
 		contract.Tuple(func(tup *txvmutil.TupleBuilder) { // {'V', amount, assetID, anchor}
 			tup.PushdataByte(txvm.ValueCode)
-			tup.PushdataInt64(amount)
+			tup.PushdataInt64(p.Amount)
 			tup.PushdataBytes(assetID.Bytes())
-			tup.PushdataBytes(anchor)
+			tup.PushdataBytes(p.Anchor)
 		})
 	})
 	b.PushdataInt64(selector).Op(op.Put) // con stack: snapshot; arg stack: selector
@@ -101,13 +88,13 @@ func (c *Custodian) doPostPegOut(ctx context.Context, assetXDR, anchor, txid []b
 	// Delete relevant row from exports table.
 	// TODO(debnil): Implement a mechanism to recover in case of a crash here.
 	// Currently, the txvm funds will be retired or refunded, but the db will not be updated.
-	result, err := c.DB.ExecContext(ctx, `DELETE FROM exports WHERE txid=$1`, txid)
+	result, err := c.DB.ExecContext(ctx, `DELETE FROM exports WHERE ref=$1`, refdata)
 	if err != nil {
-		return errors.Wrapf(err, "deleting export for tx %x", txid)
+		return errors.Wrapf(err, "deleting export for tx %x", p.TxID)
 	}
 	numAffected, err := result.RowsAffected()
 	if err != nil {
-		return errors.Wrapf(err, "checking rows affected by exports delete query for txid %x", txid)
+		return errors.Wrapf(err, "checking rows affected by exports delete query for txid %x", p.TxID)
 	}
 	if numAffected != 1 {
 		return fmt.Errorf("got %d rows affected by exports delete query, want 1", numAffected)

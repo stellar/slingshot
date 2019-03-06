@@ -29,16 +29,8 @@ CREATE TABLE IF NOT EXISTS pegs (
 );
 
 CREATE TABLE IF NOT EXISTS exports (
-  txid BLOB NOT NULL PRIMARY KEY,
-  exporter TEXT NOT NULL,
-  amount INTEGER NOT NULL,
-  asset_xdr BLOB NOT NULL,
-  temp_addr TEXT NOT NULL,
-  seqnum INTEGER NOT NULL,
   pegged_out INTEGER NOT NULL DEFAULT 0,
-  anchor BLOB NOT NULL,
-  pubkey BLOB NOT NULL,
-  json BLOB NOT NULL
+  ref BLOB NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS custodian (
