@@ -401,7 +401,7 @@ impl Program {
         self
     }
 
-    /// Adds the left and right predicates, followed by the `left` instruction in the correct order
+    /// Pushes left and right predicates, followed by the `left` instruction,
     /// to choose the left disjunction in the predicate tree.
     pub fn choose_left(&mut self, pred: &Predicate) -> Result<&mut Program, VMError> {
         let (l, r) = pred.to_disjunction()?;
@@ -411,7 +411,7 @@ impl Program {
         Ok(self)
     }
 
-    /// Adds the left and right predicates, followed by the `right` instruction in the correct order
+    /// Pushes left and right predicates, followed by the `right` instruction,
     /// to choose the right disjunction in the predicate tree.
     pub fn choose_right(&mut self, pred: &Predicate) -> Result<&mut Program, VMError> {
         let (l, r) = pred.to_disjunction()?;
