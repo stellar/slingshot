@@ -479,7 +479,7 @@ where
             flv: flv.commitment,
         };
         let wide_value = WideValue {
-            r1cs_qty: qty_var, // Negate value.
+            r1cs_qty: neg_qty_var,
             r1cs_flv: flv_var,
             witness: match (qty_assignment, flv_assignment) {
                 (Some(q), Some(f)) => Some((q, f)),
