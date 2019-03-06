@@ -1479,7 +1479,7 @@ _pred blockid_ **nonce** → _contract_
     T.commit("blockid", blockid)
     T.commit("predicate", pred)
     T.commit("maxtime", LE64(tx.maxtime))
-    nonce_anchor = T.challenge_bytes()
+    nonce_anchor = T.challenge_bytes("anchor")
     ```
 4. Pushes a new [contract](#contract-type) with:
     * an empty [payload](#contract-payload)
@@ -1504,7 +1504,7 @@ Blockchain state machine performs the following checks:
 1. The `blockid` is checked against the IDs of “recent” blocks when the transaction is applied to the blockchain. It must match a recent block, or the initial block of the blockchain.
 2. The `nonce_anchor` is checked for uniqueness against “recent” nonce anchors.
 
-To perform these checks, validators must keep a set of recent nonces and a set of recent block headers available. For scalability and to reduce resource demands on the network, these sets must be limited in size. So block signers can and should impose reasonable limits on the value of exp (which is the time by which the transaction must be included in a block or become invalid).
+To perform these checks, validators must keep a set of recent nonces and a set of recent block headers available. For scalability and to reduce resource demands on the network, these sets must be limited in size. So verifiers can and should impose reasonable limits on the value of exp (which is the time by which the transaction must be included in a block or become invalid).
 
 To support long-living pre-signed transactions, the protocol allows a nonce to use the blockchain’s initial block ID regardless of the `refscount` limit specified in the block headers.
 
