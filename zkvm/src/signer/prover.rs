@@ -4,50 +4,39 @@ use crate::signer::*;
 use crate::transcript::TranscriptProtocol;
 use curve25519_dalek::ristretto::RistrettoPoint;
 use curve25519_dalek::scalar::Scalar;
-use merlin::Transcript;
 use rand;
 
 #[derive(Copy, Clone)]
 pub struct Nonce(Scalar);
 pub struct NoncePrecommitment(Scalar);
+// TODO: compress & decompress RistrettoPoint into CompressedRistretto when sending as message
 pub struct NonceCommitment(RistrettoPoint);
 pub struct Siglet(Scalar);
 
-// TODO: come up with a better name for this!
-pub struct Shared<'a> {
-    generator: RistrettoPoint,
-    transcript: &'a mut Transcript,
-    // X = sum_i ( H(L, X_i) * X_i )
-    agg_pubkey: PubKey,
-    // L = H(X_1 || X_2 || ... || X_n)
-    agg_pubkey_hash: PubKeyHash,
-    // TODO: what should the message representation format be?
-    message: Vec<u8>,
-}
-
-pub struct PartyAwaitingPrecommitments<'a> {
-    shared: Shared<'a>,
+pub struct PartyAwaitingPrecommitments {
+    shared: Shared,
     x_i: PrivKey,
     r_i: Nonce,
     R_i: NonceCommitment,
 }
 
-pub struct PartyAwaitingCommitments<'a> {
-    shared: Shared<'a>,
+pub struct PartyAwaitingCommitments {
+    shared: Shared,
     x_i: PrivKey,
     r_i: Nonce,
     nonce_precommitments: Vec<NoncePrecommitment>,
 }
 
-pub struct PartyAwaitingSiglets<'a> {
-    shared: Shared<'a>,
+// TODO: get rid of unnecessary fields
+pub struct PartyAwaitingSiglets {
+    shared: Shared,
     x_i: PrivKey,
     r_i: Nonce,
     nonce_commitments: Vec<NonceCommitment>,
 }
 
-impl<'a> PartyAwaitingPrecommitments<'a> {
-    pub fn new(x_i: PrivKey, shared: Shared<'a>) -> (Self, NoncePrecommitment) {
+impl<'a> PartyAwaitingPrecommitments {
+    pub fn new(x_i: PrivKey, shared: Shared) -> (Self, NoncePrecommitment) {
         let mut rng = shared
             .transcript
             .build_rng()
@@ -78,7 +67,7 @@ impl<'a> PartyAwaitingPrecommitments<'a> {
     pub fn receive_hashes(
         self,
         nonce_precommitments: Vec<NoncePrecommitment>,
-    ) -> (PartyAwaitingCommitments<'a>, NonceCommitment) {
+    ) -> (PartyAwaitingCommitments, NonceCommitment) {
         // Store received nonce precommitments in next state
         (
             PartyAwaitingCommitments {
@@ -92,11 +81,11 @@ impl<'a> PartyAwaitingPrecommitments<'a> {
     }
 }
 
-impl<'a> PartyAwaitingCommitments<'a> {
+impl<'a> PartyAwaitingCommitments {
     pub fn receive_nonces(
         self,
         nonce_commitments: Vec<NonceCommitment>,
-    ) -> (PartyAwaitingSiglets<'a>, Siglet) {
+    ) -> (PartyAwaitingSiglets, Siglet) {
         // Check stored precommitments against received commitments
         for (pre_comm, comm) in self
             .nonce_precommitments
@@ -116,7 +105,7 @@ impl<'a> PartyAwaitingCommitments<'a> {
         let R: RistrettoPoint = nonce_commitments.iter().map(|R_i| R_i.0).sum();
 
         // Make H(X,R,m). shared.agg_pubkey = X, shared.message = m.
-        let hash_x_R_m = {
+        let hash_X_R_m = {
             let mut hash_transcript = self.shared.transcript.clone();
             hash_transcript.commit_point(b"X", &self.shared.agg_pubkey.0.compress());
             hash_transcript.commit_point(b"R", &R.compress());
@@ -134,7 +123,7 @@ impl<'a> PartyAwaitingCommitments<'a> {
         };
 
         // Generate siglet: s_i = r_i + H(X,R,m)*H(L,X_i)*x_i
-        let s_i = self.r_i.0 + hash_x_R_m * hash_L_X_i * self.x_i.0;
+        let s_i = self.r_i.0 + hash_X_R_m * hash_L_X_i * self.x_i.0;
 
         // Store received nonce commitments in next state
         (
@@ -149,11 +138,13 @@ impl<'a> PartyAwaitingCommitments<'a> {
     }
 }
 
-impl<'a> PartyAwaitingSiglets<'a> {
-    pub fn receive_siglets(self, _siglets: Vec<Siglet>) -> Signature {
-        // verify received siglets
+impl<'a> PartyAwaitingSiglets {
+    pub fn receive_siglets(self, siglets: Vec<Siglet>) -> Signature {
+        // TODO: verify received siglets
         // s = sum(siglets)
-        // R = sum(R_vec)
-        unimplemented!();
+        let s: Scalar = siglets.iter().map(|siglet| siglet.0).sum();
+        // R = sum(R_i). nonce_commitments = R_i
+        let R: RistrettoPoint = self.nonce_commitments.iter().map(|R_i| R_i.0).sum();
+        Signature { s, R }
     }
 }

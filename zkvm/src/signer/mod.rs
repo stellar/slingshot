@@ -9,7 +9,6 @@ use rand;
 // Modules for signing protocol
 
 pub mod prover;
-pub mod verifier;
 
 pub struct PrivKey(Scalar);
 pub struct PubKey(RistrettoPoint);
@@ -17,13 +16,23 @@ pub struct MultikeyWitness(Vec<PubKey>); // TODO: also include Option<Scalar> fo
 pub struct PubKeyHash(Scalar);
 pub struct Signature {
     s: Scalar,
-    r: RistrettoPoint,
+    R: RistrettoPoint,
 }
 
-// TODO: compress & decompress RistrettoPoint into CompressedRistretto when sending as messages
+// TODO: come up with a better name for this!
+pub struct Shared {
+    generator: RistrettoPoint,
+    transcript: Transcript,
+    // X = sum_i ( H(L, X_i) * X_i )
+    agg_pubkey: PubKey,
+    // L = H(X_1 || X_2 || ... || X_n)
+    agg_pubkey_hash: PubKeyHash,
+    // TODO: what should the message representation format be?
+    message: Vec<u8>,
+}
 
 impl MultikeyWitness {
-    fn aggregate(&self, transcript: &mut Transcript) -> (PubKey, PubKeyHash) {
+    pub fn aggregate(&self, transcript: &mut Transcript) -> (PubKey, PubKeyHash) {
         // L = H(X_1 || X_2 || ... || X_n)
         for X_i in &self.0 {
             transcript.commit_point(b"X_i.L", &X_i.0.compress());
@@ -39,5 +48,21 @@ impl MultikeyWitness {
         }
 
         (PubKey(X), PubKeyHash(L))
+    }
+}
+
+impl Signature {
+    pub fn verify(&self, shared: Shared) -> bool {
+        // Make H(X,R,m). shared.agg_pubkey = X, shared.message = m.
+        let hash_X_R_m = {
+            let mut hash_transcript = shared.transcript.clone();
+            hash_transcript.commit_point(b"X", &shared.agg_pubkey.0.compress());
+            hash_transcript.commit_point(b"R", &self.R.compress());
+            hash_transcript.commit_bytes(b"m", &shared.message);
+            hash_transcript.challenge_scalar(b"hash_x_R_m")
+        };
+
+        // Check sG = R + H(X,R,m)*X
+        self.s * shared.generator == self.R + hash_X_R_m * shared.agg_pubkey.0
     }
 }
