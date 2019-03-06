@@ -6,102 +6,39 @@ use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
 use rand;
 
-pub struct PartyAwaitingHashes<'a> {
-    generator: RistrettoPoint,
-    transcript: &'a mut Transcript,
-    k_i: Scalar,
-    R_i: Nonce,
-}
-pub struct Hash(Scalar);
+// Modules for signing protocol
 
-pub struct PartyAwaitingNonces<'a> {
-    generator: RistrettoPoint,
-    transcript: &'a mut Transcript,
-    k_i: Scalar,
-    R_i: Nonce,
-    R_hashes: Vec<Hash>,
-}
+pub mod prover;
+pub mod verifier;
 
-#[derive(Copy, Clone)]
-pub struct Nonce(RistrettoPoint);
-
-pub struct PartyAwaitingSiglets<'a> {
-    generator: RistrettoPoint,
-    transcript: &'a mut Transcript,
-    k_i: Scalar,
-    R_i: Nonce,
-    R_vec: Vec<Nonce>,
-}
-pub struct Siglet(RistrettoPoint);
-
+pub struct PrivKey(Scalar);
+pub struct PubKey(RistrettoPoint);
+pub struct MultikeyWitness(Vec<PubKey>); // TODO: also include Option<Scalar> for signing key?
+pub struct PubKeyHash(Scalar);
 pub struct Signature {
     s: Scalar,
     r: RistrettoPoint,
+    message: Vec<u8>, // TODO: what is the message representation format?
 }
 
 // TODO: compress & decompress RistrettoPoint into CompressedRistretto when sending as messages
-// TODO: what is the message representation format?
 
-impl<'a> PartyAwaitingHashes<'a> {
-    pub fn new(generator: RistrettoPoint, transcript: &'a mut Transcript) -> (Self, Hash) {
-        let mut rng = transcript.build_rng().finalize(&mut rand::thread_rng());
+impl MultikeyWitness {
+    fn aggregate(&self, transcript: &mut Transcript) -> (PubKey, PubKeyHash) {
+        // L = H(P_1 || P_2 || ... || P_n)
+        for X_i in &self.0 {
+            transcript.commit_point(b"X_i.L", &X_i.0.compress());
+        }
+        let L = transcript.challenge_scalar(b"L");
 
-        // generate ephemeral keypair (k_i, R_i). R_i = generator * k_i
-        let k_i = Scalar::random(&mut rng);
-        let R_i = Nonce(generator * k_i);
+        // X = sum_i ( H(L, X_i) * X_i )
+        let mut X = RistrettoPoint::default();
+        for X_i in &self.0 {
+            transcript.commit_point(b"X_i.X", &X_i.0.compress());
+            let hash = transcript.challenge_scalar(b"H(L,X_i)");
+            X = X + hash * X_i.0;
+        }
 
-        // make H(R_i)
-        let mut hash_transcript = transcript.clone();
-        hash_transcript.commit_point(b"R_i", &R_i.0.compress());
-        let hash = Hash(transcript.challenge_scalar(b"R_i.hash"));
-
-        (
-            PartyAwaitingHashes {
-                generator,
-                transcript,
-                k_i,
-                R_i,
-            },
-            hash,
-        )
-    }
-
-    pub fn receive_hashes(self, hashes: Vec<Hash>) -> (PartyAwaitingNonces<'a>, Nonce) {
-        // store received hashes
-        (
-            PartyAwaitingNonces {
-                generator: self.generator,
-                transcript: self.transcript,
-                k_i: self.k_i,
-                R_i: self.R_i,
-                R_hashes: hashes,
-            },
-            self.R_i,
-        )
-    }
-}
-
-impl<'a> PartyAwaitingNonces<'a> {
-    pub fn receive_nonces(self, nonces: Vec<Nonce>) -> (PartyAwaitingSiglets<'a>, Siglet) {
-        // TODO: check stored hashes against received nonces
-        // TODO: generate siglet
-        // store received nonces
-        let _ = PartyAwaitingSiglets {
-            generator: self.generator,
-            transcript: self.transcript,
-            k_i: self.k_i,
-            R_i: self.R_i,
-            R_vec: nonces,
-        };
-        unimplemented!()
-    }
-}
-
-impl<'a> PartyAwaitingSiglets<'a> {
-    pub fn receive_siglets(self, _siglets: Vec<Siglet>) -> Signature {
-        // verify received siglets
-        // s = sum(siglets)
-        // R = sum(R_vec)
-        unimplemented!();
+        (PubKey(X), PubKeyHash(L))
     }
 }
