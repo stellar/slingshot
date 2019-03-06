@@ -340,8 +340,8 @@ where
         let v_point = v_commitment.to_point();
 
         // Pop scalar `v`
-        let data = self.pop_item()?.to_data()?.to_bytes();
-        let v_scalar = SliceReader::parse(&data, |r| r.read_scalar())?;
+        let scalar_witness = self.pop_item()?.to_data()?.to_scalar()?;
+        let v_scalar = scalar_witness.to_scalar();
 
         self.delegate.verify_point_op(|| {
             // Check V = vB => V-vB = 0
