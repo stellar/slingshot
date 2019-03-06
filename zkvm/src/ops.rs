@@ -4,6 +4,7 @@
 use crate::encoding;
 use crate::encoding::SliceReader;
 use crate::errors::VMError;
+use crate::predicate::Predicate;
 use crate::types::Data;
 use core::borrow::Borrow;
 use core::mem;
@@ -398,5 +399,25 @@ impl Program {
     pub fn cloak(&mut self, m: usize, n: usize) -> &mut Program {
         self.0.push(Instruction::Cloak(m, n));
         self
+    }
+
+    /// Adds the left and right predicates, followed by the `left` instruction in the correct order
+    /// to choose the left disjunction in the predicate tree.
+    pub fn choose_left(&mut self, pred: &Predicate) -> Result<&mut Program, VMError> {
+        let (l, r) = pred.to_disjunction()?;
+        self.push(l);
+        self.push(r);
+        self.left();
+        Ok(self)
+    }
+
+    /// Adds the left and right predicates, followed by the `right` instruction in the correct order
+    /// to choose the right disjunction in the predicate tree.
+    pub fn choose_right(&mut self, pred: &Predicate) -> Result<&mut Program, VMError> {
+        let (l, r) = pred.to_disjunction()?;
+        self.push(l);
+        self.push(r);
+        self.right();
+        Ok(self)
     }
 }

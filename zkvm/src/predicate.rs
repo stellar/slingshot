@@ -103,6 +103,14 @@ impl Predicate {
         }
     }
 
+    /// Downcasts the predicate to a disjunction.
+    pub fn to_disjunction(&self) -> Result<(Predicate, Predicate), VMError> {
+        match self {
+            Predicate::Or(d) => Ok((d.left.clone(), d.right.clone())),
+            _ => Err(VMError::TypeNotDisjunction),
+        }
+    }
+
     /// Creates a disjunction of two predicates.
     pub fn or(self, right: Predicate) -> Result<Self, VMError> {
         let point = {

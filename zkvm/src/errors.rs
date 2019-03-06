@@ -67,6 +67,10 @@ pub enum VMError {
     /// This error occurs when an instruction requires a scalar witness type.
     #[fail(display = "Item is not a Scalar Witness.")]
     TypeNotScalarWitness,
+    
+    /// This errors occurs when an instruction expects a predicate disjunction type.
+    #[fail(display = "Item is not a disjunction.")]
+    TypeNotDisjunction,
 
     /// This error occurs when an instruction expects a key type.
     #[fail(display = "Item is not a key.")]
