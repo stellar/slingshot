@@ -383,7 +383,7 @@ Contract ID is a hash of the contract’s [output structure](#output-structure):
 ```
 T = Transcript("ZkVM.contractid")
 T.commit("contract", output_structure)
-id = T.challenge_bytes()
+id = T.challenge_bytes("id")
 ```
 
 Contract ID makes [`delegate`](#delegate) signatures safe against [predicate](#predicate) key reuse:
