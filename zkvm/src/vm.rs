@@ -331,6 +331,42 @@ where
         Ok(())
     }
 
+    fn unblind(&mut self) -> Result<(), VMError> {
+        // Pop expression `expr`
+        let expr = self.pop_item()?.to_expression()?;
+        
+        // Pop commitment `V`
+        let v_commitment = self.pop_item()?.to_data()?.to_commitment()?;
+        let v_point = v_commitment.to_point();
+        
+        // Pop scalar `v`
+        let data = self.pop_item()?.to_data()?.to_bytes();
+        let v_scalar = SliceReader::parse(&data, |r| r.read_scalar())?;
+
+        // Create a detached variable `var` using `V`
+        let var = Variable { commitment: v_commitment };
+
+
+        self.delegate.verify_point_op(|| {
+            // Check V = vB => V-vB = 0
+            PointOp {
+                primary: Some(v_scalar),
+                secondary: None,
+                arbitrary: vec![(Scalar::one(), v_point)],
+            }
+        })?;
+
+        // Check var == expr
+        let expr2 = self.variable_to_expression(var.clone())?;
+
+        // self.delegate
+        //     .cs()
+        //     .constrain(expr.to_r1cs_lc() - expr2.to_r1cs_lc());
+
+        self.push_item(var);
+        Ok(())
+    }
+
     fn r#const(&mut self) -> Result<(), VMError> {
         let data = self.pop_item()?.to_data()?.to_bytes();
         let scalar = SliceReader::parse(&data, |r| r.read_scalar())?;
