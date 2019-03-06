@@ -1,5 +1,5 @@
 use bulletproofs::r1cs;
-use bulletproofs::r1cs::R1CSProof;
+use bulletproofs::r1cs::{R1CSError, R1CSProof};
 use curve25519_dalek::ristretto::CompressedRistretto;
 use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
@@ -199,7 +199,7 @@ where
                 Instruction::Verify => self.verify()?,
                 Instruction::Unblind => self.unblind()?,
                 Instruction::Issue => self.issue()?,
-                Instruction::Borrow => unimplemented!(),
+                Instruction::Borrow => self.borrow()?,
                 Instruction::Retire => self.retire()?,
                 Instruction::Qty => unimplemented!(),
                 Instruction::Flavor => unimplemented!(),
@@ -441,6 +441,53 @@ where
         };
 
         self.push_item(contract);
+        Ok(())
+    }
+
+    fn borrow(&mut self) -> Result<(), VMError> {
+        let flv = self.pop_item()?.to_variable()?;
+        let qty = self.pop_item()?.to_variable()?;
+
+        let (_, flv_var) = self.delegate.commit_variable(&flv.commitment)?;
+        let (_, qty_var) = self.delegate.commit_variable(&qty.commitment)?;
+        let flv_assignment = flv.commitment.assignment().map(|sw| sw.to_scalar());
+        let qty_assignment = ScalarWitness::option_to_integer(qty.commitment.assignment())?;
+
+        spacesuit::range_proof(
+            self.delegate.cs(),
+            qty_var.into(),
+            qty_assignment,
+            BitRange::max(),
+        )
+        .map_err(|_| VMError::R1CSInconsistency)?;
+        let (neg_qty_var, _, _) = self
+            .delegate
+            .cs()
+            .allocate(|| {
+                Ok((
+                    -(qty_assignment
+                        .ok_or(R1CSError::MissingAssignment)?
+                        .to_scalar()),
+                    Scalar::zero(),
+                    Scalar::zero(),
+                ))
+            })
+            .map_err(|e| VMError::R1CSError(e))?;
+        self.delegate.cs().constrain(qty_var + neg_qty_var);
+        let value = Value {
+            qty: qty.commitment.clone(),
+            flv: flv.commitment,
+        };
+        let wide_value = WideValue {
+            r1cs_qty: qty_var, // Negate value.
+            r1cs_flv: flv_var,
+            witness: match (qty_assignment, flv_assignment) {
+                (Some(q), Some(f)) => Some((q, f)),
+                _ => None,
+            },
+        };
+        self.push_item(wide_value);
+        self.push_item(value);
         Ok(())
     }
 
