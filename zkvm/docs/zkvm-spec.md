@@ -843,7 +843,7 @@ The ZkVM state consists of the static attributes and the state machine attribute
     * `tx_signature`
     * `cs_proof`
 2. Extension flag (boolean)
-3. Last anchor (optional [anchor](#anchor): `None` or `Some(anchor)`)
+3. Last [anchor](#anchor) or ∅ if unset.
 4. Data stack (array of [items](#types))
 5. Program stack (array of [programs](#program) with their offsets)
 6. Current [program](#program) with its offset
