@@ -163,3 +163,85 @@ impl MerkleNode {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[derive(Clone)]
+    struct TestItem(u64);
+
+    impl MerkleItem for TestItem {
+        fn commit(&self, t: &mut Transcript) {
+            t.commit_u64(b"item", self.0)
+        }
+    }
+
+    fn test_items(num: usize) -> Vec<TestItem> {
+        let mut items = Vec::with_capacity(num);
+        for i in 0..num {
+            items.push(TestItem(i as u64))
+        }
+        items
+    }
+
+    fn to_merkle(items: &[TestItem]) -> Vec<&MerkleItem> {
+        items.iter().map(|i| i as &MerkleItem).collect::<Vec<_>>()
+    }
+
+    macro_rules! assert_proof {
+        ($num:ident, $idx:ident) => {
+            let (item, root, proof) = {
+                let items = test_items(*$num as usize);
+                let tree = MerkleTree::new(b"test", &to_merkle(&items)).unwrap();
+                let proof = tree.proof(*$idx as usize).unwrap();
+                (items[*$idx as usize].clone(), tree.root().clone(), proof)
+            };
+            MerkleTree::verify_proof(b"test", &item, proof, &root).unwrap();
+        };
+    }
+
+    macro_rules! assert_proof_err {
+        ($num:ident, $idx:ident, $wrong_idx:ident) => {
+            let (item, root, proof) = {
+                let items = test_items(*$num as usize);
+                let tree = MerkleTree::new(b"test", &to_merkle(&items)).unwrap();
+                let proof = tree.proof(*$idx as usize).unwrap();
+                (
+                    items[*$wrong_idx as usize].clone(),
+                    tree.root().clone(),
+                    proof,
+                )
+            };
+            assert!(MerkleTree::verify_proof(b"test", &item, proof, &root).is_err());
+        };
+    }
+
+    #[test]
+    fn empty() {
+        assert!(MerkleTree::new(b"test", &[]).is_none());
+    }
+
+    #[test]
+    fn invalid_range() {
+        let entries = test_items(5);
+        let root = MerkleTree::new(b"test", &to_merkle(&entries)).unwrap();
+        assert!(root.proof(7).is_err())
+    }
+
+    #[test]
+    fn valid_proofs() {
+        let tests = [(10, 7), (11, 3), (12, 0), (5, 3), (25, 9)];
+        for (num, idx) in tests.iter() {
+            assert_proof!(num, idx);
+        }
+    }
+
+    #[test]
+    fn invalid_proofs() {
+        let tests = [(10, 7, 8), (11, 3, 5), (12, 0, 2), (5, 3, 1), (25, 9, 8)];
+        for (num, idx, wrong_idx) in tests.iter() {
+            assert_proof_err!(num, idx, wrong_idx);
+        }
+    }
+}

@@ -1,9 +1,7 @@
 use curve25519_dalek::ristretto::CompressedRistretto;
 use merlin::Transcript;
-use subtle::ConstantTimeEq;
 
 use crate::contract::Contract;
-use crate::errors::VMError;
 use crate::merkle::{MerkleItem, MerkleTree};
 use crate::transcript::TranscriptProtocol;
 use crate::vm::TxHeader;
@@ -49,7 +47,6 @@ impl UTXO {
 impl TxID {
     /// Computes TxID from a tx log
     pub fn from_log(list: &[Entry]) -> Self {
-        let t = Transcript::new(b"ZkVM.txid");
         match MerkleTree::new(b"ZkVM.txid", &Entry::to_merkle_item(list)) {
             Some(t) => Self(*t.root()),
             None => Self([0u8; 32]),
@@ -130,20 +127,7 @@ mod tests {
     }
 
     #[test]
-    fn empty() {
-        assert!(MerkleTree::new(b"ZkVM.txid", &[]).is_none());
-    }
-
-    #[test]
-    fn invalid_range() {
-        let entries = txlog_helper();
-        let entries = Entry::to_merkle_item(&entries);
-        let root = MerkleTree::new(b"ZkVM.txid", &entries).unwrap();
-        assert!(root.proof(5).is_err())
-    }
-
-    #[test]
-    fn valid_proof() {
+    fn valid_txid_proof() {
         let (entry, txid, proof) = {
             let entries = txlog_helper();
             let root = MerkleTree::new(b"ZkVM.txid", &Entry::to_merkle_item(&entries)).unwrap();
@@ -155,7 +139,7 @@ mod tests {
     }
 
     #[test]
-    fn invalid_proof() {
+    fn invalid_txid_proof() {
         let (entry, txid, proof) = {
             let entries = txlog_helper();
             let root = MerkleTree::new(b"ZkVM.txid", &Entry::to_merkle_item(&entries)).unwrap();
