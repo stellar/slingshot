@@ -409,7 +409,20 @@ VM keeps track of the last used anchor and fails if:
 1. by the end of the execution, no anchor was used (which means that [transaction ID](#transaction-id) is not unique), or
 2. an [`output`](#output) or [`contract`](#contract) is invoked before the anchor is set (since they can’t be made unique).
 
-Note: using a chain of anchors enables the signer to have a predictable anchor computation, when the signable contract is created transiently from a just-opened UTXO, without the need to know about the entire transaction.
+#### Note 1
+
+Chaining the anchors this way gives flexibility to the signer:
+if contract A creates contract B, the B's ID can be computed solely
+from the contents of A, without the knowledge of the entire transaction.
+
+#### Note 2
+
+Transient contract sets its ID as an anchor because this can be done only once: the contract is soon destroyed by [`signtx`](#signtx), [`call`](#call) or [`delegate`](#delegate).
+
+This is not the case with [`output`](#output): if the output’s ID was set as an anchor, it'd be available in _two transactions_:
+in the current one (for the rest of its execution), but also in the _future transaction_,
+when the output is claimed by [`input`](#input) which sets the same contract ID as an anchor.
+
 
 ### Transcript
 
@@ -543,7 +556,6 @@ and can only contain [portable types](#portable-types).
 
 UTXO stands for Unspent Transaction [Output](#output-structure).
 UTXO is uniquely identified by the [ID](#contract-id) of the contract in the output.
-
 
 ### Constraint system
 
@@ -1485,7 +1497,7 @@ Fails if:
 A nonce serves two purposes:
 
 1. It provides a unique anchor for an issuing transaction if other anchors are not available (i.e., from other values already on the stack);
-2. It binds the entire transaction to a particular blockchain, protecting not only against cross-blockchain replays, but also potential blockchain forks due to compromise of the old block-signing keys. This is a necessary feature for stateless signing devices that rely on blockchain proofs.
+2. It binds the entire transaction to a particular blockchain, protecting not only against cross-blockchain replays, but also potential blockchain forks. This is a necessary feature for stateless signing devices that rely on blockchain proofs.
 
 Blockchain state machine performs the following checks:
 
@@ -1923,7 +1935,7 @@ We need to investigate whether there are use-cases that cannot be safely or effi
 In ZkVM:
 
 * [Transaction ID](#transaction-id) is globally unique,
-* [UTXO ID](#utxo) is globally unique,
+* [UTXO](#utxo) is globally unique,
 * [Nonce](#nonce) is globally unique,
 * [Contract](#contract-type) is globally unique,
 * [Value](#value-type) is **not** unique.
@@ -1931,7 +1943,7 @@ In ZkVM:
 In contrast, in TxVM:
 
 * [Transaction ID](#transaction-id) is globally unique,
-* [UTXO ID](#utxo) is **not** unique,
+* [UTXO](#utxo) is **not** unique,
 * [Nonce](#nonce) is globally unique,
 * [Contract](#contract-type) is globally unique,
 * [Value](#value-type) is globally unique.
@@ -1946,7 +1958,7 @@ TxVM ensures transaction uniqueness this way:
 
 **Pro:**
 
-UTXO ID is fully determined before transaction is finalized. So e.g. a child transaction can be formed before the current transaction is completed and its ID is known. This might be handy in some cases.
+UTXO is fully determined before transaction is finalized. So e.g. a child transaction can be formed before the current transaction is completed and its ID is known. This might be handy in some cases.
 
 **Meh:**
 
@@ -1981,7 +1993,7 @@ This makes handling them much simpler: we can issue, finalize and even “claim�
 
 **Con:**
 
-UTXO IDs are not generally known without fuller view on transaction flow. This could be not a big deal, as we cannot really plan for the next transaction until this one is fully formed and published. Also, in a joint proof scenario, it’s even less reliable to plan the next payment until the MPC is completed, so requirement to wait till transaction ID is determined may not be a big deal.
+UTXO IDs are not generally known without fuller view on transaction flow. This could be not a big deal, as we cannot really plan for the next transaction until this one is fully formed and published. Also, in a joint proof scenario, it’s even less reliable to plan the next payment until the multi-party protocol is completed, therefore waiting for transaction ID to be determined becomes a requirement.
 
 That said, for contracts created from another contract, the contract ID is determined locally by the parent contract’s ID.
 
