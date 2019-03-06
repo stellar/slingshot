@@ -18,14 +18,13 @@ pub struct PubKeyHash(Scalar);
 pub struct Signature {
     s: Scalar,
     r: RistrettoPoint,
-    message: Vec<u8>, // TODO: what is the message representation format?
 }
 
 // TODO: compress & decompress RistrettoPoint into CompressedRistretto when sending as messages
 
 impl MultikeyWitness {
     fn aggregate(&self, transcript: &mut Transcript) -> (PubKey, PubKeyHash) {
-        // L = H(P_1 || P_2 || ... || P_n)
+        // L = H(X_1 || X_2 || ... || X_n)
         for X_i in &self.0 {
             transcript.commit_point(b"X_i.L", &X_i.0.compress());
         }
