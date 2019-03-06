@@ -542,7 +542,7 @@ and can only contain [portable types](#portable-types).
 ### UTXO
 
 UTXO stands for Unspent Transaction [Output](#output-structure).
-UTXO is uniquely identified by the [contract ID](#contract-id).
+UTXO is uniquely identified by the [ID](#contract-id) of the contract in the output.
 
 
 ### Constraint system
