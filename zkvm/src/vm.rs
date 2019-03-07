@@ -388,9 +388,7 @@ where
     // pred blockid `nonce` → contract
     fn nonce(&mut self) -> Result<(), VMError> {
         let blockid = self.pop_item()?.to_data()?.to_bytes();
-        let blockid = SliceReader::parse(&blockid, |r| {
-            r.read_u8x32()
-        })?;
+        let blockid = SliceReader::parse(&blockid, |r| r.read_u8x32())?;
         let predicate = self.pop_item()?.to_data()?.to_predicate()?;
         let nonce_anchor = Anchor::nonce(blockid, &predicate, self.maxtime);
 
@@ -400,7 +398,8 @@ where
             payload: Vec::new(),
         };
         self.last_anchor = Some(contract.id().to_anchor());
-        self.txlog.push(Entry::Nonce(blockid, self.maxtime, nonce_anchor));
+        self.txlog
+            .push(Entry::Nonce(blockid, self.maxtime, nonce_anchor));
         self.push_item(contract);
         Ok(())
     }
@@ -520,12 +519,13 @@ where
     /// _items... predicate_ **output:_k_** → ø
     fn output(&mut self, k: usize) -> Result<(), VMError> {
         let (predicate, payload) = self.pop_contract(k)?;
-        let (next_anchor, contract_anchor) = self.last_anchor.ok_or(VMError::AnchorMissing)?.ratchet();
+        let (next_anchor, contract_anchor) =
+            self.last_anchor.ok_or(VMError::AnchorMissing)?.ratchet();
         self.last_anchor = Some(next_anchor);
         let contract = Contract {
             anchor: contract_anchor,
             payload,
-            predicate
+            predicate,
         };
         self.txlog.push(Entry::Output(contract.id()));
         Ok(())
@@ -536,7 +536,7 @@ where
         let contract = Contract {
             anchor: self.last_anchor.ok_or(VMError::AnchorMissing)?,
             payload,
-            predicate
+            predicate,
         };
         self.last_anchor = Some(contract.id().to_anchor());
         self.push_item(contract);

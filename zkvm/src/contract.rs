@@ -14,11 +14,11 @@ pub const DATA_TYPE: u8 = 0x00;
 pub const VALUE_TYPE: u8 = 0x01;
 
 /// A unique identifier for an anchor
-#[derive(Copy,Clone,Debug)]
+#[derive(Copy, Clone, Debug)]
 pub struct Anchor([u8; 32]);
 
 /// A unique identifier for a contract.
-#[derive(Copy,Clone,Debug)]
+#[derive(Copy, Clone, Debug)]
 pub struct ContractID([u8; 32]);
 
 /// A ZkVM contract that holds a _payload_ (a list of portable items) protected by a _predicate_.
@@ -63,7 +63,7 @@ impl Input {
     /// Parses an input from a byte array.
     pub fn from_bytes(data: Vec<u8>) -> Result<Self, VMError> {
         let (contract, id) = SliceReader::parse(&data, |r| Contract::decode(r))?;
-        Ok(Self{ contract, id })
+        Ok(Self { contract, id })
     }
 
     /// Precise length of a serialized contract
@@ -88,7 +88,7 @@ impl Anchor {
     }
 
     /// Computes a nonce anchor from its components
-    pub fn nonce(blockid: [u8;32], predicate: &Predicate, maxtime: u64) -> Self {
+    pub fn nonce(blockid: [u8; 32], predicate: &Predicate, maxtime: u64) -> Self {
         let mut t = Transcript::new(b"ZkVM.nonce");
         t.commit_bytes(b"blockid", &blockid);
         t.commit_bytes(b"predicate", predicate.to_point().as_bytes());
@@ -175,7 +175,6 @@ impl PortableItem {
 }
 
 impl Contract {
-
     /// Converts self to vector of bytes
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut buf = Vec::with_capacity(self.serialized_length());
@@ -231,7 +230,11 @@ impl Contract {
                 payload.push(item);
             }
 
-            Ok(Contract { anchor, predicate, payload })
+            Ok(Contract {
+                anchor,
+                predicate,
+                payload,
+            })
         })?;
 
         let id = ContractID::from_serialized_contract(serialized_contract);

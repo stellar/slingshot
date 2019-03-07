@@ -1,8 +1,8 @@
 use curve25519_dalek::ristretto::CompressedRistretto;
 use merlin::Transcript;
 
-use crate::contract::{Anchor,ContractID};
-use crate::merkle::{MerkleItem,MerkleTree};
+use crate::contract::{Anchor, ContractID};
+use crate::merkle::{MerkleItem, MerkleTree};
 use crate::transcript::TranscriptProtocol;
 use crate::vm::TxHeader;
 
@@ -18,7 +18,7 @@ pub enum Entry {
     Retire(CompressedRistretto, CompressedRistretto),
     Input(ContractID),
     Output(ContractID),
-    Nonce([u8;32], u64, Anchor),
+    Nonce([u8; 32], u64, Anchor),
     Data(Vec<u8>),
     Import, // TBD: parameters
     Export, // TBD: parameters
