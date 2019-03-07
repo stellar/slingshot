@@ -416,13 +416,12 @@ impl Program {
         choose_fn: F,
     ) -> Result<&mut Program, VMError>
     where
-        F: FnOnce(PredicateTree) -> Result<&mut PredicateTree, VMError>,
+        F: FnOnce(PredicateTree) -> Result<&mut Program, VMError>,
     {
         choose_fn(PredicateTree {
             prog: self,
             pred: pred,
-        })?;
-        Ok(self)
+        })
     }
 }
 
@@ -434,34 +433,33 @@ pub struct PredicateTree<'a> {
 
 impl<'a> PredicateTree<'a> {
     /// Left Predicate branch
-    pub fn left(&mut self) -> Result<&mut Self, VMError> {
+    pub fn left(self) -> Result<Self, VMError> {
         let (l, r) = self.pred.to_disjunction()?;
-        self.pred = l.clone();
+        let prog = self.prog;
+        prog.push(l.clone()).push(r).left();
 
-        self.prog.push(l);
-        self.prog.push(r);
-        self.prog.left();
-
-        Ok(self)
+        Ok(Self { pred: l, prog })
     }
 
     /// Right Predicate branch
-    pub fn right(&mut self) -> Result<&mut Self, VMError> {
+    pub fn right(self) -> Result<Self, VMError> {
         let (l, r) = self.pred.to_disjunction()?;
-        self.pred = r.clone();
+        let prog = self.prog;
+        prog.push(l).push(r.clone()).right();
 
-        self.prog.push(l);
-        self.prog.push(r);
-        self.prog.left();
+        Ok(Self { pred: r, prog })
+    }
 
-        Ok(self)
+    /// Returns Predicate tree program.
+    pub fn program(self) -> &'a mut Program {
+        self.prog
     }
 
     /// Pushes program to the stack and calls the contract protected
     /// by the program predicate.
-    pub fn call(&mut self, prog: Program) -> &mut Self {
-        self.prog.push(prog);
-        self.prog.call();
-        self
+    pub fn call(self) -> Result<&'a mut Program, VMError> {
+        let subprog = self.pred.to_program()?;
+        self.prog.push(subprog).call();
+        Ok(self.prog)
     }
 }

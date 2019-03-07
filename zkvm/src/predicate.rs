@@ -104,10 +104,18 @@ impl Predicate {
     }
 
     /// Downcasts the predicate to a disjunction.
-    pub fn to_disjunction(&self) -> Result<(Predicate, Predicate), VMError> {
+    pub fn to_disjunction(self) -> Result<(Predicate, Predicate), VMError> {
         match self {
-            Predicate::Or(d) => Ok((d.left.clone(), d.right.clone())),
+            Predicate::Or(d) => Ok((d.left, d.right)),
             _ => Err(VMError::TypeNotDisjunction),
+        }
+    }
+
+    /// Downcasts the predicate to a program.
+    pub fn to_program(self) -> Result<Program, VMError> {
+        match self {
+            Predicate::Program(p) => Ok(p),
+            _ => Err(VMError::TypeNotProgram),
         }
     }
 

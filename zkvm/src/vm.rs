@@ -12,7 +12,7 @@ use crate::constraints::{Commitment, Constraint, Expression, Variable};
 use crate::contract::{Contract, PortableItem};
 use crate::encoding::SliceReader;
 use crate::errors::VMError;
-use crate::ops::{Instruction, Program};
+use crate::ops::Instruction;
 use crate::point_ops::PointOp;
 use crate::predicate::Predicate;
 use crate::scalar_witness::ScalarWitness;
@@ -117,7 +117,7 @@ pub(crate) trait Delegate<CS: r1cs::ConstraintSystem> {
     fn next_instruction(&mut self, run: &mut Self::RunType)
         -> Result<Option<Instruction>, VMError>;
 
-    fn new_run(&self, prog: Program) -> Self::RunType;
+    fn new_run(&self, prog: Data) -> Result<Self::RunType, VMError>;
 }
 
 impl<'d, CS, D> VM<'d, CS, D>
@@ -610,13 +610,13 @@ where
 
     fn call(&mut self) -> Result<(), VMError> {
         // Pop program contract and predicate
-        let prog = self.pop_item()?.to_data()?.to_program()?;
+        let prog = self.pop_item()?.to_data()?;
         let contract = self.pop_item()?.to_contract()?;
         let predicate = contract.predicate;
 
         // 0 = -P + h(prog) * B2
         self.delegate
-            .verify_point_op(|| predicate.prove_program_predicate(&prog.to_bytes()))?;
+            .verify_point_op(|| predicate.prove_program_predicate(&prog.clone().to_bytes()))?;
 
         // Place contract payload on the stack
         for item in contract.payload.into_iter() {
@@ -664,7 +664,7 @@ where
         let signature = Signature::from_bytes(SliceReader::parse(&sig, |r| r.read_u8x64())?)?;
 
         // Program
-        let prog = self.pop_item()?.to_data()?.to_program()?;
+        let prog = self.pop_item()?.to_data()?;
 
         // Place all items in payload onto the stack
         let contract = self.pop_item()?.to_contract()?;
@@ -677,7 +677,7 @@ where
 
         // Verify signature using Verification key, over the message `program`
         let mut t = Transcript::new(b"ZkVM.delegate");
-        t.commit_bytes(b"prog", &prog.to_bytes());
+        t.commit_bytes(b"prog", &prog.clone().to_bytes());
         self.delegate
             .verify_point_op(|| signature.verify_single(&mut t, verification_key))?;
 
@@ -757,8 +757,8 @@ where
         ))
     }
 
-    fn continue_with_program(&mut self, prog: Program) -> Result<(), VMError> {
-        let new_run = self.delegate.new_run(prog);
+    fn continue_with_program(&mut self, prog: Data) -> Result<(), VMError> {
+        let new_run = self.delegate.new_run(prog)?;
         let paused_run = mem::replace(&mut self.current_run, new_run);
         self.run_stack.push(paused_run);
         Ok(())
