@@ -2,7 +2,7 @@ use curve25519_dalek::ristretto::CompressedRistretto;
 use merlin::Transcript;
 
 use crate::contract::{Anchor,ContractID};
-use crate::errors::VMError;
+use crate::merkle::{MerkleItem,MerkleTree};
 use crate::transcript::TranscriptProtocol;
 use crate::vm::TxHeader;
 
