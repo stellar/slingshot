@@ -377,13 +377,6 @@ impl Program {
         self.0
     }
 
-    /// Converts the program to opaque serialized bytes.
-    pub fn to_bytes(&self) -> Vec<u8> {
-        let mut prog_bytes = Vec::new();
-        self.encode(&mut prog_bytes);
-        prog_bytes
-    }
-
     /// Returns the serialized length of the program.
     pub fn serialized_length(&self) -> usize {
         self.0.iter().map(|p| p.serialized_length()).sum()
@@ -410,18 +403,19 @@ impl Program {
 
     /// Takes predicate and closure to add choose operations for
     /// predicate tree traversal.
-    pub fn choose_predicate<F>(
+    pub fn choose_predicate<F, T>(
         &mut self,
         pred: Predicate,
         choose_fn: F,
     ) -> Result<&mut Program, VMError>
     where
-        F: FnOnce(PredicateTree) -> Result<&mut Program, VMError>,
+        F: FnOnce(PredicateTree) -> Result<T, VMError>,
     {
         choose_fn(PredicateTree {
             prog: self,
             pred: pred,
-        })
+        })?;
+        Ok(self)
     }
 }
 
@@ -448,11 +442,6 @@ impl<'a> PredicateTree<'a> {
         prog.push(l).push(r.clone()).right();
 
         Ok(Self { pred: r, prog })
-    }
-
-    /// Returns Predicate tree program.
-    pub fn program(self) -> &'a mut Program {
-        self.prog
     }
 
     /// Pushes program to the stack and calls the contract protected

@@ -67,8 +67,8 @@ impl<'a, 'b> Delegate<r1cs::Verifier<'a, 'b>> for Verifier<'a, 'b> {
         Ok(Some(instr))
     }
 
-    fn new_run(&self, data: Data) -> Result<Self::RunType, VMError> {
-        Ok(VerifierRun::new(data.to_program()?.to_bytes()))
+    fn new_run(&self, prog: Data) -> Result<Self::RunType, VMError> {
+        Ok(VerifierRun::new(prog.to_bytes()))
     }
 
     fn cs(&mut self) -> &mut r1cs::Verifier<'a, 'b> {
