@@ -54,16 +54,10 @@ pub struct Output {
 impl Output {
     /// Creates an Input with a given contract
     pub fn new(contract: Contract) -> Self {
-        Self {
-            id: contract.id(),
-            contract,
-        }
-    }
-
-    /// Parses an output
-    pub fn decode<'a>(output: &mut SliceReader<'a>) -> Result<Self, VMError> {
-        let (contract, id) = Contract::decode(output)?;
-        Ok(Self { contract, id })
+        let mut buf = Vec::with_capacity(contract.serialized_length());
+        contract.encode(&mut buf);
+        let id = ContractID::from_serialized_contract(&buf);
+        Self { id, contract }
     }
 
     /// Returns the contract ID
@@ -71,14 +65,25 @@ impl Output {
         self.id
     }
 
-    /// Gives a reference to the contract
-    pub fn as_contract(&self) -> &Contract {
-        &self.contract
-    }
-
     /// Converts output to a contract and also returns its precomputed ID
     pub fn into_contract(self) -> (Contract, ContractID) {
         (self.contract, self.id)
+    }
+
+    /// Precise length of a serialized output
+    pub fn serialized_length(&self) -> usize {
+        self.contract.serialized_length()
+    }
+
+    /// Serializes the output to a byte array
+    pub fn encode(&self, buf: &mut Vec<u8>) {
+        self.contract.encode(buf)
+    }
+
+    /// Parses an output
+    pub fn decode<'a>(output: &mut SliceReader<'a>) -> Result<Self, VMError> {
+        let (contract, id) = Contract::decode(output)?;
+        Ok(Self { contract, id })
     }
 }
 
@@ -174,20 +179,7 @@ impl PortableItem {
 }
 
 impl Contract {
-    /// Converts self to vector of bytes
-    pub fn to_bytes(&self) -> Vec<u8> {
-        let mut buf = Vec::with_capacity(self.serialized_length());
-        self.encode(&mut buf);
-        buf
-    }
-
-    /// Serializes the contract and computes its ID.
-    pub fn id(&self) -> ContractID {
-        ContractID::from_serialized_contract(&self.to_bytes())
-    }
-
-    /// Precise length of a serialized contract
-    pub fn serialized_length(&self) -> usize {
+    fn serialized_length(&self) -> usize {
         let mut size = 32 + 32 + 4;
         for item in self.payload.iter() {
             size += item.serialized_length();
@@ -195,8 +187,7 @@ impl Contract {
         size
     }
 
-    /// Serializes the contract to a byte array
-    pub fn encode(&self, buf: &mut Vec<u8>) {
+    fn encode(&self, buf: &mut Vec<u8>) {
         encoding::write_bytes(&self.anchor.0, buf);
         encoding::write_point(&self.predicate.to_point(), buf);
         encoding::write_u32(self.payload.len() as u32, buf);

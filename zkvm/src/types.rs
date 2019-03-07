@@ -156,7 +156,7 @@ impl Data {
             Data::Predicate(predicate) => predicate.serialized_length(),
             Data::Commitment(commitment) => commitment.serialized_length(),
             Data::Scalar(scalar) => scalar.serialized_length(),
-            Data::Output(output) => output.as_contract().serialized_length(),
+            Data::Output(output) => output.serialized_length(),
         }
     }
 
@@ -236,7 +236,7 @@ impl Data {
             Data::Predicate(predicate) => predicate.encode(buf),
             Data::Commitment(commitment) => commitment.encode(buf),
             Data::Scalar(scalar) => scalar.encode(buf),
-            Data::Output(output) => output.as_contract().encode(buf),
+            Data::Output(output) => output.encode(buf),
         };
     }
 }
