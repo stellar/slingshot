@@ -189,7 +189,7 @@ impl Contract {
 
     /// Precise length of a serialized contract
     fn serialized_length(&self) -> usize {
-        let mut size = 32 + 4;
+        let mut size = 32 + 32 + 4;
         for item in self.payload.iter() {
             size += item.serialized_length();
         }

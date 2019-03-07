@@ -29,16 +29,19 @@ impl ProgramHelper for Program {
         issuance_pred: Predicate,
         nonce_pred: Predicate,
     ) -> &mut Self {
-        self.push(Commitment::blinded_with_factor(qty, Scalar::from(1u64))) // stack: qty
+        let dummy_block_id = Data::Opaque([0xffu8; 32].to_vec());
+        self.push(nonce_pred)
+            .push(dummy_block_id)
+            .nonce()
+            .sign_tx() // stack is clean
+            
+            .push(Commitment::blinded_with_factor(qty, Scalar::from(1u64))) // stack: qty
             .var() // stack: qty-var
             .push(Commitment::unblinded(flv)) // stack: qty-var, flv
             .var() // stack: qty-var, flv-var
             .push(Data::default()) // stack: qty-var, flv-var, data
             .push(issuance_pred) // stack: qty-var, flv-var, data, pred
             .issue() // stack: issue-contract
-            .push(nonce_pred) // stack: issue-contract, pred
-            .nonce() // stack: issue-contract, nonce-contract
-            .sign_tx() // stack: issue-contract
             .sign_tx(); // stack: issued-value
         self
     }
@@ -176,7 +179,7 @@ fn issue() {
         Ok(txid) => {
             // Check txid
             assert_eq!(
-                "5245c74137fec1e97159a45e737c4eb8e703fb0f1d151e842351e2ab834763be",
+                "ee88427053ca9ee7726a633e39334415139dc7931a88a104456805f82f07f9a3",
                 hex::encode(txid.0)
             );
         }
