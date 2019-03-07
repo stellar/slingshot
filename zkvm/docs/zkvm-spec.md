@@ -376,9 +376,7 @@ Time bounds are available in the transaction as [expressions](#expression-type) 
 
 ### Contract ID
 
-_Contract ID_ is a 32-byte commitment to the [contract](#contract-type) ([anchor](#anchor), [payload](#contract-payload) and [predicate](#predicate)) that is also a unique identifier.
-
-Contract ID is a hash of the contract’s [output structure](#output-structure):
+_Contract ID_ is a 32-byte unique identifier of the [contract](#contract-type) and a commitment to its contents (see [Output](#output-structure)):
 
 ```
 T = Transcript("ZkVM.contractid")
@@ -386,37 +384,31 @@ T.commit("contract", output_structure)
 id = T.challenge_bytes("id")
 ```
 
-Contract ID makes [`delegate`](#delegate) signatures safe against [predicate](#predicate) key reuse:
-signature covers the unique contract ID, therefore preventing its replay against another contract,
+Contract ID makes signatures safe against reused [predicate](#predicate) keys:
+a signature covers the unique contract ID, therefore preventing its replay against another contract,
 even if containing the same [payload](#contract-payload) and predicate.
 
-Contract ID is made globally unique due to use of [anchor](#anchor).
-
+Uniqueness is provided via the [anchor](#anchor).
 
 ### Anchor
 
 _Anchor_ is a 32-byte unique string that provides uniqueness to the [contract ID](#contract-id).
-
 Anchors can be created by the [`nonce`](#nonce) instruction or generated from previously used unique contract IDs, tracked by the VM via [last anchor](#vm-state):
 
 1. Nonce contract has its anchor computed from the nonce parameters (see [`nonce`](#nonce) instruction).
 2. Claimed UTXO ([`input`](#input)) sets the VM’s [last anchor](#vm-state) to its _ratcheted_ [contract ID](#contract-id) (see [`input`](#input)).
 3. Newly created contracts and outputs ([`contract`](#contract), [`output`](#contract)) consume the VM’s [last anchor](#vm-state) and replace it with its [contract ID](#contract-id).
 
-VM keeps track of the last used anchor and fails if:
+VM fails if:
 
-1. by the end of the execution, no anchor was used (which means that [transaction ID](#transaction-id) is not unique), or
-2. an [`issue`](#issue), [`output`](#output) or [`contract`](#contract) is invoked before the anchor is set (since they can’t be made unique).
+1. an [`issue`](#issue), [`output`](#output) or [`contract`](#contract) is invoked before the anchor is set,
+2. by the end of the execution, no anchor was used (which means that [transaction ID](#transaction-id) is not unique).
 
-#### Note 1
-
-Chaining the anchors this way gives flexibility to the signer:
+Note 1: chaining the anchors this way gives flexibility to the signer:
 if contract A creates contract B, the B's ID can be computed solely
 from the contents of A, without the knowledge of the entire transaction.
 
-#### Note 2
-
-Inputs _ratchet_ the contract ID because this contract ID was already available as an anchor in the _previous transaction_ (where the output was created).
+Note 2: [`input`](#input) _ratchets_ the contract ID because this contract ID was already available as an anchor in the _previous transaction_ (where the output was created).
 
 
 ### Transcript
