@@ -119,10 +119,10 @@ mod tests {
             let entries = txlog_helper();
             let root = MerkleTree::build(b"ZkVM.txid", &entries).unwrap();
             let index = 3;
-            let proof = root.proof(index).unwrap();
+            let proof = root.create_path(index).unwrap();
             (entries[index].clone(), TxID::from_log(&entries), proof)
         };
-        MerkleTree::verify_proof(b"ZkVM.txid", &entry, proof, &txid.0).unwrap();
+        MerkleTree::verify_path(b"ZkVM.txid", &entry, proof, &txid.0).unwrap();
     }
 
     #[test]
@@ -131,9 +131,9 @@ mod tests {
             let entries = txlog_helper();
             let root = MerkleTree::build(b"ZkVM.txid", &entries).unwrap();
             let index = 3;
-            let proof = root.proof(index).unwrap();
+            let proof = root.create_path(index).unwrap();
             (entries[index + 1].clone(), TxID::from_log(&entries), proof)
         };
-        assert!(MerkleTree::verify_proof(b"ZkVM.txid", &entry, proof, &txid.0).is_err());
+        assert!(MerkleTree::verify_path(b"ZkVM.txid", &entry, proof, &txid.0).is_err());
     }
 }
