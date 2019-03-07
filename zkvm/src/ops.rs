@@ -1,6 +1,7 @@
 //! Definition of all instructions in ZkVM,
 //! their codes and decoding/encoding utility functions.
 
+use crate::scalar_witness::ScalarWitness;
 use crate::encoding;
 use crate::encoding::SliceReader;
 use crate::errors::VMError;
@@ -24,7 +25,7 @@ pub enum Instruction {
     Roll(usize), // index of the item
     Const,
     Var,
-    Alloc,
+    Alloc(Option<ScalarWitness>),
     Mintime,
     Maxtime,
     Expr,
@@ -171,7 +172,7 @@ impl Instruction {
             }
             Opcode::Const => Ok(Instruction::Const),
             Opcode::Var => Ok(Instruction::Var),
-            Opcode::Alloc => Ok(Instruction::Alloc),
+            Opcode::Alloc => Ok(Instruction::Alloc(None)),
             Opcode::Mintime => Ok(Instruction::Mintime),
             Opcode::Maxtime => Ok(Instruction::Maxtime),
             Opcode::Expr => Ok(Instruction::Expr),

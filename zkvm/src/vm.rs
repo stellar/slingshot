@@ -185,7 +185,7 @@ where
                 Instruction::Roll(i) => self.roll(i)?,
                 Instruction::Const => self.r#const()?,
                 Instruction::Var => self.var()?,
-                Instruction::Alloc => unimplemented!(),
+                Instruction::Alloc(sw) => self.alloc(sw)?,
                 Instruction::Mintime => self.mintime()?,
                 Instruction::Maxtime => self.maxtime()?,
                 Instruction::Expr => self.expr()?,
@@ -373,6 +373,10 @@ where
         let commitment = self.pop_item()?.to_data()?.to_commitment()?;
         let v = Variable { commitment };
         self.push_item(v);
+        Ok(())
+    }
+
+    fn alloc(&mut self, sw: Option<ScalarWitness>) -> Result<(), VMError> {
         Ok(())
     }
 
