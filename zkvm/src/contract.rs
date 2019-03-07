@@ -126,11 +126,10 @@ impl ContractID {
         t.challenge_bytes(b"id", &mut id);
         Self(id)
     }
-}
 
-impl From<ContractID> for Anchor {
-    fn from(c: ContractID) -> Self {
-        Anchor(c.0)
+    /// Re-wraps contract ID bytes into Anchor
+    pub(crate) fn to_anchor(self) -> Anchor {
+        Anchor(self.0)
     }
 }
 

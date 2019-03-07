@@ -506,7 +506,7 @@ where
         let (contract, contract_id) = output.into_contract();
         self.push_item(contract);
         self.txlog.push(Entry::Input(contract_id));
-        self.last_anchor = Some(Anchor::from(contract_id).ratchet());
+        self.last_anchor = Some(contract_id.to_anchor().ratchet());
         Ok(())
     }
 
@@ -796,7 +796,7 @@ where
             payload,
         };
         let output = Output::new(c);
-        self.last_anchor = Some(output.id().into());
+        self.last_anchor = Some(output.id().to_anchor());
         Ok(output)
     }
 }
