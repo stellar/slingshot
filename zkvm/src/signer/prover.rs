@@ -2,6 +2,7 @@
 
 use crate::signer::*;
 use crate::transcript::TranscriptProtocol;
+use curve25519_dalek::constants::RISTRETTO_BASEPOINT_POINT;
 use curve25519_dalek::ristretto::RistrettoPoint;
 use curve25519_dalek::scalar::Scalar;
 use rand;
@@ -37,7 +38,20 @@ pub struct PartyAwaitingSiglets {
 }
 
 impl<'a> PartyAwaitingPrecommitments {
-    pub fn new(x_i: PrivKey, shared: Shared) -> (Self, NoncePrecommitment) {
+    pub fn new(
+        x_i: PrivKey,
+        X_agg: PubKey,
+        L: PubKeyHash,
+        m: Message,
+    ) -> (Self, NoncePrecommitment) {
+        let shared = Shared {
+            G: RISTRETTO_BASEPOINT_POINT,
+            transcript: Transcript::new(b"ZkVM.MuSig"),
+            X_agg,
+            L,
+            m,
+        };
+
         let mut rng = shared
             .transcript
             .build_rng()
@@ -107,20 +121,20 @@ impl<'a> PartyAwaitingCommitments {
 
         // Make c = H(X_agg, R, m)
         let c = {
-            let mut hash_transcript = self.shared.transcript.clone();
-            hash_transcript.commit_point(b"X_agg", &self.shared.X_agg.0.compress());
-            hash_transcript.commit_point(b"R", &R.compress());
-            hash_transcript.commit_bytes(b"m", &self.shared.m);
-            hash_transcript.challenge_scalar(b"c")
+            let mut c_transcript = self.shared.transcript.clone();
+            c_transcript.commit_point(b"X_agg", &self.shared.X_agg.0.compress());
+            c_transcript.commit_point(b"R", &R.compress());
+            c_transcript.commit_bytes(b"m", &self.shared.m.0);
+            c_transcript.challenge_scalar(b"c")
         };
 
         // Make a_i = H(L, X_i)
         let a_i = {
-            let mut hash_transcript = self.shared.transcript.clone();
-            hash_transcript.commit_scalar(b"L", &self.shared.L.0);
+            let mut a_i_transcript = self.shared.transcript.clone();
+            a_i_transcript.commit_scalar(b"L", &self.shared.L.0);
             let X_i = self.x_i.0 * self.shared.G;
-            hash_transcript.commit_point(b"X_i", &X_i.compress());
-            hash_transcript.challenge_scalar(b"a_i")
+            a_i_transcript.commit_point(b"X_i", &X_i.compress());
+            a_i_transcript.challenge_scalar(b"a_i")
         };
 
         // Generate siglet: s_i = r_i + c * a_i * x_i
@@ -161,18 +175,18 @@ impl<'a> PartyAwaitingSiglets {
 
             // Make c = H(X_agg, R, m)
             let c = {
-                let mut hash_transcript = self.shared.transcript.clone();
-                hash_transcript.commit_point(b"X_agg", &self.shared.X_agg.0.compress());
-                hash_transcript.commit_point(b"R", &R.compress());
-                hash_transcript.commit_bytes(b"m", &self.shared.m);
-                hash_transcript.challenge_scalar(b"c")
+                let mut c_transcript = self.shared.transcript.clone();
+                c_transcript.commit_point(b"X_agg", &self.shared.X_agg.0.compress());
+                c_transcript.commit_point(b"R", &R.compress());
+                c_transcript.commit_bytes(b"m", &self.shared.m.0);
+                c_transcript.challenge_scalar(b"c")
             };
             // Make a_i = H(L, X_i)
             let a_i = {
-                let mut hash_transcript = self.shared.transcript.clone();
-                hash_transcript.commit_scalar(b"L", &self.shared.L.0);
-                hash_transcript.commit_point(b"X_i", &X_i.compress());
-                hash_transcript.challenge_scalar(b"a_i")
+                let mut a_i_transcript = self.shared.transcript.clone();
+                a_i_transcript.commit_scalar(b"L", &self.shared.L.0);
+                a_i_transcript.commit_point(b"X_i", &X_i.compress());
+                a_i_transcript.challenge_scalar(b"a_i")
             };
 
             // Check that S_i = R_i + c * a_i * X_i
