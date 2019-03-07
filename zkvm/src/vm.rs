@@ -437,10 +437,8 @@ where
 
         self.txlog.push(Entry::Issue(qty_point, flv_point));
 
-        let contract = self
-            .make_output(predicate, vec![PortableItem::Value(value)])?
-            .into_contract()
-            .0;
+        let payload = vec![PortableItem::Value(value)];
+        let contract = self.make_output(predicate, payload)?.into_contract().0;
 
         self.push_item(contract);
         Ok(())
@@ -462,9 +460,9 @@ where
             BitRange::max(),
         )
         .map_err(|_| VMError::R1CSInconsistency)?;
-        let (neg_qty_var, _, _) = self
-            .delegate
-            .cs()
+
+        let cs = self.delegate.cs();
+        let (neg_qty_var, _, _) = cs
             .allocate(|| {
                 Ok((
                     -(qty_assignment
@@ -788,14 +786,12 @@ where
         predicate: Predicate,
         payload: Vec<PortableItem>,
     ) -> Result<Output, VMError> {
-        let anchor = mem::replace(&mut self.last_anchor, None);
-        let anchor = anchor.ok_or(VMError::AnchorMissing)?;
-        let c = Contract {
+        let anchor = mem::replace(&mut self.last_anchor, None).ok_or(VMError::AnchorMissing)?;
+        let output = Output::new(Contract {
             anchor,
             predicate,
             payload,
-        };
-        let output = Output::new(c);
+        });
         self.last_anchor = Some(output.id().to_anchor());
         Ok(output)
     }

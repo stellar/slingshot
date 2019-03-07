@@ -212,13 +212,10 @@ impl Contract {
             if k > r.len() {
                 return Err(VMError::FormatError);
             }
-
             let mut payload: Vec<PortableItem> = Vec::with_capacity(k);
             for _ in 0..k {
-                let item = PortableItem::decode(r)?;
-                payload.push(item);
+                payload.push(PortableItem::decode(r)?);
             }
-
             Ok(Contract {
                 anchor,
                 predicate,
