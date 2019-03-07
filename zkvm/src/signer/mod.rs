@@ -161,37 +161,13 @@ mod tests {
             .map(|p| p.receive_commitments(comms.clone()))
             .unzip();
 
-        // Check that all siglets are valid
-        for (i, s_i) in siglets.iter().enumerate() {
-            let S_i = s_i.0 * shared.G;
-            let X_i = priv_keys[i].0 * shared.G;
-            let R_i = &comms[i].0;
-            let R: RistrettoPoint = comms.iter().map(|R_i| R_i.0).sum();
-
-            // Make c = H(X_agg, R, m)
-            let c = {
-                let mut hash_transcript = shared.transcript.clone();
-                hash_transcript.commit_point(b"X_agg", &shared.X_agg.0.compress());
-                hash_transcript.commit_point(b"R", &R.compress());
-                hash_transcript.commit_bytes(b"m", &shared.m);
-                hash_transcript.challenge_scalar(b"c")
-            };
-            // Make a_i = H(L, X_i)
-            let a_i = {
-                let mut hash_transcript = shared.transcript.clone();
-                hash_transcript.commit_scalar(b"L", &shared.L.0);
-                let X_i = priv_keys[i].0 * shared.G;
-                hash_transcript.commit_point(b"X_i", &X_i.compress());
-                hash_transcript.challenge_scalar(b"a_i")
-            };
-
-            // Check that S_i = R_i + c * a_i * X_i
-            assert_eq!(S_i, R_i + c * a_i * X_i);
-        }
-
+        let pub_keys: Vec<_> = priv_keys
+            .iter()
+            .map(|priv_key| PubKey(priv_key.0 * shared.G))
+            .collect();
         let signatures: Vec<_> = parties
             .into_iter()
-            .map(|p| p.receive_siglets(siglets.clone()))
+            .map(|p| p.receive_and_verify_siglets(siglets.clone(), pub_keys.clone()))
             .collect();
 
         // Check that signatures from all parties are the same

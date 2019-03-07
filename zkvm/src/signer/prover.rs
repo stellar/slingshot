@@ -31,11 +31,8 @@ pub struct PartyAwaitingCommitments {
     nonce_precommitments: Vec<NoncePrecommitment>,
 }
 
-// TODO: get rid of unnecessary fields
 pub struct PartyAwaitingSiglets {
     shared: Shared,
-    x_i: PrivKey,
-    r_i: Nonce,
     nonce_commitments: Vec<NonceCommitment>,
 }
 
@@ -133,8 +130,6 @@ impl<'a> PartyAwaitingCommitments {
         (
             PartyAwaitingSiglets {
                 shared: self.shared,
-                x_i: self.x_i,
-                r_i: self.r_i,
                 nonce_commitments,
             },
             Siglet(s_i),
@@ -144,11 +139,45 @@ impl<'a> PartyAwaitingCommitments {
 
 impl<'a> PartyAwaitingSiglets {
     pub fn receive_siglets(self, siglets: Vec<Siglet>) -> Signature {
-        // TODO: verify received siglets, if we store all pubkeys
         // s = sum(siglets)
         let s: Scalar = siglets.iter().map(|siglet| siglet.0).sum();
         // R = sum(R_i). nonce_commitments = R_i
         let R: RistrettoPoint = self.nonce_commitments.iter().map(|R_i| R_i.0).sum();
         Signature { s, R }
+    }
+
+    pub fn receive_and_verify_siglets(
+        self,
+        siglets: Vec<Siglet>,
+        pubkeys: Vec<PubKey>,
+    ) -> Signature {
+        // Check that all siglets are valid
+        for (i, s_i) in siglets.iter().enumerate() {
+            let S_i = s_i.0 * self.shared.G;
+            let X_i = pubkeys[i].0;
+            let R_i = self.nonce_commitments[i].0;
+            let R: RistrettoPoint = self.nonce_commitments.iter().map(|R_i| R_i.0).sum();
+
+            // Make c = H(X_agg, R, m)
+            let c = {
+                let mut hash_transcript = self.shared.transcript.clone();
+                hash_transcript.commit_point(b"X_agg", &self.shared.X_agg.0.compress());
+                hash_transcript.commit_point(b"R", &R.compress());
+                hash_transcript.commit_bytes(b"m", &self.shared.m);
+                hash_transcript.challenge_scalar(b"c")
+            };
+            // Make a_i = H(L, X_i)
+            let a_i = {
+                let mut hash_transcript = self.shared.transcript.clone();
+                hash_transcript.commit_scalar(b"L", &self.shared.L.0);
+                hash_transcript.commit_point(b"X_i", &X_i.compress());
+                hash_transcript.challenge_scalar(b"a_i")
+            };
+
+            // Check that S_i = R_i + c * a_i * X_i
+            assert_eq!(S_i, R_i + c * a_i * X_i);
+        }
+
+        self.receive_siglets(siglets)
     }
 }
