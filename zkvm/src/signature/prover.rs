@@ -9,14 +9,16 @@ use rand;
 
 #[derive(Clone)]
 pub struct Nonce(Scalar);
+
 #[derive(Clone)]
 pub struct NoncePrecommitment(Scalar);
+
 // TODO: compress & decompress RistrettoPoint into CompressedRistretto when sending as message
-// TODO: rearrange crate/imports so fields don't have to be public
 #[derive(Clone)]
-pub struct NonceCommitment(pub RistrettoPoint);
+pub struct NonceCommitment(RistrettoPoint);
+
 #[derive(Clone)]
-pub struct Siglet(pub Scalar);
+pub struct Siglet(Scalar);
 
 pub struct PartyAwaitingPrecommitments {
     shared: Shared,
@@ -35,6 +37,18 @@ pub struct PartyAwaitingCommitments {
 pub struct PartyAwaitingSiglets {
     shared: Shared,
     nonce_commitments: Vec<NonceCommitment>,
+}
+
+#[derive(Clone)]
+pub struct Shared {
+    G: RistrettoPoint,
+    transcript: Transcript,
+    // X_agg = sum_i ( a_i * X_i )
+    X_agg: PubKey,
+    // L = H(X_1 || X_2 || ... || X_n)
+    L: PubKeyHash,
+    // message being signed
+    m: Message,
 }
 
 impl<'a> PartyAwaitingPrecommitments {

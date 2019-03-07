@@ -7,8 +7,6 @@ use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
 use rand;
 
-// Modules for signing protocol
-
 pub mod prover;
 
 #[derive(Clone)]
@@ -17,10 +15,10 @@ pub struct PrivKey(Scalar);
 #[derive(Clone)]
 pub struct PubKey(RistrettoPoint);
 
-pub struct MultiKey(Vec<PubKey>); // TODO: also include Option<Scalar> for signing key?
-
 #[derive(Clone)]
 pub struct PubKeyHash(Scalar);
+
+pub struct MultiKey(Vec<PubKey>);
 
 #[derive(Debug, Clone)]
 pub struct Signature {
@@ -32,16 +30,10 @@ pub struct Signature {
 #[derive(Clone)]
 pub struct Message(Vec<u8>);
 
-#[derive(Clone)]
-pub struct Shared {
-    G: RistrettoPoint,
-    transcript: Transcript,
-    // X_agg = sum_i ( a_i * X_i )
-    X_agg: PubKey,
-    // L = H(X_1 || X_2 || ... || X_n)
-    L: PubKeyHash,
-    // message being signed
-    m: Message,
+impl PrivKey {
+    pub fn new(s: Scalar) -> Self {
+        PrivKey(s)
+    }
 }
 
 impl MultiKey {
@@ -98,10 +90,10 @@ mod tests {
     fn make_aggregated_pubkey() {
         // super secret, sshhh!
         let priv_keys = vec![
-            PrivKey(Scalar::from(1u64)),
-            PrivKey(Scalar::from(2u64)),
-            PrivKey(Scalar::from(3u64)),
-            PrivKey(Scalar::from(4u64)),
+            PrivKey::new(Scalar::from(1u64)),
+            PrivKey::new(Scalar::from(2u64)),
+            PrivKey::new(Scalar::from(3u64)),
+            PrivKey::new(Scalar::from(4u64)),
         ];
         let (pub_key, pub_key_hash) = agg_pubkey_helper(&priv_keys);
 
