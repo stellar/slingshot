@@ -6,11 +6,14 @@ use curve25519_dalek::ristretto::RistrettoPoint;
 use curve25519_dalek::scalar::Scalar;
 use rand;
 
-#[derive(Copy, Clone)]
+#[derive(Clone)]
 pub struct Nonce(Scalar);
+#[derive(Clone)]
 pub struct NoncePrecommitment(Scalar);
 // TODO: compress & decompress RistrettoPoint into CompressedRistretto when sending as message
+#[derive(Clone)]
 pub struct NonceCommitment(RistrettoPoint);
+#[derive(Clone)]
 pub struct Siglet(Scalar);
 
 pub struct PartyAwaitingPrecommitments {
@@ -45,7 +48,7 @@ impl<'a> PartyAwaitingPrecommitments {
         // Generate ephemeral keypair (r_i, R_i). r_i is a random nonce.
         let r_i = Nonce(Scalar::random(&mut rng));
         // R_i = generator * r_i
-        let R_i = NonceCommitment(shared.generator * r_i.0);
+        let R_i = NonceCommitment(shared.G * r_i.0);
 
         // Make H(R_i)
         let mut hash_transcript = shared.transcript.clone();
@@ -64,7 +67,7 @@ impl<'a> PartyAwaitingPrecommitments {
         )
     }
 
-    pub fn receive_hashes(
+    pub fn receive_precommitments(
         self,
         nonce_precommitments: Vec<NoncePrecommitment>,
     ) -> (PartyAwaitingCommitments, NonceCommitment) {
@@ -82,7 +85,7 @@ impl<'a> PartyAwaitingPrecommitments {
 }
 
 impl<'a> PartyAwaitingCommitments {
-    pub fn receive_nonces(
+    pub fn receive_commitments(
         self,
         nonce_commitments: Vec<NonceCommitment>,
     ) -> (PartyAwaitingSiglets, Siglet) {
@@ -104,26 +107,26 @@ impl<'a> PartyAwaitingCommitments {
         // Make R = sum_i(R_i). nonce_commitments = R_i from all the parties.
         let R: RistrettoPoint = nonce_commitments.iter().map(|R_i| R_i.0).sum();
 
-        // Make H(X,R,m). shared.agg_pubkey = X, shared.message = m.
-        let hash_X_R_m = {
+        // Make c = H(X_agg, R, m)
+        let c = {
             let mut hash_transcript = self.shared.transcript.clone();
-            hash_transcript.commit_point(b"X", &self.shared.agg_pubkey.0.compress());
+            hash_transcript.commit_point(b"X_agg", &self.shared.X_agg.0.compress());
             hash_transcript.commit_point(b"R", &R.compress());
-            hash_transcript.commit_bytes(b"m", &self.shared.message);
-            hash_transcript.challenge_scalar(b"hash_x_R_m")
+            hash_transcript.commit_bytes(b"m", &self.shared.m);
+            hash_transcript.challenge_scalar(b"c")
         };
 
-        // Make H(L,X_i). shared.agg_pubkey_hash = L,
-        let hash_L_X_i = {
+        // Make a_i = H(L, X_i)
+        let a_i = {
             let mut hash_transcript = self.shared.transcript.clone();
-            hash_transcript.commit_scalar(b"L", &self.shared.agg_pubkey_hash.0);
-            let X_i = self.x_i.0 * self.shared.generator;
+            hash_transcript.commit_scalar(b"L", &self.shared.L.0);
+            let X_i = self.x_i.0 * self.shared.G;
             hash_transcript.commit_point(b"X_i", &X_i.compress());
-            hash_transcript.challenge_scalar(b"hash_L_X_i")
+            hash_transcript.challenge_scalar(b"a_i")
         };
 
-        // Generate siglet: s_i = r_i + H(X,R,m)*H(L,X_i)*x_i
-        let s_i = self.r_i.0 + hash_X_R_m * hash_L_X_i * self.x_i.0;
+        // Generate siglet: s_i = r_i + c * a_i * x_i
+        let s_i = self.r_i.0 + c * a_i * self.x_i.0;
 
         // Store received nonce commitments in next state
         (
