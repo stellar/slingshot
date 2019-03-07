@@ -86,9 +86,11 @@ mod tests {
                 b"USD".to_vec(),
             );
             let dest = Predicate::Key(VerificationKey::from_secret(&dest_key));
+            let dummy_block_id = Data::Opaque([0xffu8; 32].to_vec());
             let program = Program::build(|p| {
                 usd.issue_to(p, 10u64, dest.clone())
                     .push(Predicate::Key(VerificationKey::from_secret(&nonce_key)))
+                    .push(dummy_block_id)
                     .nonce()
                     .sign_tx()
             });
@@ -112,9 +114,11 @@ mod tests {
                 b"USD".to_vec(),
             );
             let dest = Predicate::Key(VerificationKey::from_secret(&dest_key));
+            let dummy_block_id = Data::Opaque([0xffu8; 32].to_vec());
             let issue_program = Program::build(|p| {
                 usd.issue_to(p, 10u64, dest.clone())
                     .push(Predicate::Key(VerificationKey::from_secret(&nonce_key)))
+                    .push(dummy_block_id)
                     .nonce()
                     .sign_tx()
             });
