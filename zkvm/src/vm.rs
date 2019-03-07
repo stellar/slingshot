@@ -9,7 +9,7 @@ use std::iter::FromIterator;
 use std::mem;
 
 use crate::constraints::{Commitment, Constraint, Expression, Variable};
-use crate::contract::{Anchor, Contract, ContractID, PortableItem};
+use crate::contract::{Anchor, Contract, Output, PortableItem};
 use crate::encoding::SliceReader;
 use crate::errors::VMError;
 use crate::ops::Instruction;
@@ -393,7 +393,7 @@ where
         let nonce_anchor = Anchor::nonce(blockid, &predicate, self.maxtime);
 
         self.last_anchor = Some(nonce_anchor); // will be immediately moved into contract below
-        let (contract, _) = self.make_contract(predicate, vec![])?;
+        let contract = self.make_output(predicate, vec![])?.into_contract().0;
 
         self.txlog
             .push(Entry::Nonce(blockid, self.maxtime, nonce_anchor));
@@ -437,7 +437,10 @@ where
 
         self.txlog.push(Entry::Issue(qty_point, flv_point));
 
-        let (contract, _) = self.make_contract(predicate, vec![PortableItem::Value(value)])?;
+        let contract = self
+            .make_output(predicate, vec![PortableItem::Value(value)])?
+            .into_contract()
+            .0;
 
         self.push_item(contract);
         Ok(())
@@ -509,18 +512,18 @@ where
 
     /// _items... predicate_ **output:_k_** → ø
     fn output(&mut self, k: usize) -> Result<(), VMError> {
-        let (_, id) = self.pop_contract(k)?;
-        self.txlog.push(Entry::Output(id));
+        let output = self.pop_output(k)?;
+        self.txlog.push(Entry::Output(output));
         Ok(())
     }
 
     fn contract(&mut self, k: usize) -> Result<(), VMError> {
-        let (contract, _) = self.pop_contract(k)?;
-        self.push_item(contract);
+        let output = self.pop_output(k)?;
+        self.push_item(output.into_contract().0);
         Ok(())
     }
 
-    fn pop_contract(&mut self, k: usize) -> Result<(Contract, ContractID), VMError> {
+    fn pop_output(&mut self, k: usize) -> Result<Output, VMError> {
         let predicate = self.pop_item()?.to_data()?.to_predicate()?;
 
         if k > self.stack.len() {
@@ -533,7 +536,7 @@ where
             .map(|item| item.to_portable())
             .collect::<Result<Vec<_>, _>>()?;
 
-        self.make_contract(predicate, payload)
+        self.make_output(predicate, payload)
     }
 
     fn cloak(&mut self, m: usize, n: usize) -> Result<(), VMError> {
@@ -780,11 +783,11 @@ where
     }
 
     /// Creates and anchors the contract
-    fn make_contract(
+    fn make_output(
         &mut self,
         predicate: Predicate,
         payload: Vec<PortableItem>,
-    ) -> Result<(Contract, ContractID), VMError> {
+    ) -> Result<Output, VMError> {
         let anchor = mem::replace(&mut self.last_anchor, None);
         let anchor = anchor.ok_or(VMError::AnchorMissing)?;
         let c = Contract {
@@ -792,8 +795,8 @@ where
             predicate,
             payload,
         };
-        let id = c.id();
-        self.last_anchor = Some(id.into());
-        Ok((c, id))
+        let output = Output::new(c);
+        self.last_anchor = Some(output.id().into());
+        Ok(output)
     }
 }

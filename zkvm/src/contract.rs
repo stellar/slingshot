@@ -66,13 +66,18 @@ impl Output {
         Ok(Self { contract, id })
     }
 
+    /// Returns the contract ID
+    pub fn id(&self) -> ContractID {
+        self.id
+    }
+
     /// Gives a reference to the contract
-    pub(crate) fn as_contract(&self) -> &Contract {
+    pub fn as_contract(&self) -> &Contract {
         &self.contract
     }
 
     /// Converts output to a contract and also returns its precomputed ID
-    pub(crate) fn into_contract(self) -> (Contract, ContractID) {
+    pub fn into_contract(self) -> (Contract, ContractID) {
         (self.contract, self.id)
     }
 }

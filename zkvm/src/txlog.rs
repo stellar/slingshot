@@ -1,7 +1,7 @@
 use curve25519_dalek::ristretto::CompressedRistretto;
 use merlin::Transcript;
 
-use crate::contract::{Anchor, ContractID};
+use crate::contract::{Anchor, ContractID, Output};
 use crate::merkle::{MerkleItem, MerkleTree};
 use crate::transcript::TranscriptProtocol;
 use crate::vm::TxHeader;
@@ -17,7 +17,7 @@ pub enum Entry {
     Issue(CompressedRistretto, CompressedRistretto),
     Retire(CompressedRistretto, CompressedRistretto),
     Input(ContractID),
-    Output(ContractID),
+    Output(Output),
     Nonce([u8; 32], u64, Anchor),
     Data(Vec<u8>),
     Import, // TBD: parameters
@@ -70,8 +70,8 @@ impl MerkleItem for Entry {
             Entry::Input(id) => {
                 t.commit_bytes(b"input", id.as_bytes());
             }
-            Entry::Output(id) => {
-                t.commit_bytes(b"output", id.as_bytes());
+            Entry::Output(output) => {
+                t.commit_bytes(b"output", output.id().as_bytes());
             }
             Entry::Nonce(blockid, maxtime, anchor) => {
                 t.commit_bytes(b"nonce.b", blockid);
