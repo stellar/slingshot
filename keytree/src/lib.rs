@@ -48,7 +48,15 @@ impl Xprv {
     }
 }
 
-pub fn intermediate_key(xpub: &Xpub, label: &String, data: &String) -> Xpub {
+/// Returns a intermediate child pubkey.
+pub fn intermediate_key(
+    xpub: &Xpub,
+    label: &'static std::string::String,
+    data: &String,
+) -> Option<Xpub> {
+    // question: this function returns an option because it calls a function that returns an option
+    // and I didn't know what else to do. is there something better to do?
+
     // question: is the following kosher? https://doc.dalek.rs/merlin/struct.Transcript.html#note
     let mut t = Transcript::new(b"Keytree.intermediate");
     t.commit_bytes(b"pt", xpub.point.as_bytes());
@@ -57,7 +65,22 @@ pub fn intermediate_key(xpub: &Xpub, label: &String, data: &String) -> Xpub {
     // provide the transcript to the user to commit an arbitrary derivation path or index
     t.commit_bytes(label.as_bytes(), data.as_bytes());
 
-    unimplemented!();
+    // squeeze a challenge scalar
+    let f = t.challenge_scalar(label.as_bytes()); // is this the right input?
+
+    // squeeze a new derivation key
+    let mut dk = [0u8; 32];
+    t.challenge_bytes(b"dk", &mut dk);
+
+    let point;
+    match xpub.point.decompress() {
+        None => return None,
+        Some(p) => {
+            point = (p + (f * &constants::RISTRETTO_BASEPOINT_POINT)).compress();
+        }
+    }
+
+    Some(Xpub { point, dk })
 }
 
 #[cfg(test)]
