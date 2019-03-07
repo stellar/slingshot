@@ -143,6 +143,7 @@ impl<'a> PartyAwaitingSiglets {
         let s: Scalar = siglets.iter().map(|siglet| siglet.0).sum();
         // R = sum(R_i). nonce_commitments = R_i
         let R: RistrettoPoint = self.nonce_commitments.iter().map(|R_i| R_i.0).sum();
+
         Signature { s, R }
     }
 

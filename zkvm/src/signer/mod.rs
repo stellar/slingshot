@@ -118,7 +118,7 @@ mod tests {
                 .map(|priv_key| PubKey(G * priv_key.0))
                 .collect(),
         );
-        let mut transcript = Transcript::new(b"agg pubkey test");
+        let mut transcript = Transcript::new(b"sign msg test");
         multi_key.aggregate(&mut transcript)
     }
 
