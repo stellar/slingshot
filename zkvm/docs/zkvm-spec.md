@@ -1277,20 +1277,25 @@ _qty flv metadata pred_ **issue** → _contract_
     T.commit("metadata", metadata)
     flavor = T.challenge_scalar("flavor")
     ```
-6. Checks that the `flv` has unblinded commitment to `flavor` by [deferring the point operation](#deferred-point-operations):
+6. Checks that the `flv` has unblinded commitment to `flavor`
+   by [deferring the point operation](#deferred-point-operations):
     ```
     flv == flavor·B
     ```
-7. Adds a 64-bit range proof for the `qty` to the [constraint system](#constraint-system) (see [Cloak protocol](../../spacesuit/spec.md) for the range proof definition).
+7. Adds a 64-bit range proof for the `qty` to the [constraint system](#constraint-system)
+   (see [Cloak protocol](../../spacesuit/spec.md) for the range proof definition).
 8. Adds an [issue entry](#issue-entry) to the [transaction log](#transaction-log).
-9. Creates a [contract](#contract-type) with the value as the only [payload](#contract-payload), protected by the predicate `pred`.
+9. Creates a [contract](#contract-type) with the value as the only [payload](#contract-payload),
+   protected by the predicate `pred`, consuming [VM’s last anchor](#vm-state)
+   and replacing it with this contract’s [ID](#contract-id).
 
 The value is now issued into the contract that must be unlocked
 using one of the contract instructions: [`signtx`](#signtx), [`delegate`](#delegate) or [`call`](#call).
 
 Fails if:
 * `pred` is not a valid [point](#point),
-* `flv` or `qty` are not [variable types](#variable-type).
+* `flv` or `qty` are not [variable types](#variable-type),
+* VM’s [last anchor](#vm-state) is missing.
 
 
 #### borrow
@@ -1424,10 +1429,8 @@ _prevoutput_ **input** → _contract_
 
 1. Pops a [data](#data-type) `prevoutput` representing the [unspent output structure](#output-structure) from the stack.
 2. Constructs a [contract](#contract-type) based on the `prevoutput` data and pushes it to the stack.
-3. For each decoded [value](#value-type), quantity variable is allocated first, flavor second.
-4. Adds [input entry](#input-entry) to the [transaction log](#transaction-log).
-5. Sets the [VM’s last anchor](#vm-state) to the [contract ID](#contract-id) of the claimed 
-[UTXO](#utxo).
+3. Adds [input entry](#input-entry) to the [transaction log](#transaction-log).
+4. Sets the [VM’s last anchor](#vm-state) to the [contract ID](#contract-id) of the claimed [UTXO](#utxo).
 
 Fails if the `prevoutput` is not a [data type](#data-type) with exact encoding of an [output structure](#output-structure).
 
@@ -1441,11 +1444,11 @@ _items... predicate_ **output:_k_** → ø
     ```
     T = Transcript("ZkVM.ratchet-anchor")
     T.commit("anchor", vm.last_anchor)
-    next_anchor = T.challenge_bytes("vm_anchor")
-    contract_anchor = T.challenge_bytes("contract_anchor")
+    next_anchor = T.challenge_bytes("anchor1")
+    contract_anchor = T.challenge_bytes("anchor2")
     ```
 4. Updates the [VM’s last anchor](#vm-state) with a ratcheted `next_anchor`:
-5. Uses ratcheted `contract_anchor` in the [output structure](#output-structure).
+5. Uses `contract_anchor` in the [output structure](#output-structure).
 6. Adds an [output entry](#output-entry) to the [transaction log](#transaction-log).
 
 Immediate data `k` is encoded as [LE32](#le32).
