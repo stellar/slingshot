@@ -1,10 +1,10 @@
 //! Definition of all instructions in ZkVM,
 //! their codes and decoding/encoding utility functions.
 
-use crate::scalar_witness::ScalarWitness;
 use crate::encoding;
 use crate::encoding::SliceReader;
 use crate::errors::VMError;
+use crate::scalar_witness::ScalarWitness;
 use crate::types::Data;
 use core::borrow::Borrow;
 use core::mem;
@@ -241,7 +241,13 @@ impl Instruction {
             }
             Instruction::Const => write(Opcode::Const),
             Instruction::Var => write(Opcode::Var),
-            Instruction::Alloc => write(Opcode::Alloc),
+            Instruction::Alloc(osw) => {
+                write(Opcode::Alloc);
+                match osw {
+                    Some(sw) => sw.encode(program),
+                    None => (),
+                };
+            }
             Instruction::Mintime => write(Opcode::Mintime),
             Instruction::Maxtime => write(Opcode::Maxtime),
             Instruction::Expr => write(Opcode::Expr),
