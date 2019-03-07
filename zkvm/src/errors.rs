@@ -100,9 +100,9 @@ pub enum VMError {
     #[fail(display = "Stack is not cleared by the program")]
     StackNotClean,
 
-    /// This error occurs when VM's uniqueness flag remains false.
-    #[fail(display = "Tx ID is not made unique via `input` or `nonce`")]
-    NotUniqueTxid,
+    /// This error occurs when VM's anchor remains unset.
+    #[fail(display = "VM anchor is not set via `input` or `nonce`")]
+    AnchorMissing,
 
     /// This error occurs when VM's deferred schnorr checks fail
     #[fail(display = "Deferred point operations failed")]

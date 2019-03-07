@@ -1,5 +1,6 @@
 use bulletproofs::{BulletproofGens, PedersenGens};
 use curve25519_dalek::scalar::Scalar;
+use curve25519_dalek::constants::RISTRETTO_BASEPOINT_COMPRESSED;
 use hex;
 
 use zkvm::*;
@@ -43,14 +44,16 @@ impl ProgramHelper for Program {
     }
 
     fn input_helper(&mut self, qty: u64, flv: Scalar, pred: Predicate) -> &mut Self {
+        let anchor = Anchor::nonce([0u8;32], &Predicate::Opaque(RISTRETTO_BASEPOINT_COMPRESSED), 0);
         let prev_output = Contract {
+            anchor,
             payload: vec![PortableItem::Value(Value {
                 qty: Commitment::blinded(qty),
                 flv: Commitment::blinded(flv),
             })],
             predicate: pred,
         };
-        self.push(Input::new(prev_output, TxID([0; 32]))) // stack: input-data
+        self.push(Input::new(prev_output)) // stack: input-data
             .input() // stack: input-contract
             .sign_tx(); // stack: input-value
         self

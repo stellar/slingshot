@@ -9,7 +9,7 @@ use std::iter::FromIterator;
 use std::mem;
 
 use crate::constraints::{Commitment, Constraint, Expression, Variable};
-use crate::contract::{Contract, PortableItem};
+use crate::contract::{Anchor, Contract, PortableItem};
 use crate::encoding::SliceReader;
 use crate::errors::VMError;
 use crate::ops::Instruction;
@@ -75,9 +75,8 @@ where
     // we allow treating unassigned opcodes as no-ops.
     extension: bool,
 
-    // set to true by `input` and `nonce` instructions
-    // when the txid is guaranteed to be unique.
-    unique: bool,
+    // updated by input/nonce/contract/output instructions
+    last_anchor: Option<Anchor>,
 
     // stack of all items in the VM
     stack: Vec<Item>,
@@ -131,7 +130,7 @@ where
             mintime: header.mintime,
             maxtime: header.maxtime,
             extension: header.version > CURRENT_VERSION,
-            unique: false,
+            last_anchor: None,
             delegate,
             stack: Vec::new(),
             current_run: run,
@@ -152,8 +151,8 @@ where
             return Err(VMError::StackNotClean);
         }
 
-        if self.unique == false {
-            return Err(VMError::NotUniqueTxid);
+        if self.last_anchor.is_none() {
+            return Err(VMError::AnchorMissing);
         }
 
         let txid = TxID::from_log(&self.txlog[..]);
@@ -386,16 +385,23 @@ where
         Ok(())
     }
 
+    // pred blockid `nonce` → contract
     fn nonce(&mut self) -> Result<(), VMError> {
+        let blockid = self.pop_item()?.to_data()?.to_bytes();
+        let blockid = SliceReader::parse(&blockid, |r| {
+            r.read_u8x32()
+        })?;
         let predicate = self.pop_item()?.to_data()?.to_predicate()?;
-        let point = predicate.to_point();
+        let nonce_anchor = Anchor::nonce(blockid, &predicate, self.maxtime);
+
         let contract = Contract {
+            anchor: nonce_anchor,
             predicate,
             payload: Vec::new(),
         };
-        self.txlog.push(Entry::Nonce(point, self.maxtime));
+        self.last_anchor = Some(contract.id().to_anchor());
+        self.txlog.push(Entry::Nonce(blockid, self.maxtime, nonce_anchor));
         self.push_item(contract);
-        self.unique = true;
         Ok(())
     }
 
@@ -435,10 +441,13 @@ where
 
         self.txlog.push(Entry::Issue(qty_point, flv_point));
 
+        let anchor = self.last_anchor.ok_or(VMError::AnchorMissing)?;
         let contract = Contract {
+            anchor,
             predicate,
             payload: vec![PortableItem::Value(value)],
         };
+        self.last_anchor = Some(contract.id().to_anchor());
 
         self.push_item(contract);
         Ok(())
@@ -501,27 +510,40 @@ where
     /// _input_ **input** → _contract_
     fn input(&mut self) -> Result<(), VMError> {
         let input = self.pop_item()?.to_data()?.to_input()?;
-        let (contract, utxo) = input.unfreeze();
+        let (contract, contract_id) = input.unfreeze();
         self.push_item(contract);
-        self.txlog.push(Entry::Input(utxo));
-        self.unique = true;
+        self.txlog.push(Entry::Input(contract_id));
+        self.last_anchor = Some(contract_id.to_anchor());
         Ok(())
     }
 
     /// _items... predicate_ **output:_k_** → ø
     fn output(&mut self, k: usize) -> Result<(), VMError> {
-        let contract = self.pop_contract(k)?;
-        self.txlog.push(Entry::Output(contract));
+        let (predicate, payload) = self.pop_contract(k)?;
+        let (next_anchor, contract_anchor) = self.last_anchor.ok_or(VMError::AnchorMissing)?.ratchet();
+        self.last_anchor = Some(next_anchor);
+        let contract = Contract {
+            anchor: contract_anchor,
+            payload,
+            predicate
+        };
+        self.txlog.push(Entry::Output(contract.id()));
         Ok(())
     }
 
     fn contract(&mut self, k: usize) -> Result<(), VMError> {
-        let contract = self.pop_contract(k)?;
+        let (predicate, payload) = self.pop_contract(k)?;
+        let contract = Contract {
+            anchor: self.last_anchor.ok_or(VMError::AnchorMissing)?,
+            payload,
+            predicate
+        };
+        self.last_anchor = Some(contract.id().to_anchor());
         self.push_item(contract);
         Ok(())
     }
 
-    fn pop_contract(&mut self, k: usize) -> Result<Contract, VMError> {
+    fn pop_contract(&mut self, k: usize) -> Result<(Predicate, Vec<PortableItem>), VMError> {
         let predicate = self.pop_item()?.to_data()?.to_predicate()?;
 
         if k > self.stack.len() {
@@ -534,7 +556,7 @@ where
             .map(|item| item.to_portable())
             .collect::<Result<Vec<_>, _>>()?;
 
-        Ok(Contract { predicate, payload })
+        Ok((predicate, payload))
     }
 
     fn cloak(&mut self, m: usize, n: usize) -> Result<(), VMError> {
