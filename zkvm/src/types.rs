@@ -6,7 +6,7 @@ use merlin::Transcript;
 use spacesuit::SignedInteger;
 
 use crate::constraints::{Commitment, Constraint, Expression, Variable};
-use crate::contract::{Contract, Input, PortableItem};
+use crate::contract::{Contract, Output, PortableItem};
 use crate::encoding::SliceReader;
 use crate::errors::VMError;
 use crate::ops::Program;
@@ -58,7 +58,7 @@ pub enum Data {
     Scalar(Box<ScalarWitness>),
 
     /// An input object (claimed UTXO).
-    Input(Box<Input>),
+    Output(Box<Output>),
 }
 
 /// Represents a value of an issued asset in the VM.
@@ -156,7 +156,7 @@ impl Data {
             Data::Predicate(predicate) => predicate.serialized_length(),
             Data::Commitment(commitment) => commitment.serialized_length(),
             Data::Scalar(scalar) => scalar.serialized_length(),
-            Data::Input(input) => input.serialized_length(),
+            Data::Output(output) => output.as_contract().serialized_length(),
         }
     }
 
@@ -208,11 +208,11 @@ impl Data {
     }
 
     /// Downcast the data item to an `Input` type.
-    pub fn to_input(self) -> Result<Input, VMError> {
+    pub fn to_output(self) -> Result<Output, VMError> {
         match self {
-            Data::Opaque(data) => Input::from_bytes(data),
-            Data::Input(i) => Ok(*i),
-            _ => Err(VMError::TypeNotInput),
+            Data::Opaque(data) => SliceReader::parse(&data, |r| Output::decode(r)),
+            Data::Output(i) => Ok(*i),
+            _ => Err(VMError::TypeNotOutput),
         }
     }
 
@@ -224,7 +224,7 @@ impl Data {
                 Ok(ScalarWitness::Scalar(scalar))
             }
             Data::Scalar(scalar_witness) => Ok(*scalar_witness),
-            _ => Err(VMError::TypeNotScalarWitness),
+            _ => Err(VMError::TypeNotScalar),
         }
     }
 
@@ -236,7 +236,7 @@ impl Data {
             Data::Predicate(predicate) => predicate.encode(buf),
             Data::Commitment(commitment) => commitment.encode(buf),
             Data::Scalar(scalar) => scalar.encode(buf),
-            Data::Input(input) => input.encode(buf),
+            Data::Output(output) => output.as_contract().encode(buf),
         };
     }
 }
@@ -290,9 +290,9 @@ impl From<Commitment> for Data {
     }
 }
 
-impl From<Input> for Data {
-    fn from(x: Input) -> Self {
-        Data::Input(Box::new(x))
+impl From<Output> for Data {
+    fn from(x: Output) -> Self {
+        Data::Output(Box::new(x))
     }
 }
 

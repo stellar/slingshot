@@ -46,12 +46,12 @@ pub enum PortableItem {
 
 /// Representation of the claimed UTXO
 #[derive(Clone, Debug)]
-pub struct Input {
+pub struct Output {
     contract: Contract,
     id: ContractID,
 }
 
-impl Input {
+impl Output {
     /// Creates an Input with a given contract
     pub fn new(contract: Contract) -> Self {
         Self {
@@ -60,23 +60,19 @@ impl Input {
         }
     }
 
-    /// Parses an input from a byte array.
-    pub fn from_bytes(data: Vec<u8>) -> Result<Self, VMError> {
-        let (contract, id) = SliceReader::parse(&data, |r| Contract::decode(r))?;
+    /// Parses an output
+    pub fn decode<'a>(output: &mut SliceReader<'a>) -> Result<Self, VMError> {
+        let (contract, id) = Contract::decode(output)?;
         Ok(Self { contract, id })
     }
 
-    /// Precise length of a serialized contract
-    pub fn serialized_length(&self) -> usize {
-        self.contract.serialized_length()
+    /// Gives a reference to the contract
+    pub(crate) fn as_contract(&self) -> &Contract {
+        &self.contract
     }
 
-    /// Serializes the input to a byte array.
-    pub fn encode(&self, buf: &mut Vec<u8>) {
-        self.contract.encode(buf);
-    }
-
-    pub(crate) fn unfreeze(self) -> (Contract, ContractID) {
+    /// Converts output to a contract and also returns its precomputed ID
+    pub(crate) fn into_contract(self) -> (Contract, ContractID) {
         (self.contract, self.id)
     }
 }
@@ -98,15 +94,12 @@ impl Anchor {
         Self(nonce)
     }
 
-    /// Ratchet the anchor into two new anchors
-    pub fn ratchet(&self) -> (Self, Self) {
+    /// Ratchet the anchor into a new anchor
+    pub fn ratchet(mut self) -> Self {
         let mut t = Transcript::new(b"ZkVM.ratchet-anchor");
-        t.commit_bytes(b"anchor", &self.0);
-        let mut a1 = [0u8; 32];
-        let mut a2 = [0u8; 32];
-        t.challenge_bytes(b"anchor1", &mut a1);
-        t.challenge_bytes(b"anchor1", &mut a2);
-        (Self(a1), Self(a2))
+        t.commit_bytes(b"old", &self.0);
+        t.challenge_bytes(b"new", &mut self.0);
+        self
     }
 }
 
@@ -116,17 +109,18 @@ impl ContractID {
         &self.0
     }
 
-    /// Converts the contract ID to an anchor.
-    pub fn to_anchor(self) -> Anchor {
-        Anchor(self.0)
-    }
-
     fn from_serialized_contract(bytes: &[u8]) -> Self {
         let mut t = Transcript::new(b"ZkVM.contractid");
         t.commit_bytes(b"contract", bytes);
         let mut id = [0u8; 32];
         t.challenge_bytes(b"id", &mut id);
         Self(id)
+    }
+}
+
+impl From<ContractID> for Anchor {
+    fn from(c: ContractID) -> Self {
+        Anchor(c.0)
     }
 }
 
@@ -188,7 +182,7 @@ impl Contract {
     }
 
     /// Precise length of a serialized contract
-    fn serialized_length(&self) -> usize {
+    pub fn serialized_length(&self) -> usize {
         let mut size = 32 + 32 + 4;
         for item in self.payload.iter() {
             size += item.serialized_length();

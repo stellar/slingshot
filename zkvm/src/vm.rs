@@ -9,7 +9,7 @@ use std::iter::FromIterator;
 use std::mem;
 
 use crate::constraints::{Commitment, Constraint, Expression, Variable};
-use crate::contract::{Anchor, Contract, PortableItem};
+use crate::contract::{Anchor, Contract, ContractID, PortableItem};
 use crate::encoding::SliceReader;
 use crate::errors::VMError;
 use crate::ops::Instruction;
@@ -392,12 +392,9 @@ where
         let predicate = self.pop_item()?.to_data()?.to_predicate()?;
         let nonce_anchor = Anchor::nonce(blockid, &predicate, self.maxtime);
 
-        let contract = Contract {
-            anchor: nonce_anchor,
-            predicate,
-            payload: Vec::new(),
-        };
-        self.last_anchor = Some(contract.id().to_anchor());
+        self.last_anchor = Some(nonce_anchor); // will be immediately moved into contract below
+        let (contract, _) = self.make_contract(predicate, vec![])?;
+
         self.txlog
             .push(Entry::Nonce(blockid, self.maxtime, nonce_anchor));
         self.push_item(contract);
@@ -440,13 +437,7 @@ where
 
         self.txlog.push(Entry::Issue(qty_point, flv_point));
 
-        let anchor = self.last_anchor.ok_or(VMError::AnchorMissing)?;
-        let contract = Contract {
-            anchor,
-            predicate,
-            payload: vec![PortableItem::Value(value)],
-        };
-        self.last_anchor = Some(contract.id().to_anchor());
+        let (contract, _) = self.make_contract(predicate, vec![PortableItem::Value(value)])?;
 
         self.push_item(contract);
         Ok(())
@@ -508,42 +499,28 @@ where
 
     /// _input_ **input** → _contract_
     fn input(&mut self) -> Result<(), VMError> {
-        let input = self.pop_item()?.to_data()?.to_input()?;
-        let (contract, contract_id) = input.unfreeze();
+        let output = self.pop_item()?.to_data()?.to_output()?;
+        let (contract, contract_id) = output.into_contract();
         self.push_item(contract);
         self.txlog.push(Entry::Input(contract_id));
-        self.last_anchor = Some(contract_id.to_anchor());
+        self.last_anchor = Some(Anchor::from(contract_id).ratchet());
         Ok(())
     }
 
     /// _items... predicate_ **output:_k_** → ø
     fn output(&mut self, k: usize) -> Result<(), VMError> {
-        let (predicate, payload) = self.pop_contract(k)?;
-        let (next_anchor, contract_anchor) =
-            self.last_anchor.ok_or(VMError::AnchorMissing)?.ratchet();
-        self.last_anchor = Some(next_anchor);
-        let contract = Contract {
-            anchor: contract_anchor,
-            payload,
-            predicate,
-        };
-        self.txlog.push(Entry::Output(contract.id()));
+        let (_, id) = self.pop_contract(k)?;
+        self.txlog.push(Entry::Output(id));
         Ok(())
     }
 
     fn contract(&mut self, k: usize) -> Result<(), VMError> {
-        let (predicate, payload) = self.pop_contract(k)?;
-        let contract = Contract {
-            anchor: self.last_anchor.ok_or(VMError::AnchorMissing)?,
-            payload,
-            predicate,
-        };
-        self.last_anchor = Some(contract.id().to_anchor());
+        let (contract, _) = self.pop_contract(k)?;
         self.push_item(contract);
         Ok(())
     }
 
-    fn pop_contract(&mut self, k: usize) -> Result<(Predicate, Vec<PortableItem>), VMError> {
+    fn pop_contract(&mut self, k: usize) -> Result<(Contract, ContractID), VMError> {
         let predicate = self.pop_item()?.to_data()?.to_predicate()?;
 
         if k > self.stack.len() {
@@ -556,7 +533,7 @@ where
             .map(|item| item.to_portable())
             .collect::<Result<Vec<_>, _>>()?;
 
-        Ok((predicate, payload))
+        self.make_contract(predicate, payload)
     }
 
     fn cloak(&mut self, m: usize, n: usize) -> Result<(), VMError> {
@@ -800,5 +777,23 @@ where
             bitrange,
         )
         .map_err(|_| VMError::R1CSInconsistency)
+    }
+
+    /// Creates and anchors the contract
+    fn make_contract(
+        &mut self,
+        predicate: Predicate,
+        payload: Vec<PortableItem>,
+    ) -> Result<(Contract, ContractID), VMError> {
+        let anchor = mem::replace(&mut self.last_anchor, None);
+        let anchor = anchor.ok_or(VMError::AnchorMissing)?;
+        let c = Contract {
+            anchor,
+            predicate,
+            payload,
+        };
+        let id = c.id();
+        self.last_anchor = Some(id.into());
+        Ok((c, id))
     }
 }

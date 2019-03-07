@@ -34,7 +34,6 @@ impl ProgramHelper for Program {
             .push(dummy_block_id)
             .nonce()
             .sign_tx() // stack is clean
-            
             .push(Commitment::blinded_with_factor(qty, Scalar::from(1u64))) // stack: qty
             .var() // stack: qty-var
             .push(Commitment::unblinded(flv)) // stack: qty-var, flv
@@ -60,7 +59,7 @@ impl ProgramHelper for Program {
             })],
             predicate: pred,
         };
-        self.push(Input::new(prev_output)) // stack: input-data
+        self.push(Output::new(prev_output)) // stack: input-data
             .input() // stack: input-contract
             .sign_tx(); // stack: input-value
         self
@@ -179,7 +178,7 @@ fn issue() {
         Ok(txid) => {
             // Check txid
             assert_eq!(
-                "ee88427053ca9ee7726a633e39334415139dc7931a88a104456805f82f07f9a3",
+                "316f835973819a8cf6219010faf712bd17a1fe6fa2cc6350e4d96483b2065d82",
                 hex::encode(txid.0)
             );
         }

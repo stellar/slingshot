@@ -1430,9 +1430,15 @@ _prevoutput_ **input** → _contract_
 1. Pops a [data](#data-type) `prevoutput` representing the [unspent output structure](#output-structure) from the stack.
 2. Constructs a [contract](#contract-type) based on the `prevoutput` data and pushes it to the stack.
 3. Adds [input entry](#input-entry) to the [transaction log](#transaction-log).
-4. Sets the [VM’s last anchor](#vm-state) to the [contract ID](#contract-id) of the claimed [UTXO](#utxo).
+4. Sets the [VM’s last anchor](#vm-state) to the ratcheted [contract ID](#contract-id):
+    ```
+    T = Transcript("ZkVM.ratchet-anchor")
+    T.commit("old", contract_id)
+    new_anchor = T.challenge_bytes("new")
+    ```
 
 Fails if the `prevoutput` is not a [data type](#data-type) with exact encoding of an [output structure](#output-structure).
+
 
 #### output
 
@@ -1440,16 +1446,9 @@ _items... predicate_ **output:_k_** → ø
 
 1. Pops [`predicate`](#predicate) from the stack.
 2. Pops `k` items from the stack.
-3. Ratchets the [VM’s last anchor](#vm-state):
-    ```
-    T = Transcript("ZkVM.ratchet-anchor")
-    T.commit("anchor", vm.last_anchor)
-    next_anchor = T.challenge_bytes("anchor1")
-    contract_anchor = T.challenge_bytes("anchor2")
-    ```
-4. Updates the [VM’s last anchor](#vm-state) with a ratcheted `next_anchor`:
-5. Uses `contract_anchor` in the [output structure](#output-structure).
-6. Adds an [output entry](#output-entry) to the [transaction log](#transaction-log).
+3. Creates a contract with the `k` items as a payload, the predicate `pred`, and anchor set to the [VM’s last anchor](#vm-state).
+4. Adds an [output entry](#output-entry) to the [transaction log](#transaction-log).
+5. Update the [VM’s last anchor](#vm-state) with the [contract ID](#contract-id) of the new contract.
 
 Immediate data `k` is encoded as [LE32](#le32).
 
