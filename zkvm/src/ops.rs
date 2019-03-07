@@ -377,6 +377,13 @@ impl Program {
         self.0
     }
 
+    /// Converts the program to opaque serialized bytes.
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let mut prog_bytes = Vec::new();
+        self.encode(&mut prog_bytes);
+        prog_bytes
+    }
+
     /// Returns the serialized length of the program.
     pub fn serialized_length(&self) -> usize {
         self.0.iter().map(|p| p.serialized_length()).sum()
@@ -401,23 +408,60 @@ impl Program {
         self
     }
 
-    /// Pushes left and right predicates, followed by the `left` instruction,
-    /// to choose the left disjunction in the predicate tree.
-    pub fn choose_left(&mut self, pred: &Predicate) -> Result<&mut Program, VMError> {
-        let (l, r) = pred.to_disjunction()?;
-        self.push(l);
-        self.push(r);
-        self.left();
+    /// Takes predicate and closure to add choose operations for
+    /// predicate tree traversal.
+    pub fn choose_predicate<F>(
+        &mut self,
+        pred: Predicate,
+        choose_fn: F,
+    ) -> Result<&mut Program, VMError>
+    where
+        F: FnOnce(PredicateTree) -> Result<&mut PredicateTree, VMError>,
+    {
+        choose_fn(PredicateTree {
+            prog: self,
+            pred: pred,
+        })?;
+        Ok(self)
+    }
+}
+
+/// Adds data and instructions to traverse a predicate tree.
+pub struct PredicateTree<'a> {
+    prog: &'a mut Program,
+    pred: Predicate,
+}
+
+impl<'a> PredicateTree<'a> {
+    /// Left Predicate branch
+    pub fn left(&mut self) -> Result<&mut Self, VMError> {
+        let (l, r) = self.pred.to_disjunction()?;
+        self.pred = l.clone();
+
+        self.prog.push(l);
+        self.prog.push(r);
+        self.prog.left();
+
         Ok(self)
     }
 
-    /// Pushes left and right predicates, followed by the `right` instruction,
-    /// to choose the right disjunction in the predicate tree.
-    pub fn choose_right(&mut self, pred: &Predicate) -> Result<&mut Program, VMError> {
-        let (l, r) = pred.to_disjunction()?;
-        self.push(l);
-        self.push(r);
-        self.right();
+    /// Right Predicate branch
+    pub fn right(&mut self) -> Result<&mut Self, VMError> {
+        let (l, r) = self.pred.to_disjunction()?;
+        self.pred = r.clone();
+
+        self.prog.push(l);
+        self.prog.push(r);
+        self.prog.left();
+
         Ok(self)
+    }
+
+    /// Pushes program to the stack and calls the contract protected
+    /// by the program predicate.
+    pub fn call(&mut self, prog: Program) -> &mut Self {
+        self.prog.push(prog);
+        self.prog.call();
+        self
     }
 }

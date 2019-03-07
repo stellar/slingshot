@@ -25,7 +25,7 @@ pub use self::constraints::{Commitment, Constraint, Expression, Variable};
 pub use self::contract::{Contract, Input, PortableItem};
 pub use self::errors::VMError;
 pub use self::merkle::{MerkleItem, MerkleNeighbor, MerkleTree};
-pub use self::ops::{Instruction, Opcode, Program};
+pub use self::ops::{Instruction, Opcode, PredicateTree, Program};
 pub use self::predicate::Predicate;
 pub use self::prover::Prover;
 pub use self::scalar_witness::ScalarWitness;

@@ -6,11 +6,10 @@ use merlin::Transcript;
 use crate::constraints::Commitment;
 use crate::encoding::*;
 use crate::errors::VMError;
-use crate::ops::Instruction;
+use crate::ops::{Instruction, Program};
 use crate::point_ops::PointOp;
 use crate::predicate::Predicate;
 use crate::signature::VerificationKey;
-use crate::types::Data;
 use crate::vm::{Delegate, Tx, VerifiedTx, VM};
 
 /// This is the entry point API for verifying a transaction.
@@ -67,8 +66,8 @@ impl<'a, 'b> Delegate<r1cs::Verifier<'a, 'b>> for Verifier<'a, 'b> {
         Ok(Some(instr))
     }
 
-    fn new_run(&self, prog: Data) -> Result<Self::RunType, VMError> {
-        Ok(VerifierRun::new(prog.to_bytes()))
+    fn new_run(&self, prog: Program) -> Self::RunType {
+        VerifierRun::new(prog.to_bytes())
     }
 
     fn cs(&mut self) -> &mut r1cs::Verifier<'a, 'b> {
