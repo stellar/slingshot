@@ -400,14 +400,13 @@ _Anchor_ is a 32-byte unique string that provides uniqueness to the [contract ID
 Anchors can be created by the [`nonce`](#nonce) instruction or generated from previously used unique contract IDs, tracked by the VM via [last anchor](#vm-state):
 
 1. Nonce contract has its anchor computed from the nonce parameters (see [`nonce`](#nonce) instruction).
-2. Claimed UTXO ([`input`](#input)) sets the VM’s [last anchor](#vm-state) to its [contract ID](#contract-id).
-3. Transient contract ([`contract`](#contract)) consumes the VM’s [last anchor](#vm-state) and replaces it with its [contract ID](#contract-id).
-4. Newly created outputs ([`output`](#output)) consume the VM’s [last anchor](#vm-state) and replace it with a ratcheted one (because the contract ID will be used as an anchor in a later transaction, via [`input`](#input)).
+2. Claimed UTXO ([`input`](#input)) sets the VM’s [last anchor](#vm-state) to its _ratcheted_ [contract ID](#contract-id) (see [`input`](#input)).
+3. Newly created contracts and outputs ([`contract`](#contract), [`output`](#contract)) consume the VM’s [last anchor](#vm-state) and replace it with its [contract ID](#contract-id).
 
 VM keeps track of the last used anchor and fails if:
 
 1. by the end of the execution, no anchor was used (which means that [transaction ID](#transaction-id) is not unique), or
-2. an [`output`](#output) or [`contract`](#contract) is invoked before the anchor is set (since they can’t be made unique).
+2. an [`issue`](#issue), [`output`](#output) or [`contract`](#contract) is invoked before the anchor is set (since they can’t be made unique).
 
 #### Note 1
 
@@ -417,11 +416,7 @@ from the contents of A, without the knowledge of the entire transaction.
 
 #### Note 2
 
-Transient contract sets its ID as an anchor because this can be done only once: the contract is soon destroyed by [`signtx`](#signtx), [`call`](#call) or [`delegate`](#delegate).
-
-This is not the case with [`output`](#output): if the output’s ID was set as an anchor, it'd be available in _two transactions_:
-in the current one (for the rest of its execution), but also in the _future transaction_,
-when the output is claimed by [`input`](#input) which sets the same contract ID as an anchor.
+Inputs _ratchet_ the contract ID because this contract ID was already available as an anchor in the _previous transaction_ (where the output was created).
 
 
 ### Transcript
