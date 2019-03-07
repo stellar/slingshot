@@ -10,6 +10,7 @@ use rand;
 
 pub mod prover;
 
+#[derive(Clone)]
 pub struct PrivKey(Scalar);
 
 #[derive(Clone)]
@@ -145,6 +146,7 @@ mod tests {
 
     fn sign_helper(priv_keys: Vec<PrivKey>, shared: Shared) -> Signature {
         let (parties, precomms): (Vec<_>, Vec<_>) = priv_keys
+            .clone()
             .into_iter()
             .map(|x_i| PartyAwaitingPrecommitments::new(x_i, shared.clone()))
             .unzip();
@@ -159,19 +161,47 @@ mod tests {
             .map(|p| p.receive_commitments(comms.clone()))
             .unzip();
 
+        // Check that all siglets are valid
+        for (i, s_i) in siglets.iter().enumerate() {
+            let S_i = s_i.0 * shared.G;
+            let X_i = priv_keys[i].0 * shared.G;
+            let R_i = &comms[i].0;
+            let R: RistrettoPoint = comms.iter().map(|R_i| R_i.0).sum();
+
+            // Make c = H(X_agg, R, m)
+            let c = {
+                let mut hash_transcript = shared.transcript.clone();
+                hash_transcript.commit_point(b"X_agg", &shared.X_agg.0.compress());
+                hash_transcript.commit_point(b"R", &R.compress());
+                hash_transcript.commit_bytes(b"m", &shared.m);
+                hash_transcript.challenge_scalar(b"c")
+            };
+            // Make a_i = H(L, X_i)
+            let a_i = {
+                let mut hash_transcript = shared.transcript.clone();
+                hash_transcript.commit_scalar(b"L", &shared.L.0);
+                let X_i = priv_keys[i].0 * shared.G;
+                hash_transcript.commit_point(b"X_i", &X_i.compress());
+                hash_transcript.challenge_scalar(b"a_i")
+            };
+
+            // Check that S_i = R_i + c * a_i * X_i
+            assert_eq!(S_i, R_i + c * a_i * X_i);
+        }
+
         let signatures: Vec<_> = parties
             .into_iter()
             .map(|p| p.receive_siglets(siglets.clone()))
             .collect();
 
-        // signatures from all parties should be the same
+        // Check that signatures from all parties are the same
         let cmp = &signatures[0];
         for sig in &signatures {
             assert_eq!(cmp.s, sig.s);
             assert_eq!(cmp.R, sig.R)
         }
 
-        signatures[0].clone()
+        (signatures[0].clone())
     }
 
     #[test]

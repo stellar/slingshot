@@ -11,10 +11,11 @@ pub struct Nonce(Scalar);
 #[derive(Clone)]
 pub struct NoncePrecommitment(Scalar);
 // TODO: compress & decompress RistrettoPoint into CompressedRistretto when sending as message
+// TODO: rearrange crate/imports so fields don't have to be public
 #[derive(Clone)]
-pub struct NonceCommitment(RistrettoPoint);
+pub struct NonceCommitment(pub RistrettoPoint);
 #[derive(Clone)]
-pub struct Siglet(Scalar);
+pub struct Siglet(pub Scalar);
 
 pub struct PartyAwaitingPrecommitments {
     shared: Shared,
@@ -96,9 +97,9 @@ impl<'a> PartyAwaitingCommitments {
             .zip(nonce_commitments.iter())
         {
             // Make H(comm) = H(R_i)
-            let mut hash_transcript = self.shared.transcript.clone();
-            hash_transcript.commit_point(b"R_i", &comm.0.compress());
-            let correct_precomm = hash_transcript.challenge_scalar(b"nonce.precommit");
+            let mut precomm_transcript = self.shared.transcript.clone();
+            precomm_transcript.commit_point(b"R_i", &comm.0.compress());
+            let correct_precomm = precomm_transcript.challenge_scalar(b"nonce.precommit");
 
             // Compare H(comm) with pre_comm, they should be equal
             assert_eq!(pre_comm.0, correct_precomm);
@@ -143,7 +144,7 @@ impl<'a> PartyAwaitingCommitments {
 
 impl<'a> PartyAwaitingSiglets {
     pub fn receive_siglets(self, siglets: Vec<Siglet>) -> Signature {
-        // TODO: verify received siglets
+        // TODO: verify received siglets, if we store all pubkeys
         // s = sum(siglets)
         let s: Scalar = siglets.iter().map(|siglet| siglet.0).sum();
         // R = sum(R_i). nonce_commitments = R_i
