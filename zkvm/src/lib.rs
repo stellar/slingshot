@@ -10,6 +10,7 @@ mod encoding;
 mod errors;
 mod merkle;
 mod ops;
+mod patricia;
 mod point_ops;
 mod predicate;
 mod prover;
