@@ -1,5 +1,5 @@
 use curve25519_dalek::scalar::Scalar;
-use zkvm::{Commitment, Contract, Data, Input, Predicate, Program, TxID, Value};
+use zkvm::{Commitment, Data, Output, Predicate, Program, Value};
 
 /// Represents a ZkVM Token with unique flavor and embedded
 /// metadata protected by a user-supplied Predicate.
@@ -53,16 +53,8 @@ impl Token {
 
     /// Adds instructions to a program to retire a given UTXO.
     /// TBD: accept a qty/Token pairing to retire.
-    pub fn retire<'a>(
-        program: &'a mut Program,
-        prev_output: Contract,
-        txid: TxID,
-    ) -> &'a mut Program {
-        program
-            .push(Input::new(prev_output, txid))
-            .input()
-            .sign_tx()
-            .retire()
+    pub fn retire<'a>(program: &'a mut Program, prev_output: Output) -> &'a mut Program {
+        program.push(prev_output).input().sign_tx().retire()
     }
 }
 
@@ -75,6 +67,14 @@ mod tests {
         VerificationKey, Verifier,
     };
 
+    fn add_nonce(p: &mut Program, nonce_key: &Scalar) {
+        let dummy_block_id = Data::Opaque([0xffu8; 32].to_vec());
+        p.push(Predicate::Key(VerificationKey::from_secret(nonce_key)))
+            .push(dummy_block_id)
+            .nonce()
+            .sign_tx();
+    }
+
     #[test]
     fn issue_to() {
         let (tx, _, _) = {
@@ -86,11 +86,10 @@ mod tests {
                 b"USD".to_vec(),
             );
             let dest = Predicate::Key(VerificationKey::from_secret(&dest_key));
+
             let program = Program::build(|p| {
+                add_nonce(p, &nonce_key);
                 usd.issue_to(p, 10u64, dest.clone())
-                    .push(Predicate::Key(VerificationKey::from_secret(&nonce_key)))
-                    .nonce()
-                    .sign_tx()
             });
             build(program, vec![issue_key, nonce_key]).unwrap()
         };
@@ -113,20 +112,17 @@ mod tests {
             );
             let dest = Predicate::Key(VerificationKey::from_secret(&dest_key));
             let issue_program = Program::build(|p| {
+                add_nonce(p, &nonce_key);
                 usd.issue_to(p, 10u64, dest.clone())
-                    .push(Predicate::Key(VerificationKey::from_secret(&nonce_key)))
-                    .nonce()
-                    .sign_tx()
             });
-            let (_, issue_txid, issue_txlog) =
-                build(issue_program, vec![issue_key, nonce_key]).unwrap();
+            let (_, _, issue_txlog) = build(issue_program, vec![issue_key, nonce_key]).unwrap();
 
             let mut retire_program = Program::new();
-            let issue_output = match &issue_txlog[2] {
+            let issue_output = match &issue_txlog[3] {
                 Entry::Output(x) => x.clone(),
                 _ => return assert!(false, "TxLog entry doesn't match: expected Output"),
             };
-            Token::retire(&mut retire_program, issue_output, issue_txid);
+            Token::retire(&mut retire_program, issue_output);
             build(retire_program, vec![dest_key]).unwrap()
         };
 

@@ -1,4 +1,5 @@
 use bulletproofs::{BulletproofGens, PedersenGens};
+use curve25519_dalek::constants::RISTRETTO_BASEPOINT_COMPRESSED;
 use curve25519_dalek::scalar::Scalar;
 use hex;
 
@@ -28,29 +29,37 @@ impl ProgramHelper for Program {
         issuance_pred: Predicate,
         nonce_pred: Predicate,
     ) -> &mut Self {
-        self.push(Commitment::blinded_with_factor(qty, Scalar::from(1u64))) // stack: qty
+        let dummy_block_id = Data::Opaque([0xffu8; 32].to_vec());
+        self.push(nonce_pred)
+            .push(dummy_block_id)
+            .nonce()
+            .sign_tx() // stack is clean
+            .push(Commitment::blinded_with_factor(qty, Scalar::from(1u64))) // stack: qty
             .var() // stack: qty-var
             .push(Commitment::unblinded(flv)) // stack: qty-var, flv
             .var() // stack: qty-var, flv-var
             .push(Data::default()) // stack: qty-var, flv-var, data
             .push(issuance_pred) // stack: qty-var, flv-var, data, pred
             .issue() // stack: issue-contract
-            .push(nonce_pred) // stack: issue-contract, pred
-            .nonce() // stack: issue-contract, nonce-contract
-            .sign_tx() // stack: issue-contract
             .sign_tx(); // stack: issued-value
         self
     }
 
     fn input_helper(&mut self, qty: u64, flv: Scalar, pred: Predicate) -> &mut Self {
+        let anchor = Anchor::nonce(
+            [0u8; 32],
+            &Predicate::Opaque(RISTRETTO_BASEPOINT_COMPRESSED),
+            0,
+        );
         let prev_output = Contract {
+            anchor,
             payload: vec![PortableItem::Value(Value {
                 qty: Commitment::blinded(qty),
                 flv: Commitment::blinded(flv),
             })],
             predicate: pred,
         };
-        self.push(Input::new(prev_output, TxID([0; 32]))) // stack: input-data
+        self.push(Output::new(prev_output)) // stack: input-data
             .input() // stack: input-contract
             .sign_tx(); // stack: input-value
         self
@@ -169,7 +178,7 @@ fn issue() {
         Ok(txid) => {
             // Check txid
             assert_eq!(
-                "5245c74137fec1e97159a45e737c4eb8e703fb0f1d151e842351e2ab834763be",
+                "316f835973819a8cf6219010faf712bd17a1fe6fa2cc6350e4d96483b2065d82",
                 hex::encode(txid.0)
             );
         }
