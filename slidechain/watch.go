@@ -203,7 +203,8 @@ func (c *Custodian) watchPegOuts(ctx context.Context, pegouts <-chan pegOut) {
 			if !ok {
 				log.Fatalf("peg-outs channel closed")
 			}
-			// For the reference data to match that of the export transaction, the tx ID must be empty.
+			// This peg-out struct is marshalled into a JSON, which must equal the reference data in the export tx.
+			// That requires that the post-peg-out struct txid be empty.
 			txid := p.TxID
 			p.TxID = []byte{}
 			err := c.doPostPegOut(ctx, p, txid)

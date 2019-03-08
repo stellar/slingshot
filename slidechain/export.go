@@ -180,7 +180,7 @@ func (c *Custodian) pegOutFromExports(ctx context.Context, pegouts chan<- pegOut
 				log.Fatalf("got %d rows affected by update exports query for txid %x, want 1", numAffected, txid)
 			}
 			// Send peg-out info to goroutine for successes and non-retriable failures.
-			// The goroutine needs to the txid for lookup in exports, so we store it on the peg-out struct.
+			// The goroutine needs the txid to look up rows in the exports table, so it is stored in the peg-out struct.
 			if peggedOut == pegOutOK || peggedOut == pegOutFail {
 				p.TxID = txid
 				pegouts <- p
