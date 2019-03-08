@@ -858,7 +858,7 @@ The VM is initialized with the following state:
 
 1. [Transaction](#transaction) as provided by the user.
 2. Extension flag set to `true` or `false` according to the [transaction versioning](#versioning) rules for the transaction version.
-3. Last anchor is set to `None`.
+3. Last anchor is set to ∅.
 4. Data stack is empty.
 5. Program stack is empty.
 6. Current program set to the transaction program; with zero offset.
