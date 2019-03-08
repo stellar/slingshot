@@ -1,0 +1,7 @@
+#!/bin/sh
+
+# Perform `cargo fmt` check in all Rust crates
+for dir in $(find . -name Cargo.toml -print0 | xargs -0 -n1 dirname | sort --unique)
+do 
+	cd $dir; cargo fmt --all -- --check || exit 1; cd ..
+done
