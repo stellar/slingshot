@@ -393,7 +393,7 @@ Uniqueness is provided via the [anchor](#anchor).
 ### Anchor
 
 _Anchor_ is a 32-byte unique string that provides uniqueness to the [contract ID](#contract-id).
-Anchors can be created by the [`nonce`](#nonce) instruction or generated from previously used unique contract IDs, tracked by the VM via [last anchor](#vm-state):
+Anchors can be created by the [`nonce`](#nonce) instruction or generated from unique contract IDs used earlier in the same transaction. These are tracked by the VM via [last anchor](#vm-state):
 
 1. Nonce contract has its anchor computed from the nonce parameters (see [`nonce`](#nonce) instruction).
 2. Claimed UTXO ([`input`](#input)) sets the VM’s [last anchor](#vm-state) to its _ratcheted_ [contract ID](#contract-id) (see [`input`](#input)).
