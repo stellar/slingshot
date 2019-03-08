@@ -163,7 +163,6 @@ func (c *Custodian) watchExports(ctx context.Context) {
 
 			// Record the export in the db,
 			// then wake up a goroutine that executes peg-outs on the main chain.
-			log.Printf("insert query for txid %x", tx.ID.Bytes())
 			const q = `INSERT INTO exports (txid, ref) VALUES ($1, $2)`
 			_, err = c.DB.ExecContext(ctx, q, info.TxID, exportRef)
 			if err != nil {

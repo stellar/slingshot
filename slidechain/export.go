@@ -133,7 +133,6 @@ func (c *Custodian) pegOutFromExports(ctx context.Context, pegouts chan<- pegOut
 		}
 		for i, txid := range txids {
 			var p pegOut
-			log.Print(refs[i])
 			err := json.Unmarshal(refs[i], &p)
 			if err != nil {
 				log.Fatalf("unmarshaling refdata: %s", err)
