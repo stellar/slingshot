@@ -242,13 +242,7 @@ impl Instruction {
             }
             Instruction::Const => write(Opcode::Const),
             Instruction::Var => write(Opcode::Var),
-            Instruction::Alloc(osw) => {
-                write(Opcode::Alloc);
-                match osw {
-                    Some(sw) => sw.encode(program),
-                    None => (),
-                };
-            }
+            Instruction::Alloc(_) => write(Opcode::Alloc),
             Instruction::Mintime => write(Opcode::Mintime),
             Instruction::Maxtime => write(Opcode::Maxtime),
             Instruction::Expr => write(Opcode::Expr),
