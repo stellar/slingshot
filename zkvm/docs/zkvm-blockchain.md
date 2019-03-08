@@ -69,11 +69,11 @@ A block header contains:
   1970.
   Each new block must have a time strictly later than the block before it.
 - `txroot`:
-  32-byte merkle root hash of the transactions in the block.
+  32-byte [Merkle root hash](zkvm-spec.md#merkle-binary-tree) of the transactions in the block.
 - `utxoroot`:
-  32-byte merkle root hash of the utxo set after applying all transactions in the block.
+  32-byte Merkle patricia root hash of the utxo set after applying all transactions in the block.
 - `nonceroot`:
-  32-byte merkle root hash of the nonce set after applying all transactions in the block.
+  32-byte Merkle patricia root hash of the nonce set after applying all transactions in the block.
 - `refscount`:
   integer number of recent block IDs to store for reference.
   A new block may specify a lower `refscount` than its predecessor but may not increase it by more than 1.
@@ -97,8 +97,26 @@ T.commit(utxoroot)
 blockid = T.challenge_bytes("id")
 ```
 
-
 # Procedures
+
+## Merkle patricia tree
+
+A Merkle patricia tree is similar to a Merkle binary tree.
+Each node hashes the subtrees beneath it.
+The root node’s hash is a commitment to the full membership of the tree.
+It is possible to create and verify compact proofs of membership.
+
+Unlike a Merkle binary tree,
+a Merkle patricia tree is a radix tree
+(in which subtrees of a given node share a common prefix)
+with variable length branches that allow for efficient updates.
+It is therefore preferable to a Merkle binary tree for sets with churn:
+the utxo set and the nonce set.
+
+As with the
+[Merkle binary tree](zkvm-spec.md#merkle-binary-tree),
+we define a Merkle patricia tree in terms of
+[transcripts](zkvm-spec.md#transcript).
 
 ## Make initial block
 
