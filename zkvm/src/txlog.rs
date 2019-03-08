@@ -1,7 +1,7 @@
 use curve25519_dalek::ristretto::CompressedRistretto;
 use merlin::Transcript;
 
-use crate::contract::Contract;
+use crate::contract::{Anchor, ContractID, Output};
 use crate::merkle::{MerkleItem, MerkleTree};
 use crate::transcript::TranscriptProtocol;
 use crate::vm::TxHeader;
@@ -16,9 +16,9 @@ pub enum Entry {
     Header(TxHeader),
     Issue(CompressedRistretto, CompressedRistretto),
     Retire(CompressedRistretto, CompressedRistretto),
-    Input(UTXO),
-    Nonce(CompressedRistretto, u64),
-    Output(Contract),
+    Input(ContractID),
+    Output(Output),
+    Nonce([u8; 32], u64, Anchor),
     Data(Vec<u8>),
     Import, // TBD: parameters
     Export, // TBD: parameters
@@ -67,15 +67,16 @@ impl MerkleItem for Entry {
                 t.commit_point(b"retire.q", q);
                 t.commit_point(b"retire.f", f);
             }
-            Entry::Input(utxo) => {
-                t.commit_bytes(b"input", &utxo.0);
+            Entry::Input(id) => {
+                t.commit_bytes(b"input", id.as_bytes());
             }
-            Entry::Nonce(pred, maxtime) => {
-                t.commit_point(b"nonce.p", &pred);
+            Entry::Output(output) => {
+                t.commit_bytes(b"output", output.id().as_bytes());
+            }
+            Entry::Nonce(blockid, maxtime, anchor) => {
+                t.commit_bytes(b"nonce.b", blockid);
                 t.commit_u64(b"nonce.t", *maxtime);
-            }
-            Entry::Output(contract) => {
-                t.commit_bytes(b"output", &contract.to_bytes());
+                t.commit_bytes(b"nonce.n", anchor.as_bytes());
             }
             Entry::Data(data) => {
                 t.commit_bytes(b"data", data);
@@ -107,9 +108,9 @@ mod tests {
                 CompressedRistretto::from_slice(&[0u8; 32]),
                 CompressedRistretto::from_slice(&[1u8; 32]),
             ),
-            Entry::Nonce(CompressedRistretto::from_slice(&[1u8; 32]), 0u64),
-            Entry::Nonce(CompressedRistretto::from_slice(&[2u8; 32]), 1u64),
-            Entry::Nonce(CompressedRistretto::from_slice(&[3u8; 32]), 2u64),
+            Entry::Data(vec![0u8]),
+            Entry::Data(vec![1u8]),
+            Entry::Data(vec![2u8]),
         ]
     }
 

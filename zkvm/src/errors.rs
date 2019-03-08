@@ -48,25 +48,25 @@ pub enum VMError {
     #[fail(display = "Item is not an expression.")]
     TypeNotExpression,
 
-    /// This error occurs when an instruction requires a predicate type.
+    /// This error occurs when an instruction requires a predicate data type.
     #[fail(display = "Item is not a predicate.")]
     TypeNotPredicate,
 
-    /// This error occurs when an instruction requires a commitment type.
+    /// This error occurs when an instruction requires a commitment data type.
     #[fail(display = "Item is not a commitment.")]
     TypeNotCommitment,
 
-    /// This error occurs when an instruction requires an input type.
-    #[fail(display = "Item is not an input.")]
-    TypeNotInput,
+    /// This error occurs when an instruction requires an output data type.
+    #[fail(display = "Item is not an output.")]
+    TypeNotOutput,
 
     /// This error occurs when an instruction requires a constraint type.
     #[fail(display = "Item is not a constraint.")]
     TypeNotConstraint,
 
-    /// This error occurs when an instruction requires a scalar witness type.
-    #[fail(display = "Item is not a Scalar Witness.")]
-    TypeNotScalarWitness,
+    /// This error occurs when an instruction requires a scalar data type.
+    #[fail(display = "Item is not a scalar.")]
+    TypeNotScalar,
 
     /// This error occurs when an instruction expects a key type.
     #[fail(display = "Item is not a key.")]
@@ -100,9 +100,9 @@ pub enum VMError {
     #[fail(display = "Stack is not cleared by the program")]
     StackNotClean,
 
-    /// This error occurs when VM's uniqueness flag remains false.
-    #[fail(display = "Tx ID is not made unique via `input` or `nonce`")]
-    NotUniqueTxid,
+    /// This error occurs when VM's anchor remains unset.
+    #[fail(display = "VM anchor is not set via `input` or `nonce`")]
+    AnchorMissing,
 
     /// This error occurs when VM's deferred schnorr checks fail
     #[fail(display = "Deferred point operations failed")]
