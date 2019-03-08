@@ -52,7 +52,7 @@ pub struct Output {
 }
 
 impl Output {
-    /// Creates an Input with a given contract
+    /// Creates an Output with a given contract
     pub fn new(contract: Contract) -> Self {
         let mut buf = Vec::with_capacity(contract.serialized_length());
         contract.encode(&mut buf);
