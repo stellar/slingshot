@@ -4,6 +4,7 @@
 use crate::encoding;
 use crate::encoding::SliceReader;
 use crate::errors::VMError;
+use crate::predicate::Predicate;
 use crate::scalar_witness::ScalarWitness;
 use crate::types::Data;
 use core::borrow::Borrow;
@@ -405,5 +406,56 @@ impl Program {
     pub fn cloak(&mut self, m: usize, n: usize) -> &mut Program {
         self.0.push(Instruction::Cloak(m, n));
         self
+    }
+
+    /// Takes predicate and closure to add choose operations for
+    /// predicate tree traversal.
+    pub fn choose_predicate<F, T>(
+        &mut self,
+        pred: Predicate,
+        choose_fn: F,
+    ) -> Result<&mut Program, VMError>
+    where
+        F: FnOnce(PredicateTree) -> Result<T, VMError>,
+    {
+        choose_fn(PredicateTree {
+            prog: self,
+            pred: pred,
+        })?;
+        Ok(self)
+    }
+}
+
+/// Adds data and instructions to traverse a predicate tree.
+pub struct PredicateTree<'a> {
+    prog: &'a mut Program,
+    pred: Predicate,
+}
+
+impl<'a> PredicateTree<'a> {
+    /// Left Predicate branch
+    pub fn left(self) -> Result<Self, VMError> {
+        let (l, r) = self.pred.to_disjunction()?;
+        let prog = self.prog;
+        prog.push(l.as_opaque()).push(r.as_opaque()).left();
+
+        Ok(Self { pred: l, prog })
+    }
+
+    /// Right Predicate branch
+    pub fn right(self) -> Result<Self, VMError> {
+        let (l, r) = self.pred.to_disjunction()?;
+        let prog = self.prog;
+        prog.push(l.as_opaque()).push(r.as_opaque()).right();
+
+        Ok(Self { pred: r, prog })
+    }
+
+    /// Pushes program to the stack and calls the contract protected
+    /// by the program predicate.
+    pub fn call(self) -> Result<(), VMError> {
+        let subprog = self.pred.to_program()?;
+        self.prog.push(subprog).call();
+        Ok(())
     }
 }

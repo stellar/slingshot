@@ -103,6 +103,27 @@ impl Predicate {
         }
     }
 
+    /// Downcasts the predicate to a disjunction.
+    pub fn to_disjunction(self) -> Result<(Predicate, Predicate), VMError> {
+        match self {
+            Predicate::Or(d) => Ok((d.left, d.right)),
+            _ => Err(VMError::TypeNotDisjunction),
+        }
+    }
+
+    /// Downcasts the predicate to a program.
+    pub fn to_program(self) -> Result<Program, VMError> {
+        match self {
+            Predicate::Program(p) => Ok(p),
+            _ => Err(VMError::TypeNotProgram),
+        }
+    }
+
+    /// Converts the predicate to its opaque representation.
+    pub fn as_opaque(&self) -> Self {
+        Predicate::Opaque(self.to_point())
+    }
+
     /// Creates a disjunction of two predicates.
     pub fn or(self, right: Predicate) -> Result<Self, VMError> {
         let point = {
