@@ -278,6 +278,12 @@ where
     }
 }
 
+impl From<Program> for Data {
+    fn from(x: Program) -> Self {
+        Data::Program(x)
+    }
+}
+
 impl From<Predicate> for Data {
     fn from(x: Predicate) -> Self {
         Data::Predicate(Box::new(x))
