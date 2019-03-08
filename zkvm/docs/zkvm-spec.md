@@ -527,8 +527,7 @@ but in the [output](#output-structure) only the [portable types](#portable-types
 
 ### Output structure
 
-Output represents a _snapshot_ of a [contract](#contract-type)
-and can only contain [portable types](#portable-types).
+Output is a serialized [contract](#contract-type):
 
 ```
       Output  =  Anchor || Predicate  ||  LE32(k)  ||  Item[0]  || ... ||  Item[k-1]
@@ -542,7 +541,7 @@ and can only contain [portable types](#portable-types).
 ### UTXO
 
 UTXO stands for Unspent Transaction [Output](#output-structure).
-UTXO is uniquely identified by the [ID](#contract-id) of the contract in the output.
+UTXO is uniquely identified by the [ID](#contract-id) of the contract represented by the output.
 
 ### Constraint system
 
