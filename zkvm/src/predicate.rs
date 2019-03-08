@@ -10,7 +10,7 @@ use merlin::Transcript;
 
 use crate::encoding;
 use crate::errors::VMError;
-use crate::ops::Instruction;
+use crate::ops::Program;
 use crate::point_ops::PointOp;
 use crate::signature::VerificationKey;
 use crate::transcript::TranscriptProtocol;
@@ -27,7 +27,7 @@ pub enum Predicate {
     Key(VerificationKey),
 
     /// Representation of a predicate as commitment to a program.
-    Program(Vec<Instruction>),
+    Program(Program),
 
     /// Disjunction of two predicates.
     Or(Box<PredicateDisjunction>),
@@ -56,7 +56,7 @@ impl Predicate {
             Predicate::Or(d) => d.precomputed_point,
             Predicate::Program(prog) => {
                 let mut bytecode = Vec::new();
-                Instruction::encode_program(prog.iter(), &mut bytecode);
+                prog.encode(&mut bytecode);
                 let h = Predicate::commit_program(&bytecode);
                 (h * PedersenGens::default().B_blinding).compress()
             }
@@ -118,11 +118,6 @@ impl Predicate {
         })))
     }
 
-    /// Creates a program-based predicate.
-    pub fn program(program: Vec<Instruction>) -> Self {
-        Predicate::Program(program)
-    }
-
     fn commit_or(left: CompressedRistretto, right: CompressedRistretto) -> Scalar {
         let mut t = Transcript::new(b"ZkVM.predicate");
         t.commit_point(b"L", &left);
@@ -148,25 +143,25 @@ mod tests {
     use super::*;
     use bulletproofs::PedersenGens;
 
-    fn bytecode(prog: &Vec<Instruction>) -> Vec<u8> {
+    fn bytecode(prog: &Program) -> Vec<u8> {
         let mut prog_vec = Vec::new();
-        Instruction::encode_program(prog.iter(), &mut prog_vec);
+        prog.encode(&mut prog_vec);
         prog_vec
     }
 
     #[test]
     fn valid_program_commitment() {
-        let prog = vec![Instruction::Drop];
-        let pred = Predicate::program(prog.clone());
+        let prog = Program::build(|p| p.drop());
+        let pred = Predicate::Program(prog.clone());
         let op = pred.prove_program_predicate(&bytecode(&prog));
         assert!(op.verify().is_ok());
     }
 
     #[test]
     fn invalid_program_commitment() {
-        let prog = vec![Instruction::Drop];
-        let prog2 = vec![Instruction::Dup(1)];
-        let pred = Predicate::program(prog);
+        let prog = Program::build(|p| p.drop());
+        let prog2 = Program::build(|p| p.dup(1));
+        let pred = Predicate::Program(prog);
         let op = pred.prove_program_predicate(&bytecode(&prog2));
         assert!(op.verify().is_err());
     }

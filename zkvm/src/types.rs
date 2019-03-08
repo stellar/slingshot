@@ -6,10 +6,10 @@ use merlin::Transcript;
 use spacesuit::SignedInteger;
 
 use crate::constraints::{Commitment, Constraint, Expression, Variable};
-use crate::contract::{Contract, Input, PortableItem};
+use crate::contract::{Contract, Output, PortableItem};
 use crate::encoding::SliceReader;
 use crate::errors::VMError;
-use crate::ops::Instruction;
+use crate::ops::Program;
 use crate::predicate::Predicate;
 use crate::scalar_witness::ScalarWitness;
 use crate::transcript::TranscriptProtocol;
@@ -45,8 +45,8 @@ pub enum Data {
     /// Opaque data item.
     Opaque(Vec<u8>),
 
-    /// A program (list of instructions).
-    Program(Vec<Instruction>),
+    /// A program.
+    Program(Program),
 
     /// A predicate.
     Predicate(Box<Predicate>),
@@ -58,14 +58,18 @@ pub enum Data {
     Scalar(Box<ScalarWitness>),
 
     /// An input object (claimed UTXO).
-    Input(Box<Input>),
+    Output(Box<Output>),
 }
 
-/// A value type.
-#[derive(Debug)]
+/// Represents a value of an issued asset in the VM.
+/// Note: values do not necessarily have open commitments. Some can be reblinded,
+/// others can be passed-through to an output without going through `cloak` and the constraint system.
+#[derive(Clone, Debug)]
 pub struct Value {
-    pub(crate) qty: Variable,
-    pub(crate) flv: Variable,
+    /// Commitment to value's quantity
+    pub qty: Commitment,
+    /// Commitment to value's flavor
+    pub flv: Commitment,
 }
 
 /// A wide value type (for negative values created by `borrow`).
@@ -148,11 +152,11 @@ impl Data {
     pub fn serialized_length(&self) -> usize {
         match self {
             Data::Opaque(data) => data.len(),
-            Data::Program(program) => program.iter().map(|p| p.serialized_length()).sum(),
+            Data::Program(program) => program.serialized_length(),
             Data::Predicate(predicate) => predicate.serialized_length(),
             Data::Commitment(commitment) => commitment.serialized_length(),
             Data::Scalar(scalar) => scalar.serialized_length(),
-            Data::Input(input) => input.serialized_length(),
+            Data::Output(output) => output.serialized_length(),
         }
     }
 
@@ -183,15 +187,9 @@ impl Data {
     }
 
     /// Downcast the data item to a `Program` type.
-    pub fn to_program(self) -> Result<Vec<Instruction>, VMError> {
+    pub fn to_program(self) -> Result<Program, VMError> {
         match self {
-            Data::Opaque(data) => SliceReader::parse(&data, |r| {
-                let mut prog = Vec::new();
-                while r.len() > 0 {
-                    prog.push(Instruction::parse(r)?);
-                }
-                Ok(prog)
-            }),
+            Data::Opaque(data) => Program::parse(&data),
             Data::Program(program) => Ok(program),
             _ => Err(VMError::TypeNotProgram),
         }
@@ -209,12 +207,24 @@ impl Data {
         }
     }
 
-    /// Downcast the data item to an `Input` type.
-    pub fn to_input(self) -> Result<Input, VMError> {
+    /// Downcast the data item to an `Output` type.
+    pub fn to_output(self) -> Result<Output, VMError> {
         match self {
-            Data::Opaque(data) => Input::from_bytes(data),
-            Data::Input(i) => Ok(*i),
-            _ => Err(VMError::TypeNotInput),
+            Data::Opaque(data) => SliceReader::parse(&data, |r| Output::decode(r)),
+            Data::Output(i) => Ok(*i),
+            _ => Err(VMError::TypeNotOutput),
+        }
+    }
+
+    /// Downcast the data item to an `ScalarWitness` type.
+    pub fn to_scalar(self) -> Result<ScalarWitness, VMError> {
+        match self {
+            Data::Opaque(data) => {
+                let scalar = SliceReader::parse(&data, |r| r.read_scalar())?;
+                Ok(ScalarWitness::Scalar(scalar))
+            }
+            Data::Scalar(scalar_witness) => Ok(*scalar_witness),
+            _ => Err(VMError::TypeNotScalar),
         }
     }
 
@@ -222,11 +232,11 @@ impl Data {
     pub fn encode(&self, buf: &mut Vec<u8>) {
         match self {
             Data::Opaque(x) => buf.extend_from_slice(x),
-            Data::Program(program) => Instruction::encode_program(program.iter(), buf),
+            Data::Program(program) => program.encode(buf),
             Data::Predicate(predicate) => predicate.encode(buf),
             Data::Commitment(commitment) => commitment.encode(buf),
             Data::Scalar(scalar) => scalar.encode(buf),
-            Data::Input(input) => input.encode(buf),
+            Data::Output(output) => output.encode(buf),
         };
     }
 }
@@ -244,6 +254,16 @@ impl Value {
         t.commit_bytes(b"predicate", predicate.to_point().as_bytes());
         t.commit_bytes(b"metadata", &metadata.to_bytes());
         t.challenge_scalar(b"flavor")
+    }
+
+    /// Returns a (qty,flavor) assignment to a value, or None if both fields are unassigned.
+    /// Fails if the assigment is inconsistent.
+    pub(crate) fn assignment(&self) -> Result<Option<(SignedInteger, Scalar)>, VMError> {
+        match (self.qty.assignment(), self.flv.assignment()) {
+            (None, None) => Ok(None),
+            (Some(ScalarWitness::Integer(q)), Some(ScalarWitness::Scalar(f))) => Ok(Some((q, f))),
+            (_, _) => return Err(VMError::InconsistentWitness),
+        }
     }
 }
 
@@ -270,9 +290,9 @@ impl From<Commitment> for Data {
     }
 }
 
-impl From<Input> for Data {
-    fn from(x: Input) -> Self {
-        Data::Input(Box::new(x))
+impl From<Output> for Data {
+    fn from(x: Output) -> Self {
+        Data::Output(Box::new(x))
     }
 }
 

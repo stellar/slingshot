@@ -29,7 +29,7 @@ with **cloaked assets** and **zero-knowledge smart contracts**.
 ### [Spacesuit](spacesuit)
 
 Interstellar’s implementation of _Cloak_, a confidential assets protocol
-based on the [Bulletproofs](http://doc.dalek.rs/bulletproofs/index.html) zero-knowledge circuit proof system.
+based on the [Bulletproofs](https://doc.dalek.rs/bulletproofs/index.html) zero-knowledge circuit proof system.
 
 * [Spacesuit README](spacesuit/README.md)
 * [Cloak specification](spacesuit/spec.md)

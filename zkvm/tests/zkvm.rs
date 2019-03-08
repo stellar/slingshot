@@ -1,4 +1,5 @@
 use bulletproofs::{BulletproofGens, PedersenGens};
+use curve25519_dalek::constants::RISTRETTO_BASEPOINT_COMPRESSED;
 use curve25519_dalek::scalar::Scalar;
 use hex;
 
@@ -28,29 +29,37 @@ impl ProgramHelper for Program {
         issuance_pred: Predicate,
         nonce_pred: Predicate,
     ) -> &mut Self {
-        self.push(Commitment::blinded_with_factor(qty, Scalar::from(1u64))) // stack: qty
+        let dummy_block_id = Data::Opaque([0xffu8; 32].to_vec());
+        self.push(nonce_pred)
+            .push(dummy_block_id)
+            .nonce()
+            .sign_tx() // stack is clean
+            .push(Commitment::blinded_with_factor(qty, Scalar::from(1u64))) // stack: qty
             .var() // stack: qty-var
             .push(Commitment::unblinded(flv)) // stack: qty-var, flv
             .var() // stack: qty-var, flv-var
             .push(Data::default()) // stack: qty-var, flv-var, data
             .push(issuance_pred) // stack: qty-var, flv-var, data, pred
             .issue() // stack: issue-contract
-            .push(nonce_pred) // stack: issue-contract, pred
-            .nonce() // stack: issue-contract, nonce-contract
-            .sign_tx() // stack: issue-contract
             .sign_tx(); // stack: issued-value
         self
     }
 
     fn input_helper(&mut self, qty: u64, flv: Scalar, pred: Predicate) -> &mut Self {
-        let prev_output = Output {
-            payload: vec![FrozenItem::Value(FrozenValue {
+        let anchor = Anchor::nonce(
+            [0u8; 32],
+            &Predicate::Opaque(RISTRETTO_BASEPOINT_COMPRESSED),
+            0,
+        );
+        let prev_output = Contract {
+            anchor,
+            payload: vec![PortableItem::Value(Value {
                 qty: Commitment::blinded(qty),
                 flv: Commitment::blinded(flv),
             })],
             predicate: pred,
         };
-        self.push(Input::new(prev_output, TxID([0; 32]))) // stack: input-data
+        self.push(Output::new(prev_output)) // stack: input-data
             .input() // stack: input-contract
             .sign_tx(); // stack: input-value
         self
@@ -103,8 +112,8 @@ fn issuance_helper() -> (Scalar, Predicate, Scalar) {
     (scalar, predicate, flavor)
 }
 
-fn test_helper(program: Vec<Instruction>, keys: &Vec<Scalar>) -> Result<TxID, VMError> {
-    let (tx, txid, txlog) = {
+fn test_helper(program: Program, keys: &Vec<Scalar>) -> Result<TxID, VMError> {
+    let (tx, _, _) = {
         // Build tx
         let bp_gens = BulletproofGens::new(256, 1);
         let header = TxHeader {
@@ -142,12 +151,11 @@ fn issue_contract(
     issuance_pred: Predicate,
     nonce_pred: Predicate,
     output_pred: Predicate,
-) -> Vec<Instruction> {
+) -> Program {
     Program::build(|p| {
         p.issue_helper(qty, flv, issuance_pred, nonce_pred) // stack: issued-val
             .output_helper(output_pred) // stack: empty
     })
-    .to_vec()
 }
 
 #[test]
@@ -170,7 +178,7 @@ fn issue() {
         Ok(txid) => {
             // Check txid
             assert_eq!(
-                "5245c74137fec1e97159a45e737c4eb8e703fb0f1d151e842351e2ab834763be",
+                "316f835973819a8cf6219010faf712bd17a1fe6fa2cc6350e4d96483b2065d82",
                 hex::encode(txid.0)
             );
         }
@@ -195,13 +203,12 @@ fn spend_1_1_contract(
     flv: Scalar,
     input_pred: Predicate,
     output_pred: Predicate,
-) -> Vec<Instruction> {
+) -> Program {
     Program::build(|p| {
         p.input_helper(input, flv, input_pred)
             .cloak_helper(1, vec![(output, flv)])
             .output_helper(output_pred)
     })
-    .to_vec()
 }
 
 #[test]
@@ -244,14 +251,13 @@ fn spend_1_2_contract(
     input_pred: Predicate,
     output_1_pred: Predicate,
     output_2_pred: Predicate,
-) -> Vec<Instruction> {
+) -> Program {
     Program::build(|p| {
         p.input_helper(input, flv, input_pred) // stack: input
             .cloak_helper(1, vec![(output_1, flv), (output_2, flv)]) // stack: output-1, output-2
             .output_helper(output_2_pred) // stack: output-1
             .output_helper(output_1_pred) // stack: empty
     })
-    .to_vec()
 }
 
 #[test]
@@ -298,14 +304,13 @@ fn spend_2_1_contract(
     input_1_pred: Predicate,
     input_2_pred: Predicate,
     output_pred: Predicate,
-) -> Vec<Instruction> {
+) -> Program {
     Program::build(|p| {
         p.input_helper(input_1, flv, input_1_pred) // stack: input-1
             .input_helper(input_2, flv, input_2_pred) // stack: input-1, input-2
             .cloak_helper(2, vec![(output, flv)]) // stack: output
             .output_helper(output_pred) // stack: empty
     })
-    .to_vec()
 }
 
 #[test]
@@ -354,7 +359,7 @@ fn spend_2_2_contract(
     input_2_pred: Predicate,
     output_1_pred: Predicate,
     output_2_pred: Predicate,
-) -> Vec<Instruction> {
+) -> Program {
     Program::build(|p| {
         p.input_helper(input_1, flv, input_1_pred) // stack: input-1
             .input_helper(input_2, flv, input_2_pred) // stack: input-1, input-2
@@ -362,7 +367,6 @@ fn spend_2_2_contract(
             .output_helper(output_2_pred) // stack: output-1
             .output_helper(output_1_pred) // stack: empty
     })
-    .to_vec()
 }
 
 #[test]
@@ -416,7 +420,7 @@ fn issue_and_spend_contract(
     input_pred: Predicate,
     output_1_pred: Predicate,
     output_2_pred: Predicate,
-) -> Vec<Instruction> {
+) -> Program {
     Program::build(|p| {
         p.issue_helper(issue_qty, flv, issuance_pred, nonce_pred) // stack: issued-val
             .input_helper(input_qty, flv, input_pred) // stack: issued-val, input-val
@@ -424,7 +428,6 @@ fn issue_and_spend_contract(
             .output_helper(output_2_pred) // stack: output-1
             .output_helper(output_1_pred) // stack: empty
     })
-    .to_vec()
 }
 
 #[test]

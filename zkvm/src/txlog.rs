@@ -1,7 +1,8 @@
 use curve25519_dalek::ristretto::CompressedRistretto;
 use merlin::Transcript;
 
-use crate::contract::Output;
+use crate::contract::{Anchor, ContractID, Output};
+use crate::merkle::{MerkleItem, MerkleTree};
 use crate::transcript::TranscriptProtocol;
 use crate::vm::TxHeader;
 
@@ -15,9 +16,9 @@ pub enum Entry {
     Header(TxHeader),
     Issue(CompressedRistretto, CompressedRistretto),
     Retire(CompressedRistretto, CompressedRistretto),
-    Input(UTXO),
-    Nonce(CompressedRistretto, u64),
+    Input(ContractID),
     Output(Output),
+    Nonce([u8; 32], u64, Anchor),
     Data(Vec<u8>),
     Import, // TBD: parameters
     Export, // TBD: parameters
@@ -46,40 +47,12 @@ impl UTXO {
 impl TxID {
     /// Computes TxID from a tx log
     pub fn from_log(list: &[Entry]) -> Self {
-        let t = Transcript::new(b"ZkVM.txid");
-        let mut result = [0u8; 32];
-        Self::node(t, list, &mut result);
-        Self(result)
-    }
-
-    fn node(mut t: Transcript, list: &[Entry], result: &mut [u8; 32]) {
-        match list.len() {
-            0 => Self::empty(t, result),
-            1 => Self::leaf(t, &list[0], result),
-            n => {
-                let k = n.next_power_of_two() / 2;
-                let mut righthash = [0u8; 32];
-                Self::node(t.clone(), &list[..k], result);
-                Self::node(t.clone(), &list[k..], &mut righthash);
-                t.commit_bytes(b"L", result);
-                t.commit_bytes(b"R", &righthash);
-                t.challenge_bytes(b"merkle.node", result);
-            }
-        }
-    }
-
-    fn empty(mut t: Transcript, result: &mut [u8; 32]) {
-        t.challenge_bytes(b"merkle.empty", result);
-    }
-
-    fn leaf(mut t: Transcript, entry: &Entry, result: &mut [u8; 32]) {
-        entry.commit_to_transcript(&mut t);
-        t.challenge_bytes(b"merkle.leaf", result);
+        TxID(MerkleTree::root(b"ZkVM.txid", list))
     }
 }
 
-impl Entry {
-    fn commit_to_transcript(&self, t: &mut Transcript) {
+impl MerkleItem for Entry {
+    fn commit(&self, t: &mut Transcript) {
         match self {
             Entry::Header(h) => {
                 t.commit_u64(b"tx.version", h.version);
@@ -94,15 +67,16 @@ impl Entry {
                 t.commit_point(b"retire.q", q);
                 t.commit_point(b"retire.f", f);
             }
-            Entry::Input(utxo) => {
-                t.commit_bytes(b"input", &utxo.0);
+            Entry::Input(id) => {
+                t.commit_bytes(b"input", id.as_bytes());
             }
-            Entry::Nonce(pred, maxtime) => {
-                t.commit_point(b"nonce.p", &pred);
+            Entry::Output(output) => {
+                t.commit_bytes(b"output", output.id().as_bytes());
+            }
+            Entry::Nonce(blockid, maxtime, anchor) => {
+                t.commit_bytes(b"nonce.b", blockid);
                 t.commit_u64(b"nonce.t", *maxtime);
-            }
-            Entry::Output(outstruct) => {
-                t.commit_bytes(b"output", &outstruct.to_bytes());
+                t.commit_bytes(b"nonce.n", anchor.as_bytes());
             }
             Entry::Data(data) => {
                 t.commit_bytes(b"data", data);
@@ -116,5 +90,51 @@ impl Entry {
                 unimplemented!()
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn txlog_helper() -> Vec<Entry> {
+        vec![
+            Entry::Header(TxHeader {
+                mintime: 0,
+                maxtime: 0,
+                version: 0,
+            }),
+            Entry::Issue(
+                CompressedRistretto::from_slice(&[0u8; 32]),
+                CompressedRistretto::from_slice(&[1u8; 32]),
+            ),
+            Entry::Data(vec![0u8]),
+            Entry::Data(vec![1u8]),
+            Entry::Data(vec![2u8]),
+        ]
+    }
+
+    #[test]
+    fn valid_txid_proof() {
+        let (entry, txid, proof) = {
+            let entries = txlog_helper();
+            let root = MerkleTree::build(b"ZkVM.txid", &entries).unwrap();
+            let index = 3;
+            let proof = root.create_path(index).unwrap();
+            (entries[index].clone(), TxID::from_log(&entries), proof)
+        };
+        MerkleTree::verify_path(b"ZkVM.txid", &entry, proof, &txid.0).unwrap();
+    }
+
+    #[test]
+    fn invalid_txid_proof() {
+        let (entry, txid, proof) = {
+            let entries = txlog_helper();
+            let root = MerkleTree::build(b"ZkVM.txid", &entries).unwrap();
+            let index = 3;
+            let proof = root.create_path(index).unwrap();
+            (entries[index + 1].clone(), TxID::from_log(&entries), proof)
+        };
+        assert!(MerkleTree::verify_path(b"ZkVM.txid", &entry, proof, &txid.0).is_err());
     }
 }

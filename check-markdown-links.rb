@@ -2,7 +2,11 @@
 require 'open-uri'
 require 'pathname'
 require 'pp'
-DO_NOT_CHECK_HTTP_LINKS = !!ENV["DO_NOT_CHECK_HTTP_LINKS"]
+DO_NOT_CHECK_HTTP_LINKS = !(ENV["DO_NOT_CHECK_HTTP_LINKS"].to_s =~ /^(|0|no|false)$/)
+
+if !DO_NOT_CHECK_HTTP_LINKS
+  puts "Checking remote URLs for 404 errors (set DO_NOT_CHECK_HTTP_LINKS to disable)"
+end
 
 # 1. Get all links
 # 2. For each link, check if it's good:

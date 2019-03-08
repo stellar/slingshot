@@ -27,6 +27,8 @@ ZkVM defines a procedural representation for blockchain transactions and the rul
     * [Pedersen commitment](#pedersen-commitment)
     * [Verification key](#verification-key)
     * [Time bounds](#time-bounds)
+    * [Contract ID](#contract-id)
+    * [Anchor](#anchor)
     * [Transcript](#transcript)
     * [Predicate](#predicate)
     * [Predicate tree](#predicate-tree)
@@ -34,9 +36,8 @@ ZkVM defines a procedural representation for blockchain transactions and the rul
     * [Program predicate](#program-predicate)
     * [Program](#program)
     * [Contract payload](#contract-payload)
-    * [Input structure](#input-structure)
-    * [UTXO](#utxo)
     * [Output structure](#output-structure)
+    * [UTXO](#utxo)
     * [Constraint system](#constraint-system)
     * [Constraint system proof](#constraint-system-proof)
     * [Transaction](#transaction)
@@ -45,7 +46,7 @@ ZkVM defines a procedural representation for blockchain transactions and the rul
     * [Merkle binary tree](#merkle-binary-tree)
     * [Aggregated signature](#aggregated-signature)
     * [Transaction signature](#transaction-signature)
-    * [Blinding protocol](#blinding-protocol)
+    * [Unblinding proof](#unblinding-proof)
 * [VM operation](#vm-operation)
     * [VM state](#vm-state)
     * [VM execution](#vm-execution)
@@ -196,6 +197,8 @@ Contracts can be "frozen" with the [`output`](#output) instruction that places t
 and the payload into the [output structure](#output-structure) which is
 recorded in the [transaction log](#transaction-log).
 
+Each contract contains a hidden field [anchor](#anchor) that makes it globally unique for safe signing.
+
 
 ### Variable type
 
@@ -213,19 +216,10 @@ Variables can be copied and dropped at will, but cannot be ported across transac
 Constraint system also contains _low-level variables_ that are not individually bound to [Pedersen commitments](#pedersen-commitment):
 when these are exposed to the VM (for instance, from [`mul`](#mul)), they have the [expression type](#expression-type).
 
-### Attached and detached variables
-
-A [variable](#variable-type) can be in one of two states: **detached** or **attached**.
-
-A **detached variable** can be [reblinded](#reblind): all copies of a detached variable share the same commitment,
-so reblinding one of them reflects the new commitments in all the copies. When an [expression](#expression-type) is formed using detached variables, all of them transition to an _attached_ state.
-
-An **attached variable** has its commitment applied to the constraint system, so it cannot be reblinded and variable cannot be detached.
-
 
 ### Expression type
 
-_Expression_ is a linear combination of attached [variables](#variable-type) with cleartext [scalar](#scalar) weights.
+_Expression_ is a linear combination of constraint system variables with cleartext [scalar](#scalar) weights.
 
     expr = { (weight0, var0), (weight1, var1), ...  }
 
@@ -235,8 +229,6 @@ the result is a linear combination with one term with weight 1:
     expr = { (1, var) }
 
 Expressions can be [added](#add) and [multiplied](#mul), producing new expressions.
-Expressions can also be [blinded](#blind) into a [Pedersen commitment](#pedersen-commitment) with a pre-arranged
-blinding factor.
 
 Expressions can be copied and dropped at will, but cannot be ported across transactions via [outputs](#output-structure).
 
@@ -364,8 +356,7 @@ where:
 
 Pedersen commitments can be used to allocate new [variables](#variable-type) using the [`var`](#var) instruction.
 
-Pedersen commitments can be proven to use a pre-determined blinding factor using [`blind`](#blind),
-[`reblind`](#reblind) and [`unblind`](#unblind) instructions.
+Pedersen commitments can be opened using the [`unblind`](#unblind) instruction.
 
 
 ### Verification key
@@ -383,6 +374,42 @@ represented by an unsigned 64-bit integer.
 Time bounds are available in the transaction as [expressions](#expression-type) provided by the instructions
 [`mintime`](#mintime) and [`maxtime`](#maxtime).
 
+
+### Contract ID
+
+_Contract ID_ is a 32-byte unique identifier of the [contract](#contract-type) and a commitment to its contents (see [Output](#output-structure)):
+
+```
+T = Transcript("ZkVM.contractid")
+T.commit("contract", output_structure)
+id = T.challenge_bytes("id")
+```
+
+Contract ID makes signatures safe against reused [verification keys](#verification-key) in [predicates](#predicate):
+a signature covers the unique contract ID, therefore preventing its replay against another contract,
+even if containing the same [payload](#contract-payload) and predicate.
+
+Uniqueness is provided via the [anchor](#anchor).
+
+### Anchor
+
+_Anchor_ is a 32-byte unique string that provides uniqueness to the [contract ID](#contract-id).
+Anchors can be created by the [`nonce`](#nonce) instruction or generated from unique contract IDs used earlier in the same transaction. These are tracked by the VM via [last anchor](#vm-state):
+
+1. Nonce contract has its anchor computed from the nonce parameters (see [`nonce`](#nonce) instruction).
+2. Claimed UTXO ([`input`](#input)) sets the VM’s [last anchor](#vm-state) to its _ratcheted_ [contract ID](#contract-id) (see [`input`](#input)).
+3. Newly created contracts and outputs ([`contract`](#contract), [`output`](#contract)) consume the VM’s [last anchor](#vm-state) and replace it with its [contract ID](#contract-id).
+
+VM fails if:
+
+1. an [`issue`](#issue), [`output`](#output) or [`contract`](#contract) is invoked before the anchor is set,
+2. by the end of the execution, no anchor was used (which means that [transaction ID](#transaction-id) is not unique).
+
+Note 1: chaining the anchors this way gives flexibility to the signer:
+if contract A creates contract B, the B's ID can be computed solely
+from the contents of A, without the knowledge of the entire transaction.
+
+Note 2: [`input`](#input) _ratchets_ the contract ID because this contract ID was already available as an anchor in the _previous transaction_ (where the output was created).
 
 
 ### Transcript
@@ -499,47 +526,23 @@ Payload of a [contract](#contract-type) may contain arbitrary [types](#types),
 but in the [output](#output-structure) only the [portable types](#portable-types) are allowed.
 
 
-### Input structure
-
-Input structure represents an unspent output (UTXO) from a previous transaction.
-
-Input is serialized as [output](#output-structure) with an extra 32 bytes containing
-the output’s [transaction ID](#transaction-id).
-
-```
-       Input  =  PreviousTxID || PreviousOutput
-PreviousTxID  =  <32 bytes>
-
-```
-
-### UTXO
-
-UTXO is an _unspent transaction output_ identified by a 32-byte hash computed using [transcript](#transcript):
-
-```
-T = Transcript("ZkVM.utxo")
-T.commit("txid", previous_txid)
-T.commit("output", previous_output)
-utxo = T.challenge_bytes("id")
-```
-
-In the above, `previous_txid` is the [transaction ID](#transaction-id) of the transaction where the output was created,
-and `previous_output` is the serialized [output](#output-structure).
-
-
 ### Output structure
 
-Output represents a _snapshot_ of a [contract](#contract-type)
-and can only contain [portable types](#portable-types).
+Output is a serialized [contract](#contract-type):
 
 ```
-      Output  =  Predicate  ||  LE32(k)  ||  Item[0]  || ... ||  Item[k-1]
+      Output  =  Anchor || Predicate  ||  LE32(k)  ||  Item[0]  || ... ||  Item[k-1]
+      Anchor  =  <32 bytes>
    Predicate  =  <32 bytes>
         Item  =  enum { Data, Value }
         Data  =  0x00  ||  LE32(len)  ||  <bytes>
        Value  =  0x01  ||  <32 bytes> ||  <32 bytes>
 ```
 
+### UTXO
+
+UTXO stands for Unspent Transaction [Output](#output-structure).
+UTXO is uniquely identified by the [ID](#contract-id) of the contract represented by the output.
 
 ### Constraint system
 
@@ -619,20 +622,20 @@ T.commit("tx.maxtime", LE64(maxtime))
 Input entry is added using [`input`](#input) instruction.
 
 ```
-T.commit("input", utxo_id)
+T.commit("input", contract_id)
 ```
 
-where `utxo_id` is the ID of the corresponding [UTXO](#utxo).
+where `contract_id` is the [contract ID](#contract-id) of the claimed [UTXO](#utxo).
 
 #### Output entry
 
 Output entry is added using [`output`](#output) instruction.
 
 ```
-T.commit("output", output_structure)
+T.commit("output", contract_id)
 ```
 
-where `output_structure` is a serialized [output](#output-structure).
+where `contract_id` is the [contract ID](#contract-id) of the newly created [UTXO](#utxo).
 
 #### Issue entry
 
@@ -657,8 +660,9 @@ T.commit("retire.f", flavor_commitment)
 Nonce entry is added using [`nonce`](#nonce) instruction.
 
 ```
-T.commit("nonce.p", predicate)
+T.commit("nonce.b", blockid)
 T.commit("nonce.t", maxtime)
+T.commit("nonce.n", nonce_anchor)
 ```
 
 #### Data entry
@@ -810,165 +814,7 @@ Fiat-Shamir transform defined through the use of the [transcript](#transcript) i
 4. Add the verifier's statement to the list of [deferred point operations](#deferred-point-operations).
 
 
-### Blinding protocol
-
-The blinding protocol consists of three proofs about blinding factors:
-
-1. [Blinding proof](#blinding-proof): a proof that a blinding factor is formed with a pre-determined key which can be removed using [reblind](#reblinding-proof) operation. Implemented by the [`blind`](#blind) instruction.
-2. [Reblinding proof](#reblinding-proof): a proof that a blinding factor is replaced with another one without affecting the committed value. Implemented by the [`reblind`](#reblind) instruction.
-3. [Unblinding proof](#unblinding-proof): demonstrates the committed value and proves that the blinding factor is zero. Implemented by the [`unblind`](#reblind) instruction.
-
-
-#### Blinding proof
-
-Proves that a commitment `V = v·B + f·B2` has blinding factor `f = q·p`, while `q` and `p` are committed to via `Q=q·B2` and `P=p·B2`.
-
-This protocol solves a problem for a contract between two parties (_sender_ and _recipient_): where the sender computes the committed value `v` without cooperation with the recipient, but needs to form the commitment in a way that’s usable by the recipient. The recipient then can subtract the unknown factor by using a pre-agreed secret `p` and one-time nonce `Q`.
-
-```
-    W == p^{-1}·v·B
-W + Q == p^{-1}·V
-   B2 == p^{-1}·P
-    Q == q·B2
-```
-
-The proof that `Q=q·B2` is provided separately to be used in the [reblinding proof](#reblinding-proof) by a receiving party.
-
-Setup:
-
-1. Recipient generates random scalar `p` and communicates it to the sender.
-2. Sender and recipient bind their contract to `p` via commitment `P = p·B2`.
-
-Proof:
-
-1. Prover (sender) generates a random nonce `q`.
-2. Prover commits to it using [secondary base point](#base-points) `B2`: `Q = q·B2` and sends `Q` to the verifier.
-3. Prover and verifier prepare a [transcript](#transcript) for the proof of discrete log of `Q/B2`:
-    ```
-    T = Transcript("ZkVM.blind-reblind-nonce")
-    T.commit("Q", Q)
-    ```
-4. Prover and verifier perform the [signature protocol](#aggregated-signature) with base point `B2` producing a 64-byte proof `R_q || s_q`.
-5. Prover makes a commitment `Com(v, q·p) = v·B + q·p·B2`.
-6. Prover commits to the value by multiplicatively blinding it (because often secret values are distributed non-uniformly) and sends `W` to the verifier:
-    ```
-    W = p^{-1}·v·B
-    ```
-7. Prover and verifier prepare a [transcript](#transcript) for the main statement:
-    ```
-    T = Transcript("ZkVM.blind")
-    T.commit("P", P)
-    T.commit("Q", Q)
-    T.commit("V", V)
-    T.commit("W", W)
-    ```
-8. Prover creates secret nonces `r_w` and `r_p`.
-9. Prover creates nonce commitments and sends them to the verifier:
-    ```
-    R_w = r_w·B
-    R_v = r_p·V
-    R_p = r_p·P
-    ```
-10. Prover and verifier write the nonce commitments to the transcript:
-    ```
-    T.commit("R_w", R_w)
-    T.commit("R_v", R_v)
-    T.commit("R_p", R_p)
-    ```
-11. Prover and verifier compute a Fiat-Shamir challenge scalar `e` using the transcript:
-    ```
-    e = T.challenge_scalar("e")
-    ```
-12. Prover blinds secrets `p^{-1}·v` and `p^{-1}` using the nonces and the challenge and sends them to the verifier:
-    ```
-    s_w = r_w + e·p^{-1}·v
-    s_p = r_p + e·p^{-1}
-    ```
-13. Verifier checks the relation:
-    ```
-    R_w + e·W     == s_w·B
-    R_v + e·(W+Q) == s_p·V
-    R_p + e·B2    == s_p·P
-    ```
-
-The total size of the proof (excluding `P` and `V`) is 256 bytes:
-
-```
-Q || R_q || s_q || R_v || R_w || R_p || s_p || s_w  (8x32)
-```
-
-The recipient can copy the proof about the nonce `q`: `Q || R_q || s_q`
-and use it in their [reblinding proof](#reblinding-proof).
-
-#### Reblinding proof
-
-Proves that a commitment `V2` retains the same committed value `v` as `V1`, but subtracts blinding factor `p·Q` and adds another blinding factor `f·B2`. 
-
-This protocol allows the receiving party in the [blinding proof protocol](#blinding-proof) to replace the randomized blinding factor
-produced by the sender with the blinding factor of their own choice. The sender needs to randomize the commitment to avoid unsafe reuse of the blinding factor `p`. The blinding protocol forces publication of the proof for `Q == q·B2` to be reused in this protocol without the recipient knowing the secret nonce `q`.
-
-```
-V1 == v·B + (x + p·q)·B2
-V2 == v·B + (x + f)·B2
-F  == p^{-1}·f·B2
-Q  == q·B2      
-```
-
-1. Prover (recipient) and verifier perform the [signature protocol](#aggregated-signature) for the statement `Q == q·B2`. Prover copies the proof data `Q || R_q || s_q` from the [blinding proof](#blinding-proof):   
-    ```
-    T = Transcript("ZkVM.blind-reblind-nonce")
-    T.commit("Q", Q)
-    ...
-    [the rest of the signature protocol]
-    ```
-2. Prover chooses a random blinding factor `f` and commits to it, blinding it multiplicatively with `p^{-1}`, sending the commitment to the verifier:
-    ```
-    F = p^{-1}·f·B2
-    ```
-3. Prover and verifier prepare a [transcript](#transcript) for the main statement:
-    ```
-    T = Transcript("ZkVM.reblind")
-    T.commit("Q", Q)
-    T.commit("V1", V1)
-    T.commit("V2", V2)
-    T.commit("F", F)
-    ```
-8. Prover creates secret nonces `r_f` and `r_p`.
-9. Prover creates nonce commitments and sends them to the verifier:
-    ```
-    R_f = r_f·B2
-    R_v = r_p·(V2-V1)
-    ```
-10. Prover and verifier write the nonce commitments to the transcript:
-    ```
-    T.commit("R_f", R_f)
-    T.commit("R_v", R_v)
-    ```
-11. Prover and verifier compute a Fiat-Shamir challenge scalar `e` using the transcript:
-    ```
-    e = T.challenge_scalar("e")
-    ```
-12. Prover blinds secrets `p^{-1}·f` and `p^{-1}` using the nonces and the challenge and sends them to the verifier:
-    ```
-    s_f = r_f + e·p^{-1}·f
-    s_p = r_p + e·p^{-1}
-    ```
-13. Verifier checks the relation:
-    ```
-    R_f + e·F     == s_f·B2
-    R_v + e·(F-Q) == s_p·(V2-V1)
-    ```
-
-The total size of the proof (excluding `V1` and `V2`) is 256 bytes:
-```
-F || Q || R_q || s_q || R_f || R_v || s_p || s_f  (8x32)
-```
-
-Note: the commitment `P` is not present in the protocol because the protocol does not need to guarantee that exactly `p·Q` is subtracted.
-It is up to the recipient to decide how much to add or subtract from a blinding factor, the protocol only guarantees that they cannot modify the committed value and can subtract `p·Q` if they want (because discrete log of `Q` is not known to the recipient).
-
-
-#### Unblinding proof
+### Unblinding proof
 
 Unblinding proof shows the committed value `v` and proves
 that the blinding factor in the [Pedersen commitment](#pedersen-commitment) is zero:
@@ -996,15 +842,14 @@ The ZkVM state consists of the static attributes and the state machine attribute
     * `tx_signature`
     * `cs_proof`
 2. Extension flag (boolean)
-3. Uniqueness flag (boolean)
+3. Last [anchor](#anchor) or ∅ if unset
 4. Data stack (array of [items](#types))
 5. Program stack (array of [programs](#program) with their offsets)
 6. Current [program](#program) with its offset
 7. [Transaction log](#transaction-log) (array of logged items)
 8. Transaction signature verification keys (array of [points](#point))
 9. [Deferred point operations](#deferred-point-operations)
-10. Variables: a list of allocated variables with their commitments: `enum{ detached(point), attached(point, index) }`
-11. [Constraint system](#constraint-system)
+10. [Constraint system](#constraint-system)
 
 
 ### VM execution
@@ -1013,15 +858,14 @@ The VM is initialized with the following state:
 
 1. [Transaction](#transaction) as provided by the user.
 2. Extension flag set to `true` or `false` according to the [transaction versioning](#versioning) rules for the transaction version.
-3. Uniqueness flag is set to `false`.
+3. Last anchor is set to ∅.
 4. Data stack is empty.
 5. Program stack is empty.
 6. Current program set to the transaction program; with zero offset.
 7. Transaction log is empty.
 8. Array of signature verification keys is empty.
 9. Array of deferred point operations is empty.
-10. High-level variables: empty.
-11. Constraint system: empty (time bounds are constants that appear only within linear combinations of actual variables), with [transcript](#transcript) initialized with label `ZkVM.r1cs`:
+10. Constraint system: empty (time bounds are constants that appear only within linear combinations of actual variables), with [transcript](#transcript) initialized with label `ZkVM.r1cs`:
     ```
     r1cs_transcript = Transcript("ZkVM.r1cs")
     ```
@@ -1039,7 +883,7 @@ Then, the VM executes the current program till completion:
 
 If the execution finishes successfully, VM performs the finishing tasks:
 1. Checks if the stack is empty; fails otherwise.
-2. Checks if the uniqueness flag is set to `true`; fails otherwise.
+2. Checks if the [last anchor](#vm-state) is set; fails otherwise.
 3. Computes [transaction ID](#transaction-id).
 4. Computes a verification statement for [transaction signature](#transaction-signature).
 5. Computes a verification statement for [constraint system proof](#constraint-system-proof).
@@ -1125,7 +969,7 @@ Code | Instruction                | Stack diagram                              |
 0x06 | [`alloc`](#alloc)          |                 ø → _expr_                 | Allocates a low-level variable in [CS](#constraint-system)
 0x07 | [`mintime`](#mintime)      |                 ø → _expr_                 |
 0x08 | [`maxtime`](#maxtime)      |                 ø → _expr_                 |
-0x09 | [`expr`](#expr)            |             _var_ → _expr_                 | [Attaches](#attached-and-detached-variables) variable to [CS](#constraint-system)
+0x09 | [`expr`](#expr)            |             _var_ → _expr_                 | Allocates a variable in [CS](#constraint-system)
 0x0a | [`neg`](#neg)              |           _expr1_ → _expr2_                |
 0x0b | [`add`](#add)              |     _expr1 expr2_ → _expr3_                |
 0x0c | [`mul`](#mul)              |     _expr1 expr2_ → _expr3_                | Potentially adds multiplier in [CS](#constraint-system)
@@ -1134,31 +978,29 @@ Code | Instruction                | Stack diagram                              |
 0x0f | [`and`](#and)              | _constr1 constr2_ → _constr3_              |
 0x10 | [`or`](#or)                | _constr1 constr2_ → _constr3_              |
 0x11 | [`verify`](#verify)        |      _constraint_ → ø                      | Modifies [CS](#constraint-system) 
-0x12 | [`blind`](#blind)          |  _proof V expr P_ → _var_                  | Modifies [CS](#constraint-system), [defers point ops](#deferred-point-operations)
-0x13 | [`reblind`](#reblind)      |   _proof V2 var1_ → _var1_                 | [Defers point operations](#deferred-point-operations)
-0x14 | [`unblind`](#unblind)      |        _v V expr_ → _var_                  | Modifies [CS](#constraint-system), [Defers point ops](#deferred-point-operations)
+0x12 | [`unblind`](#unblind)      |        _v V expr_ → _var_                  | Modifies [CS](#constraint-system), [Defers point ops](#deferred-point-operations)
  |                                |                                            |
  |     [**Values**](#value-instructions)              |                        |
-0x15 | [`issue`](#issue)          |    _qty flv data pred_ → _contract_        | Modifies [CS](#constraint-system), [tx log](#transaction-log), [defers point ops](#deferred-point-operations)
-0x16 | [`borrow`](#borrow)        |         _qty flv_ → _–V +V_                | Modifies [CS](#constraint-system)
-0x17 | [`retire`](#retire)        |           _value_ → ø                      | Modifies [CS](#constraint-system), [tx log](#transaction-log)
-0x18 | [`qty`](#qty)              |           _value_ → _value qtyvar_         |
-0x19 | [`flavor`](#flavor)        |           _value_ → _value flavorvar_      |
-0x1a | [`cloak:m:n`](#cloak)      | _widevalues commitments_ → _values_        | Modifies [CS](#constraint-system)
-0x1b | [`import`](#import)        |   _proof qty flv_ → _value_                | Modifies [CS](#constraint-system), [tx log](#transaction-log), [defers point ops](#deferred-point-operations)
-0x1c | [`export`](#export)        |       _value ???_ → ø                      | Modifies [CS](#constraint-system), [tx log](#transaction-log)
+0x13 | [`issue`](#issue)          |    _qty flv data pred_ → _contract_        | Modifies [CS](#constraint-system), [tx log](#transaction-log), [defers point ops](#deferred-point-operations)
+0x14 | [`borrow`](#borrow)        |         _qty flv_ → _–V +V_                | Modifies [CS](#constraint-system)
+0x15 | [`retire`](#retire)        |           _value_ → ø                      | Modifies [CS](#constraint-system), [tx log](#transaction-log)
+0x16 | [`qty`](#qty)              |           _value_ → _value qtyvar_         |
+0x17 | [`flavor`](#flavor)        |           _value_ → _value flavorvar_      |
+0x18 | [`cloak:m:n`](#cloak)      | _widevalues commitments_ → _values_        | Modifies [CS](#constraint-system)
+0x19 | [`import`](#import)        |   _proof qty flv_ → _value_                | Modifies [CS](#constraint-system), [tx log](#transaction-log), [defers point ops](#deferred-point-operations)
+0x1a | [`export`](#export)        |       _value ???_ → ø                      | Modifies [CS](#constraint-system), [tx log](#transaction-log)
  |                                |                                            |
  |     [**Contracts**](#contract-instructions)        |                        |
-0x1d | [`input`](#input)          |           _input_ → _contract_             | Modifies [tx log](#transaction-log)
-0x1e | [`output:k`](#output)      |   _items... pred_ → ø                      | Modifies [tx log](#transaction-log)
-0x1f | [`contract:k`](#contract)  |   _items... pred_ → _contract_             | 
-0x20 | [`nonce`](#nonce)          |            _pred_ → _contract_             | Modifies [tx log](#transaction-log)
-0x21 | [`log`](#log)              |            _data_ → ø                      | Modifies [tx log](#transaction-log)
-0x22 | [`signtx`](#signtx)        |        _contract_ → _results..._           | Modifies [deferred verification keys](#transaction-signature)
-0x23 | [`call`](#call)            |   _contract prog_ → _results..._           | [Defers point operations](#deferred-point-operations)
-0x24 | [`left`](#left)            |    _contract A B_ → _contract’_            | [Defers point operations](#deferred-point-operations)
-0x25 | [`right`](#right)          |    _contract A B_ → _contract’_            | [Defers point operations](#deferred-point-operations)
-0x26 | [`delegate`](#delegate)    |_contract prog sig_ → _results..._          | [Defers point operations](#deferred-point-operations)
+0x1b | [`input`](#input)          |      _prevoutput_ → _contract_             | Modifies [tx log](#transaction-log)
+0x1c | [`output:k`](#output)      |   _items... pred_ → ø                      | Modifies [tx log](#transaction-log)
+0x1d | [`contract:k`](#contract)  |   _items... pred_ → _contract_             | 
+0x1e | [`nonce`](#nonce)          |    _pred blockid_ → _contract_             | Modifies [tx log](#transaction-log)
+0x1f | [`log`](#log)              |            _data_ → ø                      | Modifies [tx log](#transaction-log)
+0x20 | [`signtx`](#signtx)        |        _contract_ → _results..._           | Modifies [deferred verification keys](#transaction-signature)
+0x21 | [`call`](#call)            |   _contract prog_ → _results..._           | [Defers point operations](#deferred-point-operations)
+0x22 | [`left`](#left)            |    _contract A B_ → _contract’_            | [Defers point operations](#deferred-point-operations)
+0x23 | [`right`](#right)          |    _contract A B_ → _contract’_            | [Defers point operations](#deferred-point-operations)
+0x24 | [`delegate`](#delegate)    |_contract prog sig_ → _results..._          | [Defers point operations](#deferred-point-operations)
   —  | [`ext`](#ext)              |                 ø → ø                      | Fails if [extension flag](#vm-state) is not set.
 
 
@@ -1223,7 +1065,7 @@ Fails if `a` is not a valid [scalar](#scalar).
 _P_ **var** → _v_
 
 1. Pops a [point](#point) `P` from the stack.
-2. Creates a [detached variable](#variable-type) `v` from a [Pedersen commitment](#pedersen-commitment) `P`.
+2. Creates a [variable](#variable-type) `v` from a [Pedersen commitment](#pedersen-commitment) `P`.
 3. Pushes `v` to the stack.
 
 Fails if `P` is not a valid [point](#point).
@@ -1259,7 +1101,7 @@ The one-term expression represents time bound as a weight on the R1CS constant `
 _var_ **expr** → _ex_
 
 1. Pops a [variable](#variable-type) `var`.
-2. If it is [detached](#attached-and-detached-variables), attaches it to the constraint system.
+2. Allocates a high-level variable in the constraint system using its Pedersen commitment.
 3. Pushes a single-term [expression](#expression-type) with weight=1 to the stack: `expr = { (1, var) }`.
 
 Fails if `var` is not a [variable type](#variable-type).
@@ -1336,7 +1178,7 @@ _expr_ **range:_n_** → _expr_
 
 Immediate data `n` is encoded as one byte.
 
-Fails if `expr` is not an [expression type](#expression-type) or if `n` is not in range [1, 64].
+Fails if `expr` is not an [expression type](#expression-type) or if `n` is not in range [0, 64].
 
 #### and
 
@@ -1385,44 +1227,6 @@ _constr_ **verify** → ø
 Fails if `constr` is not a [constraint](#constraint-type).
 
 
-#### blind
-
-_proof V expr P_ **blind** → _var_
-
-1. Pops [point](#point) `P`.
-2. Pops [expression](#expression-type) `expr`.
-3. Pops [point](#point) `V`.
-4. Pops [data](#data-type) `proof`.
-5. Creates a new [detached variable](#variable-type) `var` with commitment `V`.
-6. Verifies the [blinding proof](#blinding-proof) for commitments `V`, `P` and proof data `proof`, [deferring all point operations](#deferred-point-operations)).
-7. Adds an equality [constraint](#constraint-type) `expr == var` to the [constraint system](#constraint-system).
-8. Pushes `var` to the stack.
-
-Fails if: 
-* `proof` is not a 256-byte [data](#data-type), or
-* `P`, `V` are not valid [points](#point), or
-* `expr` is not an [expression](#expression-type).
-
-
-#### reblind
-
-_proof V2 var1_ **reblind** → _var1_
-
-1. Pops [variable](#variable-type) `var1`.
-2. Pops [point](#point) `V2`.
-3. Pops [data](#data-type) `proof`.
-4. Checks that `var1` is a [detached variable](#variable-type) and reads its commitment `V1` from the [VM list of variable commitments](#vm-state).
-5. Replaces commitment `V1` with `V2` for this variable.
-6. Verifies the [reblinding proof](#reblinding-proof) for the commitments `V1`, `V2` and proof data `proof`, [deferring all point operations](#deferred-point-operations)).
-7. Pushes back the detached variable `var1`.
-
-Fails if: 
-* `proof` is not a 256-byte [data](#data-type), or
-* `V2` is not a valid [point](#point), or
-* `var1` is not a [variable](#variable-type), or
-* `var1` is already attached.
-
-
 #### unblind
 
 _v V expr_ **unblind** → _var_
@@ -1430,7 +1234,7 @@ _v V expr_ **unblind** → _var_
 1. Pops [expression](#expression-type) `expr`.
 2. Pops [point](#point) `V`.
 3. Pops [scalar](#scalar) `v`.
-4. Creates a new [detached variable](#variable-type) `var` with commitment `V`.
+4. Creates a new [variable](#variable-type) `var` with commitment `V`.
 5. Verifies the [unblinding proof](#unblinding-proof) for the commitment `V` and scalar `v`, [deferring all point operations](#deferred-point-operations)).
 6. Adds an equality [constraint](#constraint-type) `expr == var` to the [constraint system](#constraint-system).
 7. Pushes `var` to the stack.
@@ -1450,8 +1254,8 @@ _qty flv metadata pred_ **issue** → _contract_
 
 1. Pops [point](#point) `pred`.
 2. Pops [data](#data-type) `metadata`.
-3. Pops [variable](#variable-type) `flv`; if the variable is detached, attaches it.
-4. Pops [variable](#variable-type) `qty`; if the variable is detached, attaches it.
+3. Pops [variable](#variable-type) `flv` and commits it to the constraint system.
+4. Pops [variable](#variable-type) `qty` and commits it to the constraint system.
 5. Creates a [value](#value-type) with variables `qty` and `flv` for quantity and flavor, respectively. 
 6. Computes the _flavor_ scalar defined by the [predicate](#predicate) `pred` using the following [transcript-based](#transcript) protocol:
     ```
@@ -1460,28 +1264,33 @@ _qty flv metadata pred_ **issue** → _contract_
     T.commit("metadata", metadata)
     flavor = T.challenge_scalar("flavor")
     ```
-6. Checks that the `flv` has unblinded commitment to `flavor` by [deferring the point operation](#deferred-point-operations):
+6. Checks that the `flv` has unblinded commitment to `flavor`
+   by [deferring the point operation](#deferred-point-operations):
     ```
     flv == flavor·B
     ```
-7. Adds a 64-bit range proof for the `qty` to the [constraint system](#constraint-system) (see [Cloak protocol](../../spacesuit/spec.md) for the range proof definition).
+7. Adds a 64-bit range proof for the `qty` to the [constraint system](#constraint-system)
+   (see [Cloak protocol](../../spacesuit/spec.md) for the range proof definition).
 8. Adds an [issue entry](#issue-entry) to the [transaction log](#transaction-log).
-9. Creates a [contract](#contract-type) with the value as the only [payload](#contract-payload), protected by the predicate `pred`.
+9. Creates a [contract](#contract-type) with the value as the only [payload](#contract-payload),
+   protected by the predicate `pred`, consuming [VM’s last anchor](#vm-state)
+   and replacing it with this contract’s [ID](#contract-id).
 
 The value is now issued into the contract that must be unlocked
 using one of the contract instructions: [`signtx`](#signtx), [`delegate`](#delegate) or [`call`](#call).
 
 Fails if:
 * `pred` is not a valid [point](#point),
-* `flv` or `qty` are not [variable types](#variable-type).
+* `flv` or `qty` are not [variable types](#variable-type),
+* VM’s [last anchor](#vm-state) is not set.
 
 
 #### borrow
 
 _qty flv_ **borrow** → _–V +V_
 
-1. Pops [variable](#variable-type) `flv`; if the variable is detached, attaches it.
-2. Pops [variable](#variable-type) `qty`; if the variable is detached, attaches it.
+1. Pops [variable](#variable-type) `flv` and commits it to the constraint system.
+2. Pops [variable](#variable-type) `qty` and commits it to the constraint system.
 3. Creates a [value](#value-type) `+V` with variables `qty` and `flv` for quantity and flavor, respectively.
 4. Adds a 64-bit range proof for `qty` variable to the [constraint system](#constraint-system) (see [Cloak protocol](../../spacesuit/spec.md) for the range proof definition).
 5. Creates [wide value](#wide-value-type) `–V`, allocating a low-level variable `qty2` for the negated quantity and reusing the flavor variable `flv`.
@@ -1537,8 +1346,8 @@ Immediate data `m` and `n` are encoded as two [LE32](#le32)s.
 
 _proof qty flv_ **import** → _value_
 
-1. Pops [variable](#variable-type) `flv`; if the variable is detached, attaches it.
-2. Pops [variable](#variable-type) `qty`; if the variable is detached, attaches it.
+1. Pops [variable](#variable-type) `flv` and commits it to the constraint system.
+2. Pops [variable](#variable-type) `qty` and commits it to the constraint system.
 3. Pops [data](#data-type) `proof`.
 4. Creates a [value](#value-type) with variables `qty` and `flv` for quantity and flavor, respectively. 
 5. Computes the _flavor_ scalar defined by the [predicate](#predicate) `pred` using the following [transcript-based](#transcript) protocol:
@@ -1603,15 +1412,20 @@ Fails if:
 
 #### input
 
-_input_ **input** → _contract_
+_prevoutput_ **input** → _contract_
 
-1. Pops a [data](#data-type) `input` representing the [input structure](#input-structure) from the stack.
-2. Constructs a [contract](#contract-type) based on the `input` data and pushes it to the stack.
-3. For each decoded [value](#value-type), quantity variable is allocated first, flavor second.
-4. Adds [input entry](#input-entry) to the [transaction log](#transaction-log).
-5. Sets the [VM uniqueness flag](#vm-state) to `true`.
+1. Pops a [data](#data-type) `prevoutput` representing the [unspent output structure](#output-structure) from the stack.
+2. Constructs a [contract](#contract-type) based on the `prevoutput` data and pushes it to the stack.
+3. Adds [input entry](#input-entry) to the [transaction log](#transaction-log).
+4. Sets the [VM’s last anchor](#vm-state) to the ratcheted [contract ID](#contract-id):
+    ```
+    T = Transcript("ZkVM.ratchet-anchor")
+    T.commit("old", contract_id)
+    new_anchor = T.challenge_bytes("new")
+    ```
 
-Fails if the `input` is not a [data type](#data-type) with exact encoding of an [input structure](#input-structure).
+Fails if the `prevoutput` is not a [data type](#data-type) with exact encoding of an [output structure](#output-structure).
+
 
 #### output
 
@@ -1619,9 +1433,13 @@ _items... predicate_ **output:_k_** → ø
 
 1. Pops [`predicate`](#predicate) from the stack.
 2. Pops `k` items from the stack.
-3. Adds an [output entry](#output-entry) to the [transaction log](#transaction-log).
+3. Creates a contract with the `k` items as a payload, the predicate `pred`, and anchor set to the [VM’s last anchor](#vm-state).
+4. Adds an [output entry](#output-entry) to the [transaction log](#transaction-log).
+5. Updates the [VM’s last anchor](#vm-state) with the [contract ID](#contract-id) of the new contract.
 
 Immediate data `k` is encoded as [LE32](#le32).
+
+Fails if VM’s [last anchor](#vm-state) is not set.
 
 
 #### contract
@@ -1630,22 +1448,54 @@ _items... pred_ **contract:_k_** → _contract_
 
 1. Pops [predicate](#predicate) `pred` from the stack.
 2. Pops `k` items from the stack.
-3. Creates a contract with the `k` items as a payload and the predicate.
+3. Creates a contract with the `k` items as a payload, the predicate `pred`, and anchor set to the [VM’s last anchor](#vm-state).
 4. Pushes the contract onto the stack.
+5. Update the [VM’s last anchor](#vm-state) with the [contract ID](#contract-id) of the new contract.
 
 Immediate data `k` is encoded as [LE32](#le32).
 
+Fails if VM’s [last anchor](#vm-state) is missing.
 
 #### nonce
 
-_predicate_ **nonce** → _contract_
+_pred blockid_ **nonce** → _contract_
 
-1. Pops [predicate](#predicate) from the stack.
-2. Pushes a new [contract](#contract-type) with an empty [payload](#contract-payload) and this predicate to the stack.
-3. Adds [nonce entry](#nonce-entry) to the [transaction log](#transaction-log) with the predicate and transaction [maxtime](#time-bounds).
-4. Sets the [VM uniqueness flag](#vm-state) to `true`.
+1. Pops [32-byte string](#data-type) `blockid` from the stack.
+2. Pops [predicate](#predicate) `pred` from the stack.
+3. Computes the nonce [anchor](#anchor) value:
+    ```
+    T = Transcript("ZkVM.nonce")
+    T.commit("blockid", blockid)
+    T.commit("predicate", pred)
+    T.commit("maxtime", LE64(tx.maxtime))
+    nonce_anchor = T.challenge_bytes("anchor")
+    ```
+4. Pushes a new [contract](#contract-type) with:
+    * an empty [payload](#contract-payload)
+    * predicate set to `pred`
+    * anchor set to `nonce_anchor`.
+5. Sets the [VM’s last anchor](#vm-state) to [contract ID](#contract-id) of that contract.
+6. Adds [nonce entry](#nonce-entry) to the [transaction log](#transaction-log) with the `blockid`, transaction [maxtime](#time-bounds) and `nonce_anchor`.
 
-Fails if `predicate` is not a valid [point](#point).
+Fails if:
+* `blockid` is a not a 32-byte [data string](#data-type).
+* `pred` is not a valid [point](#point).
+
+**Discussion**
+
+A nonce serves two purposes:
+
+1. It provides a unique anchor for an issuing transaction if other anchors are not available (i.e., from other values already on the stack);
+2. It binds the entire transaction to a particular blockchain, protecting not only against cross-blockchain replays, but also potential blockchain forks. This is a necessary feature for stateless signing devices that rely on blockchain proofs.
+
+Blockchain state machine performs the following checks:
+
+1. The `blockid` is checked against the IDs of “recent” blocks when the transaction is applied to the blockchain. It must match a recent block, or the initial block of the blockchain.
+2. The `nonce_anchor` is checked for uniqueness against “recent” nonce anchors.
+
+To perform these checks, validators must keep a set of recent nonces and a set of recent block headers available. For scalability and to reduce resource demands on the network, these sets must be limited in size. So verifiers can and should impose reasonable limits on the value of exp (which is the time by which the transaction must be included in a block or become invalid).
+
+To support long-living pre-signed transactions, the protocol allows a nonce to use the blockchain’s initial block ID regardless of the `refscount` limit specified in the block headers.
 
 
 #### log
@@ -1782,7 +1632,7 @@ Locks value with a public key.
 ### Unlock value example
 
 Unlocks a simple contract that locked a single value with a public key.
-The unlock is performed by claiming the [input](#input-structure) and [signing](#signtx) the transaction.
+The unlock is performed by claiming the [input](#input) and [signing](#signtx) the transaction.
 
 ```
 <serialized_input> input signtx ...
@@ -1790,7 +1640,7 @@ The unlock is performed by claiming the [input](#input-structure) and [signing](
 
 ### Simple payment example
 
-Unlocks three values from the existing [inputs](#input-structure),
+Unlocks three values from the existing [inputs](#input),
 recombines them into a payment to address `A` (pubkey) and a change `C`:
 
 ```
@@ -2074,18 +1924,18 @@ We need to investigate whether there are use-cases that cannot be safely or effi
 In ZkVM:
 
 * [Transaction ID](#transaction-id) is globally unique,
-* [UTXO ID](#utxo) is globally unique,
+* [UTXO](#utxo) is globally unique,
 * [Nonce](#nonce) is globally unique,
-* [Value](#value-type) is **not** unique,
-* [Contract](#contract-type) is **not** unique.
+* [Contract](#contract-type) is globally unique,
+* [Value](#value-type) is **not** unique.
 
 In contrast, in TxVM:
 
 * [Transaction ID](#transaction-id) is globally unique,
-* [UTXO ID](#utxo) is **not** unique,
+* [UTXO](#utxo) is **not** unique,
 * [Nonce](#nonce) is globally unique,
-* [Value](#value-type) is globally unique,
-* [Contract](#contract-type) is globally unique.
+* [Contract](#contract-type) is globally unique,
+* [Value](#value-type) is globally unique.
 
 TxVM ensures transaction uniqueness this way:
 
@@ -2097,7 +1947,7 @@ TxVM ensures transaction uniqueness this way:
 
 **Pro:**
 
-UTXO ID is fully determined before transaction is finalized. So e.g. a child transaction can be formed before the current transaction is completed and its ID is known. This might be handy in some cases.
+UTXO is fully determined before transaction is finalized. So e.g. a child transaction can be formed before the current transaction is completed and its ID is known. This might be handy in some cases.
 
 **Meh:**
 
@@ -2119,23 +1969,22 @@ ZkVM ensures transaction uniqueness this way:
 * `issue` does not consume zero value
 * `finalize` does not consume zero value
 * `claim/borrow` can produce an arbitrary value and its negative at any point
-* Each UTXO ID is defined as `Hash(contract, txid)`, that is contents of the contract are not unique, but the new UTXO ID is defined by transaction ID, not vice versa.
+* Each UTXO ID is defined as `Hash(contract)`, that is contents of the contract are unique due to a contract’s anchor.
 * Transaction ID is a hash of the finalized log.
-* When VM finishes, it checks that the log contains either an [input](#input-entry) or a [nonce](#nonce-entry), setting the `uniqueness` flag.
-* Outputs are encoded in the log as snapshots of contents. Blockchain state update hashes these with transaction ID when generating UTXO IDs.
-* Inputs are encoded in the log as their UTXO IDs, so the blockchain processor knows which ones to find and remove.
+* Newly created contracts consume the "last anchor" tracked by VM and set it to their contract ID.
+* When VM finishes, it checks that "last anchor" is present, which means that the log contains either an [input](#input-entry) or a [nonce](#nonce-entry).
+* Inputs and outputs are represented in the log as contract IDs which the blockchain state machine should remove/insert accordingly.
 
 **Pros:**
 
-Huge pro: recipient can know upfront and provide full spec for the _compressed_ contract+value specification, so it can be revealed behind a shuffle.
-
-Handling values becomes much simpler — they are just values. So we can issue, finalize and even “claim” a value in a straightforward manner.
-
 The values are simply pedersen commitments (Q,A) (quantity, flavor), without any extra payload.
+This makes handling them much simpler: we can issue, finalize and even “claim” a value in a straightforward manner.
 
 **Con:**
 
-UTXO IDs are not known until the full transaction log is formed. This could be not a big deal, as we cannot really plan for the next transaction until this one is fully formed and published. Also, in a joint proof scenario, it’s even less reliable to plan the next payment until the MPC is completed, so requirement to wait till transaction ID is determined may not be a big deal.
+UTXO IDs are not generally known without fuller view on transaction flow. This could be not a big deal, as we cannot really plan for the next transaction until this one is fully formed and published. Also, in a joint proof scenario, it’s even less reliable to plan the next payment until the multi-party protocol is completed, therefore waiting for transaction ID to be determined becomes a requirement.
+
+That said, for contracts created from another contract, the contract ID is determined locally by the parent contract’s ID.
 
 
 ### Open questions

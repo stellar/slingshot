@@ -1,13 +1,13 @@
 //! Definition of all instructions in ZkVM,
 //! their codes and decoding/encoding utility functions.
 
-use core::borrow::Borrow;
-use core::mem;
-
 use crate::encoding;
 use crate::encoding::SliceReader;
 use crate::errors::VMError;
 use crate::types::Data;
+use core::borrow::Borrow;
+use core::mem;
+use spacesuit::BitRange;
 
 /// A builder type for assembling a sequence of `Instruction`s with chained method calls.
 /// E.g. `let prog = Program::new().push(...).input().push(...).output(1).to_vec()`.
@@ -32,12 +32,10 @@ pub enum Instruction {
     Add,
     Mul,
     Eq,
-    Range(u8), // bitwidth (1..64)
+    Range(BitRange), // bitwidth (0...64)
     And,
     Or,
     Verify,
-    Blind,
-    Reblind,
     Unblind,
     Issue,
     Borrow,
@@ -83,30 +81,28 @@ pub enum Opcode {
     And = 0x0f,
     Or = 0x10,
     Verify = 0x11,
-    Blind = 0x12,
-    Reblind = 0x13,
-    Unblind = 0x14,
-    Issue = 0x15,
-    Borrow = 0x16,
-    Retire = 0x17,
-    Qty = 0x18,
-    Flavor = 0x19,
-    Cloak = 0x1a,
-    Import = 0x1b,
-    Export = 0x1c,
-    Input = 0x1d,
-    Output = 0x1e,
-    Contract = 0x1f,
-    Nonce = 0x20,
-    Log = 0x21,
-    Signtx = 0x22,
-    Call = 0x23,
-    Left = 0x24,
-    Right = 0x25,
+    Unblind = 0x12,
+    Issue = 0x13,
+    Borrow = 0x14,
+    Retire = 0x15,
+    Qty = 0x16,
+    Flavor = 0x17,
+    Cloak = 0x18,
+    Import = 0x19,
+    Export = 0x1a,
+    Input = 0x1b,
+    Output = 0x1c,
+    Contract = 0x1d,
+    Nonce = 0x1e,
+    Log = 0x1f,
+    Signtx = 0x20,
+    Call = 0x21,
+    Left = 0x22,
+    Right = 0x23,
     Delegate = MAX_OPCODE,
 }
 
-const MAX_OPCODE: u8 = 0x26;
+const MAX_OPCODE: u8 = 0x24;
 
 impl Opcode {
     /// Converts the opcode to `u8`.
@@ -184,14 +180,13 @@ impl Instruction {
             Opcode::Mul => Ok(Instruction::Mul),
             Opcode::Eq => Ok(Instruction::Eq),
             Opcode::Range => {
-                let bit_width = program.read_u8()?;
+                let bit_width =
+                    BitRange::new(program.read_u8()? as usize).ok_or(VMError::FormatError)?;
                 Ok(Instruction::Range(bit_width))
             }
             Opcode::And => Ok(Instruction::And),
             Opcode::Or => Ok(Instruction::Or),
             Opcode::Verify => Ok(Instruction::Verify),
-            Opcode::Blind => Ok(Instruction::Blind),
-            Opcode::Reblind => Ok(Instruction::Reblind),
             Opcode::Unblind => Ok(Instruction::Unblind),
             Opcode::Issue => Ok(Instruction::Issue),
             Opcode::Borrow => Ok(Instruction::Borrow),
@@ -253,15 +248,14 @@ impl Instruction {
             Instruction::Add => write(Opcode::Add),
             Instruction::Mul => write(Opcode::Mul),
             Instruction::Eq => write(Opcode::Eq),
-            Instruction::Range(bit_width) => {
+            Instruction::Range(n) => {
                 write(Opcode::Range);
-                program.push(*bit_width);
+                let bit_width: BitRange = *n;
+                program.push(bit_width.into());
             }
             Instruction::And => write(Opcode::And),
             Instruction::Or => write(Opcode::Or),
             Instruction::Verify => write(Opcode::Verify),
-            Instruction::Blind => write(Opcode::Blind),
-            Instruction::Reblind => write(Opcode::Reblind),
             Instruction::Unblind => write(Opcode::Unblind),
             Instruction::Issue => write(Opcode::Issue),
             Instruction::Borrow => write(Opcode::Borrow),
@@ -294,17 +288,6 @@ impl Instruction {
             Instruction::Ext(x) => program.push(*x),
         };
     }
-
-    /// Encodes the iterator of instructions into a buffer.
-    pub fn encode_program<I>(iterator: I, program: &mut Vec<u8>)
-    where
-        I: IntoIterator,
-        I::Item: Borrow<Self>,
-    {
-        for i in iterator.into_iter() {
-            i.borrow().encode(program);
-        }
-    }
 }
 
 macro_rules! def_op {
@@ -328,7 +311,6 @@ impl Program {
     def_op!(add, Add);
     def_op!(alloc, Alloc);
     def_op!(and, And);
-    def_op!(blind, Blind);
     def_op!(borrow, Borrow);
     def_op!(call, Call);
     def_op!(r#const, Const);
@@ -353,8 +335,7 @@ impl Program {
     def_op!(or, Or);
     def_op!(output, Output, usize);
     def_op!(qty, Qty);
-    def_op!(range, Range, u8);
-    def_op!(reblind, Reblind);
+    def_op!(range, Range, BitRange);
     def_op!(retire, Retire);
     def_op!(right, Right);
     def_op!(roll, Roll, usize);
@@ -379,9 +360,32 @@ impl Program {
         program
     }
 
+    /// Creates a program from parsing the opaque data slice of encoded instructions.
+    pub fn parse(data: &[u8]) -> Result<Self, VMError> {
+        SliceReader::parse(data, |r| {
+            let mut program = Self::new();
+            while r.len() > 0 {
+                program.0.push(Instruction::parse(r)?);
+            }
+            Ok(program)
+        })
+    }
+
     /// Converts the program to a plain vector of instructions.
     pub fn to_vec(self) -> Vec<Instruction> {
         self.0
+    }
+
+    /// Returns the serialized length of the program.
+    pub fn serialized_length(&self) -> usize {
+        self.0.iter().map(|p| p.serialized_length()).sum()
+    }
+
+    /// Encodes a program into a buffer.
+    pub fn encode(&self, buf: &mut Vec<u8>) {
+        for i in self.0.iter() {
+            i.borrow().encode(buf);
+        }
     }
 
     /// Adds a `push` instruction with an immediate data type that can be converted into `Data`.

@@ -14,10 +14,10 @@ use crate::scalar_witness::ScalarWitness;
 /// Variable represents a high-level R1CS variable specified by its
 /// Pedersen commitment. In ZkVM variables are actually indices to a list
 /// of stored commitments to permit commitment reblinding (see `reblind` instruction).
-#[derive(Copy, Clone, Debug)]
+#[derive(Clone, Debug)]
 pub struct Variable {
-    pub(crate) index: usize,
-    // the witness is located indirectly in vm::VariableCommitment
+    /// TBD: maybe do this as a subtype of the Expression
+    pub(crate) commitment: Commitment,
 }
 
 /// Expression is a linear combination of high-level variables (`var`),
@@ -160,6 +160,15 @@ impl Commitment {
             Commitment::Open(w) => Some((w.value, w.blinding)),
         }
     }
+
+    /// Returns the committed scalar or integer, without the blinding factor.
+    /// If the witness is missing, returns None.
+    pub fn assignment(&self) -> Option<ScalarWitness> {
+        match self {
+            Commitment::Closed(_) => None,
+            Commitment::Open(w) => Some(w.value),
+        }
+    }
 }
 
 impl CommitmentWitness {
@@ -231,7 +240,7 @@ impl Expression {
         }
     }
 
-    fn to_r1cs_lc(&self) -> r1cs::LinearCombination {
+    pub(crate) fn to_r1cs_lc(&self) -> r1cs::LinearCombination {
         match self {
             Expression::Constant(a) => a.to_scalar().into(),
             Expression::LinearCombination(terms, _) => r1cs::LinearCombination::from_iter(terms),
