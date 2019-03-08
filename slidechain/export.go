@@ -119,20 +119,22 @@ func (c *Custodian) pegOutFromExports(ctx context.Context, pegouts chan<- pegOut
 			return
 		case <-ch:
 		}
-		const q = `SELECT ref FROM exports WHERE pegged_out IN ($1, $2)`
+		const q = `SELECT txid, ref FROM exports WHERE pegged_out IN ($1, $2)`
 
 		var (
-			refs [][]byte
+			txids, refs [][]byte
 		)
-		err := sqlutil.ForQueryRows(ctx, c.DB, q, pegOutNotYet, pegOutRetry, func(ref []byte) {
+		err := sqlutil.ForQueryRows(ctx, c.DB, q, pegOutNotYet, pegOutRetry, func(txid, ref []byte) {
+			txids = append(txids, txid)
 			refs = append(refs, ref)
 		})
 		if err != nil {
 			log.Fatalf("reading export rows: %s", err)
 		}
-		for _, ref := range refs {
+		for i, txid := range txids {
 			var p pegOut
-			err := json.Unmarshal(ref, &p)
+			log.Print(refs[i])
+			err := json.Unmarshal(refs[i], &p)
 			if err != nil {
 				log.Fatalf("unmarshaling refdata: %s", err)
 			}
@@ -152,8 +154,7 @@ func (c *Custodian) pegOutFromExports(ctx context.Context, pegouts chan<- pegOut
 				log.Fatalf("setting exporter address to %s: %s", p.Exporter, err)
 			}
 
-			log.Printf("pegging out export %x: %d of %s to %s", p.TxID, p.Amount, asset.String(), p.Exporter)
-
+			log.Printf("pegging out export %x: %d of %s to %s", txid, p.Amount, asset.String(), p.Exporter)
 			peggedOut := pegOutOK
 			err = c.pegOut(ctx, exporter, asset, p.Amount, tempID, xdr.SequenceNumber(p.Seqnum))
 			if err != nil {
@@ -161,23 +162,23 @@ func (c *Custodian) pegOutFromExports(ctx context.Context, pegouts chan<- pegOut
 				if herr, ok := errors.Root(err).(*horizon.Error); ok {
 					resultCodes, rerr := herr.ResultCodes()
 					if rerr != nil {
-						log.Fatalf("getting error codes from failed submission of tx %x (with horizon err '%s'): %s", p.TxID, herr, rerr)
+						log.Fatalf("getting error codes from failed submission of tx %x (with horizon err '%s'): %s", txid, herr, rerr)
 					}
 					if resultCodes.TransactionCode == xdr.TransactionResultCodeTxBadSeq.String() {
 						peggedOut = pegOutRetry
 					}
 				}
 			}
-			result, err := c.DB.ExecContext(ctx, `UPDATE exports SET pegged_out=$1 WHERE ref=$2`, peggedOut, ref)
+			result, err := c.DB.ExecContext(ctx, `UPDATE exports SET pegged_out=$1 WHERE txid=$2`, peggedOut, txid)
 			if err != nil {
 				log.Fatalf("updating pegged_out in export table: %s", err)
 			}
 			numAffected, err := result.RowsAffected()
 			if err != nil {
-				log.Fatalf("checking rows affected by update exports query for txid %x: %s", p.TxID, err)
+				log.Fatalf("checking rows affected by update exports query for txid %x: %s", txid, err)
 			}
 			if numAffected != 1 {
-				log.Fatalf("got %d rows affected by update exports query for txid %x, want 1", numAffected, p.TxID)
+				log.Fatalf("got %d rows affected by update exports query for txid %x, want 1", numAffected, txid)
 			}
 			// Send peg-out info to goroutine for successes and non-retriable failures.
 			if peggedOut == pegOutOK || peggedOut == pegOutFail {

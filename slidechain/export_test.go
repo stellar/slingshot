@@ -60,9 +60,10 @@ func TestPegOut(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	txid := []byte("test")
 	var zero32 [32]byte // anchor and pubkey do not matter to test this functionality
 	p := pegOut{
-		TxID:     []byte("test"),
+		TxID:     txid,
 		AssetXDR: lumenXDR,
 		TempAddr: tempAddr,
 		Seqnum:   int64(seqnum),
@@ -77,7 +78,7 @@ func TestPegOut(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err = c.DB.Exec("INSERT INTO exports (ref) VALUES ($1)", ref)
+	_, err = c.DB.Exec("INSERT INTO exports (txid, ref) VALUES ($1, $2)", txid, ref)
 	if err != nil && err != context.Canceled {
 		t.Fatal(err)
 	}

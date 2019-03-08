@@ -15,13 +15,16 @@ import (
 	"github.com/stellar/go/xdr"
 )
 
-func (c *Custodian) doPostPegOut(ctx context.Context, p pegOut) error {
+func (c *Custodian) doPostPegOut(ctx context.Context, p pegOut, txid []byte) error {
 	var asset xdr.Asset
 	err := asset.UnmarshalBinary(p.AssetXDR)
 	if err != nil {
 		return errors.Wrap(err, "unmarshaling asset xdr")
 	}
 	assetID := bc.NewHash(txvm.AssetID(importIssuanceSeed[:], p.AssetXDR))
+
+	// For the reference data to match that of the export transaction, the tx ID must be empty.
+	p.TxID = []byte{}
 	refdata, err := json.Marshal(p)
 	if err != nil {
 		return errors.Wrap(err, "marshaling reference data")
@@ -88,13 +91,13 @@ func (c *Custodian) doPostPegOut(ctx context.Context, p pegOut) error {
 	// Delete relevant row from exports table.
 	// TODO(debnil): Implement a mechanism to recover in case of a crash here.
 	// Currently, the txvm funds will be retired or refunded, but the db will not be updated.
-	result, err := c.DB.ExecContext(ctx, `DELETE FROM exports WHERE ref=$1`, refdata)
+	result, err := c.DB.ExecContext(ctx, `DELETE FROM exports WHERE txid=$1`, txid)
 	if err != nil {
-		return errors.Wrapf(err, "deleting export for tx %x", p.TxID)
+		return errors.Wrapf(err, "deleting export for tx %x", txid)
 	}
 	numAffected, err := result.RowsAffected()
 	if err != nil {
-		return errors.Wrapf(err, "checking rows affected by exports delete query for txid %x", p.TxID)
+		return errors.Wrapf(err, "checking rows affected by exports delete query for txid %x", txid)
 	}
 	if numAffected != 1 {
 		return fmt.Errorf("got %d rows affected by exports delete query, want 1", numAffected)

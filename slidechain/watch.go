@@ -145,9 +145,17 @@ func (c *Custodian) watchExports(ctx context.Context) {
 				continue
 			}
 
-			exportInfoJSON := tx.Log[1][2].(txvm.Bytes)
+			// We need the export tx ID as a primary key in the exports table.
+			// However, this is not contained in the reference data in the TxVM transaction,
+			// since that data is marshalled before the tx is even created, let alone submitted.
+			// So, we must also add this ID to the JSON we store in the exports table.
 			var info pegOut
-			err := json.Unmarshal(exportInfoJSON, &info)
+			err := json.Unmarshal(tx.Log[1][2].(txvm.Bytes), &info)
+			if err != nil {
+				continue
+			}
+			info.TxID = tx.ID.Bytes()
+			exportRef, err := json.Marshal(info)
 			if err != nil {
 				continue
 			}
@@ -155,8 +163,9 @@ func (c *Custodian) watchExports(ctx context.Context) {
 
 			// Record the export in the db,
 			// then wake up a goroutine that executes peg-outs on the main chain.
-			const q = `INSERT INTO exports (ref) VALUES ($1)`
-			_, err = c.DB.ExecContext(ctx, q, exportInfoJSON)
+			log.Printf("insert query for txid %x", tx.ID.Bytes())
+			const q = `INSERT INTO exports (txid, ref) VALUES ($1, $2)`
+			_, err = c.DB.ExecContext(ctx, q, info.TxID, exportRef)
 			if err != nil {
 				log.Fatalf("recording export tx: %s", err)
 			}
@@ -179,21 +188,22 @@ func (c *Custodian) watchPegOuts(ctx context.Context, pegouts <-chan pegOut) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			const q = `SELECT ref FROM exports WHERE pegged_out IN ($1, $2)`
-			var refs [][]byte
-			err := sqlutil.ForQueryRows(ctx, c.DB, q, pegOutOK, pegOutFail, func(ref []byte) {
+			const q = `SELECT txid, ref FROM exports WHERE pegged_out IN ($1, $2)`
+			var txids, refs [][]byte
+			err := sqlutil.ForQueryRows(ctx, c.DB, q, pegOutOK, pegOutFail, func(txid, ref []byte) {
+				txids = append(txids, txid)
 				refs = append(refs, ref)
 			})
 			if err != nil {
 				log.Fatalf("querying peg-outs: %s", err)
 			}
-			for _, ref := range refs {
+			for i, txid := range txids {
 				var p pegOut
-				err = json.Unmarshal(ref, &p)
+				err = json.Unmarshal(refs[i], &p)
 				if err != nil {
 					log.Fatalf("unmarshaling reference: %s", err)
 				}
-				err = c.doPostPegOut(ctx, p)
+				err = c.doPostPegOut(ctx, p, txid)
 				if err != nil {
 					log.Fatalf("doing post-peg-out: %s", err)
 				}
@@ -202,7 +212,7 @@ func (c *Custodian) watchPegOuts(ctx context.Context, pegouts <-chan pegOut) {
 			if !ok {
 				log.Fatalf("peg-outs channel closed")
 			}
-			err := c.doPostPegOut(ctx, p)
+			err := c.doPostPegOut(ctx, p, p.TxID)
 			if err != nil {
 				log.Fatalf("doing post-peg-out: %s", err)
 			}
