@@ -13,8 +13,9 @@ pub enum PatriciaNode {
     Node(PatriciaItem, Box<PatriciaNode>, Box<PatriciaNode>),
 }
 
+#[derive(Clone)]
 struct PatriciaItem {
-    key: Vec<u8>,
+    key: &'static [u8],
     hash: [u8; 32],
     bitmask: u8,
 }
@@ -30,64 +31,79 @@ impl PatriciaTree {
 }
 
 impl PatriciaNode {
-    fn insert(&self, item: &[u8]) -> Result<&Self, VMError> {
+    fn insert(self, insert: &'static [u8]) -> Result<Self, VMError> {
         match self {
             PatriciaNode::Empty() => {
-                return Ok(&PatriciaNode::Leaf(PatriciaItem {
-                    key: item.to_vec(),
-                    hash: hash(item),
+                return Ok(PatriciaNode::Leaf(PatriciaItem {
+                    key: insert,
+                    hash: hash(insert),
                     bitmask: 7,
                 }));
             }
             PatriciaNode::Leaf(p) => {
-                if p.key == item {
+                if p.key == insert {
                     return Ok(self);
                 }
-                if p.is_prefix(item) {
-                    return Err(VMError::InvalidMerkleProof);
-                }
-
-                // Find common split
-                let (byte, bit) = p.last_matching_bit(item);
-                let matching_bytes = &p.key[..byte + 1];
-
-                let parent_item = PatriciaItem {
-                    key: matching_bytes.to_vec(),
-                    hash: hash(matching_bytes),
-                    bitmask: bit,
-                };
-
-                // TODO: move the leftover bits from the parent into
-                // the new child accordingly - right now, this is wrong!
-                let new_child = PatriciaItem {
-                    key: p.key[byte + 1..].to_vec(),
-                    hash: hash(&p.key[byte + 1..]),
-                    bitmask: bit,
-                };
-
-                let insert_child = PatriciaItem {
-                    key: item[byte + 1..].to_vec(),
-                    hash: hash(&item[byte + 1..]),
-                    bitmask: 7,
-                };
-
-                // Build two children
-                if bit_after(&p.key, byte, bit) == 0 {
-                    return Ok(&PatriciaNode::Node(
-                        parent_item,
-                        Box::new(PatriciaNode::Leaf(new_child)),
-                        Box::new(PatriciaNode::Leaf(insert_child)),
-                    ));
-                } else {
-                    return Ok(&PatriciaNode::Node(
-                        parent_item,
-                        Box::new(PatriciaNode::Leaf(insert_child)),
-                        Box::new(PatriciaNode::Leaf(new_child)),
-                    ));
-                }
+                return Ok(insert_helper(insert, p, None)?)
             }
-            PatriciaNode::Node(item, l, r) => unimplemented!(),
+            PatriciaNode::Node(item, l, r) => {
+                if item.key == insert {
+                    return Ok(self);
+                }
+                return Ok(insert_helper(insert, item, Some((l, r)))?)
+            }
         }
+    }
+}
+
+fn insert_helper(insert: &'static [u8], item: PatriciaItem, children: Option<(Box<PatriciaNode>, Box<PatriciaNode>)>) -> Result<PatriciaNode, VMError> {
+    if item.is_prefix(insert) {
+        return Err(VMError::InvalidMerkleProof);
+    }
+
+    // Find common split
+    let (byte, bit) = item.last_matching_bit(insert);
+    let matching_bytes = &item.key[..byte + 1];
+
+    let parent = PatriciaItem {
+        key: matching_bytes,
+        hash: hash(matching_bytes),
+        bitmask: bit,
+    };
+
+    // let item.bitmask = 7;
+    let item = PatriciaItem {
+        key: item.key,
+        hash: item.hash,
+        bitmask: 7,
+    };
+    let new_child = match children {
+        Some((l, r)) => {
+            PatriciaNode::Node(item, l, r)
+        },
+        None => PatriciaNode::Leaf(item),
+    };
+
+    let insert_child = PatriciaNode::Leaf(
+        PatriciaItem {
+            key: insert,
+            hash: hash(&insert),
+            bitmask: 7,
+        }
+    );
+
+    if bit_after(&item.key, byte, bit) == 0 {
+        return Ok(PatriciaNode::Node(
+            parent,
+            Box::new(new_child),
+            Box::new(insert_child),
+        ));
+    } else {
+        return Ok(PatriciaNode::Node(
+            parent,
+            Box::new(insert_child),
+            Box::new(new_child),
+        ));
     }
 }
 
