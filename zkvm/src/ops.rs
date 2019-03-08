@@ -316,7 +316,7 @@ macro_rules! def_op {
 
 impl Program {
     def_op!(add, Add);
-    def_op!(alloc, Alloc);
+    def_op!(alloc, Alloc, Option<ScalarWitness>);
     def_op!(and, And);
     def_op!(borrow, Borrow);
     def_op!(call, Call);
