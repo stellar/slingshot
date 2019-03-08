@@ -1,10 +1,11 @@
 #![allow(non_snake_case)]
 
-use crate::signer::*;
+use crate::signature::musig::*;
 use crate::transcript::TranscriptProtocol;
 use curve25519_dalek::constants::RISTRETTO_BASEPOINT_POINT;
 use curve25519_dalek::ristretto::RistrettoPoint;
 use curve25519_dalek::scalar::Scalar;
+use merlin::Transcript;
 use rand;
 
 #[derive(Clone)]
@@ -53,6 +54,7 @@ pub struct Shared {
 
 impl<'a> PartyAwaitingPrecommitments {
     pub fn new(
+        transcript: Transcript,
         x_i: PrivKey,
         X_agg: PubKey,
         L: PubKeyHash,
@@ -60,16 +62,13 @@ impl<'a> PartyAwaitingPrecommitments {
     ) -> (Self, NoncePrecommitment) {
         let shared = Shared {
             G: RISTRETTO_BASEPOINT_POINT,
-            transcript: Transcript::new(b"ZkVM.MuSig"),
+            transcript,
             X_agg,
             L,
             m,
         };
 
-        let mut rng = shared
-            .transcript
-            .build_rng()
-            .finalize(&mut rand::thread_rng());
+        let mut rng = transcript.build_rng().finalize(&mut rand::thread_rng());
 
         // Generate ephemeral keypair (r_i, R_i). r_i is a random nonce.
         let r_i = Nonce(Scalar::random(&mut rng));

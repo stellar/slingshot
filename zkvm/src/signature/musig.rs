@@ -5,9 +5,6 @@ use curve25519_dalek::constants::RISTRETTO_BASEPOINT_POINT;
 use curve25519_dalek::ristretto::RistrettoPoint;
 use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
-use rand;
-
-pub mod prover;
 
 #[derive(Clone)]
 pub struct PrivKey(Scalar);
@@ -63,8 +60,7 @@ impl MultiKey {
 }
 
 impl Signature {
-    pub fn verify(&self, X_agg: PubKey, m: Message) -> bool {
-        let mut transcript = Transcript::new(b"ZkVM.MuSig");
+    pub fn verify(&self, transcript: Transcript, X_agg: PubKey, m: Message) -> bool {
         let G = RISTRETTO_BASEPOINT_POINT;
 
         // Make c = H(X_agg, R, m)
@@ -83,7 +79,7 @@ impl Signature {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::signer::prover::*;
+    use crate::signature::prover::*;
     use curve25519_dalek::ristretto::CompressedRistretto;
 
     #[test]
@@ -184,7 +180,8 @@ mod tests {
         let (X_agg, L) = agg_pubkey_helper(&priv_keys);
         let m = Message(b"message to sign".to_vec());
 
+        let mut transcript = Transcript::new(b"signing.test");
         let signature = sign_helper(priv_keys, X_agg.clone(), L, m.clone());
-        assert_eq!(true, signature.verify(X_agg, m));
+        assert_eq!(true, signature.verify(&mut transcript, X_agg, m));
     }
 }

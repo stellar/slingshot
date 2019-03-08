@@ -14,7 +14,6 @@ mod predicate;
 mod prover;
 mod scalar_witness;
 mod signature;
-mod signer;
 mod transcript;
 mod txlog;
 mod types;
