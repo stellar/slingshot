@@ -1435,7 +1435,7 @@ _items... predicate_ **output:_k_** → ø
 2. Pops `k` items from the stack.
 3. Creates a contract with the `k` items as a payload, the predicate `pred`, and anchor set to the [VM’s last anchor](#vm-state).
 4. Adds an [output entry](#output-entry) to the [transaction log](#transaction-log).
-5. Update the [VM’s last anchor](#vm-state) with the [contract ID](#contract-id) of the new contract.
+5. Updates the [VM’s last anchor](#vm-state) with the [contract ID](#contract-id) of the new contract.
 
 Immediate data `k` is encoded as [LE32](#le32).
 
