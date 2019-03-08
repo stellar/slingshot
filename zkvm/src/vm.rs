@@ -377,6 +377,19 @@ where
     }
 
     fn alloc(&mut self, sw: Option<ScalarWitness>) -> Result<(), VMError> {
+        let (var, _, _) = self
+            .delegate
+            .cs()
+            .allocate(|| {
+                Ok((
+                    sw.ok_or(R1CSError::MissingAssignment)?.to_scalar(),
+                    Scalar::zero(),
+                    Scalar::zero(),
+                ))
+            })
+            .map_err(|e| VMError::R1CSError(e))?;
+        let expr = Expression::LinearCombination(vec![(var, Scalar::one())], sw);
+        self.push_item(expr);
         Ok(())
     }
 
