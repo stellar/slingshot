@@ -23,8 +23,6 @@ func (c *Custodian) doPostPegOut(ctx context.Context, p pegOut, txid []byte) err
 	}
 	assetID := bc.NewHash(txvm.AssetID(importIssuanceSeed[:], p.AssetXDR))
 
-	// For the reference data to match that of the export transaction, the tx ID must be empty.
-	p.TxID = []byte{}
 	refdata, err := json.Marshal(p)
 	if err != nil {
 		return errors.Wrap(err, "marshaling reference data")

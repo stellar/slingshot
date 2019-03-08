@@ -145,17 +145,9 @@ func (c *Custodian) watchExports(ctx context.Context) {
 				continue
 			}
 
-			// We need the export tx ID as a primary key in the exports table.
-			// However, this is not contained in the reference data in the TxVM transaction,
-			// since that data is marshalled before the tx is even created, let alone submitted.
-			// So, we must also add this ID to the JSON we store in the exports table.
 			var info pegOut
-			err := json.Unmarshal(tx.Log[1][2].(txvm.Bytes), &info)
-			if err != nil {
-				continue
-			}
-			info.TxID = tx.ID.Bytes()
-			exportRef, err := json.Marshal(info)
+			exportRef := tx.Log[1][2].(txvm.Bytes)
+			err := json.Unmarshal(exportRef, &info)
 			if err != nil {
 				continue
 			}
@@ -164,7 +156,7 @@ func (c *Custodian) watchExports(ctx context.Context) {
 			// Record the export in the db,
 			// then wake up a goroutine that executes peg-outs on the main chain.
 			const q = `INSERT INTO exports (txid, ref) VALUES ($1, $2)`
-			_, err = c.DB.ExecContext(ctx, q, info.TxID, exportRef)
+			_, err = c.DB.ExecContext(ctx, q, tx.ID.Bytes(), exportRef)
 			if err != nil {
 				log.Fatalf("recording export tx: %s", err)
 			}
@@ -211,7 +203,10 @@ func (c *Custodian) watchPegOuts(ctx context.Context, pegouts <-chan pegOut) {
 			if !ok {
 				log.Fatalf("peg-outs channel closed")
 			}
-			err := c.doPostPegOut(ctx, p, p.TxID)
+			// For the reference data to match that of the export transaction, the tx ID must be empty.
+			txid := p.TxID
+			p.TxID = []byte{}
+			err := c.doPostPegOut(ctx, p, txid)
 			if err != nil {
 				log.Fatalf("doing post-peg-out: %s", err)
 			}
