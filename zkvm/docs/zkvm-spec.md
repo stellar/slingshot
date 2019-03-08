@@ -1282,7 +1282,7 @@ using one of the contract instructions: [`signtx`](#signtx), [`delegate`](#deleg
 Fails if:
 * `pred` is not a valid [point](#point),
 * `flv` or `qty` are not [variable types](#variable-type),
-* VM’s [last anchor](#vm-state) is missing.
+* VM’s [last anchor](#vm-state) is not set.
 
 
 #### borrow
