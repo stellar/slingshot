@@ -75,7 +75,7 @@ where
     // we allow treating unassigned opcodes as no-ops.
     extension: bool,
 
-    // updated by input/nonce/contract/output instructions
+    // updated by nonce/input/issue/contract/output instructions
     last_anchor: Option<Anchor>,
 
     // stack of all items in the VM

@@ -207,7 +207,7 @@ impl Data {
         }
     }
 
-    /// Downcast the data item to an `Input` type.
+    /// Downcast the data item to an `Output` type.
     pub fn to_output(self) -> Result<Output, VMError> {
         match self {
             Data::Opaque(data) => SliceReader::parse(&data, |r| Output::decode(r)),
