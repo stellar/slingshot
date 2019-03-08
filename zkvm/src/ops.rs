@@ -430,7 +430,7 @@ impl<'a> PredicateTree<'a> {
     pub fn left(self) -> Result<Self, VMError> {
         let (l, r) = self.pred.to_disjunction()?;
         let prog = self.prog;
-        prog.push(l.clone()).push(r).left();
+        prog.push(l.as_opaque()).push(r.as_opaque()).left();
 
         Ok(Self { pred: l, prog })
     }
@@ -439,16 +439,16 @@ impl<'a> PredicateTree<'a> {
     pub fn right(self) -> Result<Self, VMError> {
         let (l, r) = self.pred.to_disjunction()?;
         let prog = self.prog;
-        prog.push(l).push(r.clone()).right();
+        prog.push(l.as_opaque()).push(r.as_opaque()).right();
 
         Ok(Self { pred: r, prog })
     }
 
     /// Pushes program to the stack and calls the contract protected
     /// by the program predicate.
-    pub fn call(self) -> Result<&'a mut Program, VMError> {
+    pub fn call(self) -> Result<(), VMError> {
         let subprog = self.pred.to_program()?;
         self.prog.push(subprog).call();
-        Ok(self.prog)
+        Ok(())
     }
 }

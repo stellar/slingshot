@@ -119,6 +119,11 @@ impl Predicate {
         }
     }
 
+    /// Converts the predicate to its opaque representation.
+    pub fn as_opaque(&self) -> Self {
+        Predicate::Opaque(self.to_point())
+    }
+
     /// Creates a disjunction of two predicates.
     pub fn or(self, right: Predicate) -> Result<Self, VMError> {
         let point = {
