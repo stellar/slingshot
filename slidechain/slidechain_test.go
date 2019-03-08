@@ -577,6 +577,12 @@ func isPostPegOutTx(tx *bc.Tx, asset xdr.Asset, amount int64, tempAddr, exporter
 		return false
 	}
 	if foundRetire {
+		var logRef pegOut
+		err := json.Unmarshal(tx.Log[2][2].(txvm.Bytes), logRef)
+		if err != nil {
+			log.Printf("unmarshaling log item: %s", err)
+			return false
+		}
 		ref := pegOut{
 			AssetXDR: assetXDR,
 			TempAddr: tempAddr,
@@ -586,12 +592,7 @@ func isPostPegOutTx(tx *bc.Tx, asset xdr.Asset, amount int64, tempAddr, exporter
 			Anchor:   anchor,
 			Pubkey:   pubkey,
 		}
-		refdata, err := json.Marshal(ref)
-		if err != nil {
-			log.Printf("unmarshaling json: %s", err)
-			return false
-		}
-		if !bytes.Equal(refdata, tx.Log[2][2].(txvm.Bytes)) {
+		if !reflect.DeepEqual(logRef, ref) {
 			return false
 		}
 	}
