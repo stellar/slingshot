@@ -841,7 +841,7 @@ The ZkVM state consists of the static attributes and the state machine attribute
     * `tx_signature`
     * `cs_proof`
 2. Extension flag (boolean)
-3. Last [anchor](#anchor) or ∅ if unset.
+3. Last [anchor](#anchor) or ∅ if unset
 4. Data stack (array of [items](#types))
 5. Program stack (array of [programs](#program) with their offsets)
 6. Current [program](#program) with its offset
@@ -882,7 +882,7 @@ Then, the VM executes the current program till completion:
 
 If the execution finishes successfully, VM performs the finishing tasks:
 1. Checks if the stack is empty; fails otherwise.
-2. Checks if the last anchor is present; fails otherwise.
+2. Checks if the [last anchor](#vm-state) is set; fails otherwise.
 3. Computes [transaction ID](#transaction-id).
 4. Computes a verification statement for [transaction signature](#transaction-signature).
 5. Computes a verification statement for [constraint system proof](#constraint-system-proof).
