@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/bobg/sqlutil"
+	"github.com/chain/txvm/errors"
 	"github.com/chain/txvm/protocol/bc"
 	"github.com/chain/txvm/protocol/txvm"
 	i10rnet "github.com/interstellar/starlight/net"
@@ -107,16 +108,8 @@ func (c *Custodian) watchPegIns(ctx context.Context) {
 // Runs as a goroutine.
 func (c *Custodian) watchExports(ctx context.Context) {
 	defer log.Println("watchExports exiting")
-	r := c.S.w.Reader()
-	for {
-		got, ok := r.Read(ctx)
-		if !ok {
-			if ctx.Err() == context.Canceled {
-				return
-			}
-			log.Fatal("error reading block from multichan")
-		}
-		b := got.(*bc.Block)
+
+	c.RunPin(ctx, "watchExports", func(ctx context.Context, b *bc.Block) error {
 		for _, tx := range b.Transactions {
 			// Check if the transaction has either expected length for an export tx.
 			// Confirm that its input, log, and output entries are as expected.
@@ -161,14 +154,15 @@ func (c *Custodian) watchExports(ctx context.Context) {
 				VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`
 			_, err = c.DB.ExecContext(ctx, q, tx.ID.Bytes(), info.Exporter, info.Amount, info.AssetXDR, info.TempAddr, info.Seqnum, info.Anchor, info.Pubkey)
 			if err != nil {
-				log.Fatalf("recording export tx: %s", err)
+				return errors.Wrapf(err, "recording export tx %x", tx.ID.Bytes())
 			}
 
-			log.Printf("recorded export: %d of txvm asset %x (Stellar %x) for %s", info.Amount, exportedAssetBytes, info.AssetXDR, info.Exporter)
+			log.Printf("recorded export: %d of txvm asset %x (Stellar %x) for %s in tx %x", info.Amount, exportedAssetBytes, info.AssetXDR, info.Exporter, tx.ID.Bytes())
 
 			c.exports.Broadcast()
 		}
-	}
+		return nil
+	})
 }
 
 // Runs as a goroutine.
