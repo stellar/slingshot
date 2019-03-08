@@ -384,7 +384,7 @@ T.commit("contract", output_structure)
 id = T.challenge_bytes("id")
 ```
 
-Contract ID makes signatures safe against reused [predicate](#predicate) keys:
+Contract ID makes signatures safe against reused [verification keys](#verification-key) in [predicates](#predicate):
 a signature covers the unique contract ID, therefore preventing its replay against another contract,
 even if containing the same [payload](#contract-payload) and predicate.
 
