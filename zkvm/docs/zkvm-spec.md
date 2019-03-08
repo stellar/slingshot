@@ -1439,7 +1439,7 @@ _items... predicate_ **output:_k_** → ø
 
 Immediate data `k` is encoded as [LE32](#le32).
 
-Fails if VM’s [last anchor](#vm-state) is missing.
+Fails if VM’s [last anchor](#vm-state) is not set.
 
 
 #### contract
