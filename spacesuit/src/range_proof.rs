@@ -15,15 +15,12 @@ pub fn range_proof<CS: ConstraintSystem>(
     let n_usize: usize = n.into();
     for i in 0..n_usize {
         // Create low-level variables and add them to constraints
-        let (a, b, o) = cs.allocate(|| {
-            let q: u64 = v_assignment
-                .ok_or(R1CSError::MissingAssignment)?
-                .to_u64()
-                // TBD: change to R1CSError::InvalidAssignment
-                .ok_or(R1CSError::MissingAssignment)?;
-            let bit: u64 = (q >> i) & 1;
-            Ok(((1 - bit).into(), bit.into(), Scalar::zero()))
-        })?;
+        let (a, b, o) = cs.allocate_multiplier(v_assignment.and_then(|q| {
+            q.to_u64().map(|q| {
+                let bit: u64 = (q >> i) & 1;
+                ((1 - bit).into(), bit.into())
+            })
+        }))?;
 
         // Enforce a * b = 0, so one of (a,b) is zero
         cs.constrain(o.into());
