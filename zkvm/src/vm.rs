@@ -1,5 +1,5 @@
 use bulletproofs::r1cs;
-use bulletproofs::r1cs::{R1CSError, R1CSProof};
+use bulletproofs::r1cs::R1CSProof;
 use curve25519_dalek::ristretto::CompressedRistretto;
 use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
@@ -376,16 +376,10 @@ where
     }
 
     fn alloc(&mut self, sw: Option<ScalarWitness>) -> Result<(), VMError> {
-        let (var, _, _) = self
+        let var = self
             .delegate
             .cs()
-            .allocate(|| {
-                Ok((
-                    sw.ok_or(R1CSError::MissingAssignment)?.to_scalar(),
-                    Scalar::zero(),
-                    Scalar::zero(),
-                ))
-            })
+            .allocate(sw.map(|s| s.to_scalar()))
             .map_err(|e| VMError::R1CSError(e))?;
         let expr = Expression::LinearCombination(vec![(var, Scalar::one())], sw);
         self.push_item(expr);
@@ -478,17 +472,10 @@ where
         )
         .map_err(|_| VMError::R1CSInconsistency)?;
 
-        let cs = self.delegate.cs();
-        let (neg_qty_var, _, _) = cs
-            .allocate(|| {
-                Ok((
-                    -(qty_assignment
-                        .ok_or(R1CSError::MissingAssignment)?
-                        .to_scalar()),
-                    Scalar::zero(),
-                    Scalar::zero(),
-                ))
-            })
+        let neg_qty_var = self
+            .delegate
+            .cs()
+            .allocate(qty_assignment.map(|q| -q.to_scalar()))
             .map_err(|e| VMError::R1CSError(e))?;
         self.delegate.cs().constrain(qty_var + neg_qty_var);
         let value = Value {
