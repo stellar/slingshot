@@ -5,6 +5,7 @@ use crate::encoding;
 use crate::encoding::SliceReader;
 use crate::errors::VMError;
 use crate::predicate::Predicate;
+use crate::scalar_witness::ScalarWitness;
 use crate::types::Data;
 use core::borrow::Borrow;
 use core::mem;
@@ -25,7 +26,7 @@ pub enum Instruction {
     Roll(usize), // index of the item
     Const,
     Var,
-    Alloc,
+    Alloc(Option<ScalarWitness>),
     Mintime,
     Maxtime,
     Expr,
@@ -172,7 +173,7 @@ impl Instruction {
             }
             Opcode::Const => Ok(Instruction::Const),
             Opcode::Var => Ok(Instruction::Var),
-            Opcode::Alloc => Ok(Instruction::Alloc),
+            Opcode::Alloc => Ok(Instruction::Alloc(None)),
             Opcode::Mintime => Ok(Instruction::Mintime),
             Opcode::Maxtime => Ok(Instruction::Maxtime),
             Opcode::Expr => Ok(Instruction::Expr),
@@ -241,7 +242,7 @@ impl Instruction {
             }
             Instruction::Const => write(Opcode::Const),
             Instruction::Var => write(Opcode::Var),
-            Instruction::Alloc => write(Opcode::Alloc),
+            Instruction::Alloc(_) => write(Opcode::Alloc),
             Instruction::Mintime => write(Opcode::Mintime),
             Instruction::Maxtime => write(Opcode::Maxtime),
             Instruction::Expr => write(Opcode::Expr),
@@ -310,7 +311,7 @@ macro_rules! def_op {
 
 impl Program {
     def_op!(add, Add);
-    def_op!(alloc, Alloc);
+    def_op!(alloc, Alloc, Option<ScalarWitness>);
     def_op!(and, And);
     def_op!(borrow, Borrow);
     def_op!(call, Call);
