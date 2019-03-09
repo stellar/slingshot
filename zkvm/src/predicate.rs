@@ -58,7 +58,7 @@ impl Predicate {
                 let mut bytecode = Vec::new();
                 prog.encode(&mut bytecode);
                 let h = Predicate::commit_program(&bytecode);
-                (h   * PedersenGens::default().B_blinding).compress()
+                (h * PedersenGens::default().B_blinding).compress()
             }
         }
     }

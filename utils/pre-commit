@@ -2,7 +2,7 @@
 
 # To install, do:
 #
-# $ ln -s utils/pre-commit .git/hooks/pre-commit
+# $ cp utils/pre-commit .git/hooks/pre-commit
 # 
 # Perform `cargo fmt` check in all Rust crates
 for dir in $(find . -name Cargo.toml -print0 | xargs -0 -n1 dirname | sort --unique)
