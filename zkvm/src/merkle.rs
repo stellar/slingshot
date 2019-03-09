@@ -56,7 +56,7 @@ impl MerkleTree {
         Ok(result)
     }
 
-    /// Verifies the Merkle path for an item givne the path and the Merkle root.
+    /// Verifies the Merkle path for an item given the path and the Merkle root.
     pub fn verify_path<M: MerkleItem>(
         label: &'static [u8],
         entry: &M,
@@ -193,6 +193,13 @@ mod tests {
             items.push(TestItem(i as u64))
         }
         items
+    }
+
+    fn test_commit(items: Vec<TestItem>) {
+        let new_items = items.iter().map(|i| {
+            i.commit(&mut Transcript::new(b"test"));
+            i
+        }).collect::<Vec<_>>();
     }
 
     macro_rules! assert_proof {
