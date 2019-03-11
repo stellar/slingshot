@@ -1,5 +1,7 @@
 #![allow(non_snake_case)]
 
+use crate::errors::VMError;
+use crate::signature::VerificationKey;
 use crate::transcript::TranscriptProtocol;
 use curve25519_dalek::constants::RISTRETTO_BASEPOINT_POINT;
 use curve25519_dalek::ristretto::RistrettoPoint;
@@ -7,91 +9,69 @@ use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
 
 #[derive(Clone)]
-pub struct PrivKey(Scalar);
+pub struct PubKey(pub RistrettoPoint);
 
 #[derive(Clone)]
-pub struct PubKey(RistrettoPoint);
-
-#[derive(Clone)]
-pub struct PubKeyHash(Scalar);
-
-pub struct MultiKey(Vec<PubKey>);
+pub struct PrivKey(pub Scalar);
 
 #[derive(Debug, Clone)]
 pub struct Signature {
-    s: Scalar,
-    R: RistrettoPoint,
+    pub s: Scalar,
+    pub R: RistrettoPoint,
 }
 
 // TODO: is this actually the msg format we want?
 #[derive(Clone)]
-pub struct Message(Vec<u8>);
-
-impl PrivKey {
-    pub fn new(s: Scalar) -> Self {
-        PrivKey(s)
-    }
-}
-
-impl MultiKey {
-    pub fn aggregate(&self) -> (PubKey, PubKeyHash) {
-        let transcript = Transcript::new(b"ZkVM.MuSig");
-
-        // L = H(X_1 || X_2 || ... || X_n)
-        let mut L_transcript = transcript.clone();
-        for X_i in &self.0 {
-            L_transcript.commit_point(b"X_i.L", &X_i.0.compress());
-        }
-        let L = L_transcript.challenge_scalar(b"L");
-
-        // X = sum_i ( a_i * X_i )
-        // a_i = H(L, X_i)
-        let mut X = RistrettoPoint::default();
-        for X_i in &self.0 {
-            let mut a_i_transcript = transcript.clone();
-            a_i_transcript.commit_scalar(b"L", &L);
-            a_i_transcript.commit_point(b"X_i", &X_i.0.compress());
-            let a_i = a_i_transcript.challenge_scalar(b"a_i");
-            X = X + a_i * X_i.0;
-        }
-
-        (PubKey(X), PubKeyHash(L))
-    }
-}
+pub struct Message(pub Vec<u8>);
 
 impl Signature {
-    pub fn verify(&self, transcript: Transcript, X_agg: PubKey, m: Message) -> bool {
+    pub fn verify(
+        &self,
+        transcript: &mut Transcript,
+        X_agg: VerificationKey,
+        m: Message,
+    ) -> Result<(), VMError> {
         let G = RISTRETTO_BASEPOINT_POINT;
 
         // Make c = H(X_agg, R, m)
         let c = {
-            transcript.commit_point(b"X_agg", &X_agg.0.compress());
+            transcript.commit_point(b"X_agg", &X_agg.0);
             transcript.commit_point(b"R", &self.R.compress());
             transcript.commit_bytes(b"m", &m.0);
             transcript.challenge_scalar(b"c")
         };
 
+        let X_agg = match X_agg.0.decompress() {
+            Some(X_agg) => X_agg,
+            None => return Err(VMError::InvalidPoint),
+        };
         // Check sG = R + c * X_agg
-        self.s * G == self.R + c * X_agg.0
+        match self.s * G == self.R + c * X_agg {
+            true => Ok(()),
+            false => Err(VMError::PointOperationsFailed),
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
+
     use super::*;
+    use crate::errors::VMError;
     use crate::signature::prover::*;
+    use crate::signature::{multikey::Multikey, VerificationKey};
     use curve25519_dalek::ristretto::CompressedRistretto;
 
     #[test]
     fn make_aggregated_pubkey() {
         // super secret, sshhh!
         let priv_keys = vec![
-            PrivKey::new(Scalar::from(1u64)),
-            PrivKey::new(Scalar::from(2u64)),
-            PrivKey::new(Scalar::from(3u64)),
-            PrivKey::new(Scalar::from(4u64)),
+            PrivKey(Scalar::from(1u64)),
+            PrivKey(Scalar::from(2u64)),
+            PrivKey(Scalar::from(3u64)),
+            PrivKey(Scalar::from(4u64)),
         ];
-        let (pub_key, pub_key_hash) = agg_pubkey_helper(&priv_keys);
+        let multikey = multikey_helper(&priv_keys).unwrap();
 
         let expected_pub_key = CompressedRistretto::from_slice(&[
             130, 18, 226, 231, 233, 237, 157, 84, 32, 224, 131, 198, 42, 230, 208, 160, 173, 151,
@@ -102,19 +82,17 @@ mod tests {
             229, 216, 77, 98, 51, 230, 53, 250, 192, 247, 82, 234, 3,
         ]);
 
-        assert_eq!(expected_pub_key, pub_key.0.compress());
-        assert_eq!(expected_pub_key_hash, pub_key_hash.0);
+        assert_eq!(expected_pub_key, multikey.aggregated_key().0);
+        assert_eq!(expected_pub_key_hash, multikey.aggregated_hash());
     }
 
-    fn agg_pubkey_helper(priv_keys: &Vec<PrivKey>) -> (PubKey, PubKeyHash) {
+    fn multikey_helper(priv_keys: &Vec<PrivKey>) -> Result<Multikey, VMError> {
         let G = RISTRETTO_BASEPOINT_POINT;
-        let multi_key = MultiKey(
+        Multikey::new(
             priv_keys
                 .iter()
-                .map(|priv_key| PubKey(G * priv_key.0))
-                .collect(),
-        );
-        multi_key.aggregate()
+                .map(|priv_key| VerificationKey((G * priv_key.0).compress())),
+        )
     }
 
     #[test]
@@ -126,17 +104,26 @@ mod tests {
             PrivKey(Scalar::from(3u64)),
             PrivKey(Scalar::from(4u64)),
         ];
-        let (X_agg, L) = agg_pubkey_helper(&priv_keys);
+        let multikey = multikey_helper(&priv_keys).unwrap();
         let m = Message(b"message to sign".to_vec());
 
-        sign_helper(priv_keys, X_agg, L, m);
+        sign_helper(priv_keys, multikey, m);
     }
 
-    fn sign_helper(priv_keys: Vec<PrivKey>, X_agg: PubKey, L: PubKeyHash, m: Message) -> Signature {
+    fn sign_helper(priv_keys: Vec<PrivKey>, multikey: Multikey, m: Message) -> Signature {
+        let transcript = Transcript::new(b"signing.test");
+
         let (parties, precomms): (Vec<_>, Vec<_>) = priv_keys
             .clone()
             .into_iter()
-            .map(|x_i| PartyAwaitingPrecommitments::new(x_i, X_agg.clone(), L.clone(), m.clone()))
+            .map(|x_i| {
+                PartyAwaitingPrecommitments::new(
+                    transcript.clone(),
+                    x_i,
+                    multikey.clone(),
+                    m.clone(),
+                )
+            })
             .unzip();
 
         let (parties, comms): (Vec<_>, Vec<_>) = parties
@@ -177,11 +164,14 @@ mod tests {
             PrivKey(Scalar::from(3u64)),
             PrivKey(Scalar::from(4u64)),
         ];
-        let (X_agg, L) = agg_pubkey_helper(&priv_keys);
+        let multikey = multikey_helper(&priv_keys).unwrap();
         let m = Message(b"message to sign".to_vec());
 
-        let mut transcript = Transcript::new(b"signing.test");
-        let signature = sign_helper(priv_keys, X_agg.clone(), L, m.clone());
-        assert_eq!(true, signature.verify(&mut transcript, X_agg, m));
+        let signature = sign_helper(priv_keys, multikey.clone(), m.clone());
+
+        let mut verify_transcript = Transcript::new(b"signing.test");
+        assert!(signature
+            .verify(&mut verify_transcript, multikey.aggregated_key(), m)
+            .is_ok());
     }
 }

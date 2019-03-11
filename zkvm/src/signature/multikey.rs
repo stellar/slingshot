@@ -5,6 +5,7 @@ use curve25519_dalek::ristretto::RistrettoPoint;
 use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
 
+#[derive(Clone)]
 pub struct Multikey {
     transcript: Transcript,
     X_agg: VerificationKey,
@@ -17,7 +18,7 @@ impl Multikey {
         I: IntoIterator<Item = VerificationKey>,
     {
         // Create transcript for Multikey
-        let transcript = Transcript::new(b"ZkVM.aggregated-key");
+        let mut transcript = Transcript::new(b"ZkVM.aggregated-key");
 
         // Hash in pubkeys
         // L = H(X_1 || X_2 || ... || X_n)
@@ -58,5 +59,9 @@ impl Multikey {
 
     pub fn aggregated_key(&self) -> VerificationKey {
         self.X_agg
+    }
+
+    pub fn aggregated_hash(&self) -> Scalar {
+        self.L
     }
 }

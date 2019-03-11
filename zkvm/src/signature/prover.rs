@@ -1,5 +1,6 @@
 #![allow(non_snake_case)]
 
+use crate::signature::multikey::Multikey;
 use crate::signature::musig::*;
 use crate::transcript::TranscriptProtocol;
 use curve25519_dalek::constants::RISTRETTO_BASEPOINT_POINT;
@@ -41,45 +42,37 @@ pub struct PartyAwaitingSiglets {
 }
 
 #[derive(Clone)]
-pub struct Shared {
+pub struct Shared<'a> {
     G: RistrettoPoint,
-    transcript: Transcript,
-    // X_agg = sum_i ( a_i * X_i )
-    X_agg: PubKey,
-    // L = H(X_1 || X_2 || ... || X_n)
-    L: PubKeyHash,
-    // message being signed
+    transcript: &'a mut Transcript,
+    multikey: Multikey,
     m: Message,
 }
 
 impl<'a> PartyAwaitingPrecommitments {
     pub fn new(
-        transcript: Transcript,
+        transcript: &mut Transcript,
         x_i: PrivKey,
-        X_agg: PubKey,
-        L: PubKeyHash,
+        multikey: Multikey,
         m: Message,
     ) -> (Self, NoncePrecommitment) {
-        let shared = Shared {
-            G: RISTRETTO_BASEPOINT_POINT,
-            transcript,
-            X_agg,
-            L,
-            m,
-        };
-
         let mut rng = transcript.build_rng().finalize(&mut rand::thread_rng());
 
         // Generate ephemeral keypair (r_i, R_i). r_i is a random nonce.
         let r_i = Nonce(Scalar::random(&mut rng));
         // R_i = generator * r_i
-        let R_i = NonceCommitment(shared.G * r_i.0);
+        let R_i = NonceCommitment(RISTRETTO_BASEPOINT_POINT * r_i.0);
 
         // Make H(R_i)
-        let mut hash_transcript = shared.transcript.clone();
-        hash_transcript.commit_point(b"R_i", &R_i.0.compress());
-        let precommitment =
-            NoncePrecommitment(hash_transcript.challenge_scalar(b"nonce.precommit"));
+        transcript.commit_point(b"R_i", &R_i.0.compress());
+        let precommitment = NoncePrecommitment(transcript.challenge_scalar(b"nonce.precommit"));
+
+        let shared = Shared {
+            G: RISTRETTO_BASEPOINT_POINT,
+            transcript,
+            multikey,
+            m,
+        };
 
         (
             PartyAwaitingPrecommitments {
@@ -134,17 +127,18 @@ impl<'a> PartyAwaitingCommitments {
 
         // Make c = H(X_agg, R, m)
         let c = {
-            let mut c_transcript = self.shared.transcript.clone();
-            c_transcript.commit_point(b"X_agg", &self.shared.X_agg.0.compress());
-            c_transcript.commit_point(b"R", &R.compress());
-            c_transcript.commit_bytes(b"m", &self.shared.m.0);
-            c_transcript.challenge_scalar(b"c")
+            self.shared
+                .transcript
+                .commit_point(b"X_agg", &self.shared.multikey.aggregated_key().0);
+            self.shared.transcript.commit_point(b"R", &R.compress());
+            self.shared.transcript.commit_bytes(b"m", &self.shared.m.0);
+            self.shared.transcript.challenge_scalar(b"c")
         };
 
         // Make a_i = H(L, X_i)
         let a_i = {
             let mut a_i_transcript = self.shared.transcript.clone();
-            a_i_transcript.commit_scalar(b"L", &self.shared.L.0);
+            a_i_transcript.commit_scalar(b"L", &self.shared.multikey.aggregated_hash());
             let X_i = self.x_i.0 * self.shared.G;
             a_i_transcript.commit_point(b"X_i", &X_i.compress());
             a_i_transcript.challenge_scalar(b"a_i")
@@ -189,7 +183,7 @@ impl<'a> PartyAwaitingSiglets {
             // Make c = H(X_agg, R, m)
             let c = {
                 let mut c_transcript = self.shared.transcript.clone();
-                c_transcript.commit_point(b"X_agg", &self.shared.X_agg.0.compress());
+                c_transcript.commit_point(b"X_agg", &self.shared.multikey.aggregated_key().0);
                 c_transcript.commit_point(b"R", &R.compress());
                 c_transcript.commit_bytes(b"m", &self.shared.m.0);
                 c_transcript.challenge_scalar(b"c")
@@ -197,7 +191,7 @@ impl<'a> PartyAwaitingSiglets {
             // Make a_i = H(L, X_i)
             let a_i = {
                 let mut a_i_transcript = self.shared.transcript.clone();
-                a_i_transcript.commit_scalar(b"L", &self.shared.L.0);
+                a_i_transcript.commit_scalar(b"L", &self.shared.multikey.aggregated_hash());
                 a_i_transcript.commit_point(b"X_i", &X_i.compress());
                 a_i_transcript.challenge_scalar(b"a_i")
             };
