@@ -983,23 +983,21 @@ Code | Instruction                | Stack diagram                              |
 0x13 | [`issue`](#issue)          |    _qty flv data pred_ → _contract_        | Modifies [CS](#constraint-system), [tx log](#transaction-log), [defers point ops](#deferred-point-operations)
 0x14 | [`borrow`](#borrow)        |         _qty flv_ → _–V +V_                | Modifies [CS](#constraint-system)
 0x15 | [`retire`](#retire)        |           _value_ → ø                      | Modifies [CS](#constraint-system), [tx log](#transaction-log)
-0x16 | [`qty`](#qty)              |           _value_ → _value qtyvar_         |
-0x17 | [`flavor`](#flavor)        |           _value_ → _value flavorvar_      |
-0x18 | [`cloak:m:n`](#cloak)      | _widevalues commitments_ → _values_        | Modifies [CS](#constraint-system)
-0x19 | [`import`](#import)        |   _proof qty flv_ → _value_                | Modifies [CS](#constraint-system), [tx log](#transaction-log), [defers point ops](#deferred-point-operations)
-0x1a | [`export`](#export)        |       _value ???_ → ø                      | Modifies [CS](#constraint-system), [tx log](#transaction-log)
+0x16 | [`cloak:m:n`](#cloak)      | _widevalues commitments_ → _values_        | Modifies [CS](#constraint-system)
+0x17 | [`import`](#import)        |   _proof qty flv_ → _value_                | Modifies [CS](#constraint-system), [tx log](#transaction-log), [defers point ops](#deferred-point-operations)
+0x18 | [`export`](#export)        |       _value ???_ → ø                      | Modifies [CS](#constraint-system), [tx log](#transaction-log)
  |                                |                                            |
  |     [**Contracts**](#contract-instructions)        |                        |
-0x1b | [`input`](#input)          |      _prevoutput_ → _contract_             | Modifies [tx log](#transaction-log)
-0x1c | [`output:k`](#output)      |   _items... pred_ → ø                      | Modifies [tx log](#transaction-log)
-0x1d | [`contract:k`](#contract)  |   _items... pred_ → _contract_             | 
-0x1e | [`nonce`](#nonce)          |    _pred blockid_ → _contract_             | Modifies [tx log](#transaction-log)
-0x1f | [`log`](#log)              |            _data_ → ø                      | Modifies [tx log](#transaction-log)
-0x20 | [`signtx`](#signtx)        |        _contract_ → _results..._           | Modifies [deferred verification keys](#transaction-signature)
-0x21 | [`call`](#call)            |   _contract prog_ → _results..._           | [Defers point operations](#deferred-point-operations)
-0x22 | [`left`](#left)            |    _contract A B_ → _contract’_            | [Defers point operations](#deferred-point-operations)
-0x23 | [`right`](#right)          |    _contract A B_ → _contract’_            | [Defers point operations](#deferred-point-operations)
-0x24 | [`delegate`](#delegate)    |_contract prog sig_ → _results..._          | [Defers point operations](#deferred-point-operations)
+0x19 | [`input`](#input)          |      _prevoutput_ → _contract_             | Modifies [tx log](#transaction-log)
+0x1a | [`output:k`](#output)      |   _items... pred_ → ø                      | Modifies [tx log](#transaction-log)
+0x1b | [`contract:k`](#contract)  |   _items... pred_ → _contract_             | 
+0x1c | [`nonce`](#nonce)          |    _pred blockid_ → _contract_             | Modifies [tx log](#transaction-log)
+0x1d | [`log`](#log)              |            _data_ → ø                      | Modifies [tx log](#transaction-log)
+0x1e | [`signtx`](#signtx)        |        _contract_ → _results..._           | Modifies [deferred verification keys](#transaction-signature)
+0x1f | [`call`](#call)            |   _contract prog_ → _results..._           | [Defers point operations](#deferred-point-operations)
+0x20 | [`left`](#left)            |    _contract A B_ → _contract’_            | [Defers point operations](#deferred-point-operations)
+0x21 | [`right`](#right)          |    _contract A B_ → _contract’_            | [Defers point operations](#deferred-point-operations)
+0x22 | [`delegate`](#delegate)    |_contract prog sig_ → _results..._          | [Defers point operations](#deferred-point-operations)
   —  | [`ext`](#ext)              |                 ø → ø                      | Fails if [extension flag](#vm-state) is not set.
 
 
@@ -1308,22 +1306,6 @@ _value_ **retire** → ø
 
 1. Pops a [value](#value-type) from the stack.
 2. Adds a _retirement_ entry to the [transaction log](#transaction-log).
-
-Fails if the value is not a [non-negative value type](#value-type).
-
-#### qty
-
-_value_ **qty** → _value qtyvar_
-
-Copies a [variable](#variable-type) representing quantity of an [unwide value](#value-type) and pushes it to the stack.
-
-Fails if the value is not a [non-negative value type](#value-type).
-
-#### flavor
-
-_value_ **flavor** → _value flavorvar_
-
-Copies a [variable](#variable-type) representing flavor of an [unwide value](#value-type) and pushes it to the stack.
 
 Fails if the value is not a [non-negative value type](#value-type).
 
@@ -1984,7 +1966,6 @@ This makes handling them much simpler: we can issue, finalize and even “claim�
 UTXO IDs are not generally known without fuller view on transaction flow. This could be not a big deal, as we cannot really plan for the next transaction until this one is fully formed and published. Also, in a joint proof scenario, it’s even less reliable to plan the next payment until the multi-party protocol is completed, therefore waiting for transaction ID to be determined becomes a requirement.
 
 That said, for contracts created from another contract, the contract ID is determined locally by the parent contract’s ID.
-
 
 ### Open questions
 

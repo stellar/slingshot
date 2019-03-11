@@ -85,22 +85,22 @@ pub enum Opcode {
     Issue = 0x13,
     Borrow = 0x14,
     Retire = 0x15,
-    Cloak = 0x18,
-    Import = 0x19,
-    Export = 0x1a,
-    Input = 0x1b,
-    Output = 0x1c,
-    Contract = 0x1d,
-    Nonce = 0x1e,
-    Log = 0x1f,
-    Signtx = 0x20,
-    Call = 0x21,
-    Left = 0x22,
-    Right = 0x23,
+    Cloak = 0x16,
+    Import = 0x17,
+    Export = 0x18,
+    Input = 0x19,
+    Output = 0x1a,
+    Contract = 0x1b,
+    Nonce = 0x1c,
+    Log = 0x1d,
+    Signtx = 0x1e,
+    Call = 0x1f,
+    Left = 0x20,
+    Right = 0x21,
     Delegate = MAX_OPCODE,
 }
 
-const MAX_OPCODE: u8 = 0x24;
+const MAX_OPCODE: u8 = 0x22;
 
 impl Opcode {
     /// Converts the opcode to `u8`.
