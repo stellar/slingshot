@@ -80,10 +80,7 @@ mod tests {
             156, 102, 163, 57, 200, 52, 79, 146, 47, 195, 32, 108, 181, 218, 232, 20, 165, 148,
             192, 23, 125, 211, 35, 92, 37, 77, 156, 64, 154, 101, 184, 8,
         ]);
-        let expected_point = match expected_compressed_point.decompress() {
-            None => panic!("should be a valid compressed point"),
-            Some(p) => p,
-        };
+        let expected_point = expected_compressed_point.decompress().unwrap();
 
         assert_eq!(xpub.dk, expected_dk);
         assert_eq!(xpub.point, expected_point);
