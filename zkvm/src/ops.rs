@@ -42,8 +42,6 @@ pub enum Instruction {
     Issue,
     Borrow,
     Retire,
-    Qty,
-    Flavor,
     Cloak(usize, usize), // M inputs, N outputs
     Import,
     Export,
@@ -87,8 +85,6 @@ pub enum Opcode {
     Issue = 0x13,
     Borrow = 0x14,
     Retire = 0x15,
-    Qty = 0x16,
-    Flavor = 0x17,
     Cloak = 0x18,
     Import = 0x19,
     Export = 0x1a,
@@ -193,8 +189,6 @@ impl Instruction {
             Opcode::Issue => Ok(Instruction::Issue),
             Opcode::Borrow => Ok(Instruction::Borrow),
             Opcode::Retire => Ok(Instruction::Retire),
-            Opcode::Qty => Ok(Instruction::Qty),
-            Opcode::Flavor => Ok(Instruction::Flavor),
             Opcode::Cloak => {
                 let m = program.read_size()?;
                 let n = program.read_size()?;
@@ -262,8 +256,6 @@ impl Instruction {
             Instruction::Issue => write(Opcode::Issue),
             Instruction::Borrow => write(Opcode::Borrow),
             Instruction::Retire => write(Opcode::Retire),
-            Instruction::Qty => write(Opcode::Qty),
-            Instruction::Flavor => write(Opcode::Flavor),
             Instruction::Cloak(m, n) => {
                 write(Opcode::Cloak);
                 encoding::write_u32(*m as u32, program);
@@ -323,7 +315,6 @@ impl Program {
     def_op!(eq, Eq);
     def_op!(export, Export);
     def_op!(expr, Expr);
-    def_op!(flavor, Flavor);
     def_op!(import, Import);
     def_op!(input, Input);
     def_op!(issue, Issue);
@@ -336,7 +327,6 @@ impl Program {
     def_op!(nonce, Nonce);
     def_op!(or, Or);
     def_op!(output, Output, usize);
-    def_op!(qty, Qty);
     def_op!(range, Range, BitRange);
     def_op!(retire, Retire);
     def_op!(right, Right);

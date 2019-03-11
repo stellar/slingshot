@@ -200,8 +200,6 @@ where
                 Instruction::Issue => self.issue()?,
                 Instruction::Borrow => self.borrow()?,
                 Instruction::Retire => self.retire()?,
-                Instruction::Qty => unimplemented!(),
-                Instruction::Flavor => unimplemented!(),
                 Instruction::Cloak(m, n) => self.cloak(m, n)?,
                 Instruction::Import => unimplemented!(),
                 Instruction::Export => unimplemented!(),
