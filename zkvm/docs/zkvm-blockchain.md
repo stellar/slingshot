@@ -6,7 +6,7 @@ a blockchain containing
 
 Nodes participating in a ZkVM blockchain network must implement the data types and perform the procedures described in this document.
 
-This document does not describe the consensus mechanism for a ZkVM network.
+This document does not describe the consensus mechanism for a ZkVM blockchain network.
 
 # Data types
 
@@ -47,6 +47,8 @@ A block contains:
   a list of
   [transactions](zkvm-spec.md#transaction).
 
+The initial block (at height 1) has an empty list of transactions.
+
 ## Block header
 
 A block header contains:
@@ -62,7 +64,7 @@ A block header contains:
   ID of the preceding block.
   For the initial block
   (which has no predecessor),
-  an all-zero string of 32 bytes.
+  this is an all-zero string of 32 bytes.
 - `timestamp`:
   integer timestamp of the block in milliseconds since the Unix epoch:
   00:00:00 UTC Jan 1,
@@ -117,6 +119,56 @@ As with the
 [Merkle binary tree](zkvm-spec.md#merkle-binary-tree),
 we define a Merkle patricia tree in terms of
 [transcripts](zkvm-spec.md#transcript).
+Leaves and nodes in the tree use the same instance of a transcript:
+
+```
+T = Transcript(<label>)
+```
+
+(where `<label>` is specified by the calling protocol).
+
+The input to the *Merkle patricia tree hash*
+(MPTH)
+is a list of data entries;
+these entries will be hashed to form the leaves of the merkle hash tree.
+The output is a single 32-byte hash value.
+The input list must be prefix-free;
+that is,
+no element can be a prefix of any other.
+Given a sorted list of n unique inputs,
+`D[n] = {d(0), d(1), ..., d(n-1)}`,
+the MPTH is thus defined as follows:
+
+The hash of an empty Merkle patricia tree list is a 32-byte challenge string with the label `patricia.empty`:
+
+```
+MPTH(T, {}) = T.challenge_bytes("patricia.empty")
+```
+
+To compute the hash of a list with one entry,
+commit it to the transcript with the label `"patricia.leaf"` and then generate a 32-byte challenge string with the same label:
+
+```
+T.commit("patricia.leaf", d(0))
+MPTH(T, {d{0)}) = T.challenge_bytes("patricia.leaf")
+```
+
+To compute the hash of a list with two or more entries:
+1. Let the bit string `p` be the longest common prefix of all entries;
+2. Let k be the number of items with prefix `p||0`
+   (that is, `p` concatenated with the single bit 0).
+3. Let L be recursively defined as `MPTH(T, D[0:k])` (the hash of the first `k` elements of D).
+4. Commit `L` to `T` with the label `"patricia.left"`.
+5. Let R be recursively defined as `MPTH(T, D[k:n])` (the hash of the remaining `n-k` elements of D).
+5. Commit `R` to `T` with the label `"patricia.right"`.
+6. Generate a 32-byte challenge string with the label `"patricia.node"`.
+
+```
+T.commit("patricia.left", MPTH(T, D[0:k]))
+T.commit("patricia.right", MPTH(T, D[k:n]))
+MPTH(T, D) = T.challenge_bytes("patricia.node")
+```
+
 
 ## Make initial block
 
