@@ -42,8 +42,6 @@ pub enum Instruction {
     Issue,
     Borrow,
     Retire,
-    Qty,
-    Flavor,
     Cloak(usize, usize), // M inputs, N outputs
     Import,
     Export,
@@ -87,24 +85,22 @@ pub enum Opcode {
     Issue = 0x13,
     Borrow = 0x14,
     Retire = 0x15,
-    Qty = 0x16,
-    Flavor = 0x17,
-    Cloak = 0x18,
-    Import = 0x19,
-    Export = 0x1a,
-    Input = 0x1b,
-    Output = 0x1c,
-    Contract = 0x1d,
-    Nonce = 0x1e,
-    Log = 0x1f,
-    Signtx = 0x20,
-    Call = 0x21,
-    Left = 0x22,
-    Right = 0x23,
+    Cloak = 0x16,
+    Import = 0x17,
+    Export = 0x18,
+    Input = 0x19,
+    Output = 0x1a,
+    Contract = 0x1b,
+    Nonce = 0x1c,
+    Log = 0x1d,
+    Signtx = 0x1e,
+    Call = 0x1f,
+    Left = 0x20,
+    Right = 0x21,
     Delegate = MAX_OPCODE,
 }
 
-const MAX_OPCODE: u8 = 0x24;
+const MAX_OPCODE: u8 = 0x22;
 
 impl Opcode {
     /// Converts the opcode to `u8`.
@@ -193,8 +189,6 @@ impl Instruction {
             Opcode::Issue => Ok(Instruction::Issue),
             Opcode::Borrow => Ok(Instruction::Borrow),
             Opcode::Retire => Ok(Instruction::Retire),
-            Opcode::Qty => Ok(Instruction::Qty),
-            Opcode::Flavor => Ok(Instruction::Flavor),
             Opcode::Cloak => {
                 let m = program.read_size()?;
                 let n = program.read_size()?;
@@ -262,8 +256,6 @@ impl Instruction {
             Instruction::Issue => write(Opcode::Issue),
             Instruction::Borrow => write(Opcode::Borrow),
             Instruction::Retire => write(Opcode::Retire),
-            Instruction::Qty => write(Opcode::Qty),
-            Instruction::Flavor => write(Opcode::Flavor),
             Instruction::Cloak(m, n) => {
                 write(Opcode::Cloak);
                 encoding::write_u32(*m as u32, program);
@@ -323,7 +315,6 @@ impl Program {
     def_op!(eq, Eq);
     def_op!(export, Export);
     def_op!(expr, Expr);
-    def_op!(flavor, Flavor);
     def_op!(import, Import);
     def_op!(input, Input);
     def_op!(issue, Issue);
@@ -336,7 +327,6 @@ impl Program {
     def_op!(nonce, Nonce);
     def_op!(or, Or);
     def_op!(output, Output, usize);
-    def_op!(qty, Qty);
     def_op!(range, Range, BitRange);
     def_op!(retire, Retire);
     def_op!(right, Right);
