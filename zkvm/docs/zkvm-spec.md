@@ -1968,7 +1968,10 @@ UTXO IDs are not generally known without fuller view on transaction flow. This c
 That said, for contracts created from another contract, the contract ID is determined locally by the parent contract’s ID.
 
 ### Do we need qty/flavor introspection ops?
-Previously, we thought we needed them to reblind the received value. However, we normally use `borrow` instead of placing some bounds on a received value. If we only ever mix all values and borrow necessary payments, we do not need to expose these variables at all.
+
+Previously, we thought we needed them to reblind a received value. (In this now-scrapped protocol, we would encrypt a value to a public key in one transaction and decrypt it in another one.) Now, we will use El-Gamal encryptions and codify encrypted values or data in specific types. That means we do not need to operate on individual values or commitments.
+Also, instead of placing bounds on some received value, we now normally use `borrow`. While constraints on values are still relevant, the `borrow` approach means we do not need to inspect a `Value` object. Instead, we can simply constrain raw commitments or variables and then `borrow` a value with such a commitment. 
+Thus, neither of these use cases requires `qty` and `flavor`.
 
 ### Open questions
 None at the moment.
