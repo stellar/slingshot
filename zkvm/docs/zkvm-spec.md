@@ -1968,7 +1968,7 @@ UTXO IDs are not generally known without fuller view on transaction flow. This c
 That said, for contracts created from another contract, the contract ID is determined locally by the parent contract’s ID.
 
 ### Do we need qty/flavor introspection ops?
-Previously, we thought we needed them to reblind the received value. However, we normally use `borrow` instead of placing some bounds on a received value. If we only ever mix all values and borrow necessary payments, we may reconsider if we expose these variables at all.
+Previously, we thought we needed them to reblind the received value. However, we normally use `borrow` instead of placing some bounds on a received value. If we only ever mix all values and borrow necessary payments, we do not need to expose these variables at all.
 
 ### Open questions
 None at the moment.
