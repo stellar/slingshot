@@ -74,12 +74,12 @@ mod tests {
         let multikey = multikey_helper(&priv_keys).unwrap();
 
         let expected_pub_key = CompressedRistretto::from_slice(&[
-            130, 18, 226, 231, 233, 237, 157, 84, 32, 224, 131, 198, 42, 230, 208, 160, 173, 151,
-            69, 90, 5, 12, 146, 65, 179, 6, 165, 87, 41, 106, 178, 12,
+            216, 24, 38, 3, 168, 38, 151, 153, 62, 37, 16, 214, 25, 233, 233, 11, 95, 170, 11, 161,
+            131, 79, 0, 194, 162, 98, 164, 135, 41, 109, 20, 54,
         ]);
         let expected_pub_key_hash = Scalar::from_bits([
-            117, 94, 182, 185, 8, 30, 150, 65, 198, 231, 112, 232, 131, 203, 40, 235, 225, 120, 17,
-            229, 216, 77, 98, 51, 230, 53, 250, 192, 247, 82, 234, 3,
+            170, 162, 115, 8, 107, 188, 34, 85, 60, 63, 177, 82, 191, 66, 133, 135, 119, 148, 25,
+            136, 143, 1, 111, 129, 130, 116, 75, 248, 222, 40, 117, 0,
         ]);
 
         assert_eq!(expected_pub_key, multikey.aggregated_key().0);
@@ -115,8 +115,7 @@ mod tests {
         let (parties, precomms): (Vec<_>, Vec<_>) = priv_keys
             .clone()
             .into_iter()
-            .enumerate()
-            .map(|(i, x_i)| {
+            .map(|x_i| {
                 PartyAwaitingPrecommitments::new(
                     &Transcript::new(b"signing.test"),
                     x_i,

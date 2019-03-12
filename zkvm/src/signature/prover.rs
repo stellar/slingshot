@@ -44,6 +44,7 @@ pub struct PartyAwaitingSiglets {
     multikey: Multikey,
     nonce_commitments: Vec<NonceCommitment>,
     m: Message,
+    c: Scalar,
 }
 
 impl NonceCommitment {
@@ -149,6 +150,7 @@ impl PartyAwaitingCommitments {
                 multikey: self.multikey,
                 nonce_commitments,
                 m,
+                c,
             },
             Siglet(s_i),
         )
@@ -175,21 +177,12 @@ impl PartyAwaitingSiglets {
             let S_i = s_i.0 * RISTRETTO_BASEPOINT_POINT;
             let X_i = pubkeys[i].0;
             let R_i = self.nonce_commitments[i].0;
-            let R: RistrettoPoint = self.nonce_commitments.iter().map(|R_i| R_i.0).sum();
 
-            // Make c = H(X_agg, R, m)
-            let c = {
-                let mut c_transcript = self.transcript.clone();
-                c_transcript.commit_point(b"X_agg", &self.multikey.aggregated_key().0);
-                c_transcript.commit_point(b"R", &R.compress());
-                c_transcript.commit_bytes(b"m", &self.m.0);
-                c_transcript.challenge_scalar(b"c")
-            };
             // Make a_i = H(L, X_i)
             let a_i = self.multikey.a_i(&VerificationKey(X_i.compress()));
 
             // Check that S_i = R_i + c * a_i * X_i
-            assert_eq!(S_i, R_i + c * a_i * X_i);
+            assert_eq!(S_i, R_i + self.c * a_i * X_i);
         }
 
         self.receive_siglets(siglets)
