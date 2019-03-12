@@ -5,6 +5,7 @@ use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
 use spacesuit;
 use spacesuit::BitRange;
+use serde::Serialize;
 use std::iter::FromIterator;
 use std::mem;
 
@@ -16,6 +17,8 @@ use crate::ops::Instruction;
 use crate::point_ops::PointOp;
 use crate::predicate::Predicate;
 use crate::scalar_witness::ScalarWitness;
+// use crate::serde::de::Visitor;
+// use crate::serde::{self, Deserialize, Deserializer, Serialize, Serializer};
 use crate::signature::*;
 use crate::txlog::{Entry, TxID, TxLog};
 use crate::types::*;
@@ -36,6 +39,54 @@ pub struct TxHeader {
     pub maxtime: u64,
 }
 
+impl TxHeader {
+
+    /// Serializes the tx header into a byte array of 24 elements.
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let mut buf = Vec::with_capacity(self.serialized_size());
+        buf.extend_from_slice(&self.version.to_ne_bytes());
+        buf.extend_from_slice(&self.mintime.to_ne_bytes());
+        buf.extend_from_slice(&self.maxtime.to_ne_bytes());
+        buf
+    }
+
+    /// Returns the size in bytes required to serialize the `TxHeader`.
+    pub fn serialized_size(&self) -> usize {
+        // 3 elements, 64 bits = 8 bytes each
+        3 * 8
+    }
+
+    /// Deserializes the proof from a byte slice.TxHeader
+    /// 
+    /// Returns an error if the byte slice cannot be parsed into a TxHeader.
+    pub fn from_bytes(mut slice: &[u8]) -> Result<TxHeader, VMError> {
+        if slice.len() % 8 != 0 {
+            return Err(VMError::FormatError)
+        }
+        if slice.len() < 3 * 8 {
+            return Err(VMError::FormatError)
+        }
+        macro_rules! read8 {
+            () => {{
+                let mut buf8 = [0u8; 8];
+                buf8[..].copy_from_slice(&slice[..8]);
+                slice = &slice[8..];
+                buf8
+            }};
+        }
+
+        let version = u64::from_ne_bytes(read8!());
+        let mintime = u64::from_ne_bytes(read8!());
+        let maxtime = u64::from_ne_bytes(read8!());
+
+        Ok(TxHeader{
+            version,
+            mintime,
+            maxtime,
+        })
+    }
+}
+
 /// Instance of a transaction that contains all necessary data to validate it.
 pub struct Tx {
     /// Header metadata
@@ -50,6 +101,67 @@ pub struct Tx {
     /// Constraint system proof for all the constraints
     pub proof: R1CSProof,
 }
+
+impl Tx {
+    /// Serializes the tx into a byte array of N elements.
+    /// PRTODO: Define layout to find N.
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let mut buf = Vec::with_capacity(self.serialized_size());
+        buf.append(&mut self.header.to_bytes());
+
+        buf
+    }
+
+    /// Returns the size in bytes required to serialize the `Tx`
+    pub fn serialized_size(&self) -> usize {
+        // PRTODO: Fill in.
+        0 + self.header.serialized_size()
+    }
+
+    /// Deserializes the tx from a byte slice. 
+    /// 
+    /// Returns an error if the byte slice cannot be parsed into a `Tx`.
+    pub fn from_bytes(mut slice: &[u8]) -> Result<Tx, VMError> {
+        Ok(Tx{})
+    }
+}
+
+impl Serialize for Tx {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where S : serde::Serializer, {
+        serializer.serialize_bytes(&self.to_bytes()[..])
+    }
+}
+
+// impl serde::Serialize for Tx {
+//     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+//     where S : serde::Serializer, {
+//         serializer.serialize_bytes(&self.to_bytes()[..])
+//     }
+// }
+
+// impl <'de> serde::Deserialize<'de> for Tx {
+//     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+//     where D : serde::Deserializer<'de>, {
+//         struct TxVisitor;
+
+//         impl<'de> serde::de::Visitor<'de> for TxVisitor {
+//             type Value = Tx;
+//             fn expecting(&self, formatter: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
+//                 formatter.write_str("a valid Tx")
+//             }
+
+//             fn visit_bytes<E>(self, v: &[u8]) -> Result<Tx, E>
+//             where
+//                 E: serde::de::Error,
+//             {
+//                 serde::de::Visitor::from_bytes(v).map_err(serde::de::Error::custom)
+//             }
+//         }
+
+//         deserializer.deserialize_bytes(TxVisitor)
+//     }
+// }
 
 /// Represents a verified transaction: a txid and a list of state updates.
 pub struct VerifiedTx {

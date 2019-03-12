@@ -77,6 +77,12 @@ impl<'a> SliceReader<'a> {
         Ok(x)
     }
 
+    pub fn read_u64(&mut self) -> Result<u64, VMError> {
+        let bytes = self.read_bytes(8)?;
+        let x = LittleEndian::read_u64(&bytes);
+        Ok(x)
+    }
+
     // returns a 32-byte "size" type used in ZkVM
     pub fn read_size(&mut self) -> Result<usize, VMError> {
         let n = self.read_u32()?;
@@ -121,6 +127,18 @@ pub(crate) fn write_u32<'a>(x: u32, target: &mut Vec<u8>) {
     let mut buf = [0u8; 4];
     LittleEndian::write_u32(&mut buf, x);
     target.extend_from_slice(&buf);
+}
+
+// Writes a LE64-encoded integer
+pub(crate) fn write_u64<'a>(x: u64, target: &mut Vec<u8>) {
+    let mut buf = [0u8; 8];
+    LittleEndian::write_u64(&mut buf, x);
+    target.extend_from_slice(&buf);
+}
+
+// Writes a usize as a LE32-encoded integer
+pub(crate) fn write_size<'a>(x: usize, target: &mut Vec<u8>) {
+    write_u32(x as u32, target);
 }
 
 /// Writes a 32-byte array and returns the subsequent slice
