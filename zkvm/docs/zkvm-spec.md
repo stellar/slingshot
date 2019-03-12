@@ -977,28 +977,29 @@ Code | Instruction                | Stack diagram                              |
 0x0e | [`range:n`](#range)        |            _expr_ → _expr_                 | Modifies [CS](#constraint-system)
 0x0f | [`and`](#and)              | _constr1 constr2_ → _constr3_              |
 0x10 | [`or`](#or)                | _constr1 constr2_ → _constr3_              |
-0x11 | [`verify`](#verify)        |      _constraint_ → ø                      | Modifies [CS](#constraint-system) 
-0x12 | [`unblind`](#unblind)      |        _V v_ → _V_                         | [Defers point ops](#deferred-point-operations)
+0x11 | ['not'](#not)              | _constr1_ → _constr2_                      | Modifies [CS](#constraint-system)
+0x12 | [`verify`](#verify)        |      _constraint_ → ø                      | Modifies [CS](#constraint-system) 
+0x13 | [`unblind`](#unblind)      |        _V v_ → _V_                         | [Defers point ops](#deferred-point-operations)
  |                                |                                            |
  |     [**Values**](#value-instructions)              |                        |
-0x13 | [`issue`](#issue)          |    _qty flv data pred_ → _contract_        | Modifies [CS](#constraint-system), [tx log](#transaction-log), [defers point ops](#deferred-point-operations)
-0x14 | [`borrow`](#borrow)        |         _qty flv_ → _–V +V_                | Modifies [CS](#constraint-system)
-0x15 | [`retire`](#retire)        |           _value_ → ø                      | Modifies [CS](#constraint-system), [tx log](#transaction-log)
-0x16 | [`cloak:m:n`](#cloak)      | _widevalues commitments_ → _values_        | Modifies [CS](#constraint-system)
-0x17 | [`import`](#import)        |   _proof qty flv_ → _value_                | Modifies [CS](#constraint-system), [tx log](#transaction-log), [defers point ops](#deferred-point-operations)
-0x18 | [`export`](#export)        |       _value ???_ → ø                      | Modifies [CS](#constraint-system), [tx log](#transaction-log)
+0x14 | [`issue`](#issue)          |    _qty flv data pred_ → _contract_        | Modifies [CS](#constraint-system), [tx log](#transaction-log), [defers point ops](#deferred-point-operations)
+0x15 | [`borrow`](#borrow)        |         _qty flv_ → _–V +V_                | Modifies [CS](#constraint-system)
+0x16 | [`retire`](#retire)        |           _value_ → ø                      | Modifies [CS](#constraint-system), [tx log](#transaction-log)
+0x17 | [`cloak:m:n`](#cloak)      | _widevalues commitments_ → _values_        | Modifies [CS](#constraint-system)
+0x18 | [`import`](#import)        |   _proof qty flv_ → _value_                | Modifies [CS](#constraint-system), [tx log](#transaction-log), [defers point ops](#deferred-point-operations)
+0x19 | [`export`](#export)        |       _value ???_ → ø                      | Modifies [CS](#constraint-system), [tx log](#transaction-log)
  |                                |                                            |
  |     [**Contracts**](#contract-instructions)        |                        |
-0x19 | [`input`](#input)          |      _prevoutput_ → _contract_             | Modifies [tx log](#transaction-log)
-0x1a | [`output:k`](#output)      |   _items... pred_ → ø                      | Modifies [tx log](#transaction-log)
-0x1b | [`contract:k`](#contract)  |   _items... pred_ → _contract_             | 
-0x1c | [`nonce`](#nonce)          |    _pred blockid_ → _contract_             | Modifies [tx log](#transaction-log)
-0x1d | [`log`](#log)              |            _data_ → ø                      | Modifies [tx log](#transaction-log)
-0x1e | [`signtx`](#signtx)        |        _contract_ → _results..._           | Modifies [deferred verification keys](#transaction-signature)
-0x1f | [`call`](#call)            | _contract bf prog_ → _results..._          | [Defers point operations](#deferred-point-operations)
-0x20 | [`left`](#left)            |    _contract A B_ → _contract’_            | [Defers point operations](#deferred-point-operations)
-0x21 | [`right`](#right)          |    _contract A B_ → _contract’_            | [Defers point operations](#deferred-point-operations)
-0x22 | [`delegate`](#delegate)    |_contract prog sig_ → _results..._          | [Defers point operations](#deferred-point-operations)
+0x1a | [`input`](#input)          |      _prevoutput_ → _contract_             | Modifies [tx log](#transaction-log)
+0x1b | [`output:k`](#output)      |   _items... pred_ → ø                      | Modifies [tx log](#transaction-log)
+0x1c | [`contract:k`](#contract)  |   _items... pred_ → _contract_             | 
+0x1d | [`nonce`](#nonce)          |    _pred blockid_ → _contract_             | Modifies [tx log](#transaction-log)
+0x1e | [`log`](#log)              |            _data_ → ø                      | Modifies [tx log](#transaction-log)
+0x1f | [`signtx`](#signtx)        |        _contract_ → _results..._           | Modifies [deferred verification keys](#transaction-signature)
+0x20 | [`call`](#call)            |_contract bf prog_ → _results..._           | [Defers point operations](#deferred-point-operations)
+0x21 | [`left`](#left)            |    _contract A B_ → _contract’_            | [Defers point operations](#deferred-point-operations)
+0x22 | [`right`](#right)          |    _contract A B_ → _contract’_            | [Defers point operations](#deferred-point-operations)
+0x23 | [`delegate`](#delegate)    |_contract prog sig_ → _results..._          | [Defers point operations](#deferred-point-operations)
   —  | [`ext`](#ext)              |                 ø → ø                      | Fails if [extension flag](#vm-state) is not set.
 
 
@@ -1201,6 +1202,23 @@ _constraint1 constraint2_ **or** → _constraint3_
 No changes to the [constraint system](#constraint-system) are made until [`verify`](#verify) is executed.
 
 Fails if `c1` and `c2` are not [constraints](#constraint-type).
+
+#### not
+
+_constr1_ **not** → _constr2_
+
+1. Pops [constraint](#constraint-type) `c1`.
+2. Create two constraints:
+   ```
+   x * y = 0
+   x * w = 1-y
+   ```
+   where `w` is a random challenge and `x` is the expression from constraint `c1`.
+3. Wrap the output `y` in a constraint `c2`.
+4. Push `c2` to the stack.
+
+This implements the boolean `not` trick from [Setty, Vu, Panpalia, Braun, Ali, Blumberg, Walfish (2012)](https://eprint.iacr.org/2012/598.pdf) and implemented in [libsnark](https://github.com/scipr-lab/libsnark/blob/dfa74ff270ca295619be1fdf7661f76dff0ae69e/libsnark/gadgetlib1/gadgets/basic_gadgets.hpp#L162-L169).
+
 
 #### verify
 

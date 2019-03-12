@@ -6,6 +6,7 @@ use curve25519_dalek::ristretto::CompressedRistretto;
 use curve25519_dalek::scalar::Scalar;
 use std::iter::FromIterator;
 use std::ops::{Add, Neg};
+use subtle::ConditionallySelectable;
 
 use crate::encoding;
 use crate::errors::VMError;
@@ -47,8 +48,10 @@ pub enum Constraint {
     /// Disjunction of two constraints: at least one must evaluate to true.
     /// Created by `or` instruction.
     Or(Box<Constraint>, Box<Constraint>),
-    // TBD: add `Not(Box<Constraint>)`.
 
+    /// Negation of a constraint: must be zero to evaluate to true.
+    /// Created by 'not' instruction.
+    Not(Box<Constraint>),
     // no witness needed as it's normally true/false and we derive it on the fly during processing.
     // this also allows us not to wrap this enum in a struct.
 }
@@ -104,6 +107,21 @@ impl Constraint {
                 // output expression: a * b
                 let (_l, _r, o) = cs.multiply(a, b);
                 r1cs::LinearCombination::from(o)
+            }
+            Constraint::Not(c1) => {
+                let x = c1.flatten(cs);
+                conditional_select()
+                // subtle.conditional_select()
+                let y = r1cs::LinearCombination::default();
+                let (x, y, o) = cs.multiply(x, y);
+                cs.constrain(o.into());
+                let w = cs.challenge_scalar(b"ZkVM.verify.not-challenge");
+                let (_x, _w, o) = cs.multiply(r1cs::LinearCombination::from(x), w.into());
+                cs.constrain(
+                    r1cs::LinearCombination::from(o) 
+                    + r1cs::LinearCombination::from(-Scalar::one()) 
+                    + r1cs::LinearCombination::from(y));
+                r1cs::LinearCombination::from(y)
             }
         }
     }

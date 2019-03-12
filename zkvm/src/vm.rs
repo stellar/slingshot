@@ -302,6 +302,7 @@ where
                 Instruction::Range(i) => self.range(i)?,
                 Instruction::And => self.and()?,
                 Instruction::Or => self.or()?,
+                Instruction::Not => self.not()?,
                 Instruction::Verify => self.verify()?,
                 Instruction::Unblind => self.unblind()?,
                 Instruction::Issue => self.issue()?,
@@ -426,6 +427,13 @@ where
         let c1 = self.pop_item()?.to_constraint()?;
         let c3 = Constraint::Or(Box::new(c1), Box::new(c2));
         self.push_item(c3);
+        Ok(())
+    }
+
+    fn not(&mut self) -> Result<(), VMError> {
+        let c1 = self.pop_item()?.to_constraint()?;
+        let c2 = Constraint::Not(Box::new(c1));
+        self.push_item(c2);
         Ok(())
     }
 
