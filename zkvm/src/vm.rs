@@ -11,6 +11,7 @@ use std::mem;
 
 use crate::constraints::{Commitment, Constraint, Expression, Variable};
 use crate::contract::{Anchor, Contract, Output, PortableItem};
+use crate::encoding;
 use crate::encoding::SliceReader;
 use crate::errors::VMError;
 use crate::ops::Instruction;
@@ -39,54 +40,6 @@ pub struct TxHeader {
     pub maxtime: u64,
 }
 
-impl TxHeader {
-
-    /// Serializes the tx header into a byte array of 24 elements.
-    pub fn to_bytes(&self) -> Vec<u8> {
-        let mut buf = Vec::with_capacity(self.serialized_size());
-        buf.extend_from_slice(&self.version.to_ne_bytes());
-        buf.extend_from_slice(&self.mintime.to_ne_bytes());
-        buf.extend_from_slice(&self.maxtime.to_ne_bytes());
-        buf
-    }
-
-    /// Returns the size in bytes required to serialize the `TxHeader`.
-    pub fn serialized_size(&self) -> usize {
-        // 3 elements, 64 bits = 8 bytes each
-        3 * 8
-    }
-
-    /// Deserializes the proof from a byte slice.TxHeader
-    /// 
-    /// Returns an error if the byte slice cannot be parsed into a TxHeader.
-    pub fn from_bytes(mut slice: &[u8]) -> Result<TxHeader, VMError> {
-        if slice.len() % 8 != 0 {
-            return Err(VMError::FormatError)
-        }
-        if slice.len() < 3 * 8 {
-            return Err(VMError::FormatError)
-        }
-        macro_rules! read8 {
-            () => {{
-                let mut buf8 = [0u8; 8];
-                buf8[..].copy_from_slice(&slice[..8]);
-                slice = &slice[8..];
-                buf8
-            }};
-        }
-
-        let version = u64::from_ne_bytes(read8!());
-        let mintime = u64::from_ne_bytes(read8!());
-        let maxtime = u64::from_ne_bytes(read8!());
-
-        Ok(TxHeader{
-            version,
-            mintime,
-            maxtime,
-        })
-    }
-}
-
 /// Instance of a transaction that contains all necessary data to validate it.
 pub struct Tx {
     /// Header metadata
@@ -107,21 +60,45 @@ impl Tx {
     /// PRTODO: Define layout to find N.
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut buf = Vec::with_capacity(self.serialized_size());
-        buf.append(&mut self.header.to_bytes());
-
+        encoding::write_u64(self.header.version, &mut buf);
+        encoding::write_u64(self.header.mintime, &mut buf);
+        encoding::write_u64(self.header.maxtime, &mut buf);
+        
+        encoding::write_size(self.program.len(), &mut buf);
+        buf.extend(&self.program);
+        buf.extend_from_slice(&self.signature.to_bytes());
+        buf.extend_from_slice(&self.proof.to_bytes()[..]);
         buf
     }
 
     /// Returns the size in bytes required to serialize the `Tx`
     pub fn serialized_size(&self) -> usize {
-        // PRTODO: Fill in.
-        0 + self.header.serialized_size()
+        // header is 8 bytes * 3 fields = 24 bytes
+        // program length is 4 bytes
+        // program is self.program.len() bytes
+        // signature is 64 bytes
+        // proof is 14*32 + the ipp bytes
+        8*3 + 4 + self.program.len() + 64 + self.proof.serialized_size()
     }
 
     /// Deserializes the tx from a byte slice. 
     /// 
     /// Returns an error if the byte slice cannot be parsed into a `Tx`.
     pub fn from_bytes(mut slice: &[u8]) -> Result<Tx, VMError> {
+        if slice.len() < (24 + 4 + 64 + 14*32) {
+            return Err(R1CSError::FormatError);
+        }
+        // let version = encoding::read_u64(&slice)?;
+        // let mintime = encoding::read_u64(&slice)?;
+        // let maxtime = encoding::read_u64(&slice)?;
+
+        // let prog_len = encoding::read_size(&slice)?;
+        // let program = encoding::read_bytes(prog_len)?;
+
+        // buf = slice[..64];
+        // slice = &slice[64..];
+        // let signature = buf.to_bytes()?;
+
         Ok(Tx{})
     }
 }
