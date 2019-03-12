@@ -108,10 +108,14 @@ mod tests {
         let multikey = multikey_helper(&priv_keys).unwrap();
         let m = Message(b"message to sign".to_vec());
 
-        sign_helper(priv_keys, multikey, m);
+        sign_helper(priv_keys, multikey, m).unwrap();
     }
 
-    fn sign_helper(priv_keys: Vec<PrivKey>, multikey: Multikey, m: Message) -> Signature {
+    fn sign_helper(
+        priv_keys: Vec<PrivKey>,
+        multikey: Multikey,
+        m: Message,
+    ) -> Result<Signature, VMError> {
         let (parties, precomms): (Vec<_>, Vec<_>) = priv_keys
             .clone()
             .into_iter()
@@ -131,7 +135,7 @@ mod tests {
 
         let (parties, siglets): (Vec<_>, Vec<_>) = parties
             .into_iter()
-            .map(|p| p.receive_commitments(m.clone(), comms.clone()))
+            .map(|p| p.receive_commitments(m.clone(), comms.clone()).unwrap())
             .unzip();
 
         let pub_keys: Vec<_> = priv_keys
@@ -140,7 +144,9 @@ mod tests {
             .collect();
         let signatures: Vec<_> = parties
             .into_iter()
-            .map(|p| p.receive_and_verify_siglets(siglets.clone(), pub_keys.clone()))
+            .map(|p: PartyAwaitingSiglets| {
+                p.receive_and_verify_siglets(siglets.clone(), pub_keys.clone())
+            })
             .collect();
 
         // Check that signatures from all parties are the same
@@ -150,7 +156,7 @@ mod tests {
             assert_eq!(cmp.R, sig.R)
         }
 
-        (signatures[0].clone())
+        Ok(signatures[0].clone())
     }
 
     #[test]
@@ -165,7 +171,7 @@ mod tests {
         let multikey = multikey_helper(&priv_keys).unwrap();
         let m = Message(b"message to sign".to_vec());
 
-        let signature = sign_helper(priv_keys, multikey.clone(), m.clone());
+        let signature = sign_helper(priv_keys, multikey.clone(), m.clone()).unwrap();
 
         let mut verify_transcript = Transcript::new(b"signing.test");
         assert!(signature

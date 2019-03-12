@@ -13,12 +13,7 @@ pub struct Multikey {
 }
 
 impl Multikey {
-    pub fn new(pubkeys: Vec<VerificationKey>) -> Result<Self, VMError>
-// TODO: figure out how to copy iterators (So we can iterate twice)
-    // pub fn new<I>(pubkeys: I) -> Result<Self, VMError>
-    // where
-    //     I: IntoIterator<Item = VerificationKey>,
-    {
+    pub fn new(pubkeys: Vec<VerificationKey>) -> Result<Self, VMError> {
         // Create transcript for Multikey
         let mut transcript = Transcript::new(b"ZkVM.aggregated-key");
 

@@ -1,5 +1,6 @@
 #![allow(non_snake_case)]
 
+use crate::errors::VMError;
 use crate::signature::multikey::Multikey;
 use crate::signature::musig::*;
 use crate::signature::VerificationKey;
@@ -13,8 +14,8 @@ use rand;
 #[derive(Copy, Clone, Debug)]
 pub struct Nonce(Scalar);
 
-#[derive(Copy, Clone, Debug)]
-pub struct NoncePrecommitment(Scalar);
+#[derive(Copy, Clone)]
+pub struct NoncePrecommitment([u8; 32]);
 
 // TODO: compress & decompress RistrettoPoint into CompressedRistretto when sending as message
 #[derive(Copy, Clone, Debug)]
@@ -40,10 +41,8 @@ pub struct PartyAwaitingCommitments {
 }
 
 pub struct PartyAwaitingSiglets {
-    transcript: Transcript,
     multikey: Multikey,
     nonce_commitments: Vec<NonceCommitment>,
-    m: Message,
     c: Scalar,
 }
 
@@ -51,7 +50,9 @@ impl NonceCommitment {
     fn precommit(&self) -> NoncePrecommitment {
         let mut h = Transcript::new(b"MuSig.nonce-precommit");
         h.commit_point(b"R_i", &self.0.compress());
-        NoncePrecommitment(h.challenge_scalar(b"precommitment"))
+        let mut precommitment = [0u8; 32];
+        h.challenge_bytes(b"precommitment", &mut precommitment);
+        NoncePrecommitment(precommitment)
     }
 }
 
@@ -107,7 +108,7 @@ impl PartyAwaitingCommitments {
         mut self,
         m: Message,
         nonce_commitments: Vec<NonceCommitment>,
-    ) -> (PartyAwaitingSiglets, Siglet) {
+    ) -> Result<(PartyAwaitingSiglets, Siglet), VMError> {
         // Check stored precommitments against received commitments
         for (pre_comm, comm) in self
             .nonce_precommitments
@@ -120,7 +121,9 @@ impl PartyAwaitingCommitments {
             // Compare H(comm) with pre_comm, they should be equal
             // TBD: make it return Result instead of panic
             // TBD: should we use ct_eq?
-            assert_eq!(pre_comm.0, actual_precomm.0);
+            if pre_comm.0 != actual_precomm.0 {
+                return Err(VMError::InconsistentWitness);
+            }
         }
 
         // Make R = sum_i(R_i). nonce_commitments = R_i from all the parties.
@@ -144,16 +147,14 @@ impl PartyAwaitingCommitments {
         let s_i = self.r_i.0 + c * a_i * self.x_i.0;
 
         // Store received nonce commitments in next state
-        (
+        Ok((
             PartyAwaitingSiglets {
-                transcript: self.transcript,
                 multikey: self.multikey,
                 nonce_commitments,
-                m,
                 c,
             },
             Siglet(s_i),
-        )
+        ))
     }
 }
 
