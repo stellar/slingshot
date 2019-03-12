@@ -3,6 +3,7 @@
 
 use curve25519_dalek::constants;
 use curve25519_dalek::ristretto::CompressedRistretto;
+use curve25519_dalek::ristretto::RistrettoPoint;
 use curve25519_dalek::scalar::Scalar;
 use rand::{CryptoRng, RngCore};
 
@@ -14,7 +15,7 @@ pub struct Xprv {
 
 /// Xpub represents an extended public key.
 pub struct Xpub {
-    point: CompressedRistretto,
+    point: RistrettoPoint,
     dk: [u8; 32],
 }
 
@@ -31,7 +32,7 @@ impl Xprv {
     pub fn to_xpub(&self) -> Xpub {
         let point = self.scalar * &constants::RISTRETTO_BASEPOINT_POINT;
         Xpub {
-            point: point.compress(),
+            point: point,
             dk: self.dk,
         }
     }
@@ -75,10 +76,11 @@ mod tests {
             159, 7, 231, 190, 85, 81, 56, 122, 152, 186, 151, 124, 115, 45, 8, 13, 203, 15, 41,
             160, 72, 227, 101, 105, 18, 198, 83, 62, 50, 238, 122, 237,
         ];
-        let expected_point = CompressedRistretto::from_slice(&[
+        let expected_compressed_point = CompressedRistretto::from_slice(&[
             156, 102, 163, 57, 200, 52, 79, 146, 47, 195, 32, 108, 181, 218, 232, 20, 165, 148,
             192, 23, 125, 211, 35, 92, 37, 77, 156, 64, 154, 101, 184, 8,
         ]);
+        let expected_point = expected_compressed_point.decompress().unwrap();
 
         assert_eq!(xpub.dk, expected_dk);
         assert_eq!(xpub.point, expected_point);
