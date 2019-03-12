@@ -13,16 +13,18 @@ pub struct Multikey {
 }
 
 impl Multikey {
-    pub fn new<I>(pubkeys: I) -> Result<Self, VMError>
-    where
-        I: IntoIterator<Item = VerificationKey>,
+    pub fn new(pubkeys: Vec<VerificationKey>) -> Result<Self, VMError>
+// TODO: figure out how to copy iterators (So we can iterate twice)
+    // pub fn new<I>(pubkeys: I) -> Result<Self, VMError>
+    // where
+    //     I: IntoIterator<Item = VerificationKey>,
     {
         // Create transcript for Multikey
         let mut transcript = Transcript::new(b"ZkVM.aggregated-key");
 
         // Hash in pubkeys
         // L = H(X_1 || X_2 || ... || X_n)
-        for X_i in pubkeys {
+        for X_i in &pubkeys {
             transcript.commit_point(b"X_i.L", &X_i.0);
         }
         let L = transcript.challenge_scalar(b"L");
@@ -31,7 +33,7 @@ impl Multikey {
         // X = sum_i ( a_i * X_i )
         // a_i = H(L, X_i). Compenents of L have already been fed to transcript.
         let mut X_agg = RistrettoPoint::default();
-        for X_i in pubkeys {
+        for X_i in &pubkeys {
             let mut a_i_transcript = transcript.clone();
             a_i_transcript.commit_point(b"X_i", &X_i.0);
             let a_i = a_i_transcript.challenge_scalar(b"a_i");

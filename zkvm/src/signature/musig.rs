@@ -91,7 +91,8 @@ mod tests {
         Multikey::new(
             priv_keys
                 .iter()
-                .map(|priv_key| VerificationKey((G * priv_key.0).compress())),
+                .map(|priv_key| VerificationKey((G * priv_key.0).compress()))
+                .collect(),
         )
     }
 
@@ -111,18 +112,17 @@ mod tests {
     }
 
     fn sign_helper(priv_keys: Vec<PrivKey>, multikey: Multikey, m: Message) -> Signature {
-        let transcript = Transcript::new(b"signing.test");
+        // This is terrible, but just trying to make lifetimes work properly
+        let mut transcripts: Vec<_> = (0..priv_keys.len())
+            .map(|_| Transcript::new(b"signing.test"))
+            .collect();
 
         let (parties, precomms): (Vec<_>, Vec<_>) = priv_keys
             .clone()
             .into_iter()
-            .map(|x_i| {
-                PartyAwaitingPrecommitments::new(
-                    transcript.clone(),
-                    x_i,
-                    multikey.clone(),
-                    m.clone(),
-                )
+            .enumerate()
+            .map(|(i, x_i)| {
+                PartyAwaitingPrecommitments::new(&mut transcripts[i], x_i, multikey.clone())
             })
             .unzip();
 
@@ -133,7 +133,7 @@ mod tests {
 
         let (parties, siglets): (Vec<_>, Vec<_>) = parties
             .into_iter()
-            .map(|p| p.receive_commitments(comms.clone()))
+            .map(|p| p.receive_commitments(m.clone(), comms.clone()))
             .unzip();
 
         let pub_keys: Vec<_> = priv_keys

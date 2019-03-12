@@ -2,6 +2,7 @@
 
 use crate::signature::multikey::Multikey;
 use crate::signature::musig::*;
+use crate::signature::VerificationKey;
 use crate::transcript::TranscriptProtocol;
 use curve25519_dalek::constants::RISTRETTO_BASEPOINT_POINT;
 use curve25519_dalek::ristretto::RistrettoPoint;
@@ -22,39 +23,34 @@ pub struct NonceCommitment(RistrettoPoint);
 #[derive(Clone)]
 pub struct Siglet(Scalar);
 
-pub struct PartyAwaitingPrecommitments {
-    shared: Shared,
+pub struct PartyAwaitingPrecommitments<'a> {
+    transcript: &'a mut Transcript,
+    multikey: Multikey,
     x_i: PrivKey,
     r_i: Nonce,
     R_i: NonceCommitment,
 }
 
-pub struct PartyAwaitingCommitments {
-    shared: Shared,
+pub struct PartyAwaitingCommitments<'a> {
+    transcript: &'a mut Transcript,
+    multikey: Multikey,
     x_i: PrivKey,
     r_i: Nonce,
     nonce_precommitments: Vec<NoncePrecommitment>,
 }
 
-pub struct PartyAwaitingSiglets {
-    shared: Shared,
-    nonce_commitments: Vec<NonceCommitment>,
-}
-
-#[derive(Clone)]
-pub struct Shared<'a> {
-    G: RistrettoPoint,
+pub struct PartyAwaitingSiglets<'a> {
     transcript: &'a mut Transcript,
     multikey: Multikey,
+    nonce_commitments: Vec<NonceCommitment>,
     m: Message,
 }
 
-impl<'a> PartyAwaitingPrecommitments {
+impl<'a> PartyAwaitingPrecommitments<'a> {
     pub fn new(
-        transcript: &mut Transcript,
+        transcript: &'a mut Transcript,
         x_i: PrivKey,
         multikey: Multikey,
-        m: Message,
     ) -> (Self, NoncePrecommitment) {
         let mut rng = transcript.build_rng().finalize(&mut rand::thread_rng());
 
@@ -67,16 +63,10 @@ impl<'a> PartyAwaitingPrecommitments {
         transcript.commit_point(b"R_i", &R_i.0.compress());
         let precommitment = NoncePrecommitment(transcript.challenge_scalar(b"nonce.precommit"));
 
-        let shared = Shared {
-            G: RISTRETTO_BASEPOINT_POINT,
-            transcript,
-            multikey,
-            m,
-        };
-
         (
             PartyAwaitingPrecommitments {
-                shared,
+                transcript,
+                multikey,
                 x_i,
                 r_i,
                 R_i,
@@ -88,11 +78,12 @@ impl<'a> PartyAwaitingPrecommitments {
     pub fn receive_precommitments(
         self,
         nonce_precommitments: Vec<NoncePrecommitment>,
-    ) -> (PartyAwaitingCommitments, NonceCommitment) {
+    ) -> (PartyAwaitingCommitments<'a>, NonceCommitment) {
         // Store received nonce precommitments in next state
         (
             PartyAwaitingCommitments {
-                shared: self.shared,
+                transcript: self.transcript,
+                multikey: self.multikey,
                 x_i: self.x_i,
                 r_i: self.r_i,
                 nonce_precommitments,
@@ -102,11 +93,12 @@ impl<'a> PartyAwaitingPrecommitments {
     }
 }
 
-impl<'a> PartyAwaitingCommitments {
+impl<'a> PartyAwaitingCommitments<'a> {
     pub fn receive_commitments(
         self,
+        m: Message,
         nonce_commitments: Vec<NonceCommitment>,
-    ) -> (PartyAwaitingSiglets, Siglet) {
+    ) -> (PartyAwaitingSiglets<'a>, Siglet) {
         // Check stored precommitments against received commitments
         for (pre_comm, comm) in self
             .nonce_precommitments
@@ -114,7 +106,7 @@ impl<'a> PartyAwaitingCommitments {
             .zip(nonce_commitments.iter())
         {
             // Make H(comm) = H(R_i)
-            let mut precomm_transcript = self.shared.transcript.clone();
+            let mut precomm_transcript = self.transcript.clone();
             precomm_transcript.commit_point(b"R_i", &comm.0.compress());
             let correct_precomm = precomm_transcript.challenge_scalar(b"nonce.precommit");
 
@@ -127,22 +119,16 @@ impl<'a> PartyAwaitingCommitments {
 
         // Make c = H(X_agg, R, m)
         let c = {
-            self.shared
-                .transcript
-                .commit_point(b"X_agg", &self.shared.multikey.aggregated_key().0);
-            self.shared.transcript.commit_point(b"R", &R.compress());
-            self.shared.transcript.commit_bytes(b"m", &self.shared.m.0);
-            self.shared.transcript.challenge_scalar(b"c")
+            self.transcript
+                .commit_point(b"X_agg", &self.multikey.aggregated_key().0);
+            self.transcript.commit_point(b"R", &R.compress());
+            self.transcript.commit_bytes(b"m", &m.0);
+            self.transcript.challenge_scalar(b"c")
         };
 
         // Make a_i = H(L, X_i)
-        let a_i = {
-            let mut a_i_transcript = self.shared.transcript.clone();
-            a_i_transcript.commit_scalar(b"L", &self.shared.multikey.aggregated_hash());
-            let X_i = self.x_i.0 * self.shared.G;
-            a_i_transcript.commit_point(b"X_i", &X_i.compress());
-            a_i_transcript.challenge_scalar(b"a_i")
-        };
+        let X_i = VerificationKey((self.x_i.0 * RISTRETTO_BASEPOINT_POINT).compress());
+        let a_i = self.multikey.a_i(&X_i);
 
         // Generate siglet: s_i = r_i + c * a_i * x_i
         let s_i = self.r_i.0 + c * a_i * self.x_i.0;
@@ -150,15 +136,17 @@ impl<'a> PartyAwaitingCommitments {
         // Store received nonce commitments in next state
         (
             PartyAwaitingSiglets {
-                shared: self.shared,
+                transcript: self.transcript,
+                multikey: self.multikey,
                 nonce_commitments,
+                m,
             },
             Siglet(s_i),
         )
     }
 }
 
-impl<'a> PartyAwaitingSiglets {
+impl<'a> PartyAwaitingSiglets<'a> {
     pub fn receive_siglets(self, siglets: Vec<Siglet>) -> Signature {
         // s = sum(siglets)
         let s: Scalar = siglets.iter().map(|siglet| siglet.0).sum();
@@ -175,26 +163,21 @@ impl<'a> PartyAwaitingSiglets {
     ) -> Signature {
         // Check that all siglets are valid
         for (i, s_i) in siglets.iter().enumerate() {
-            let S_i = s_i.0 * self.shared.G;
+            let S_i = s_i.0 * RISTRETTO_BASEPOINT_POINT;
             let X_i = pubkeys[i].0;
             let R_i = self.nonce_commitments[i].0;
             let R: RistrettoPoint = self.nonce_commitments.iter().map(|R_i| R_i.0).sum();
 
             // Make c = H(X_agg, R, m)
             let c = {
-                let mut c_transcript = self.shared.transcript.clone();
-                c_transcript.commit_point(b"X_agg", &self.shared.multikey.aggregated_key().0);
+                let mut c_transcript = self.transcript.clone();
+                c_transcript.commit_point(b"X_agg", &self.multikey.aggregated_key().0);
                 c_transcript.commit_point(b"R", &R.compress());
-                c_transcript.commit_bytes(b"m", &self.shared.m.0);
+                c_transcript.commit_bytes(b"m", &self.m.0);
                 c_transcript.challenge_scalar(b"c")
             };
             // Make a_i = H(L, X_i)
-            let a_i = {
-                let mut a_i_transcript = self.shared.transcript.clone();
-                a_i_transcript.commit_scalar(b"L", &self.shared.multikey.aggregated_hash());
-                a_i_transcript.commit_point(b"X_i", &X_i.compress());
-                a_i_transcript.challenge_scalar(b"a_i")
-            };
+            let a_i = self.multikey.a_i(&VerificationKey(X_i.compress()));
 
             // Check that S_i = R_i + c * a_i * X_i
             assert_eq!(S_i, R_i + c * a_i * X_i);
