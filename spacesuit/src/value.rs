@@ -47,7 +47,7 @@ impl Value {
     /// Creates variables for the fields in `Value`, and packages them in an `AllocatedValue`.
     pub fn allocate<CS: ConstraintSystem>(&self, cs: &mut CS) -> Result<AllocatedValue, R1CSError> {
         let q_u64 = self.q.into();
-        let (q_var, f_var, _) = cs.allocate(|| Ok((q_u64, self.f, q_u64 * self.f)))?;
+        let (q_var, f_var, _) = cs.allocate_multiplier(Some((q_u64, self.f)))?;
 
         Ok(AllocatedValue {
             q: q_var,
@@ -62,12 +62,7 @@ impl AllocatedValue {
     pub(crate) fn unassigned<CS: ConstraintSystem>(
         cs: &mut CS,
     ) -> Result<AllocatedValue, R1CSError> {
-        let (q, f, _) = cs.allocate(|| {
-            Err(R1CSError::GadgetError {
-                description: "Tried to assign variables in `AllocatedValue::unassigned`"
-                    .to_string(),
-            })
-        })?;
+        let (q, f, _) = cs.allocate_multiplier(None)?;
 
         Ok(Self {
             q,
