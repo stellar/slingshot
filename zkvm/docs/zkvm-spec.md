@@ -57,7 +57,7 @@ ZkVM defines a procedural representation for blockchain transactions and the rul
     * [Constraint system instructions](#constraint-system-instructions)
     * [Value instructions](#value-instructions)
     * [Contract instructions](#contract-instructions)
-* [Transaction Encoding](#tx-encoding)
+* [Transaction Encoding](#transaction-encoding)
 * [Examples](#examples)
     * [Lock value example](#lock-value-example)
     * [Unlock value example](#unlock-value-example)
