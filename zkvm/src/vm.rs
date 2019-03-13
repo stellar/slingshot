@@ -19,8 +19,6 @@ use crate::ops::Instruction;
 use crate::point_ops::PointOp;
 use crate::predicate::Predicate;
 use crate::scalar_witness::ScalarWitness;
-// use crate::serde::de::Visitor;
-// use crate::serde::{self, Deserialize, Deserializer, Serialize, Serializer};
 use crate::signature::*;
 use crate::txlog::{Entry, TxID, TxLog};
 use crate::types::*;
@@ -45,7 +43,7 @@ impl TxHeader {
     fn serialized_size(&self) -> usize {
         8 * 3
     }
-    
+
     fn encode(&self, buf: &mut Vec<u8>) {
         encoding::write_u64(self.version, buf);
         encoding::write_u64(self.mintime, buf);
