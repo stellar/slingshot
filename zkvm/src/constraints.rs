@@ -126,8 +126,8 @@ impl Constraint {
                 }
             }
             Constraint::Not(c1) => {
-                let (x, x_assg) = c1.flatten(cs)?;
-                let (y_assg, w_assg) = match x_assg {
+                let (x_lc, x_assg) = c1.flatten(cs)?;
+                let (xy, xw, y_assg) = match x_assg {
                     Some(x_assg) => {
                         let is_zero = x_assg.ct_eq(&Scalar::zero());
                         let y_assg = Scalar::conditional_select(
@@ -137,15 +137,14 @@ impl Constraint {
                         );
                         let w = Scalar::conditional_select(&x_assg, &Scalar::one(), is_zero.into());
                         let w = w.invert();
-                        (Some(y_assg), Some(w))
+                        (Some((x_assg, y_assg)), Some((x_assg, w)), Some(y_assg))
                     }
-                    None => (None, None),
+                    None => (None, None, None),
                 };
-                let y = cs.allocate(y_assg)?;
-                let (x, y, o) = cs.multiply(x, y.into());
+                let (x, y, o) = cs.allocate_multiplier(xy)?;
                 cs.constrain(o.into());
-                let w = cs.allocate(w_assg)?;
-                let (_x, _w, xw) = cs.multiply(x.into(), w.into());
+                cs.constrain(x - x_lc);
+                let (_x, _w, xw) = cs.allocate_multiplier(xw)?;
                 cs.constrain(xw - Scalar::one() + y);
                 Ok((r1cs::LinearCombination::from(y), y_assg))
             }
