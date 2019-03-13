@@ -196,10 +196,13 @@ mod tests {
     }
 
     fn test_commit(items: Vec<TestItem>) {
-        let new_items = items.iter().map(|i| {
-            i.commit(&mut Transcript::new(b"test"));
-            i
-        }).collect::<Vec<_>>();
+        let new_items = items
+            .iter()
+            .map(|i| {
+                i.commit(&mut Transcript::new(b"test"));
+                i
+            })
+            .collect::<Vec<_>>();
     }
 
     macro_rules! assert_proof {
