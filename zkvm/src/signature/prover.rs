@@ -128,11 +128,11 @@ impl PartyAwaitingCommitments {
         // Make R = sum_i(R_i). nonce_commitments = R_i from all the parties.
         let R: RistrettoPoint = nonce_commitments.iter().map(|R_i| R_i.0).sum();
 
-        // Make c = H(X_agg, R, m)
+        // Make c = H(aggregated_key, R, m)
         // The message should already have been fed into the transcript.
         let c = {
             self.transcript
-                .commit_point(b"X_agg", &self.multikey.aggregated_key().0);
+                .commit_point(b"aggregated_key", &self.multikey.aggregated_key().0);
             self.transcript.commit_point(b"R", &R.compress());
             self.transcript.challenge_scalar(b"c")
         };

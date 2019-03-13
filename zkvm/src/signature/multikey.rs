@@ -1,4 +1,3 @@
-use crate::errors::VMError;
 use crate::signature::VerificationKey;
 use crate::transcript::TranscriptProtocol;
 use curve25519_dalek::ristretto::RistrettoPoint;
@@ -8,11 +7,11 @@ use merlin::Transcript;
 #[derive(Clone)]
 pub struct Multikey {
     transcript: Transcript,
-    X_agg: VerificationKey,
+    aggregated_key: VerificationKey,
 }
 
 impl Multikey {
-    pub fn new(pubkeys: Vec<VerificationKey>) -> Result<Self, VMError> {
+    pub fn new(pubkeys: Vec<VerificationKey>) -> Option<Self> {
         // Create transcript for Multikey
         let mut transcript = Transcript::new(b"ZkVM.aggregated-key");
 
@@ -24,24 +23,24 @@ impl Multikey {
 
         let mut multikey = Multikey {
             transcript,
-            X_agg: VerificationKey(RistrettoPoint::default().compress()),
+            aggregated_key: VerificationKey(RistrettoPoint::default().compress()),
         };
 
         // Make aggregated pubkey
-        // X_agg = sum_i ( a_i * X_i )
-        let mut X_agg = RistrettoPoint::default();
+        // aggregated_key = sum_i ( a_i * X_i )
+        let mut aggregated_key = RistrettoPoint::default();
         for X_i in &pubkeys {
             let a_i = multikey.factor_for_key(X_i);
             let X_i = match X_i.0.decompress() {
                 Some(X_i) => X_i,
-                None => return Err(VMError::InvalidPoint),
+                None => return None,
             };
-            X_agg = X_agg + a_i * X_i;
+            aggregated_key = aggregated_key + a_i * X_i;
         }
 
-        multikey.X_agg = VerificationKey(X_agg.compress());
+        multikey.aggregated_key = VerificationKey(aggregated_key.compress());
 
-        Ok(multikey)
+        Some(multikey)
     }
 
     // Make a_i
@@ -53,6 +52,6 @@ impl Multikey {
     }
 
     pub fn aggregated_key(&self) -> VerificationKey {
-        self.X_agg
+        self.aggregated_key
     }
 }

@@ -28,25 +28,25 @@ impl Signature {
         &self,
         // The message `m` should already have been fed into the transcript
         transcript: &Transcript,
-        X_agg: VerificationKey,
+        aggregated_key: VerificationKey,
     ) -> Result<(), VMError> {
         let G = RISTRETTO_BASEPOINT_POINT;
         let mut transcript = transcript.clone();
 
-        // Make c = H(X_agg, R, m)
+        // Make c = H(aggregated_key, R, m)
         // The message `m` should already have been fed into the transcript
         let c = {
-            transcript.commit_point(b"X_agg", &X_agg.0);
+            transcript.commit_point(b"aggregated_key", &aggregated_key.0);
             transcript.commit_point(b"R", &self.R.compress());
             transcript.challenge_scalar(b"c")
         };
 
-        let X_agg = match X_agg.0.decompress() {
-            Some(X_agg) => X_agg,
+        let aggregated_key = match aggregated_key.0.decompress() {
+            Some(aggregated_key) => aggregated_key,
             None => return Err(VMError::InvalidPoint),
         };
-        // Check sG = R + c * X_agg
-        match self.s * G == self.R + c * X_agg {
+        // Check sG = R + c * aggregated_key
+        match self.s * G == self.R + c * aggregated_key {
             true => Ok(()),
             false => Err(VMError::PointOperationsFailed),
         }
@@ -81,7 +81,7 @@ mod tests {
         assert_eq!(expected_pub_key, multikey.aggregated_key().0);
     }
 
-    fn multikey_helper(priv_keys: &Vec<PrivKey>) -> Result<Multikey, VMError> {
+    fn multikey_helper(priv_keys: &Vec<PrivKey>) -> Option<Multikey> {
         let G = RISTRETTO_BASEPOINT_POINT;
         Multikey::new(
             priv_keys
