@@ -28,7 +28,7 @@ impl Signature {
         &self,
         // The message `m` should already have been fed into the transcript
         transcript: &Transcript,
-        aggregated_key: VerificationKey,
+        P: VerificationKey,
     ) -> Result<(), VMError> {
         let G = RISTRETTO_BASEPOINT_POINT;
         let mut transcript = transcript.clone();
@@ -36,17 +36,17 @@ impl Signature {
         // Make c = H(aggregated_key, R, m)
         // The message `m` should already have been fed into the transcript
         let c = {
-            transcript.commit_point(b"aggregated_key", &aggregated_key.0);
+            transcript.commit_point(b"P", &P.0);
             transcript.commit_point(b"R", &self.R.compress());
             transcript.challenge_scalar(b"c")
         };
 
-        let aggregated_key = match aggregated_key.0.decompress() {
-            Some(aggregated_key) => aggregated_key,
+        let P = match P.0.decompress() {
+            Some(pk) => pk,
             None => return Err(VMError::InvalidPoint),
         };
         // Check sG = R + c * aggregated_key
-        match self.s * G == self.R + c * aggregated_key {
+        match self.s * G == self.R + c * P {
             true => Ok(()),
             false => Err(VMError::PointOperationsFailed),
         }

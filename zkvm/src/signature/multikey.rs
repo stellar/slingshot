@@ -14,11 +14,12 @@ impl Multikey {
     pub fn new(pubkeys: Vec<VerificationKey>) -> Option<Self> {
         // Create transcript for Multikey
         let mut transcript = Transcript::new(b"ZkVM.aggregated-key");
+        transcript.commit_u64(b"n", pubkeys.len() as u64);
 
         // Hash in pubkeys
         // L = H(X_1 || X_2 || ... || X_n)
         for X_i in &pubkeys {
-            transcript.commit_point(b"X_i.L", &X_i.0);
+            transcript.commit_point(b"P", &X_i.0);
         }
 
         let mut multikey = Multikey {
