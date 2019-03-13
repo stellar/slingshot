@@ -83,7 +83,7 @@ impl Tx {
         buf.extend_from_slice(&self.proof.to_bytes());
     }
 
-    fn decode<'a>(r : &mut SliceReader<'a>) -> Result<Tx, VMError> {
+    fn decode<'a>(r: &mut SliceReader<'a>) -> Result<Tx, VMError> {
         let header = TxHeader::decode(r)?;
         let prog_len = r.read_size()?;
         let program = r.read_bytes(prog_len)?.to_vec();
