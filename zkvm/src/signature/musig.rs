@@ -20,7 +20,6 @@ pub struct Signature {
     pub R: RistrettoPoint,
 }
 
-// TODO: is this actually the msg format we want?
 #[derive(Clone)]
 pub struct Message(pub Vec<u8>);
 
@@ -74,16 +73,11 @@ mod tests {
         let multikey = multikey_helper(&priv_keys).unwrap();
 
         let expected_pub_key = CompressedRistretto::from_slice(&[
-            216, 24, 38, 3, 168, 38, 151, 153, 62, 37, 16, 214, 25, 233, 233, 11, 95, 170, 11, 161,
-            131, 79, 0, 194, 162, 98, 164, 135, 41, 109, 20, 54,
-        ]);
-        let expected_pub_key_hash = Scalar::from_bits([
-            170, 162, 115, 8, 107, 188, 34, 85, 60, 63, 177, 82, 191, 66, 133, 135, 119, 148, 25,
-            136, 143, 1, 111, 129, 130, 116, 75, 248, 222, 40, 117, 0,
+            66, 159, 16, 236, 165, 170, 29, 154, 226, 5, 197, 204, 148, 244, 75, 6, 182, 23, 35,
+            23, 237, 90, 147, 172, 26, 104, 172, 191, 183, 57, 16, 31,
         ]);
 
         assert_eq!(expected_pub_key, multikey.aggregated_key().0);
-        assert_eq!(expected_pub_key_hash, multikey.aggregated_hash());
     }
 
     fn multikey_helper(priv_keys: &Vec<PrivKey>) -> Result<Multikey, VMError> {

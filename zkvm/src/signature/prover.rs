@@ -119,7 +119,6 @@ impl PartyAwaitingCommitments {
             let actual_precomm = comm.precommit();
 
             // Compare H(comm) with pre_comm, they should be equal
-            // TBD: make it return Result instead of panic
             // TBD: should we use ct_eq?
             if pre_comm.0 != actual_precomm.0 {
                 return Err(VMError::InconsistentWitness);
@@ -141,7 +140,7 @@ impl PartyAwaitingCommitments {
 
         // Make a_i = H(L, X_i)
         let X_i = VerificationKey((self.x_i.0 * RISTRETTO_BASEPOINT_POINT).compress());
-        let a_i = self.multikey.a_i(&X_i);
+        let a_i = self.multikey.factor_for_key(&X_i);
 
         // Generate siglet: s_i = r_i + c * a_i * x_i
         let s_i = self.r_i.0 + c * a_i * self.x_i.0;
@@ -180,7 +179,9 @@ impl PartyAwaitingSiglets {
             let R_i = self.nonce_commitments[i].0;
 
             // Make a_i = H(L, X_i)
-            let a_i = self.multikey.a_i(&VerificationKey(X_i.compress()));
+            let a_i = self
+                .multikey
+                .factor_for_key(&VerificationKey(X_i.compress()));
 
             // Check that S_i = R_i + c * a_i * X_i
             assert_eq!(S_i, R_i + self.c * a_i * X_i);
