@@ -3,9 +3,10 @@ use bulletproofs::r1cs::R1CSProof;
 use curve25519_dalek::ristretto::CompressedRistretto;
 use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
+use serde::de::Visitor;
+use serde::{self, Deserialize, Deserializer, Serialize, Serializer};
 use spacesuit;
 use spacesuit::BitRange;
-use serde::Serialize;
 use std::iter::FromIterator;
 use std::mem;
 
@@ -56,89 +57,97 @@ pub struct Tx {
 }
 
 impl Tx {
-    /// Serializes the tx into a byte array of N elements.
-    /// PRTODO: Define layout to find N.
+    /// Serializes the tx into a byte array.
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut buf = Vec::with_capacity(self.serialized_size());
         encoding::write_u64(self.header.version, &mut buf);
         encoding::write_u64(self.header.mintime, &mut buf);
         encoding::write_u64(self.header.maxtime, &mut buf);
-        
+
         encoding::write_size(self.program.len(), &mut buf);
         buf.extend(&self.program);
         buf.extend_from_slice(&self.signature.to_bytes());
-        buf.extend_from_slice(&self.proof.to_bytes()[..]);
+        buf.extend_from_slice(&self.proof.to_bytes());
         buf
     }
 
-    /// Returns the size in bytes required to serialize the `Tx`
+    /// Returns the size in bytes required to serialize the `Tx`.
     pub fn serialized_size(&self) -> usize {
         // header is 8 bytes * 3 fields = 24 bytes
         // program length is 4 bytes
         // program is self.program.len() bytes
         // signature is 64 bytes
         // proof is 14*32 + the ipp bytes
-        8*3 + 4 + self.program.len() + 64 + self.proof.serialized_size()
+        8 * 3 + 4 + self.program.len() + 64 + self.proof.serialized_size()
     }
 
-    /// Deserializes the tx from a byte slice. 
-    /// 
+    /// Deserializes the tx from a byte slice.
+    ///
     /// Returns an error if the byte slice cannot be parsed into a `Tx`.
-    pub fn from_bytes(mut slice: &[u8]) -> Result<Tx, VMError> {
-        if slice.len() < (24 + 4 + 64 + 14*32) {
-            return Err(R1CSError::FormatError);
+    pub fn from_bytes(slice: &[u8]) -> Result<Tx, VMError> {
+        if slice.len() < (24 + 4 + 64 + 14 * 32) {
+            return Err(VMError::FormatError);
         }
-        // let version = encoding::read_u64(&slice)?;
-        // let mintime = encoding::read_u64(&slice)?;
-        // let maxtime = encoding::read_u64(&slice)?;
+        let mut reader = SliceReader::new(slice);
+        let version = reader.read_u64()?;
+        let mintime = reader.read_u64()?;
+        let maxtime = reader.read_u64()?;
+        let header = TxHeader {
+            version: version,
+            mintime: mintime,
+            maxtime: maxtime,
+        };
 
-        // let prog_len = encoding::read_size(&slice)?;
-        // let program = encoding::read_bytes(prog_len)?;
+        let prog_len = reader.read_size()?;
+        let program = reader.read_bytes(prog_len)?.to_vec();
 
-        // buf = slice[..64];
-        // slice = &slice[64..];
-        // let signature = buf.to_bytes()?;
-
-        Ok(Tx{})
+        let mut signature_buf = [0u8; 64];
+        signature_buf.copy_from_slice(reader.read_bytes(64)?);
+        let signature = Signature::from_bytes(signature_buf)?;
+        let proof = R1CSProof::from_bytes(reader.read_bytes(reader.len())?)
+            .map_err(|_| VMError::FormatError)?;
+        Ok(Tx {
+            header: header,
+            program: program,
+            signature: signature,
+            proof: proof,
+        })
     }
 }
 
 impl Serialize for Tx {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where S : serde::Serializer, {
+    where
+        S: Serializer,
+    {
         serializer.serialize_bytes(&self.to_bytes()[..])
     }
 }
+impl<'de> Deserialize<'de> for Tx {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct TxVisitor;
 
-// impl serde::Serialize for Tx {
-//     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-//     where S : serde::Serializer, {
-//         serializer.serialize_bytes(&self.to_bytes()[..])
-//     }
-// }
+        impl<'de> Visitor<'de> for TxVisitor {
+            type Value = Tx;
 
-// impl <'de> serde::Deserialize<'de> for Tx {
-//     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-//     where D : serde::Deserializer<'de>, {
-//         struct TxVisitor;
+            fn expecting(&self, formatter: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
+                formatter.write_str("a valid Tx")
+            }
 
-//         impl<'de> serde::de::Visitor<'de> for TxVisitor {
-//             type Value = Tx;
-//             fn expecting(&self, formatter: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
-//                 formatter.write_str("a valid Tx")
-//             }
+            fn visit_bytes<E>(self, v: &[u8]) -> Result<Tx, E>
+            where
+                E: serde::de::Error,
+            {
+                Tx::from_bytes(v).map_err(serde::de::Error::custom)
+            }
+        }
 
-//             fn visit_bytes<E>(self, v: &[u8]) -> Result<Tx, E>
-//             where
-//                 E: serde::de::Error,
-//             {
-//                 serde::de::Visitor::from_bytes(v).map_err(serde::de::Error::custom)
-//             }
-//         }
-
-//         deserializer.deserialize_bytes(TxVisitor)
-//     }
-// }
+        deserializer.deserialize_bytes(TxVisitor)
+    }
+}
 
 /// Represents a verified transaction: a txid and a list of state updates.
 pub struct VerifiedTx {
