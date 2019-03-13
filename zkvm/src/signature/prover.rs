@@ -185,7 +185,7 @@ impl PartyAwaitingSiglets {
 
             // Check that S_i = R_i + c * a_i * X_i
             if S_i != R_i + self.c * a_i * X_i {
-                return Err(VMError::PointOperationsFailed);
+                return Err(VMError::SignatureShareError { index: i });
             }
             assert_eq!(S_i, R_i + self.c * a_i * X_i);
         }
