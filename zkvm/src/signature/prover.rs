@@ -58,6 +58,7 @@ impl NonceCommitment {
 
 impl PartyAwaitingPrecommitments {
     pub fn new(
+        // The message `m` should already have been fed into the transcript
         transcript: &Transcript,
         x_i: PrivKey,
         multikey: Multikey,
@@ -106,7 +107,6 @@ impl PartyAwaitingPrecommitments {
 impl PartyAwaitingCommitments {
     pub fn receive_commitments(
         mut self,
-        m: Message,
         nonce_commitments: Vec<NonceCommitment>,
     ) -> Result<(PartyAwaitingSiglets, Siglet), VMError> {
         // Check stored precommitments against received commitments
@@ -129,12 +129,11 @@ impl PartyAwaitingCommitments {
         let R: RistrettoPoint = nonce_commitments.iter().map(|R_i| R_i.0).sum();
 
         // Make c = H(X_agg, R, m)
+        // The message should already have been fed into the transcript.
         let c = {
             self.transcript
                 .commit_point(b"X_agg", &self.multikey.aggregated_key().0);
             self.transcript.commit_point(b"R", &R.compress());
-            // TBD: remove this - it should be within a transcript already, outside the musig protocol
-            self.transcript.commit_bytes(b"m", &m.0);
             self.transcript.challenge_scalar(b"c")
         };
 

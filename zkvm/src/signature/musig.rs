@@ -26,17 +26,17 @@ pub struct Message(pub Vec<u8>);
 impl Signature {
     pub fn verify(
         &self,
+        // The message `m` should already have been fed into the transcript
         transcript: &mut Transcript,
         X_agg: VerificationKey,
-        m: Message,
     ) -> Result<(), VMError> {
         let G = RISTRETTO_BASEPOINT_POINT;
 
         // Make c = H(X_agg, R, m)
+        // The message `m` should already have been fed into the transcript
         let c = {
             transcript.commit_point(b"X_agg", &X_agg.0);
             transcript.commit_point(b"R", &self.R.compress());
-            transcript.commit_bytes(b"m", &m.0);
             transcript.challenge_scalar(b"c")
         };
 
@@ -110,16 +110,13 @@ mod tests {
         multikey: Multikey,
         m: Message,
     ) -> Result<Signature, VMError> {
+        let mut transcript = Transcript::new(b"signing test");
+        transcript.commit_bytes(b"message", &m.0);
+
         let (parties, precomms): (Vec<_>, Vec<_>) = priv_keys
             .clone()
             .into_iter()
-            .map(|x_i| {
-                PartyAwaitingPrecommitments::new(
-                    &Transcript::new(b"signing.test"),
-                    x_i,
-                    multikey.clone(),
-                )
-            })
+            .map(|x_i| PartyAwaitingPrecommitments::new(&transcript.clone(), x_i, multikey.clone()))
             .unzip();
 
         let (parties, comms): (Vec<_>, Vec<_>) = parties
@@ -129,7 +126,7 @@ mod tests {
 
         let (parties, siglets): (Vec<_>, Vec<_>) = parties
             .into_iter()
-            .map(|p| p.receive_commitments(m.clone(), comms.clone()).unwrap())
+            .map(|p| p.receive_commitments(comms.clone()).unwrap())
             .unzip();
 
         let pub_keys: Vec<_> = priv_keys
@@ -167,9 +164,11 @@ mod tests {
 
         let signature = sign_helper(priv_keys, multikey.clone(), m.clone()).unwrap();
 
-        let mut verify_transcript = Transcript::new(b"signing.test");
+        let mut transcript = Transcript::new(b"signing test");
+        transcript.commit_bytes(b"message", &m.0);
+
         assert!(signature
-            .verify(&mut verify_transcript, multikey.aggregated_key(), m)
+            .verify(&mut transcript, multikey.aggregated_key())
             .is_ok());
     }
 }
