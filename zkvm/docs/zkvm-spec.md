@@ -57,6 +57,7 @@ ZkVM defines a procedural representation for blockchain transactions and the rul
     * [Constraint system instructions](#constraint-system-instructions)
     * [Value instructions](#value-instructions)
     * [Contract instructions](#contract-instructions)
+* [Transaction Encoding](#tx-encoding)
 * [Examples](#examples)
     * [Lock value example](#lock-value-example)
     * [Unlock value example](#unlock-value-example)
@@ -1598,7 +1599,17 @@ All unassigned instruction codes are interpreted as no-ops. This are reserved fo
 
 See [Versioning](#versioning).
 
+## Transaction Encoding
 
+This section contains the rules for serializing a [Transaction](#transaction) object.
+
+```
+        SerializedTx = TxHeader || LE32(len(Program)) || Program || Signature || Proof
+        TxHeader = <24 bytes>
+        Program = <len(Program) bytes>
+        Signature = <64 bytes>
+        Proof = <14 * 32 + len(InnerProductProof) bytes>
+```
 
 ## Examples
 
