@@ -1605,10 +1605,10 @@ A [Transaction](#transaction) is serialized as follows:
 
 ```
         SerializedTx = TxHeader || LE32(len(Program)) || Program || Signature || Proof
-        TxHeader = <24 bytes>
+        TxHeader = LE64(version) || LE64(mintime) || LE64(maxtime)
         Program = <len(Program) bytes>
         Signature = <64 bytes>
-        Proof = <14 * 32 + len(InnerProductProof) bytes>
+        Proof = <14·32 + len(InnerProductProof) bytes>
 ```
 
 ## Examples

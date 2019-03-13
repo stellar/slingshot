@@ -51,17 +51,11 @@ impl TxHeader {
     }
 
     fn decode<'a>(reader: &mut SliceReader<'a>) -> Result<Self, VMError> {
-        let (header, _) = reader.slice(|r| {
-            let version = r.read_u64()?;
-            let mintime = r.read_u64()?;
-            let maxtime = r.read_u64()?;
-            Ok(TxHeader {
-                version,
-                mintime,
-                maxtime,
-            })
-        })?;
-        Ok(header)
+        Ok(TxHeader {
+            version: reader.read_u64()?,
+            mintime: reader.read_u64()?,
+            maxtime: reader.read_u64()?,
+        })
     }
 }
 
@@ -89,25 +83,20 @@ impl Tx {
         buf.extend_from_slice(&self.proof.to_bytes());
     }
 
-    fn decode<'a>(reader: &mut SliceReader<'a>) -> Result<Tx, VMError> {
-        let (tx, _) = reader.slice(|r| {
-            let header = TxHeader::decode(r)?;
-            let prog_len = r.read_size()?;
-            let program = r.read_bytes(prog_len)?.to_vec();
+    fn decode<'a>(r : &mut SliceReader<'a>) -> Result<Tx, VMError> {
+        let header = TxHeader::decode(r)?;
+        let prog_len = r.read_size()?;
+        let program = r.read_bytes(prog_len)?.to_vec();
 
-            let mut sig_buf = [0u8; 64];
-            sig_buf.copy_from_slice(r.read_bytes(64)?);
-            let signature = Signature::from_bytes(sig_buf)?;
-            let proof =
-                R1CSProof::from_bytes(r.read_bytes(r.len())?).map_err(|_| VMError::FormatError)?;
-            Ok(Tx {
-                header,
-                program,
-                signature,
-                proof,
-            })
-        })?;
-        Ok(tx)
+        let signature = Signature::from_bytes(r.read_u8x64()?)?;
+        let proof =
+            R1CSProof::from_bytes(r.read_bytes(r.len())?).map_err(|_| VMError::FormatError)?;
+        Ok(Tx {
+            header,
+            program,
+            signature,
+            proof,
+        })
     }
 
     /// Serializes the tx into a byte array.
@@ -131,8 +120,7 @@ impl Tx {
     ///
     /// Returns an error if the byte slice cannot be parsed into a `Tx`.
     pub fn from_bytes(slice: &[u8]) -> Result<Tx, VMError> {
-        let tx = SliceReader::parse(slice, |r| Self::decode(r))?;
-        Ok(tx)
+        SliceReader::parse(slice, |r| Self::decode(r))
     }
 }
 
