@@ -1601,7 +1601,7 @@ See [Versioning](#versioning).
 
 ## Transaction Encoding
 
-This section contains the rules for serializing a [Transaction](#transaction) object.
+A [Transaction](#transaction) is serialized as follows:
 
 ```
         SerializedTx = TxHeader || LE32(len(Program)) || Program || Signature || Proof
