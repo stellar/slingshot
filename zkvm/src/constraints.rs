@@ -98,36 +98,29 @@ impl Constraint {
     ) -> Result<(r1cs::LinearCombination, Option<Scalar>), r1cs::R1CSError> {
         match self {
             Constraint::Eq(expr1, expr2) => {
-                let lc = expr1.to_r1cs_lc() - expr2.to_r1cs_lc();
-                match (expr1.eval(), expr2.eval()) {
-                    (Some(x), Some(y)) => Ok((lc, Some(x.to_scalar() - y.to_scalar()))),
-                    (_, _) => Ok((lc, None)),
-                }
+                let assignment = expr1
+                    .eval()
+                    .and_then(|x| expr2.eval().map(|y| x.to_scalar() - y.to_scalar()));
+                Ok((expr1.to_r1cs_lc() - expr2.to_r1cs_lc(), assignment))
             }
             Constraint::And(c1, c2) => {
                 let (a, a_assg) = c1.flatten(cs)?;
                 let (b, b_assg) = c2.flatten(cs)?;
                 let z = cs.challenge_scalar(b"ZkVM.verify.and-challenge");
-                match (a_assg, b_assg) {
-                    (Some(a_assg), Some(b_assg)) => Ok((a + z * b, Some(a_assg + z * b_assg))),
-                    (_, _) => Ok((a + z * b, None)),
-                }
+                let assignment = a_assg.and_then(|a| b_assg.map(|b| a + z * b));
+                Ok((a + z * b, assignment))
             }
             Constraint::Or(c1, c2) => {
                 let (a, a_assg) = c1.flatten(cs)?;
                 let (b, b_assg) = c2.flatten(cs)?;
                 // output expression: a * b
                 let (_l, _r, o) = cs.multiply(a, b);
-                match (a_assg, b_assg) {
-                    (Some(a_assg), Some(b_assg)) => {
-                        Ok((r1cs::LinearCombination::from(o), Some(a_assg * b_assg)))
-                    }
-                    (_, _) => Ok((r1cs::LinearCombination::from(o), None)),
-                }
+                let assignment = a_assg.and_then(|a| b_assg.map(|b| a * b));
+                Ok((r1cs::LinearCombination::from(o), assignment))
             }
             Constraint::Not(c1) => {
                 let (x_lc, x_assg) = c1.flatten(cs)?;
-                let (xy, xw, y_assg) = match x_assg {
+                let (xy_assg, xw_assg, y_assg) = match x_assg {
                     Some(x_assg) => {
                         let is_zero = x_assg.ct_eq(&Scalar::zero());
                         let y_assg = Scalar::conditional_select(
@@ -135,21 +128,22 @@ impl Constraint {
                             &Scalar::one(),
                             is_zero.into(),
                         );
-                        let w = Scalar::conditional_select(&x_assg, &Scalar::one(), is_zero.into());
-                        let w = w.invert();
-                        (Some((x_assg, y_assg)), Some((x_assg, w)), Some(y_assg))
+                        let w_assg =
+                            Scalar::conditional_select(&x_assg, &Scalar::one(), is_zero.into());
+                        let w_assg = w_assg.invert();
+                        (Some((x_assg, y_assg)), Some((x_assg, w_assg)), Some(y_assg))
                     }
                     None => (None, None, None),
                 };
-                let (x, y, o) = cs.allocate_multiplier(xy)?;
-                // constraint x to c1
-                cs.constrain(x - x_lc);
-                // enforce x*y == 0
-                cs.constrain(o.into());
-                let (_x, _w, xw) = cs.allocate_multiplier(xw)?;
-                // enforce x*w = 1 - y
-                cs.constrain(xw - Scalar::one() + y);
-                Ok((r1cs::LinearCombination::from(y), y_assg))
+                let (l1, r1, o1) = cs.allocate_multiplier(xy_assg)?;
+                // constraint l1 to x
+                cs.constrain(l1 - x_lc);
+                // enforce `x*y == 0` (y is 0 if x != 0)
+                cs.constrain(o1.into());
+                let (_l2, _r2, o2) = cs.allocate_multiplier(xw_assg)?;
+                // enforce `x*w == 1 - y` (y is 1 if x == 0)
+                cs.constrain(o2 - Scalar::one() + r1);
+                Ok((r1cs::LinearCombination::from(r1), y_assg))
             }
         }
     }
