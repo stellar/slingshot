@@ -29,7 +29,6 @@ impl Multikey {
 
         // Make aggregated pubkey
         // X_agg = sum_i ( a_i * X_i )
-        // a_i = H(L, X_i). Compenents of L have already been fed to transcript.
         let mut X_agg = RistrettoPoint::default();
         for X_i in &pubkeys {
             let a_i = multikey.factor_for_key(X_i);

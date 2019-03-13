@@ -10,6 +10,7 @@ use curve25519_dalek::ristretto::RistrettoPoint;
 use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
 use rand;
+use subtle::ConstantTimeEq;
 
 #[derive(Copy, Clone, Debug)]
 pub struct Nonce(Scalar);
@@ -17,7 +18,6 @@ pub struct Nonce(Scalar);
 #[derive(Copy, Clone)]
 pub struct NoncePrecommitment([u8; 32]);
 
-// TODO: compress & decompress RistrettoPoint into CompressedRistretto when sending as message
 #[derive(Copy, Clone, Debug)]
 pub struct NonceCommitment(RistrettoPoint);
 
@@ -42,8 +42,8 @@ pub struct PartyAwaitingCommitments {
 
 pub struct PartyAwaitingSiglets {
     multikey: Multikey,
-    nonce_commitments: Vec<NonceCommitment>,
     c: Scalar,
+    nonce_commitments: Vec<NonceCommitment>,
 }
 
 impl NonceCommitment {
@@ -70,7 +70,6 @@ impl PartyAwaitingPrecommitments {
         let r_i = Nonce(Scalar::random(&mut rng));
         // R_i = generator * r_i
         let R_i = NonceCommitment(RISTRETTO_BASEPOINT_POINT * r_i.0);
-
         // Make H(R_i)
         let precommitment = R_i.precommit();
 
@@ -120,7 +119,8 @@ impl PartyAwaitingCommitments {
 
             // Compare H(comm) with pre_comm, they should be equal
             // TBD: should we use ct_eq?
-            if pre_comm.0 != actual_precomm.0 {
+            let equal = pre_comm.0.ct_eq(&actual_precomm.0);
+            if equal.unwrap_u8() == 0 {
                 return Err(VMError::InconsistentWitness);
             }
         }
