@@ -12,8 +12,9 @@ Specifically:
 - A node joining an existing ZkVM network performance the [join existing network](#join-existing-network) procedure.
 - Each node performs the [apply block](#apply-block) procedure on the arrival of each new block.
 
-This document does not describe the consensus mechanism,
-which governs the production of authoritative blocks for the blockchain.
+This document does not describe the mechanism for producing blocks from pending transactions,
+nor for choosing among competing blocks to include in the authoritative chain
+(a.k.a. consensus).
 
 _TBD: add a consensus spec._
 
@@ -28,7 +29,7 @@ As each new
 arrives,
 it is
 [applied](#apply-block)
-to the current state to produce an new,
+to the current state to produce a new,
 updated state.
 
 The blockchain state contains:
@@ -82,7 +83,7 @@ A block header contains:
   For the initial block
   (which has no predecessor),
   this is an all-zero string of 32 bytes.
-- `timestampms`:
+- `timestamp_ms`:
   integer timestamp of the block in milliseconds since the Unix epoch:
   00:00:00 UTC Jan 1,
   1970.
@@ -116,7 +117,7 @@ T = Transcript("ZkVM.blockheader")
 T.commit("version", LE64(version))
 T.commit("height", LE64(height))
 T.commit("previd", previd)
-T.commit("timestampms", LE64(timestampms))
+T.commit("timestamp_ms", LE64(timestamp_ms))
 T.commit("txroot", txroot)
 T.commit("utxoroot", utxoroot)
 blockid = T.challenge_bytes("id")
@@ -126,6 +127,7 @@ blockid = T.challenge_bytes("id")
 
 A Merkle patricia tree is similar to a
 [Merkle binary tree](zkvm-spec.md#merkle-binary-tree).
+Its membership uniquely determines its shape.
 Each node hashes the subtrees beneath it.
 The root node’s hash is a commitment to the full membership of the tree.
 It is possible to create and verify compact proofs of membership.
@@ -134,7 +136,7 @@ Unlike a Merkle binary tree,
 a Merkle patricia tree is a radix tree
 (in which subtrees of a given node share a common prefix)
 with variable length branches that allow for efficient updates.
-It is therefore preferable to a Merkle binary tree for sets with churn
+It is therefore preferable to a Merkle binary tree for large sets with frequent and comparatively small updates,
 specifically the utxo set and the nonce set.
 
 As with the Merkle binary tree,
@@ -211,7 +213,7 @@ A node starts here when creating a new blockchain network.
 Its [blockchain state](#blockchain-state) is set to the result of the procedure.
 
 Inputs:
-- `timestampms`,
+- `timestamp_ms`,
   the current time as a number of milliseconds since the Unix epoch:
   00:00:00 UTC Jan 1,
   1970.
@@ -225,7 +227,7 @@ Output:
 
 Procedure:
 1. [Make an initial block](#make-initial-block)
-   `initialblock` from `timestampms` and `refscount`.
+   `initialblock` from `timestamp_ms` and `refscount`.
 2. Return a blockchain state with its fields set as follows:
    - `initialheader`:
      `initialblock.header`
@@ -241,7 +243,7 @@ Procedure:
 ## Make initial block
 
 Inputs:
-- `timestampms`,
+- `timestamp_ms`,
   the current time as a number of milliseconds since the Unix epoch:
   00:00:00 UTC Jan 1,
   1970.
@@ -277,8 +279,8 @@ Procedure:
      1
    - `previd`:
      all-zero string of 32-bytes
-   - `timestampms`:
-     `timestampms`
+   - `timestamp_ms`:
+     `timestamp_ms`
    - `txroot`:
      `txroot`
    - `utxoroot`:
@@ -322,13 +324,13 @@ Procedure:
 3. Verify `block.header.previd` equals the
    [block ID](#block-id)
    of `prevheader`.
-4. Verify `block.header.timestampms > prevheader.timestampms`.
+4. Verify `block.header.timestamp_ms > prevheader.timestamp_ms`.
 5. Verify `block.header.refscount >= 0` and `block.header.refscount <= prevheader.refscount + 1`.
 6. Compute `txroot`, the [Merkle root hash](zkvm-spec.md#merkle-binary-tree) of `block.txs`, using label `"transactions"`.
 7. Verify `txroot == block.header.txroot`.
 8. For each transaction `tx` in block.txs:
-   1. Verify `tx.mintimems == 0` or `tx.mintimems >= block.header.timestampms`.
-   2. Verify `tx.maxtimems == 0` or `tx.maxtimems < block.header.timestampms`.
+   1. Verify `tx.mintimems == 0` or `tx.mintimems >= block.header.timestamp_ms`.
+   2. Verify `tx.maxtimems == 0` or `tx.maxtimems < block.header.timestamp_ms`.
    3. If `block.header.version == 1`,
       verify `tx.version == 1`.
    4. [Execute](zkvm-spec.md#vm-execution)
@@ -353,7 +355,7 @@ Procedure:
 1. [Validate](#validate-block)
    `block` with `prevheader` set to `state.tipheader`.
 2. Let `state′` be `state`.
-3. Remove items from `state′.nonces` where the expiration timestamp is earlier than `block.header.timestampms`.
+3. Remove items from `state′.nonces` where the expiration timestamp is earlier than `block.header.timestamp_ms`.
 4. For each txlog from the validation step,
    in order:
    1. [Apply](#apply-transaction-log)
@@ -387,9 +389,7 @@ Procedure:
    [nonce entry](zkvm-spec.md#nonce-entry)
    `n` in `txlog`:
    1. Verify `n.blockid` is one of the following:
-      - An all-zero 32-byte string,
-        or
-      - The ID of the initial block,
+      - The [ID](#block-id) of `state.initialheader`,
         or
       - One of the block ids in `state.refids`.
    2. Verify `n` is _not_ in `state.nonces`.
