@@ -139,7 +139,7 @@ impl Constraint {
                 let (l1, r1, o1) = cs.allocate_multiplier(xy_assg)?;
                 let (_l2, _r2, o2) = cs.allocate_multiplier(xw_assg)?;
 
-                // Add constraints: r2 left unconstrained since w is 
+                // Add constraints: r2 left unconstrained since w is
                 // a free varaible
 
                 // `l1 == x`

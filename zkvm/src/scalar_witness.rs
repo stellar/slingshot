@@ -5,7 +5,7 @@ use spacesuit::SignedInteger;
 
 use crate::encoding;
 use crate::errors::VMError;
-use std::ops::{Add, Mul, Neg};
+use std::ops::{Add, Mul, Neg, Sub};
 use std::u64;
 
 /// Represents a concrete kind of a number represented by a scalar.
@@ -78,6 +78,14 @@ impl Add for ScalarWitness {
             },
             (a, b) => ScalarWitness::Scalar(a.to_scalar() + b.to_scalar()),
         }
+    }
+}
+
+impl Sub for ScalarWitness {
+    type Output = ScalarWitness;
+
+    fn sub(self, rhs: ScalarWitness) -> ScalarWitness {
+        -self + rhs
     }
 }
 
