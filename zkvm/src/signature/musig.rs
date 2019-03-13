@@ -27,10 +27,11 @@ impl Signature {
     pub fn verify(
         &self,
         // The message `m` should already have been fed into the transcript
-        transcript: &mut Transcript,
+        transcript: &Transcript,
         X_agg: VerificationKey,
     ) -> Result<(), VMError> {
         let G = RISTRETTO_BASEPOINT_POINT;
+        let mut transcript = transcript.clone();
 
         // Make c = H(X_agg, R, m)
         // The message `m` should already have been fed into the transcript
