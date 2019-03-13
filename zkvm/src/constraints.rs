@@ -82,7 +82,7 @@ impl Constraint {
             // Note: cloning because we can't move out of captured variable in an `Fn` closure,
             // and `Box<FnOnce>` is not fully supported yet. (We can update when that happens).
             // Cf. https://github.com/dalek-cryptography/bulletproofs/issues/244
-            let expr = self.clone().flatten(cs);
+            let (expr, _) = self.clone().flatten(cs);
 
             // Add the resulting expression to the constraint system
             cs.constrain(expr);
@@ -92,36 +92,55 @@ impl Constraint {
         .map_err(|e| VMError::R1CSError(e))
     }
 
-    fn flatten<CS: r1cs::RandomizedConstraintSystem>(self, cs: &mut CS) -> r1cs::LinearCombination {
+    fn flatten<CS: r1cs::RandomizedConstraintSystem>(self, cs: &mut CS) -> (r1cs::LinearCombination, Option<Scalar>) {
         match self {
-            Constraint::Eq(expr1, expr2) => expr1.to_r1cs_lc() - expr2.to_r1cs_lc(),
+            Constraint::Eq(expr1, expr2) => {
+                let lc = expr1.to_r1cs_lc() - expr2.to_r1cs_lc();
+                match (expr1.to_scalar(), expr2.to_scalar()) {
+                    (Some(x), Some(y)) => (lc, Some(x-y)), 
+                    (_, _) => (lc, None)
+                }
+            },
             Constraint::And(c1, c2) => {
-                let a = c1.flatten(cs);
-                let b = c2.flatten(cs);
+                let (a, a_assg) = c1.flatten(cs);
+                let (b, b_assg) = c2.flatten(cs);
                 let z = cs.challenge_scalar(b"ZkVM.verify.and-challenge");
-                a + z * b
+                match (a_assg, b_assg) {
+                    (Some(a_assg), Some(b_assg)) => (a+z*b, Some(a_assg + z * b_assg)),
+                    (_, _) => (a+z*b, None),
+                }
             }
             Constraint::Or(c1, c2) => {
-                let a = c1.flatten(cs);
-                let b = c2.flatten(cs);
+                let (a, a_assg) = c1.flatten(cs);
+                let (b, b_assg) = c2.flatten(cs);
                 // output expression: a * b
                 let (_l, _r, o) = cs.multiply(a, b);
-                r1cs::LinearCombination::from(o)
+                match (a_assg, b_assg) {
+                    (Some(a_assg), Some(b_assg)) => (r1cs::LinearCombination::from(o), Some(a_assg*b_assg)),
+                    (_, _) => (r1cs::LinearCombination::from(o), None),
+                }
             }
             Constraint::Not(c1) => {
-                let x = c1.flatten(cs);
-                conditional_select()
-                // subtle.conditional_select()
-                let y = r1cs::LinearCombination::default();
-                let (x, y, o) = cs.multiply(x, y);
-                cs.constrain(o.into());
-                let w = cs.challenge_scalar(b"ZkVM.verify.not-challenge");
-                let (_x, _w, o) = cs.multiply(r1cs::LinearCombination::from(x), w.into());
-                cs.constrain(
-                    r1cs::LinearCombination::from(o) 
-                    + r1cs::LinearCombination::from(-Scalar::one()) 
-                    + r1cs::LinearCombination::from(y));
-                r1cs::LinearCombination::from(y)
+                let (x, x_assg) = c1.flatten(cs);
+                match x_assg {
+                    Some(x_assg) => {
+                        let is_zero = (x_assg == Scalar::zero()) as u8;
+                        let y_assg = Scalar::conditional_select(
+                            &Scalar::zero(), 
+                            &Scalar::one(), 
+                            is_zero.into()
+                        );
+                        let w = Scalar::conditional_select(&x_assg, &Scalar::one(), is_zero.into());
+                        let w = w.invert();
+
+                        let (x, y, o) = cs.multiply(x, y_assg.into());
+                        cs.constrain(o.into());
+                        let (_x, _w, xw) = cs.multiply(x.into(), w.into());
+                        cs.constrain(xw - Scalar::one() + y);
+                        (r1cs::LinearCombination::from(y), Some(y_assg))
+                    },
+                    None => unimplemented!()
+                }
             }
         }
     }
@@ -262,6 +281,16 @@ impl Expression {
         match self {
             Expression::Constant(a) => a.to_scalar().into(),
             Expression::LinearCombination(terms, _) => r1cs::LinearCombination::from_iter(terms),
+        }
+    }
+
+    fn to_scalar(&self) -> Option<Scalar> {
+        match self {
+            Expression::Constant(a) => Some(a.to_scalar()),
+            Expression::LinearCombination(_, a) => match a {
+                Some(a) => Some(a.to_scalar()),
+                None => None,
+            }
         }
     }
 }
