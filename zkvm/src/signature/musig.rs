@@ -137,7 +137,8 @@ mod tests {
         let signatures: Vec<_> = parties
             .into_iter()
             .map(|p: PartyAwaitingSiglets| {
-                p.receive_and_verify_siglets(siglets.clone(), pub_keys.clone())
+                p.receive_siglets(siglets.clone(), pub_keys.clone())
+                    .unwrap()
             })
             .collect();
 

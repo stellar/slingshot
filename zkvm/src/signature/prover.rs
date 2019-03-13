@@ -158,7 +158,7 @@ impl PartyAwaitingCommitments {
 }
 
 impl PartyAwaitingSiglets {
-    pub fn receive_siglets(self, siglets: Vec<Siglet>) -> Signature {
+    pub fn receive_trusted_siglets(self, siglets: Vec<Siglet>) -> Signature {
         // s = sum(siglets)
         let s: Scalar = siglets.iter().map(|siglet| siglet.0).sum();
         // R = sum(R_i). nonce_commitments = R_i
@@ -167,11 +167,11 @@ impl PartyAwaitingSiglets {
         Signature { s, R }
     }
 
-    pub fn receive_and_verify_siglets(
+    pub fn receive_siglets(
         self,
         siglets: Vec<Siglet>,
         pubkeys: Vec<PubKey>,
-    ) -> Signature {
+    ) -> Result<Signature, VMError> {
         // Check that all siglets are valid
         for (i, s_i) in siglets.iter().enumerate() {
             let S_i = s_i.0 * RISTRETTO_BASEPOINT_POINT;
@@ -184,9 +184,12 @@ impl PartyAwaitingSiglets {
                 .factor_for_key(&VerificationKey(X_i.compress()));
 
             // Check that S_i = R_i + c * a_i * X_i
+            if S_i != R_i + self.c * a_i * X_i {
+                return Err(VMError::PointOperationsFailed);
+            }
             assert_eq!(S_i, R_i + self.c * a_i * X_i);
         }
 
-        self.receive_siglets(siglets)
+        Ok(self.receive_trusted_siglets(siglets))
     }
 }
