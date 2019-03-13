@@ -1213,7 +1213,7 @@ _constr1_ **not** → _constr2_
    x * y = 0
    x * w = 1-y
    ```
-   where `w` is a free variable and `x` is the expression from constraint `c1`.
+   where `w` is a free variable and `x` is the evaluation of constraint `c1`.
 3. Wrap the output `y` in a constraint `c2`.
 4. Push `c2` to the stack.
 
