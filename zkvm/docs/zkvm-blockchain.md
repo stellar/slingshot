@@ -113,12 +113,12 @@ mechanism:
 
 ```
 T = Transcript("ZkVM.blockheader")
-T.commit(LE64(version))
-T.commit(LE64(height))
-T.commit(previd)
-T.commit(LE64(timestampms))
-T.commit(txroot)
-T.commit(utxoroot)
+T.commit("version", LE64(version))
+T.commit("height", LE64(height))
+T.commit("previd", previd)
+T.commit("timestampms", LE64(timestampms))
+T.commit("txroot", txroot)
+T.commit("utxoroot", utxoroot)
 blockid = T.challenge_bytes("id")
 ```
 
@@ -162,7 +162,7 @@ Given a sorted list of n unique inputs,
 D[n] = {d(0), d(1), ..., d(n-1)}
 ```
 
-the MPTH is thus defined as follows:
+the MPTH is thus defined as follows.
 
 The hash of an empty Merkle patricia tree list is a 32-byte challenge string with the label `patricia.empty`:
 
