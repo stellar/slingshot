@@ -33,7 +33,7 @@ impl Signature {
         let G = RISTRETTO_BASEPOINT_POINT;
         let mut transcript = transcript.clone();
 
-        // Make c = H(aggregated_key, R, m)
+        // Make c = H(X, R, m)
         // The message `m` should already have been fed into the transcript
         let c = {
             transcript.commit_point(b"P", &P.0);
@@ -42,7 +42,7 @@ impl Signature {
         };
 
         let P = match P.0.decompress() {
-            Some(pk) => pk,
+            Some(P) => P,
             None => return Err(VMError::InvalidPoint),
         };
         // Check sG = R + c * aggregated_key
@@ -74,8 +74,8 @@ mod tests {
         let multikey = multikey_helper(&priv_keys).unwrap();
 
         let expected_pub_key = CompressedRistretto::from_slice(&[
-            66, 159, 16, 236, 165, 170, 29, 154, 226, 5, 197, 204, 148, 244, 75, 6, 182, 23, 35,
-            23, 237, 90, 147, 172, 26, 104, 172, 191, 183, 57, 16, 31,
+            212, 211, 54, 88, 245, 166, 107, 207, 28, 70, 247, 28, 5, 233, 67, 112, 196, 30, 35,
+            136, 160, 232, 167, 109, 47, 88, 194, 207, 227, 71, 222, 102,
         ]);
 
         assert_eq!(expected_pub_key, multikey.aggregated_key().0);

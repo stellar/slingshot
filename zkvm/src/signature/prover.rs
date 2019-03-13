@@ -63,8 +63,9 @@ impl PartyAwaitingPrecommitments {
         x_i: PrivKey,
         multikey: Multikey,
     ) -> (Self, NoncePrecommitment) {
-        let transcript = transcript.clone();
-        let mut rng = transcript.build_rng().finalize(&mut rand::thread_rng());
+        let mut rng_transcript = transcript.clone();
+        rng_transcript.commit_scalar(b"x_i", &x_i.0);
+        let mut rng = rng_transcript.build_rng().finalize(&mut rand::thread_rng());
 
         // Generate ephemeral keypair (r_i, R_i). r_i is a random nonce.
         let r_i = Nonce(Scalar::random(&mut rng));
@@ -75,7 +76,7 @@ impl PartyAwaitingPrecommitments {
 
         (
             PartyAwaitingPrecommitments {
-                transcript,
+                transcript: transcript.clone(),
                 multikey,
                 x_i,
                 r_i,
@@ -128,11 +129,11 @@ impl PartyAwaitingCommitments {
         // Make R = sum_i(R_i). nonce_commitments = R_i from all the parties.
         let R: RistrettoPoint = nonce_commitments.iter().map(|R_i| R_i.0).sum();
 
-        // Make c = H(aggregated_key, R, m)
+        // Make c = H(X, R, m)
         // The message should already have been fed into the transcript.
         let c = {
             self.transcript
-                .commit_point(b"aggregated_key", &self.multikey.aggregated_key().0);
+                .commit_point(b"P", &self.multikey.aggregated_key().0);
             self.transcript.commit_point(b"R", &R.compress());
             self.transcript.challenge_scalar(b"c")
         };
