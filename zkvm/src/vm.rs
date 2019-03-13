@@ -41,6 +41,32 @@ pub struct TxHeader {
     pub maxtime: u64,
 }
 
+impl TxHeader {
+    fn serialized_size(&self) -> usize {
+        8 * 3
+    }
+    
+    fn encode(&self, buf: &mut Vec<u8>) {
+        encoding::write_u64(self.version, buf);
+        encoding::write_u64(self.mintime, buf);
+        encoding::write_u64(self.maxtime, buf);
+    }
+
+    fn decode<'a>(reader: &mut SliceReader<'a>) -> Result<Self, VMError> {
+        let (header, _) = reader.slice(|r| {
+            let version = r.read_u64()?;
+            let mintime = r.read_u64()?;
+            let maxtime = r.read_u64()?;
+            Ok(TxHeader {
+                version,
+                mintime,
+                maxtime,
+            })
+        })?;
+        Ok(header)
+    }
+}
+
 /// Instance of a transaction that contains all necessary data to validate it.
 pub struct Tx {
     /// Header metadata
@@ -57,17 +83,39 @@ pub struct Tx {
 }
 
 impl Tx {
-    /// Serializes the tx into a byte array.
-    pub fn to_bytes(&self) -> Vec<u8> {
-        let mut buf = Vec::with_capacity(self.serialized_size());
-        encoding::write_u64(self.header.version, &mut buf);
-        encoding::write_u64(self.header.mintime, &mut buf);
-        encoding::write_u64(self.header.maxtime, &mut buf);
-
-        encoding::write_size(self.program.len(), &mut buf);
+    fn encode(&self, buf: &mut Vec<u8>) {
+        self.header.encode(buf);
+        encoding::write_size(self.program.len(), buf);
         buf.extend(&self.program);
         buf.extend_from_slice(&self.signature.to_bytes());
         buf.extend_from_slice(&self.proof.to_bytes());
+    }
+
+    fn decode<'a>(reader: &mut SliceReader<'a>) -> Result<Tx, VMError> {
+        let (tx, _) = reader.slice(|r| {
+            let header = TxHeader::decode(r)?;
+            let prog_len = r.read_size()?;
+            let program = r.read_bytes(prog_len)?.to_vec();
+
+            let mut sig_buf = [0u8; 64];
+            sig_buf.copy_from_slice(r.read_bytes(64)?);
+            let signature = Signature::from_bytes(sig_buf)?;
+            let proof =
+                R1CSProof::from_bytes(r.read_bytes(r.len())?).map_err(|_| VMError::FormatError)?;
+            Ok(Tx {
+                header,
+                program,
+                signature,
+                proof,
+            })
+        })?;
+        Ok(tx)
+    }
+
+    /// Serializes the tx into a byte array.
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let mut buf = Vec::with_capacity(self.serialized_size());
+        self.encode(&mut buf);
         buf
     }
 
@@ -78,40 +126,15 @@ impl Tx {
         // program is self.program.len() bytes
         // signature is 64 bytes
         // proof is 14*32 + the ipp bytes
-        8 * 3 + 4 + self.program.len() + 64 + self.proof.serialized_size()
+        self.header.serialized_size() + 4 + self.program.len() + 64 + self.proof.serialized_size()
     }
 
     /// Deserializes the tx from a byte slice.
     ///
     /// Returns an error if the byte slice cannot be parsed into a `Tx`.
     pub fn from_bytes(slice: &[u8]) -> Result<Tx, VMError> {
-        if slice.len() < (24 + 4 + 64 + 14 * 32) {
-            return Err(VMError::FormatError);
-        }
-        let mut reader = SliceReader::new(slice);
-        let version = reader.read_u64()?;
-        let mintime = reader.read_u64()?;
-        let maxtime = reader.read_u64()?;
-        let header = TxHeader {
-            version: version,
-            mintime: mintime,
-            maxtime: maxtime,
-        };
-
-        let prog_len = reader.read_size()?;
-        let program = reader.read_bytes(prog_len)?.to_vec();
-
-        let mut signature_buf = [0u8; 64];
-        signature_buf.copy_from_slice(reader.read_bytes(64)?);
-        let signature = Signature::from_bytes(signature_buf)?;
-        let proof = R1CSProof::from_bytes(reader.read_bytes(reader.len())?)
-            .map_err(|_| VMError::FormatError)?;
-        Ok(Tx {
-            header: header,
-            program: program,
-            signature: signature,
-            proof: proof,
-        })
+        let tx = SliceReader::parse(slice, |r| Self::decode(r))?;
+        Ok(tx)
     }
 }
 

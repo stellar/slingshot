@@ -15,7 +15,7 @@ pub struct SliceReader<'a> {
 }
 
 impl<'a> SliceReader<'a> {
-    pub fn new(data: &'a [u8]) -> Self {
+    fn new(data: &'a [u8]) -> Self {
         SliceReader {
             start: 0,
             end: data.len(),
