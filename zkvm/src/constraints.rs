@@ -99,8 +99,8 @@ impl Constraint {
         match self {
             Constraint::Eq(expr1, expr2) => {
                 let lc = expr1.to_r1cs_lc() - expr2.to_r1cs_lc();
-                match (expr1.to_scalar(), expr2.to_scalar()) {
-                    (Some(x), Some(y)) => Ok((lc, Some(x - y))),
+                match (expr1.eval(), expr2.eval()) {
+                    (Some(x), Some(y)) => Ok((lc, Some(x.to_scalar() - y.to_scalar()))),
                     (_, _) => Ok((lc, None)),
                 }
             }
@@ -291,11 +291,11 @@ impl Expression {
         }
     }
 
-    fn to_scalar(&self) -> Option<Scalar> {
+    fn eval(&self) -> Option<ScalarWitness> {
         match self {
-            Expression::Constant(a) => Some(a.to_scalar()),
+            Expression::Constant(a) => Some(*a),
             Expression::LinearCombination(_, a) => match a {
-                Some(a) => Some(a.to_scalar()),
+                Some(a) => Some(*a),
                 None => None,
             },
         }
