@@ -3,6 +3,8 @@ use bulletproofs::r1cs::R1CSProof;
 use curve25519_dalek::ristretto::CompressedRistretto;
 use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
+use serde::de::Visitor;
+use serde::{self, Deserialize, Deserializer, Serialize, Serializer};
 use spacesuit;
 use spacesuit::BitRange;
 use std::iter::FromIterator;
@@ -10,6 +12,7 @@ use std::mem;
 
 use crate::constraints::{Commitment, Constraint, Expression, Variable};
 use crate::contract::{Anchor, Contract, Output, PortableItem};
+use crate::encoding;
 use crate::encoding::SliceReader;
 use crate::errors::VMError;
 use crate::ops::Instruction;
@@ -36,6 +39,26 @@ pub struct TxHeader {
     pub maxtime: u64,
 }
 
+impl TxHeader {
+    fn serialized_size(&self) -> usize {
+        8 * 3
+    }
+
+    fn encode(&self, buf: &mut Vec<u8>) {
+        encoding::write_u64(self.version, buf);
+        encoding::write_u64(self.mintime, buf);
+        encoding::write_u64(self.maxtime, buf);
+    }
+
+    fn decode<'a>(reader: &mut SliceReader<'a>) -> Result<Self, VMError> {
+        Ok(TxHeader {
+            version: reader.read_u64()?,
+            mintime: reader.read_u64()?,
+            maxtime: reader.read_u64()?,
+        })
+    }
+}
+
 /// Instance of a transaction that contains all necessary data to validate it.
 pub struct Tx {
     /// Header metadata
@@ -49,6 +72,90 @@ pub struct Tx {
 
     /// Constraint system proof for all the constraints
     pub proof: R1CSProof,
+}
+
+impl Tx {
+    fn encode(&self, buf: &mut Vec<u8>) {
+        self.header.encode(buf);
+        encoding::write_size(self.program.len(), buf);
+        buf.extend(&self.program);
+        buf.extend_from_slice(&self.signature.to_bytes());
+        buf.extend_from_slice(&self.proof.to_bytes());
+    }
+
+    fn decode<'a>(r: &mut SliceReader<'a>) -> Result<Tx, VMError> {
+        let header = TxHeader::decode(r)?;
+        let prog_len = r.read_size()?;
+        let program = r.read_bytes(prog_len)?.to_vec();
+
+        let signature = Signature::from_bytes(r.read_u8x64()?)?;
+        let proof =
+            R1CSProof::from_bytes(r.read_bytes(r.len())?).map_err(|_| VMError::FormatError)?;
+        Ok(Tx {
+            header,
+            program,
+            signature,
+            proof,
+        })
+    }
+
+    /// Serializes the tx into a byte array.
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let mut buf = Vec::with_capacity(self.serialized_size());
+        self.encode(&mut buf);
+        buf
+    }
+
+    /// Returns the size in bytes required to serialize the `Tx`.
+    pub fn serialized_size(&self) -> usize {
+        // header is 8 bytes * 3 fields = 24 bytes
+        // program length is 4 bytes
+        // program is self.program.len() bytes
+        // signature is 64 bytes
+        // proof is 14*32 + the ipp bytes
+        self.header.serialized_size() + 4 + self.program.len() + 64 + self.proof.serialized_size()
+    }
+
+    /// Deserializes the tx from a byte slice.
+    ///
+    /// Returns an error if the byte slice cannot be parsed into a `Tx`.
+    pub fn from_bytes(slice: &[u8]) -> Result<Tx, VMError> {
+        SliceReader::parse(slice, |r| Self::decode(r))
+    }
+}
+
+impl Serialize for Tx {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_bytes(&self.to_bytes()[..])
+    }
+}
+impl<'de> Deserialize<'de> for Tx {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct TxVisitor;
+
+        impl<'de> Visitor<'de> for TxVisitor {
+            type Value = Tx;
+
+            fn expecting(&self, formatter: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
+                formatter.write_str("a valid Tx")
+            }
+
+            fn visit_bytes<E>(self, v: &[u8]) -> Result<Tx, E>
+            where
+                E: serde::de::Error,
+            {
+                Tx::from_bytes(v).map_err(serde::de::Error::custom)
+            }
+        }
+
+        deserializer.deserialize_bytes(TxVisitor)
+    }
 }
 
 /// Represents a verified transaction: a txid and a list of state updates.

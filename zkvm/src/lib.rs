@@ -3,6 +3,7 @@
 
 #[macro_use]
 extern crate failure;
+extern crate serde;
 
 mod constraints;
 mod contract;
