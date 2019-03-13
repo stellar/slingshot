@@ -100,7 +100,7 @@ impl Constraint {
             Constraint::Eq(expr1, expr2) => {
                 let assignment = expr1
                     .eval()
-                    .and_then(|x| expr2.eval().map(|y| x.to_scalar() - y.to_scalar()));
+                    .and_then(|x| expr2.eval().map(|y| (x - y).to_scalar()));
                 Ok((expr1.to_r1cs_lc() - expr2.to_r1cs_lc(), assignment))
             }
             Constraint::And(c1, c2) => {
@@ -135,13 +135,18 @@ impl Constraint {
                     }
                     None => (None, None, None),
                 };
+                // Allocate multipliers
                 let (l1, r1, o1) = cs.allocate_multiplier(xy_assg)?;
-                // constraint l1 to x
-                cs.constrain(l1 - x_lc);
-                // enforce `x*y == 0` (y is 0 if x != 0)
-                cs.constrain(o1.into());
                 let (_l2, _r2, o2) = cs.allocate_multiplier(xw_assg)?;
-                // enforce `x*w == 1 - y` (y is 1 if x == 0)
+
+                // Add constraints: r2 left unconstrained since w is 
+                // a free varaible
+
+                // `l1 == x`
+                cs.constrain(l1 - x_lc);
+                // `x*y == 0` (y is 0 if x != 0)
+                cs.constrain(o1.into());
+                // `x*w == 1 - y` (y is 1 if x == 0)
                 cs.constrain(o2 - Scalar::one() + r1);
                 Ok((r1cs::LinearCombination::from(r1), y_assg))
             }
