@@ -6,7 +6,7 @@ use curve25519_dalek::ristretto::CompressedRistretto;
 use curve25519_dalek::scalar::Scalar;
 use std::iter::FromIterator;
 use std::ops::{Add, Neg};
-use subtle::ConditionallySelectable;
+use subtle::{ConditionallySelectable, ConstantTimeEq};
 
 use crate::encoding;
 use crate::errors::VMError;
@@ -82,10 +82,7 @@ impl Constraint {
             // Note: cloning because we can't move out of captured variable in an `Fn` closure,
             // and `Box<FnOnce>` is not fully supported yet. (We can update when that happens).
             // Cf. https://github.com/dalek-cryptography/bulletproofs/issues/244
-            let (expr, _) = self
-                .clone()
-                .flatten(cs)
-                .map_err(|e| r1cs::R1CSError::MissingAssignment)?;
+            let (expr, _) = self.clone().flatten(cs)?;
 
             // Add the resulting expression to the constraint system
             cs.constrain(expr);
@@ -98,7 +95,7 @@ impl Constraint {
     fn flatten<CS: r1cs::RandomizedConstraintSystem>(
         self,
         cs: &mut CS,
-    ) -> Result<(r1cs::LinearCombination, Option<Scalar>), VMError> {
+    ) -> Result<(r1cs::LinearCombination, Option<Scalar>), r1cs::R1CSError> {
         match self {
             Constraint::Eq(expr1, expr2) => {
                 let lc = expr1.to_r1cs_lc() - expr2.to_r1cs_lc();
@@ -130,9 +127,9 @@ impl Constraint {
             }
             Constraint::Not(c1) => {
                 let (x, x_assg) = c1.flatten(cs)?;
-                match x_assg {
+                let (y_assg, w_assg) = match x_assg {
                     Some(x_assg) => {
-                        let is_zero = (x_assg == Scalar::zero()) as u8;
+                        let is_zero = x_assg.ct_eq(&Scalar::zero());
                         let y_assg = Scalar::conditional_select(
                             &Scalar::zero(),
                             &Scalar::one(),
@@ -140,15 +137,17 @@ impl Constraint {
                         );
                         let w = Scalar::conditional_select(&x_assg, &Scalar::one(), is_zero.into());
                         let w = w.invert();
-
-                        let (x, y, o) = cs.multiply(x, y_assg.into());
-                        cs.constrain(o.into());
-                        let (_x, _w, xw) = cs.multiply(x.into(), w.into());
-                        cs.constrain(xw - Scalar::one() + y);
-                        Ok((r1cs::LinearCombination::from(y), Some(y_assg)))
+                        (Some(y_assg), Some(w))
                     }
-                    None => Err(VMError::WitnessMissing),
-                }
+                    None => (None, None),
+                };
+                let y = cs.allocate(y_assg)?;
+                let (x, y, o) = cs.multiply(x, y.into());
+                cs.constrain(o.into());
+                let w = cs.allocate(w_assg)?;
+                let (_x, _w, xw) = cs.multiply(x.into(), w.into());
+                cs.constrain(xw - Scalar::one() + y);
+                Ok((r1cs::LinearCombination::from(y), y_assg))
             }
         }
     }
