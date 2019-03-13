@@ -142,9 +142,12 @@ impl Constraint {
                     None => (None, None, None),
                 };
                 let (x, y, o) = cs.allocate_multiplier(xy)?;
-                cs.constrain(o.into());
+                // constraint x to c1
                 cs.constrain(x - x_lc);
+                // enforce x*y == 0
+                cs.constrain(o.into());
                 let (_x, _w, xw) = cs.allocate_multiplier(xw)?;
+                // enforce x*w = 1 - y
                 cs.constrain(xw - Scalar::one() + y);
                 Ok((r1cs::LinearCombination::from(y), y_assg))
             }
