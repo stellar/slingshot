@@ -32,7 +32,7 @@ impl Xprv {
         let mut dk = [0u8; 32];
         rng.fill_bytes(&mut dk);
 
-        let mut transcript = Transcript::new(b"Keytree.intermediate");
+        let mut transcript = Transcript::new(b"Keytree.derivation");
         transcript.commit_point(
             b"pt",
             &(scalar * &constants::RISTRETTO_BASEPOINT_POINT).compress(),

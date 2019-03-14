@@ -42,18 +42,20 @@ Stands for _extended private key_: consists of a secret [scalar](#scalar) and a 
 ```rust
 struct Xprv {
   scalar: Scalar,
-  dk: [u8; 32]
+  dk: [u8; 32],
+  transcript: Transcript,
 }
 ```
 
 ### Xpub
 
-Stands for _extended public key_: consists of a [point](#point) and a [derivation key](#derivation-key).
+Stands for _extended public key_: consists of a [point](#point), a [derivation key](#derivation-key), and a transcript.
 
 ```rust
 struct Xpub {
   point: CompressedRistretto,
-  dk: [u8; 32]
+  dk: [u8; 32],
+  Transcript: transcript,
 }
 ```
 
@@ -74,6 +76,7 @@ If you need to share an individual public key, use [leaf key derivation](#derive
 	```
 	xprv = Xprv { scalar, dk }
 	```
+5. Create Merlin `t = Transcript::new("Keytree.derivation")`.
 5. Return the resulting extended private key `xprv`.
 
 ### Convert Xprv to Xpub
@@ -89,22 +92,21 @@ Xpub {
 
 ### Derive an intermediate key
 
-1. Create Merlin `t = Transcript::new("Keytree.intermediate")`.
-2. Commit [xpub](#xpub) to transcript (if xprv is provided, compute xpub from xprv):
+1. Commit [xpub](#xpub) to the provided key's transcript (if xprv is provided, compute xpub from xprv):
 	```
 	t.commit_bytes("pt", xpub.point)
 	t.commit_bytes("dk", xpub.dk)
 	```
-3. Provide the transcript to the user to commit an arbitrary derivation path or index:
+2. Provide the transcript to the user to commit an arbitrary derivation path or index:
 	```
-	t.commit_bytes(label, data) 
+	t.commit_bytes(label, data)
 	```
 	E.g. `t.commit_u64("account", account_id)` for an account within a hierarchy of keys.
-4. Squeeze a blinding factor `f`:
+3. Squeeze a blinding factor `f`:
 	```
-	f = t.challenge_scalar("f")
+	f = t.challenge_scalar("f.intermediate")
 	```
-5. Squeeze a new derivation key `dk2` (32 bytes):
+4. Squeeze a new derivation key `dk2` (32 bytes):
 	```
 	dk2 = t.challenge_bytes("dk")
 	```
@@ -121,26 +123,25 @@ Xpub {
 
 Similar to the intermediate derivation, but for safety is domain-separated so the same index produces unrelated public key.
 
-1. Create Merlin `t = Transcript::new("Keytree.leaf")`.
-2. Commit [xpub](#xpub) to transcript (if xprv is provided, compute xpub from xprv):
+1. Commit [xpub](#xpub) to the provided key's transcript (if xprv is provided, compute xpub from xprv):
 	```
 	t.commit_bytes("pt", xpub.point)
 	t.commit_bytes("dk", xpub.dk)
 	```
-3. Provide the transcript to the user to commit an arbitrary selector data (could be structured):
+2. Provide the transcript to the user to commit an arbitrary selector data (could be structured):
 	```
 	t.commit_bytes(label, data)
 	```
 	E.g. `t.commit_u64("invoice", invoice_index)` for a receiving address.
-4. Squeeze a blinding factor `f`:
+3. Squeeze a blinding factor `f`:
 	```
-	f = t.challenge_scalar("f")
+	f = t.challenge_scalar("f.leaf")
 	```
-5. For `xprv` (if provided) returns a blinded scalar:
+4. For `xprv` (if provided) returns a blinded scalar:
 	```
 	child = parent.scalar + f
 	```
-6. For `xpub` returns a blinded public key:
+5. For `xpub` returns a blinded public key:
 	```
 	child = parent.point + f·B
 	```
