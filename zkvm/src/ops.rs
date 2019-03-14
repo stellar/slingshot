@@ -438,8 +438,8 @@ impl<'a> PredicateTree<'a> {
     /// Pushes program to the stack and calls the contract protected
     /// by the program predicate.
     pub fn call(self) -> Result<(), VMError> {
-        let (subprog, salt) = self.pred.to_program()?;
-        self.prog.push(Data::Opaque(salt)).call();
+        let (subprog, blinding) = self.pred.to_program()?;
+        self.prog.push(Data::Opaque(blinding)).call();
         self.prog.push(subprog).call();
         Ok(())
     }
