@@ -2,6 +2,7 @@ package stellar
 
 import (
 	"fmt"
+	"io/ioutil"
 	"log"
 	"net/http"
 
@@ -35,7 +36,11 @@ func FundAccount(address string) error {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("got bad status code %d requesting friendbot lumens", resp.StatusCode)
+		body, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			return errors.Wrapf(err, "reading response from bad friendbot request %d", resp.StatusCode)
+		}
+		return fmt.Errorf("error funding address through friendbot. got bad status code %d, response %s", resp.StatusCode, body)
 	}
 	return nil
 }
