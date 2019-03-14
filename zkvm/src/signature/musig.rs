@@ -13,12 +13,7 @@ pub struct Signature {
 }
 
 impl Signature {
-    pub fn verify(
-        &self,
-        // The message `m` should already have been fed into the transcript
-        transcript: &Transcript,
-        P: VerificationKey,
-    ) -> Result<(), VMError> {
+    pub fn verify(&self, transcript: &Transcript, P: VerificationKey) -> Result<(), VMError> {
         let G = RISTRETTO_BASEPOINT_POINT;
         let mut transcript = transcript.clone();
 

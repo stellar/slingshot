@@ -115,7 +115,6 @@ impl PartyAwaitingCommitments {
             let actual_precomm = comm.precommit();
 
             // Compare H(comm) with pre_comm, they should be equal
-            // TBD: should we use ct_eq?
             let equal = pre_comm.0.ct_eq(&actual_precomm.0);
             if equal.unwrap_u8() == 0 {
                 return Err(VMError::InconsistentWitness);
@@ -126,7 +125,7 @@ impl PartyAwaitingCommitments {
         let R: RistrettoPoint = nonce_commitments.iter().map(|R_i| R_i.0).sum();
 
         // Make c = H(X, R, m)
-        // The message should already have been fed into the transcript.
+        // The message `m` should already have been fed into the transcript.
         let c = {
             self.transcript
                 .commit_point(b"P", &self.multikey.aggregated_key().0);
