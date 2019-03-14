@@ -18,6 +18,8 @@ pub struct NoncePrecommitment([u8; 32]);
 #[derive(Copy, Clone, Debug)]
 pub struct NonceCommitment(RistrettoPoint);
 
+pub struct Party {}
+
 pub struct PartyAwaitingPrecommitments {
     transcript: Transcript,
     multikey: Multikey,
@@ -51,13 +53,13 @@ impl NonceCommitment {
     }
 }
 
-impl PartyAwaitingPrecommitments {
+impl Party {
     pub fn new(
         // The message `m` should already have been fed into the transcript
         transcript: &Transcript,
         x_i: Scalar,
         multikey: Multikey,
-    ) -> (Self, NoncePrecommitment) {
+    ) -> (PartyAwaitingPrecommitments, NoncePrecommitment) {
         let mut rng = transcript
             .build_rng()
             .commit_witness_bytes(b"x_i", &x_i.to_bytes())
@@ -81,7 +83,9 @@ impl PartyAwaitingPrecommitments {
             precommitment,
         )
     }
+}
 
+impl PartyAwaitingPrecommitments {
     pub fn receive_precommitments(
         self,
         nonce_precommitments: Vec<NoncePrecommitment>,
@@ -106,10 +110,11 @@ impl PartyAwaitingCommitments {
         nonce_commitments: Vec<NonceCommitment>,
     ) -> Result<(PartyAwaitingShares, Scalar), VMError> {
         // Check stored precommitments against received commitments
-        for (pre_comm, comm) in self
+        for (index, (pre_comm, comm)) in self
             .nonce_precommitments
             .iter()
             .zip(nonce_commitments.iter())
+            .enumerate()
         {
             // Make H(comm) = H(R_i)
             let actual_precomm = comm.precommit();
@@ -117,7 +122,7 @@ impl PartyAwaitingCommitments {
             // Compare H(comm) with pre_comm, they should be equal
             let equal = pre_comm.0.ct_eq(&actual_precomm.0);
             if equal.unwrap_u8() == 0 {
-                return Err(VMError::InconsistentWitness);
+                return Err(VMError::ShareError { index });
             }
         }
 
@@ -178,7 +183,7 @@ impl PartyAwaitingShares {
 
             // Check that S_i = R_i + c * a_i * X_i
             if S_i != R_i + self.c * a_i * X_i {
-                return Err(VMError::SignatureShareError { index: i });
+                return Err(VMError::ShareError { index: i });
             }
         }
 

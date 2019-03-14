@@ -100,7 +100,7 @@ mod tests {
         let (parties, precomms): (Vec<_>, Vec<_>) = priv_keys
             .clone()
             .into_iter()
-            .map(|x_i| PartyAwaitingPrecommitments::new(&transcript.clone(), x_i, multikey.clone()))
+            .map(|x_i| Party::new(&transcript.clone(), x_i, multikey.clone()))
             .unzip();
 
         let (parties, comms): (Vec<_>, Vec<_>) = parties

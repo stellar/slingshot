@@ -105,8 +105,8 @@ pub enum VMError {
     PointOperationsFailed,
 
     /// This error occurs when a signature share fails to verify
-    #[fail(display = "Signature share #{:?} failed to verify correctly", index)]
-    SignatureShareError {
+    #[fail(display = "Share #{:?} failed to verify correctly", index)]
+    ShareError {
         /// The index of the share that failed fo verify correctly
         index: usize,
     },
