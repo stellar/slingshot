@@ -995,7 +995,7 @@ Code | Instruction                | Stack diagram                              |
 0x1c | [`nonce`](#nonce)          |    _pred blockid_ → _contract_             | Modifies [tx log](#transaction-log)
 0x1d | [`log`](#log)              |            _data_ → ø                      | Modifies [tx log](#transaction-log)
 0x1e | [`signtx`](#signtx)        |        _contract_ → _results..._           | Modifies [deferred verification keys](#transaction-signature)
-0x1f | [`call`](#call)            | _contract bf prog_ → _results..._        | [Defers point operations](#deferred-point-operations)
+0x1f | [`call`](#call)            | _contract bf prog_ → _results..._          | [Defers point operations](#deferred-point-operations)
 0x20 | [`left`](#left)            |    _contract A B_ → _contract’_            | [Defers point operations](#deferred-point-operations)
 0x21 | [`right`](#right)          |    _contract A B_ → _contract’_            | [Defers point operations](#deferred-point-operations)
 0x22 | [`delegate`](#delegate)    |_contract prog sig_ → _results..._          | [Defers point operations](#deferred-point-operations)
