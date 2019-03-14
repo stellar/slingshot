@@ -106,9 +106,9 @@ pub enum VMError {
 
     /// This error occurs when a signature share fails to verify
     #[fail(display = "Signature share #{:?} failed to verify correctly", index)]
-    SignatureShareError { 
+    SignatureShareError {
         /// The index of the share that failed fo verify correctly
-        index: usize 
+        index: usize,
     },
 
     /// This error occurs when R1CS proof verification failed.
