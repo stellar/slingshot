@@ -2,11 +2,11 @@
 //! Implementation of the key tree protocol, a key blinding scheme for deriving hierarchies of public keys.
 
 use crate::transcript::TranscriptProtocol;
-use merlin::Transcript;
 use curve25519_dalek::constants;
 use curve25519_dalek::ristretto::CompressedRistretto;
 use curve25519_dalek::ristretto::RistrettoPoint;
 use curve25519_dalek::scalar::Scalar;
+use merlin::Transcript;
 use rand::{CryptoRng, RngCore};
 
 mod transcript;
@@ -33,10 +33,17 @@ impl Xprv {
         rng.fill_bytes(&mut dk);
 
         let mut transcript = Transcript::new(b"Keytree.intermediate");
-        transcript.commit_point(b"pt", &(scalar*&constants::RISTRETTO_BASEPOINT_POINT).compress());
+        transcript.commit_point(
+            b"pt",
+            &(scalar * &constants::RISTRETTO_BASEPOINT_POINT).compress(),
+        );
         transcript.commit_bytes(b"dk", &dk);
 
-        Xprv { scalar, dk, transcript }
+        Xprv {
+            scalar,
+            dk,
+            transcript,
+        }
     }
 
     /// Returns a new Xpub, generated from the provided Xprv.
