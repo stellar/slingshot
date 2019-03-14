@@ -113,7 +113,7 @@ mod tests {
             .map(|p| p.receive_precommitments(precomms.clone()))
             .unzip();
 
-        let (parties, siglets): (Vec<_>, Vec<_>) = parties
+        let (parties, shares): (Vec<_>, Vec<_>) = parties
             .into_iter()
             .map(|p| p.receive_commitments(comms.clone()).unwrap())
             .unzip();
@@ -125,8 +125,7 @@ mod tests {
         let signatures: Vec<_> = parties
             .into_iter()
             .map(|p: PartyAwaitingSiglets| {
-                p.receive_siglets(siglets.clone(), pub_keys.clone())
-                    .unwrap()
+                p.receive_shares(shares.clone(), pub_keys.clone()).unwrap()
             })
             .collect();
 

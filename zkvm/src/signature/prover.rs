@@ -37,13 +37,14 @@ pub struct PartyAwaitingCommitments {
 pub struct PartyAwaitingSiglets {
     multikey: Multikey,
     c: Scalar,
+    R: RistrettoPoint,
     nonce_commitments: Vec<NonceCommitment>,
 }
 
 impl NonceCommitment {
     fn precommit(&self) -> NoncePrecommitment {
         let mut h = Transcript::new(b"MuSig.nonce-precommit");
-        h.commit_point(b"R_i", &self.0.compress());
+        h.commit_point(b"R", &self.0.compress());
         let mut precommitment = [0u8; 32];
         h.challenge_bytes(b"precommitment", &mut precommitment);
         NoncePrecommitment(precommitment)
@@ -137,7 +138,7 @@ impl PartyAwaitingCommitments {
         let X_i = VerificationKey((self.x_i * RISTRETTO_BASEPOINT_POINT).compress());
         let a_i = self.multikey.factor_for_key(&X_i);
 
-        // Generate siglet: s_i = r_i + c * a_i * x_i
+        // Generate share: s_i = r_i + c * a_i * x_i
         let s_i = self.r_i + c * a_i * self.x_i;
 
         // Store received nonce commitments in next state
@@ -146,6 +147,7 @@ impl PartyAwaitingCommitments {
                 multikey: self.multikey,
                 nonce_commitments,
                 c,
+                R,
             },
             s_i,
         ))
@@ -153,22 +155,19 @@ impl PartyAwaitingCommitments {
 }
 
 impl PartyAwaitingSiglets {
-    pub fn receive_trusted_siglets(self, siglets: Vec<Scalar>) -> Signature {
-        // s = sum(siglets)
-        let s: Scalar = siglets.iter().map(|siglet| siglet).sum();
-        // R = sum(R_i). nonce_commitments = R_i
-        let R: RistrettoPoint = self.nonce_commitments.iter().map(|R_i| R_i.0).sum();
-
-        Signature { s, R }
+    pub fn receive_trusted_shares(self, shares: Vec<Scalar>) -> Signature {
+        // s = sum(s_i), s_i = shares[i]
+        let s: Scalar = shares.iter().map(|share| share).sum();
+        Signature { s, R: self.R }
     }
 
-    pub fn receive_siglets(
+    pub fn receive_shares(
         self,
-        siglets: Vec<Scalar>,
+        shares: Vec<Scalar>,
         pubkeys: Vec<VerificationKey>,
     ) -> Result<Signature, VMError> {
-        // Check that all siglets are valid
-        for (i, s_i) in siglets.iter().enumerate() {
+        // Check that all shares are valid
+        for (i, s_i) in shares.iter().enumerate() {
             let S_i = s_i * RISTRETTO_BASEPOINT_POINT;
             let X_i = pubkeys[i];
             let R_i = self.nonce_commitments[i].0;
@@ -184,6 +183,6 @@ impl PartyAwaitingSiglets {
             }
         }
 
-        Ok(self.receive_trusted_siglets(siglets))
+        Ok(self.receive_trusted_shares(shares))
     }
 }

@@ -47,7 +47,7 @@ impl Multikey {
 
     // Make a_i
     pub fn factor_for_key(&self, X_i: &VerificationKey) -> Scalar {
-        // a_i = H(L, X_i). Compenents of L have already been fed to transcript.
+        // a_i = H(L, X_i). Components of L have already been fed to transcript.
         let mut a_i_transcript = self.transcript.clone();
         a_i_transcript.commit_point(b"X_i", &X_i.0);
         a_i_transcript.challenge_scalar(b"a_i")
