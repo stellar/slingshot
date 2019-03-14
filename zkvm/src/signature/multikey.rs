@@ -1,6 +1,5 @@
 use crate::signature::VerificationKey;
 use crate::transcript::TranscriptProtocol;
-use curve25519_dalek::constants::RISTRETTO_BASEPOINT_COMPRESSED;
 use curve25519_dalek::ristretto::RistrettoPoint;
 use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
@@ -23,16 +22,10 @@ impl Multikey {
             transcript.commit_point(b"P", &X_i.0);
         }
 
-        let mut multikey = Multikey {
-            transcript,
-            aggregated_key: VerificationKey(RISTRETTO_BASEPOINT_COMPRESSED),
-        };
-
-        // Make aggregated pubkey
         // aggregated_key = sum_i ( a_i * X_i )
         let mut aggregated_key = RistrettoPoint::default();
         for X_i in &pubkeys {
-            let a_i = multikey.factor_for_key(X_i);
+            let a_i = Multikey::compute_factor(&transcript, X_i);
             let X_i = match X_i.0.decompress() {
                 Some(X_i) => X_i,
                 None => return None,
@@ -40,17 +33,21 @@ impl Multikey {
             aggregated_key = aggregated_key + a_i * X_i;
         }
 
-        multikey.aggregated_key = VerificationKey(aggregated_key.compress());
-
-        Some(multikey)
+        Some(Multikey {
+            transcript,
+            aggregated_key: VerificationKey(aggregated_key.compress()),
+        })
     }
 
-    // Make a_i
-    pub fn factor_for_key(&self, X_i: &VerificationKey) -> Scalar {
+    fn compute_factor(transcript: &Transcript, X_i: &VerificationKey) -> Scalar {
         // a_i = H(L, X_i). Components of L have already been fed to transcript.
-        let mut a_i_transcript = self.transcript.clone();
+        let mut a_i_transcript = transcript.clone();
         a_i_transcript.commit_point(b"X_i", &X_i.0);
         a_i_transcript.challenge_scalar(b"a_i")
+    }
+
+    pub fn factor_for_key(&self, X_i: &VerificationKey) -> Scalar {
+        Multikey::compute_factor(&self.transcript, X_i)
     }
 
     pub fn aggregated_key(&self) -> VerificationKey {
