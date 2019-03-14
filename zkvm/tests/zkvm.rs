@@ -1,4 +1,3 @@
-use bulletproofs::{BulletproofGens, PedersenGens};
 use curve25519_dalek::constants::RISTRETTO_BASEPOINT_COMPRESSED;
 use curve25519_dalek::scalar::Scalar;
 use hex;
@@ -87,8 +86,6 @@ impl ProgramHelper for Program {
 /// Generates the given number of signing key Predicates, returning
 /// the Predicates and the secret signing keys.
 fn predicate_helper(pred_num: usize) -> (Vec<Predicate>, Vec<Scalar>) {
-    let gens = PedersenGens::default();
-
     let scalars: Vec<Scalar> = (0..pred_num)
         .into_iter()
         .map(|s| Scalar::from(s as u64))
@@ -96,7 +93,7 @@ fn predicate_helper(pred_num: usize) -> (Vec<Predicate>, Vec<Scalar>) {
 
     let predicates: Vec<Predicate> = scalars
         .iter()
-        .map(|s| Predicate::Key((s * gens.B).compress().into()))
+        .map(|s| Predicate::Key(VerificationKey::from_secret(s)))
         .collect();
 
     (predicates, scalars)
@@ -105,9 +102,8 @@ fn predicate_helper(pred_num: usize) -> (Vec<Predicate>, Vec<Scalar>) {
 /// Returns the secret Scalar and Predicate used to issue
 /// a flavor, along with the flavor Scalar.
 fn issuance_helper() -> (Scalar, Predicate, Scalar) {
-    let gens = PedersenGens::default();
     let scalar = Scalar::from(100u64);
-    let predicate = Predicate::Key((scalar * gens.B).compress().into());
+    let predicate = Predicate::Key(VerificationKey::from_secret(&scalar));
     let flavor = Value::issue_flavor(&predicate, Data::default());
     (scalar, predicate, flavor)
 }
@@ -115,19 +111,17 @@ fn issuance_helper() -> (Scalar, Predicate, Scalar) {
 fn test_helper(program: Program, keys: &Vec<Scalar>) -> Result<TxID, VMError> {
     let (tx, _, _) = {
         // Build tx
-        let bp_gens = BulletproofGens::new(256, 1);
         let header = TxHeader {
             version: 0u64,
             mintime: 0u64,
             maxtime: 0u64,
         };
-        let gens = PedersenGens::default();
-        Prover::build_tx(program, header, &bp_gens, |t, verification_keys| {
+        Prover::build_tx(program, header, |t, verification_keys| {
             let signtx_keys: Vec<Scalar> = verification_keys
                 .iter()
                 .filter_map(|vk| {
                     for k in keys {
-                        if (k * gens.B).compress() == vk.0 {
+                        if VerificationKey::from_secret(k) == *vk {
                             return Some(*k);
                         }
                     }
@@ -139,9 +133,7 @@ fn test_helper(program: Program, keys: &Vec<Scalar>) -> Result<TxID, VMError> {
     };
 
     // Verify tx
-    let bp_gens = BulletproofGens::new(256, 1);
-
-    let vtx = Verifier::verify_tx(tx, &bp_gens)?;
+    let vtx = Verifier::verify_tx(tx)?;
     Ok(vtx.id)
 }
 

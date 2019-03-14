@@ -72,10 +72,9 @@ impl<'a, 'b> Prover<'a, 'b> {
     /// Builds a transaction with a given list of instructions and a `TxHeader`.
     /// Returns a transaction `Tx` along with its ID (`TxID`) and a transaction log (`TxLog`).
     /// Fails if the input program is malformed, or some witness data is missing.
-    pub fn build_tx<'g, F>(
+    pub fn build_tx<F>(
         program: Program,
         header: TxHeader,
-        bp_gens: &'g BulletproofGens,
         sign_tx_fn: F,
     ) -> Result<(Tx, TxID, TxLog), VMError>
     where
@@ -83,8 +82,9 @@ impl<'a, 'b> Prover<'a, 'b> {
     {
         // Prepare the constraint system
         let mut r1cs_transcript = Transcript::new(b"ZkVM.r1cs");
+        let bp_gens = BulletproofGens::new(256, 1);
         let pc_gens = PedersenGens::default();
-        let cs = r1cs::Prover::new(bp_gens, &pc_gens, &mut r1cs_transcript);
+        let cs = r1cs::Prover::new(&bp_gens, &pc_gens, &mut r1cs_transcript);
 
         // Serialize the tx program
         let mut bytecode = Vec::new();

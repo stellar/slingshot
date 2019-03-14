@@ -61,7 +61,6 @@ impl Token {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use bulletproofs::{BulletproofGens, PedersenGens};
     use zkvm::{
         Entry, Predicate, Program, Prover, Signature, Tx, TxHeader, TxID, TxLog, VMError,
         VerificationKey, Verifier,
@@ -95,8 +94,7 @@ mod tests {
         };
 
         // Verify tx
-        let bp_gens = BulletproofGens::new(256, 1);
-        assert!(Verifier::verify_tx(tx, &bp_gens).is_ok());
+        assert!(Verifier::verify_tx(tx).is_ok());
     }
 
     #[test]
@@ -127,26 +125,23 @@ mod tests {
         };
 
         // Verify tx
-        let bp_gens = BulletproofGens::new(256, 1);
-        assert!(Verifier::verify_tx(tx, &bp_gens).is_ok());
+        assert!(Verifier::verify_tx(tx).is_ok());
     }
 
     // Helper functions
     fn build(program: Program, keys: Vec<Scalar>) -> Result<(Tx, TxID, TxLog), VMError> {
-        let bp_gens = BulletproofGens::new(256, 1);
         let header = TxHeader {
             version: 0u64,
             mintime: 0u64,
             maxtime: 0u64,
         };
         // TBD: figure out better + more robust signing mechanism
-        let gens = PedersenGens::default();
-        Prover::build_tx(program, header, &bp_gens, |t, verification_keys| {
+        Prover::build_tx(program, header, |t, verification_keys| {
             let signtx_keys: Vec<Scalar> = verification_keys
                 .iter()
                 .filter_map(|vk| {
                     for k in &keys {
-                        if (k * gens.B).compress() == vk.0 {
+                        if VerificationKey::from_secret(k) == *vk {
                             return Some(*k);
                         }
                     }
