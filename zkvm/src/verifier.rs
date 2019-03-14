@@ -80,7 +80,7 @@ impl<'a, 'b> Verifier<'a, 'b> {
     /// Verifies the `Tx` object by executing the VM and returns the `VerifiedTx`.
     /// Returns an error if the program is malformed or any of the proofs are not valid.
     pub fn verify_tx(tx: Tx) -> Result<VerifiedTx, VMError> {
-        let bp_gens = BulletproofGens::new(128, 1);
+        let bp_gens = BulletproofGens::new(256, 1);
         let mut r1cs_transcript = Transcript::new(b"ZkVM.r1cs");
         let pc_gens = PedersenGens::default();
         let cs = r1cs::Verifier::new(&bp_gens, &pc_gens, &mut r1cs_transcript);

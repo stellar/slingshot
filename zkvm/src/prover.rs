@@ -82,7 +82,7 @@ impl<'a, 'b> Prover<'a, 'b> {
     {
         // Prepare the constraint system
         let mut r1cs_transcript = Transcript::new(b"ZkVM.r1cs");
-        let bp_gens = BulletproofGens::new(128, 1);
+        let bp_gens = BulletproofGens::new(256, 1);
         let pc_gens = PedersenGens::default();
         let cs = r1cs::Prover::new(&bp_gens, &pc_gens, &mut r1cs_transcript);
 
