@@ -57,9 +57,10 @@ impl PartyAwaitingPrecommitments {
         x_i: Scalar,
         multikey: Multikey,
     ) -> (Self, NoncePrecommitment) {
-        let mut rng_transcript = transcript.clone();
-        rng_transcript.commit_scalar(b"x_i", &x_i);
-        let mut rng = rng_transcript.build_rng().finalize(&mut rand::thread_rng());
+        let mut rng = transcript
+            .build_rng()
+            .commit_witness_bytes(b"x_i", &x_i.to_bytes())
+            .finalize(&mut rand::thread_rng());
 
         // Generate ephemeral keypair (r_i, R_i). r_i is a random nonce.
         let r_i = Scalar::random(&mut rng);
@@ -181,7 +182,6 @@ impl PartyAwaitingSiglets {
             if S_i != R_i + self.c * a_i * X_i {
                 return Err(VMError::SignatureShareError { index: i });
             }
-            assert_eq!(S_i, R_i + self.c * a_i * X_i);
         }
 
         Ok(self.receive_trusted_siglets(siglets))

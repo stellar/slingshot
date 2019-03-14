@@ -30,14 +30,13 @@ impl Signature {
             transcript.challenge_scalar(b"c")
         };
 
-        let P = match P.0.decompress() {
-            Some(P) => P,
-            None => return Err(VMError::InvalidPoint),
-        };
+        let P = P.0.decompress().ok_or(VMError::InvalidPoint)?;
+
         // Check sG = R + c * aggregated_key
-        match self.s * G == self.R + c * P {
-            true => Ok(()),
-            false => Err(VMError::PointOperationsFailed),
+        if self.s * G == self.R + c * P {
+            Ok(())
+        } else {
+            Err(VMError::PointOperationsFailed)
         }
     }
 }

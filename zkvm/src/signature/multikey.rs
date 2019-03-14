@@ -1,5 +1,6 @@
 use crate::signature::VerificationKey;
 use crate::transcript::TranscriptProtocol;
+use curve25519_dalek::constants::RISTRETTO_BASEPOINT_COMPRESSED;
 use curve25519_dalek::ristretto::RistrettoPoint;
 use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
@@ -24,7 +25,7 @@ impl Multikey {
 
         let mut multikey = Multikey {
             transcript,
-            aggregated_key: VerificationKey(RistrettoPoint::default().compress()),
+            aggregated_key: VerificationKey(RISTRETTO_BASEPOINT_COMPRESSED),
         };
 
         // Make aggregated pubkey
