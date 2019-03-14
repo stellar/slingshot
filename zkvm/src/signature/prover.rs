@@ -34,7 +34,7 @@ pub struct PartyAwaitingCommitments {
     nonce_precommitments: Vec<NoncePrecommitment>,
 }
 
-pub struct PartyAwaitingSiglets {
+pub struct PartyAwaitingShares {
     multikey: Multikey,
     c: Scalar,
     R: RistrettoPoint,
@@ -104,7 +104,7 @@ impl PartyAwaitingCommitments {
     pub fn receive_commitments(
         mut self,
         nonce_commitments: Vec<NonceCommitment>,
-    ) -> Result<(PartyAwaitingSiglets, Scalar), VMError> {
+    ) -> Result<(PartyAwaitingShares, Scalar), VMError> {
         // Check stored precommitments against received commitments
         for (pre_comm, comm) in self
             .nonce_precommitments
@@ -142,7 +142,7 @@ impl PartyAwaitingCommitments {
 
         // Store received nonce commitments in next state
         Ok((
-            PartyAwaitingSiglets {
+            PartyAwaitingShares {
                 multikey: self.multikey,
                 nonce_commitments,
                 c,
@@ -153,10 +153,10 @@ impl PartyAwaitingCommitments {
     }
 }
 
-impl PartyAwaitingSiglets {
+impl PartyAwaitingShares {
     pub fn receive_trusted_shares(self, shares: Vec<Scalar>) -> Signature {
         // s = sum(s_i), s_i = shares[i]
-        let s: Scalar = shares.iter().map(|share| share).sum();
+        let s: Scalar = shares.into_iter().map(|share| share).sum();
         Signature { s, R: self.R }
     }
 

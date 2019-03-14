@@ -119,7 +119,7 @@ mod tests {
             .collect();
         let signatures: Vec<_> = parties
             .into_iter()
-            .map(|p: PartyAwaitingSiglets| {
+            .map(|p: PartyAwaitingShares| {
                 p.receive_shares(shares.clone(), pub_keys.clone()).unwrap()
             })
             .collect();

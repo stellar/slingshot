@@ -16,21 +16,21 @@ impl Multikey {
         let mut transcript = Transcript::new(b"ZkVM.aggregated-key");
         transcript.commit_u64(b"n", pubkeys.len() as u64);
 
-        // Hash in pubkeys
+        // Commit pubkeys into the transcript
         // L = H(X_1 || X_2 || ... || X_n)
-        for X_i in &pubkeys {
-            transcript.commit_point(b"P", &X_i.0);
+        for X in &pubkeys {
+            transcript.commit_point(b"P", &X.0);
         }
 
         // aggregated_key = sum_i ( a_i * X_i )
         let mut aggregated_key = RistrettoPoint::default();
-        for X_i in &pubkeys {
-            let a_i = Multikey::compute_factor(&transcript, X_i);
-            let X_i = match X_i.0.decompress() {
-                Some(X_i) => X_i,
+        for X in &pubkeys {
+            let a = Multikey::compute_factor(&transcript, X);
+            let X = match X.0.decompress() {
+                Some(X) => X,
                 None => return None,
             };
-            aggregated_key = aggregated_key + a_i * X_i;
+            aggregated_key = aggregated_key + a * X;
         }
 
         Some(Multikey {
