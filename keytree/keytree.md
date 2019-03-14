@@ -77,7 +77,7 @@ If you need to share an individual public key, use [leaf key derivation](#derive
 	xprv = Xprv { scalar, dk }
 	```
 5. Create Merlin `t = Transcript::new("Keytree.derivation")`.
-5. Return the resulting extended private key `xprv`.
+6. Return the resulting extended private key `xprv`.
 
 ### Convert Xprv to Xpub
 
