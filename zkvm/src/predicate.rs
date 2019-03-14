@@ -57,7 +57,6 @@ impl Predicate {
             Predicate::Program(prog, salt) => {
                 let mut bytecode = Vec::new();
                 prog.encode(&mut bytecode);
-                // XXX: Check if this is correct, I don't think it is...
                 let h = Predicate::commit_program(&bytecode, salt);
                 (h * PedersenGens::default().B_blinding).compress()
             }
