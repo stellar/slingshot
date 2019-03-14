@@ -1,28 +1,24 @@
 #![deny(missing_docs)]
 //! Implementation of the key tree protocol, a key blinding scheme for deriving hierarchies of public keys.
 
-use crate::transcript::TranscriptProtocol;
 use curve25519_dalek::constants;
 use curve25519_dalek::ristretto::CompressedRistretto;
 use curve25519_dalek::ristretto::RistrettoPoint;
 use curve25519_dalek::scalar::Scalar;
-use merlin::Transcript;
 use rand::{CryptoRng, RngCore};
-
-mod transcript;
 
 /// Xprv represents an extended private key.
 pub struct Xprv {
     scalar: Scalar,
     dk: [u8; 32],
-    transcript: Transcript,
+    precompressed_pubkey: CompressedRistretto,
 }
 
 /// Xpub represents an extended public key.
 pub struct Xpub {
     point: RistrettoPoint,
     dk: [u8; 32],
-    transcript: Transcript,
+    precompressed_pubkey: CompressedRistretto,
 }
 
 impl Xprv {
@@ -32,17 +28,12 @@ impl Xprv {
         let mut dk = [0u8; 32];
         rng.fill_bytes(&mut dk);
 
-        let mut transcript = Transcript::new(b"Keytree.derivation");
-        transcript.commit_point(
-            b"pt",
-            &(scalar * &constants::RISTRETTO_BASEPOINT_POINT).compress(),
-        );
-        transcript.commit_bytes(b"dk", &dk);
+        let precompressed_pubkey = (scalar * &constants::RISTRETTO_BASEPOINT_POINT).compress();
 
         Xprv {
             scalar,
             dk,
-            transcript,
+            precompressed_pubkey,
         }
     }
 
@@ -52,7 +43,7 @@ impl Xprv {
         Xpub {
             point: point,
             dk: self.dk,
-            transcript: self.transcript.clone(),
+            precompressed_pubkey: self.precompressed_pubkey,
         }
     }
 }
