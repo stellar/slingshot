@@ -995,7 +995,7 @@ Code | Instruction                | Stack diagram                              |
 0x1c | [`nonce`](#nonce)          |    _pred blockid_ → _contract_             | Modifies [tx log](#transaction-log)
 0x1d | [`log`](#log)              |            _data_ → ø                      | Modifies [tx log](#transaction-log)
 0x1e | [`signtx`](#signtx)        |        _contract_ → _results..._           | Modifies [deferred verification keys](#transaction-signature)
-0x1f | [`call`](#call)            |   _contract prog_ → _results..._           | [Defers point operations](#deferred-point-operations)
+0x1f | [`call`](#call)            | _contract salt prog_ → _results..._        | [Defers point operations](#deferred-point-operations)
 0x20 | [`left`](#left)            |    _contract A B_ → _contract’_            | [Defers point operations](#deferred-point-operations)
 0x21 | [`right`](#right)          |    _contract A B_ → _contract’_            | [Defers point operations](#deferred-point-operations)
 0x22 | [`delegate`](#delegate)    |_contract prog sig_ → _results..._          | [Defers point operations](#deferred-point-operations)
@@ -1506,10 +1506,10 @@ is deferred until the end of VM execution.
 
 #### call
 
-_contract(P) prog_ **call** → _results..._
+_contract(P) salt prog_ **call** → _results..._
 
-1. Pops the [data](#data-type) `prog` and a [contract](#contract-type) `contract`.
-2. Reads the [predicate](#predicate) `P` from the contract.
+1. Pops the [data](#data-type) `prog`, its associated [data](#data-type) `salt`, and a [contract](#contract-type) `contract`.
+2. Reads the [predicate](#predicate) `P` from the contract and its salt.
 3. Forms a statement for [program predicate](#program-predicate) of `prog` being equal to `P`:
     ```
     0 == -P + h(prog)·B2
@@ -1518,8 +1518,8 @@ _contract(P) prog_ **call** → _results..._
 5. Places the [payload](#contract-payload) on the stack (last item on top), discarding the contract.
 6. Set the `prog` as current.
 
-Fails if the top item is not a [data](#data-type) or
-the second-from-the-top is not a [contract](#contract-type).
+Fails if either of the top two item is not a [data](#data-type) or
+the third-from-the-top is not a [contract](#contract-type).
 
 
 #### left

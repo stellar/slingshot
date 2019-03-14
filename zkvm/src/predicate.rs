@@ -26,8 +26,8 @@ pub enum Predicate {
     /// constructing aggregated signature.
     Key(VerificationKey),
 
-    /// Representation of a predicate as commitment to a program.
-    Program(Program),
+    /// Representation of a predicate as commitment to a program and salt.
+    Program(Program, Vec<u8>),
 
     /// Disjunction of two predicates.
     Or(Box<PredicateDisjunction>),
@@ -54,10 +54,11 @@ impl Predicate {
             Predicate::Opaque(p) => *p,
             Predicate::Key(k) => k.0,
             Predicate::Or(d) => d.precomputed_point,
-            Predicate::Program(prog) => {
+            Predicate::Program(prog, salt) => {
                 let mut bytecode = Vec::new();
                 prog.encode(&mut bytecode);
-                let h = Predicate::commit_program(&bytecode);
+                // XXX: Check if this is correct, I don't think it is...
+                let h = Predicate::commit_program(&bytecode, salt);
                 (h * PedersenGens::default().B_blinding).compress()
             }
         }
@@ -85,14 +86,26 @@ impl Predicate {
 
     /// Verifies whether the current predicate is a commitment to a program `prog`.
     /// Returns a `PointOp` instance that can be verified in a batch with other operations.
-    pub fn prove_program_predicate(&self, prog: &[u8]) -> PointOp {
-        let h = Self::commit_program(prog);
+    pub fn prove_program_predicate(&self, prog: &[u8], salt: &[u8]) -> PointOp {
+        let h = Self::commit_program(prog, salt);
         // P == h*B2   ->   0 == -P + h*B2
         PointOp {
             primary: None,
             secondary: Some(h),
             arbitrary: vec![(-Scalar::one(), self.to_point())],
         }
+    }
+
+    /// Creates a program with a random salt.
+    pub fn blinded_program<T: Into<Program>>(x: T) -> Self {
+        let salt: [u8; 16] = rand::random();
+        Predicate::Program(x.into(), salt.to_vec())
+    }
+
+    /// Creates a program with an empty salt.
+    pub fn unblinded_program<T: Into<Program>>(x: T) -> Self {
+        let salt: [u8; 0] = [];
+        Predicate::Program(x.into(), salt.to_vec())
     }
 
     /// Downcasts the predicate to a verification key
@@ -112,9 +125,9 @@ impl Predicate {
     }
 
     /// Downcasts the predicate to a program.
-    pub fn to_program(self) -> Result<Program, VMError> {
+    pub fn to_program(self) -> Result<(Program, Vec<u8>), VMError> {
         match self {
-            Predicate::Program(p) => Ok(p),
+            Predicate::Program(p, s) => Ok((p, s)),
             _ => Err(VMError::TypeNotProgram),
         }
     }
@@ -146,8 +159,9 @@ impl Predicate {
         t.challenge_scalar(b"f")
     }
 
-    fn commit_program(prog: &[u8]) -> Scalar {
+    fn commit_program(prog: &[u8], salt: &[u8]) -> Scalar {
         let mut t = Transcript::new(b"ZkVM.predicate");
+        t.commit_bytes(b"salt", salt);
         t.commit_bytes(b"prog", &prog);
         t.challenge_scalar(b"h")
     }
@@ -173,8 +187,9 @@ mod tests {
     #[test]
     fn valid_program_commitment() {
         let prog = Program::build(|p| p.drop());
-        let pred = Predicate::Program(prog.clone());
-        let op = pred.prove_program_predicate(&bytecode(&prog));
+        let pred = Predicate::unblinded_program(prog.clone());
+        let salt: [u8; 0] = [];
+        let op = pred.prove_program_predicate(&bytecode(&prog), &salt);
         assert!(op.verify().is_ok());
     }
 
@@ -182,8 +197,9 @@ mod tests {
     fn invalid_program_commitment() {
         let prog = Program::build(|p| p.drop());
         let prog2 = Program::build(|p| p.dup(1));
-        let pred = Predicate::Program(prog);
-        let op = pred.prove_program_predicate(&bytecode(&prog2));
+        let pred = Predicate::unblinded_program(prog);
+        let salt: [u8; 0] = [];
+        let op = pred.prove_program_predicate(&bytecode(&prog2), &salt);
         assert!(op.verify().is_err());
     }
 

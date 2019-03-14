@@ -718,14 +718,16 @@ where
     }
 
     fn call(&mut self) -> Result<(), VMError> {
-        // Pop program contract and predicate
+        // Pop program, salt, contract, and predicate
         let prog = self.pop_item()?.to_data()?;
+        let salt = self.pop_item()?.to_data()?;
         let contract = self.pop_item()?.to_contract()?;
         let predicate = contract.predicate;
 
         // 0 = -P + h(prog) * B2
-        self.delegate
-            .verify_point_op(|| predicate.prove_program_predicate(&prog.clone().to_bytes()))?;
+        self.delegate.verify_point_op(|| {
+            predicate.prove_program_predicate(&prog.clone().to_bytes(), &salt.clone().to_bytes())
+        })?;
 
         // Place contract payload on the stack
         for item in contract.payload.into_iter() {
