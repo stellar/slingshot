@@ -1509,7 +1509,7 @@ is deferred until the end of VM execution.
 _contract(P) salt prog_ **call** → _results..._
 
 1. Pops the [data](#data-type) `prog`, its associated [data](#data-type) `salt`, and a [contract](#contract-type) `contract`.
-2. Reads the [predicate](#predicate) `P` from the contract and its salt.
+2. Reads the [predicate](#predicate) `P` from the contract and its associated salt.
 3. Forms a statement for [program predicate](#program-predicate) of `prog` being equal to `P`:
     ```
     0 == -P + h(prog)·B2
