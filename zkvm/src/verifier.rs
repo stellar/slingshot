@@ -79,7 +79,7 @@ impl<'a, 'b> Delegate<r1cs::Verifier<'a, 'b>> for Verifier<'a, 'b> {
 impl<'a, 'b> Verifier<'a, 'b> {
     /// Verifies the `Tx` object by executing the VM and returns the `VerifiedTx`.
     /// Returns an error if the program is malformed or any of the proofs are not valid.
-    pub fn verify_tx<'g>(tx: Tx) -> Result<VerifiedTx, VMError> {
+    pub fn verify_tx(tx: Tx) -> Result<VerifiedTx, VMError> {
         let bp_gens = BulletproofGens::new(256, 1);
         let mut r1cs_transcript = Transcript::new(b"ZkVM.r1cs");
         let pc_gens = PedersenGens::default();
