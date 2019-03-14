@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"strings"
@@ -153,7 +154,11 @@ func makeNewCustodianAccount(ctx context.Context, db *sql.DB, hclient horizon.Cl
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, "", fmt.Errorf("bad status code %d funding address through friendbot", resp.StatusCode)
+		body, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			return nil, "", errors.Wrapf(err, "reading response from bad friendbot request %d", resp.StatusCode)
+		}
+		return nil, "", fmt.Errorf("error funding address through friendbot. got bad status code %d, response %s", resp.StatusCode, body)
 	}
 	log.Println("account successfully funded")
 
