@@ -165,7 +165,7 @@ impl PartyAwaitingSiglets {
     pub fn receive_siglets(
         self,
         siglets: Vec<Scalar>,
-        pubkeys: Vec<RistrettoPoint>,
+        pubkeys: Vec<VerificationKey>,
     ) -> Result<Signature, VMError> {
         // Check that all siglets are valid
         for (i, s_i) in siglets.iter().enumerate() {
@@ -174,9 +174,9 @@ impl PartyAwaitingSiglets {
             let R_i = self.nonce_commitments[i].0;
 
             // Make a_i = H(L, X_i)
-            let a_i = self
-                .multikey
-                .factor_for_key(&VerificationKey(X_i.compress()));
+            let a_i = self.multikey.factor_for_key(&VerificationKey(X_i.0));
+
+            let X_i = X_i.0.decompress().ok_or(VMError::InvalidPoint)?;
 
             // Check that S_i = R_i + c * a_i * X_i
             if S_i != R_i + self.c * a_i * X_i {

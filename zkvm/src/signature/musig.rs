@@ -61,12 +61,12 @@ mod tests {
         ];
         let multikey = multikey_helper(&priv_keys).unwrap();
 
-        let expected_pub_key = CompressedRistretto::from_slice(&[
+        let expected_pubkey = CompressedRistretto::from_slice(&[
             212, 211, 54, 88, 245, 166, 107, 207, 28, 70, 247, 28, 5, 233, 67, 112, 196, 30, 35,
             136, 160, 232, 167, 109, 47, 88, 194, 207, 227, 71, 222, 102,
         ]);
 
-        assert_eq!(expected_pub_key, multikey.aggregated_key().0);
+        assert_eq!(expected_pubkey, multikey.aggregated_key().0);
     }
 
     fn multikey_helper(priv_keys: &Vec<Scalar>) -> Option<Multikey> {
@@ -120,7 +120,7 @@ mod tests {
 
         let pub_keys: Vec<_> = priv_keys
             .iter()
-            .map(|priv_key| priv_key * RISTRETTO_BASEPOINT_POINT)
+            .map(|priv_key| VerificationKey((priv_key * RISTRETTO_BASEPOINT_POINT).compress()))
             .collect();
         let signatures: Vec<_> = parties
             .into_iter()
