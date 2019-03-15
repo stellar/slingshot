@@ -436,14 +436,9 @@ where
     }
 
     fn unblind(&mut self) -> Result<(), VMError> {
-        // Pop scalar `v`
-        let scalar_witness = self.pop_item()?.to_data()?.to_scalar()?;
-        let v_scalar = scalar_witness.to_scalar();
-
-        // Pop commitment `V`
-        let v_commitment_data = self.pop_item()?.to_data()?;
-        let v_commitment_push = v_commitment_data.clone();
-        let v_point = v_commitment_data.to_commitment()?.to_point();
+        // Pop scalar `v` and commitment `V`
+        let v_scalar = self.pop_item()?.to_data()?.to_scalar()?.to_scalar();
+        let v_point = self.pop_item()?.to_data()?.to_commitment()?.to_point();
 
         self.delegate.verify_point_op(|| {
             // Check V = vB => V-vB = 0
@@ -455,7 +450,7 @@ where
         })?;
 
         // Push commitment item
-        self.push_item(v_commitment_push);
+        self.push_item(Data::Opaque(v_point.as_bytes().to_vec()));
         Ok(())
     }
 
