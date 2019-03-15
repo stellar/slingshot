@@ -135,7 +135,9 @@ mod tests {
         let seed = [0u8; 32];
         let mut rng = ChaChaRng::from_seed(seed);
         let xprv = Xprv::random(&mut rng);
-        let xpub = xprv.to_xpub().to_intermediate_key(customize);
+        let xpub = xprv.to_xpub().to_intermediate_key(|t| {
+            t.commit_u64("account_id", 42);
+        });
 
         // the following are hard-coded based on the previous seed
         let expected_dk = [
