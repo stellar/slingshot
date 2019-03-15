@@ -70,7 +70,7 @@ impl Xpub {
         let mut dk = [0u8; 32];
         t.challenge_bytes(b"dk", &mut dk);
 
-        let point = self.point + (f * &constants::RISTRETTO_BASEPOINT_POINT);
+        let child_point = self.point + (f * &constants::RISTRETTO_BASEPOINT_POINT);
         let precompressed_pubkey = point.compress();
 
         Xpub {
