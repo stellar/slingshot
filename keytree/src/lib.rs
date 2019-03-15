@@ -67,7 +67,7 @@ impl Xpub {
         let f = t.challenge_scalar(b"f.intermediate");
 
         // squeeze a new derivation key
-        let mut dk = [0u8; 32];
+        let mut child_dk = [0u8; 32];
         t.challenge_bytes(b"dk", &mut dk);
 
         let child_point = self.point + (f * &constants::RISTRETTO_BASEPOINT_POINT);
