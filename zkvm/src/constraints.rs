@@ -133,7 +133,7 @@ impl Constraint {
                         );
                         let w = Scalar::conditional_select(&x, &Scalar::one(), is_zero.into());
                         let w = w.invert();
-                        (Some((x, w)), Some((x, w)), Some(y))
+                        (Some((x, y)), Some((x, w)), Some(y))
                     }
                     None => (None, None, None),
                 };
