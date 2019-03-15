@@ -443,8 +443,7 @@ where
         // Pop commitment `V`
         let v_commitment_data = self.pop_item()?.to_data()?;
         let v_commitment_push = v_commitment_data.clone();
-        let v_commitment = v_commitment_data.to_commitment()?;
-        let v_point = v_commitment.to_point();
+        let v_point = v_commitment_data.to_commitment()?.to_point();
 
         self.delegate.verify_point_op(|| {
             // Check V = vB => V-vB = 0
