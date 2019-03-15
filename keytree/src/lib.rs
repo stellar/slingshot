@@ -54,7 +54,7 @@ impl Xprv {
 
 impl Xpub {
     /// Returns a intermediate child pubkey.
-    pub fn to_intermediate_key(&self, customize: impl FnOnce(&mut Transcript)) -> Xpub {
+    pub fn derive_intermediate_key(&self, customize: impl FnOnce(&mut Transcript)) -> Xpub {
         let mut t = Transcript::new(b"Keytree.derivation");
         t.commit_bytes(b"pt", self.precompressed_pubkey.as_bytes());
         t.commit_bytes(b"dk", &self.dk);
