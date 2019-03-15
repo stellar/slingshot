@@ -977,9 +977,9 @@ Code | Instruction                | Stack diagram                              |
 0x0e | [`range:n`](#range)        |            _expr_ → _expr_                 | Modifies [CS](#constraint-system)
 0x0f | [`and`](#and)              | _constr1 constr2_ → _constr3_              |
 0x10 | [`or`](#or)                | _constr1 constr2_ → _constr3_              |
-0x11 | [`not`](#not)              | _constr1_ → _constr2_                      | Modifies [CS](#constraint-system)
+0x11 | [`not`](#not)              |         _constr1_ → _constr2_              | Modifies [CS](#constraint-system)
 0x12 | [`verify`](#verify)        |      _constraint_ → ø                      | Modifies [CS](#constraint-system) 
-0x13 | [`unblind`](#unblind)      |        _V v_ → _V_                         | [Defers point ops](#deferred-point-operations)
+0x13 | [`unblind`](#unblind)      |             _V v_ → _V_                    | [Defers point ops](#deferred-point-operations)
  |                                |                                            |
  |     [**Values**](#value-instructions)              |                        |
 0x14 | [`issue`](#issue)          |    _qty flv data pred_ → _contract_        | Modifies [CS](#constraint-system), [tx log](#transaction-log), [defers point ops](#deferred-point-operations)
