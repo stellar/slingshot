@@ -1230,8 +1230,9 @@ Fails if `constr` is not a [constraint](#constraint-type).
 _V v_ **unblind** → _V_
 
 1. Pops [scalar](#scalar) `v`.
-2. Peeks [point](#point) `V`.
+2. Pops [point](#point) `V`.
 3. Verifies the [unblinding proof](#unblinding-proof) for the commitment `V` and scalar `v`, [deferring all point operations](#deferred-point-operations)).
+4. Pushes [point](#point) `V`.
 
 Fails if: 
 * `v` is not a valid [scalar](#scalar), or

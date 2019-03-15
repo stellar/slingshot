@@ -440,11 +440,10 @@ where
         let scalar_witness = self.pop_item()?.to_data()?.to_scalar()?;
         let v_scalar = scalar_witness.to_scalar();
 
-        // Peek commitment `V`
-        if self.stack.len() == 0 {
-            return Err(VMError::StackUnderflow);
-        }
-        let v_commitment = &self.stack[0].to_data()?.to_commitment()?;
+        // Pop commitment `V`
+        let v_commitment_data = self.pop_item()?.to_data()?;
+        let v_commitment_push = v_commitment_data.clone();
+        let v_commitment = v_commitment_data.to_commitment()?;
         let v_point = v_commitment.to_point();
 
         self.delegate.verify_point_op(|| {
@@ -455,6 +454,9 @@ where
                 arbitrary: vec![(Scalar::one(), v_point)],
             }
         })?;
+
+        // Push commitment item
+        self.push_item(v_commitment_push);
         Ok(())
     }
 
