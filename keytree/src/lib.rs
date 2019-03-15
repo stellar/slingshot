@@ -1,11 +1,15 @@
 #![deny(missing_docs)]
 //! Implementation of the key tree protocol, a key blinding scheme for deriving hierarchies of public keys.
 
+use crate::transcript::TranscriptProtocol;
 use curve25519_dalek::constants;
 use curve25519_dalek::ristretto::CompressedRistretto;
 use curve25519_dalek::ristretto::RistrettoPoint;
 use curve25519_dalek::scalar::Scalar;
+use merlin::Transcript;
 use rand::{CryptoRng, RngCore};
+
+mod transcript;
 
 /// Xprv represents an extended private key.
 pub struct Xprv {
@@ -48,39 +52,33 @@ impl Xprv {
     }
 }
 
-/// Returns a intermediate child pubkey.
-pub fn intermediate_key(
-    xpub: &Xpub,
-    label: &'static std::string::String,
-    data: &String,
-) -> Option<Xpub> {
-    // question: this function returns an option because it calls a function that returns an option
-    // and I didn't know what else to do. is there something better to do?
+impl Xpub {
+    /// Returns a intermediate child pubkey.
+    pub fn to_intermediate_key(&self, customize: impl FnOnce(&mut Transcript)) -> Xpub {
+        let mut t = Transcript::new(b"Keytree.derivation");
+        t.commit_bytes(b"pt", self.precompressed_pubkey.as_bytes());
+        t.commit_bytes(b"dk", &self.dk);
 
-    // question: is the following kosher? https://doc.dalek.rs/merlin/struct.Transcript.html#note
-    let mut t = Transcript::new(b"Keytree.intermediate");
-    t.commit_bytes(b"pt", xpub.point.as_bytes());
-    t.commit_bytes(b"dk", &xpub.dk);
+        // the user can pass customize in so that they can commit arbitrary
+        // data (like an account ID)
+        customize(&mut t);
 
-    // provide the transcript to the user to commit an arbitrary derivation path or index
-    t.commit_bytes(label.as_bytes(), data.as_bytes());
+        // squeeze a challenge scalar
+        let f = t.challenge_scalar(b"f.intermediate");
 
-    // squeeze a challenge scalar
-    let f = t.challenge_scalar(label.as_bytes()); // is this the right input?
+        // squeeze a new derivation key
+        let mut dk = [0u8; 32];
+        t.challenge_bytes(b"dk", &mut dk);
 
-    // squeeze a new derivation key
-    let mut dk = [0u8; 32];
-    t.challenge_bytes(b"dk", &mut dk);
+        let point = self.point + (f * &constants::RISTRETTO_BASEPOINT_POINT);
+        let precompressed_pubkey = point.compress();
 
-    let point;
-    match xpub.point.decompress() {
-        None => return None,
-        Some(p) => {
-            point = (p + (f * &constants::RISTRETTO_BASEPOINT_POINT)).compress();
+        Xpub {
+            point,
+            dk,
+            precompressed_pubkey,
         }
     }
-
-    Some(Xpub { point, dk })
 }
 
 #[cfg(test)]
@@ -129,5 +127,33 @@ mod tests {
 
         assert_eq!(xpub.dk, expected_dk);
         assert_eq!(xpub.point, expected_point);
+        assert_eq!(xpub.precompressed_pubkey, expected_compressed_point);
+    }
+
+    #[test]
+    fn random_xpub_derivation_test() {
+        let seed = [0u8; 32];
+        let mut rng = ChaChaRng::from_seed(seed);
+        let xprv = Xprv::random(&mut rng);
+        let xpub = xprv.to_xpub().to_intermediate_key(customize);
+
+        // the following are hard-coded based on the previous seed
+        let expected_dk = [
+            213, 184, 36, 41, 212, 147, 104, 136, 121, 56, 43, 216, 7, 41, 62, 96, 27, 59, 169,
+            220, 232, 135, 119, 40, 211, 34, 90, 46, 86, 167, 236, 82,
+        ];
+        let expected_compressed_point = CompressedRistretto::from_slice(&[
+            144, 115, 113, 51, 15, 159, 80, 246, 172, 113, 178, 147, 234, 47, 12, 31, 1, 203, 103,
+            10, 174, 22, 233, 179, 59, 228, 17, 206, 65, 206, 151, 3,
+        ]);
+        let expected_point = expected_compressed_point.decompress().unwrap();
+
+        assert_eq!(xpub.dk, expected_dk);
+        assert_eq!(xpub.point, expected_point);
+        assert_eq!(xpub.precompressed_pubkey, expected_compressed_point);
+    }
+
+    fn customize(t: &mut Transcript) {
+        t.commit_bytes(b"test_label", b"test_content");
     }
 }
