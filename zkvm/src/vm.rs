@@ -436,16 +436,16 @@ where
     }
 
     fn unblind(&mut self) -> Result<(), VMError> {
-        // Pop expression `expr`
-        let expr = self.pop_item()?.to_expression()?;
-
-        // Pop commitment `V`
-        let v_commitment = self.pop_item()?.to_data()?.to_commitment()?;
-        let v_point = v_commitment.to_point();
-
         // Pop scalar `v`
         let scalar_witness = self.pop_item()?.to_data()?.to_scalar()?;
         let v_scalar = scalar_witness.to_scalar();
+
+        // Peek commitment `V`
+        if self.stack.len() == 0 {
+            return Err(VMError::StackUnderflow);
+        }
+        let v_commitment = &self.stack[0].to_data()?.to_commitment()?;
+        let v_point = v_commitment.to_point();
 
         self.delegate.verify_point_op(|| {
             // Check V = vB => V-vB = 0
@@ -455,15 +455,6 @@ where
                 arbitrary: vec![(Scalar::one(), v_point)],
             }
         })?;
-
-        // Add constraint `V == expr`
-        let (_, v) = self.delegate.commit_variable(&v_commitment)?;
-        self.delegate.cs().constrain(expr.to_r1cs_lc() - v);
-
-        // Push variable
-        self.push_item(Variable {
-            commitment: v_commitment,
-        });
         Ok(())
     }
 
