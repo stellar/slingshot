@@ -119,35 +119,45 @@ impl Constraint {
                 Ok((r1cs::LinearCombination::from(o), assignment))
             }
             Constraint::Not(c1) => {
+                // Compute the input linear combination and its secret assignment
                 let (x_lc, x_assg) = c1.flatten(cs)?;
+
+                // Compute assignments for all the wires
                 let (xy_assg, xw_assg, y_assg) = match x_assg {
-                    Some(x_assg) => {
-                        let is_zero = x_assg.ct_eq(&Scalar::zero());
-                        let y_assg = Scalar::conditional_select(
+                    Some(x) => {
+                        let is_zero = x.ct_eq(&Scalar::zero());
+                        let y = Scalar::conditional_select(
                             &Scalar::zero(),
                             &Scalar::one(),
                             is_zero.into(),
                         );
-                        let w_assg =
-                            Scalar::conditional_select(&x_assg, &Scalar::one(), is_zero.into());
-                        let w_assg = w_assg.invert();
-                        (Some((x_assg, y_assg)), Some((x_assg, w_assg)), Some(y_assg))
+                        let w = Scalar::conditional_select(&x, &Scalar::one(), is_zero.into());
+                        let w = w.invert();
+                        (Some((x, w)), Some((x, w)), Some(y))
                     }
                     None => (None, None, None),
                 };
-                // Allocate multipliers
+
+                // Allocate two multipliers.
                 let (l1, r1, o1) = cs.allocate_multiplier(xy_assg)?;
-                let (_l2, _r2, o2) = cs.allocate_multiplier(xw_assg)?;
+                let (l2, _r2, o2) = cs.allocate_multiplier(xw_assg)?;
 
-                // Add constraints: r2 left unconstrained since w is
-                // a free varaible
+                // Add 4 constraints.
 
-                // `l1 == x`
+                // (1) `x == l1`
                 cs.constrain(l1 - x_lc);
-                // `x*y == 0` (y is 0 if x != 0)
+
+                // (2) `l1 == l2` (== x)
+                cs.constrain(l1 - l2);
+
+                // (3) `x*y == 0` which implies that y == 0 if x != 0.
                 cs.constrain(o1.into());
-                // `x*w == 1 - y` (y is 1 if x == 0)
+
+                // (4) `x*w == 1 - y` which implies that y == 1 if x == 0.
                 cs.constrain(o2 - Scalar::one() + r1);
+
+                // Note: w (r2) is left unconstrained — it is a free variable.
+
                 Ok((r1cs::LinearCombination::from(r1), y_assg))
             }
         }
