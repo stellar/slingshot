@@ -978,7 +978,7 @@ Code | Instruction                | Stack diagram                              |
 0x0f | [`and`](#and)              | _constr1 constr2_ → _constr3_              |
 0x10 | [`or`](#or)                | _constr1 constr2_ → _constr3_              |
 0x11 | [`verify`](#verify)        |      _constraint_ → ø                      | Modifies [CS](#constraint-system) 
-0x12 | [`unblind`](#unblind)      |        _v V expr_ → _var_                  | Modifies [CS](#constraint-system), [Defers point ops](#deferred-point-operations)
+0x12 | [`unblind`](#unblind)      |        _V v_ → _V_                         | [Defers point ops](#deferred-point-operations)
  |                                |                                            |
  |     [**Values**](#value-instructions)              |                        |
 0x13 | [`issue`](#issue)          |    _qty flv data pred_ → _contract_        | Modifies [CS](#constraint-system), [tx log](#transaction-log), [defers point ops](#deferred-point-operations)
@@ -1227,20 +1227,16 @@ Fails if `constr` is not a [constraint](#constraint-type).
 
 #### unblind
 
-_v V expr_ **unblind** → _var_
+_V v_ **unblind** → _V_
 
-1. Pops [expression](#expression-type) `expr`.
+1. Pops [scalar](#scalar) `v`.
 2. Pops [point](#point) `V`.
-3. Pops [scalar](#scalar) `v`.
-4. Creates a new [variable](#variable-type) `var` with commitment `V`.
-5. Verifies the [unblinding proof](#unblinding-proof) for the commitment `V` and scalar `v`, [deferring all point operations](#deferred-point-operations)).
-6. Adds an equality [constraint](#constraint-type) `expr == var` to the [constraint system](#constraint-system).
-7. Pushes `var` to the stack.
+3. Verifies the [unblinding proof](#unblinding-proof) for the commitment `V` and scalar `v`, [deferring all point operations](#deferred-point-operations)).
+4. Pushes [point](#point) `V`.
 
 Fails if: 
 * `v` is not a valid [scalar](#scalar), or
 * `V` is not a valid [point](#point), or
-* `expr` is not an [expression](#expression-type).
 
 
 
