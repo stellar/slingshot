@@ -76,7 +76,7 @@ impl Xpub {
         Xpub {
             point,
             dk,
-            precompressed_pubkey,
+            precompressed_pubkey: point.compress(),
         }
     }
 }
