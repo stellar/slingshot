@@ -60,15 +60,15 @@ Party state transitions overview:
 ```
 Party{}
   ↓
-.new(transcript, privkey, multikey, Vec<pubkey>) → precommitment
+.new(transcript, privkey, multikey, Vec<pubkey>) → NoncePrecommitment([u8; 32])
   ↓
 PartyAwaitingPrecommitments{transcript, privkey, multikey, nonce, noncecommitment, Vec<Counterparty>}
   ↓
-.receive_precommitments(self, Vec<precommitment>) → commitment
+.receive_precommitments(self, Vec<precommitment>) → NonceCommitment(RistrettoPoint)
   ↓
 PartyAwaitingCommitments{transcript, privkey, multikey, nonce, Vec<CounterpartyPrecommitted>}
   ↓
-.receive_commitments(self, Vec<commitment>) → share
+.receive_commitments(self, Vec<commitment>) → Share(Scalar)
   ↓
 PartyAwaitingShares{multikey, c, R, Vec, CounterpartyCommitted>} 
   ↓
@@ -77,25 +77,28 @@ PartyAwaitingShares{multikey, c, R, Vec, CounterpartyCommitted>}
 ```
 
 Note:
-For now, we will have redundancy - meaning, each party will receive and verify its own messages as well as its counterparties' messages. This makes the protocol slightly simpler, but does incur a performance overhead. (Future work: potentially remove this redundancy).
+For now, we will have message redundancy - meaning, each party will receive and verify its own messages as well as its counterparties' messages. This makes the protocol slightly simpler, but does incur a performance overhead. (Future work: potentially remove this redundancy).
 
-Also, for now we will assume that all of the messages passed into each party state arrive in the same order (each party's message is in the same index). This allows us to skip the step of ordering them / assigning indexes. (Future work: allow for unordered inputs, and have the party states sort them.)
+Also, for now we will assume that all of the messages passed into each party state arrive in the same order (each party's message is in the same index). This allows us to skip the step of ordering them / assigning indexes. (Future work: allow for unordered inputs, have the parties sort them.)
 
 ### Party
 
 Fields: none
 
 Function: `new(...)`
+
 Input: 
 - transcript: `&Transcript` - the message to be signed should have been fed to the transcript beforehand. (Future work: pass in a mutable borrow of a transcript instead of just a borrow.)
 - privkey: `Scalar`
 - multikey: `Multikey`
 - pubkeys: `Vec<VerificationKey>` - all the public keys that went into the multikey. The list is assumed to be in the same order as the upcoming lists of `NoncePrecommitment`s, `NonceCommitment`s, and `Share`s.
+
 Operation:
 - use the transcript to generate a random factor (the nonce)
 - use the nonce to create a nonce commitment and precommitment
 - clone the transcript
 - create a vector of `Counterparty`s using the pubkeys.
+
 Output: 
 - the next state in the protocol: `PartyAwaitingPrecommitments` 
 - the nonce precommitment: `NoncePrecommitment`
@@ -111,11 +114,14 @@ Fields:
 - counterparties: `Vec<Counterparty>`
 
 Function: `receive_precommitments(...)`
+
 Input: 
 - `self`
 - nonce_precommitments: `Vec<NoncePrecommitment>`
+
 Operation:
 - call `precommit_nonce` on each of `self.counterparties`, with the received `nonce_precommitments`. This will return `CounterpartyPrecommitted`s.
+
 Output:
 - the next state in the protocol: `PartyAwaitingCommitments`
 - the nonce commitment: `NonceCommitment`
@@ -130,18 +136,21 @@ Fields:
 - counterparties: `Vec<CounterpartyPrecommitted>`
 
 Function: `receive_commitments(...)`
+
 Input:
 - `self`
 - nonce_commitments: `Vec<NonceCommitment>`
+
 Operation:
 - call `commit_nonce()` on each of `self.counterparties`, with the received `nonce_commitments`. This checks that the stored precommitments match the received commitments. If it succeeds, it will return `CounterpartyCommitted`s.
-- make `R` = sum(`nonce_commitments`)
-- make `c` = challenge scalar after feeding `multikey.aggregated_key()` and `R` into the transcript
+- make `nonce_sum` = sum(`nonce_commitments`)
+- make `c` = challenge scalar after feeding `multikey.aggregated_key()` and `nonce_sum` into the transcript
 - make `a_i` = `multikey.factor_for_key(self.privkey)`
 - make `s_i` = `r_i + c * a_i * x_i`, where `x_i` = self.privkey and `r_i` = self.nonce
-Return: 
+
+Output: 
 - the next state in the protocol: `PartyAwaitingShares`
-- the signature share: `Scalar`
+- the signature share: `Share`
 
 ### PartyAwaitingShares
 
@@ -152,13 +161,16 @@ Fields:
 - nonce_sum: `RistrettoPoint` // R
 
 Function: `receive_shares(...)`
+
 Input: 
 - `self`
-- shares: `Vec<Scalar>`
+- shares: `Vec<Share>`
+
 Operation:
 - call `sign()` on each of `self.counterparties`, with the received `shares`. This checks that the shares are valid, using the information in the `CounterpartyCommitted`. (Calling `receive_trusted_shares(...)` skips this step.)
 - make `s` = `sum(shares)`
-Return
+
+Output
 - the signature: `Signature { self.nonce_sum, s }`
 
 ## Protocol for counterparty state transitions
@@ -167,18 +179,18 @@ Counterparties are states stored internally by a party, that represent the messa
 
 Counterparty state transitions overview:
 ```
-Counterparty{pubkey}
+Counterparty{pubkey: Verificationkey}
   ↓
-.precommit_nonce(H) // simply adds precommitment
+.precommit_nonce(H: NoncePrecommitment) // simply adds precommitment
   ↓
 CounterpartyPrecommitted{H, pubkey}
   ↓
-.commit_nonce(R) // verifies hash(R) == H
+.commit_nonce(R: NonceCommitment) // verifies hash(R) == H
   ↓
 CounterpartyCommitted{R, pubkey}
 /* R_total := sum{R_i}, commit to transcript, compute and send out siglet */
   ↓
-.sign(s) // verifies s_i*G == R_i + c * factor * pubkey_i
+.sign(s: Share) // verifies s_i*G == R_i + c * factor * pubkey_i
   ↓
   s
 
