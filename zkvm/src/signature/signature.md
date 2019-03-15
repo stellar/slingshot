@@ -120,7 +120,7 @@ Input:
 - nonce_precommitments: `Vec<NoncePrecommitment>`
 
 Operation:
-- call `precommit_nonce` on each of `self.counterparties`, with the received `nonce_precommitments`. This will return `CounterpartyPrecommitted`s.
+- call `precommit_nonce(...)` on each of `self.counterparties`, with the received `nonce_precommitments`. This will return `CounterpartyPrecommitted`s.
 
 Output:
 - the next state in the protocol: `PartyAwaitingCommitments`
@@ -142,11 +142,11 @@ Input:
 - nonce_commitments: `Vec<NonceCommitment>`
 
 Operation:
-- call `commit_nonce()` on each of `self.counterparties`, with the received `nonce_commitments`. This checks that the stored precommitments match the received commitments. If it succeeds, it will return `CounterpartyCommitted`s.
+- call `commit_nonce(...)` on each of `self.counterparties`, with the received `nonce_commitments`. This checks that the stored precommitments match the received commitments. If it succeeds, it will return `CounterpartyCommitted`s.
 - make `nonce_sum` = sum(`nonce_commitments`)
 - make `c` = challenge scalar after feeding `multikey.aggregated_key()` and `nonce_sum` into the transcript
 - make `a_i` = `multikey.factor_for_key(self.privkey)`
-- make `s_i` = `r_i + c * a_i * x_i`, where `x_i` = self.privkey and `r_i` = self.nonce
+- make `s_i` = `r_i + c * a_i * x_i`, where `x_i` = `self.privkey` and `r_i` = `self.nonce`
 
 Output: 
 - the next state in the protocol: `PartyAwaitingShares`
@@ -157,8 +157,8 @@ Output:
 Fields:
 - multikey: `Multikey`
 - counterparties: `Vec<CounterpartyCommitted>`
-- challenge: `Scalar` // c
-- nonce_sum: `RistrettoPoint` // R
+- challenge: `Scalar`
+- nonce_sum: `RistrettoPoint`
 
 Function: `receive_shares(...)`
 
@@ -167,7 +167,7 @@ Input:
 - shares: `Vec<Share>`
 
 Operation:
-- call `sign()` on each of `self.counterparties`, with the received `shares`. This checks that the shares are valid, using the information in the `CounterpartyCommitted`. (Calling `receive_trusted_shares(...)` skips this step.)
+- call `sign(...)` on each of `self.counterparties`, with the received `shares`. This checks that the shares are valid, using the information in the `CounterpartyCommitted`. (Calling `receive_trusted_shares(...)` skips this step.)
 - make `s` = `sum(shares)`
 
 Output
@@ -175,7 +175,7 @@ Output
 
 ## Protocol for counterparty state transitions
 Counterparties are states stored internally by a party, that represent the messages received by from its counterparties. 
-// TODO: add more description
+TODO: add more description
 
 Counterparty state transitions overview:
 ```
@@ -188,12 +188,12 @@ CounterpartyPrecommitted{H, pubkey}
 .commit_nonce(R: NonceCommitment) // verifies hash(R) == H
   ↓
 CounterpartyCommitted{R, pubkey}
-/* R_total := sum{R_i}, commit to transcript, compute and send out siglet */
   ↓
-.sign(s: Share) // verifies s_i*G == R_i + c * factor * pubkey_i
+.sign(s: Share) // verifies s_i * G == R_i + c * factor * pubkey_i
   ↓
   s
 
-/* s_total = sum{s_i} */
+s_total = sum{s_i}
+R_total = sum{R_i}
 ```
 
