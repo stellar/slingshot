@@ -459,36 +459,39 @@ provide a flexible way to open a [contract](#contract-type).
 Each node in a predicate tree is formed with one of the following:
 
 1. [Verification key](#verification-key): can be satisfied by signing a transaction using [`signtx`](#signtx) or signing and executing a program using [`delegate`](#delegate).
-2. [Disjunction](#predicate-disjunction) of other predicates. Choice is made using [`left`](#left) and [`right`](#right) instructions.
+2. [Disjunction](#predicate-disjunction) of other predicates. Choice is made using [`select:n:k`](#select) instruction, where `n` is the number of predicates and `k` the index of the chosen predicate.
 3. [Program commitment](#program-predicate). The structure of the commitment prevents signing and requires user to reveal and evaluate the program using the [`call`](#call) instruction.
 
 
 ### Predicate disjunction
 
+XXX: Rewrote in the language of select, but not sure about the below (particularly the final paragraph, as well as whether there are n or n+1 predicates).
+
 Disjunction of two predicates is implemented using a commitment `f` that
-commits to _left_ and _right_ [predicates](#predicate) `L` and `R`
-as a scalar factor on a [primary base point](#base-points) `B` added to the predicate `L`:
+commits to _n_ [predicates](#predicate) `X_1`, `X_2`, ..., `X_n`
+as a scalar factor on a [primary base point](#base-points) `B` added to the predicate `X_1`:
 
 ```
-OR(L,R) = L + f(L, R)·B
+OR(X_1,...,X_N) = X_1 + f(X_1, ..., X_N)·B
 ```
 
 Commitment scheme is defined using the [transcript](#transcript) protocol
-by committing compressed 32-byte points `L` and `R` and squeezing a scalar
-that is bound to both predicates:
+by committing compressed 32-byte points `X_1`, `X_2`, ..., `X_n` and squeezing a scalar
+that is bound to all `n` predicates:
 
 ```
+// given [X[0], ..., X[n-1]]
 T = Transcript("ZkVM.predicate")
-T.commit("L", L)
-T.commit("R", R)
+T.commit("n"), byte(n))
+for i=0 to i=n-1 {T.commit("X", X[i])}
 f = T.challenge_scalar("f")
-OR(L,R) = L + f·B
+OR = X[0] + f·B
 ``` 
 
-The choice between the branches is performed using [`left`](#left) and [`right`](#right) instructions.
+The choice between the branches is performed using the [`select:n:k`](#select) instruction, where `n` represents the number of predicates and k the chosen branch.
 
-Disjunction allows signing ([`signtx`](#signtx), [`delegate`](#delegate)) for the [key](#verification-key) `L` without
-revealing the alternative predicate `R` using the adjusted secret scalar `dlog(L) + f(L,R)`.
+Disjunction allows signing ([`signtx`](#signtx), [`delegate`](#delegate)) for the [key](#verification-key) `X_1` without
+revealing the alternative predicate `X_k` using the adjusted secret scalar `dlog(X_1) + f(X_1,X_k)`.
 
 
 ### Program predicate
@@ -996,9 +999,8 @@ Code | Instruction                | Stack diagram                              |
 0x1d | [`log`](#log)              |            _data_ → ø                      | Modifies [tx log](#transaction-log)
 0x1e | [`signtx`](#signtx)        |        _contract_ → _results..._           | Modifies [deferred verification keys](#transaction-signature)
 0x1f | [`call`](#call)            | _contract bf prog_ → _results..._          | [Defers point operations](#deferred-point-operations)
-0x20 | [`left`](#left)            |    _contract A B_ → _contract’_            | [Defers point operations](#deferred-point-operations)
-0x21 | [`right`](#right)          |    _contract A B_ → _contract’_            | [Defers point operations](#deferred-point-operations)
-0x22 | [`delegate`](#delegate)    |_contract prog sig_ → _results..._          | [Defers point operations](#deferred-point-operations)
+0x20 | [`select:n:k`](#select)    | _contract x1...xn_ → _contract’_           | [Defers point operations](#deferred-point-operations)
+0x21 | [`delegate`](#delegate)    |_contract prog sig_ → _results..._          | [Defers point operations](#deferred-point-operations)
   —  | [`ext`](#ext)              |                 ø → ø                      | Fails if [extension flag](#vm-state) is not set.
 
 
@@ -1521,40 +1523,22 @@ _contract(P) bf prog_ **call** → _results..._
 Fails if either of the top two item is not a [data](#data-type) or
 the third-from-the-top is not a [contract](#contract-type).
 
+### select 
+_contract(P) X1 ... Xn_ **select:_n_:_k_** → _contract(Xk)_
 
-#### left
-
-_contract(P) L R_ **left** → _contract(L)_
-
-1. Pops the right [predicate](#predicate) `R`, then the left [predicate](#predicate) `L` and a [contract](#contract-type) `contract`.
+1. Pops all N [predicates](#predicate) `X_1`, `X_2`, ..., `X_n` (in that order) and a [contract] (#contract-type) `contract`.
 2. Reads the [predicate](#predicate) `P` from the contract.
-3. Forms a statement for [predicate disjunction](#predicate-disjunction) of `L` and `R` being equal to `P`:
+3. Forms a statement for [predicate disjunction](#predicate-disjunction) of `X_1` and `X_k` being equal to `P`:
     ```
-    0 == -P + L + f(L, R)·B
+    0 == -P + X_1 + f(X_1, X_k)·B
     ```
 4. Adds the statement to the [deferred point operations](#deferred-point-operations).
-5. Replaces the contract’s predicate with `L` and pushes the contract back onto the stack.
+5. Replaces the contract's predicate with `X_k` and pushes the contract back onto the stack.
 
-Fails if the top two items are not valid [points](#point),
-or if the third from the top item is not a [contract](#contract-type).
+Immediate data `n` and `k` are encoded as 8-bit unsigned integers (`u8`).
 
-
-#### right
-
-_contract(P) L R_ **right** → _contract(R)_
-
-1. Pops the right [predicate](#predicate) `R`, then the left [predicate](#predicate) `L` and a [contract](#contract-type) `contract`.
-2. Reads the [predicate](#predicate) `P` from the contract.
-3. Forms a statement of [predicate disjunction](#predicate-disjunction) of `L` and `R` being equal to `P`:
-    ```
-    0 == -P + L + f(L, R)·B
-    ```
-4. Adds the statement to the deferred point operations.
-5. Replaces the contract’s predicate with `R` and pushes the contract back onto the stack.
-
-Fails if the top two items are not valid [points](#point),
-or if the third from the top item is not a [contract](#contract-type).
-
+Fails if the top N items are not valid [points](#point),
+or if the N+1 from the top item is not a [contract](#contract-type).
 
 #### delegate
 

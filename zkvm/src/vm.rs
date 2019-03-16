@@ -7,6 +7,7 @@ use serde::de::Visitor;
 use serde::{self, Deserialize, Deserializer, Serialize, Serializer};
 use spacesuit;
 use spacesuit::BitRange;
+use std::cmp;
 use std::iter::FromIterator;
 use std::mem;
 
@@ -317,8 +318,7 @@ where
                 Instruction::Log => self.log()?,
                 Instruction::Signtx => self.signtx()?,
                 Instruction::Call => self.call()?,
-                Instruction::Left => self.left()?,
-                Instruction::Right => self.right()?,
+                Instruction::Select(n, k) => self.select(n, k)?,
                 Instruction::Delegate => self.delegate()?,
                 Instruction::Ext(opcode) => self.ext(opcode)?,
             }
@@ -768,6 +768,26 @@ where
         self.left_or_right(|contract, _, right| {
             contract.predicate = right;
         })
+    }
+
+    fn select(&mut self, n: u8, k: u8) -> Result<(), VMError> {
+        let upper_bound = cmp::min(256, self.stack.len() + 1) as u8;
+        if n > upper_bound || k > upper_bound {
+            return Err(VMError::StackUnderflow)
+        }
+
+        let mut x_vec: Vec<Predicate> = Vec::with_capacity(n as usize);
+        for _ in 0..n {
+            x_vec.insert(0, self.pop_item()?.to_data()?.to_predicate()?);
+        }
+        let mut contract = self.pop_item()?.to_contract()?;
+        let p = &contract.predicate;
+        
+        self.delegate.verify_point_op(|| p.prove_or(&x_vec[0], &x_vec[k as usize]))?;
+
+        contract.predicate = x_vec[k as usize];
+        self.push_item(contract);
+        Ok(())
     }
 
     fn delegate(&mut self) -> Result<(), VMError> {

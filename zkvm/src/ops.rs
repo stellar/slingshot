@@ -52,8 +52,7 @@ pub enum Instruction {
     Log,
     Signtx,
     Call,
-    Left,
-    Right,
+    Select(u8, u8),
     Delegate,
     Ext(u8),
 }
