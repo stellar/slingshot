@@ -53,14 +53,14 @@ impl Xprv {
 }
 
 impl Xpub {
-    /// Returns a intermediate child pubkey.
+    /// Returns a intermediate child pubkey. Users must provide customize, in order to separate
+    /// sibling keys from one another through unique derivation paths.
     pub fn derive_intermediate_key(&self, customize: impl FnOnce(&mut Transcript)) -> Xpub {
         let mut t = Transcript::new(b"Keytree.derivation");
         t.commit_bytes(b"pt", self.precompressed_pubkey.as_bytes());
         t.commit_bytes(b"dk", &self.dk);
 
-        // the user can pass customize in so that they can commit arbitrary
-        // data (like an account ID)
+        // change the derivation path for this key
         customize(&mut t);
 
         // squeeze a challenge scalar
@@ -68,15 +68,14 @@ impl Xpub {
 
         // squeeze a new derivation key
         let mut child_dk = [0u8; 32];
-        t.challenge_bytes(b"dk", &mut dk);
+        t.challenge_bytes(b"dk", &mut child_dk);
 
         let child_point = self.point + (f * &constants::RISTRETTO_BASEPOINT_POINT);
-        let precompressed_pubkey = point.compress();
 
         Xpub {
-            point,
-            dk,
-            precompressed_pubkey: point.compress(),
+            point: child_point,
+            dk: child_dk,
+            precompressed_pubkey: child_point.compress(),
         }
     }
 }
@@ -135,27 +134,23 @@ mod tests {
         let seed = [0u8; 32];
         let mut rng = ChaChaRng::from_seed(seed);
         let xprv = Xprv::random(&mut rng);
-        let xpub = xprv.to_xpub().to_intermediate_key(|t| {
-            t.commit_u64("account_id", 42);
+        let xpub = xprv.to_xpub().derive_intermediate_key(|t| {
+            t.commit_u64(b"account_id", 34);
         });
 
         // the following are hard-coded based on the previous seed
         let expected_dk = [
-            213, 184, 36, 41, 212, 147, 104, 136, 121, 56, 43, 216, 7, 41, 62, 96, 27, 59, 169,
-            220, 232, 135, 119, 40, 211, 34, 90, 46, 86, 167, 236, 82,
+            54, 228, 53, 234, 188, 42, 86, 46, 242, 40, 184, 43, 57, 159, 189, 0, 75, 44, 198, 65,
+            3, 49, 63, 166, 115, 189, 31, 202, 9, 113, 245, 157,
         ];
         let expected_compressed_point = CompressedRistretto::from_slice(&[
-            144, 115, 113, 51, 15, 159, 80, 246, 172, 113, 178, 147, 234, 47, 12, 31, 1, 203, 103,
-            10, 174, 22, 233, 179, 59, 228, 17, 206, 65, 206, 151, 3,
+            116, 20, 192, 197, 35, 140, 34, 119, 49, 139, 163, 229, 31, 198, 251, 142, 131, 106,
+            45, 155, 76, 4, 80, 143, 147, 205, 90, 69, 84, 34, 34, 27,
         ]);
         let expected_point = expected_compressed_point.decompress().unwrap();
 
         assert_eq!(xpub.dk, expected_dk);
         assert_eq!(xpub.point, expected_point);
         assert_eq!(xpub.precompressed_pubkey, expected_compressed_point);
-    }
-
-    fn customize(t: &mut Transcript) {
-        t.commit_bytes(b"test_label", b"test_content");
     }
 }
