@@ -69,7 +69,10 @@ impl Xprv {
         let pieces = bytes.split_at(32);
         let mut scalar_bytes = [0u8; 32];
         scalar_bytes.copy_from_slice(&pieces.0[..]);
-        let scalar = match Scalar::from_canonical_bytes(scalar_bytes) { Some(x)=>x, None => return None };
+        let scalar = match Scalar::from_canonical_bytes(scalar_bytes) {
+            Some(x) => x,
+            None => return None,
+        };
         let mut dk = [0u8; 32];
         dk.copy_from_slice(&pieces.1[..]);
         let precompressed_pubkey = (scalar * &constants::RISTRETTO_BASEPOINT_POINT).compress();
