@@ -67,7 +67,7 @@ impl Xprv {
         }
 
         let pieces = bytes.split_at(32);
-        let mut scalar_bytes: [u8; 32] = Default::default();
+        let mut scalar_bytes = [0u8; 32];
         scalar_bytes.copy_from_slice(&pieces.0[..]);
         let scalar = match Scalar::from_canonical_bytes(scalar_bytes) { Some(x)=>x, None => return None };
         let mut dk: [u8; 32] = Default::default();
