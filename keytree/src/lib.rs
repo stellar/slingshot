@@ -1,11 +1,15 @@
 #![deny(missing_docs)]
 //! Implementation of the key tree protocol, a key blinding scheme for deriving hierarchies of public keys.
 
+use crate::transcript::TranscriptProtocol;
 use curve25519_dalek::constants;
 use curve25519_dalek::ristretto::CompressedRistretto;
 use curve25519_dalek::ristretto::RistrettoPoint;
 use curve25519_dalek::scalar::Scalar;
+use merlin::Transcript;
 use rand::{CryptoRng, RngCore};
+
+mod transcript;
 
 /// Xprv represents an extended private key.
 pub struct Xprv {
@@ -44,6 +48,34 @@ impl Xprv {
             point: point,
             dk: self.dk,
             precompressed_pubkey: self.precompressed_pubkey,
+        }
+    }
+}
+
+impl Xpub {
+    /// Returns a intermediate child pubkey. Users must provide customize, in order to separate
+    /// sibling keys from one another through unique derivation paths.
+    pub fn derive_intermediate_key(&self, customize: impl FnOnce(&mut Transcript)) -> Xpub {
+        let mut t = Transcript::new(b"Keytree.derivation");
+        t.commit_bytes(b"pt", self.precompressed_pubkey.as_bytes());
+        t.commit_bytes(b"dk", &self.dk);
+
+        // change the derivation path for this key
+        customize(&mut t);
+
+        // squeeze a challenge scalar
+        let f = t.challenge_scalar(b"f.intermediate");
+
+        // squeeze a new derivation key
+        let mut child_dk = [0u8; 32];
+        t.challenge_bytes(b"dk", &mut child_dk);
+
+        let child_point = self.point + (f * &constants::RISTRETTO_BASEPOINT_POINT);
+
+        Xpub {
+            point: child_point,
+            dk: child_dk,
+            precompressed_pubkey: child_point.compress(),
         }
     }
 }
@@ -94,5 +126,31 @@ mod tests {
 
         assert_eq!(xpub.dk, expected_dk);
         assert_eq!(xpub.point, expected_point);
+        assert_eq!(xpub.precompressed_pubkey, expected_compressed_point);
+    }
+
+    #[test]
+    fn random_xpub_derivation_test() {
+        let seed = [0u8; 32];
+        let mut rng = ChaChaRng::from_seed(seed);
+        let xprv = Xprv::random(&mut rng);
+        let xpub = xprv.to_xpub().derive_intermediate_key(|t| {
+            t.commit_u64(b"account_id", 34);
+        });
+
+        // the following are hard-coded based on the previous seed
+        let expected_dk = [
+            54, 228, 53, 234, 188, 42, 86, 46, 242, 40, 184, 43, 57, 159, 189, 0, 75, 44, 198, 65,
+            3, 49, 63, 166, 115, 189, 31, 202, 9, 113, 245, 157,
+        ];
+        let expected_compressed_point = CompressedRistretto::from_slice(&[
+            116, 20, 192, 197, 35, 140, 34, 119, 49, 139, 163, 229, 31, 198, 251, 142, 131, 106,
+            45, 155, 76, 4, 80, 143, 147, 205, 90, 69, 84, 34, 34, 27,
+        ]);
+        let expected_point = expected_compressed_point.decompress().unwrap();
+
+        assert_eq!(xpub.dk, expected_dk);
+        assert_eq!(xpub.point, expected_point);
+        assert_eq!(xpub.precompressed_pubkey, expected_compressed_point);
     }
 }
