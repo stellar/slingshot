@@ -251,7 +251,6 @@ impl Node {
         match (item, is_child) {
             // Empty node, cannot remove
             (None, _) => {
-                println!("reached empty node, cannot remove");
                 return Err(VMError::InvalidMerkleProof);
             }
             // Leaf node
@@ -259,7 +258,6 @@ impl Node {
                 if i.equals(remove) {
                     return Ok(None);
                 }
-                println!("tried to remove leaf... didn't work");
                 return Err(VMError::InvalidMerkleProof);
             }
             // Intermediary node
@@ -499,9 +497,7 @@ mod tests {
         assert_eq!(tree.size, 6);
 
         let tree = tree.remove(&[0b0110]).unwrap();
-        println!("removed 0b0110");
         let tree = tree.remove(&[0b1010]).unwrap();
-        println!("removed 0b1010");
         assert_eq!(tree.size, 4);
 
         assert!(tree.insert(&[0b1111]).is_ok());
