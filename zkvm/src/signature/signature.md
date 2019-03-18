@@ -52,7 +52,17 @@ In both the simple Schnorr signature and the MuSig signature cases, the signatur
 
 Key aggregation happens in the `Multikey::new(pubkeys)` function. 
 
-(`<L> = H(X_1 || X_2 || ... || X_n`).
+Input:
+- pubkeys: `Vec<VerificationKey>`. This is a list of compressed public keys that will be aggregated, as long as they can be decompressed successfully.
+
+Operation:
+- Create a new transcript using the tag "ZkVM.aggregated-key". (TODO: remove the "ZkVM." if we make the signature crate separate from the ZkVM crate.)
+- Commit all the pubkeys to the transcript. This reflects the creation of the `<L>` encoding of the list of pubkeys detailed in the MuSig paper: `<L> = H(X_1 || X_2 || ... || X_n)`. The difference is that we do not need to squeeze `<L>` out of the transcript, since we can use the prepared transcript directly for future randomness.
+  (TODO: this sounds awkward, explain better?)
+- Create `aggregated_key = sum_i ( a_i * X_i )`. Iterate over the pubkeys, compute the factor `a_i = H(<L>, X_i)`, and add `a_i * X_i` to the aggregated key.
+
+Output:
+- a new multikey, with the transcript and aggregated key detailed above.
 
 ### Signing
 
