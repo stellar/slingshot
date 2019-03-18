@@ -45,11 +45,7 @@ impl PatriciaTree {
     /// Constructs a new, empty PatriciaTree.
     pub fn new() -> Self {
         PatriciaTree {
-            root: Node {
-                item: None,
-                hash: [0u8; 32],
-                children: Some((Box::new(Node::empty()), Box::new(Node::empty()))),
-            },
+            root: Node::empty(),
             size: 0,
         }
     }
@@ -134,8 +130,8 @@ impl Node {
         let item = &self.item.clone();
         let is_child = self.children.is_some();
         match (item, is_child) {
-            // Inserting into empty
-            (None, false) => {
+            // Root or empty node
+            (None, _) => {
                 return Ok(Node::leaf(PatriciaItem::leaf(insert)));
             }
             // Leaf node
@@ -146,27 +142,6 @@ impl Node {
             (Some(i), true) => {
                 return self.insert_intermediate(insert, i);
             }
-            // Root node
-            (None, true) => match self.children {
-                Some((l, r)) => {
-                    if bit_at(insert[0], 0) == 0 {
-                        let l = l.insert(insert)?;
-                        return Ok(Node {
-                            item: None,
-                            hash: hash_node(&l, &r),
-                            children: Some((Box::new(l), r)),
-                        });
-                    } else {
-                        let r = r.insert(insert)?;
-                        return Ok(Node {
-                            item: None,
-                            hash: hash_node(&l, &r),
-                            children: Some((l, Box::new(r))),
-                        });
-                    }
-                }
-                None => Err(VMError::InvalidMerkleProof),
-            },
         }
     }
 
@@ -243,6 +218,8 @@ impl Node {
         }
 
         // If not prefix, find common split
+        // TBD: no matching bits should mean that we have an empty item
+        // here and just split the rest?
         let (byte, bit) = item
             .last_matching_bit(&insert)
             .ok_or(VMError::FormatError)?;
@@ -273,7 +250,8 @@ impl Node {
         let is_child = self.children.is_some();
         match (item, is_child) {
             // Empty node, cannot remove
-            (None, false) => {
+            (None, _) => {
+                println!("reached empty node, cannot remove");
                 return Err(VMError::InvalidMerkleProof);
             }
             // Leaf node
@@ -281,14 +259,11 @@ impl Node {
                 if i.equals(remove) {
                     return Ok(None);
                 }
+                println!("tried to remove leaf... didn't work");
                 return Err(VMError::InvalidMerkleProof);
             }
             // Intermediary node
             (Some(i), true) => {
-                // All items should be located in leaf nodes
-                if i.equals(remove) {
-                    return Err(VMError::InvalidMerkleProof);
-                }
                 if i.is_prefix(&remove) {
                     if let Some((l, r)) = self.children {
                         if bit_after(&remove, i.key.len() - 1, i.bits) == 0 {
@@ -320,35 +295,6 @@ impl Node {
                 }
                 return Err(VMError::InvalidMerkleProof);
             }
-            // Root node
-            (None, true) => match self.children {
-                Some((l, r)) => {
-                    if bit_at(remove[0], 0) == 0 {
-                        let l = l.remove(remove)?;
-                        let l = match l {
-                            Some(l) => l,
-                            None => Node::empty(),
-                        };
-                        return Ok(Some(Node {
-                            item: None,
-                            hash: hash_node(&l, &r),
-                            children: Some((Box::new(l), r)),
-                        }));
-                    } else {
-                        let r = r.remove(remove)?;
-                        let r = match r {
-                            Some(r) => r,
-                            None => Node::empty(),
-                        };
-                        return Ok(Some(Node {
-                            item: None,
-                            hash: hash_node(&l, &r),
-                            children: Some((l, Box::new(r))),
-                        }));
-                    }
-                }
-                None => Err(VMError::InvalidMerkleProof),
-            },
         }
     }
 
@@ -446,6 +392,8 @@ fn equals(l: &[u8], l_bits: u8, r: &[u8]) -> bool {
     return l_masked == r[idx - 1];
 }
 
+/// Checks that the input `prefix` is a prefix of `item`, checking inclusion
+/// up to bit with index `prefix_bits` of the last byte in the `prefix`.
 fn is_prefix(prefix: &[u8], prefix_bits: u8, item: &[u8]) -> bool {
     if prefix.len() == 0 {
         return true;
@@ -462,8 +410,9 @@ fn is_prefix(prefix: &[u8], prefix_bits: u8, item: &[u8]) -> bool {
     }
 
     // Check equality of last byte of prefix with some bits masked
-    let masked_prefix = prefix[idx - 1] << (7 - prefix_bits) >> (7 - prefix_bits);
-    let masked_item = item[idx - 1] << (7 - prefix_bits) >> (7 - prefix_bits);
+    // TBD: fix this
+    let masked_prefix = prefix[idx - 1] >> (7 - prefix_bits) << (7 - prefix_bits);
+    let masked_item = item[idx - 1] >> (7 - prefix_bits) << (7 - prefix_bits);
     return masked_prefix == masked_item;
 }
 
@@ -503,7 +452,8 @@ fn bit_after(slice: &[u8], mut byte: usize, mut bit: u8) -> u8 {
 }
 
 fn bit_at(byte: u8, pos: u8) -> u8 {
-    (byte >> pos) & 0x01
+    byte & (0x01 << (7 - pos))
+    // (byte >> (7-pos)) & 0x01
 }
 
 #[cfg(test)]
@@ -513,7 +463,7 @@ mod tests {
     #[test]
     fn test_last_matching_bit() {
         let (byte, bit) = last_matching_bit(&[0b1000], &[0b1100]).unwrap();
-        assert_eq!((byte, bit), (0, 1));
+        assert_eq!((byte, bit), (0, 4));
 
         let (byte, bit) =
             last_matching_bit(&[0b1111, 0b0100, 0b11101100], &[0b1111, 0b0100, 0b11101100])
@@ -523,13 +473,18 @@ mod tests {
         let (byte, bit) =
             last_matching_bit(&[0b1111, 0b0100, 0b11101100], &[0b1111, 0b0100, 0b11111100])
                 .unwrap();
-        assert_eq!((byte, bit), (2, 3));
+        assert_eq!((byte, bit), (2, 2));
     }
 
     #[test]
     fn test_is_prefix() {
-        assert!(is_prefix(&[0b01, 0b1000], 3, &[0b01, 0b11000]));
-        assert_eq!(is_prefix(&[0b01, 0b1000], 4, &[0b01, 0b11000]), false);
+        assert!(is_prefix(&[0b01, 0b00001000], 4, &[0b01, 0b00001111]));
+        assert!(is_prefix(&[0b01, 0b00001110], 7, &[0b01, 0b00001110]));
+        assert!(is_prefix(&[0b01, 0b00001110], 6, &[0b01, 0b00001111]));
+        assert_eq!(
+            is_prefix(&[0b01, 0b00001000], 5, &[0b01, 0b00001111]),
+            false
+        );
     }
 
     #[test]
@@ -544,7 +499,9 @@ mod tests {
         assert_eq!(tree.size, 6);
 
         let tree = tree.remove(&[0b0110]).unwrap();
+        println!("removed 0b0110");
         let tree = tree.remove(&[0b1010]).unwrap();
+        println!("removed 0b1010");
         assert_eq!(tree.size, 4);
 
         assert!(tree.insert(&[0b1111]).is_ok());
