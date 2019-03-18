@@ -44,7 +44,8 @@ Functions:
 
 A signature is comprised of a scalar `s`, and a RistrettoPoint `R`. In the simple Schnorr signature case, `s` represents the Schnorr signature scalar and `R` represents the nonce commitment. In the MuSig signature case, `s` represents the sum of the Schnorr signature scalars of each party, or `s = sum_i (s_i)`. `R` represents the sum of the nonce commitments of each party, or `R = sum_i (R_i)`. 
 
-In both the simple Schnorr signature and the MuSig signature cases, the signature verification is the same, and is detailed in the [verifying](#verifying) section.
+Functions:
+- `Signature::verify(...)`: In both the simple Schnorr signature and the MuSig signature cases, the signature verification is the same. For more detail, see the [verification](#verifying) section.
 
 ## Operations
 
@@ -66,7 +67,26 @@ Output:
 
 ### Signing
 
-TODO
+There are several paths to signing:
+1. Make a Schnorr signature with one public key (derived from one private key).
+    Function: `Signature::sign_single(...)`
+
+    Input: 
+    - transcript: `&Transcript` - the message to be signed should have been committed to the transcript beforehand. (TODO: pass in a mutable borrow of a transcript instead of a borrow.)
+    - privkey: `Scalar`
+
+    Operation:
+    - Use the transcript to generate a random factor (the nonce, `r`), by committing to the privkey and passing in a `thread_rng`
+    - Use the nonce to create a nonce commitment `R = r * G`
+    - Mutably clone the transcript
+    - Make `c = H(X, R, m)`. Because `m` has already been fed into the transcript externally, we do this by committing `X = privkey * G` to the transcript with label "P" (for pubkey), committing `R` to the transcript with label "R", and getting the challenge scalar `c` with label "c".
+    - Make `s = r + c * x` where `x = privkey`
+
+    Output:
+    - Signature { s, R }
+
+2. Make a Schnorr signature with one aggregated key (`Multikey`), derived from multiple public keys.
+    TODO (tie to protocol for party & counterparty state transitions)
 
 ### Verifying
 
@@ -74,7 +94,7 @@ Signature verificaiton happens in the `Signature::verify(...)` function.
 
 Input: 
 - `&self`
-- transcript: `&Transcript` - the message to be signed should have been committed to the transcript beforehand. (TODO: pass in a mutable borrow of a transcript instead of just a borrow.)
+- transcript: `&Transcript` - the message to be signed should have been committed to the transcript beforehand. (TODO: pass in a mutable borrow of a transcript instead of a borrow.)
 - P: `VerificationKey`
 
 Operation:
@@ -122,20 +142,20 @@ Fields: none
 Function: `new(...)`
 
 Input: 
-- transcript: `&Transcript` - the message to be signed should have been committed to the transcript beforehand. (TODO: pass in a mutable borrow of a transcript instead of just a borrow.)
+- transcript: `&Transcript` - the message to be signed should have been committed to the transcript beforehand. (TODO: pass in a mutable borrow of a transcript instead of a borrow.)
 - privkey: `Scalar`
 - multikey: `Multikey`
 - pubkeys: `Vec<VerificationKey>` - all the public keys that went into the multikey. The list is assumed to be in the same order as the upcoming lists of `NoncePrecommitment`s, `NonceCommitment`s, and `Share`s.
 
 Operation:
-- use the transcript to generate a random factor (the nonce)
-- use the nonce to create a nonce commitment and precommitment
-- clone the transcript
-- create a vector of `Counterparty`s using the pubkeys.
+- Use the transcript to generate a random factor (the nonce), by committing to the privkey and passing in a `thread_rng`.
+- Use the nonce to create a nonce commitment and precommitment
+- Clone the transcript
+- Create a vector of `Counterparty`s using the pubkeys.
 
 Output: 
-- the next state in the protocol: `PartyAwaitingPrecommitments` 
-- the nonce precommitment: `NoncePrecommitment`
+- The next state in the protocol: `PartyAwaitingPrecommitments` 
+- The nonce precommitment: `NoncePrecommitment`
 
 ### PartyAwaitingPrecommitments
 
@@ -154,7 +174,7 @@ Input:
 - nonce_precommitments: `Vec<NoncePrecommitment>`
 
 Operation:
-- call `precommit_nonce(...)` on each of `self.counterparties`, with the received `nonce_precommitments`. This will return `CounterpartyPrecommitted`s.
+- Call `precommit_nonce(...)` on each of `self.counterparties`, with the received `nonce_precommitments`. This will return `CounterpartyPrecommitted`s.
 
 Output:
 - the next state in the protocol: `PartyAwaitingCommitments`
@@ -176,15 +196,15 @@ Input:
 - nonce_commitments: `Vec<NonceCommitment>`
 
 Operation:
-- call `commit_nonce(...)` on each of `self.counterparties`, with the received `nonce_commitments`. This checks that the stored precommitments match the received commitments. If it succeeds, it will return `CounterpartyCommitted`s.
-- make `nonce_sum` = sum(`nonce_commitments`)
-- make `c` = challenge scalar after committing `multikey.aggregated_key()` and `nonce_sum` into the transcript
-- make `a_i` = `multikey.factor_for_key(self.privkey)`
-- make `s_i` = `r_i + c * a_i * x_i`, where `x_i` = `self.privkey` and `r_i` = `self.nonce`
+- Call `commit_nonce(...)` on each of `self.counterparties`, with the received `nonce_commitments`. This checks that the stored precommitments match the received commitments. If it succeeds, it will return `CounterpartyCommitted`s.
+- Make `nonce_sum` = sum(`nonce_commitments`)
+- Make `c` = challenge scalar after committing `multikey.aggregated_key()` and `nonce_sum` into the transcript
+- Make `a_i` = `multikey.factor_for_key(self.privkey)`
+- Make `s_i` = `r_i + c * a_i * x_i`, where `x_i` = `self.privkey` and `r_i` = `self.nonce`
 
 Output: 
-- the next state in the protocol: `PartyAwaitingShares`
-- the signature share: `Share`
+- The next state in the protocol: `PartyAwaitingShares`
+- The signature share: `Share`
 
 ### PartyAwaitingShares
 
@@ -201,11 +221,11 @@ Input:
 - shares: `Vec<Share>`
 
 Operation:
-- call `sign(...)` on each of `self.counterparties`, with the received `shares`. This checks that the shares are valid, using the information in the `CounterpartyCommitted`. (Calling `receive_trusted_shares(...)` skips this step.)
-- make `s` = `sum(shares)`
+- Call `sign(...)` on each of `self.counterparties`, with the received `shares`. This checks that the shares are valid, using the information in the `CounterpartyCommitted`. (Calling `receive_trusted_shares(...)` skips this step.)
+- Make `s` = `sum(shares)`
 
 Output
-- the signature: `Signature { self.nonce_sum, s }`
+- The signature: `Signature { self.nonce_sum, s }`
 
 ## Protocol for counterparty state transitions
 Counterparties are states stored internally by a party, that represent the messages received by from its counterparties. 
