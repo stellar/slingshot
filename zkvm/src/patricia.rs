@@ -35,9 +35,10 @@ struct PatriciaItem {
     /// bits included, represents the data represented
     /// by this path of the Patricia tree.
     key: &'static [u8],
-    /// Position of the last bit to include in the key
-    /// ex: if we include the whole key [u8] slice, the
-    //. offset would be 7.
+
+    /// Position of the last bit to include in the key, starting
+    /// from the most-significant bit. An offset of 7 includes
+    /// the whole bit
     bits: u8,
 }
 
@@ -60,8 +61,13 @@ impl PatriciaTree {
 
     /// Removes an item from the tree.
     pub fn remove(self, item: &'static [u8]) -> Result<Self, VMError> {
+        let root = match self.root.remove(item)? {
+            Some(r) => r,
+            None => Node::empty(),
+        };
+
         Ok(Self {
-            root: self.root.remove(item)?.ok_or(VMError::InvalidMerkleProof)?,
+            root: root,
             size: self.size - 1,
         })
     }
@@ -150,13 +156,13 @@ impl Node {
             return Ok(self);
         }
         if item.is_prefix(&insert) {
-            return Err(VMError::InvalidMerkleProof);
+            return Err(VMError::PatriciaPrefixInserted);
         }
 
         // Find common split
         let (byte, bit) = item
             .last_matching_bit(&insert)
-            .ok_or(VMError::FormatError)?;
+            .ok_or(VMError::NoMatchingBits)?;
         let matching_bytes = &item.key[..byte + 1];
 
         // Construct new children
@@ -214,15 +220,13 @@ impl Node {
                     });
                 }
             }
-            return Err(VMError::InvalidMerkleProof);
+            return Err(VMError::PatriciaNodeNotFound);
         }
 
         // If not prefix, find common split
-        // TBD: no matching bits should mean that we have an empty item
-        // here and just split the rest?
         let (byte, bit) = item
             .last_matching_bit(&insert)
-            .ok_or(VMError::FormatError)?;
+            .ok_or(VMError::NoMatchingBits)?;
         let matching_bytes = &item.key[..byte + 1];
         let matching_item = PatriciaItem {
             key: matching_bytes,
@@ -251,14 +255,14 @@ impl Node {
         match (item, is_child) {
             // Empty node, cannot remove
             (None, _) => {
-                return Err(VMError::InvalidMerkleProof);
+                return Err(VMError::PatriciaNodeNotFound);
             }
             // Leaf node
             (Some(i), false) => {
                 if i.equals(remove) {
                     return Ok(None);
                 }
-                return Err(VMError::InvalidMerkleProof);
+                return Err(VMError::PatriciaNodeNotFound);
             }
             // Intermediary node
             (Some(i), true) => {
@@ -291,7 +295,7 @@ impl Node {
                         }
                     }
                 }
-                return Err(VMError::InvalidMerkleProof);
+                return Err(VMError::PatriciaNodeNotFound);
             }
         }
     }
@@ -312,27 +316,18 @@ impl Node {
                         return r.build_path(item, result);
                     }
                 } else {
-                    return Err(VMError::InvalidMerkleProof);
+                    return Err(VMError::PatriciaNodeNotFound);
                 }
             }
             (Some(i), None) => {
                 if i.key == item {
                     return Ok(());
                 } else {
-                    return Err(VMError::InvalidMerkleProof);
+                    return Err(VMError::PatriciaNodeNotFound);
                 }
             }
-            (None, Some((l, r))) => {
-                if bit_at(item[0], 0) == 0 {
-                    result.insert(0, PatriciaNeighbor::Right(r.hash));
-                    return l.build_path(item, result);
-                } else {
-                    result.insert(0, PatriciaNeighbor::Left(l.hash));
-                    return r.build_path(item, result);
-                }
-            }
-            (None, None) => {
-                return Err(VMError::InvalidMerkleProof);
+            (None, _) => {
+                return Err(VMError::PatriciaNodeNotFound);
             }
         }
     }
@@ -386,7 +381,7 @@ fn equals(l: &[u8], l_bits: u8, r: &[u8]) -> bool {
         return false;
     }
 
-    let l_masked = l[idx - 1] << (7 - l_bits) >> (7 - l_bits);
+    let l_masked = l[idx - 1] >> (7 - l_bits) << (7 - l_bits);
     return l_masked == r[idx - 1];
 }
 
@@ -401,14 +396,13 @@ fn is_prefix(prefix: &[u8], prefix_bits: u8, item: &[u8]) -> bool {
         return false;
     }
 
-    // // Check equality until last byte of prefix
+    // Check equality until last byte of prefix
     let idx = prefix.len();
     if prefix[..idx - 1] != item[..idx - 1] {
         return false;
     }
 
     // Check equality of last byte of prefix with some bits masked
-    // TBD: fix this
     let masked_prefix = prefix[idx - 1] >> (7 - prefix_bits) << (7 - prefix_bits);
     let masked_item = item[idx - 1] >> (7 - prefix_bits) << (7 - prefix_bits);
     return masked_prefix == masked_item;
@@ -449,9 +443,10 @@ fn bit_after(slice: &[u8], mut byte: usize, mut bit: u8) -> u8 {
     return bit_at(slice[byte], bit);
 }
 
+/// Returns the byte at the given position, where the position
+/// numbering starts at the most-significant bit.
 fn bit_at(byte: u8, pos: u8) -> u8 {
     byte & (0x01 << (7 - pos))
-    // (byte >> (7-pos)) & 0x01
 }
 
 #[cfg(test)]

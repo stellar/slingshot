@@ -135,4 +135,16 @@ pub enum VMError {
     /// This error occurs when a Merkle proof of inclusion is invalid.
     #[fail(display = "Invalid Merkle proof.")]
     InvalidMerkleProof,
+
+    /// This error occurs when a node in the Patricia tree is not found.
+    #[fail(display = "Patricia tree node not found.")]
+    PatriciaNodeNotFound,
+
+    /// This error occurs when a prefix is inserted into the Patricia tree.
+    #[fail(display = "Cannot insert prefix into Patricia tree.")]
+    PatriciaPrefixInserted,
+
+    /// This error occurs when an inserted Patricia tree item has no matching bits.
+    #[fail(display = "Inserted item has no matching bits.")]
+    NoMatchingBits,
 }
