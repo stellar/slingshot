@@ -85,7 +85,25 @@ There are several paths to signing:
     - Signature { s, R }
 
 2. Make a Schnorr signature with one aggregated key (`Multikey`), derived from multiple public keys.
-    TODO (tie to protocol for party & counterparty state transitions)
+    - Create an aggregated pubkey. For more information see the [key aggregation](#key-aggregation) section.
+
+    For each party that is taking part in the signing:
+    - Call `Party::new(transcript, privkey, multikey, pubkeys)`.
+    - Get back `PartyAwaitingPrecommitments` and a `NoncePrecommitment`.
+    - Share your `NoncePrecommitment`, and receive other parties' `NoncePrecommitment`s. 
+
+    - Call `receive_precommitments(precommitments)` on your `PartyAwaitingPrecommitments` state, inputting a vector of all parties' precommitments.
+    - Get back `PartyAwaitingCommitments` and a `NonceCommitment`.
+    - Share your `NonceCommitment`, and receive other parties' `NonceCommitment`s.
+
+    - Call `receive_commitments(commitments)` on your `PartyAwaitingCommitments` state, inputting a vector of all parties' commitments.
+    - Get back `PartyAwaitingShares` and a `Share`.
+    - Share your `Share`, and receive other parties' `Share`s.
+
+    - Call `receive_shares(share)` on your `PartyAwaitingShares`.
+    - Get back `Signature`. You are done!
+
+    For more information on each of these states and steps, see the [protocol for party state transitions](#protocol-for-party-state-transitions).
 
 ### Verifying
 
