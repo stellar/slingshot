@@ -17,7 +17,7 @@ impl Multikey {
         transcript.commit_u64(b"n", pubkeys.len() as u64);
 
         // Commit pubkeys into the transcript
-        // L = H(X_1 || X_2 || ... || X_n)
+        // <L> = H(X_1 || X_2 || ... || X_n)
         for X in &pubkeys {
             transcript.commit_point(b"P", &X.0);
         }
@@ -40,7 +40,7 @@ impl Multikey {
     }
 
     fn compute_factor(transcript: &Transcript, X_i: &VerificationKey) -> Scalar {
-        // a_i = H(L, X_i). Components of L have already been fed to transcript.
+        // a_i = H(<L>, X_i). Components of <L> have already been fed to transcript.
         let mut a_i_transcript = transcript.clone();
         a_i_transcript.commit_point(b"X_i", &X_i.0);
         a_i_transcript.challenge_scalar(b"a_i")

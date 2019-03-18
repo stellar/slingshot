@@ -1,6 +1,6 @@
 # Signatures: Engineering design doc
 
-This is a signature scheme for signing messages. In the first iteration of this design, we are considering a case where we want to sign a single message with one public key. This public key can be created from a single party's public and private key pair, or it can be from the aggregation of multiple public keys. 
+This is a signature scheme for signing messages. The first iteration describes the protocol for signing a single message with one public key. The public key can be created from a single party's private key, or it can be created from the aggregation of multiple public keys. 
 
 In future iterations, we can consider signing with public keys that are nested aggregations of public keys, and signing multiple messages in a way that is safe against Russell's attack.
 
@@ -31,18 +31,28 @@ B = e2f2ae0a6abc4e71a884a961c500515f58e30b6aa582dd8db6a65945e08d2d76
 
 ### Multikey
 
-Multikey creates transcript, commits pubkeys to transcript, and keeps transcript. Then allows functions to clone/fork the transcript to make per-key factors.
-TODO: expand
+Fields:
+- transcript: `Transcript`. All of the pubkeys that the multikey are created from are committed to this transcript. 
+- aggregated_key: `VerificationKey`
+
+Functions: 
+- `Multikey::new(...)`: detailed more in [key aggregation](#key-aggregation) section. 
+- `Multikey::factor_for_key(self, verification_key)`: computes the `a_i` factor, where `a_i = H(<L>, X_i)`. `<L>`, or the list of pukeys that go into the aggregated pubkey, has already been fed into `self.transcript`. Therefore, this function simply clones `self.transcript`, commits the verification key (`X_i`) into the transcript with label "X_i", and then squeezes the challenge scalar `a_i` from the transcript with label "a_i".
+- `Multikey::aggregated_key(self)`: returns the aggregated key stored in the multikey, `self.aggregated_key`.  
 
 ### Signature
 
-TODO
+A signature is comprised of a scalar `s`, and a RistrettoPoint `R`. In the simple Schnorr signature case, `s` represents the Schnorr signature scalar and `R` represents the nonce commitment. In the MuSig signature case, `s` represents the sum of the Schnorr signature scalars of each party, or `s = sum_i (s_i)`. `R` represents the sum of the nonce commitments of each party, or `R = sum_i (R_i)`. 
+
+In both the simple Schnorr signature and the MuSig signature cases, the signature verification is the same: `s * G == R + c * P`, where `G` is the base point, `c` is the challenge, and `P` is the public key.
 
 ## Operations
 
 ### Key Aggregation
 
-TODO
+Key aggregation happens in the `Multikey::new(pubkeys)` function. 
+
+(`<L> = H(X_1 || X_2 || ... || X_n`).
 
 ### Signing
 
