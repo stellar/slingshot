@@ -37,20 +37,20 @@ Fields:
 
 Functions: 
 - `Multikey::new(...)`: detailed more in [key aggregation](#key-aggregation) section. 
-- `Multikey::factor_for_key(self, verification_key)`: computes the `a_i` factor, where `a_i = H(<L>, X_i)`. `<L>`, or the list of pukeys that go into the aggregated pubkey, has already been fed into `self.transcript`. Therefore, this function simply clones `self.transcript`, commits the verification key (`X_i`) into the transcript with label "X_i", and then squeezes the challenge scalar `a_i` from the transcript with label "a_i".
+- `Multikey::factor_for_key(self, verification_key)`: computes the `a_i` factor, where `a_i = H(<L>, X_i)`. `<L>`, or the list of pukeys that go into the aggregated pubkey, has already been committed into `self.transcript`. Therefore, this function simply clones `self.transcript`, commits the verification key (`X_i`) into the transcript with label "X_i", and then squeezes the challenge scalar `a_i` from the transcript with label "a_i".
 - `Multikey::aggregated_key(self)`: returns the aggregated key stored in the multikey, `self.aggregated_key`.  
 
 ### Signature
 
 A signature is comprised of a scalar `s`, and a RistrettoPoint `R`. In the simple Schnorr signature case, `s` represents the Schnorr signature scalar and `R` represents the nonce commitment. In the MuSig signature case, `s` represents the sum of the Schnorr signature scalars of each party, or `s = sum_i (s_i)`. `R` represents the sum of the nonce commitments of each party, or `R = sum_i (R_i)`. 
 
-In both the simple Schnorr signature and the MuSig signature cases, the signature verification is the same: `s * G == R + c * P`, where `G` is the base point, `c` is the challenge, and `P` is the public key.
+In both the simple Schnorr signature and the MuSig signature cases, the signature verification is the same, and is detailed in the [verifying](#verifying) section.
 
 ## Operations
 
 ### Key Aggregation
 
-Key aggregation happens in the `Multikey::new(pubkeys)` function. 
+Key aggregation happens in the `Multikey::new(...)` function. 
 
 Input:
 - pubkeys: `Vec<VerificationKey>`. This is a list of compressed public keys that will be aggregated, as long as they can be decompressed successfully.
@@ -70,7 +70,21 @@ TODO
 
 ### Verifying
 
-TODO
+Signature verificaiton happens in the `Signature::verify(...)` function.
+
+Input: 
+- `&self`
+- transcript: `&Transcript` - the message to be signed should have been committed to the transcript beforehand. (TODO: pass in a mutable borrow of a transcript instead of just a borrow.)
+- P: `VerificationKey`
+
+Operation:
+- Mutably clone the trancript 
+- Make `c = H(X, R, m)`. Since the transcript should already have had the message `m` committed to it, the function only needs to commit `X` with label "P" (for pubkey) and `R` with label "R", and then get the challenge scalar `c` with label "c".
+- Decompress verification key `P`. If this fails, return `Err(VMError::InvalidPoint)`.
+- Check if `s * G == R + c * P`. `G` is the [base point](#base-point).
+
+Output:
+- `Ok(())` if verification succeeds, or `Err(VMError)` if the verification or point decompression fail.
 
 ## Protocol for party state transitions
 
@@ -108,7 +122,7 @@ Fields: none
 Function: `new(...)`
 
 Input: 
-- transcript: `&Transcript` - the message to be signed should have been fed to the transcript beforehand. (Future work: pass in a mutable borrow of a transcript instead of just a borrow.)
+- transcript: `&Transcript` - the message to be signed should have been committed to the transcript beforehand. (TODO: pass in a mutable borrow of a transcript instead of just a borrow.)
 - privkey: `Scalar`
 - multikey: `Multikey`
 - pubkeys: `Vec<VerificationKey>` - all the public keys that went into the multikey. The list is assumed to be in the same order as the upcoming lists of `NoncePrecommitment`s, `NonceCommitment`s, and `Share`s.
@@ -164,7 +178,7 @@ Input:
 Operation:
 - call `commit_nonce(...)` on each of `self.counterparties`, with the received `nonce_commitments`. This checks that the stored precommitments match the received commitments. If it succeeds, it will return `CounterpartyCommitted`s.
 - make `nonce_sum` = sum(`nonce_commitments`)
-- make `c` = challenge scalar after feeding `multikey.aggregated_key()` and `nonce_sum` into the transcript
+- make `c` = challenge scalar after committing `multikey.aggregated_key()` and `nonce_sum` into the transcript
 - make `a_i` = `multikey.factor_for_key(self.privkey)`
 - make `s_i` = `r_i + c * a_i * x_i`, where `x_i` = `self.privkey` and `r_i` = `self.nonce`
 
