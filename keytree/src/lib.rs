@@ -132,17 +132,15 @@ impl Xpub {
         let mut dk = [0u8; 32];
         dk.copy_from_slice(&pieces.1[..]);
 
-        match precompressed_pubkey.decompress() {
+        let point = match precompressed_pubkey.decompress() {
+            Some(p) => p,
             None => return None,
-            Some(p) => {
-                let point = p;
-                return Some(Xpub {
-                    point,
-                    dk,
-                    precompressed_pubkey,
-                });
-            }
-        }
+        };
+        Some(Xpub {
+            point,
+            dk,
+            precompressed_pubkey,
+        })
     }
 }
 
