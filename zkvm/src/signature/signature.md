@@ -58,7 +58,7 @@ Input:
 
 Operation:
 - Create a new transcript using the tag "ZkVM.aggregated-key". (TODO: remove the "ZkVM." if we make the signature crate separate from the ZkVM crate.)
-- Commit all the pubkeys to the transcript. This reflects the creation of the `<L>` encoding of the list of pubkeys detailed in the MuSig paper: `<L> = H(X_1 || X_2 || ... || X_n)`. The difference is that we do not need to squeeze `<L>` out of the transcript, since we can use the prepared transcript directly for future randomness.
+- Commit all the pubkeys to the transcript. The transcript state corresponds to the commitment `<L>` in the MuSig paper: `<L> = H(X_1 || X_2 || ... || X_n)`.
   (TODO: this sounds awkward, explain better?)
 - Create `aggregated_key = sum_i ( a_i * X_i )`. Iterate over the pubkeys, compute the factor `a_i = H(<L>, X_i)`, and add `a_i * X_i` to the aggregated key.
 
@@ -72,13 +72,12 @@ There are several paths to signing:
     Function: `Signature::sign_single(...)`
 
     Input: 
-    - transcript: `&Transcript` - the message to be signed should have been committed to the transcript beforehand. (TODO: pass in a mutable borrow of a transcript instead of a borrow.)
+    - transcript: `&mut Transcript` - the message to be signed should have been committed to the transcript beforehand.
     - privkey: `Scalar`
 
     Operation:
-    - Use the transcript to generate a random factor (the nonce, `r`), by committing to the privkey and passing in a `thread_rng`
+    - Clone the transcript state, mix it with the privkey and system-provided RNG to generate the nonce `r`. This makes the nonce uniquely bound to a message and private key, and also makes it non-deterministic to prevent "rowhammer" attacks.
     - Use the nonce to create a nonce commitment `R = r * G`
-    - Mutably clone the transcript
     - Make `c = H(X, R, m)`. Because `m` has already been fed into the transcript externally, we do this by committing `X = privkey * G` to the transcript with label "P" (for pubkey), committing `R` to the transcript with label "R", and getting the challenge scalar `c` with label "c".
     - Make `s = r + c * x` where `x = privkey`
 
@@ -94,11 +93,10 @@ Signature verificaiton happens in the `Signature::verify(...)` function.
 
 Input: 
 - `&self`
-- transcript: `&Transcript` - the message to be signed should have been committed to the transcript beforehand. (TODO: pass in a mutable borrow of a transcript instead of a borrow.)
+- transcript: `&mut Transcript` - the message to be signed should have been committed to the transcript beforehand.
 - P: `VerificationKey`
 
 Operation:
-- Mutably clone the trancript 
 - Make `c = H(X, R, m)`. Since the transcript should already have had the message `m` committed to it, the function only needs to commit `X` with label "P" (for pubkey) and `R` with label "R", and then get the challenge scalar `c` with label "c".
 - Decompress verification key `P`. If this fails, return `Err(VMError::InvalidPoint)`.
 - Check if `s * G == R + c * P`. `G` is the [base point](#base-point).
@@ -142,7 +140,7 @@ Fields: none
 Function: `new(...)`
 
 Input: 
-- transcript: `&Transcript` - the message to be signed should have been committed to the transcript beforehand. (TODO: pass in a mutable borrow of a transcript instead of a borrow.)
+- transcript: `&mut Transcript` - the message to be signed should have been committed to the transcript beforehand.
 - privkey: `Scalar`
 - multikey: `Multikey`
 - pubkeys: `Vec<VerificationKey>` - all the public keys that went into the multikey. The list is assumed to be in the same order as the upcoming lists of `NoncePrecommitment`s, `NonceCommitment`s, and `Share`s.
