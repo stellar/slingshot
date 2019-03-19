@@ -41,7 +41,7 @@ mod tests {
 
     use super::*;
     use crate::errors::VMError;
-    use crate::signature::prover::*;
+    use crate::signature::signer::*;
     use crate::signature::{multikey::Multikey, VerificationKey};
     use curve25519_dalek::ristretto::CompressedRistretto;
 
@@ -90,17 +90,21 @@ mod tests {
     }
 
     fn sign_helper(
-        priv_keys: Vec<Scalar>,
+        privkeys: Vec<Scalar>,
         multikey: Multikey,
         m: Vec<u8>,
     ) -> Result<Signature, VMError> {
         let mut transcript = Transcript::new(b"signing test");
         transcript.commit_bytes(b"message", &m);
+        let pubkeys: Vec<_> = privkeys
+            .iter()
+            .map(|privkey| VerificationKey((privkey * RISTRETTO_BASEPOINT_POINT).compress()))
+            .collect();
 
-        let (parties, precomms): (Vec<_>, Vec<_>) = priv_keys
+        let (parties, precomms): (Vec<_>, Vec<_>) = privkeys
             .clone()
             .into_iter()
-            .map(|x_i| Party::new(&transcript.clone(), x_i, multikey.clone()))
+            .map(|x_i| Party::new(&transcript.clone(), x_i, multikey.clone(), pubkeys.clone()))
             .unzip();
 
         let (parties, comms): (Vec<_>, Vec<_>) = parties
@@ -113,15 +117,9 @@ mod tests {
             .map(|p| p.receive_commitments(comms.clone()).unwrap())
             .unzip();
 
-        let pub_keys: Vec<_> = priv_keys
-            .iter()
-            .map(|priv_key| VerificationKey((priv_key * RISTRETTO_BASEPOINT_POINT).compress()))
-            .collect();
         let signatures: Vec<_> = parties
             .into_iter()
-            .map(|p: PartyAwaitingShares| {
-                p.receive_shares(shares.clone(), pub_keys.clone()).unwrap()
-            })
+            .map(|p: PartyAwaitingShares| p.receive_shares(shares.clone()).unwrap())
             .collect();
 
         // Check that signatures from all parties are the same

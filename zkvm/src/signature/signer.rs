@@ -1,6 +1,7 @@
 #![allow(non_snake_case)]
 
 use crate::errors::VMError;
+use crate::signature::counterparty::NonceCommitment;
 use crate::signature::counterparty::*;
 use crate::signature::multikey::Multikey;
 use crate::signature::musig::*;
@@ -55,7 +56,7 @@ impl Party {
         // Generate ephemeral keypair (r_i, R_i). r_i is a random nonce.
         let r_i = Scalar::random(&mut rng);
         // R_i = generator * r_i
-        let R_i = NonceCommitment(RISTRETTO_BASEPOINT_POINT * r_i);
+        let R_i = NonceCommitment::new(RISTRETTO_BASEPOINT_POINT * r_i);
         // Make H(R_i)
         let precommitment = R_i.precommit();
 
@@ -85,7 +86,7 @@ impl PartyAwaitingPrecommitments {
     ) -> (PartyAwaitingCommitments, NonceCommitment) {
         let counterparties = self
             .counterparties
-            .iter()
+            .into_iter()
             .zip(nonce_precommitments)
             .map(|(counterparty, precommitment)| counterparty.precommit_nonce(precommitment))
             .collect();
@@ -111,13 +112,13 @@ impl PartyAwaitingCommitments {
         // Check stored precommitments against received commitments
         let counterparties = self
             .counterparties
-            .iter()
-            .zip(nonce_commitments)
+            .into_iter()
+            .zip(&nonce_commitments)
             .map(|(counterparty, commitment)| counterparty.commit_nonce(commitment))
-            .collect()?;
+            .collect::<Result<_, _>>()?;
 
         // Make R = sum_i(R_i). nonce_commitments = R_i from all the parties.
-        let R: RistrettoPoint = nonce_commitments.iter().map(|R_i| R_i.0).sum();
+        let R = NonceCommitment::sum(&nonce_commitments);
 
         // Make c = H(X, R, m)
         // The message `m` should already have been fed into the transcript.
@@ -155,28 +156,15 @@ impl PartyAwaitingShares {
         Signature { s, R: self.R }
     }
 
-    pub fn receive_shares(
-        self,
-        shares: Vec<Scalar>,
-        pubkeys: Vec<VerificationKey>,
-    ) -> Result<Signature, VMError> {
+    pub fn receive_shares(self, shares: Vec<Scalar>) -> Result<Signature, VMError> {
         // Check that all shares are valid
-        for (i, s_i) in shares.iter().enumerate() {
-            let S_i = s_i * RISTRETTO_BASEPOINT_POINT;
-            let X_i = pubkeys[i];
-            let R_i = self.nonce_commitments[i].0;
+        let validated_shares = self
+            .counterparties
+            .iter()
+            .zip(shares)
+            .map(|(counterparty, share)| counterparty.sign(share, self.c, &self.multikey))
+            .collect::<Result<_, _>>()?;
 
-            // Make a_i = H(L, X_i)
-            let a_i = self.multikey.factor_for_key(&VerificationKey(X_i.0));
-
-            let X_i = X_i.0.decompress().ok_or(VMError::InvalidPoint)?;
-
-            // Check that S_i = R_i + c * a_i * X_i
-            if S_i != R_i + self.c * a_i * X_i {
-                return Err(VMError::MuSigShareError { index: i });
-            }
-        }
-
-        Ok(self.receive_trusted_shares(shares))
+        Ok(self.receive_trusted_shares(validated_shares))
     }
 }

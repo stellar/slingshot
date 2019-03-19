@@ -330,8 +330,8 @@ Input:
 Operation:
 - Verify that `s_i * G == R_i + c * a_i * X_i`.
   `s_i` = share, `G` = [base point](#base-point), `R_i` = self.commitment, `c` = challenge, `a_i` = `multikey.factor_for_key(self.pubkey)`, `X_i` = self.pubkey.
-- If verification succeeds, return `Ok((share, self.commitment))`
+- If verification succeeds, return `Ok(share)`
 - Else, return `Err(VMError::MuSigShareError)`
 
 Output:
-- `Result<(Scalar, NonceCommitment), VMError>`
+- `Result<Scalar, VMError>`

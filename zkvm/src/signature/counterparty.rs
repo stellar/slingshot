@@ -15,12 +15,20 @@ pub struct NoncePrecommitment([u8; 32]);
 pub struct NonceCommitment(RistrettoPoint);
 
 impl NonceCommitment {
-    fn precommit(&self) -> NoncePrecommitment {
+    pub fn new(commitment: RistrettoPoint) -> Self {
+        NonceCommitment(commitment)
+    }
+
+    pub fn precommit(&self) -> NoncePrecommitment {
         let mut h = Transcript::new(b"MuSig.nonce-precommit");
         h.commit_point(b"R", &self.0.compress());
         let mut precommitment = [0u8; 32];
         h.challenge_bytes(b"precommitment", &mut precommitment);
         NoncePrecommitment(precommitment)
+    }
+
+    pub fn sum(commitments: &Vec<Self>) -> RistrettoPoint {
+        commitments.iter().map(|R_i| R_i.0).sum()
     }
 }
 
@@ -54,7 +62,7 @@ impl Counterparty {
 impl CounterpartyPrecommitted {
     pub fn commit_nonce(
         self,
-        commitment: NonceCommitment,
+        commitment: &NonceCommitment,
     ) -> Result<CounterpartyCommitted, VMError> {
         // Check H(commitment) =? precommitment
         let received_precommitment = commitment.precommit();
@@ -66,7 +74,7 @@ impl CounterpartyPrecommitted {
         }
 
         Ok(CounterpartyCommitted {
-            commitment,
+            commitment: *commitment,
             pubkey: self.pubkey,
         })
     }
@@ -74,11 +82,11 @@ impl CounterpartyPrecommitted {
 
 impl CounterpartyCommitted {
     pub fn sign(
-        self,
+        &self,
         share: Scalar,
         challenge: Scalar,
         multikey: &Multikey,
-    ) -> Result<(Scalar, NonceCommitment), VMError> {
+    ) -> Result<Scalar, VMError> {
         // Check if s_i * G == R_i + c * a_i * X_i.
         // - s_i = share
         // - G = RISTRETTO_BASEPOINT_POINT
@@ -96,6 +104,6 @@ impl CounterpartyCommitted {
             });
         }
 
-        Ok((share, self.commitment))
+        Ok(share)
     }
 }
