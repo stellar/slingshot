@@ -259,7 +259,7 @@ CounterpartyCommitted{commitment, pubkey}
   ↓
 .sign(share, challenge, multikey)
   ↓
-s_i, R_i
+ s_i
 
 s_total = sum{s_i}
 R_total = sum{R_i}

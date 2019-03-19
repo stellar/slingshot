@@ -88,12 +88,12 @@ impl CounterpartyCommitted {
         multikey: &Multikey,
     ) -> Result<Scalar, VMError> {
         // Check if s_i * G == R_i + c * a_i * X_i.
-        // - s_i = share
-        // - G = RISTRETTO_BASEPOINT_POINT
-        // - R_i = self.commitment
-        // - c = challenge
-        // - a_i = multikey.factor_for_key(self.pubkey)
-        // - X_i = self.pubkey
+        //   s_i = share
+        //   G = RISTRETTO_BASEPOINT_POINT
+        //   R_i = self.commitment
+        //   c = challenge
+        //   a_i = multikey.factor_for_key(self.pubkey)
+        //   X_i = self.pubkey
         let S_i = share * RISTRETTO_BASEPOINT_POINT;
         let a_i = multikey.factor_for_key(&self.pubkey);
         let X_i = self.pubkey.0.decompress().ok_or(VMError::InvalidPoint)?;

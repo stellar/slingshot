@@ -7,7 +7,6 @@ use crate::signature::multikey::Multikey;
 use crate::signature::musig::*;
 use crate::signature::VerificationKey;
 use crate::transcript::TranscriptProtocol;
-
 use curve25519_dalek::constants::RISTRETTO_BASEPOINT_POINT;
 use curve25519_dalek::ristretto::RistrettoPoint;
 use curve25519_dalek::scalar::Scalar;
