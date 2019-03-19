@@ -747,7 +747,7 @@ where
         let p = &contract.predicate;
         self.delegate.verify_point_op(|| p.prove_disjunction(&preds))?;
 
-        contract.predicate = x_vec.remove(k as usize);
+        contract.predicate = preds.remove(k as usize);
         self.push_item(contract);
         Ok(())
     }
