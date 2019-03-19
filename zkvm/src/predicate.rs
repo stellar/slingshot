@@ -32,7 +32,6 @@ pub enum Predicate {
 
     /// Disjunction of n predicates.
     Or(PredicateDisjunction),
-    
 }
 
 #[derive(Clone, Debug)]
@@ -78,7 +77,10 @@ impl Predicate {
         PointOp {
             primary: Some(f),
             secondary: None,
-            arbitrary: vec![(Scalar::one(), preds[0].to_point()), (-Scalar::one(), self.to_point())],
+            arbitrary: vec![
+                (Scalar::one(), preds[0].to_point()),
+                (-Scalar::one(), self.to_point()),
+            ],
         }
     }
 
@@ -138,19 +140,24 @@ impl Predicate {
     pub fn disjunction(preds: Vec<Predicate>) -> Result<Self, VMError> {
         let point = {
             let f = Predicate::commit_disjunction(preds.iter().map(|p| p.to_point()));
-            let l = preds[0].to_point().decompress().ok_or(VMError::InvalidPoint)?;
+            let l = preds[0]
+                .to_point()
+                .decompress()
+                .ok_or(VMError::InvalidPoint)?;
             l + f * PedersenGens::default().B
         };
-        Ok(Predicate::Or(PredicateDisjunction{
+        Ok(Predicate::Or(PredicateDisjunction {
             preds: preds,
             precomputed_point: point.compress(),
         }))
     }
 
-    fn commit_disjunction<I>(preds: I) -> Scalar where 
-    I:IntoIterator, 
-    I::Item: Borrow<CompressedRistretto>,
-    I::IntoIter: ExactSizeIterator {
+    fn commit_disjunction<I>(preds: I) -> Scalar
+    where
+        I: IntoIterator,
+        I::Item: Borrow<CompressedRistretto>,
+        I::IntoIter: ExactSizeIterator,
+    {
         let mut t = Transcript::new(b"ZkVM.predicate");
         let iter = preds.into_iter();
         t.commit_u64(b"n", iter.len() as u64);
@@ -207,7 +214,10 @@ mod tests {
         let gens = PedersenGens::default();
 
         // dummy predicates
-        let preds = vec![Predicate::Opaque(gens.B.compress()), Predicate::Opaque(gens.B_blinding.compress())];
+        let preds = vec![
+            Predicate::Opaque(gens.B.compress()),
+            Predicate::Opaque(gens.B_blinding.compress()),
+        ];
 
         let pred = Predicate::disjunction(preds.clone()).unwrap();
         let op = pred.prove_disjunction(&preds);
@@ -219,7 +229,10 @@ mod tests {
         let gens = PedersenGens::default();
 
         // dummy predicates
-        let preds = vec![Predicate::Opaque(gens.B.compress()), Predicate::Opaque(gens.B_blinding.compress())];
+        let preds = vec![
+            Predicate::Opaque(gens.B.compress()),
+            Predicate::Opaque(gens.B_blinding.compress()),
+        ];
 
         let pred = Predicate::disjunction(preds.clone()).unwrap();
         let op = pred.prove_disjunction(&preds);
@@ -230,7 +243,10 @@ mod tests {
         let gens = PedersenGens::default();
 
         // dummy predicates
-        let preds = vec![Predicate::Opaque(gens.B_blinding.compress()), Predicate::Opaque(gens.B.compress())];
+        let preds = vec![
+            Predicate::Opaque(gens.B_blinding.compress()),
+            Predicate::Opaque(gens.B.compress()),
+        ];
 
         let pred = Predicate::Opaque(gens.B.compress());
         let op = pred.prove_disjunction(&preds);

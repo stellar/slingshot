@@ -736,7 +736,7 @@ where
 
     fn select(&mut self, n: u8, k: u8) -> Result<(), VMError> {
         if k >= n {
-            return Err(VMError::PredicateIndexInvalid)
+            return Err(VMError::PredicateIndexInvalid);
         }
 
         let mut preds: Vec<Predicate> = Vec::with_capacity(n as usize);
@@ -745,7 +745,8 @@ where
         }
         let mut contract = self.pop_item()?.to_contract()?;
         let p = &contract.predicate;
-        self.delegate.verify_point_op(|| p.prove_disjunction(&preds))?;
+        self.delegate
+            .verify_point_op(|| p.prove_disjunction(&preds))?;
 
         contract.predicate = preds.remove(k as usize);
         self.push_item(contract);

@@ -426,7 +426,6 @@ pub struct PredicateTree<'a> {
 }
 
 impl<'a> PredicateTree<'a> {
-
     /// Kth Predicate branch
     pub fn select(self, k: usize) -> Result<Self, VMError> {
         let preds = self.pred.to_disjunction()?;
@@ -440,7 +439,10 @@ impl<'a> PredicateTree<'a> {
             prog.push(pred.as_opaque());
         }
         prog.select(n as u8, k as u8);
-        Ok(Self {pred: selected, prog})
+        Ok(Self {
+            pred: selected,
+            prog,
+        })
     }
 
     /// Pushes program to the stack and calls the contract protected
