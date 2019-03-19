@@ -468,15 +468,15 @@ Each node in a predicate tree is formed with one of the following:
 XXX: Rewrote in the language of select, but not sure about the below (particularly the final paragraph, as well as whether there are n or n+1 predicates).
 
 Disjunction of two predicates is implemented using a commitment `f` that
-commits to _n_ [predicates](#predicate) `X_1`, `X_2`, ..., `X_n`
-as a scalar factor on a [primary base point](#base-points) `B` added to the predicate `X_1`:
+commits to _n_ [predicates](#predicate) `X_0`, `X_1`, ..., `X_{n-1}`
+as a scalar factor on a [primary base point](#base-points) `B` added to the predicate `X_0`:
 
 ```
 OR(X_1,...,X_N) = X_1 + f(X_1, ..., X_N)·B
 ```
 
 Commitment scheme is defined using the [transcript](#transcript) protocol
-by committing compressed 32-byte points `X_1`, `X_2`, ..., `X_n` and squeezing a scalar
+by committing compressed 32-byte points `X_0`, `X_1`, ..., `X_{n-1}` and squeezing a scalar
 that is bound to all `n` predicates:
 
 ```
@@ -488,10 +488,10 @@ f = T.challenge_scalar("f")
 OR = X[0] + f·B
 ``` 
 
-The choice between the branches is performed using the [`select:n:k`](#select) instruction, where `n` represents the number of predicates and k the chosen branch.
+The choice between the branches is performed using the [`select:n:k`](#select) instruction, where `n` represents the number of predicates and k the index of the chosen branch.
 
-Disjunction allows signing ([`signtx`](#signtx), [`delegate`](#delegate)) for the [key](#verification-key) `X_1` without
-revealing the alternative predicate `X_k` using the adjusted secret scalar `dlog(X_1) + f(X_1,X_k)`.
+Disjunction allows signing ([`signtx`](#signtx), [`delegate`](#delegate)) for the [key](#verification-key) `X_0` without
+revealing the alternative predicate `X_k` using the adjusted secret scalar `dlog(X_0) + f(X_0,...,X_{n-1})`.
 
 
 ### Program predicate
@@ -1524,13 +1524,13 @@ Fails if either of the top two item is not a [data](#data-type) or
 the third-from-the-top is not a [contract](#contract-type).
 
 ### select 
-_contract(P) X1 ... Xn_ **select:_n_:_k_** → _contract(Xk)_
+_contract(P) X0 ... X{n-1}_ **select:_n_:_k_** → _contract(Xk)_
 
-1. Pops all N [predicates](#predicate) `X_1`, `X_2`, ..., `X_n` (in that order) and a [contract] (#contract-type) `contract`.
+1. Pops all N [predicates](#predicate) `X_0`, `X_1`, ..., `X_{n-1}` (in that order) and a [contract] (#contract-type) `contract`.
 2. Reads the [predicate](#predicate) `P` from the contract.
-3. Forms a statement for [predicate disjunction](#predicate-disjunction) of `X_1` and `X_k` being equal to `P`:
+3. Forms a statement for [predicate disjunction](#predicate-disjunction) of `X_0,...X_{n-1}` being equal to `P`:
     ```
-    0 == -P + X_1 + f(X_1, X_k)·B
+    0 == -P + X_0 + f(X_0, ..., X_{n-1})·B
     ```
 4. Adds the statement to the [deferred point operations](#deferred-point-operations).
 5. Replaces the contract's predicate with `X_k` and pushes the contract back onto the stack.

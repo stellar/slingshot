@@ -201,20 +201,7 @@ mod tests {
         let op = pred.prove_program_predicate(&bytecode(&prog2), &[]);
         assert!(op.verify().is_err());
     }
-
-    // #[test]
-    // fn valid_disjunction() {
-    //     let gens = PedersenGens::default();
-
-    //     // dummy predicates
-    //     let left = Predicate::Opaque(gens.B.compress());
-    //     let right = Predicate::Opaque(gens.B_blinding.compress());
-
-    //     let pred = left.clone().or(right.clone()).unwrap();
-    //     let op = pred.prove_or(&left, &right);
-    //     assert!(op.verify().is_ok());
-    // }
-
+    
     #[test]
     fn valid_disjunction1() {
         let gens = PedersenGens::default();
@@ -241,7 +228,7 @@ mod tests {
         let second = Predicate::Opaque(gens.B_blinding.compress());
         preds.push(second);
         preds.push(first);
-        
+
         let pred = Predicate::disjunction(preds.clone()).unwrap();
         let op = pred.prove_disjunction(preds);
         assert!(op.verify().is_ok());
@@ -260,5 +247,14 @@ mod tests {
         let pred = Predicate::Opaque(gens.B.compress());
         let op = pred.prove_disjunction(preds);
         assert!(op.verify().is_err());
+    }
+
+    fn invalid_disjunction2() {
+        let gens = PedersenGens::default();
+
+        // dummy predicates
+        let mut preds: Vec<Predicate> = Vec::with_capacity(3);
+        let first = Predicate::Opaque(gens.B.compress());
+        let second = Predicate::Opaque(gens.B_blinding.compress());
     }
 }
