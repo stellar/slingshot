@@ -7,7 +7,6 @@ use serde::de::Visitor;
 use serde::{self, Deserialize, Deserializer, Serialize, Serializer};
 use spacesuit;
 use spacesuit::BitRange;
-use std::cmp;
 use std::iter::FromIterator;
 use std::mem;
 
@@ -740,40 +739,9 @@ where
         Ok(())
     }
 
-    fn left_or_right<F>(&mut self, assign: F) -> Result<(), VMError>
-    where
-        F: FnOnce(&mut Contract, Predicate, Predicate) -> (),
-    {
-        let r = self.pop_item()?.to_data()?.to_predicate()?;
-        let l = self.pop_item()?.to_data()?.to_predicate()?;
-
-        let mut contract = self.pop_item()?.to_contract()?;
-        let p = &contract.predicate;
-
-        self.delegate.verify_point_op(|| p.prove_or(&l, &r))?;
-
-        assign(&mut contract, l, r);
-
-        self.push_item(contract);
-        Ok(())
-    }
-
-    fn left(&mut self) -> Result<(), VMError> {
-        self.left_or_right(|contract, left, _| {
-            contract.predicate = left;
-        })
-    }
-
-    fn right(&mut self) -> Result<(), VMError> {
-        self.left_or_right(|contract, _, right| {
-            contract.predicate = right;
-        })
-    }
-
     fn select(&mut self, n: u8, k: u8) -> Result<(), VMError> {
-        let upper_bound = cmp::min(256, self.stack.len() + 1) as u8;
-        if n > upper_bound || k > upper_bound {
-            return Err(VMError::StackUnderflow)
+        if k >= n {
+            return Err(VMError::PredicateIndexInvalid)
         }
 
         let mut x_vec: Vec<Predicate> = Vec::with_capacity(n as usize);
@@ -782,10 +750,10 @@ where
         }
         let mut contract = self.pop_item()?.to_contract()?;
         let p = &contract.predicate;
-        
-        self.delegate.verify_point_op(|| p.prove_or(&x_vec[0], &x_vec[k as usize]))?;
+        let pred = x_vec[k as usize].clone();
+        self.delegate.verify_point_op(|| p.prove_disjunction(x_vec))?;
 
-        contract.predicate = x_vec[k as usize];
+        contract.predicate = pred;
         self.push_item(contract);
         Ok(())
     }

@@ -7,6 +7,7 @@ use bulletproofs::PedersenGens;
 use curve25519_dalek::ristretto::CompressedRistretto;
 use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
+use std::borrow::Borrow;
 
 use crate::encoding;
 use crate::errors::VMError;
@@ -29,14 +30,14 @@ pub enum Predicate {
     /// Representation of a predicate as commitment to a program and blinding factor.
     Program(Program, Vec<u8>),
 
-    /// Disjunction of two predicates.
-    Or(Box<PredicateDisjunction>),
+    /// Disjunction of n predicates.
+    Or(PredicateDisjunction),
+    
 }
 
 #[derive(Clone, Debug)]
 pub struct PredicateDisjunction {
-    left: Predicate,
-    right: Predicate,
+    preds: Vec<Predicate>,
     // We precompute the disjunction predicate when composing it via `Predicate::or()`,
     // so that we can keep `to_point`/`encode` methods non-failable across all types.
     precomputed_point: CompressedRistretto,
@@ -68,18 +69,16 @@ impl Predicate {
         encoding::write_point(&self.to_point(), prog);
     }
 
-    /// Verifies whether the current predicate is a disjunction of two others.
+    /// Verifies whether the current predicate is a disjunction of n others.
     /// Returns a `PointOp` instance that can be verified in a batch with other operations.
-    pub fn prove_or(&self, left: &Predicate, right: &Predicate) -> PointOp {
-        let l = left.to_point();
-        let r = right.to_point();
-        let f = Self::commit_or(l, r);
+    pub fn prove_disjunction(&self, preds: Vec<Predicate>) -> PointOp {
+        let f = Self::commit_disjunction(preds.iter().map(|p| p.to_point()));
 
-        // P = L + f*B
+        // P = X[0] + f*B
         PointOp {
             primary: Some(f),
             secondary: None,
-            arbitrary: vec![(Scalar::one(), l), (-Scalar::one(), self.to_point())],
+            arbitrary: vec![(Scalar::one(), preds[0].to_point()), (-Scalar::one(), self.to_point())],
         }
     }
 
@@ -115,9 +114,9 @@ impl Predicate {
     }
 
     /// Downcasts the predicate to a disjunction.
-    pub fn to_disjunction(self) -> Result<(Predicate, Predicate), VMError> {
+    pub fn to_disjunction(self) -> Result<Vec<Predicate>, VMError> {
         match self {
-            Predicate::Or(d) => Ok((d.left, d.right)),
+            Predicate::Or(d) => Ok(d.preds),
             _ => Err(VMError::TypeNotDisjunction),
         }
     }
@@ -135,25 +134,29 @@ impl Predicate {
         Predicate::Opaque(self.to_point())
     }
 
-    /// Creates a disjunction of two predicates.
-    pub fn or(self, right: Predicate) -> Result<Self, VMError> {
+    /// Creates a disjunction of a vector of predicates.
+    pub fn disjunction(preds: Vec<Predicate>) -> Result<Self, VMError> {
         let point = {
-            let l = self.to_point();
-            let f = Predicate::commit_or(l, right.to_point());
-            let l = l.decompress().ok_or(VMError::InvalidPoint)?;
+            let f = Predicate::commit_disjunction(preds.iter().map(|p| p.to_point()));
+            let l = preds[0].to_point().decompress().ok_or(VMError::InvalidPoint)?;
             l + f * PedersenGens::default().B
         };
-        Ok(Predicate::Or(Box::new(PredicateDisjunction {
-            left: self,
-            right: right,
+        Ok(Predicate::Or(PredicateDisjunction{
+            preds: preds,
             precomputed_point: point.compress(),
-        })))
+        }))
     }
 
-    fn commit_or(left: CompressedRistretto, right: CompressedRistretto) -> Scalar {
+    fn commit_disjunction<I>(preds: I) -> Scalar where 
+    I:IntoIterator, 
+    I::Item: Borrow<CompressedRistretto>,
+    I::IntoIter: ExactSizeIterator {
         let mut t = Transcript::new(b"ZkVM.predicate");
-        t.commit_point(b"L", &left);
-        t.commit_point(b"R", &right);
+        let iter = preds.into_iter();
+        t.commit_u64(b"n", iter.len() as u64);
+        for x in iter {
+            t.commit_point(b"X", x.borrow());
+        }
         t.challenge_scalar(b"f")
     }
 
@@ -199,42 +202,63 @@ mod tests {
         assert!(op.verify().is_err());
     }
 
+    // #[test]
+    // fn valid_disjunction() {
+    //     let gens = PedersenGens::default();
+
+    //     // dummy predicates
+    //     let left = Predicate::Opaque(gens.B.compress());
+    //     let right = Predicate::Opaque(gens.B_blinding.compress());
+
+    //     let pred = left.clone().or(right.clone()).unwrap();
+    //     let op = pred.prove_or(&left, &right);
+    //     assert!(op.verify().is_ok());
+    // }
+
     #[test]
-    fn valid_disjunction() {
+    fn valid_disjunction1() {
         let gens = PedersenGens::default();
 
         // dummy predicates
-        let left = Predicate::Opaque(gens.B.compress());
-        let right = Predicate::Opaque(gens.B_blinding.compress());
+        let mut preds: Vec<Predicate> = Vec::with_capacity(2);
+        let first = Predicate::Opaque(gens.B.compress());
+        let second = Predicate::Opaque(gens.B_blinding.compress());
+        preds.push(first);
+        preds.push(second);
 
-        let pred = left.clone().or(right.clone()).unwrap();
-        let op = pred.prove_or(&left, &right);
+        let pred = Predicate::disjunction(preds.clone()).unwrap();
+        let op = pred.prove_disjunction(preds);
         assert!(op.verify().is_ok());
     }
 
+    #[test]
+    fn valid_disjunction2() {
+        let gens = PedersenGens::default();
+
+        // dummy predicates
+        let mut preds: Vec<Predicate> = Vec::with_capacity(2);
+        let first = Predicate::Opaque(gens.B.compress());
+        let second = Predicate::Opaque(gens.B_blinding.compress());
+        preds.push(second);
+        preds.push(first);
+        
+        let pred = Predicate::disjunction(preds.clone()).unwrap();
+        let op = pred.prove_disjunction(preds);
+        assert!(op.verify().is_ok());
+    }
     #[test]
     fn invalid_disjunction1() {
         let gens = PedersenGens::default();
 
         // dummy predicates
-        let left = Predicate::Opaque(gens.B.compress());
-        let right = Predicate::Opaque(gens.B_blinding.compress());
+        let mut preds: Vec<Predicate> = Vec::with_capacity(2);
+        let first = Predicate::Opaque(gens.B.compress());
+        let second = Predicate::Opaque(gens.B_blinding.compress());
+        preds.push(first);
+        preds.push(second);
 
         let pred = Predicate::Opaque(gens.B.compress());
-        let op = pred.prove_or(&left, &right);
-        assert!(op.verify().is_err());
-    }
-
-    #[test]
-    fn invalid_disjunction2() {
-        let gens = PedersenGens::default();
-
-        // dummy predicates
-        let left = Predicate::Opaque(gens.B.compress());
-        let right = Predicate::Opaque(gens.B_blinding.compress());
-
-        let pred = left.clone().or(right.clone()).unwrap();
-        let op = pred.prove_or(&right, &left);
+        let op = pred.prove_disjunction(preds);
         assert!(op.verify().is_err());
     }
 }

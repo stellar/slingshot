@@ -94,12 +94,11 @@ pub enum Opcode {
     Log = 0x1d,
     Signtx = 0x1e,
     Call = 0x1f,
-    Left = 0x20,
-    Right = 0x21,
+    Select = 0x20,
     Delegate = MAX_OPCODE,
 }
 
-const MAX_OPCODE: u8 = 0x22;
+const MAX_OPCODE: u8 = 0x21;
 
 impl Opcode {
     /// Converts the opcode to `u8`.
@@ -208,8 +207,11 @@ impl Instruction {
             Opcode::Log => Ok(Instruction::Log),
             Opcode::Signtx => Ok(Instruction::Signtx),
             Opcode::Call => Ok(Instruction::Call),
-            Opcode::Left => Ok(Instruction::Left),
-            Opcode::Right => Ok(Instruction::Right),
+            Opcode::Select => {
+                let n = program.read_u8()?;
+                let k = program.read_u8()?;
+                Ok(Instruction::Select(n, k))
+            }
             Opcode::Delegate => Ok(Instruction::Delegate),
         }
     }
@@ -275,8 +277,11 @@ impl Instruction {
             Instruction::Log => write(Opcode::Log),
             Instruction::Signtx => write(Opcode::Signtx),
             Instruction::Call => write(Opcode::Call),
-            Instruction::Left => write(Opcode::Left),
-            Instruction::Right => write(Opcode::Right),
+            Instruction::Select(n, k) => {
+                write(Opcode::Select);
+                encoding::write_u8(*n, program);
+                encoding::write_u8(*k, program);
+            }
             Instruction::Delegate => write(Opcode::Delegate),
             Instruction::Ext(x) => program.push(*x),
         };
@@ -298,6 +303,13 @@ macro_rules! def_op {
              self
         }
     );
+    ($func_name:ident, $op:ident, $type1:ty, $type2:ty) => (
+           /// Adds a `$func_name` instruction.
+           pub fn $func_name(&mut self, arg1: $type1, arg2: $type2) -> &mut Program{
+             self.0.push(Instruction::$op(arg1, arg2));
+             self
+        }
+    );
 }
 
 impl Program {
@@ -306,6 +318,7 @@ impl Program {
     def_op!(and, And);
     def_op!(borrow, Borrow);
     def_op!(call, Call);
+    def_op!(cloak, Cloak, usize, usize);
     def_op!(r#const, Const);
     def_op!(contract, Contract, usize);
     def_op!(delegate, Delegate);
@@ -317,7 +330,6 @@ impl Program {
     def_op!(import, Import);
     def_op!(input, Input);
     def_op!(issue, Issue);
-    def_op!(left, Left);
     def_op!(log, Log);
     def_op!(maxtime, Maxtime);
     def_op!(mintime, Mintime);
@@ -328,8 +340,8 @@ impl Program {
     def_op!(output, Output, usize);
     def_op!(range, Range, BitRange);
     def_op!(retire, Retire);
-    def_op!(right, Right);
     def_op!(roll, Roll, usize);
+    def_op!(select, Select, u8, u8);
     def_op!(sign_tx, Signtx);
     def_op!(unblind, Unblind);
     def_op!(var, Var);
@@ -385,12 +397,6 @@ impl Program {
         self
     }
 
-    /// Adds a `cloak` instruction for `m` inputs and `n` outputs.
-    pub fn cloak(&mut self, m: usize, n: usize) -> &mut Program {
-        self.0.push(Instruction::Cloak(m, n));
-        self
-    }
-
     /// Takes predicate and closure to add choose operations for
     /// predicate tree traversal.
     pub fn choose_predicate<F, T>(
@@ -416,22 +422,21 @@ pub struct PredicateTree<'a> {
 }
 
 impl<'a> PredicateTree<'a> {
-    /// Left Predicate branch
-    pub fn left(self) -> Result<Self, VMError> {
-        let (l, r) = self.pred.to_disjunction()?;
+
+    /// Kth Predicate branch
+    pub fn select(self, k: usize) -> Result<Self, VMError> {
+        let preds = self.pred.to_disjunction()?;
+        let n = preds.len();
+        let selected = preds[k].clone();
+        if k >= n {
+            return Err(VMError::PredicateIndexInvalid);
+        }
         let prog = self.prog;
-        prog.push(l.as_opaque()).push(r.as_opaque()).left();
-
-        Ok(Self { pred: l, prog })
-    }
-
-    /// Right Predicate branch
-    pub fn right(self) -> Result<Self, VMError> {
-        let (l, r) = self.pred.to_disjunction()?;
-        let prog = self.prog;
-        prog.push(l.as_opaque()).push(r.as_opaque()).right();
-
-        Ok(Self { pred: r, prog })
+        for pred in preds.iter() {
+            prog.push(pred.as_opaque());
+        }
+        prog.select(n as u8, k as u8);
+        Ok(Self {pred: selected, prog})
     }
 
     /// Pushes program to the stack and calls the contract protected
