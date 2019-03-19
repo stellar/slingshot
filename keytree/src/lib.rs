@@ -66,15 +66,15 @@ impl Xprv {
             return None;
         }
 
-        let pieces = bytes.split_at(32);
+        let (scslice, dkslice) = bytes.split_at(32);
         let mut scalar_bytes = [0u8; 32];
-        scalar_bytes.copy_from_slice(&pieces.0[..]);
+        scalar_bytes.copy_from_slice(&scslice[..]);
         let scalar = match Scalar::from_canonical_bytes(scalar_bytes) {
             Some(x) => x,
             None => return None,
         };
         let mut dk = [0u8; 32];
-        dk.copy_from_slice(&pieces.1[..]);
+        dk.copy_from_slice(&dkslice[..]);
         let precompressed_pubkey = (scalar * &constants::RISTRETTO_BASEPOINT_POINT).compress();
 
         return Some(Xprv {
@@ -128,9 +128,9 @@ impl Xpub {
         }
 
         let (pkslice, dkslice) = bytes.split_at(32);
-        let precompressed_pubkey = CompressedRistretto::from_slice(&pieces.0[..]);
+        let precompressed_pubkey = CompressedRistretto::from_slice(&pkslice[..]);
         let mut dk = [0u8; 32];
-        dk.copy_from_slice(&pieces.1[..]);
+        dk.copy_from_slice(&dkslice[..]);
 
         let point = match precompressed_pubkey.decompress() {
             Some(p) => p,
