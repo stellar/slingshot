@@ -127,7 +127,7 @@ impl Xpub {
             return None;
         }
 
-        let pieces = bytes.split_at(32);
+        let (pkslice, dkslice) = bytes.split_at(32);
         let precompressed_pubkey = CompressedRistretto::from_slice(&pieces.0[..]);
         let mut dk = [0u8; 32];
         dk.copy_from_slice(&pieces.1[..]);
