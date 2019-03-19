@@ -13,15 +13,15 @@ pub struct PatriciaTree {
 /// Specifies a neighbor in the proof of inclusion.
 #[derive(Clone, Debug)]
 pub enum PatriciaNeighbor {
-    /// Left
+    /// Hash of left subtree
     Left([u8; 32]),
-    /// Right
+    /// Hash of right subtree
     Right([u8; 32]),
 }
 
 struct Node {
     /// Data held by this node
-    item: Option<PatriciaItem>,
+    item: Option<Item>,
     /// Hash of the data in this node (if a leaf),
     /// or of the children concatenated
     hash: [u8; 32],
@@ -30,16 +30,19 @@ struct Node {
 }
 
 #[derive(Clone)]
-struct PatriciaItem {
+struct Item {
     /// Key contained at this item: with the appropriate
     /// bits included, represents the data represented
     /// by this path of the Patricia tree.
-    key: &'static [u8],
+    key: [u8; 32],
+
+    // Position of the last byte to include in the key.
+    byte_pos: usize,
 
     /// Position of the last bit to include in the key, starting
     /// from the most-significant bit. An offset of 7 includes
     /// the whole bit
-    bits: u8,
+    bit_pos: u8,
 }
 
 impl PatriciaTree {
@@ -52,7 +55,7 @@ impl PatriciaTree {
     }
 
     /// Inserts an item into the tree.
-    pub fn insert(self, item: &'static [u8]) -> Result<Self, VMError> {
+    pub fn insert(self, item: [u8; 32]) -> Result<Self, VMError> {
         Ok(Self {
             root: self.root.insert(item)?,
             size: self.size + 1,
@@ -60,7 +63,7 @@ impl PatriciaTree {
     }
 
     /// Removes an item from the tree.
-    pub fn remove(self, item: &'static [u8]) -> Result<Self, VMError> {
+    pub fn remove(self, item: [u8; 32]) -> Result<Self, VMError> {
         let root = match self.root.remove(item)? {
             Some(r) => r,
             None => Node::empty(),
@@ -78,7 +81,7 @@ impl PatriciaTree {
     }
 
     /// Returns a path of inclusion for the given item.
-    pub fn build_path(&self, item: &'static [u8]) -> Result<Vec<PatriciaNeighbor>, VMError> {
+    pub fn build_path(&self, item: [u8; 32]) -> Result<Vec<PatriciaNeighbor>, VMError> {
         let mut path = Vec::new();
         self.root.build_path(item, &mut path)?;
         Ok(path)
@@ -87,11 +90,11 @@ impl PatriciaTree {
     /// Takes an item, path of inclusion, and Merkle root and verifies the
     /// path of inclusion.
     pub fn verify_path(
-        item: &'static [u8],
+        item: [u8; 32],
         proof: Vec<PatriciaNeighbor>,
         root: &[u8; 32],
     ) -> Result<(), VMError> {
-        let insert_item = PatriciaItem { key: item, bits: 7 };
+        let insert_item = Item::leaf(item);
         let mut result = hash_leaf(&insert_item);
         for node in proof.iter() {
             let mut t = Transcript::new(b"ZkVM.patricia");
@@ -124,7 +127,7 @@ impl Node {
         }
     }
 
-    fn leaf(item: PatriciaItem) -> Self {
+    fn leaf(item: Item) -> Self {
         Self {
             hash: hash_leaf(&item),
             item: Some(item),
@@ -132,27 +135,30 @@ impl Node {
         }
     }
 
-    fn insert(self, insert: &'static [u8]) -> Result<Node, VMError> {
-        let item = &self.item.clone();
+    fn insert(self, insert: [u8; 32]) -> Result<Node, VMError> {
         let is_child = self.children.is_some();
+        if self.item.is_none() {
+            return Ok(Node::leaf(Item::leaf(insert)));
+        }
+        let item = self.item.clone();
         match (item, is_child) {
             // Root or empty node
             (None, _) => {
-                return Ok(Node::leaf(PatriciaItem::leaf(insert)));
+                return Ok(Node::leaf(Item::leaf(insert)));
             }
             // Leaf node
             (Some(i), false) => {
-                return self.insert_leaf(insert, i);
+                return self.insert_leaf(insert, &i);
             }
             // Intermediary node
             (Some(i), true) => {
-                return self.insert_intermediate(insert, i);
+                return self.insert_intermediate(insert, &i);
             }
         }
     }
 
-    fn insert_leaf(self, insert: &'static [u8], item: &PatriciaItem) -> Result<Node, VMError> {
-        if item.equals(insert) {
+    fn insert_leaf(self, insert: [u8; 32], item: &Item) -> Result<Node, VMError> {
+        if item.equals(&insert) {
             return Ok(self);
         }
         if item.is_prefix(&insert) {
@@ -163,62 +169,62 @@ impl Node {
         let (byte, bit) = item
             .last_matching_bit(&insert)
             .ok_or(VMError::NoMatchingBits)?;
-        let matching_bytes = &item.key[..byte + 1];
 
         // Construct new children
         let new_child = Node::leaf(item.clone());
-        let insert_item = PatriciaItem::leaf(insert);
+        let insert_item = Item::leaf(insert);
         let insert_child = Node::leaf(insert_item);
 
         // Add children to parent
-        if bit_after(&item.key, byte, bit) == 0 {
-            return Ok(Node {
-                item: Some(PatriciaItem {
-                    key: matching_bytes,
-                    bits: bit,
-                }),
-                hash: hash_node(&new_child, &insert_child),
-                children: Some((Box::new(new_child), Box::new(insert_child))),
-            });
-        } else {
-            return Ok(Node {
-                item: Some(PatriciaItem {
-                    key: matching_bytes,
-                    bits: bit,
-                }),
-                hash: hash_node(&insert_child, &new_child),
-                children: Some((Box::new(insert_child), Box::new(new_child))),
-            });
-        }
+        let parent_item = Item {
+            key: item.key,
+            byte_pos: byte,
+            bit_pos: bit,
+        };
+        match bit_after(&item.key, byte, bit) {
+            0 => {
+                return Ok(Node {
+                    item: Some(parent_item),
+                    hash: hash_node(&new_child, &insert_child),
+                    children: Some((Box::new(new_child), Box::new(insert_child))),
+                });
+            }
+            _ => {
+                return Ok(Node {
+                    item: Some(parent_item),
+                    hash: hash_node(&insert_child, &new_child),
+                    children: Some((Box::new(insert_child), Box::new(new_child))),
+                });
+            }
+        };
     }
 
-    fn insert_intermediate(
-        self,
-        insert: &'static [u8],
-        item: &PatriciaItem,
-    ) -> Result<Node, VMError> {
-        if item.equals(insert) {
+    fn insert_intermediate(self, insert: [u8; 32], item: &Item) -> Result<Node, VMError> {
+        if item.equals(&insert) {
             return Ok(self);
         }
 
         // If the prefix matches, recursively insert into children
         if item.is_prefix(&insert) {
             if let Some((l, r)) = self.children {
-                if bit_after(&insert, item.key.len() - 1, item.bits) == 0 {
-                    let left = l.insert(insert)?;
-                    return Ok(Node {
-                        item: Some(item.clone()),
-                        hash: hash_node(&left, &r),
-                        children: Some((Box::new(left), r)),
-                    });
-                } else {
-                    let right = r.insert(insert)?;
-                    return Ok(Node {
-                        item: Some(item.clone()),
-                        hash: hash_node(&l, &right),
-                        children: Some((l, Box::new(right))),
-                    });
-                }
+                match bit_after(&insert, item.byte_pos, item.bit_pos) {
+                    0 => {
+                        let left = l.insert(insert)?;
+                        return Ok(Node {
+                            item: Some(item.clone()),
+                            hash: hash_node(&left, &r),
+                            children: Some((Box::new(left), r)),
+                        });
+                    }
+                    _ => {
+                        let right = r.insert(insert)?;
+                        return Ok(Node {
+                            item: Some(item.clone()),
+                            hash: hash_node(&l, &right),
+                            children: Some((l, Box::new(right))),
+                        });
+                    }
+                };
             }
             return Err(VMError::PatriciaNodeNotFound);
         }
@@ -227,13 +233,13 @@ impl Node {
         let (byte, bit) = item
             .last_matching_bit(&insert)
             .ok_or(VMError::NoMatchingBits)?;
-        let matching_bytes = &item.key[..byte + 1];
-        let matching_item = PatriciaItem {
-            key: matching_bytes,
-            bits: bit,
+        let matching_item = Item {
+            key: item.key,
+            byte_pos: byte,
+            bit_pos: bit,
         };
 
-        let insert_child = Node::leaf(PatriciaItem::leaf(insert));
+        let insert_child = Node::leaf(Item::leaf(insert));
         if bit_after(&item.key, byte, bit) == 0 {
             return Ok(Node {
                 item: Some(matching_item),
@@ -249,17 +255,16 @@ impl Node {
         }
     }
 
-    fn remove(self, remove: &'static [u8]) -> Result<Option<Node>, VMError> {
-        let item = &self.item.clone();
+    fn remove(self, remove: [u8; 32]) -> Result<Option<Node>, VMError> {
         let is_child = self.children.is_some();
-        match (item, is_child) {
+        match (&self.item, is_child) {
             // Empty node, cannot remove
             (None, _) => {
                 return Err(VMError::PatriciaNodeNotFound);
             }
             // Leaf node
             (Some(i), false) => {
-                if i.equals(remove) {
+                if i.equals(&remove) {
                     return Ok(None);
                 }
                 return Err(VMError::PatriciaNodeNotFound);
@@ -268,31 +273,34 @@ impl Node {
             (Some(i), true) => {
                 if i.is_prefix(&remove) {
                     if let Some((l, r)) = self.children {
-                        if bit_after(&remove, i.key.len() - 1, i.bits) == 0 {
-                            let l = l.remove(remove)?;
-                            match l {
-                                Some(l) => {
-                                    return Ok(Some(Node {
-                                        item: Some(i.clone()),
-                                        hash: hash_node(&l, &r),
-                                        children: Some((Box::new(l), r)),
-                                    }));
+                        match bit_after(&remove, i.byte_pos, i.bit_pos) {
+                            0 => {
+                                let l = l.remove(remove)?;
+                                match l {
+                                    Some(l) => {
+                                        return Ok(Some(Node {
+                                            item: Some(i.clone()),
+                                            hash: hash_node(&l, &r),
+                                            children: Some((Box::new(l), r)),
+                                        }));
+                                    }
+                                    None => return Ok(Some(*r)),
                                 }
-                                None => return Ok(Some(*r)),
                             }
-                        } else {
-                            let r = r.remove(remove)?;
-                            match r {
-                                Some(r) => {
-                                    return Ok(Some(Node {
-                                        item: Some(i.clone()),
-                                        hash: hash_node(&l, &r),
-                                        children: Some((l, Box::new(r))),
-                                    }));
+                            _ => {
+                                let r = r.remove(remove)?;
+                                match r {
+                                    Some(r) => {
+                                        return Ok(Some(Node {
+                                            item: Some(i.clone()),
+                                            hash: hash_node(&l, &r),
+                                            children: Some((l, Box::new(r))),
+                                        }));
+                                    }
+                                    None => return Ok(Some(*l)),
                                 }
-                                None => return Ok(Some(*l)),
                             }
-                        }
+                        };
                     }
                 }
                 return Err(VMError::PatriciaNodeNotFound);
@@ -302,18 +310,21 @@ impl Node {
 
     fn build_path(
         &self,
-        item: &'static [u8],
+        item: [u8; 32],
         result: &mut Vec<PatriciaNeighbor>,
     ) -> Result<(), VMError> {
         match (&self.item, &self.children) {
             (Some(i), Some((l, r))) => {
-                if i.is_prefix(item) {
-                    if bit_after(item, i.key.len() - 1, i.bits) == 0 {
-                        result.insert(0, PatriciaNeighbor::Right(r.hash));
-                        return l.build_path(item, result);
-                    } else {
-                        result.insert(0, PatriciaNeighbor::Left(l.hash));
-                        return r.build_path(item, result);
+                if i.is_prefix(&item) {
+                    match bit_after(&item, i.byte_pos, i.bit_pos) {
+                        0 => {
+                            result.insert(0, PatriciaNeighbor::Right(r.hash));
+                            return l.build_path(item, result);
+                        }
+                        _ => {
+                            result.insert(0, PatriciaNeighbor::Left(l.hash));
+                            return r.build_path(item, result);
+                        }
                     }
                 } else {
                     return Err(VMError::PatriciaNodeNotFound);
@@ -333,14 +344,14 @@ impl Node {
     }
 }
 
-impl PatriciaItem {
+impl Item {
     fn equals(&self, item: &[u8]) -> bool {
-        equals(&self.key, self.bits, item)
+        equals(&self.key[..self.byte_pos + 1], self.bit_pos, item)
     }
 
     /// Returns true if the node's key is a prefix of the item.
     fn is_prefix(&self, item: &[u8]) -> bool {
-        is_prefix(&self.key, self.bits, item)
+        is_prefix(&self.key[..self.byte_pos + 1], self.bit_pos, item)
     }
 
     /// Returns the pair of the byte and bit offset of the last matching bit
@@ -349,8 +360,14 @@ impl PatriciaItem {
         last_matching_bit(&self.key, item)
     }
 
-    fn leaf(item: &'static [u8]) -> Self {
-        Self { key: item, bits: 7 }
+    /// Returns an item with maximum byte and bit positions for
+    /// inserting at the leaf.
+    fn leaf(item: [u8; 32]) -> Self {
+        Self {
+            key: item,
+            byte_pos: 31,
+            bit_pos: 7,
+        }
     }
 }
 
@@ -363,9 +380,9 @@ fn hash_node(l: &Node, r: &Node) -> [u8; 32] {
     buf
 }
 
-fn hash_leaf(item: &PatriciaItem) -> [u8; 32] {
+fn hash_leaf(item: &Item) -> [u8; 32] {
     let mut t = Transcript::new(b"ZkVM.patricia");
-    t.commit_bytes(b"item", item.key);
+    t.commit_bytes(b"item", &item.key);
     let mut buf = [0u8; 32];
     t.challenge_bytes(b"patricia.leaf", &mut buf);
     buf
@@ -453,6 +470,14 @@ fn bit_at(byte: u8, pos: u8) -> u8 {
 mod tests {
     use super::*;
 
+    /// Helper function to generate 32-byte slices and set
+    /// the last byte for tests.
+    fn test_slice(last_byte: u8) -> [u8; 32] {
+        let mut item = [0u8; 32];
+        item[31] = last_byte;
+        item
+    }
+
     #[test]
     fn test_last_matching_bit() {
         let (byte, bit) = last_matching_bit(&[0b1000], &[0b1100]).unwrap();
@@ -483,38 +508,38 @@ mod tests {
     #[test]
     fn test_insert() {
         let tree = PatriciaTree::new();
-        let tree = tree.insert(&[0b0011]).unwrap();
-        let tree = tree.insert(&[0b1111]).unwrap();
-        let tree = tree.insert(&[0b0101]).unwrap();
-        let tree = tree.insert(&[0b0110]).unwrap();
-        let tree = tree.insert(&[0b1010]).unwrap();
-        let tree = tree.insert(&[0b1011]).unwrap();
+        let tree = tree.insert(test_slice(0b0011)).unwrap();
+        let tree = tree.insert(test_slice(0b1111)).unwrap();
+        let tree = tree.insert(test_slice(0b0101)).unwrap();
+        let tree = tree.insert(test_slice(0b0110)).unwrap();
+        let tree = tree.insert(test_slice(0b1010)).unwrap();
+        let tree = tree.insert(test_slice(0b1011)).unwrap();
         assert_eq!(tree.size, 6);
 
-        let tree = tree.remove(&[0b0110]).unwrap();
-        let tree = tree.remove(&[0b1010]).unwrap();
+        let tree = tree.remove(test_slice(0b0110)).unwrap();
+        let tree = tree.remove(test_slice(0b1010)).unwrap();
         assert_eq!(tree.size, 4);
 
-        assert!(tree.insert(&[0b1111]).is_ok());
+        assert!(tree.insert(test_slice(0b1111)).is_ok());
     }
 
     #[test]
     fn test_proofs() {
         let tree = PatriciaTree::new();
-        let find_item = &[0b0101];
-        let tree = tree.insert(&[0b0011]).unwrap();
-        let tree = tree.insert(&[0b1111]).unwrap();
+        let find_item = test_slice(0b0101);
+        let tree = tree.insert(test_slice(0b0011)).unwrap();
+        let tree = tree.insert(test_slice(0b1111)).unwrap();
         let tree = tree.insert(find_item).unwrap();
-        let tree = tree.insert(&[0b0110]).unwrap();
-        let tree = tree.insert(&[0b1010]).unwrap();
-        let tree = tree.insert(&[0b1011]).unwrap();
+        let tree = tree.insert(test_slice(0b0110)).unwrap();
+        let tree = tree.insert(test_slice(0b1010)).unwrap();
+        let tree = tree.insert(test_slice(0b1011)).unwrap();
 
         let path = tree.build_path(find_item).unwrap();
         let root = tree.root();
         assert!(PatriciaTree::verify_path(find_item, path.clone(), &root).is_ok());
         assert!(PatriciaTree::verify_path(find_item, path[1..].to_vec(), &root).is_err());
 
-        let tree = tree.remove(&[0b0110]).unwrap();
+        let tree = tree.remove(test_slice(0b0110)).unwrap();
         assert!(PatriciaTree::verify_path(find_item, path.clone(), &tree.root()).is_err());
     }
 }
