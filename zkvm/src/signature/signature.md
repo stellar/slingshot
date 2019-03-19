@@ -59,7 +59,6 @@ Input:
 Operation:
 - Create a new transcript using the tag "ZkVM.aggregated-key". (TODO: remove the "ZkVM." if we make the signature crate separate from the ZkVM crate.)
 - Commit all the pubkeys to the transcript. The transcript state corresponds to the commitment `<L>` in the MuSig paper: `<L> = H(X_1 || X_2 || ... || X_n)`.
-  (TODO: this sounds awkward, explain better?)
 - Create `aggregated_key = sum_i ( a_i * X_i )`. Iterate over the pubkeys, compute the factor `a_i = H(<L>, X_i)`, and add `a_i * X_i` to the aggregated key.
 
 Output:
@@ -167,7 +166,7 @@ Operation:
 - Use the transcript to generate a random factor (the nonce), by committing to the privkey and passing in a `thread_rng`.
 - Use the nonce to create a nonce commitment and precommitment
 - Clone the transcript
-- Create a vector of `Counterparty`s using the pubkeys.
+- Create a vector of `Counterparty`s by calling `Counterparty::new(...)` with the input pubkeys.
 
 Output: 
 - The next state in the protocol: `PartyAwaitingPrecommitments` 
@@ -245,25 +244,92 @@ Output
 
 ## Protocol for counterparty state transitions
 Counterparties are states stored internally by a party, that represent the messages received by from its counterparties. 
-TODO: add more description
 
 Counterparty state transitions overview:
 ```
-Counterparty{pubkey: Verificationkey}
+Counterparty{pubkey}
   ↓
-.precommit_nonce(H: NoncePrecommitment) // simply adds precommitment
+.precommit_nonce(precommitment)
   ↓
-CounterpartyPrecommitted{H, pubkey}
+CounterpartyPrecommitted{precommitment, pubkey}
   ↓
-.commit_nonce(R: NonceCommitment) // verifies hash(R) == H
+.commit_nonce(commitment)
   ↓
-CounterpartyCommitted{R, pubkey}
+CounterpartyCommitted{commitment, pubkey}
   ↓
-.sign(s: Share) // verifies s_i * G == R_i + c * factor * pubkey_i
+.sign(share, challenge, multikey)
   ↓
-  s
+s_i, R_i
 
 s_total = sum{s_i}
 R_total = sum{R_i}
+Signature = {s: s_total, R: R_total}
 ```
 
+### Counterparty
+
+Fields: pubkey
+
+Function: `new(...)`
+
+    Input: 
+    - pubkey: `Verificationkey`
+
+    Operation:
+    - Create a new `Counterparty` instance with the input pubkey in the `pubkey` field
+
+    Output: 
+    - The new `Counterparty` instance
+
+Function: `precommit_nonce(...)`
+
+    Input:
+    - precommitment: `NoncePrecommitment`
+
+    Operation:
+    - Create a new `CounterpartyPrecommitted` instance with `self.pubkey` and the precommitment
+    - Future work: receive pubkey in this function, and match against stored counterparties to make sure the pubkey corresponds. This will allow us to receive messages out of order, and do sorting on the party's end.
+
+    Output:
+    - `CounterpartyPrecommitted`
+
+### CounterpartyPrecommitted
+
+Fields:
+- precommitment: `NoncePrecommitment`
+- pubkey: `VerificationKey`
+
+Function: `commit_nonce(...)`
+
+Input: 
+- commitment: `NonceCommitment`
+
+Operation:
+- Verify that `self.precommitment = commitment.precommit()`.
+- If verification succeeds, create a new `CounterpartyCommitted` using `self.pubkey` and commitment.
+- Else, return `Err(R1CSError::MuSigShareError)`.
+
+Output:
+- `Result<CounterpartyCommitted, MuSigShareError>`.
+
+### CounterpartyCommitted
+
+Fields:
+- commitment: `NonceCommitment`
+- pubkey: `VerificationKey`
+
+Function: `sign(...)`
+
+Input:
+- share: `Share`
+- challenge: `Scalar`
+- multikey: `&Multikey`
+
+Operation:
+- Verify that `s_i * G == R_i + c * a_i * X_i`.
+  `s_i` = share, `G` = [base point](#base-point), `R_i` = self.commitment, `c` = challenge, `a_i` = `multikey.factor_for_key(self.pubkey)`, `X_i` = self.pubkey.
+- If verification succeeds, return `Ok((share, self.commitment))`
+- Else, return `Err(R1CSError::MuSigShareError)`
+
+Output:
+- `Result<(Share, NonceCommitment), R1CSError>`

@@ -112,10 +112,10 @@ pub enum VMError {
     #[fail(display = "Deferred point operations failed")]
     PointOperationsFailed,
 
-    /// This error occurs when a signature share fails to verify
+    /// This error occurs when a MuSig signature share fails to verify
     #[fail(display = "Share #{:?} failed to verify correctly", index)]
-    ShareError {
-        /// The index of the share that failed fo verify correctly
+    MuSigShareError {
+        /// The index of the MuSig share that failed fo verify correctly
         index: usize,
     },
 
