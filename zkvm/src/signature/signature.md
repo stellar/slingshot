@@ -37,8 +37,8 @@ Fields:
 
 Functions: 
 - `Multikey::new(...)`: detailed more in [key aggregation](#key-aggregation) section. 
-- `Multikey::factor_for_key(self, verification_key)`: computes the `a_i` factor, where `a_i = H(<L>, X_i)`. `<L>`, or the list of pukeys that go into the aggregated pubkey, has already been committed into `self.transcript`. Therefore, this function simply clones `self.transcript`, commits the verification key (`X_i`) into the transcript with label "X_i", and then squeezes the challenge scalar `a_i` from the transcript with label "a_i".
-- `Multikey::aggregated_key(self)`: returns the aggregated key stored in the multikey, `self.aggregated_key`.  
+- `Multikey::factor_for_key(&self, &verification_key)`: computes the `a_i` factor, where `a_i = H(<L>, X_i)`. `<L>`, or the list of pukeys that go into the aggregated pubkey, has already been committed into `self.transcript`. Therefore, this function simply clones `self.transcript`, commits the verification key (`X_i`) into the transcript with label "X_i", and then squeezes the challenge scalar `a_i` from the transcript with label "a_i".
+- `Multikey::aggregated_key(&self)`: returns the aggregated key stored in the multikey, `self.aggregated_key`.  
 
 ### Signature
 
@@ -273,7 +273,7 @@ Fields: pubkey
 Function: `new(...)`
 
     Input: 
-    - pubkey: `Verificationkey`
+    - pubkey: `VerificationKey`
 
     Operation:
     - Create a new `Counterparty` instance with the input pubkey in the `pubkey` field

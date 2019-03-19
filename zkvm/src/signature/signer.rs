@@ -26,6 +26,7 @@ pub struct PartyAwaitingPrecommitments {
     x_i: Scalar,
     r_i: Scalar,
     R_i: NonceCommitment,
+    counterparty: Counterparty,
 }
 
 pub struct PartyAwaitingCommitments {
@@ -33,14 +34,14 @@ pub struct PartyAwaitingCommitments {
     multikey: Multikey,
     x_i: Scalar,
     r_i: Scalar,
-    nonce_precommitments: Vec<NoncePrecommitment>,
+    counterparties: Vec<CounterpartyPrecommitted>,
 }
 
 pub struct PartyAwaitingShares {
     multikey: Multikey,
     c: Scalar,
     R: RistrettoPoint,
-    nonce_commitments: Vec<NonceCommitment>,
+    counterparties: Vec<CounterpartyCommitted>,
 }
 
 impl NonceCommitment {
