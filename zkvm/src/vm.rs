@@ -739,13 +739,13 @@ where
             return Err(VMError::PredicateIndexInvalid)
         }
 
-        let mut x_vec: Vec<Predicate> = Vec::with_capacity(n as usize);
+        let mut preds: Vec<Predicate> = Vec::with_capacity(n as usize);
         for _ in 0..n {
-            x_vec.insert(0, self.pop_item()?.to_data()?.to_predicate()?);
+            preds.insert(0, self.pop_item()?.to_data()?.to_predicate()?);
         }
         let mut contract = self.pop_item()?.to_contract()?;
         let p = &contract.predicate;
-        self.delegate.verify_point_op(|| p.prove_disjunction(&x_vec))?;
+        self.delegate.verify_point_op(|| p.prove_disjunction(&preds))?;
 
         contract.predicate = x_vec.remove(k as usize);
         self.push_item(contract);
