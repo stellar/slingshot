@@ -6,6 +6,7 @@ use curve25519_dalek::ristretto::CompressedRistretto;
 use curve25519_dalek::scalar::Scalar;
 use std::iter::FromIterator;
 use std::ops::{Add, Neg};
+use subtle::{ConditionallySelectable, ConstantTimeEq};
 
 use crate::encoding;
 use crate::errors::VMError;
@@ -47,8 +48,10 @@ pub enum Constraint {
     /// Disjunction of two constraints: at least one must evaluate to true.
     /// Created by `or` instruction.
     Or(Box<Constraint>, Box<Constraint>),
-    // TBD: add `Not(Box<Constraint>)`.
 
+    /// Negation of a constraint: must be zero to evaluate to true.
+    /// Created by 'not' instruction.
+    Not(Box<Constraint>),
     // no witness needed as it's normally true/false and we derive it on the fly during processing.
     // this also allows us not to wrap this enum in a struct.
 }
@@ -79,7 +82,7 @@ impl Constraint {
             // Note: cloning because we can't move out of captured variable in an `Fn` closure,
             // and `Box<FnOnce>` is not fully supported yet. (We can update when that happens).
             // Cf. https://github.com/dalek-cryptography/bulletproofs/issues/244
-            let expr = self.clone().flatten(cs);
+            let (expr, _) = self.clone().flatten(cs)?;
 
             // Add the resulting expression to the constraint system
             cs.constrain(expr);
@@ -89,21 +92,73 @@ impl Constraint {
         .map_err(|e| VMError::R1CSError(e))
     }
 
-    fn flatten<CS: r1cs::RandomizedConstraintSystem>(self, cs: &mut CS) -> r1cs::LinearCombination {
+    fn flatten<CS: r1cs::RandomizedConstraintSystem>(
+        self,
+        cs: &mut CS,
+    ) -> Result<(r1cs::LinearCombination, Option<Scalar>), r1cs::R1CSError> {
         match self {
-            Constraint::Eq(expr1, expr2) => expr1.to_r1cs_lc() - expr2.to_r1cs_lc(),
+            Constraint::Eq(expr1, expr2) => {
+                let assignment = expr1
+                    .eval()
+                    .and_then(|x| expr2.eval().map(|y| (x - y).to_scalar()));
+                Ok((expr1.to_r1cs_lc() - expr2.to_r1cs_lc(), assignment))
+            }
             Constraint::And(c1, c2) => {
-                let a = c1.flatten(cs);
-                let b = c2.flatten(cs);
+                let (a, a_assg) = c1.flatten(cs)?;
+                let (b, b_assg) = c2.flatten(cs)?;
                 let z = cs.challenge_scalar(b"ZkVM.verify.and-challenge");
-                a + z * b
+                let assignment = a_assg.and_then(|a| b_assg.map(|b| a + z * b));
+                Ok((a + z * b, assignment))
             }
             Constraint::Or(c1, c2) => {
-                let a = c1.flatten(cs);
-                let b = c2.flatten(cs);
+                let (a, a_assg) = c1.flatten(cs)?;
+                let (b, b_assg) = c2.flatten(cs)?;
                 // output expression: a * b
                 let (_l, _r, o) = cs.multiply(a, b);
-                r1cs::LinearCombination::from(o)
+                let assignment = a_assg.and_then(|a| b_assg.map(|b| a * b));
+                Ok((r1cs::LinearCombination::from(o), assignment))
+            }
+            Constraint::Not(c1) => {
+                // Compute the input linear combination and its secret assignment
+                let (x_lc, x_assg) = c1.flatten(cs)?;
+
+                // Compute assignments for all the wires
+                let (xy_assg, xw_assg, y_assg) = match x_assg {
+                    Some(x) => {
+                        let is_zero = x.ct_eq(&Scalar::zero());
+                        let y = Scalar::conditional_select(
+                            &Scalar::zero(),
+                            &Scalar::one(),
+                            is_zero.into(),
+                        );
+                        let w = Scalar::conditional_select(&x, &Scalar::one(), is_zero.into());
+                        let w = w.invert();
+                        (Some((x, y)), Some((x, w)), Some(y))
+                    }
+                    None => (None, None, None),
+                };
+
+                // Allocate two multipliers.
+                let (l1, r1, o1) = cs.allocate_multiplier(xy_assg)?;
+                let (l2, _r2, o2) = cs.allocate_multiplier(xw_assg)?;
+
+                // Add 4 constraints.
+
+                // (1) `x == l1`
+                cs.constrain(l1 - x_lc);
+
+                // (2) `l1 == l2` (== x)
+                cs.constrain(l1 - l2);
+
+                // (3) `x*y == 0` which implies that y == 0 if x != 0.
+                cs.constrain(o1.into());
+
+                // (4) `x*w == 1 - y` which implies that y == 1 if x == 0.
+                cs.constrain(o2 - Scalar::one() + r1);
+
+                // Note: w (r2) is left unconstrained — it is a free variable.
+
+                Ok((r1cs::LinearCombination::from(r1), y_assg))
             }
         }
     }
@@ -244,6 +299,16 @@ impl Expression {
         match self {
             Expression::Constant(a) => a.to_scalar().into(),
             Expression::LinearCombination(terms, _) => r1cs::LinearCombination::from_iter(terms),
+        }
+    }
+
+    fn eval(&self) -> Option<ScalarWitness> {
+        match self {
+            Expression::Constant(a) => Some(*a),
+            Expression::LinearCombination(_, a) => match a {
+                Some(a) => Some(*a),
+                None => None,
+            },
         }
     }
 }

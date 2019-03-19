@@ -11,6 +11,10 @@ use crate::errors::VMError;
 use crate::point_ops::PointOp;
 use crate::transcript::TranscriptProtocol;
 
+mod multikey;
+mod musig;
+mod prover;
+
 /// Verification key (aka "pubkey") is a wrapper type around a Ristretto point
 /// that lets the verifier to check the signature.
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
@@ -23,6 +27,7 @@ pub struct Signature {
     s: Scalar,
 }
 
+// TODO: copy _aggregated funcs over to _single, get rid of vectors.
 impl Signature {
     /// Verifies a signature for a single key
     pub fn verify_single(&self, transcript: &mut Transcript, pubkey: VerificationKey) -> PointOp {

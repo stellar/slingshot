@@ -302,6 +302,7 @@ where
                 Instruction::Range(i) => self.range(i)?,
                 Instruction::And => self.and()?,
                 Instruction::Or => self.or()?,
+                Instruction::Not => self.not()?,
                 Instruction::Verify => self.verify()?,
                 Instruction::Unblind => self.unblind()?,
                 Instruction::Issue => self.issue()?,
@@ -428,6 +429,13 @@ where
         Ok(())
     }
 
+    fn not(&mut self) -> Result<(), VMError> {
+        let c1 = self.pop_item()?.to_constraint()?;
+        let c2 = Constraint::Not(Box::new(c1));
+        self.push_item(c2);
+        Ok(())
+    }
+
     fn verify(&mut self) -> Result<(), VMError> {
         let constraint = self.pop_item()?.to_constraint()?;
         constraint.verify(self.delegate.cs())?;
@@ -435,16 +443,9 @@ where
     }
 
     fn unblind(&mut self) -> Result<(), VMError> {
-        // Pop expression `expr`
-        let expr = self.pop_item()?.to_expression()?;
-
-        // Pop commitment `V`
-        let v_commitment = self.pop_item()?.to_data()?.to_commitment()?;
-        let v_point = v_commitment.to_point();
-
-        // Pop scalar `v`
-        let scalar_witness = self.pop_item()?.to_data()?.to_scalar()?;
-        let v_scalar = scalar_witness.to_scalar();
+        // Pop scalar `v` and commitment `V`
+        let v_scalar = self.pop_item()?.to_data()?.to_scalar()?.to_scalar();
+        let v_point = self.pop_item()?.to_data()?.to_commitment()?.to_point();
 
         self.delegate.verify_point_op(|| {
             // Check V = vB => V-vB = 0
@@ -455,14 +456,8 @@ where
             }
         })?;
 
-        // Add constraint `V == expr`
-        let (_, v) = self.delegate.commit_variable(&v_commitment)?;
-        self.delegate.cs().constrain(expr.to_r1cs_lc() - v);
-
-        // Push variable
-        self.push_item(Variable {
-            commitment: v_commitment,
-        });
+        // Push commitment item
+        self.push_item(Data::Opaque(v_point.as_bytes().to_vec()));
         Ok(())
     }
 

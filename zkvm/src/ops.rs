@@ -37,6 +37,7 @@ pub enum Instruction {
     Range(BitRange), // bitwidth (0...64)
     And,
     Or,
+    Not,
     Verify,
     Unblind,
     Issue,
@@ -79,26 +80,27 @@ pub enum Opcode {
     Range = 0x0e,
     And = 0x0f,
     Or = 0x10,
-    Verify = 0x11,
-    Unblind = 0x12,
-    Issue = 0x13,
-    Borrow = 0x14,
-    Retire = 0x15,
-    Cloak = 0x16,
-    Import = 0x17,
-    Export = 0x18,
-    Input = 0x19,
-    Output = 0x1a,
-    Contract = 0x1b,
-    Nonce = 0x1c,
-    Log = 0x1d,
-    Signtx = 0x1e,
-    Call = 0x1f,
-    Select = 0x20,
+    Not = 0x11,
+    Verify = 0x12,
+    Unblind = 0x13,
+    Issue = 0x14,
+    Borrow = 0x15,
+    Retire = 0x16,
+    Cloak = 0x17,
+    Import = 0x18,
+    Export = 0x19,
+    Input = 0x1a,
+    Output = 0x1b,
+    Contract = 0x1c,
+    Nonce = 0x1d,
+    Log = 0x1e,
+    Signtx = 0x1f,
+    Call = 0x20,
+    Select = 0x21,
     Delegate = MAX_OPCODE,
 }
 
-const MAX_OPCODE: u8 = 0x21;
+const MAX_OPCODE: u8 = 0x22;
 
 impl Opcode {
     /// Converts the opcode to `u8`.
@@ -182,6 +184,7 @@ impl Instruction {
             }
             Opcode::And => Ok(Instruction::And),
             Opcode::Or => Ok(Instruction::Or),
+            Opcode::Not => Ok(Instruction::Not),
             Opcode::Verify => Ok(Instruction::Verify),
             Opcode::Unblind => Ok(Instruction::Unblind),
             Opcode::Issue => Ok(Instruction::Issue),
@@ -252,6 +255,7 @@ impl Instruction {
             }
             Instruction::And => write(Opcode::And),
             Instruction::Or => write(Opcode::Or),
+            Instruction::Not => write(Opcode::Not),
             Instruction::Verify => write(Opcode::Verify),
             Instruction::Unblind => write(Opcode::Unblind),
             Instruction::Issue => write(Opcode::Issue),
