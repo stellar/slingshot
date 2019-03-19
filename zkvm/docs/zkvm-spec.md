@@ -465,14 +465,12 @@ Each node in a predicate tree is formed with one of the following:
 
 ### Predicate disjunction
 
-XXX: Rewrote in the language of select, but not sure about the below (particularly the final paragraph, as well as whether there are n or n+1 predicates).
-
 Disjunction of two predicates is implemented using a commitment `f` that
 commits to _n_ [predicates](#predicate) `X_0`, `X_1`, ..., `X_{n-1}`
 as a scalar factor on a [primary base point](#base-points) `B` added to the predicate `X_0`:
 
 ```
-OR(X_1,...,X_N) = X_1 + f(X_1, ..., X_N)·B
+OR(X_0,...,X_{n-1}) = X_0 + f(X_0, ..., X_{n-1})·B
 ```
 
 Commitment scheme is defined using the [transcript](#transcript) protocol
@@ -491,7 +489,7 @@ OR = X[0] + f·B
 The choice between the branches is performed using the [`select:n:k`](#select) instruction, where `n` represents the number of predicates and k the index of the chosen branch.
 
 Disjunction allows signing ([`signtx`](#signtx), [`delegate`](#delegate)) for the [key](#verification-key) `X_0` without
-revealing the alternative predicate `X_k` using the adjusted secret scalar `dlog(X_0) + f(X_0,...,X_{n-1})`.
+revealing the whole set of predicates `{X_i}` using the adjusted secret scalar `dlog(X_0) + f(X_0,...,X_{n-1})`.
 
 
 ### Program predicate
@@ -999,7 +997,7 @@ Code | Instruction                | Stack diagram                              |
 0x1d | [`log`](#log)              |            _data_ → ø                      | Modifies [tx log](#transaction-log)
 0x1e | [`signtx`](#signtx)        |        _contract_ → _results..._           | Modifies [deferred verification keys](#transaction-signature)
 0x1f | [`call`](#call)            | _contract bf prog_ → _results..._          | [Defers point operations](#deferred-point-operations)
-0x20 | [`select:n:k`](#select)    | _contract x1...xn_ → _contract’_           | [Defers point operations](#deferred-point-operations)
+0x20 | [`select:n:k`](#select)    | _contract x0...xn-1_ → _contract’_         | [Defers point operations](#deferred-point-operations)
 0x21 | [`delegate`](#delegate)    |_contract prog sig_ → _results..._          | [Defers point operations](#deferred-point-operations)
   —  | [`ext`](#ext)              |                 ø → ø                      | Fails if [extension flag](#vm-state) is not set.
 
@@ -1526,7 +1524,7 @@ the third-from-the-top is not a [contract](#contract-type).
 ### select 
 _contract(P) X0 ... X{n-1}_ **select:_n_:_k_** → _contract(Xk)_
 
-1. Pops all N [predicates](#predicate) `X_0`, `X_1`, ..., `X_{n-1}` (in that order) and a [contract] (#contract-type) `contract`.
+1. Pops all N [predicates](#predicate) `X_0`, `X_1`, ..., `X_{n-1}` (in that order) and a [contract](#contract-type) `contract`.
 2. Reads the [predicate](#predicate) `P` from the contract.
 3. Forms a statement for [predicate disjunction](#predicate-disjunction) of `X_0,...X_{n-1}` being equal to `P`:
     ```
@@ -1538,7 +1536,7 @@ _contract(P) X0 ... X{n-1}_ **select:_n_:_k_** → _contract(Xk)_
 Immediate data `n` and `k` are encoded as 8-bit unsigned integers (`u8`).
 
 Fails if the top N items are not valid [points](#point),
-or if the N+1 from the top item is not a [contract](#contract-type).
+or if the `n+1`th from the top item is not a [contract](#contract-type).
 
 #### delegate
 

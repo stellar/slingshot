@@ -750,10 +750,9 @@ where
         }
         let mut contract = self.pop_item()?.to_contract()?;
         let p = &contract.predicate;
-        let pred = x_vec[k as usize].clone();
-        self.delegate.verify_point_op(|| p.prove_disjunction(x_vec))?;
+        self.delegate.verify_point_op(|| p.prove_disjunction(&x_vec))?;
 
-        contract.predicate = pred;
+        contract.predicate = x_vec[k as usize];
         self.push_item(contract);
         Ok(())
     }

@@ -71,7 +71,7 @@ impl Predicate {
 
     /// Verifies whether the current predicate is a disjunction of n others.
     /// Returns a `PointOp` instance that can be verified in a batch with other operations.
-    pub fn prove_disjunction(&self, preds: Vec<Predicate>) -> PointOp {
+    pub fn prove_disjunction(&self, preds: &[Predicate]) -> PointOp {
         let f = Self::commit_disjunction(preds.iter().map(|p| p.to_point()));
 
         // P = X[0] + f*B
@@ -201,20 +201,16 @@ mod tests {
         let op = pred.prove_program_predicate(&bytecode(&prog2), &[]);
         assert!(op.verify().is_err());
     }
-    
+
     #[test]
     fn valid_disjunction1() {
         let gens = PedersenGens::default();
 
         // dummy predicates
-        let mut preds: Vec<Predicate> = Vec::with_capacity(2);
-        let first = Predicate::Opaque(gens.B.compress());
-        let second = Predicate::Opaque(gens.B_blinding.compress());
-        preds.push(first);
-        preds.push(second);
+        let preds = vec![Predicate::Opaque(gens.B.compress()), Predicate::Opaque(gens.B_blinding.compress())];
 
         let pred = Predicate::disjunction(preds.clone()).unwrap();
-        let op = pred.prove_disjunction(preds);
+        let op = pred.prove_disjunction(&preds);
         assert!(op.verify().is_ok());
     }
 
@@ -223,14 +219,10 @@ mod tests {
         let gens = PedersenGens::default();
 
         // dummy predicates
-        let mut preds: Vec<Predicate> = Vec::with_capacity(2);
-        let first = Predicate::Opaque(gens.B.compress());
-        let second = Predicate::Opaque(gens.B_blinding.compress());
-        preds.push(second);
-        preds.push(first);
+        let preds = vec![Predicate::Opaque(gens.B.compress()), Predicate::Opaque(gens.B_blinding.compress())];
 
         let pred = Predicate::disjunction(preds.clone()).unwrap();
-        let op = pred.prove_disjunction(preds);
+        let op = pred.prove_disjunction(&preds);
         assert!(op.verify().is_ok());
     }
     #[test]
@@ -238,23 +230,10 @@ mod tests {
         let gens = PedersenGens::default();
 
         // dummy predicates
-        let mut preds: Vec<Predicate> = Vec::with_capacity(2);
-        let first = Predicate::Opaque(gens.B.compress());
-        let second = Predicate::Opaque(gens.B_blinding.compress());
-        preds.push(first);
-        preds.push(second);
+        let preds = vec![Predicate::Opaque(gens.B_blinding.compress()), Predicate::Opaque(gens.B.compress())];
 
         let pred = Predicate::Opaque(gens.B.compress());
-        let op = pred.prove_disjunction(preds);
+        let op = pred.prove_disjunction(&preds);
         assert!(op.verify().is_err());
-    }
-
-    fn invalid_disjunction2() {
-        let gens = PedersenGens::default();
-
-        // dummy predicates
-        let mut preds: Vec<Predicate> = Vec::with_capacity(3);
-        let first = Predicate::Opaque(gens.B.compress());
-        let second = Predicate::Opaque(gens.B_blinding.compress());
     }
 }
