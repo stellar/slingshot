@@ -1,22 +1,17 @@
 #![allow(non_snake_case)]
 
 use crate::errors::VMError;
+use crate::signature::counterparty::*;
 use crate::signature::multikey::Multikey;
 use crate::signature::musig::*;
 use crate::signature::VerificationKey;
 use crate::transcript::TranscriptProtocol;
+
 use curve25519_dalek::constants::RISTRETTO_BASEPOINT_POINT;
 use curve25519_dalek::ristretto::RistrettoPoint;
 use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
 use rand;
-use subtle::ConstantTimeEq;
-
-#[derive(Copy, Clone)]
-pub struct NoncePrecommitment([u8; 32]);
-
-#[derive(Copy, Clone, Debug)]
-pub struct NonceCommitment(RistrettoPoint);
 
 pub struct Party {}
 
@@ -26,7 +21,7 @@ pub struct PartyAwaitingPrecommitments {
     x_i: Scalar,
     r_i: Scalar,
     R_i: NonceCommitment,
-    counterparty: Counterparty,
+    counterparties: Vec<Counterparty>,
 }
 
 pub struct PartyAwaitingCommitments {
@@ -44,22 +39,13 @@ pub struct PartyAwaitingShares {
     counterparties: Vec<CounterpartyCommitted>,
 }
 
-impl NonceCommitment {
-    fn precommit(&self) -> NoncePrecommitment {
-        let mut h = Transcript::new(b"MuSig.nonce-precommit");
-        h.commit_point(b"R", &self.0.compress());
-        let mut precommitment = [0u8; 32];
-        h.challenge_bytes(b"precommitment", &mut precommitment);
-        NoncePrecommitment(precommitment)
-    }
-}
-
 impl Party {
     pub fn new(
         // The message `m` should already have been fed into the transcript
         transcript: &Transcript,
         x_i: Scalar,
         multikey: Multikey,
+        pubkeys: Vec<VerificationKey>,
     ) -> (PartyAwaitingPrecommitments, NoncePrecommitment) {
         let mut rng = transcript
             .build_rng()
@@ -73,6 +59,11 @@ impl Party {
         // Make H(R_i)
         let precommitment = R_i.precommit();
 
+        let counterparties = pubkeys
+            .iter()
+            .map(|pubkey| Counterparty::new(*pubkey))
+            .collect();
+
         (
             PartyAwaitingPrecommitments {
                 transcript: transcript.clone(),
@@ -80,6 +71,7 @@ impl Party {
                 x_i,
                 r_i,
                 R_i,
+                counterparties,
             },
             precommitment,
         )
@@ -91,14 +83,20 @@ impl PartyAwaitingPrecommitments {
         self,
         nonce_precommitments: Vec<NoncePrecommitment>,
     ) -> (PartyAwaitingCommitments, NonceCommitment) {
+        let counterparties = self
+            .counterparties
+            .iter()
+            .zip(nonce_precommitments)
+            .map(|(counterparty, precommitment)| counterparty.precommit_nonce(precommitment))
+            .collect();
         // Store received nonce precommitments in next state
         (
             PartyAwaitingCommitments {
-                nonce_precommitments,
                 transcript: self.transcript,
                 multikey: self.multikey,
                 x_i: self.x_i,
                 r_i: self.r_i,
+                counterparties,
             },
             self.R_i,
         )
@@ -111,21 +109,12 @@ impl PartyAwaitingCommitments {
         nonce_commitments: Vec<NonceCommitment>,
     ) -> Result<(PartyAwaitingShares, Scalar), VMError> {
         // Check stored precommitments against received commitments
-        for (index, (pre_comm, comm)) in self
-            .nonce_precommitments
+        let counterparties = self
+            .counterparties
             .iter()
-            .zip(nonce_commitments.iter())
-            .enumerate()
-        {
-            // Make H(comm) = H(R_i)
-            let actual_precomm = comm.precommit();
-
-            // Compare H(comm) with pre_comm, they should be equal
-            let equal = pre_comm.0.ct_eq(&actual_precomm.0);
-            if equal.unwrap_u8() == 0 {
-                return Err(VMError::ShareError { index });
-            }
-        }
+            .zip(nonce_commitments)
+            .map(|(counterparty, commitment)| counterparty.commit_nonce(commitment))
+            .collect()?;
 
         // Make R = sum_i(R_i). nonce_commitments = R_i from all the parties.
         let R: RistrettoPoint = nonce_commitments.iter().map(|R_i| R_i.0).sum();
@@ -150,9 +139,9 @@ impl PartyAwaitingCommitments {
         Ok((
             PartyAwaitingShares {
                 multikey: self.multikey,
-                nonce_commitments,
                 c,
                 R,
+                counterparties,
             },
             s_i,
         ))
@@ -184,7 +173,7 @@ impl PartyAwaitingShares {
 
             // Check that S_i = R_i + c * a_i * X_i
             if S_i != R_i + self.c * a_i * X_i {
-                return Err(VMError::ShareError { index: i });
+                return Err(VMError::MuSigShareError { index: i });
             }
         }
 

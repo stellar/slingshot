@@ -113,10 +113,10 @@ pub enum VMError {
     PointOperationsFailed,
 
     /// This error occurs when a MuSig signature share fails to verify
-    #[fail(display = "Share #{:?} failed to verify correctly", index)]
+    #[fail(display = "Share #{:?} failed to verify correctly", pubkey)]
     MuSigShareError {
-        /// The index of the MuSig share that failed fo verify correctly
-        index: usize,
+        /// The pubkey corresponding to the MuSig share that failed fo verify correctly
+        pubkey: [u8; 32],
     },
 
     /// This error occurs when R1CS proof verification failed.

@@ -272,26 +272,28 @@ Fields: pubkey
 
 Function: `new(...)`
 
-    Input: 
-    - pubkey: `VerificationKey`
+Input: 
+- pubkey: `VerificationKey`
 
-    Operation:
-    - Create a new `Counterparty` instance with the input pubkey in the `pubkey` field
+Operation:
+- Create a new `Counterparty` instance with the input pubkey in the `pubkey` field
 
-    Output: 
-    - The new `Counterparty` instance
+Output: 
+- The new `Counterparty` instance
+
+
 
 Function: `precommit_nonce(...)`
 
-    Input:
-    - precommitment: `NoncePrecommitment`
+Input:
+- precommitment: `NoncePrecommitment`
 
-    Operation:
-    - Create a new `CounterpartyPrecommitted` instance with `self.pubkey` and the precommitment
-    - Future work: receive pubkey in this function, and match against stored counterparties to make sure the pubkey corresponds. This will allow us to receive messages out of order, and do sorting on the party's end.
+Operation:
+- Create a new `CounterpartyPrecommitted` instance with `self.pubkey` and the precommitment
+- Future work: receive pubkey in this function, and match against stored counterparties to make sure the pubkey corresponds. This will allow us to receive messages out of order, and do sorting on the party's end.
 
-    Output:
-    - `CounterpartyPrecommitted`
+Output:
+- `CounterpartyPrecommitted`
 
 ### CounterpartyPrecommitted
 
@@ -307,7 +309,7 @@ Input:
 Operation:
 - Verify that `self.precommitment = commitment.precommit()`.
 - If verification succeeds, create a new `CounterpartyCommitted` using `self.pubkey` and commitment.
-- Else, return `Err(R1CSError::MuSigShareError)`.
+- Else, return `Err(VMError::MuSigShareError)`.
 
 Output:
 - `Result<CounterpartyCommitted, MuSigShareError>`.
@@ -321,7 +323,7 @@ Fields:
 Function: `sign(...)`
 
 Input:
-- share: `Share`
+- share: `Scalar`
 - challenge: `Scalar`
 - multikey: `&Multikey`
 
@@ -329,7 +331,7 @@ Operation:
 - Verify that `s_i * G == R_i + c * a_i * X_i`.
   `s_i` = share, `G` = [base point](#base-point), `R_i` = self.commitment, `c` = challenge, `a_i` = `multikey.factor_for_key(self.pubkey)`, `X_i` = self.pubkey.
 - If verification succeeds, return `Ok((share, self.commitment))`
-- Else, return `Err(R1CSError::MuSigShareError)`
+- Else, return `Err(VMError::MuSigShareError)`
 
 Output:
-- `Result<(Share, NonceCommitment), R1CSError>`
+- `Result<(Scalar, NonceCommitment), VMError>`
