@@ -15,10 +15,16 @@ mod multikey;
 mod musig;
 mod prover;
 
-/// Verification key (aka "pubkey") is a wrapper type around a Ristretto point
+/// Verification key (aka "pubkey") is a wrapper type around a Ristretto point and it's compressed variation
 /// that lets the verifier to check the signature.
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
-pub struct VerificationKey(pub CompressedRistretto);
+pub struct VerificationKey {
+    point: RistrettoPoint,
+    // Available only if instantiated using `with_compressed` 
+    // or if caller directly calls a method that returns a compressed point
+    compressed: Option<CompressedRistretto>, 
+}
+
 
 /// A Schnorr signature.
 #[derive(Copy, Clone, Debug)]
