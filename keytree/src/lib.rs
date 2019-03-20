@@ -158,7 +158,7 @@ mod tests {
 
         // the following are hard-coded based on the previous seed
         assert_eq!(
-            hex::encode(&xprv.dk),
+            to_hex_32(xprv.dk),
             "9f07e7be5551387a98ba977c732d080dcb0f29a048e3656912c6533e32ee7aed"
         );
         assert_eq!(
@@ -173,18 +173,16 @@ mod tests {
         let mut rng = ChaChaRng::from_seed(seed);
         let xprv = Xprv::random(&mut rng);
         let xprv_bytes = xprv.to_bytes();
-        let xprv_hex = hex::encode(&xprv_bytes[..]);
 
         assert_eq!(
-            xprv_hex,
+            to_hex_64(xprv_bytes),
             "4a53c3fbbc59970ee5f85af813875dffc13a904a2e53ae7e65fa0dea6e62c9019f07e7be5551387a98ba977c732d080dcb0f29a048e3656912c6533e32ee7aed"
         );
     }
 
     #[test]
     fn deserialize_xprv_test() {
-        let xprv_hex =  "4a53c3fbbc59970ee5f85af813875dffc13a904a2e53ae7e65fa0dea6e62c9019f07e7be5551387a98ba977c732d080dcb0f29a048e3656912c6533e32ee7aed";
-        let xprv_bytes = hex::decode(xprv_hex).unwrap();
+        let xprv_bytes = hex::decode("4a53c3fbbc59970ee5f85af813875dffc13a904a2e53ae7e65fa0dea6e62c9019f07e7be5551387a98ba977c732d080dcb0f29a048e3656912c6533e32ee7aed").unwrap();
 
         let xprv = Xprv::from_bytes(&xprv_bytes).unwrap();
 
@@ -204,13 +202,14 @@ mod tests {
         let xpub = xprv.to_xpub();
 
         // hard-coded based on the previous seed
-        let compressed_pt_hex = "9c66a339c8344f922fc3206cb5dae814a594c0177dd3235c254d9c409a65b808";
-        let expected_compressed_point =
-            CompressedRistretto::from_slice(&hex::decode(compressed_pt_hex).unwrap());
+        let expected_compressed_point = CompressedRistretto::from_slice(
+            &hex::decode("9c66a339c8344f922fc3206cb5dae814a594c0177dd3235c254d9c409a65b808")
+                .unwrap(),
+        );
         let expected_point = expected_compressed_point.decompress().unwrap();
 
         assert_eq!(
-            hex::encode(&xpub.dk),
+            to_hex_32(xpub.dk),
             "9f07e7be5551387a98ba977c732d080dcb0f29a048e3656912c6533e32ee7aed"
         );
         assert_eq!(xpub.point, expected_point);
@@ -224,19 +223,16 @@ mod tests {
         let xprv = Xprv::random(&mut rng);
         let xpub = xprv.to_xpub();
 
-        let xpub_bytes = xpub.to_bytes();
-
         // hardcoded, but happens to be expected_scalar concatenated with expected_compressed_point
         assert_eq!(
-            hex::encode(&xpub_bytes[..]),
+            to_hex_64(xpub.to_bytes()),
             "9c66a339c8344f922fc3206cb5dae814a594c0177dd3235c254d9c409a65b8089f07e7be5551387a98ba977c732d080dcb0f29a048e3656912c6533e32ee7aed"
         );
     }
 
     #[test]
     fn deserialize_xpub_test() {
-        let xpub_hex = "9c66a339c8344f922fc3206cb5dae814a594c0177dd3235c254d9c409a65b8089f07e7be5551387a98ba977c732d080dcb0f29a048e3656912c6533e32ee7aed";
-        let xpub_bytes = hex::decode(xpub_hex).unwrap();
+        let xpub_bytes = hex::decode("9c66a339c8344f922fc3206cb5dae814a594c0177dd3235c254d9c409a65b8089f07e7be5551387a98ba977c732d080dcb0f29a048e3656912c6533e32ee7aed").unwrap();
         let xpub = Xpub::from_bytes(&xpub_bytes).unwrap();
 
         let seed = [0u8; 32];
@@ -262,16 +258,26 @@ mod tests {
         });
 
         // hard-coded based on the previous seed
-        let compressed_pt_hex = "7414c0c5238c2277318ba3e51fc6fb8e836a2d9b4c04508f93cd5a455422221b";
-        let expected_compressed_point =
-            CompressedRistretto::from_slice(&hex::decode(compressed_pt_hex).unwrap());
+        let expected_compressed_point = CompressedRistretto::from_slice(
+            &hex::decode("7414c0c5238c2277318ba3e51fc6fb8e836a2d9b4c04508f93cd5a455422221b")
+                .unwrap(),
+        );
         let expected_point = expected_compressed_point.decompress().unwrap();
 
         assert_eq!(
-            hex::encode(&xpub.dk),
+            to_hex_32(xpub.dk),
             "36e435eabc2a562ef228b82b399fbd004b2cc64103313fa673bd1fca0971f59d"
         );
         assert_eq!(xpub.point, expected_point);
         assert_eq!(xpub.precompressed_pubkey, expected_compressed_point);
     }
+
+    fn to_hex_32(input: [u8; 32])->String {
+        return hex::encode(&input[..]);
+    }
+
+    fn to_hex_64(input: [u8; 64])->String {
+        return hex::encode(&input[..]);
+    }
+
 }
