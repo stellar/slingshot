@@ -19,7 +19,7 @@ impl Multikey {
         // Commit pubkeys into the transcript
         // <L> = H(X_1 || X_2 || ... || X_n)
         for X in &pubkeys {
-            transcript.commit_point(b"P", &X.0);
+            transcript.commit_point(b"X", &X.0);
         }
 
         // aggregated_key = sum_i ( a_i * X_i )

@@ -13,19 +13,19 @@ pub struct Signature {
 }
 
 impl Signature {
-    pub fn verify(&self, transcript: &Transcript, pubkey: VerificationKey) -> Result<(), VMError> {
+    pub fn verify(&self, transcript: &Transcript, X: VerificationKey) -> Result<(), VMError> {
         let G = RISTRETTO_BASEPOINT_POINT;
         let mut transcript = transcript.clone();
 
         // Make c = H(X, R, m)
         // The message `m` has already been fed into the transcript
         let c = {
-            transcript.commit_point(b"P", &pubkey.0);
+            transcript.commit_point(b"X", &X.0);
             transcript.commit_point(b"R", &self.R);
             transcript.challenge_scalar(b"c")
         };
 
-        let X = pubkey.0.decompress().ok_or(VMError::InvalidPoint)?;
+        let X = X.0.decompress().ok_or(VMError::InvalidPoint)?;
         let R = self.R.decompress().ok_or(VMError::InvalidPoint)?;
 
         // Check sG = R + c * X
@@ -58,8 +58,8 @@ mod tests {
         let multikey = multikey_helper(&priv_keys).unwrap();
 
         let expected_pubkey = CompressedRistretto::from_slice(&[
-            136, 53, 195, 229, 169, 217, 166, 146, 49, 19, 35, 5, 134, 41, 9, 177, 250, 77, 180,
-            47, 8, 211, 231, 80, 217, 222, 184, 242, 68, 53, 66, 13,
+            56, 92, 251, 79, 34, 221, 181, 222, 11, 112, 55, 45, 154, 242, 40, 250, 247, 1, 109,
+            126, 150, 210, 181, 6, 117, 95, 44, 102, 38, 28, 144, 49,
         ]);
 
         assert_eq!(expected_pubkey, multikey.aggregated_key().0);

@@ -77,7 +77,7 @@ There are several paths to signing:
     Operation:
     - Clone the transcript state, mix it with the privkey and system-provided RNG to generate the nonce `r`. This makes the nonce uniquely bound to a message and private key, and also makes it non-deterministic to prevent "rowhammer" attacks.
     - Use the nonce to create a nonce commitment `R = r * G`
-    - Make `c = H(X, R, m)`. Because `m` has already been fed into the transcript externally, we do this by committing `X = privkey * G` to the transcript with label "P" (for pubkey), committing `R` to the transcript with label "R", and getting the challenge scalar `c` with label "c".
+    - Make `c = H(X, R, m)`. Because `m` has already been fed into the transcript externally, we do this by committing `X = privkey * G` to the transcript with label "X", committing `R` to the transcript with label "R", and getting the challenge scalar `c` with label "c".
     - Make `s = r + c * x` where `x = privkey`
 
     Output:
@@ -114,7 +114,7 @@ Input:
 - P: `VerificationKey`
 
 Operation:
-- Make `c = H(X, R, m)`. Since the transcript already has the message `m` committed to it, the function only needs to commit `X` with label "P" (for pubkey) and `R` with label "R", and then get the challenge scalar `c` with label "c".
+- Make `c = H(X, R, m)`. Since the transcript already has the message `m` committed to it, the function only needs to commit `X` with label "X" and `R` with label "R", and then get the challenge scalar `c` with label "c".
 - Decompress verification key `P`. If this fails, return `Err(VMError::InvalidPoint)`.
 - Check if `s * G == R + c * P`. `G` is the [base point](#base-point).
 
