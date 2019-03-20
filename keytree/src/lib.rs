@@ -183,7 +183,6 @@ mod tests {
     #[test]
     fn deserialize_xprv_test() {
         let xprv_bytes = hex::decode("4a53c3fbbc59970ee5f85af813875dffc13a904a2e53ae7e65fa0dea6e62c9019f07e7be5551387a98ba977c732d080dcb0f29a048e3656912c6533e32ee7aed").unwrap();
-
         let xprv = Xprv::from_bytes(&xprv_bytes).unwrap();
 
         let seed = [0u8; 32];
