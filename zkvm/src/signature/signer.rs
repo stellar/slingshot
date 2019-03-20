@@ -41,7 +41,7 @@ pub struct PartyAwaitingShares {
 
 impl Party {
     pub fn new(
-        // The message `m` should already have been fed into the transcript
+        // The message `m` has already been fed into the transcript
         transcript: &Transcript,
         x_i: Scalar,
         multikey: Multikey,
@@ -108,19 +108,19 @@ impl PartyAwaitingCommitments {
         mut self,
         nonce_commitments: Vec<NonceCommitment>,
     ) -> Result<(PartyAwaitingShares, Scalar), VMError> {
+        // Make R = sum_i(R_i). nonce_commitments = R_i from all the parties.
+        let R = NonceCommitment::sum(&nonce_commitments);
+
         // Check stored precommitments against received commitments
         let counterparties = self
             .counterparties
             .into_iter()
-            .zip(&nonce_commitments)
+            .zip(nonce_commitments)
             .map(|(counterparty, commitment)| counterparty.commit_nonce(commitment))
             .collect::<Result<_, _>>()?;
 
-        // Make R = sum_i(R_i). nonce_commitments = R_i from all the parties.
-        let R = NonceCommitment::sum(&nonce_commitments);
-
         // Make c = H(X, R, m)
-        // The message `m` should already have been fed into the transcript.
+        // The message `m` has already been fed into the transcript.
         let c = {
             self.transcript
                 .commit_point(b"P", &self.multikey.aggregated_key().0);

@@ -18,7 +18,7 @@ impl Signature {
         let mut transcript = transcript.clone();
 
         // Make c = H(X, R, m)
-        // The message `m` should already have been fed into the transcript
+        // The message `m` has already been fed into the transcript
         let c = {
             transcript.commit_point(b"P", &P.0);
             transcript.commit_point(b"R", &self.R.compress());

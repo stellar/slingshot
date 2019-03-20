@@ -62,7 +62,7 @@ impl Counterparty {
 impl CounterpartyPrecommitted {
     pub fn commit_nonce(
         self,
-        commitment: &NonceCommitment,
+        commitment: NonceCommitment,
     ) -> Result<CounterpartyCommitted, VMError> {
         // Check H(commitment) =? precommitment
         let received_precommitment = commitment.precommit();
@@ -74,7 +74,7 @@ impl CounterpartyPrecommitted {
         }
 
         Ok(CounterpartyCommitted {
-            commitment: *commitment,
+            commitment: commitment,
             pubkey: self.pubkey,
         })
     }
