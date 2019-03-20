@@ -271,11 +271,11 @@ mod tests {
         assert_eq!(xpub.precompressed_pubkey, expected_compressed_point);
     }
 
-    fn to_hex_32(input: [u8; 32])->String {
+    fn to_hex_32(input: [u8; 32]) -> String {
         return hex::encode(&input[..]);
     }
 
-    fn to_hex_64(input: [u8; 64])->String {
+    fn to_hex_64(input: [u8; 64]) -> String {
         return hex::encode(&input[..]);
     }
 
