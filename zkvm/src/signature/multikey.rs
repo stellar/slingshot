@@ -13,7 +13,7 @@ pub struct Multikey {
 impl Multikey {
     pub fn new(pubkeys: Vec<VerificationKey>) -> Option<Self> {
         // Create transcript for Multikey
-        let mut transcript = Transcript::new(b"ZkVM.aggregated-key");
+        let mut transcript = Transcript::new(b"MuSig.aggregated-key");
         transcript.commit_u64(b"n", pubkeys.len() as u64);
 
         // Commit pubkeys into the transcript

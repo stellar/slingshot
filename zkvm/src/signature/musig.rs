@@ -57,8 +57,8 @@ mod tests {
         let multikey = multikey_helper(&priv_keys).unwrap();
 
         let expected_pubkey = CompressedRistretto::from_slice(&[
-            212, 211, 54, 88, 245, 166, 107, 207, 28, 70, 247, 28, 5, 233, 67, 112, 196, 30, 35,
-            136, 160, 232, 167, 109, 47, 88, 194, 207, 227, 71, 222, 102,
+            136, 53, 195, 229, 169, 217, 166, 146, 49, 19, 35, 5, 134, 41, 9, 177, 250, 77, 180,
+            47, 8, 211, 231, 80, 217, 222, 184, 242, 68, 53, 66, 13,
         ]);
 
         assert_eq!(expected_pubkey, multikey.aggregated_key().0);
