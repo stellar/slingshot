@@ -146,10 +146,9 @@ impl Xpub {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use hex;
     use rand::SeedableRng;
     use rand_chacha::ChaChaRng;
-
-    use hex;
 
     #[test]
     fn random_xprv_test() {
@@ -158,17 +157,14 @@ mod tests {
         let xprv = Xprv::random(&mut rng);
 
         // the following are hard-coded based on the previous seed
-        let dk_hex = "9f07e7be5551387a98ba977c732d080dcb0f29a048e3656912c6533e32ee7aed";
-        let scalar_hex = "4a53c3fbbc59970ee5f85af813875dffc13a904a2e53ae7e65fa0dea6e62c901";
-
-        let expected_dk = hex::decode(dk_hex).unwrap();
-
-        let mut expected_scalar_bytes = [0u8; 32];
-        expected_scalar_bytes[..].copy_from_slice(&hex::decode(scalar_hex).unwrap());
-        let expected_scalar = Scalar::from_bits(expected_scalar_bytes);
-
-        assert_eq!(expected_dk, xprv.dk);
-        assert_eq!(expected_scalar, xprv.scalar);
+        assert_eq!(
+            hex::encode(&xprv.dk),
+            "9f07e7be5551387a98ba977c732d080dcb0f29a048e3656912c6533e32ee7aed"
+        );
+        assert_eq!(
+            hex::encode(xprv.scalar.as_bytes()),
+            "4a53c3fbbc59970ee5f85af813875dffc13a904a2e53ae7e65fa0dea6e62c901"
+        );
     }
 
     #[test]
@@ -179,9 +175,10 @@ mod tests {
         let xprv_bytes = xprv.to_bytes();
         let xprv_hex = hex::encode(&xprv_bytes[..]);
 
-        let expected_xprv_hex = "4a53c3fbbc59970ee5f85af813875dffc13a904a2e53ae7e65fa0dea6e62c9019f07e7be5551387a98ba977c732d080dcb0f29a048e3656912c6533e32ee7aed";
-
-        assert_eq!(xprv_hex, expected_xprv_hex);
+        assert_eq!(
+            xprv_hex,
+            "4a53c3fbbc59970ee5f85af813875dffc13a904a2e53ae7e65fa0dea6e62c9019f07e7be5551387a98ba977c732d080dcb0f29a048e3656912c6533e32ee7aed"
+        );
     }
 
     #[test]
@@ -206,18 +203,16 @@ mod tests {
         let xprv = Xprv::random(&mut rng);
         let xpub = xprv.to_xpub();
 
-        // the following are hard-coded based on the previous seed
-        let dk_hex = "9f07e7be5551387a98ba977c732d080dcb0f29a048e3656912c6533e32ee7aed";
+        // hard-coded based on the previous seed
         let compressed_pt_hex = "9c66a339c8344f922fc3206cb5dae814a594c0177dd3235c254d9c409a65b808";
-
-        let mut expected_dk = [0u8; 32];
-        expected_dk[..].copy_from_slice(&hex::decode(dk_hex).unwrap());
-
         let expected_compressed_point =
             CompressedRistretto::from_slice(&hex::decode(compressed_pt_hex).unwrap());
         let expected_point = expected_compressed_point.decompress().unwrap();
 
-        assert_eq!(xpub.dk, expected_dk);
+        assert_eq!(
+            hex::encode(&xpub.dk),
+            "9f07e7be5551387a98ba977c732d080dcb0f29a048e3656912c6533e32ee7aed"
+        );
         assert_eq!(xpub.point, expected_point);
         assert_eq!(xpub.precompressed_pubkey, expected_compressed_point);
     }
@@ -232,9 +227,10 @@ mod tests {
         let xpub_bytes = xpub.to_bytes();
 
         // hardcoded, but happens to be expected_scalar concatenated with expected_compressed_point
-        let expected_hex = "9c66a339c8344f922fc3206cb5dae814a594c0177dd3235c254d9c409a65b8089f07e7be5551387a98ba977c732d080dcb0f29a048e3656912c6533e32ee7aed";
-        let expected_bytes = hex::decode(expected_hex).unwrap();
-        assert_eq!(&xpub_bytes[..], &expected_bytes[..]);
+        assert_eq!(
+            hex::encode(&xpub_bytes[..]),
+            "9c66a339c8344f922fc3206cb5dae814a594c0177dd3235c254d9c409a65b8089f07e7be5551387a98ba977c732d080dcb0f29a048e3656912c6533e32ee7aed"
+        );
     }
 
     #[test]
@@ -265,18 +261,16 @@ mod tests {
             t.commit_u64(b"account_id", 34);
         });
 
-        // the following are hard-coded based on the previous seed
-        let dk_hex = "36e435eabc2a562ef228b82b399fbd004b2cc64103313fa673bd1fca0971f59d";
+        // hard-coded based on the previous seed
         let compressed_pt_hex = "7414c0c5238c2277318ba3e51fc6fb8e836a2d9b4c04508f93cd5a455422221b";
-
-        let mut expected_dk = [0u8; 32];
-        expected_dk[..].copy_from_slice(&hex::decode(dk_hex).unwrap());
-
         let expected_compressed_point =
             CompressedRistretto::from_slice(&hex::decode(compressed_pt_hex).unwrap());
         let expected_point = expected_compressed_point.decompress().unwrap();
 
-        assert_eq!(xpub.dk, expected_dk);
+        assert_eq!(
+            hex::encode(&xpub.dk),
+            "36e435eabc2a562ef228b82b399fbd004b2cc64103313fa673bd1fca0971f59d"
+        );
         assert_eq!(xpub.point, expected_point);
         assert_eq!(xpub.precompressed_pubkey, expected_compressed_point);
     }
