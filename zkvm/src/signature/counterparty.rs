@@ -82,7 +82,7 @@ impl CounterpartyPrecommitted {
 
 impl CounterpartyCommitted {
     pub fn sign(
-        &self,
+        self,
         share: Scalar,
         challenge: Scalar,
         multikey: &Multikey,

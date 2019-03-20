@@ -156,14 +156,21 @@ impl PartyAwaitingShares {
     }
 
     pub fn receive_shares(self, shares: Vec<Scalar>) -> Result<Signature, VMError> {
+        // Create local copies of challenge and &multikey,
+        // since iterator takes ownership of `self` later.
+        let challenge = self.c;
+        let multikey = &self.multikey;
+
         // Check that all shares are valid
         let validated_shares = self
             .counterparties
-            .iter()
+            .into_iter()
             .zip(shares)
-            .map(|(counterparty, share)| counterparty.sign(share, self.c, &self.multikey))
-            .collect::<Result<_, _>>()?;
+            .map(|(counterparty, share)| counterparty.sign(share, challenge, multikey))
+            .collect::<Result<Vec<_>, _>>()?;
 
-        Ok(self.receive_trusted_shares(validated_shares))
+        // s = sum(s_i), s_i = shares[i]
+        let s: Scalar = validated_shares.into_iter().map(|share| share).sum();
+        Ok(Signature { s, R: self.R })
     }
 }
