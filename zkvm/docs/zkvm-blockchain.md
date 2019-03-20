@@ -9,7 +9,7 @@ Specifically:
 
 - Each node maintains a [blockchain state](#blockchain-state).
 - A node creating a new ZkVM network performs the [start new network](#start-new-network) procedure.
-- A node joining an existing ZkVM network performance the [join existing network](#join-existing-network) procedure.
+- A node joining an existing ZkVM network performs the [join existing network](#join-existing-network) procedure.
 - Each node performs the [apply block](#apply-block) procedure on the arrival of each new block.
 
 This document does not describe the mechanism for producing blocks from pending transactions,
