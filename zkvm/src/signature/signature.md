@@ -57,7 +57,7 @@ Input:
 - pubkeys: `Vec<VerificationKey>`. This is a list of compressed public keys that will be aggregated, as long as they can be decompressed successfully.
 
 Operation:
-- Create a new transcript using the tag "ZkVM.aggregated-key". (TODO: remove the "ZkVM." if we make the signature crate separate from the ZkVM crate.)
+- Create a new transcript using the tag "MuSig.aggregated-key". 
 - Commit all the pubkeys to the transcript. The transcript state corresponds to the commitment `<L>` in the MuSig paper: `<L> = H(X_1 || X_2 || ... || X_n)`.
 - Create `aggregated_key = sum_i ( a_i * X_i )`. Iterate over the pubkeys, compute the factor `a_i = H(<L>, X_i)`, and add `a_i * X_i` to the aggregated key.
 
@@ -71,7 +71,7 @@ There are several paths to signing:
     Function: `Signature::sign_single(...)`
 
     Input: 
-    - transcript: `&mut Transcript` - the message to be signed should have been committed to the transcript beforehand.
+    - transcript: `&mut Transcript` - a transcript to which the message to be signed has already been committed.
     - privkey: `Scalar`
 
     Operation:
@@ -106,15 +106,15 @@ There are several paths to signing:
 
 ### Verifying
 
-Signature verificaiton happens in the `Signature::verify(...)` function.
+Signature verification happens in the `Signature::verify(...)` function.
 
 Input: 
 - `&self`
-- transcript: `&mut Transcript` - the message to be signed should have been committed to the transcript beforehand.
+- transcript: `&mut Transcript` - a transcript to which the signed message has already been committed.
 - P: `VerificationKey`
 
 Operation:
-- Make `c = H(X, R, m)`. Since the transcript should already have had the message `m` committed to it, the function only needs to commit `X` with label "P" (for pubkey) and `R` with label "R", and then get the challenge scalar `c` with label "c".
+- Make `c = H(X, R, m)`. Since the transcript already has the message `m` committed to it, the function only needs to commit `X` with label "P" (for pubkey) and `R` with label "R", and then get the challenge scalar `c` with label "c".
 - Decompress verification key `P`. If this fails, return `Err(VMError::InvalidPoint)`.
 - Check if `s * G == R + c * P`. `G` is the [base point](#base-point).
 
@@ -157,7 +157,7 @@ Fields: none
 Function: `new(...)`
 
 Input: 
-- transcript: `&mut Transcript` - the message to be signed should have been committed to the transcript beforehand.
+- transcript: `&mut Transcript` - a transcript to which the message to be signed has already been committed.
 - privkey: `Scalar`
 - multikey: `Multikey`
 - pubkeys: `Vec<VerificationKey>` - all the public keys that went into the multikey. The list is assumed to be in the same order as the upcoming lists of `NoncePrecommitment`s, `NonceCommitment`s, and `Share`s.
