@@ -15,11 +15,11 @@ pub struct NoncePrecommitment([u8; 32]);
 pub struct NonceCommitment(RistrettoPoint);
 
 impl NonceCommitment {
-    pub fn new(commitment: RistrettoPoint) -> Self {
+    pub(super) fn new(commitment: RistrettoPoint) -> Self {
         NonceCommitment(commitment)
     }
 
-    pub fn precommit(&self) -> NoncePrecommitment {
+    pub(super) fn precommit(&self) -> NoncePrecommitment {
         let mut h = Transcript::new(b"MuSig.nonce-precommit");
         h.commit_point(b"R", &self.0.compress());
         let mut precommitment = [0u8; 32];
@@ -27,7 +27,7 @@ impl NonceCommitment {
         NoncePrecommitment(precommitment)
     }
 
-    pub fn sum(commitments: &Vec<Self>) -> RistrettoPoint {
+    pub(super) fn sum(commitments: &Vec<Self>) -> RistrettoPoint {
         commitments.iter().map(|R_i| R_i.0).sum()
     }
 }
@@ -47,11 +47,14 @@ pub struct CounterpartyCommitted {
 }
 
 impl Counterparty {
-    pub fn new(pubkey: VerificationKey) -> Self {
+    pub(super) fn new(pubkey: VerificationKey) -> Self {
         Counterparty { pubkey }
     }
 
-    pub fn precommit_nonce(self, precommitment: NoncePrecommitment) -> CounterpartyPrecommitted {
+    pub(super) fn precommit_nonce(
+        self,
+        precommitment: NoncePrecommitment,
+    ) -> CounterpartyPrecommitted {
         CounterpartyPrecommitted {
             precommitment,
             pubkey: self.pubkey,
@@ -60,7 +63,7 @@ impl Counterparty {
 }
 
 impl CounterpartyPrecommitted {
-    pub fn commit_nonce(
+    pub(super) fn commit_nonce(
         self,
         commitment: NonceCommitment,
     ) -> Result<CounterpartyCommitted, VMError> {
@@ -81,7 +84,7 @@ impl CounterpartyPrecommitted {
 }
 
 impl CounterpartyCommitted {
-    pub fn sign(
+    pub(super) fn sign(
         self,
         share: Scalar,
         challenge: Scalar,
