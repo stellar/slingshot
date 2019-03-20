@@ -65,6 +65,8 @@ If you need to share an individual public key, use [leaf key derivation](#derive
 
 ## Operations
 
+![Operations on Keys](operations.png)
+
 ### Generate key
 
 1. Acquire a secure random number generator.
