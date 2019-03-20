@@ -1,6 +1,6 @@
+use super::multikey::Multikey;
+use super::VerificationKey;
 use crate::errors::VMError;
-use crate::signature::multikey::Multikey;
-use crate::signature::VerificationKey;
 use crate::transcript::TranscriptProtocol;
 use curve25519_dalek::constants::RISTRETTO_BASEPOINT_POINT;
 use curve25519_dalek::ristretto::RistrettoPoint;

@@ -1,4 +1,4 @@
-use crate::signature::VerificationKey;
+use super::VerificationKey;
 use crate::transcript::TranscriptProtocol;
 use curve25519_dalek::ristretto::RistrettoPoint;
 use curve25519_dalek::scalar::Scalar;
