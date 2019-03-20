@@ -149,7 +149,10 @@ impl PartyAwaitingShares {
     pub fn receive_trusted_shares(self, shares: Vec<Scalar>) -> Signature {
         // s = sum(s_i), s_i = shares[i]
         let s: Scalar = shares.into_iter().map(|share| share).sum();
-        Signature { s, R: self.R }
+        Signature {
+            s,
+            R: self.R.compress(),
+        }
     }
 
     pub fn receive_shares(self, shares: Vec<Scalar>) -> Result<Signature, VMError> {
@@ -168,6 +171,9 @@ impl PartyAwaitingShares {
 
         // s = sum(s_i), s_i = shares[i]
         let s: Scalar = validated_shares.into_iter().map(|share| share).sum();
-        Ok(Signature { s, R: self.R })
+        Ok(Signature {
+            s,
+            R: self.R.compress(),
+        })
     }
 }

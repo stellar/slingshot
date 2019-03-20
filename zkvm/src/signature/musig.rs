@@ -2,33 +2,34 @@ use super::VerificationKey;
 use crate::errors::VMError;
 use crate::transcript::TranscriptProtocol;
 use curve25519_dalek::constants::RISTRETTO_BASEPOINT_POINT;
-use curve25519_dalek::ristretto::RistrettoPoint;
+use curve25519_dalek::ristretto::CompressedRistretto;
 use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
 
 #[derive(Debug, Clone)]
 pub struct Signature {
     pub s: Scalar,
-    pub R: RistrettoPoint,
+    pub R: CompressedRistretto,
 }
 
 impl Signature {
-    pub fn verify(&self, transcript: &Transcript, P: VerificationKey) -> Result<(), VMError> {
+    pub fn verify(&self, transcript: &Transcript, pubkey: VerificationKey) -> Result<(), VMError> {
         let G = RISTRETTO_BASEPOINT_POINT;
         let mut transcript = transcript.clone();
 
         // Make c = H(X, R, m)
         // The message `m` has already been fed into the transcript
         let c = {
-            transcript.commit_point(b"P", &P.0);
-            transcript.commit_point(b"R", &self.R.compress());
+            transcript.commit_point(b"P", &pubkey.0);
+            transcript.commit_point(b"R", &self.R);
             transcript.challenge_scalar(b"c")
         };
 
-        let P = P.0.decompress().ok_or(VMError::InvalidPoint)?;
+        let X = pubkey.0.decompress().ok_or(VMError::InvalidPoint)?;
+        let R = self.R.decompress().ok_or(VMError::InvalidPoint)?;
 
-        // Check sG = R + c * aggregated_key
-        if self.s * G == self.R + c * P {
+        // Check sG = R + c * X
+        if self.s * G == R + c * X {
             Ok(())
         } else {
             Err(VMError::PointOperationsFailed)
