@@ -318,8 +318,7 @@ where
                 Instruction::Log => self.log()?,
                 Instruction::Signtx => self.signtx()?,
                 Instruction::Call => self.call()?,
-                Instruction::Left => self.left()?,
-                Instruction::Right => self.right()?,
+                Instruction::Select(n, k) => self.select(n, k)?,
                 Instruction::Delegate => self.delegate()?,
                 Instruction::Ext(opcode) => self.ext(opcode)?,
             }
@@ -735,34 +734,23 @@ where
         Ok(())
     }
 
-    fn left_or_right<F>(&mut self, assign: F) -> Result<(), VMError>
-    where
-        F: FnOnce(&mut Contract, Predicate, Predicate) -> (),
-    {
-        let r = self.pop_item()?.to_data()?.to_predicate()?;
-        let l = self.pop_item()?.to_data()?.to_predicate()?;
+    fn select(&mut self, n: u8, k: u8) -> Result<(), VMError> {
+        if k >= n {
+            return Err(VMError::PredicateIndexInvalid);
+        }
 
+        let mut preds: Vec<Predicate> = Vec::with_capacity(n as usize);
+        for _ in 0..n {
+            preds.insert(0, self.pop_item()?.to_data()?.to_predicate()?);
+        }
         let mut contract = self.pop_item()?.to_contract()?;
         let p = &contract.predicate;
+        self.delegate
+            .verify_point_op(|| p.prove_disjunction(&preds))?;
 
-        self.delegate.verify_point_op(|| p.prove_or(&l, &r))?;
-
-        assign(&mut contract, l, r);
-
+        contract.predicate = preds.remove(k as usize);
         self.push_item(contract);
         Ok(())
-    }
-
-    fn left(&mut self) -> Result<(), VMError> {
-        self.left_or_right(|contract, left, _| {
-            contract.predicate = left;
-        })
-    }
-
-    fn right(&mut self) -> Result<(), VMError> {
-        self.left_or_right(|contract, _, right| {
-            contract.predicate = right;
-        })
     }
 
     fn delegate(&mut self) -> Result<(), VMError> {

@@ -142,4 +142,8 @@ pub enum VMError {
     /// This error occurs when a Merkle proof of inclusion is invalid.
     #[fail(display = "Invalid Merkle proof.")]
     InvalidMerkleProof,
+
+    /// This error occurs when the an index of a selected predicate is invalid.
+    #[fail(display = "Predicate index out of bounds")]
+    PredicateIndexInvalid,
 }

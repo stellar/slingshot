@@ -36,8 +36,7 @@ We call a type **witness** if it contains secret data and structure necessary fo
 
 * `Predicate::Opaque` is an _opaque type_ to represent all predicates for the verifier’s VM. It also represents the unused opaque branches of a [predicate tree](zkvm-spec.md#predicate-tree) in the prover’s VM.
 * `Predicate::Key` is a _witness type_ representing a signing key for [`delegate`](zkvm-spec.md#delegate) and [`signtx`](zkvm-spec.md#signtx) instructions.
-* `Predicate::Or` is a _witness type_ representing a disjunction of two predicates that can be navigated with [`left`](
-zkvm-spec.md#left) and [`right`](zkvm-spec.md#right) instructions.
+* `Predicate::Or` is a _witness type_ representing a disjunction of n predicates that can be navigated with the [`select`](zkvm-spec.md#select) instruction.
 * `Predicate::Program` is a _witness type_ representing a program commitment for the [`call`](zkvm-spec.md#call) instruction.
 
 ### Variables
