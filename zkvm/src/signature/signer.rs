@@ -156,21 +156,22 @@ impl PartyAwaitingShares {
     }
 
     pub fn receive_shares(self, shares: Vec<Scalar>) -> Result<Signature, VMError> {
-        // Create local copies of challenge and &multikey,
-        // since iterator takes ownership of `self` later.
+        // Move out self's fields because `self.c` inside `map`'s closure would
+        // lead to capturing `self` by reference, while we want
+        // to move `self.counterparties` out of it.
+        // See also RFC2229: https://github.com/rust-lang/rfcs/pull/2229
         let challenge = self.c;
         let multikey = &self.multikey;
 
         // Check that all shares are valid
-        let validated_shares = self
+        // If so, create s. s = sum(s_i), s_i = shares[i]
+        let s = self
             .counterparties
             .into_iter()
             .zip(shares)
             .map(|(counterparty, share)| counterparty.sign(share, challenge, multikey))
-            .collect::<Result<Vec<_>, _>>()?;
+            .sum::<Result<_, _>>()?;
 
-        // s = sum(s_i), s_i = shares[i]
-        let s: Scalar = validated_shares.into_iter().map(|share| share).sum();
         Ok(Signature {
             s,
             R: self.R.compress(),
