@@ -132,7 +132,8 @@ mod tests {
                 .iter()
                 .map(|priv_key| VerificationKey((G * priv_key).compress()))
                 .collect(),
-        ).unwrap()
+        )
+        .unwrap()
     }
 
     #[test]

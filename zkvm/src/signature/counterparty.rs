@@ -3,7 +3,7 @@ use super::VerificationKey;
 use crate::errors::VMError;
 use crate::transcript::TranscriptProtocol;
 use curve25519_dalek::constants::RISTRETTO_BASEPOINT_POINT;
-use curve25519_dalek::ristretto::{RistrettoPoint,CompressedRistretto};
+use curve25519_dalek::ristretto::{CompressedRistretto, RistrettoPoint};
 use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
 use subtle::ConstantTimeEq;
