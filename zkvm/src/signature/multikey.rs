@@ -19,30 +19,27 @@ impl Multikey {
         // Commit pubkeys into the transcript
         // <L> = H(X_1 || X_2 || ... || X_n)
         for X in &pubkeys {
-            transcript.commit_point(b"P", &X.0);
+            transcript.commit_point(b"P", &X.to_compressed_point());
         }
 
         // aggregated_key = sum_i ( a_i * X_i )
         let mut aggregated_key = RistrettoPoint::default();
         for X in &pubkeys {
             let a = Multikey::compute_factor(&transcript, X);
-            let X = match X.0.decompress() {
-                Some(X) => X,
-                None => return None,
-            };
-            aggregated_key = aggregated_key + a * X;
+            aggregated_key = aggregated_key + a * X.to_point();
         }
 
         Some(Multikey {
             transcript,
-            aggregated_key: VerificationKey(aggregated_key.compress()),
+            // ASK OLEG; Do we need to compress the aggregated key here?
+            aggregated_key: VerificationKey::with_compressed(aggregated_key.compress())?,
         })
     }
 
     fn compute_factor(transcript: &Transcript, X_i: &VerificationKey) -> Scalar {
         // a_i = H(<L>, X_i). Components of <L> have already been fed to transcript.
         let mut a_i_transcript = transcript.clone();
-        a_i_transcript.commit_point(b"X_i", &X_i.0);
+        a_i_transcript.commit_point(b"X_i", &X_i.to_compressed_point());
         a_i_transcript.challenge_scalar(b"a_i")
     }
 

@@ -133,13 +133,15 @@ impl PartyAwaitingCommitments {
         // The message `m` should already have been fed into the transcript.
         let c = {
             self.transcript
-                .commit_point(b"P", &self.multikey.aggregated_key().0);
+                .commit_point(b"P", &self.multikey.aggregated_key().to_compressed_point());
             self.transcript.commit_point(b"R", &R.compress());
             self.transcript.challenge_scalar(b"c")
         };
 
         // Make a_i = H(L, X_i)
-        let X_i = VerificationKey((self.x_i * RISTRETTO_BASEPOINT_POINT).compress());
+        // OLEG: compressing after allows us to avoid it failing with `with_compressed` WDYT?
+        let mut X_i = VerificationKey::with_decompressed(self.x_i * RISTRETTO_BASEPOINT_POINT);
+        X_i.compress_in_place();
         let a_i = self.multikey.factor_for_key(&X_i);
 
         // Generate share: s_i = r_i + c * a_i * x_i
@@ -177,12 +179,10 @@ impl PartyAwaitingShares {
             let R_i = self.nonce_commitments[i].0;
 
             // Make a_i = H(L, X_i)
-            let a_i = self.multikey.factor_for_key(&VerificationKey(X_i.0));
-
-            let X_i = X_i.0.decompress().ok_or(VMError::InvalidPoint)?;
+            let a_i = self.multikey.factor_for_key(&X_i);
 
             // Check that S_i = R_i + c * a_i * X_i
-            if S_i != R_i + self.c * a_i * X_i {
+            if S_i != R_i + self.c * a_i * X_i.to_point() {
                 return Err(VMError::ShareError { index: i });
             }
         }

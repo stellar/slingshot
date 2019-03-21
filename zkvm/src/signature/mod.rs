@@ -90,7 +90,7 @@ impl Signature {
     ) -> PointOp {
         transcript.commit_u64(b"n", pubkeys.len() as u64);
         for p in pubkeys.iter() {
-            transcript.commit_point(b"P", p.as_compressed_point());
+            transcript.commit_point(b"P", &p.to_compressed_point());
         }
 
         let mut pairs = pubkeys
@@ -143,7 +143,7 @@ impl Signature {
         let n = pubkeys.len();
         transcript.commit_u64(b"n", n as u64);
         for p in pubkeys.iter() {
-            transcript.commit_point(b"P", p.as_compressed_point());
+            transcript.commit_point(b"P", &p.to_compressed_point());
         }
 
         // Generate aggregated private key
@@ -207,6 +207,12 @@ impl VerificationKey {
     pub(crate) fn from_secret_uncompressed(privkey: &Scalar) -> RistrettoPoint {
         let gens = PedersenGens::default();
         (privkey * gens.B)
+    }
+}
+
+impl From<RistrettoPoint> for VerificationKey {
+    fn from(x: RistrettoPoint) -> Self {
+        VerificationKey::with_decompressed(x)
     }
 }
 

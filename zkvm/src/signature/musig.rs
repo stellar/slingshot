@@ -20,15 +20,13 @@ impl Signature {
         // Make c = H(X, R, m)
         // The message `m` should already have been fed into the transcript
         let c = {
-            transcript.commit_point(b"P", &P.0);
+            transcript.commit_point(b"P", &P.to_compressed_point());
             transcript.commit_point(b"R", &self.R.compress());
             transcript.challenge_scalar(b"c")
         };
 
-        let P = P.0.decompress().ok_or(VMError::InvalidPoint)?;
-
         // Check sG = R + c * aggregated_key
-        if self.s * G == self.R + c * P {
+        if self.s * G == self.R + c * P.to_point() {
             Ok(())
         } else {
             Err(VMError::PointOperationsFailed)
@@ -61,7 +59,10 @@ mod tests {
             136, 160, 232, 167, 109, 47, 88, 194, 207, 227, 71, 222, 102,
         ]);
 
-        assert_eq!(expected_pubkey, multikey.aggregated_key().0);
+        assert_eq!(
+            expected_pubkey,
+            multikey.aggregated_key().to_compressed_point()
+        );
     }
 
     fn multikey_helper(priv_keys: &Vec<Scalar>) -> Option<Multikey> {
@@ -69,7 +70,11 @@ mod tests {
         Multikey::new(
             priv_keys
                 .iter()
-                .map(|priv_key| VerificationKey((G * priv_key).compress()))
+                .map(|priv_key| {
+                    let mut key = VerificationKey::with_decompressed((G * priv_key));
+                    key.compress_in_place();
+                    key
+                })
                 .collect(),
         )
     }
@@ -115,7 +120,12 @@ mod tests {
 
         let pub_keys: Vec<_> = priv_keys
             .iter()
-            .map(|priv_key| VerificationKey((priv_key * RISTRETTO_BASEPOINT_POINT).compress()))
+            .map(|priv_key| {
+                let mut key =
+                    VerificationKey::with_decompressed((priv_key * RISTRETTO_BASEPOINT_POINT));
+                key.compress_in_place();
+                key
+            })
             .collect();
         let signatures: Vec<_> = parties
             .into_iter()

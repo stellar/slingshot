@@ -50,7 +50,8 @@ impl<'a, 'b> Delegate<r1cs::Verifier<'a, 'b>> for Verifier<'a, 'b> {
     }
 
     fn process_tx_signature(&mut self, pred: Predicate) -> Result<(), VMError> {
-        Ok(self.signtx_keys.push(VerificationKey(pred.to_point())))
+        let key = VerificationKey::with_compressed(pred.to_point()).ok_or(VMError::InvalidPoint)?;
+        Ok(self.signtx_keys.push(key))
     }
 
     fn next_instruction(
