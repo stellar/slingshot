@@ -163,8 +163,8 @@ impl PartyAwaitingShares {
         let challenge = self.c;
         let multikey = &self.multikey;
 
-        // Check that all shares are valid
-        // If so, create s. s = sum(s_i), s_i = shares[i]
+        // Check that all shares are valid. If so, create s from them.
+        // s = sum(s_i), s_i = shares[i]
         let s = self
             .counterparties
             .into_iter()
