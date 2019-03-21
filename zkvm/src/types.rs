@@ -9,8 +9,8 @@ use crate::constraints::{Commitment, Constraint, Expression, Variable};
 use crate::contract::{Contract, Output, PortableItem};
 use crate::encoding::SliceReader;
 use crate::errors::VMError;
-use crate::ops::Program;
 use crate::predicate::Predicate;
+use crate::program::Program;
 use crate::scalar_witness::ScalarWitness;
 use crate::transcript::TranscriptProtocol;
 
