@@ -1,4 +1,5 @@
 use super::VerificationKey;
+use crate::errors::VMError;
 use crate::transcript::TranscriptProtocol;
 use curve25519_dalek::ristretto::RistrettoPoint;
 use curve25519_dalek::scalar::Scalar;
@@ -6,12 +7,23 @@ use merlin::Transcript;
 
 #[derive(Clone)]
 pub struct Multikey {
-    transcript: Transcript,
+    transcript: Option<Transcript>,
     aggregated_key: VerificationKey,
 }
 
 impl Multikey {
-    pub fn new(pubkeys: Vec<VerificationKey>) -> Option<Self> {
+    pub fn new(pubkeys: Vec<VerificationKey>) -> Result<Self, VMError> {
+        match pubkeys.len() {
+            0 => return Err(VMError::BadArguments),
+            1 => {
+                return Ok(Multikey {
+                    transcript: None,
+                    aggregated_key: pubkeys[0],
+                });
+            }
+            _ => {}
+        }
+
         // Create transcript for Multikey
         let mut transcript = Transcript::new(b"MuSig.aggregated-key");
         transcript.commit_u64(b"n", pubkeys.len() as u64);
@@ -26,15 +38,12 @@ impl Multikey {
         let mut aggregated_key = RistrettoPoint::default();
         for X in &pubkeys {
             let a = Multikey::compute_factor(&transcript, X);
-            let X = match X.0.decompress() {
-                Some(X) => X,
-                None => return None,
-            };
+            let X = X.0.decompress().ok_or(VMError::InvalidPoint)?;
             aggregated_key = aggregated_key + a * X;
         }
 
-        Some(Multikey {
-            transcript,
+        Ok(Multikey {
+            transcript: Some(transcript),
             aggregated_key: VerificationKey(aggregated_key.compress()),
         })
     }
@@ -47,7 +56,10 @@ impl Multikey {
     }
 
     pub fn factor_for_key(&self, X_i: &VerificationKey) -> Scalar {
-        Multikey::compute_factor(&self.transcript, X_i)
+        match &self.transcript {
+            Some(t) => Multikey::compute_factor(&t, X_i),
+            None => Scalar::one(),
+        }
     }
 
     pub fn aggregated_key(&self) -> VerificationKey {
