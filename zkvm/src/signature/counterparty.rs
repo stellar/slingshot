@@ -3,7 +3,7 @@ use super::VerificationKey;
 use crate::errors::VMError;
 use crate::transcript::TranscriptProtocol;
 use curve25519_dalek::constants::RISTRETTO_BASEPOINT_POINT;
-use curve25519_dalek::ristretto::RistrettoPoint;
+use curve25519_dalek::ristretto::{RistrettoPoint,CompressedRistretto};
 use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
 use subtle::ConstantTimeEq;
@@ -25,6 +25,10 @@ impl NonceCommitment {
         let mut precommitment = [0u8; 32];
         h.challenge_bytes(b"precommitment", &mut precommitment);
         NoncePrecommitment(precommitment)
+    }
+
+    pub(super) fn compress(&self) -> CompressedRistretto {
+        self.0.compress()
     }
 
     pub(super) fn sum(commitments: &Vec<Self>) -> RistrettoPoint {

@@ -1,3 +1,4 @@
+use super::counterparty::NonceCommitment;
 use super::VerificationKey;
 use crate::errors::VMError;
 use crate::transcript::TranscriptProtocol;
@@ -13,6 +14,31 @@ pub struct Signature {
 }
 
 impl Signature {
+    pub fn sign_single(inp_transcript: &Transcript, privkey: Scalar) -> Signature {
+        let mut transcript = inp_transcript.clone();
+        let X = VerificationKey::from_secret(&privkey); // pubkey
+
+        let mut rng = transcript
+            .build_rng()
+            .commit_witness_bytes(b"x", &privkey.to_bytes())
+            .finalize(&mut rand::thread_rng());
+
+        // Generate ephemeral keypair (r, R). r is a random nonce.
+        let r = Scalar::random(&mut rng);
+        // R = generator * r
+        let R = NonceCommitment::new(RISTRETTO_BASEPOINT_POINT * r);
+
+        let c = {
+            transcript.commit_point(b"X", &X.0);
+            transcript.commit_point(b"R", &R.compress());
+            transcript.challenge_scalar(b"c")
+        };
+
+        let s = r + c * privkey;
+
+        Signature { s, R: R.compress() }
+    }
+
     pub fn verify(&self, transcript: &Transcript, X: VerificationKey) -> Result<(), VMError> {
         let G = RISTRETTO_BASEPOINT_POINT;
         let mut transcript = transcript.clone();
@@ -45,6 +71,26 @@ mod tests {
     use crate::signature::signer::*;
     use crate::signature::{multikey::Multikey, VerificationKey};
     use curve25519_dalek::ristretto::CompressedRistretto;
+
+    #[test]
+    fn sign_verify_single() {
+        let privkey = Scalar::from(1u64);
+        let mut transcript = Transcript::new(b"oh hello");
+        transcript.commit_bytes(b"label", b"message");
+        let sig = Signature::sign_single(&transcript, privkey);
+
+        let X = VerificationKey::from_secret(&privkey);
+
+        assert!(sig.verify(&transcript, X).is_ok());
+
+        let priv_bad = Scalar::from(2u64);
+        let X_bad = VerificationKey::from_secret(&priv_bad);
+        assert!(sig.verify(&transcript, X_bad).is_err());
+
+        let mut transcript_bad = Transcript::new(b"oh goodbye");
+        transcript_bad.commit_bytes(b"label", b"message");
+        assert!(sig.verify(&transcript_bad, X).is_err());
+    }
 
     #[test]
     fn make_aggregated_pubkey() {
