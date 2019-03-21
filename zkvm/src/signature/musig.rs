@@ -1,34 +1,35 @@
+use super::VerificationKey;
 use crate::errors::VMError;
-use crate::signature::VerificationKey;
 use crate::transcript::TranscriptProtocol;
 use curve25519_dalek::constants::RISTRETTO_BASEPOINT_POINT;
-use curve25519_dalek::ristretto::RistrettoPoint;
+use curve25519_dalek::ristretto::CompressedRistretto;
 use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
 
 #[derive(Debug, Clone)]
 pub struct Signature {
     pub s: Scalar,
-    pub R: RistrettoPoint,
+    pub R: CompressedRistretto,
 }
 
 impl Signature {
-    pub fn verify(&self, transcript: &Transcript, P: VerificationKey) -> Result<(), VMError> {
+    pub fn verify(&self, transcript: &Transcript, X: VerificationKey) -> Result<(), VMError> {
         let G = RISTRETTO_BASEPOINT_POINT;
         let mut transcript = transcript.clone();
 
         // Make c = H(X, R, m)
-        // The message `m` should already have been fed into the transcript
+        // The message `m` has already been fed into the transcript
         let c = {
-            transcript.commit_point(b"P", &P.0);
-            transcript.commit_point(b"R", &self.R.compress());
+            transcript.commit_point(b"X", &X.0);
+            transcript.commit_point(b"R", &self.R);
             transcript.challenge_scalar(b"c")
         };
 
-        let P = P.0.decompress().ok_or(VMError::InvalidPoint)?;
+        let X = X.0.decompress().ok_or(VMError::InvalidPoint)?;
+        let R = self.R.decompress().ok_or(VMError::InvalidPoint)?;
 
-        // Check sG = R + c * aggregated_key
-        if self.s * G == self.R + c * P {
+        // Check sG = R + c * X
+        if self.s * G == R + c * X {
             Ok(())
         } else {
             Err(VMError::PointOperationsFailed)
@@ -41,7 +42,7 @@ mod tests {
 
     use super::*;
     use crate::errors::VMError;
-    use crate::signature::prover::*;
+    use crate::signature::signer::*;
     use crate::signature::{multikey::Multikey, VerificationKey};
     use curve25519_dalek::ristretto::CompressedRistretto;
 
@@ -57,8 +58,8 @@ mod tests {
         let multikey = multikey_helper(&priv_keys).unwrap();
 
         let expected_pubkey = CompressedRistretto::from_slice(&[
-            212, 211, 54, 88, 245, 166, 107, 207, 28, 70, 247, 28, 5, 233, 67, 112, 196, 30, 35,
-            136, 160, 232, 167, 109, 47, 88, 194, 207, 227, 71, 222, 102,
+            56, 92, 251, 79, 34, 221, 181, 222, 11, 112, 55, 45, 154, 242, 40, 250, 247, 1, 109,
+            126, 150, 210, 181, 6, 117, 95, 44, 102, 38, 28, 144, 49,
         ]);
 
         assert_eq!(expected_pubkey, multikey.aggregated_key().0);
@@ -90,17 +91,21 @@ mod tests {
     }
 
     fn sign_helper(
-        priv_keys: Vec<Scalar>,
+        privkeys: Vec<Scalar>,
         multikey: Multikey,
         m: Vec<u8>,
     ) -> Result<Signature, VMError> {
         let mut transcript = Transcript::new(b"signing test");
         transcript.commit_bytes(b"message", &m);
+        let pubkeys: Vec<_> = privkeys
+            .iter()
+            .map(|privkey| VerificationKey((privkey * RISTRETTO_BASEPOINT_POINT).compress()))
+            .collect();
 
-        let (parties, precomms): (Vec<_>, Vec<_>) = priv_keys
+        let (parties, precomms): (Vec<_>, Vec<_>) = privkeys
             .clone()
             .into_iter()
-            .map(|x_i| Party::new(&transcript.clone(), x_i, multikey.clone()))
+            .map(|x_i| Party::new(&transcript.clone(), x_i, multikey.clone(), pubkeys.clone()))
             .unzip();
 
         let (parties, comms): (Vec<_>, Vec<_>) = parties
@@ -113,15 +118,9 @@ mod tests {
             .map(|p| p.receive_commitments(comms.clone()).unwrap())
             .unzip();
 
-        let pub_keys: Vec<_> = priv_keys
-            .iter()
-            .map(|priv_key| VerificationKey((priv_key * RISTRETTO_BASEPOINT_POINT).compress()))
-            .collect();
         let signatures: Vec<_> = parties
             .into_iter()
-            .map(|p: PartyAwaitingShares| {
-                p.receive_shares(shares.clone(), pub_keys.clone()).unwrap()
-            })
+            .map(|p: PartyAwaitingShares| p.receive_shares(shares.clone()).unwrap())
             .collect();
 
         // Check that signatures from all parties are the same

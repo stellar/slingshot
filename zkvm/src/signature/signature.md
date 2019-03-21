@@ -37,8 +37,8 @@ Fields:
 
 Functions: 
 - `Multikey::new(...)`: detailed more in [key aggregation](#key-aggregation) section. 
-- `Multikey::factor_for_key(self, verification_key)`: computes the `a_i` factor, where `a_i = H(<L>, X_i)`. `<L>`, or the list of pukeys that go into the aggregated pubkey, has already been committed into `self.transcript`. Therefore, this function simply clones `self.transcript`, commits the verification key (`X_i`) into the transcript with label "X_i", and then squeezes the challenge scalar `a_i` from the transcript with label "a_i".
-- `Multikey::aggregated_key(self)`: returns the aggregated key stored in the multikey, `self.aggregated_key`.  
+- `Multikey::factor_for_key(&self, &verification_key)`: computes the `a_i` factor, where `a_i = H(<L>, X_i)`. `<L>`, or the list of pukeys that go into the aggregated pubkey, has already been committed into `self.transcript`. Therefore, this function simply clones `self.transcript`, commits the verification key (`X_i`) into the transcript with label "X_i", and then squeezes the challenge scalar `a_i` from the transcript with label "a_i".
+- `Multikey::aggregated_key(&self)`: returns the aggregated key stored in the multikey, `self.aggregated_key`.  
 
 ### Signature
 
@@ -57,9 +57,8 @@ Input:
 - pubkeys: `Vec<VerificationKey>`. This is a list of compressed public keys that will be aggregated, as long as they can be decompressed successfully.
 
 Operation:
-- Create a new transcript using the tag "ZkVM.aggregated-key". (TODO: remove the "ZkVM." if we make the signature crate separate from the ZkVM crate.)
+- Create a new transcript using the tag "MuSig.aggregated-key". 
 - Commit all the pubkeys to the transcript. The transcript state corresponds to the commitment `<L>` in the MuSig paper: `<L> = H(X_1 || X_2 || ... || X_n)`.
-  (TODO: this sounds awkward, explain better?)
 - Create `aggregated_key = sum_i ( a_i * X_i )`. Iterate over the pubkeys, compute the factor `a_i = H(<L>, X_i)`, and add `a_i * X_i` to the aggregated key.
 
 Output:
@@ -72,13 +71,13 @@ There are several paths to signing:
     Function: `Signature::sign_single(...)`
 
     Input: 
-    - transcript: `&mut Transcript` - the message to be signed should have been committed to the transcript beforehand.
+    - transcript: `&mut Transcript` - a transcript to which the message to be signed has already been committed.
     - privkey: `Scalar`
 
     Operation:
     - Clone the transcript state, mix it with the privkey and system-provided RNG to generate the nonce `r`. This makes the nonce uniquely bound to a message and private key, and also makes it non-deterministic to prevent "rowhammer" attacks.
     - Use the nonce to create a nonce commitment `R = r * G`
-    - Make `c = H(X, R, m)`. Because `m` has already been fed into the transcript externally, we do this by committing `X = privkey * G` to the transcript with label "P" (for pubkey), committing `R` to the transcript with label "R", and getting the challenge scalar `c` with label "c".
+    - Make `c = H(X, R, m)`. Because `m` has already been fed into the transcript externally, we do this by committing `X = privkey * G` to the transcript with label "X", committing `R` to the transcript with label "R", and getting the challenge scalar `c` with label "c".
     - Make `s = r + c * x` where `x = privkey`
 
     Output:
@@ -107,15 +106,15 @@ There are several paths to signing:
 
 ### Verifying
 
-Signature verificaiton happens in the `Signature::verify(...)` function.
+Signature verification happens in the `Signature::verify(...)` function.
 
 Input: 
 - `&self`
-- transcript: `&mut Transcript` - the message to be signed should have been committed to the transcript beforehand.
+- transcript: `&mut Transcript` - a transcript to which the signed message has already been committed.
 - P: `VerificationKey`
 
 Operation:
-- Make `c = H(X, R, m)`. Since the transcript should already have had the message `m` committed to it, the function only needs to commit `X` with label "P" (for pubkey) and `R` with label "R", and then get the challenge scalar `c` with label "c".
+- Make `c = H(X, R, m)`. Since the transcript already has the message `m` committed to it, the function only needs to commit `X` with label "X" and `R` with label "R", and then get the challenge scalar `c` with label "c".
 - Decompress verification key `P`. If this fails, return `Err(VMError::InvalidPoint)`.
 - Check if `s * G == R + c * P`. `G` is the [base point](#base-point).
 
@@ -158,7 +157,7 @@ Fields: none
 Function: `new(...)`
 
 Input: 
-- transcript: `&mut Transcript` - the message to be signed should have been committed to the transcript beforehand.
+- transcript: `&mut Transcript` - a transcript to which the message to be signed has already been committed.
 - privkey: `Scalar`
 - multikey: `Multikey`
 - pubkeys: `Vec<VerificationKey>` - all the public keys that went into the multikey. The list is assumed to be in the same order as the upcoming lists of `NoncePrecommitment`s, `NonceCommitment`s, and `Share`s.
@@ -167,7 +166,7 @@ Operation:
 - Use the transcript to generate a random factor (the nonce), by committing to the privkey and passing in a `thread_rng`.
 - Use the nonce to create a nonce commitment and precommitment
 - Clone the transcript
-- Create a vector of `Counterparty`s using the pubkeys.
+- Create a vector of `Counterparty`s by calling `Counterparty::new(...)` with the input pubkeys.
 
 Output: 
 - The next state in the protocol: `PartyAwaitingPrecommitments` 
@@ -245,25 +244,94 @@ Output
 
 ## Protocol for counterparty state transitions
 Counterparties are states stored internally by a party, that represent the messages received by from its counterparties. 
-TODO: add more description
 
 Counterparty state transitions overview:
 ```
-Counterparty{pubkey: Verificationkey}
+Counterparty{pubkey}
   ↓
-.precommit_nonce(H: NoncePrecommitment) // simply adds precommitment
+.precommit_nonce(precommitment)
   ↓
-CounterpartyPrecommitted{H, pubkey}
+CounterpartyPrecommitted{precommitment, pubkey}
   ↓
-.commit_nonce(R: NonceCommitment) // verifies hash(R) == H
+.commit_nonce(commitment)
   ↓
-CounterpartyCommitted{R, pubkey}
+CounterpartyCommitted{commitment, pubkey}
   ↓
-.sign(s: Share) // verifies s_i * G == R_i + c * factor * pubkey_i
+.sign(share, challenge, multikey)
   ↓
-  s
+ s_i
 
 s_total = sum{s_i}
 R_total = sum{R_i}
+Signature = {s: s_total, R: R_total}
 ```
 
+### Counterparty
+
+Fields: pubkey
+
+Function: `new(...)`
+
+Input: 
+- pubkey: `VerificationKey`
+
+Operation:
+- Create a new `Counterparty` instance with the input pubkey in the `pubkey` field
+
+Output: 
+- The new `Counterparty` instance
+
+
+
+Function: `precommit_nonce(...)`
+
+Input:
+- precommitment: `NoncePrecommitment`
+
+Operation:
+- Create a new `CounterpartyPrecommitted` instance with `self.pubkey` and the precommitment
+- Future work: receive pubkey in this function, and match against stored counterparties to make sure the pubkey corresponds. This will allow us to receive messages out of order, and do sorting on the party's end.
+
+Output:
+- `CounterpartyPrecommitted`
+
+### CounterpartyPrecommitted
+
+Fields:
+- precommitment: `NoncePrecommitment`
+- pubkey: `VerificationKey`
+
+Function: `commit_nonce(...)`
+
+Input: 
+- commitment: `NonceCommitment`
+
+Operation:
+- Verify that `self.precommitment = commitment.precommit()`.
+- If verification succeeds, create a new `CounterpartyCommitted` using `self.pubkey` and commitment.
+- Else, return `Err(VMError::MuSigShareError)`.
+
+Output:
+- `Result<CounterpartyCommitted, MuSigShareError>`.
+
+### CounterpartyCommitted
+
+Fields:
+- commitment: `NonceCommitment`
+- pubkey: `VerificationKey`
+
+Function: `sign(...)`
+
+Input:
+- share: `Scalar`
+- challenge: `Scalar`
+- multikey: `&Multikey`
+
+Operation:
+- Verify that `s_i * G == R_i + c * a_i * X_i`.
+  `s_i` = share, `G` = [base point](#base-point), `R_i` = self.commitment, `c` = challenge, `a_i` = `multikey.factor_for_key(self.pubkey)`, `X_i` = self.pubkey.
+- If verification succeeds, return `Ok(share)`
+- Else, return `Err(VMError::MuSigShareError)`
+
+Output:
+- `Result<Scalar, VMError>`

@@ -11,9 +11,10 @@ use crate::errors::VMError;
 use crate::point_ops::PointOp;
 use crate::transcript::TranscriptProtocol;
 
+mod counterparty;
 mod multikey;
 mod musig;
-mod prover;
+mod signer;
 
 /// Verification key (aka "pubkey") is a wrapper type around a Ristretto point
 /// that lets the verifier to check the signature.
