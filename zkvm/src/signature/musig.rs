@@ -133,11 +133,7 @@ mod tests {
         Multikey::new(
             priv_keys
                 .iter()
-                .map(|priv_key| {
-                    let mut key = VerificationKey::with_decompressed((G * priv_key));
-                    key.compress_in_place();
-                    key
-                })
+                .map(|priv_key| VerificationKey::from(G * priv_key))
                 .collect(),
         )
         .unwrap()
@@ -167,12 +163,7 @@ mod tests {
         transcript.commit_bytes(b"message", &m);
         let pubkeys: Vec<_> = privkeys
             .iter()
-            .map(|privkey| {
-                let mut key =
-                    VerificationKey::with_decompressed((privkey * RISTRETTO_BASEPOINT_POINT));
-                key.compress_in_place();
-                key
-            })
+            .map(|privkey| VerificationKey::from(privkey * RISTRETTO_BASEPOINT_POINT))
             .collect();
 
         let (parties, precomms): (Vec<_>, Vec<_>) = privkeys

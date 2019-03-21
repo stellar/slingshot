@@ -44,8 +44,7 @@ impl Multikey {
 
         Ok(Multikey {
             transcript: Some(transcript),
-            aggregated_key: VerificationKey::with_compressed(aggregated_key.compress())
-                .ok_or(VMError::InvalidPoint)?,
+            aggregated_key: VerificationKey::from_point(aggregated_key),
         })
     }
 

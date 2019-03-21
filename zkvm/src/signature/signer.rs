@@ -126,9 +126,7 @@ impl PartyAwaitingCommitments {
         };
 
         // Make a_i = H(L, X_i)
-        // OLEG: compressing after allows us to avoid it failing with `with_compressed` WDYT?
-        let mut X_i = VerificationKey::with_decompressed(self.x_i * RISTRETTO_BASEPOINT_POINT);
-        X_i.compress_in_place();
+        let X_i = VerificationKey::from(self.x_i * RISTRETTO_BASEPOINT_POINT);
         let a_i = self.multikey.factor_for_key(&X_i);
 
         // Generate share: s_i = r_i + c * a_i * x_i
