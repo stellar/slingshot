@@ -51,6 +51,34 @@ impl Xprv {
         }
     }
 
+    /// Returns a intermediate child xprv. Users must provide customize, in order to separate
+    /// sibling keys from one another through unique derivation paths.
+    pub fn derive_intermediate_key(&self, customize: impl FnOnce(&mut Transcript)) -> Xprv {
+        let xpub = self.to_xpub();
+
+        let mut t = Transcript::new(b"Keytree.derivation");
+        t.commit_bytes(b"pt", xpub.precompressed_pubkey.as_bytes());
+        t.commit_bytes(b"dk", &xpub.dk);
+
+        // change the derivation path for this key
+        customize(&mut t);
+
+        // squeeze a challenge scalar
+        let f = t.challenge_scalar(b"f.intermediate");
+
+        // squeeze a new derivation key
+        let mut child_dk = [0u8; 32];
+        t.challenge_bytes(b"dk", &mut child_dk);
+
+        let child_point = xpub.point + (f * &constants::RISTRETTO_BASEPOINT_POINT);
+
+        Xprv {
+            scalar: self.scalar,
+            dk: child_dk,
+            precompressed_pubkey: child_point.compress(),
+        }
+    }
+
     /// Serializes this Xprv to a sequence of bytes.
     pub fn to_bytes(&self) -> [u8; 64] {
         let mut buf = [0u8; 64];
@@ -164,6 +192,28 @@ mod tests {
         assert_eq!(
             hex::encode(xprv.scalar.as_bytes()),
             "4a53c3fbbc59970ee5f85af813875dffc13a904a2e53ae7e65fa0dea6e62c901"
+        );
+    }
+
+    #[test]
+    fn random_xprv_derivation_test() {
+        let seed = [0u8; 32];
+        let mut rng = ChaChaRng::from_seed(seed);
+        let xprv = Xprv::random(&mut rng).derive_intermediate_key(|t| {
+            t.commit_u64(b"account_id", 34);
+        });
+
+        assert_eq!(
+            hex::encode(xprv.scalar.as_bytes()),
+            "4a53c3fbbc59970ee5f85af813875dffc13a904a2e53ae7e65fa0dea6e62c901"
+        );
+        assert_eq!(
+            to_hex_32(xprv.dk),
+            "36e435eabc2a562ef228b82b399fbd004b2cc64103313fa673bd1fca0971f59d"
+        );
+        assert_eq!(
+            to_hex_32(xprv.precompressed_pubkey.to_bytes()),
+            "7414c0c5238c2277318ba3e51fc6fb8e836a2d9b4c04508f93cd5a455422221b"
         );
     }
 
