@@ -134,6 +134,7 @@ impl Xpub {
             Some(p) => p,
             None => return None,
         };
+
         Some(Xpub {
             point,
             dk,
@@ -145,6 +146,7 @@ impl Xpub {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use hex;
     use rand::SeedableRng;
     use rand_chacha::ChaChaRng;
 
@@ -155,17 +157,14 @@ mod tests {
         let xprv = Xprv::random(&mut rng);
 
         // the following are hard-coded based on the previous seed
-        let expected_dk = [
-            159, 7, 231, 190, 85, 81, 56, 122, 152, 186, 151, 124, 115, 45, 8, 13, 203, 15, 41,
-            160, 72, 227, 101, 105, 18, 198, 83, 62, 50, 238, 122, 237,
-        ];
-        let expected_scalar = Scalar::from_bits([
-            74, 83, 195, 251, 188, 89, 151, 14, 229, 248, 90, 248, 19, 135, 93, 255, 193, 58, 144,
-            74, 46, 83, 174, 126, 101, 250, 13, 234, 110, 98, 201, 1,
-        ]);
-
-        assert_eq!(expected_dk, xprv.dk);
-        assert_eq!(expected_scalar, xprv.scalar);
+        assert_eq!(
+            to_hex_32(xprv.dk),
+            "9f07e7be5551387a98ba977c732d080dcb0f29a048e3656912c6533e32ee7aed"
+        );
+        assert_eq!(
+            hex::encode(xprv.scalar.as_bytes()),
+            "4a53c3fbbc59970ee5f85af813875dffc13a904a2e53ae7e65fa0dea6e62c901"
+        );
     }
 
     #[test]
@@ -175,25 +174,15 @@ mod tests {
         let xprv = Xprv::random(&mut rng);
         let xprv_bytes = xprv.to_bytes();
 
-        // hardcoded, but happens to be expected_scalar concatenated with expected_dk
-        let expected_bytes = [
-            74, 83, 195, 251, 188, 89, 151, 14, 229, 248, 90, 248, 19, 135, 93, 255, 193, 58, 144,
-            74, 46, 83, 174, 126, 101, 250, 13, 234, 110, 98, 201, 1, 159, 7, 231, 190, 85, 81, 56,
-            122, 152, 186, 151, 124, 115, 45, 8, 13, 203, 15, 41, 160, 72, 227, 101, 105, 18, 198,
-            83, 62, 50, 238, 122, 237,
-        ];
-        assert_eq!(&xprv_bytes[..], &expected_bytes[..]);
+        assert_eq!(
+            to_hex_64(xprv_bytes),
+            "4a53c3fbbc59970ee5f85af813875dffc13a904a2e53ae7e65fa0dea6e62c9019f07e7be5551387a98ba977c732d080dcb0f29a048e3656912c6533e32ee7aed"
+        );
     }
 
     #[test]
     fn deserialize_xprv_test() {
-        let xprv_bytes = [
-            74, 83, 195, 251, 188, 89, 151, 14, 229, 248, 90, 248, 19, 135, 93, 255, 193, 58, 144,
-            74, 46, 83, 174, 126, 101, 250, 13, 234, 110, 98, 201, 1, 159, 7, 231, 190, 85, 81, 56,
-            122, 152, 186, 151, 124, 115, 45, 8, 13, 203, 15, 41, 160, 72, 227, 101, 105, 18, 198,
-            83, 62, 50, 238, 122, 237,
-        ];
-
+        let xprv_bytes = hex::decode("4a53c3fbbc59970ee5f85af813875dffc13a904a2e53ae7e65fa0dea6e62c9019f07e7be5551387a98ba977c732d080dcb0f29a048e3656912c6533e32ee7aed").unwrap();
         let xprv = Xprv::from_bytes(&xprv_bytes).unwrap();
 
         let seed = [0u8; 32];
@@ -211,20 +200,16 @@ mod tests {
         let xprv = Xprv::random(&mut rng);
         let xpub = xprv.to_xpub();
 
-        // the following are hard-coded based on the previous seed
-        let expected_dk = [
-            159, 7, 231, 190, 85, 81, 56, 122, 152, 186, 151, 124, 115, 45, 8, 13, 203, 15, 41,
-            160, 72, 227, 101, 105, 18, 198, 83, 62, 50, 238, 122, 237,
-        ];
-        let expected_compressed_point = CompressedRistretto::from_slice(&[
-            156, 102, 163, 57, 200, 52, 79, 146, 47, 195, 32, 108, 181, 218, 232, 20, 165, 148,
-            192, 23, 125, 211, 35, 92, 37, 77, 156, 64, 154, 101, 184, 8,
-        ]);
-        let expected_point = expected_compressed_point.decompress().unwrap();
-
-        assert_eq!(xpub.dk, expected_dk);
-        assert_eq!(xpub.point, expected_point);
-        assert_eq!(xpub.precompressed_pubkey, expected_compressed_point);
+        // hex strings are hard-coded based on the previous seed
+        assert_eq!(
+            to_hex_32(xpub.dk),
+            "9f07e7be5551387a98ba977c732d080dcb0f29a048e3656912c6533e32ee7aed"
+        );
+        assert_eq!(xpub.point.compress(), xpub.precompressed_pubkey); // checks internal consistency
+        assert_eq!(
+            to_hex_32(xpub.precompressed_pubkey.to_bytes()),
+            "9c66a339c8344f922fc3206cb5dae814a594c0177dd3235c254d9c409a65b808"
+        );
     }
 
     #[test]
@@ -234,26 +219,15 @@ mod tests {
         let xprv = Xprv::random(&mut rng);
         let xpub = xprv.to_xpub();
 
-        let xpub_bytes = xpub.to_bytes();
-
-        // hardcoded, but happens to be expected_scalar concatenated with expected_compressed_point
-        let expected_bytes = [
-            156, 102, 163, 57, 200, 52, 79, 146, 47, 195, 32, 108, 181, 218, 232, 20, 165, 148,
-            192, 23, 125, 211, 35, 92, 37, 77, 156, 64, 154, 101, 184, 8, 159, 7, 231, 190, 85, 81,
-            56, 122, 152, 186, 151, 124, 115, 45, 8, 13, 203, 15, 41, 160, 72, 227, 101, 105, 18,
-            198, 83, 62, 50, 238, 122, 237,
-        ];
-        assert_eq!(&xpub_bytes[..], &expected_bytes[..]);
+        assert_eq!(
+            to_hex_64(xpub.to_bytes()),
+            "9c66a339c8344f922fc3206cb5dae814a594c0177dd3235c254d9c409a65b8089f07e7be5551387a98ba977c732d080dcb0f29a048e3656912c6533e32ee7aed"
+        );
     }
 
     #[test]
     fn deserialize_xpub_test() {
-        let xpub_bytes = [
-            156, 102, 163, 57, 200, 52, 79, 146, 47, 195, 32, 108, 181, 218, 232, 20, 165, 148,
-            192, 23, 125, 211, 35, 92, 37, 77, 156, 64, 154, 101, 184, 8, 159, 7, 231, 190, 85, 81,
-            56, 122, 152, 186, 151, 124, 115, 45, 8, 13, 203, 15, 41, 160, 72, 227, 101, 105, 18,
-            198, 83, 62, 50, 238, 122, 237,
-        ];
+        let xpub_bytes = hex::decode("9c66a339c8344f922fc3206cb5dae814a594c0177dd3235c254d9c409a65b8089f07e7be5551387a98ba977c732d080dcb0f29a048e3656912c6533e32ee7aed").unwrap();
         let xpub = Xpub::from_bytes(&xpub_bytes).unwrap();
 
         let seed = [0u8; 32];
@@ -278,19 +252,23 @@ mod tests {
             t.commit_u64(b"account_id", 34);
         });
 
-        // the following are hard-coded based on the previous seed
-        let expected_dk = [
-            54, 228, 53, 234, 188, 42, 86, 46, 242, 40, 184, 43, 57, 159, 189, 0, 75, 44, 198, 65,
-            3, 49, 63, 166, 115, 189, 31, 202, 9, 113, 245, 157,
-        ];
-        let expected_compressed_point = CompressedRistretto::from_slice(&[
-            116, 20, 192, 197, 35, 140, 34, 119, 49, 139, 163, 229, 31, 198, 251, 142, 131, 106,
-            45, 155, 76, 4, 80, 143, 147, 205, 90, 69, 84, 34, 34, 27,
-        ]);
-        let expected_point = expected_compressed_point.decompress().unwrap();
-
-        assert_eq!(xpub.dk, expected_dk);
-        assert_eq!(xpub.point, expected_point);
-        assert_eq!(xpub.precompressed_pubkey, expected_compressed_point);
+        assert_eq!(
+            to_hex_32(xpub.dk),
+            "36e435eabc2a562ef228b82b399fbd004b2cc64103313fa673bd1fca0971f59d"
+        );
+        assert_eq!(xpub.point.compress(), xpub.precompressed_pubkey); // checks internal consistency
+        assert_eq!(
+            to_hex_32(xpub.precompressed_pubkey.to_bytes()),
+            "7414c0c5238c2277318ba3e51fc6fb8e836a2d9b4c04508f93cd5a455422221b"
+        );
     }
+
+    fn to_hex_32(input: [u8; 32]) -> String {
+        return hex::encode(&input[..]);
+    }
+
+    fn to_hex_64(input: [u8; 64]) -> String {
+        return hex::encode(&input[..]);
+    }
+
 }

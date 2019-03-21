@@ -11,3 +11,4 @@ rand = "0.6"
 
 [dev-dependencies]
 rand_chacha = "0.1"
+hex = "^0.3"
