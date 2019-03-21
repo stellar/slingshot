@@ -168,7 +168,8 @@ mod tests {
         let pubkeys: Vec<_> = privkeys
             .iter()
             .map(|privkey| {
-                let mut key = VerificationKey::with_decompressed((privkey * RISTRETTO_BASEPOINT_POINT));
+                let mut key =
+                    VerificationKey::with_decompressed((privkey * RISTRETTO_BASEPOINT_POINT));
                 key.compress_in_place();
                 key
             })
