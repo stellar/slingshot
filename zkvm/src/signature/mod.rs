@@ -20,12 +20,54 @@ mod prover;
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub struct VerificationKey {
     point: RistrettoPoint,
-    // Available only if instantiated using `with_compressed` 
+    // Available only if instantiated using `with_compressed`
     // or if caller directly calls a method that returns a compressed point
-    compressed: Option<CompressedRistretto>, 
+    compressed: Option<CompressedRistretto>,
 }
 
+impl VerificationKey {
+    /// Creates new key from a compressed form,remembers the compressed point.
+    pub fn with_compressed(p: CompressedRistretto) -> Option<Self> {
+        Some(VerificationKey {
+            point: p.decompress()?,
+            compressed: Some(p),
+        })
+    }
+    /// Creates a new key from a ristretto point. Does not eagerly compress.
+    pub fn with_decompressed(p: RistrettoPoint) -> Self {
+        VerificationKey {
+            point: p,
+            compressed: Some(p.compress()),
+        }
+    }
+    /// Compresses the point if needed (no-op if `self.compressed == Some`)
+    pub fn compress_in_place(&mut self) {
+        if self.compressed.is_none() {
+            self.compressed = Some(self.point.compress())
+        }
+    }
+    /// Converts the Verification key to a point
+    pub fn to_point(self) -> RistrettoPoint {
+        self.point
+    }
 
+    /// Converts the Verification key to a point and returns a reference to it
+    pub fn as_point(&self) -> &RistrettoPoint {
+        &self.point
+    }
+
+    /// Converts Verification key to a compressed point.
+    /// If the compressed form is not available, the compression is completed
+    pub fn to_compressed_point(&self) -> CompressedRistretto {
+        match self.compressed {
+            Some(x) => x,
+            //Oleg: we will be compressing the point but not saving it here
+            // This is fine because we can call compress_in_place, when we know we are going to be returning the
+            // compressed varitation multiple times?
+            None => self.point.compress(),
+        }
+    }
+}
 /// A Schnorr signature.
 #[derive(Copy, Clone, Debug)]
 pub struct Signature {
@@ -48,14 +90,14 @@ impl Signature {
     ) -> PointOp {
         transcript.commit_u64(b"n", pubkeys.len() as u64);
         for p in pubkeys.iter() {
-            transcript.commit_point(b"P", &p.0);
+            transcript.commit_point(b"P", p.as_compressed_point());
         }
 
         let mut pairs = pubkeys
             .iter()
             .map(|p| {
                 let x = transcript.challenge_scalar(b"x");
-                (x, p.0)
+                (x, p.to_compressed_point())
             })
             .collect::<Vec<_>>();
 
@@ -101,7 +143,7 @@ impl Signature {
         let n = pubkeys.len();
         transcript.commit_u64(b"n", n as u64);
         for p in pubkeys.iter() {
-            transcript.commit_point(b"P", &p.0);
+            transcript.commit_point(b"P", p.as_compressed_point());
         }
 
         // Generate aggregated private key
@@ -158,19 +200,13 @@ impl Signature {
 impl VerificationKey {
     /// Constructs a VerificationKey from a private key.
     pub fn from_secret(privkey: &Scalar) -> Self {
-        VerificationKey(Self::from_secret_uncompressed(privkey).compress())
+        VerificationKey::with_decompressed(Self::from_secret_uncompressed(privkey))
     }
 
     /// Constructs an uncompressed VerificationKey point from a private key.
     pub(crate) fn from_secret_uncompressed(privkey: &Scalar) -> RistrettoPoint {
         let gens = PedersenGens::default();
         (privkey * gens.B)
-    }
-}
-
-impl From<CompressedRistretto> for VerificationKey {
-    fn from(x: CompressedRistretto) -> Self {
-        VerificationKey(x)
     }
 }
 
