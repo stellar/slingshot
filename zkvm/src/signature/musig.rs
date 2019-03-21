@@ -96,7 +96,7 @@ mod tests {
     fn sign_single_multi() {
         let privkey = Scalar::from(1u64);
         let privkeys = vec![privkey];
-        let multikey = multikey_helper(&privkeys).unwrap();
+        let multikey = multikey_helper(&privkeys);
         let msg = b"message for you, sir";
         let sig = sign_helper(privkeys, multikey.clone(), msg.to_vec()).unwrap();
 
@@ -115,7 +115,7 @@ mod tests {
             Scalar::from(3u64),
             Scalar::from(4u64),
         ];
-        let multikey = multikey_helper(&priv_keys).unwrap();
+        let multikey = multikey_helper(&priv_keys);
 
         let expected_pubkey = CompressedRistretto::from_slice(&[
             56, 92, 251, 79, 34, 221, 181, 222, 11, 112, 55, 45, 154, 242, 40, 250, 247, 1, 109,
@@ -125,14 +125,14 @@ mod tests {
         assert_eq!(expected_pubkey, multikey.aggregated_key().0);
     }
 
-    fn multikey_helper(priv_keys: &Vec<Scalar>) -> Option<Multikey> {
+    fn multikey_helper(priv_keys: &Vec<Scalar>) -> Multikey {
         let G = RISTRETTO_BASEPOINT_POINT;
         Multikey::new(
             priv_keys
                 .iter()
                 .map(|priv_key| VerificationKey((G * priv_key).compress()))
                 .collect(),
-        )
+        ).unwrap()
     }
 
     #[test]
@@ -144,7 +144,7 @@ mod tests {
             Scalar::from(3u64),
             Scalar::from(4u64),
         ];
-        let multikey = multikey_helper(&priv_keys).unwrap();
+        let multikey = multikey_helper(&priv_keys);
         let m = b"message to sign".to_vec();
 
         sign_helper(priv_keys, multikey, m).unwrap();
@@ -202,7 +202,7 @@ mod tests {
             Scalar::from(3u64),
             Scalar::from(4u64),
         ];
-        let multikey = multikey_helper(&priv_keys).unwrap();
+        let multikey = multikey_helper(&priv_keys);
         let m = b"message to sign".to_vec();
 
         let signature = sign_helper(priv_keys, multikey.clone(), m.clone()).unwrap();

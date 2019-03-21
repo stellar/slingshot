@@ -1,4 +1,5 @@
 use super::VerificationKey;
+use crate::errors::VMError;
 use crate::transcript::TranscriptProtocol;
 use curve25519_dalek::ristretto::RistrettoPoint;
 use curve25519_dalek::scalar::Scalar;
@@ -11,11 +12,11 @@ pub struct Multikey {
 }
 
 impl Multikey {
-    pub fn new(pubkeys: Vec<VerificationKey>) -> Option<Self> {
+    pub fn new(pubkeys: Vec<VerificationKey>) -> Result<Self, VMError> {
         match pubkeys.len() {
-            0 => return None,
+            0 => return Err(VMError::BadArguments),
             1 => {
-                return Some(Multikey {
+                return Ok(Multikey {
                     transcript: None,
                     aggregated_key: pubkeys[0],
                 });
@@ -37,14 +38,11 @@ impl Multikey {
         let mut aggregated_key = RistrettoPoint::default();
         for X in &pubkeys {
             let a = Multikey::compute_factor(&transcript, X);
-            let X = match X.0.decompress() {
-                Some(X) => X,
-                None => return None,
-            };
+            let X = X.0.decompress().ok_or(VMError::InvalidPoint)?;
             aggregated_key = aggregated_key + a * X;
         }
 
-        Some(Multikey {
+        Ok(Multikey {
             transcript: Some(transcript),
             aggregated_key: VerificationKey(aggregated_key.compress()),
         })

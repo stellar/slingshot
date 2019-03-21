@@ -146,4 +146,8 @@ pub enum VMError {
     /// This error occurs when the an index of a selected predicate is invalid.
     #[fail(display = "Predicate index out of bounds")]
     PredicateIndexInvalid,
+
+    /// This error occurs when a function is called with bad arguments.
+    #[fail(display = "Bad arguments")]
+    BadArguments,
 }
