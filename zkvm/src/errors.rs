@@ -112,11 +112,11 @@ pub enum VMError {
     #[fail(display = "Deferred point operations failed")]
     PointOperationsFailed,
 
-    /// This error occurs when a signature share fails to verify
-    #[fail(display = "Share #{:?} failed to verify correctly", index)]
-    ShareError {
-        /// The index of the share that failed fo verify correctly
-        index: usize,
+    /// This error occurs when a MuSig signature share fails to verify
+    #[fail(display = "Share #{:?} failed to verify correctly", pubkey)]
+    MuSigShareError {
+        /// The pubkey corresponding to the MuSig share that failed fo verify correctly
+        pubkey: [u8; 32],
     },
 
     /// This error occurs when R1CS proof verification failed.
@@ -146,4 +146,8 @@ pub enum VMError {
     /// This error occurs when the an index of a selected predicate is invalid.
     #[fail(display = "Predicate index out of bounds")]
     PredicateIndexInvalid,
+
+    /// This error occurs when a function is called with bad arguments.
+    #[fail(display = "Bad arguments")]
+    BadArguments,
 }
