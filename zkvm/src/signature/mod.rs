@@ -21,31 +21,16 @@ mod signer;
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub struct VerificationKey {
     point: RistrettoPoint,
-    // Available only if instantiated using `with_compressed`
-    // or if caller directly calls a method that returns a compressed point
-    compressed: Option<CompressedRistretto>,
+    precompressed: CompressedRistretto,
 }
 
 impl VerificationKey {
     /// Creates new key from a compressed form,remembers the compressed point.
-    pub fn with_compressed(p: CompressedRistretto) -> Option<Self> {
+    pub fn from_point(p: CompressedRistretto) -> Option<Self> {
         Some(VerificationKey {
             point: p.decompress()?,
-            compressed: Some(p),
+            precompressed: p,
         })
-    }
-    /// Creates a new key from a ristretto point. Does not eagerly compress.
-    pub fn with_decompressed(p: RistrettoPoint) -> Self {
-        VerificationKey {
-            point: p,
-            compressed: Some(p.compress()),
-        }
-    }
-    /// Compresses the point if needed (no-op if `self.compressed == Some`)
-    pub fn compress_in_place(&mut self) {
-        if self.compressed.is_none() {
-            self.compressed = Some(self.point.compress())
-        }
     }
     /// Converts the Verification key to a point
     pub fn to_point(self) -> RistrettoPoint {
@@ -60,13 +45,7 @@ impl VerificationKey {
     /// Converts Verification key to a compressed point.
     /// If the compressed form is not available, the compression is completed
     pub fn to_compressed_point(&self) -> CompressedRistretto {
-        match self.compressed {
-            Some(x) => x,
-            //Oleg: we will be compressing the point but not saving it here
-            // This is fine because we can call compress_in_place, when we know we are going to be returning the
-            // compressed varitation multiple times?
-            None => self.point.compress(),
-        }
+        self.precompressed
     }
 }
 /// A Schnorr signature.
@@ -201,7 +180,7 @@ impl Signature {
 impl VerificationKey {
     /// Constructs a VerificationKey from a private key.
     pub fn from_secret(privkey: &Scalar) -> Self {
-        VerificationKey::with_decompressed(Self::from_secret_uncompressed(privkey))
+        Self::from_secret_uncompressed(privkey).into()
     }
 
     /// Constructs an uncompressed VerificationKey point from a private key.
@@ -212,8 +191,11 @@ impl VerificationKey {
 }
 
 impl From<RistrettoPoint> for VerificationKey {
-    fn from(x: RistrettoPoint) -> Self {
-        VerificationKey::with_decompressed(x)
+    fn from(p: RistrettoPoint) -> Self {
+        VerificationKey {
+            point: p,
+            precompressed: p.compress(),
+        }
     }
 }
 
