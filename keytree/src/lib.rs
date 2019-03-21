@@ -200,19 +200,16 @@ mod tests {
         let xprv = Xprv::random(&mut rng);
         let xpub = xprv.to_xpub();
 
-        // hard-coded based on the previous seed
-        let expected_compressed_point = CompressedRistretto::from_slice(
-            &hex::decode("9c66a339c8344f922fc3206cb5dae814a594c0177dd3235c254d9c409a65b808")
-                .unwrap(),
-        );
-        let expected_point = expected_compressed_point.decompress().unwrap();
-
+        // hex strings are hard-coded based on the previous seed
         assert_eq!(
             to_hex_32(xpub.dk),
             "9f07e7be5551387a98ba977c732d080dcb0f29a048e3656912c6533e32ee7aed"
         );
-        assert_eq!(xpub.point, expected_point);
-        assert_eq!(xpub.precompressed_pubkey, expected_compressed_point);
+        assert_eq!(xpub.point.compress(), xpub.precompressed_pubkey); // checks internal consistency
+        assert_eq!(
+            to_hex_32(xpub.precompressed_pubkey.to_bytes()),
+            "9c66a339c8344f922fc3206cb5dae814a594c0177dd3235c254d9c409a65b808"
+        );
     }
 
     #[test]
@@ -222,7 +219,6 @@ mod tests {
         let xprv = Xprv::random(&mut rng);
         let xpub = xprv.to_xpub();
 
-        // hardcoded, but happens to be expected_scalar concatenated with expected_compressed_point
         assert_eq!(
             to_hex_64(xpub.to_bytes()),
             "9c66a339c8344f922fc3206cb5dae814a594c0177dd3235c254d9c409a65b8089f07e7be5551387a98ba977c732d080dcb0f29a048e3656912c6533e32ee7aed"
@@ -256,19 +252,15 @@ mod tests {
             t.commit_u64(b"account_id", 34);
         });
 
-        // hard-coded based on the previous seed
-        let expected_compressed_point = CompressedRistretto::from_slice(
-            &hex::decode("7414c0c5238c2277318ba3e51fc6fb8e836a2d9b4c04508f93cd5a455422221b")
-                .unwrap(),
-        );
-        let expected_point = expected_compressed_point.decompress().unwrap();
-
         assert_eq!(
             to_hex_32(xpub.dk),
             "36e435eabc2a562ef228b82b399fbd004b2cc64103313fa673bd1fca0971f59d"
         );
-        assert_eq!(xpub.point, expected_point);
-        assert_eq!(xpub.precompressed_pubkey, expected_compressed_point);
+        assert_eq!(xpub.point.compress(), xpub.precompressed_pubkey); // checks internal consistency
+        assert_eq!(
+            to_hex_32(xpub.precompressed_pubkey.to_bytes()),
+            "7414c0c5238c2277318ba3e51fc6fb8e836a2d9b4c04508f93cd5a455422221b"
+        );
     }
 
     fn to_hex_32(input: [u8; 32]) -> String {
