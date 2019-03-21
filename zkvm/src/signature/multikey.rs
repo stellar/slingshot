@@ -44,7 +44,7 @@ impl Multikey {
 
         Ok(Multikey {
             transcript: Some(transcript),
-            aggregated_key: VerificationKey::from_point(aggregated_key),
+            aggregated_key: aggregated_key.into(),
         })
     }
 
