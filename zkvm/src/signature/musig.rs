@@ -93,6 +93,20 @@ mod tests {
     }
 
     #[test]
+    fn sign_single_multi() {
+        let privkey = Scalar::from(1u64);
+        let privkeys = vec![privkey];
+        let multikey = multikey_helper(&privkeys).unwrap();
+        let msg = b"message for you, sir";
+        let sig = sign_helper(privkeys, multikey.clone(), msg.to_vec()).unwrap();
+
+        let mut transcript = Transcript::new(b"signing test");
+        transcript.commit_bytes(b"message", msg);
+
+        assert!(sig.verify(&transcript, multikey.aggregated_key()).is_ok());
+    }
+
+    #[test]
     fn make_aggregated_pubkey() {
         // super secret, sshhh!
         let priv_keys = vec![
