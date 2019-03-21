@@ -6,12 +6,23 @@ use merlin::Transcript;
 
 #[derive(Clone)]
 pub struct Multikey {
-    transcript: Transcript,
+    transcript: Option<Transcript>,
     aggregated_key: VerificationKey,
 }
 
 impl Multikey {
     pub fn new(pubkeys: Vec<VerificationKey>) -> Option<Self> {
+        match pubkeys.len() {
+            0 => return None,
+            1 => {
+                return Some(Multikey {
+                    transcript: None,
+                    aggregated_key: pubkeys[0],
+                });
+            }
+            _ => {}
+        }
+
         // Create transcript for Multikey
         let mut transcript = Transcript::new(b"MuSig.aggregated-key");
         transcript.commit_u64(b"n", pubkeys.len() as u64);
@@ -34,7 +45,7 @@ impl Multikey {
         }
 
         Some(Multikey {
-            transcript,
+            transcript: Some(transcript),
             aggregated_key: VerificationKey(aggregated_key.compress()),
         })
     }
@@ -47,7 +58,10 @@ impl Multikey {
     }
 
     pub fn factor_for_key(&self, X_i: &VerificationKey) -> Scalar {
-        Multikey::compute_factor(&self.transcript, X_i)
+        match &self.transcript {
+            Some(t) => Multikey::compute_factor(&t, X_i),
+            None => Scalar::one(),
+        }
     }
 
     pub fn aggregated_key(&self) -> VerificationKey {
