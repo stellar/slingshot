@@ -123,11 +123,11 @@ impl Program {
 
     /// Takes predicate and closure to add choose operations for
     /// predicate tree traversal.
-    pub fn choose_predicate<'a, F, T>(
-        &'a mut self,
+    pub fn choose_predicate<F, T>(
+        &mut self,
         pred: Predicate,
         choose_fn: F,
-    ) -> Result<&'a mut Program, VMError>
+    ) -> Result<&mut Program, VMError>
     where
         F: FnOnce(PredicateTree) -> Result<T, VMError>,
     {

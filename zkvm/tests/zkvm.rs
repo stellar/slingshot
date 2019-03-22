@@ -527,10 +527,7 @@ fn predicate_disjunction_happy_path() {
     let prog = Program::build(|p| {
         p.push(Output::new(prev_output))
             .input()
-            .choose_predicate(disjunction, |t| {
-                t.select(0)?;
-                Ok(())
-            })
+            .choose_predicate(disjunction, |t| t.select(0).map(|_| ()))
             .unwrap()
             .sign_tx()
             .cloak_helper(1, vec![(qty, flavor)])
