@@ -88,7 +88,7 @@ impl Program {
     }
 
     /// Creates a program from parsing the opaque data slice of encoded instructions.
-    pub fn parse(data: &[u8]) -> Result<Self, VMError> {
+    pub(crate) fn parse(data: &[u8]) -> Result<Self, VMError> {
         SliceReader::parse(data, |r| {
             let mut program = Self::new();
             while r.len() > 0 {
@@ -104,12 +104,12 @@ impl Program {
     }
 
     /// Returns the serialized length of the program.
-    pub fn serialized_length(&self) -> usize {
+    pub(crate) fn serialized_length(&self) -> usize {
         self.0.iter().map(|p| p.serialized_length()).sum()
     }
 
     /// Encodes a program into a buffer.
-    pub fn encode(&self, buf: &mut Vec<u8>) {
+    pub(crate) fn encode(&self, buf: &mut Vec<u8>) {
         for i in self.0.iter() {
             i.borrow().encode(buf);
         }
