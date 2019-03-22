@@ -5,7 +5,7 @@ use hex;
 
 use zkvm::{
     Anchor, Commitment, Contract, Data, Output, PortableItem, Predicate, Program, Prover,
-    Signature, TxHeader, TxID, VMError, Value, Verifier,VerificationKey,
+    Signature, TxHeader, TxID, VMError, Value, VerificationKey, Verifier,
 };
 
 // TODO(vniu): move builder convenience functions into separate crate,
