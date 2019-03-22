@@ -122,10 +122,7 @@ mod tests {
             126, 150, 210, 181, 6, 117, 95, 44, 102, 38, 28, 144, 49,
         ]);
 
-        assert_eq!(
-            expected_pubkey,
-            multikey.aggregated_key().into()
-        );
+        assert_eq!(expected_pubkey, multikey.aggregated_key().into());
     }
 
     fn multikey_helper(priv_keys: &Vec<Scalar>) -> Multikey {
