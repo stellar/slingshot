@@ -25,25 +25,50 @@ pub struct VerificationKey {
 }
 
 impl VerificationKey {
+    /// Constructs a VerificationKey from a private key.
+    pub fn from_secret(privkey: &Scalar) -> Self {
+        Self::from_secret_uncompressed(privkey).into()
+    }
+
+    /// Constructs an uncompressed VerificationKey point from a private key.
+    pub(crate) fn from_secret_uncompressed(privkey: &Scalar) -> RistrettoPoint {
+        let gens = PedersenGens::default();
+        (privkey * gens.B)
+    }
+
     /// Creates new key from a compressed form,remembers the compressed point.
-    pub fn from_point(p: CompressedRistretto) -> Option<Self> {
+    pub fn from_compressed(p: CompressedRistretto) -> Option<Self> {
         Some(VerificationKey {
             point: p.decompress()?,
             precompressed: p,
         })
     }
 
-    /// Converts the Verification key to a point and returns a reference to it
-    pub fn as_point(&self) -> &RistrettoPoint {
-        &self.point
+    /// Converts the Verification key to a compressed point
+    pub fn into_compressed(self) -> CompressedRistretto {
+        self.precompressed
     }
 
-    /// Converts Verification key to a compressed point.
-    /// If the compressed form is not available, the compression is completed
+    /// Converts the Verification key to a ristretto point
+    pub fn into_point(self) -> RistrettoPoint {
+        self.point
+    }
+
+    /// Returns a reference to the compressed ristretto point
     pub fn as_compressed_point(&self) -> &CompressedRistretto {
         &self.precompressed
     }
 }
+
+impl From<RistrettoPoint> for VerificationKey {
+    fn from(p: RistrettoPoint) -> Self {
+        VerificationKey {
+            point: p,
+            precompressed: p.compress(),
+        }
+    }
+}
+
 /// A Schnorr signature.
 #[derive(Copy, Clone, Debug)]
 pub struct Signature {
@@ -170,40 +195,6 @@ impl Signature {
         buf[..32].copy_from_slice(self.R.as_bytes());
         buf[32..].copy_from_slice(self.s.as_bytes());
         buf
-    }
-}
-
-impl VerificationKey {
-    /// Constructs a VerificationKey from a private key.
-    pub fn from_secret(privkey: &Scalar) -> Self {
-        Self::from_secret_uncompressed(privkey).into()
-    }
-
-    /// Constructs an uncompressed VerificationKey point from a private key.
-    pub(crate) fn from_secret_uncompressed(privkey: &Scalar) -> RistrettoPoint {
-        let gens = PedersenGens::default();
-        (privkey * gens.B)
-    }
-}
-
-impl From<RistrettoPoint> for VerificationKey {
-    fn from(p: RistrettoPoint) -> Self {
-        VerificationKey {
-            point: p,
-            precompressed: p.compress(),
-        }
-    }
-}
-
-impl Into<RistrettoPoint> for VerificationKey {
-    fn into(self) -> RistrettoPoint {
-        self.point
-    }
-}
-
-impl Into<CompressedRistretto> for VerificationKey {
-    fn into(self) -> CompressedRistretto {
-        self.precompressed
     }
 }
 
