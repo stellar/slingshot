@@ -29,7 +29,7 @@ impl Signature {
         let R = NonceCommitment::new(RISTRETTO_BASEPOINT_POINT * r);
 
         let c = {
-            transcript.commit_point(b"X", &X.to_compressed_point());
+            transcript.commit_point(b"X", X.as_compressed_point());
             transcript.commit_point(b"R", &R.compress());
             transcript.challenge_scalar(b"c")
         };
@@ -46,7 +46,7 @@ impl Signature {
         // Make c = H(X, R, m)
         // The message `m` has already been fed into the transcript
         let c = {
-            transcript.commit_point(b"X", &X.to_compressed_point());
+            transcript.commit_point(b"X", X.as_compressed_point());
             transcript.commit_point(b"R", &self.R);
             transcript.challenge_scalar(b"c")
         };
@@ -124,7 +124,7 @@ mod tests {
 
         assert_eq!(
             expected_pubkey,
-            multikey.aggregated_key().to_compressed_point()
+            multikey.aggregated_key().into()
         );
     }
 

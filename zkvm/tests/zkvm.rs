@@ -127,7 +127,7 @@ fn test_helper(program: Program, keys: &Vec<Scalar>) -> Result<TxID, VMError> {
                 .iter()
                 .filter_map(|vk| {
                     for k in keys {
-                        if (k * gens.B).compress() == vk.to_compressed_point() {
+                        if (k * gens.B).compress() == *vk.as_compressed_point() {
                             return Some(*k);
                         }
                     }
