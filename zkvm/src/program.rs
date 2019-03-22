@@ -123,11 +123,11 @@ impl Program {
 
     /// Takes predicate and closure to add choose operations for
     /// predicate tree traversal.
-    pub fn choose_predicate<F, T>(
-        &mut self,
+    pub fn choose_predicate<'a, F, T>(
+        &'a mut self,
         pred: Predicate,
         choose_fn: F,
-    ) -> Result<&mut Program, VMError>
+    ) -> Result<&'a mut Program, VMError>
     where
         F: FnOnce(PredicateTree) -> Result<T, VMError>,
     {
@@ -155,8 +155,8 @@ impl<'a> PredicateTree<'a> {
             return Err(VMError::PredicateIndexInvalid);
         }
         let prog = self.prog;
-        for pred in preds.iter() {
-            prog.push(pred.as_opaque());
+        for pred in preds.into_iter() {
+            prog.push(pred);
         }
         prog.select(n as u8, k as u8);
         Ok(Self {
@@ -169,7 +169,7 @@ impl<'a> PredicateTree<'a> {
     /// by the program predicate.
     pub fn call(self) -> Result<(), VMError> {
         let (subprog, blinding) = self.pred.to_program()?;
-        self.prog.push(Data::Opaque(blinding)).call();
+        self.prog.push(Data::Opaque(blinding));
         self.prog.push(subprog).call();
         Ok(())
     }

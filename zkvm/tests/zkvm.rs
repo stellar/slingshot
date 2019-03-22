@@ -527,9 +527,11 @@ fn predicate_disjunction_happy_path() {
     let prog = Program::build(|p| {
         p.push(Output::new(prev_output))
             .input()
-            .push(key_pred)
-            .push(program_pred)
-            .select(2, 0)
+            .choose_predicate(disjunction, |t| {
+                t.select(0)?;
+                Ok(())
+            })
+            .unwrap()
             .sign_tx()
             .cloak_helper(1, vec![(qty, flavor)])
             .output_helper(output_pred)
@@ -553,17 +555,12 @@ fn predicate_disjunction_program_path() {
     // Make disjunction and output
     let disjunction = Predicate::disjunction(vec![key_pred.clone(), program_pred.clone()]).unwrap();
     let prev_output = make_output(qty, flavor, disjunction.clone());
-
     let prog = Program::build(|p| {
         p.push(secret_scalar)
             .push(Output::new(prev_output.clone()))
             .input()
-            .push(key_pred.clone())
-            .push(program_pred.clone())
-            .select(2, 1)
-            .push(Data::Opaque(Vec::new()))
-            .push(spend_prog.clone())
-            .call()
+            .choose_predicate(disjunction.clone(), |t| t.select(1)?.call())
+            .unwrap()
     });
     build_and_verify(prog, &vec![key_scalar]).unwrap();
 
@@ -571,12 +568,8 @@ fn predicate_disjunction_program_path() {
         p.push(secret_scalar + Scalar::one())
             .push(Output::new(prev_output))
             .input()
-            .push(key_pred)
-            .push(program_pred)
-            .select(2, 1)
-            .push(Data::Opaque(Vec::new()))
-            .push(spend_prog)
-            .call()
+            .choose_predicate(disjunction, |t| t.select(1)?.call())
+            .unwrap()
     });
     if build_and_verify(wrong_prog, &vec![key_scalar]).is_ok() {
         panic!("Unlocking input with incorrect secret scalar should have failed but didn't");
