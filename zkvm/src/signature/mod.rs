@@ -16,6 +16,8 @@ mod multikey;
 mod musig;
 mod signer;
 
+pub use self::signer::Party;
+
 /// Verification key (aka "pubkey") is a wrapper type around a Ristretto point
 /// that lets the verifier to check the signature.
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
