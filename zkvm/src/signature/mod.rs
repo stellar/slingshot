@@ -40,8 +40,8 @@ impl VerificationKey {
 
     /// Converts Verification key to a compressed point.
     /// If the compressed form is not available, the compression is completed
-    pub fn to_compressed_point(&self) -> CompressedRistretto {
-        self.precompressed
+    pub fn as_compressed_point(&self) -> &CompressedRistretto {
+        &self.precompressed
     }
 }
 /// A Schnorr signature.
@@ -66,14 +66,14 @@ impl Signature {
     ) -> PointOp {
         transcript.commit_u64(b"n", pubkeys.len() as u64);
         for p in pubkeys.iter() {
-            transcript.commit_point(b"P", &p.to_compressed_point());
+            transcript.commit_point(b"P", p.as_compressed_point());
         }
 
         let mut pairs = pubkeys
             .iter()
             .map(|p| {
                 let x = transcript.challenge_scalar(b"x");
-                (x, p.to_compressed_point())
+                (x, *p.as_compressed_point())
             })
             .collect::<Vec<_>>();
 
@@ -119,7 +119,7 @@ impl Signature {
         let n = pubkeys.len();
         transcript.commit_u64(b"n", n as u64);
         for p in pubkeys.iter() {
-            transcript.commit_point(b"P", &p.to_compressed_point());
+            transcript.commit_point(b"P", p.as_compressed_point());
         }
 
         // Generate aggregated private key
@@ -198,6 +198,12 @@ impl From<RistrettoPoint> for VerificationKey {
 impl Into<RistrettoPoint> for VerificationKey {
     fn into(self) -> RistrettoPoint {
         self.point
+    }
+}
+
+impl Into<CompressedRistretto> for VerificationKey {
+    fn into(self) -> CompressedRistretto {
+        self.precompressed
     }
 }
 
