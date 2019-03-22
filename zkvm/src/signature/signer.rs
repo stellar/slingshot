@@ -10,10 +10,12 @@ use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
 use rand;
 
+/// Entry point to multi-party signing protocol.
 pub struct Party {}
 
-pub struct PartyAwaitingPrecommitments {
-    transcript: Transcript,
+/// State of the party when awaiting nonce precommitments from other parties.
+pub struct PartyAwaitingPrecommitments<'t> {
+    transcript: &'t mut Transcript,
     multikey: Multikey,
     x_i: Scalar,
     r_i: Scalar,
@@ -21,14 +23,16 @@ pub struct PartyAwaitingPrecommitments {
     counterparties: Vec<Counterparty>,
 }
 
-pub struct PartyAwaitingCommitments {
-    transcript: Transcript,
+/// State of the party when awaiting nonce commitments from other parties.
+pub struct PartyAwaitingCommitments<'t> {
+    transcript: &'t mut Transcript,
     multikey: Multikey,
     x_i: Scalar,
     r_i: Scalar,
     counterparties: Vec<CounterpartyPrecommitted>,
 }
 
+/// State of the party when awaiting signature shares from other parties.
 pub struct PartyAwaitingShares {
     multikey: Multikey,
     c: Scalar,
@@ -37,13 +41,15 @@ pub struct PartyAwaitingShares {
 }
 
 impl Party {
-    pub fn new(
+    /// Create new signing party for a given transcript.
+    pub fn new<'t>(
         // The message `m` has already been fed into the transcript
-        transcript: &Transcript,
+        transcript: &'t mut Transcript,
         x_i: Scalar,
         multikey: Multikey,
+        // TBD: move this inside Multikey API to avoid such redundancy.
         pubkeys: Vec<VerificationKey>,
-    ) -> (PartyAwaitingPrecommitments, NoncePrecommitment) {
+    ) -> (PartyAwaitingPrecommitments<'t>, NoncePrecommitment) {
         let mut rng = transcript
             .build_rng()
             .commit_witness_bytes(b"x_i", &x_i.to_bytes())
@@ -63,7 +69,7 @@ impl Party {
 
         (
             PartyAwaitingPrecommitments {
-                transcript: transcript.clone(),
+                transcript,
                 multikey,
                 x_i,
                 r_i,
@@ -75,11 +81,12 @@ impl Party {
     }
 }
 
-impl PartyAwaitingPrecommitments {
+impl<'t> PartyAwaitingPrecommitments<'t> {
+    /// Provide nonce precommitments to the party and transition to the next round.
     pub fn receive_precommitments(
         self,
         nonce_precommitments: Vec<NoncePrecommitment>,
-    ) -> (PartyAwaitingCommitments, NonceCommitment) {
+    ) -> (PartyAwaitingCommitments<'t>, NonceCommitment) {
         let counterparties = self
             .counterparties
             .into_iter()
@@ -100,9 +107,11 @@ impl PartyAwaitingPrecommitments {
     }
 }
 
-impl PartyAwaitingCommitments {
+impl<'t> PartyAwaitingCommitments<'t> {
+    /// Provide nonce commitments to the party and transition to the next round
+    /// if they match the precommitments.
     pub fn receive_commitments(
-        mut self,
+        self,
         nonce_commitments: Vec<NonceCommitment>,
     ) -> Result<(PartyAwaitingShares, Scalar), VMError> {
         // Make R = sum_i(R_i). nonce_commitments = R_i from all the parties.
@@ -146,6 +155,7 @@ impl PartyAwaitingCommitments {
 }
 
 impl PartyAwaitingShares {
+    /// Assemble trusted signature shares (e.g. when all keys owned by one signer)
     pub fn receive_trusted_shares(self, shares: Vec<Scalar>) -> Signature {
         // s = sum(s_i), s_i = shares[i]
         let s: Scalar = shares.into_iter().map(|share| share).sum();
@@ -155,6 +165,7 @@ impl PartyAwaitingShares {
         }
     }
 
+    /// Verify and assemble signature shares.
     pub fn receive_shares(self, shares: Vec<Scalar>) -> Result<Signature, VMError> {
         // Move out self's fields because `self.c` inside `map`'s closure would
         // lead to capturing `self` by reference, while we want

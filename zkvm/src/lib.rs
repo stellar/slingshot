@@ -15,12 +15,14 @@ mod point_ops;
 mod predicate;
 mod prover;
 mod scalar_witness;
-mod signature;
 mod transcript;
 mod txlog;
 mod types;
 mod verifier;
 mod vm;
+
+// TODO: remove this when we move musig in another crate
+pub mod signature;
 
 pub use self::constraints::{Commitment, Constraint, Expression, Variable};
 pub use self::contract::{Anchor, Contract, ContractID, Output, PortableItem};
