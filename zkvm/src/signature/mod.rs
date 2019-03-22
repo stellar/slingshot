@@ -32,10 +32,6 @@ impl VerificationKey {
             precompressed: p,
         })
     }
-    /// Converts the Verification key to a point
-    pub fn to_point(self) -> RistrettoPoint {
-        self.point
-    }
 
     /// Converts the Verification key to a point and returns a reference to it
     pub fn as_point(&self) -> &RistrettoPoint {
@@ -196,6 +192,12 @@ impl From<RistrettoPoint> for VerificationKey {
             point: p,
             precompressed: p.compress(),
         }
+    }
+}
+
+impl Into<RistrettoPoint> for VerificationKey {
+    fn into(self) -> RistrettoPoint {
+        self.point
     }
 }
 

@@ -103,7 +103,7 @@ impl CounterpartyCommitted {
         //   X_i = self.pubkey
         let S_i = share * RISTRETTO_BASEPOINT_POINT;
         let a_i = multikey.factor_for_key(&self.pubkey);
-        let X_i = self.pubkey.to_point();
+        let X_i: RistrettoPoint = self.pubkey.into();
 
         if S_i != self.commitment.0 + challenge * a_i * X_i {
             return Err(VMError::MuSigShareError {
