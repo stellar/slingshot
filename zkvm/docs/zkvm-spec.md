@@ -1,4 +1,4 @@
-# ZkVM specification
+# ZkVM transaction specification
 
 This is the specification for ZkVM, the zero-knowledge transaction virtual machine.
 
@@ -370,7 +370,8 @@ Verification keys are used to construct [predicates](#predicate) and verify [sig
 ### Time bounds
 
 Each transaction is explicitly bound to a range of _minimum_ and _maximum_ time.
-Each bound is in _seconds_ since Jan 1st, 1970 (UTC), represented by an unsigned 64-bit integer.
+Each bound is in _milliseconds_ since the Unix epoch: 00:00:00 on 1 Jan 1970 (UTC),
+represented by an unsigned 64-bit integer.
 Time bounds are available in the transaction as [expressions](#expression-type) provided by the instructions
 [`mintime`](#mintime) and [`maxtime`](#maxtime).
 
@@ -423,11 +424,11 @@ Transcript is used throughout ZkVM to generate challenge [scalars](#scalar) and 
 Transcripts have the following operations, each taking a label for domain separation:
 
 1. **Initialize** transcript:
-    ```    
+    ```
     T := Transcript(label)
     ```
 2. **Commit bytes** of arbitrary length:
-    ```    
+    ```
     T.commit(label, bytes)
     ```
 3. **Challenge bytes**
@@ -1757,8 +1758,7 @@ To _initiate_ a force-close, the program `P1` does:
 
 To construct such program `P1`, users first agree on the final distribution of balances via the program `P2`.
 
-The final-distribution program `P2`:
-1. Checks that `tx.mintime >= exptime` (can be done via `range:24(tx.mintime - exptime)` which gives 6-month resolution for the expiration time)
+The final-distribution program `P2`:1. Checks that `tx.mintime >= exptime` (can be done via `range:24(tx.mintime - exptime)` which gives 6-month resolution for the expiration time)
 2. Creates `borrow`/`output` combinations for each party with hard-coded predicate for each output.
 3. Leaves the payload value and negatives from `borrow` on the stack to be consumed by the `cloak` instruction.
 
