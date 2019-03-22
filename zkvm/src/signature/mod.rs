@@ -17,7 +17,7 @@ mod musig;
 mod signer;
 
 /// Verification key (aka "pubkey") is a wrapper type around a Ristretto point and it's compressed variation
-/// that lets the verifier to check the signature.
+/// that lets the verifier check the validity of a signature.
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub struct VerificationKey {
     point: RistrettoPoint,
