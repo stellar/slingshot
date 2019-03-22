@@ -256,7 +256,7 @@ mod tests {
         let seed = [0u8; 32];
         let mut rng = ChaChaRng::from_seed(seed);
         let xprv = Xprv::random(&mut rng).derive_leaf_key(|t| {
-            t.commit_u64(b"account_id", 34);
+            t.commit_u64(b"invoice_id", 1000024);
         });
 
         assert_eq!(
