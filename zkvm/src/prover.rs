@@ -6,9 +6,10 @@ use std::collections::VecDeque;
 
 use crate::constraints::Commitment;
 use crate::errors::VMError;
-use crate::ops::{Instruction, Program};
+use crate::ops::Instruction;
 use crate::point_ops::PointOp;
 use crate::predicate::Predicate;
+use crate::program::Program;
 use crate::signature::{Signature, VerificationKey};
 use crate::txlog::{TxID, TxLog};
 use crate::types::Data;
