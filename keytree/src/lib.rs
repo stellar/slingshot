@@ -82,7 +82,7 @@ impl Xprv {
     /// Returns a leaf Xprv. (Is this really an xprv, or just a prv?)
     /// Users must provide customize, in order to separate sibling keys from one another
     /// through unique derivation paths.
-    pub fn derive_leaf_key(&self, customize: impl FnOnce(&mut Transcript)) -> Scalar {
+    pub fn derive_key(&self, customize: impl FnOnce(&mut Transcript)) -> Scalar {
         let mut t = Transcript::new(b"Keytree.derivation");
         t.commit_bytes(b"pt", self.precompressed_pubkey.as_bytes());
         t.commit_bytes(b"dk", &self.dk);
