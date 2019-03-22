@@ -75,9 +75,8 @@ impl CounterpartyPrecommitted {
         let received_precommitment = commitment.precommit();
         let equal = self.precommitment.0.ct_eq(&received_precommitment.0);
         if equal.unwrap_u8() == 0 {
-            let point: CompressedRistretto = self.pubkey.into();
             return Err(VMError::MuSigShareError {
-                pubkey: point.to_bytes(),
+                pubkey: self.pubkey.into_compressed().to_bytes(),
             });
         }
 
@@ -104,12 +103,11 @@ impl CounterpartyCommitted {
         //   X_i = self.pubkey
         let S_i = share * RISTRETTO_BASEPOINT_POINT;
         let a_i = multikey.factor_for_key(&self.pubkey);
-        let X_i: RistrettoPoint = self.pubkey.into();
+        let X_i: RistrettoPoint = self.pubkey.into_point();
 
         if S_i != self.commitment.0 + challenge * a_i * X_i {
-            let point: CompressedRistretto = self.pubkey.into();
             return Err(VMError::MuSigShareError {
-                pubkey: point.to_bytes(),
+                pubkey: self.pubkey.into_compressed().to_bytes(),
             });
         }
 

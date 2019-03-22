@@ -38,8 +38,7 @@ impl Multikey {
         let mut aggregated_key = RistrettoPoint::default();
         for X in &pubkeys {
             let a = Multikey::compute_factor(&transcript, X);
-            let X: RistrettoPoint = <VerificationKey as Into<RistrettoPoint>>::into(*X);
-            aggregated_key = aggregated_key + a * X;
+            aggregated_key = aggregated_key + a * X.into_point();
         }
 
         Ok(Multikey {

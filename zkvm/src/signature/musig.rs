@@ -3,7 +3,7 @@ use super::VerificationKey;
 use crate::errors::VMError;
 use crate::transcript::TranscriptProtocol;
 use curve25519_dalek::constants::RISTRETTO_BASEPOINT_POINT;
-use curve25519_dalek::ristretto::{CompressedRistretto, RistrettoPoint};
+use curve25519_dalek::ristretto::CompressedRistretto;
 use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
 
@@ -51,11 +51,10 @@ impl Signature {
             transcript.challenge_scalar(b"c")
         };
 
-        let X: RistrettoPoint = X.into();
         let R = self.R.decompress().ok_or(VMError::InvalidPoint)?;
 
         // Check sG = R + c * X
-        if self.s * G == R + c * X {
+        if self.s * G == R + c * X.into_point() {
             Ok(())
         } else {
             Err(VMError::PointOperationsFailed)
@@ -122,7 +121,7 @@ mod tests {
             126, 150, 210, 181, 6, 117, 95, 44, 102, 38, 28, 144, 49,
         ]);
 
-        assert_eq!(expected_pubkey, multikey.aggregated_key().into());
+        assert_eq!(expected_pubkey, multikey.aggregated_key().into_compressed());
     }
 
     fn multikey_helper(priv_keys: &Vec<Scalar>) -> Multikey {
