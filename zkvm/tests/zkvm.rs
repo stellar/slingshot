@@ -51,19 +51,7 @@ impl ProgramHelper for Program {
     }
 
     fn input_helper(&mut self, qty: u64, flv: Scalar, pred: Predicate) -> &mut Self {
-        let anchor = Anchor::nonce(
-            [0u8; 32],
-            &Predicate::Opaque(RISTRETTO_BASEPOINT_COMPRESSED),
-            0,
-        );
-        let prev_output = Contract {
-            anchor,
-            payload: vec![PortableItem::Value(Value {
-                qty: Commitment::blinded(qty),
-                flv: Commitment::blinded(flv),
-            })],
-            predicate: pred,
-        };
+        let prev_output = make_output(qty, flv, pred);
         self.push(Output::new(prev_output)) // stack: input-data
             .input() // stack: input-contract
             .sign_tx(); // stack: input-value
@@ -126,8 +114,24 @@ fn make_flavor() -> (Scalar, Predicate, Scalar) {
     (scalar, predicate, flavor)
 }
 
+/// Creates an Output contract with given quantity, flavor, and predicate.
+fn make_output(qty: u64, flv: Scalar, pred: Predicate) -> Contract {
+    let anchor = Anchor::nonce(
+        [0u8; 32],
+        &Predicate::Opaque(RISTRETTO_BASEPOINT_COMPRESSED),
+        0,
+    );
+    Contract {
+        anchor,
+        payload: vec![PortableItem::Value(Value {
+            qty: Commitment::blinded(qty),
+            flv: Commitment::blinded(flv),
+        })],
+        predicate: pred,
+    }
+}
+
 fn build_and_verify(program: Program, keys: &Vec<Scalar>) -> Result<TxID, VMError> {
-    println!("building and verifying");
     let (tx, _, _) = {
         // Build tx
         let bp_gens = BulletproofGens::new(256, 1);
@@ -152,7 +156,6 @@ fn build_and_verify(program: Program, keys: &Vec<Scalar>) -> Result<TxID, VMErro
             Signature::sign_aggregated(t, &signtx_keys)
         })?
     };
-    println!("built tx");
 
     // Verify tx
     let bp_gens = BulletproofGens::new(256, 1);
@@ -489,38 +492,37 @@ fn issue_and_spend() {
     }
 }
 
+/// Program that spends an input on the stack unlocked with knowledge of a secret Scalar.
+fn spend_with_secret_scalar(qty: u64, flavor: Scalar, pred: Predicate, secret: Scalar) -> Program {
+    Program::build(|p| {
+        p.cloak_helper(1, vec![(qty, flavor)])
+            .output_helper(pred)
+            .r#const()
+            .push(secret)
+            .r#const()
+            .eq()
+            .verify()
+    })
+}
+
 #[test]
 fn predicate_disjunction_happy_path() {
     let (key_pred, key_scalar) = generate_predicate();
     let (output_pred, _) = generate_predicate();
 
-    // Generate program predicate, checking knowledge of secret scalar
+    // Generate program predicate
     let secret_scalar = Scalar::from(101u64);
-    let program_pred =
-        Predicate::unblinded_program(Program::build(|p| p.r#const().push(secret_scalar).eq()));
-
-    // Make disjunction
-    let disjunction = Predicate::disjunction(vec![key_pred.clone(), program_pred.clone()]).unwrap();
-
-    // Quantity, flavor
     let (qty, flavor) = (10u64, Scalar::from(1u64));
+    let program_pred = Predicate::unblinded_program(spend_with_secret_scalar(
+        qty,
+        flavor,
+        output_pred.clone(),
+        secret_scalar,
+    ));
 
-    // Create output
-    let prev_output = {
-        let anchor = Anchor::nonce(
-            [0u8; 32],
-            &Predicate::Opaque(RISTRETTO_BASEPOINT_COMPRESSED),
-            0,
-        );
-        Contract {
-            anchor,
-            payload: vec![PortableItem::Value(Value {
-                qty: Commitment::blinded(qty),
-                flv: Commitment::blinded(flavor),
-            })],
-            predicate: disjunction.clone(),
-        }
-    };
+    // Make disjunction and output
+    let disjunction = Predicate::disjunction(vec![key_pred.clone(), program_pred.clone()]).unwrap();
+    let prev_output = make_output(qty, flavor, disjunction.clone());
 
     let prog = Program::build(|p| {
         p.push(Output::new(prev_output))
@@ -532,7 +534,6 @@ fn predicate_disjunction_happy_path() {
             .cloak_helper(1, vec![(qty, flavor)])
             .output_helper(output_pred)
     });
-
     build_and_verify(prog, &vec![key_scalar]).unwrap();
 }
 
@@ -544,50 +545,40 @@ fn predicate_disjunction_program_path() {
     // Quantity, flavor
     let (qty, flavor) = (10u64, Scalar::from(1u64));
 
-    // Generate program predicate, checking knowledge of secret scalar
+    // Generate program predicate
     let secret_scalar = Scalar::from(101u64);
-    let secret_prog = Program::build(|p| {
-        p.cloak_helper(1, vec![(qty, flavor)])
-            .output_helper(output_pred)
-            .r#const()
-            .push(secret_scalar)
-            .r#const()
-            .eq()
-            .verify()
-    });
-    let program_pred = Predicate::unblinded_program(secret_prog.clone());
+    let spend_prog = spend_with_secret_scalar(qty, flavor, output_pred.clone(), secret_scalar);
+    let program_pred = Predicate::unblinded_program(spend_prog.clone());
 
-    // Make disjunction
+    // Make disjunction and output
     let disjunction = Predicate::disjunction(vec![key_pred.clone(), program_pred.clone()]).unwrap();
-
-    // Create output
-    let prev_output = {
-        let anchor = Anchor::nonce(
-            [0u8; 32],
-            &Predicate::Opaque(RISTRETTO_BASEPOINT_COMPRESSED),
-            0,
-        );
-        Contract {
-            anchor,
-            payload: vec![PortableItem::Value(Value {
-                qty: Commitment::blinded(qty),
-                flv: Commitment::blinded(flavor),
-            })],
-            predicate: disjunction.clone(),
-        }
-    };
+    let prev_output = make_output(qty, flavor, disjunction.clone());
 
     let prog = Program::build(|p| {
         p.push(secret_scalar)
+            .push(Output::new(prev_output.clone()))
+            .input()
+            .push(key_pred.clone())
+            .push(program_pred.clone())
+            .select(2, 1)
+            .push(Data::Opaque(Vec::new()))
+            .push(spend_prog.clone())
+            .call()
+    });
+    build_and_verify(prog, &vec![key_scalar]).unwrap();
+
+    let wrong_prog = Program::build(|p| {
+        p.push(secret_scalar + Scalar::one())
             .push(Output::new(prev_output))
             .input()
             .push(key_pred)
             .push(program_pred)
             .select(2, 1)
             .push(Data::Opaque(Vec::new()))
-            .push(secret_prog)
+            .push(spend_prog)
             .call()
     });
-
-    build_and_verify(prog, &vec![key_scalar]).unwrap();
+    if build_and_verify(wrong_prog, &vec![key_scalar]).is_ok() {
+        panic!("Unlocking input with incorrect secret scalar should have failed but didn't");
+    }
 }
