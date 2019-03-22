@@ -14,8 +14,7 @@ pub struct Signature {
 }
 
 impl Signature {
-    pub fn sign_single(inp_transcript: &Transcript, privkey: Scalar) -> Signature {
-        let mut transcript = inp_transcript.clone();
+    pub fn sign_single(transcript: &mut Transcript, privkey: Scalar) -> Signature {
         let X = VerificationKey::from_secret(&privkey); // pubkey
 
         let mut rng = transcript
@@ -39,9 +38,8 @@ impl Signature {
         Signature { s, R: R.compress() }
     }
 
-    pub fn verify(&self, transcript: &Transcript, X: VerificationKey) -> Result<(), VMError> {
+    pub fn verify(&self, transcript: &mut Transcript, X: VerificationKey) -> Result<(), VMError> {
         let G = RISTRETTO_BASEPOINT_POINT;
-        let mut transcript = transcript.clone();
 
         // Make c = H(X, R, m)
         // The message `m` has already been fed into the transcript
@@ -74,21 +72,22 @@ mod tests {
     #[test]
     fn sign_verify_single() {
         let privkey = Scalar::from(1u64);
-        let mut transcript = Transcript::new(b"oh hello");
-        transcript.commit_bytes(b"label", b"message");
-        let sig = Signature::sign_single(&transcript, privkey);
+        let sig = Signature::sign_single(&mut Transcript::new(b"example transcript"), privkey);
 
         let X = VerificationKey::from_secret(&privkey);
 
-        assert!(sig.verify(&transcript, X).is_ok());
+        assert!(sig
+            .verify(&mut Transcript::new(b"example transcript"), X)
+            .is_ok());
 
         let priv_bad = Scalar::from(2u64);
         let X_bad = VerificationKey::from_secret(&priv_bad);
-        assert!(sig.verify(&transcript, X_bad).is_err());
-
-        let mut transcript_bad = Transcript::new(b"oh goodbye");
-        transcript_bad.commit_bytes(b"label", b"message");
-        assert!(sig.verify(&transcript_bad, X).is_err());
+        assert!(sig
+            .verify(&mut Transcript::new(b"example transcript"), X_bad)
+            .is_err());
+        assert!(sig
+            .verify(&mut Transcript::new(b"invalid transcript"), X)
+            .is_err());
     }
 
     #[test]
@@ -96,13 +95,19 @@ mod tests {
         let privkey = Scalar::from(1u64);
         let privkeys = vec![privkey];
         let multikey = multikey_helper(&privkeys);
-        let msg = b"message for you, sir";
-        let sig = sign_helper(privkeys, multikey.clone(), msg.to_vec()).unwrap();
+        let sig = sign_helper(
+            privkeys,
+            multikey.clone(),
+            Transcript::new(b"example transcript"),
+        )
+        .unwrap();
 
-        let mut transcript = Transcript::new(b"signing test");
-        transcript.commit_bytes(b"message", msg);
-
-        assert!(sig.verify(&transcript, multikey.aggregated_key()).is_ok());
+        assert!(sig
+            .verify(
+                &mut Transcript::new(b"example transcript"),
+                multikey.aggregated_key()
+            )
+            .is_ok());
     }
 
     #[test]
@@ -145,27 +150,27 @@ mod tests {
             Scalar::from(4u64),
         ];
         let multikey = multikey_helper(&priv_keys);
-        let m = b"message to sign".to_vec();
 
-        sign_helper(priv_keys, multikey, m).unwrap();
+        sign_helper(priv_keys, multikey, Transcript::new(b"example transcript")).unwrap();
     }
 
     fn sign_helper(
         privkeys: Vec<Scalar>,
         multikey: Multikey,
-        m: Vec<u8>,
+        transcript: Transcript,
     ) -> Result<Signature, VMError> {
-        let mut transcript = Transcript::new(b"signing test");
-        transcript.commit_bytes(b"message", &m);
         let pubkeys: Vec<_> = privkeys
             .iter()
             .map(|privkey| VerificationKey::from(privkey * RISTRETTO_BASEPOINT_POINT))
             .collect();
 
+        let mut transcripts: Vec<_> = pubkeys.iter().map(|_| transcript.clone()).collect();
+
         let (parties, precomms): (Vec<_>, Vec<_>) = privkeys
             .clone()
             .into_iter()
-            .map(|x_i| Party::new(&transcript.clone(), x_i, multikey.clone(), pubkeys.clone()))
+            .zip(transcripts.iter_mut())
+            .map(|(x_i, transcript)| Party::new(transcript, x_i, multikey.clone(), pubkeys.clone()))
             .unzip();
 
         let (parties, comms): (Vec<_>, Vec<_>) = parties
@@ -203,15 +208,19 @@ mod tests {
             Scalar::from(4u64),
         ];
         let multikey = multikey_helper(&priv_keys);
-        let m = b"message to sign".to_vec();
 
-        let signature = sign_helper(priv_keys, multikey.clone(), m.clone()).unwrap();
-
-        let mut transcript = Transcript::new(b"signing test");
-        transcript.commit_bytes(b"message", &m);
+        let signature = sign_helper(
+            priv_keys,
+            multikey.clone(),
+            Transcript::new(b"example transcript"),
+        )
+        .unwrap();
 
         assert!(signature
-            .verify(&mut transcript, multikey.aggregated_key())
+            .verify(
+                &mut Transcript::new(b"example transcript"),
+                multikey.aggregated_key()
+            )
             .is_ok());
     }
 }

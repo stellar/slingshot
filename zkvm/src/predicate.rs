@@ -11,8 +11,8 @@ use std::borrow::Borrow;
 
 use crate::encoding;
 use crate::errors::VMError;
-use crate::ops::Program;
 use crate::point_ops::PointOp;
+use crate::program::Program;
 use crate::signature::VerificationKey;
 use crate::transcript::TranscriptProtocol;
 
