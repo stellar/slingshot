@@ -168,6 +168,8 @@ impl Xpub {
 
         // squeeze a challenge scalar
         let f = t.challenge_scalar(b"f.leaf");
+        // TBD: change this to VerificationKey after we factor out Musig (#239) 
+        //      in order to preserve uncompressed point.
         (self.point + (f * &constants::RISTRETTO_BASEPOINT_POINT)).compress()
     }
 
