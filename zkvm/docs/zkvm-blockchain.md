@@ -219,7 +219,7 @@ Output:
 - A [block](#block).
 
 Procedure:
-1. [Compute txroot](#compute-txroot) from an empty list of transactions.
+1. [Compute txroot](#compute-txroot) from an empty list of transaction ids.
 2. [Compute utxoroot](#compute-utxoroot) from an empty set of utxos.
 3. [Compute nonceroot](#compute-nonceroot) from an empty set of nonce anchors.
 4. Compute `header`,
@@ -257,7 +257,8 @@ Additional correctness checks against a particular blockchain state happen durin
 
 Inputs:
 - `block`,
-  the block to validate.
+  the block to validate,
+  at height 2 or above.
 - `prevheader`,
   the header of the previous block.
 
@@ -274,15 +275,20 @@ Procedure:
    of `prevheader`.
 5. Verify `block.header.timestamp_ms > prevheader.timestamp_ms`.
 6. Verify `block.header.refscount >= 0` and `block.header.refscount <= prevheader.refscount + 1`.
-7. [Compute txroot](#compute-txroot) from `block.txs`.
-8. Verify `txroot == block.header.txroot`.
-9. For each transaction `tx` in block.txs:
+7. Let `txlogs` be an empty list of transaction logs.
+   Let `txids` be an empty list of [transaction ids](zkvm-spec.md#transaction-id).
+8. For each transaction `tx` in block.txs:
    1. Verify `tx.mintime_ms <= block.header.timestamp_ms <= tx.maxtime_ms`.
    2. If `block.header.version == 1`,
       verify `tx.version == 1`.
    3. [Execute](zkvm-spec.md#vm-execution)
       `tx` to produce transaction log `txlog`.
-   4. Add `txlog` to the list of output logs.
+   4. Add `txlog` to `txlogs`.
+   5. Compute transaction ID `txid` from the [header entry](zkvm-spec.md#header-entry) of `tx` and from `txlog`.
+   6. Add `txid` to `txids`.
+9. [Compute txroot](#compute-txroot) from `txids`.
+10. Verify `txroot == block.header.txroot`.
+11. Return `txlogs`.
 
 ## Apply block
 
@@ -352,14 +358,14 @@ at least not without taking extra care to cancel out such “local pairs” firs
 ## Compute txroot
 
 Input:
-- Ordered list `txs` of [transactions](zkvm-spec.md#transaction).
+- Ordered list `txids` of [transaction IDs](zkvm-spec.md#transaction-id).
 
 Output:
 - [Merkle root hash](zkvm-spec.md#merkle-binary-tree) of the transaction list.
 
 Procedure:
-1. Create a [transcript](zkvm-spec.md#transcript) `T` with label `transactions`.
-2. Return `MerkleHash(T, txs)`.
+1. Create a [transcript](zkvm-spec.md#transcript) `T` with label `transaction_ids`.
+2. Return `MerkleHash(T, txids)`.
 
 ## Compute utxoroot
 
