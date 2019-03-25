@@ -56,8 +56,8 @@ impl MerkleItem for Entry {
         match self {
             Entry::Header(h) => {
                 t.commit_u64(b"tx.version", h.version);
-                t.commit_u64(b"tx.mintime", h.mintime);
-                t.commit_u64(b"tx.maxtime", h.maxtime);
+                t.commit_u64(b"tx.mintime", h.mintime_ms);
+                t.commit_u64(b"tx.maxtime", h.maxtime_ms);
             }
             Entry::Issue(q, f) => {
                 t.commit_point(b"issue.q", q);

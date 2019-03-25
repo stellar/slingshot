@@ -194,26 +194,23 @@ Output:
 - Blockchain state.
 
 Procedure:
-1. [Make an initial block](#make-initial-block)
-   `initialblock` from `timestamp_ms` and `refscount`.
+1. [Make an initial block header](#make-initial-block-header)
+   `initialheader` from `timestamp_ms` and `refscount`.
 2. Return a blockchain state with its fields set as follows:
-   - `initialheader`: `initialblock.header`
-   - `tipheader`: `initialblock.header`
+   - `initialheader`: `initialheader`
+   - `tipheader`: `initialheader`
    - `utxos`: empty set
    - `nonces`: empty set
    - `refids`: empty set
 
-## Make initial block
+## Make initial block header
 
 Inputs:
 - `timestamp_ms`,
   the current time as a number of milliseconds since the Unix epoch:
-  00:00:00 UTC Jan 1,
-  1970.
+  00:00:00 UTC Jan 1, 1970.
 - `refscount`,
-  the number of recent block ids to cache for
-  [nonce](zkvm-spec.md#nonce)
-  uniqueness.
+  the number of recent block ids to cache for [nonce](zkvm-spec.md#nonce) uniqueness.
 
 Output:
 - A [block](#block).
@@ -222,10 +219,7 @@ Procedure:
 1. [Compute txroot](#compute-txroot) from an empty list of transaction ids.
 2. [Compute utxoroot](#compute-utxoroot) from an empty set of utxos.
 3. [Compute nonceroot](#compute-nonceroot) from an empty set of nonce anchors.
-4. Compute `header`,
-   a
-   [block header](#block-header)
-   with its fields set as follows:
+4. Return a [block header](#block-header) with its fields set as follows:
    - `version`: 1
    - `height`: 1
    - `previd`: all-zero string of 32-bytes
@@ -235,7 +229,6 @@ Procedure:
    - `nonceroot`: `nonceroot`
    - `refscount`: `refscount`
    - `ext`: empty
-5. Return a block with `header` set to `header` and an empty `txs` list.
 
 ## Join existing network
 
@@ -257,10 +250,9 @@ Additional correctness checks against a particular blockchain state happen durin
 
 Inputs:
 - `block`,
-  the block to validate,
-  at height 2 or above.
+  the block to validate.
 - `prevheader`,
-  the header of the previous block.
+  the previous blockheader.
 
 Output:
 - list of [transaction logs](zkvm-spec.md#transaction-log),
@@ -304,11 +296,10 @@ Output:
 - New blockchain state `state′`.
 
 Procedure:
-1. [Validate](#validate-block)
-   `block` with `prevheader` set to `state.tipheader`.
+1. [Validate](#validate-block) `block` with `prevheader` set to `state.tipheader`. Set `txlogs` to the result.
 2. Let `state′` be `state`.
 3. Remove items from `state′.nonces` where `maxtime_ms < block.header.timestamp_ms`.
-4. For each txlog from the validation step,
+4. For each txlog in `txlogs`,
    in order:
    1. [Apply the txlog](#apply-transaction-log) to `state′` to produce `state′′`.
    2. Set `state′ <- state′′`.
