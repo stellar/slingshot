@@ -1,5 +1,5 @@
-use super::errors::MusigError;
 use super::key::{Multikey, VerificationKey};
+use super::errors::MusigError;
 use crate::transcript::TranscriptProtocol;
 use curve25519_dalek::constants::RISTRETTO_BASEPOINT_POINT;
 use curve25519_dalek::ristretto::{CompressedRistretto, RistrettoPoint};

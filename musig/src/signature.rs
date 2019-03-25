@@ -1,6 +1,6 @@
 use super::counterparty::NonceCommitment;
-use super::key::VerificationKey;
 use super::point_op::PointOp;
+use super::key::VerificationKey;
 use super::transcript::TranscriptProtocol;
 use curve25519_dalek::constants::RISTRETTO_BASEPOINT_POINT;
 use curve25519_dalek::ristretto::CompressedRistretto;
@@ -187,7 +187,7 @@ mod tests {
             .map(|p| p.receive_commitments(comms.clone()).unwrap())
             .unzip();
 
-        let signatures: Vec<_> = parties
+        let signatures: Vec<Signature> = parties
             .into_iter()
             .map(|p: PartyAwaitingShares| p.receive_shares(shares.clone()).unwrap())
             .collect();
