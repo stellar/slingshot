@@ -1,6 +1,6 @@
 use super::counterparty::NonceCommitment;
-use super::point_op::PointOp;
 use super::key::VerificationKey;
+use super::point_op::PointOp;
 use super::transcript::TranscriptProtocol;
 use curve25519_dalek::constants::RISTRETTO_BASEPOINT_POINT;
 use curve25519_dalek::ristretto::CompressedRistretto;
