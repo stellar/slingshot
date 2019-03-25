@@ -1,7 +1,7 @@
 use super::counterparty::NonceCommitment;
-use super::VerificationKey;
-use crate::errors::VMError;
-use crate::transcript::TranscriptProtocol;
+use super::errors::MuSigError;
+use super::key::VerificationKey;
+use super::transcript::TranscriptProtocol;
 use curve25519_dalek::constants::RISTRETTO_BASEPOINT_POINT;
 use curve25519_dalek::ristretto::CompressedRistretto;
 use curve25519_dalek::scalar::Scalar;
@@ -38,7 +38,11 @@ impl Signature {
         Signature { s, R: R.compress() }
     }
 
-    pub fn verify(&self, transcript: &mut Transcript, X: VerificationKey) -> Result<(), VMError> {
+    pub fn verify(
+        &self,
+        transcript: &mut Transcript,
+        X: VerificationKey,
+    ) -> Result<(), MuSigError> {
         let G = RISTRETTO_BASEPOINT_POINT;
 
         // Make c = H(X, R, m)
@@ -49,25 +53,24 @@ impl Signature {
             transcript.challenge_scalar(b"c")
         };
 
-        let X = X.0.decompress().ok_or(VMError::InvalidPoint)?;
-        let R = self.R.decompress().ok_or(VMError::InvalidPoint)?;
+        let X = X.0.decompress().ok_or(MuSigError::InvalidPoint)?;
+        let R = self.R.decompress().ok_or(MuSigError::InvalidPoint)?;
 
         // Check sG = R + c * X
         if self.s * G == R + c * X {
             Ok(())
         } else {
-            Err(VMError::PointOperationsFailed)
+            Err(MuSigError::PointOperationFailed)
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
-
     use super::*;
-    use crate::errors::VMError;
-    use crate::signature::signer::*;
-    use crate::signature::{multikey::Multikey, VerificationKey};
+    use crate::errors::MuSigError;
+    use crate::key::{Multikey, VerificationKey};
+    use crate::signer::*;
     use curve25519_dalek::ristretto::CompressedRistretto;
 
     #[test]
@@ -159,7 +162,7 @@ mod tests {
         privkeys: Vec<Scalar>,
         multikey: Multikey,
         transcript: Transcript,
-    ) -> Result<Signature, VMError> {
+    ) -> Result<Signature, MuSigError> {
         let pubkeys: Vec<_> = privkeys
             .iter()
             .map(|privkey| VerificationKey((privkey * RISTRETTO_BASEPOINT_POINT).compress()))

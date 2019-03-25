@@ -1,6 +1,5 @@
-use super::multikey::Multikey;
-use super::VerificationKey;
-use crate::errors::VMError;
+use super::errors::MuSigError;
+use super::key::{Multikey, VerificationKey};
 use crate::transcript::TranscriptProtocol;
 use curve25519_dalek::constants::RISTRETTO_BASEPOINT_POINT;
 use curve25519_dalek::ristretto::{CompressedRistretto, RistrettoPoint};
@@ -70,12 +69,12 @@ impl CounterpartyPrecommitted {
     pub(super) fn commit_nonce(
         self,
         commitment: NonceCommitment,
-    ) -> Result<CounterpartyCommitted, VMError> {
+    ) -> Result<CounterpartyCommitted, MuSigError> {
         // Check H(commitment) =? precommitment
         let received_precommitment = commitment.precommit();
         let equal = self.precommitment.0.ct_eq(&received_precommitment.0);
         if equal.unwrap_u8() == 0 {
-            return Err(VMError::MuSigShareError {
+            return Err(MuSigError::ShareError {
                 pubkey: self.pubkey.0.to_bytes(),
             });
         }
@@ -93,7 +92,7 @@ impl CounterpartyCommitted {
         share: Scalar,
         challenge: Scalar,
         multikey: &Multikey,
-    ) -> Result<Scalar, VMError> {
+    ) -> Result<Scalar, MuSigError> {
         // Check if s_i * G == R_i + c * a_i * X_i.
         //   s_i = share
         //   G = RISTRETTO_BASEPOINT_POINT
@@ -103,10 +102,10 @@ impl CounterpartyCommitted {
         //   X_i = self.pubkey
         let S_i = share * RISTRETTO_BASEPOINT_POINT;
         let a_i = multikey.factor_for_key(&self.pubkey);
-        let X_i = self.pubkey.0.decompress().ok_or(VMError::InvalidPoint)?;
+        let X_i = self.pubkey.0.decompress().ok_or(MuSigError::InvalidPoint)?;
 
         if S_i != self.commitment.0 + challenge * a_i * X_i {
-            return Err(VMError::MuSigShareError {
+            return Err(MuSigError::ShareError {
                 pubkey: self.pubkey.0.to_bytes(),
             });
         }

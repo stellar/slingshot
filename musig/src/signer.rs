@@ -1,9 +1,8 @@
 use super::counterparty::*;
-use super::multikey::Multikey;
-use super::musig::Signature;
-use super::VerificationKey;
-use crate::errors::VMError;
-use crate::transcript::TranscriptProtocol;
+use super::errors::MuSigError;
+use super::key::{Multikey, VerificationKey};
+use super::signature::Signature;
+use super::transcript::TranscriptProtocol;
 use curve25519_dalek::constants::RISTRETTO_BASEPOINT_POINT;
 use curve25519_dalek::ristretto::RistrettoPoint;
 use curve25519_dalek::scalar::Scalar;
@@ -113,7 +112,7 @@ impl<'t> PartyAwaitingCommitments<'t> {
     pub fn receive_commitments(
         self,
         nonce_commitments: Vec<NonceCommitment>,
-    ) -> Result<(PartyAwaitingShares, Scalar), VMError> {
+    ) -> Result<(PartyAwaitingShares, Scalar), MuSigError> {
         // Make R = sum_i(R_i). nonce_commitments = R_i from all the parties.
         let R = NonceCommitment::sum(&nonce_commitments);
 
@@ -166,7 +165,7 @@ impl PartyAwaitingShares {
     }
 
     /// Verify and assemble signature shares.
-    pub fn receive_shares(self, shares: Vec<Scalar>) -> Result<Signature, VMError> {
+    pub fn receive_shares(self, shares: Vec<Scalar>) -> Result<Signature, MuSigError> {
         // Move out self's fields because `self.c` inside `map`'s closure would
         // lead to capturing `self` by reference, while we want
         // to move `self.counterparties` out of it.

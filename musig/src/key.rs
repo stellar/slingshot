@@ -1,7 +1,7 @@
-use super::VerificationKey;
-use crate::errors::VMError;
-use crate::transcript::TranscriptProtocol;
-use curve25519_dalek::ristretto::RistrettoPoint;
+use super::errors::MuSigError;
+use super::transcript::TranscriptProtocol;
+use curve25519_dalek::constants::RISTRETTO_BASEPOINT_POINT;
+use curve25519_dalek::ristretto::{CompressedRistretto, RistrettoPoint};
 use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
 
@@ -12,9 +12,9 @@ pub struct Multikey {
 }
 
 impl Multikey {
-    pub fn new(pubkeys: Vec<VerificationKey>) -> Result<Self, VMError> {
+    pub fn new(pubkeys: Vec<VerificationKey>) -> Result<Self, MuSigError> {
         match pubkeys.len() {
-            0 => return Err(VMError::BadArguments),
+            0 => return Err(MuSigError::BadArguments),
             1 => {
                 return Ok(Multikey {
                     transcript: None,
@@ -38,7 +38,7 @@ impl Multikey {
         let mut aggregated_key = RistrettoPoint::default();
         for X in &pubkeys {
             let a = Multikey::compute_factor(&transcript, X);
-            let X = X.0.decompress().ok_or(VMError::InvalidPoint)?;
+            let X = X.0.decompress().ok_or(MuSigError::InvalidPoint)?;
             aggregated_key = aggregated_key + a * X;
         }
 
@@ -64,5 +64,28 @@ impl Multikey {
 
     pub fn aggregated_key(&self) -> VerificationKey {
         self.aggregated_key
+    }
+}
+
+/// Verification key (aka "pubkey") is a wrapper type around a Ristretto point
+/// that lets the verifier to check the signature.
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub struct VerificationKey(pub CompressedRistretto);
+
+impl VerificationKey {
+    /// Constructs a VerificationKey from a private key.
+    pub fn from_secret(privkey: &Scalar) -> Self {
+        VerificationKey(Self::from_secret_uncompressed(privkey).compress())
+    }
+
+    /// Constructs an uncompressed VerificationKey point from a private key.
+    pub(crate) fn from_secret_uncompressed(privkey: &Scalar) -> RistrettoPoint {
+        (privkey * RISTRETTO_BASEPOINT_POINT)
+    }
+}
+
+impl From<CompressedRistretto> for VerificationKey {
+    fn from(x: CompressedRistretto) -> Self {
+        VerificationKey(x)
     }
 }
