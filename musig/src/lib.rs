@@ -9,6 +9,7 @@ mod counterparty;
 mod key;
 mod signature;
 mod signer;
+mod point_op;
 
 mod errors;
 mod transcript;
