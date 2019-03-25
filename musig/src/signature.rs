@@ -7,6 +7,7 @@ use curve25519_dalek::ristretto::CompressedRistretto;
 use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
 
+/// A Schnorr signature.
 #[derive(Debug, Clone)]
 pub struct Signature {
     pub s: Scalar,
@@ -14,6 +15,7 @@ pub struct Signature {
 }
 
 impl Signature {
+    /// Creates a signature for a single private key, bypassing the party state transitions
     pub fn sign_single(transcript: &mut Transcript, privkey: Scalar) -> Signature {
         let X = VerificationKey::from_secret(&privkey); // pubkey
 
@@ -38,6 +40,7 @@ impl Signature {
         Signature { s, R: R.compress() }
     }
 
+    /// Verifies a signature for a single VerificationKey
     pub fn verify(
         &self,
         transcript: &mut Transcript,
