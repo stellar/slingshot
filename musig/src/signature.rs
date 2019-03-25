@@ -1,6 +1,6 @@
 use super::counterparty::NonceCommitment;
-use super::errors::MuSigError;
 use super::key::VerificationKey;
+use super::point_op::PointOp;
 use super::transcript::TranscriptProtocol;
 use curve25519_dalek::constants::RISTRETTO_BASEPOINT_POINT;
 use curve25519_dalek::ristretto::CompressedRistretto;
@@ -41,13 +41,7 @@ impl Signature {
     }
 
     /// Verifies a signature for a single VerificationKey
-    pub fn verify(
-        &self,
-        transcript: &mut Transcript,
-        X: VerificationKey,
-    ) -> Result<(), MuSigError> {
-        let G = RISTRETTO_BASEPOINT_POINT;
-
+    pub fn verify(&self, transcript: &mut Transcript, X: VerificationKey) -> PointOp {
         // Make c = H(X, R, m)
         // The message `m` has already been fed into the transcript
         let c = {
@@ -56,14 +50,13 @@ impl Signature {
             transcript.challenge_scalar(b"c")
         };
 
-        let X = X.0.decompress().ok_or(MuSigError::InvalidPoint)?;
-        let R = self.R.decompress().ok_or(MuSigError::InvalidPoint)?;
-
-        // Check sG = R + c * X
-        if self.s * G == R + c * X {
-            Ok(())
-        } else {
-            Err(MuSigError::PointOperationFailed)
+        // Form the final linear combination:
+        // `s * G = R + c * X`
+        //      ->
+        // `0 == (-s * G) + (1 * R) + (c * X)`
+        PointOp {
+            primary: Some(-self.s),
+            arbitrary: vec![(Scalar::one(), self.R), (c, X.0)],
         }
     }
 }
@@ -85,15 +78,18 @@ mod tests {
 
         assert!(sig
             .verify(&mut Transcript::new(b"example transcript"), X)
+            .verify()
             .is_ok());
 
         let priv_bad = Scalar::from(2u64);
         let X_bad = VerificationKey::from_secret(&priv_bad);
         assert!(sig
             .verify(&mut Transcript::new(b"example transcript"), X_bad)
+            .verify()
             .is_err());
         assert!(sig
             .verify(&mut Transcript::new(b"invalid transcript"), X)
+            .verify()
             .is_err());
     }
 
@@ -114,6 +110,7 @@ mod tests {
                 &mut Transcript::new(b"example transcript"),
                 multikey.aggregated_key()
             )
+            .verify()
             .is_ok());
     }
 
@@ -228,6 +225,7 @@ mod tests {
                 &mut Transcript::new(b"example transcript"),
                 multikey.aggregated_key()
             )
+            .verify()
             .is_ok());
     }
 }

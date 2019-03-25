@@ -1,9 +1,8 @@
 use crate::errors::MuSigError;
-use curve25519_dalek::scalar::Scalar;
-use curve25519_dalek::ristretto::{RistrettoPoint, CompressedRistretto};
 use curve25519_dalek::constants::RISTRETTO_BASEPOINT_POINT;
+use curve25519_dalek::ristretto::{CompressedRistretto, RistrettoPoint};
+use curve25519_dalek::scalar::Scalar;
 use curve25519_dalek::traits::{Identity, IsIdentity, VartimeMultiscalarMul};
-
 
 /// Deferred point operation.
 #[derive(Clone, Debug)]
@@ -68,7 +67,10 @@ mod tests {
 
         let op = PointOp {
             primary: Some(Scalar::one()),
-            arbitrary: vec![(-Scalar::one(), (RISTRETTO_BASEPOINT_POINT*Scalar::from(4u8)).compress())],
+            arbitrary: vec![(
+                -Scalar::one(),
+                (RISTRETTO_BASEPOINT_POINT * Scalar::from(4u8)).compress(),
+            )],
         };
         assert!(op.verify().is_err());
 

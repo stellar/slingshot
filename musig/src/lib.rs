@@ -7,9 +7,9 @@ extern crate failure;
 
 mod counterparty;
 mod key;
+mod point_op;
 mod signature;
 mod signer;
-mod point_op;
 
 mod errors;
 mod transcript;
