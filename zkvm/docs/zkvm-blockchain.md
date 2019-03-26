@@ -194,38 +194,31 @@ Output:
 - Blockchain state.
 
 Procedure:
-1. [Make an initial block](#make-initial-block)
-   `initialblock` from `timestamp_ms` and `refscount`.
+1. [Make an initial block header](#make-initial-block-header) `initialheader` from `timestamp_ms` and `refscount`.
 2. Return a blockchain state with its fields set as follows:
-   - `initialheader`: `initialblock.header`
-   - `tipheader`: `initialblock.header`
+   - `initialheader`: `initialheader`
+   - `tipheader`: `initialheader`
    - `utxos`: empty set
    - `nonces`: empty set
    - `refids`: empty set
 
-## Make initial block
+## Make initial block header
 
 Inputs:
 - `timestamp_ms`,
   the current time as a number of milliseconds since the Unix epoch:
-  00:00:00 UTC Jan 1,
-  1970.
+  00:00:00 UTC Jan 1, 1970.
 - `refscount`,
-  the number of recent block ids to cache for
-  [nonce](zkvm-spec.md#nonce)
-  uniqueness.
+  the number of recent block ids to cache for [nonce](zkvm-spec.md#nonce) uniqueness.
 
 Output:
-- A [block](#block).
+- A [block header](#block-header).
 
 Procedure:
-1. [Compute txroot](#compute-txroot) from an empty list of transactions.
+1. [Compute txroot](#compute-txroot) from an empty list of transaction ids.
 2. [Compute utxoroot](#compute-utxoroot) from an empty set of utxos.
 3. [Compute nonceroot](#compute-nonceroot) from an empty set of nonce anchors.
-4. Compute `header`,
-   a
-   [block header](#block-header)
-   with its fields set as follows:
+4. Return a block header with its fields set as follows:
    - `version`: 1
    - `height`: 1
    - `previd`: all-zero string of 32-bytes
@@ -235,13 +228,14 @@ Procedure:
    - `nonceroot`: `nonceroot`
    - `refscount`: `refscount`
    - `ext`: empty
-5. Return a block with `header` set to `header` and an empty `txs` list.
 
 ## Join existing network
 
 A new node starts here when joining a running network.
 It must either:
-- obtain all historical blocks, [applying](#apply-block) them one by one to reproduce the latest [blockchain state](#blockchain-state); or
+- obtain all historical blocks,
+  [applying](#apply-block) them one by one to reproduce the latest [blockchain state](#blockchain-state);
+  or
 - obtain a recent copy of the blockchain state `state` from a trusted source
   (e.g., another node that has already validated the full history of the blockchain)
   and begin applying blocks beginning at `state.tipheader.height+1`.
@@ -253,11 +247,13 @@ An obtained (as opposed to computed) blockchain state `state` may be partially v
 
 Validating a block checks it for correctness outside the context of a particular [blockchain state](#blockchain-state).
 
-Additional correctness checks against a particular blockchain state happen during the [apply block](#apply-block) procedure.
+Additional correctness checks against a particular blockchain state happen during the [apply block](#apply-block) procedure,
+of which this is a subroutine.
 
 Inputs:
 - `block`,
-  the block to validate.
+  the block to validate,
+  at height 2 or above.
 - `prevheader`,
   the header of the previous block.
 
@@ -269,20 +265,22 @@ Procedure:
 1. Verify `block.header.version >= prevheader.version`.
 2. If `block.header.version == 1`, verify `block.header.ext` is empty.
 3. Verify `block.header.height == prevheader.height+1`.
-4. Verify `block.header.previd` equals the
-   [block ID](#block-id)
-   of `prevheader`.
+4. Verify `block.header.previd` equals the [block ID](#block-id) of `prevheader`.
 5. Verify `block.header.timestamp_ms > prevheader.timestamp_ms`.
 6. Verify `block.header.refscount >= 0` and `block.header.refscount <= prevheader.refscount + 1`.
-7. [Compute txroot](#compute-txroot) from `block.txs`.
-8. Verify `txroot == block.header.txroot`.
-9. For each transaction `tx` in block.txs:
+7. Let `txlogs` be an empty list of transaction logs.
+   Let `txids` be an empty list of [transaction ids](zkvm-spec.md#transaction-id).
+8. For each transaction `tx` in block.txs:
    1. Verify `tx.mintime_ms <= block.header.timestamp_ms <= tx.maxtime_ms`.
    2. If `block.header.version == 1`,
       verify `tx.version == 1`.
-   3. [Execute](zkvm-spec.md#vm-execution)
-      `tx` to produce transaction log `txlog`.
-   4. Add `txlog` to the list of output logs.
+   3. [Execute](zkvm-spec.md#vm-execution) `tx` to produce transaction log `txlog`.
+   4. Add `txlog` to `txlogs`.
+   5. Compute transaction ID `txid` from the [header entry](zkvm-spec.md#header-entry) of `tx` and from `txlog`.
+   6. Add `txid` to `txids`.
+9. [Compute txroot](#compute-txroot) from `txids`.
+10. Verify `txroot == block.header.txroot`.
+11. Return `txlogs`.
 
 ## Apply block
 
@@ -298,8 +296,7 @@ Output:
 - New blockchain state `state′`.
 
 Procedure:
-1. [Validate](#validate-block)
-   `block` with `prevheader` set to `state.tipheader`.
+1. [Validate](#validate-block) `block` with `prevheader` set to `state.tipheader`.
 2. Let `state′` be `state`.
 3. Remove items from `state′.nonces` where `maxtime_ms < block.header.timestamp_ms`.
 4. For each txlog from the validation step,
@@ -352,14 +349,14 @@ at least not without taking extra care to cancel out such “local pairs” firs
 ## Compute txroot
 
 Input:
-- Ordered list `txs` of [transactions](zkvm-spec.md#transaction).
+- Ordered list `txids` of [transaction IDs](zkvm-spec.md#transaction-id).
 
 Output:
 - [Merkle root hash](zkvm-spec.md#merkle-binary-tree) of the transaction list.
 
 Procedure:
-1. Create a [transcript](zkvm-spec.md#transcript) `T` with label `transactions`.
-2. Return `MerkleHash(T, txs)`.
+1. Create a [transcript](zkvm-spec.md#transcript) `T` with label `transaction_ids`.
+2. Return `MerkleHash(T, txids)`.
 
 ## Compute utxoroot
 
