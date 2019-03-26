@@ -788,37 +788,51 @@ V == v·B + 0·B2
 2. Verifier checks equality `V == v·B`.
 
 ### Taproot
-Based on Gregory Maxwell's [Taproot proposal](https://lists.linuxfoundation.org/pipermail/bitcoin-dev/2018-January/015614.html), Taproot provides efficient and privacy-preserving storage of smart contracts. Multi-party blockchain contracts typically have a top-level "success clause" (all parties agree and sign) or "alternative clauses" to let a party exit the contract based on pre-determined constraints. Taproot has three significant features.
+
+Taproot provides efficient and privacy-preserving storage of smart contracts. It is based on [a proposal by Gregory Maxwell](https://lists.linuxfoundation.org/pipermail/bitcoin-dev/2018-January/015614.html). Multi-party blockchain contracts typically have a top-level "success clause" (all parties agree and sign) or "alternative clauses" to let a party exit the contract based on pre-determined constraints. Our design of Taproot has three significant features.
 
 1. The alternative clauses `{C_i}`, each of which is a [program](#program), are stored as [blinded programs](#blinded-program) and compressed in a [Merkle tree](#merkle-binary-tree) with root `M`.
 2. A signing key `X` and the Merkle root `M` (from 1) are committed to a single signing key `P` using a hash function `h1`, such that `P = X + h1(X, M)`. This makes signing for `P` possible if parties want to sign for `X` and avoids revealing the alternative clauses.
 3. Calling a program will check a [call proof](#call-proof) to verify the program's inclusion in the Taproot tree before executing the program.
 
-The commitment scheme is defined using the [transcript](#transcript) protocol by committing (1) the signing key, as a compressed 32-byte point, and (2) the root of the Merkle tree constructed from the `n` programs and (3) squeezing a scalar bound to all `n` programs.
+The commitment scheme is defined using the [transcript](#transcript) protocol by committing (1) `X`, the signing key, as a compressed 32-byte point, and (2) `M`, the root of the Merkle tree constructed from the `n` programs and (3) squeezing a scalar bound to all `n` programs.
 
 ```
 // given Merkle root M and signing key X
 t = Transcript("ZkVM.taproot")
-t.commit_bytes(b"key", X; // Compressed Ristretto
+t.commit_bytes(b"key", X); // Compressed Ristretto
 t.commit_bytes(b"merkle", M); // [u8; 32]
 t.challenge_scalar(b"h")
 ```
 
-In this context, navigating to a branch involves selecting a leaf node program to run. A branch is chosen using the [`call`](#call) instruction, which also takes a program and [call proof](#call-proof). If, using this information, the relation `P = X + h1(X, M)` is verified, then the associated program will be executed.
+Typically, to select a program to run from a leaf of the Merkle tree, we must navigate branches from the Merkle root. We tweak this procedure: the Merkle root is constructed from a provided Merkle path. It is then used to verify a relation between the contract predicate and the provided program. A branch is chosen using the [`call`](#call) instruction, which takes a program, [call proof](#call-proof), and contract. The [predicate](#predicate) `P` is read from the contract. The call proof contains the signing key `X`, a list of left-right neighbors, and the Merkle path. The neighbor list, Merkle path, and the provided program are used to reconstruct the Merkle root `M`. If the relation `P = X + h1(X, M)` is verified, then the associated program will be executed.
 
 
 ### Call proof
-An argument to the [`call`](#call) instruction, this proof is an extension of the Merkle path and contains the information to verify that a program is represented in the [Taproot](#taproot) Merkle tree. It contains `X`, the signing key; a list of left-right neighbors, each a LE32 item, but excluding the program leaf and root hash; and a LE32 bit pattern, indicating each neighbor's position.
+
+This struct is an argument to the [`call`](#call) instruction. It contains the information to verify that a program is represented in the [Taproot](#taproot) Merkle tree, in the following fields:
+ - `X`, the signing key
+ - `neighbors`, an array of left-right neighbors in the Merkle tree. Each is a LE32 item representing the hash of its children. The leaf hash of the program string and root hash are not included. Neighbor hashes are ordered from bottom-most to top-most. The first hash is the neighbor of the leaf hash of the program string, and the last is a child of the Merkle root.
+ - `positions`, a pattern indicating each neighbor's position. 0 represents a left neighbor, and 1 represents a right neighbor. This is a 32-bit little-endian integer, where the lower bits indicate the position of the lower-level neighbors. These bits are ordered identically to `neighbors`, because there is a one-to-one correspondence between their elements. The position of the leaf hash's neighbor is represented by the first bit, and the position of a child of the Merkle root is the last bit.
+
+[ADD TREE HERE]
+
+Here is a contextualized example using the tree above. Suppose we are verifying the program `P3`. Its corresponding leaf is `h(P3)`; this has a right neighbor `h(P4)`. The parent of `h(P3)` is `h2 = h(h(P3) || h(P4))`; this has a left neighbor `h1`. The parent of `h2` is `hL = h(h1 || h2)`; this has a right neighbor `hR`. `h2`'s parent is the Merkle root.
+
+This gives the neighbor list [`h(P4)`, `h1`, `hR`] and bit pattern `101`. 
 
 ### Blinded program
-The blinded program is used for efficient construction of the Merkle tree, and it can either contain a program or its accompanying blinding factor. Thus, blinding factors are simply even items in the Merkle tree. We add the computation of the per-clause blinding factor, and we commit them as follows.
+
+The blinded program is used to construct the [Taproot tree](#taproot). It is an enum that can either be a [program](#program) or its accompanying blinding factor. A leaf element in the Taproot tree is a hash of a blinded program. This lets us store the hash of the blinding factor in the tree: each odd leaf will be the hash of a program, and each even leaf a hash of the program's blinding factor.
+
+We commit them to the transcript as follows:
 
 ```
 // given program prog and key blinding_key
-t = Transcript("ZkVM.taproot-blinding)
+t = Transcript("ZkVM.taproot-blinding")
 t.commit("program", prog)
 t.commit("key", blinding_key)
-t.challenge_bytes("blinding")
+t.challenge_scalar(b"blinding")
 ```
 
 
@@ -990,7 +1004,7 @@ Code | Instruction                | Stack diagram                              |
 0x1d | [`nonce`](#nonce)          |    _pred blockid_ → _contract_             | Modifies [tx log](#transaction-log)
 0x1e | [`log`](#log)              |            _data_ → ø                      | Modifies [tx log](#transaction-log)
 0x1f | [`signtx`](#signtx)        |        _contract_ → _results..._           | Modifies [deferred verification keys](#transaction-signature)
-0x20 | [`call`](#call)            |_contract(P) prf prog_ **call** → _results_ | Defers point operations](#deferred-point-operations)
+0x20 | [`call`](#call)            |_contract(P) prf prog_ **call** → _results_ | [Defers point operations](#deferred-point-operations)
 0x21 | [`delegate`](#delegate)    |_contract prog sig_ → _results..._          | [Defers point operations](#deferred-point-operations)
   —  | [`ext`](#ext)              |                 ø → ø                      | Fails if [extension flag](#vm-state) is not set.
 
@@ -1515,14 +1529,15 @@ is deferred until the end of VM execution.
 _contract(P) prf prog_ **call** → _results..._
 1. Pops program [data](#data-type) `prog`, the extended Merkle proof [data](#data-type) `prf`, and a [contract](#contract-type) `contract`.
 2. Reads the [predicate](#predicate) `P` from the contract.
-3. Uses the [`callproof`](#call-proof) `prf` and the [program](#program) `prog` to get the signing key `X` and compute the supposed Merkle root `M`.
-4. Forms a statement to verify a relation between `P`, `M`, and `X`:
+3. Reads the signing key `X`, list of neighbors `neighbors`, and their positions `positions` from the [call proof](#call-proof) `prf`.
+4. Uses the [program](#program) `prog`, `neighbors`, and `positions` to compute the Merkle root `M`.
+5. Forms a statement to verify a relation between `P`, `M`, and `X`:
     ```
     0 == -P + X + h1(X, M)·G
     ```
-5. Adds the statement to the [deferred point operations](#deferred-point-operations).
-6. Places the [payload](#contract-payload) on the stack (last item on top), disregarding the contract.
-7. Set the `prog` as current.
+6. Adds the statement to the [deferred point operations](#deferred-point-operations).
+7. Places the [payload](#contract-payload) on the stack (last item on top).
+8. Set the `prog` as current.
 
 Fails if the top two items are not [data](#data-type) or the third from top is not a [contract](#contract-type).
 
