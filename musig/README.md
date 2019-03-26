@@ -12,7 +12,8 @@ and signing multiple messages in a way that is safe against Russell's attack.
 
 ### Scalar
 
-A _scalar_ is an integer modulo [Ristretto group](https://ristretto.group) order `|G| = 2^252 + 27742317777372353535851937790883648493`.
+A _scalar_ is an integer modulo [Ristretto group](https://ristretto.group) order 
+`|G| = 2^252 + 27742317777372353535851937790883648493`.
 
 Scalars are encoded as 32-byte strings using little-endian convention.
 
