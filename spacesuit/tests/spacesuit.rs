@@ -34,13 +34,13 @@ where
     R: rand::RngCore,
 {
     let mut prover_transcript = Transcript::new(b"TransactionTest");
-    let mut prover = Prover::new(&bp_gens, &pc_gens, &mut prover_transcript);
+    let mut prover = Prover::new(&pc_gens, &mut prover_transcript);
 
     let (in_com, in_vars) = inputs.commit(&mut prover, rng);
     let (out_com, out_vars) = outputs.commit(&mut prover, rng);
 
     cloak(&mut prover, in_vars, out_vars)?;
-    let proof = prover.prove()?;
+    let proof = prover.prove(&bp_gens)?;
 
     Ok((proof, in_com, out_com))
 }
@@ -54,14 +54,14 @@ fn verify(
 ) -> Result<(), R1CSError> {
     // Verifier makes a `ConstraintSystem` instance representing a merge gadget
     let mut verifier_transcript = Transcript::new(b"TransactionTest");
-    let mut verifier = Verifier::new(&bp_gens, &pc_gens, &mut verifier_transcript);
+    let mut verifier = Verifier::new(&mut verifier_transcript);
 
     let in_vars = in_com.commit(&mut verifier);
     let out_vars = out_com.commit(&mut verifier);
 
     assert!(cloak(&mut verifier, in_vars, out_vars,).is_ok());
 
-    Ok(verifier.verify(&proof)?)
+    Ok(verifier.verify(&proof, &pc_gens, &bp_gens)?)
 }
 
 // Helper functions to make the tests easier to read
