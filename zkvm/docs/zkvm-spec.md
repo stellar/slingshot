@@ -45,7 +45,7 @@ ZkVM defines a procedural representation for blockchain transactions and the rul
     * [Aggregated signature](#aggregated-signature)
     * [Transaction signature](#transaction-signature)
     * [Unblinding proof](#unblinding-proof)
-    * [Taproot tree](#taproot-tree)
+    * [Taproot](#taproot)
     * [Call proof](#call-proof)
     * [Blinded program](#blinded-program)
 * [VM operation](#vm-operation)
@@ -787,8 +787,8 @@ V == v·B + 0·B2
 1. Prover shows `v`.
 2. Verifier checks equality `V == v·B`.
 
-### Taproot tree
-Based on Gregory Maxwell's [Taproot proposal](https://lists.linuxfoundation.org/pipermail/bitcoin-dev/2018-January/015614.html), the Taproot tree provides efficient and privacy-preserving storage of smart contracts. Multi-party blockchain contracts typically have a top-level "success clause" (all parties agree and sign) or "alternative clauses" to let a party exit the contract based on pre-determined constraints. The Taproot tree has three significant features.
+### Taproot
+Based on Gregory Maxwell's [Taproot proposal](https://lists.linuxfoundation.org/pipermail/bitcoin-dev/2018-January/015614.html), Taproot provides efficient and privacy-preserving storage of smart contracts. Multi-party blockchain contracts typically have a top-level "success clause" (all parties agree and sign) or "alternative clauses" to let a party exit the contract based on pre-determined constraints. Taproot has three significant features.
 
 1. The alternative clauses `{C_i}`, each of which is a [program](#program), are stored as [blinded programs](#blinded-program) and compressed in a [Merkle tree](#merkle-binary-tree) with root `M`.
 2. A signing key `X` and the Merkle root `M` (from 1) are committed to a single signing key `P` using a hash function `h1`, such that `P = X + h1(X, M)`. This makes signing for `P` possible if parties want to sign for `X` and avoids revealing the alternative clauses.
@@ -808,7 +808,7 @@ In this context, navigating to a branch involves selecting a leaf node program t
 
 
 ### Call proof
-An argument to the [`call`](#call) instruction, this proof is an extension of the Merkle path and contains the information to verify that a program is represented in the [Taproot tree](#taproot-tree). It contains `X`, the signing key; a list of left-right neighbors, each a LE32 item, but excluding the program leaf and root hash; and a LE32 bit pattern, indicating each neighbor's position.
+An argument to the [`call`](#call) instruction, this proof is an extension of the Merkle path and contains the information to verify that a program is represented in the [Taproot](#taproot) Merkle tree. It contains `X`, the signing key; a list of left-right neighbors, each a LE32 item, but excluding the program leaf and root hash; and a LE32 bit pattern, indicating each neighbor's position.
 
 ### Blinded program
 The blinded program is used for efficient construction of the Merkle tree, and it can either contain a program or its accompanying blinding factor. Thus, blinding factors are simply even items in the Merkle tree. We add the computation of the per-clause blinding factor, and we commit them as follows.
@@ -1621,7 +1621,7 @@ Multi-signature predicate can be constructed in three ways:
 
 1. For N-of-N schemes, a set of independent public keys can be merged using a [MuSig](https://eprint.iacr.org/2018/068) scheme as described in [transaction signature](#transaction-signature). This allows non-interactive key generation, and only a simple interactive signing protocol.
 2. For threshold schemes (M-of-N, M ≠ N), a single public key can be constructed using a variant of a Feldman-VSS scheme, but this requires interactive key generation.
-3. Small-size threshold schemes can be instantiated non-interactively using a [Taproot tree](#taproot-tree). Most commonly, 2-of-3 "escrow" scheme can be implemented as 2 keys aggregated as the main branch for the "happy path" (escrow party not involved), while the other two combinations aggregated in the nested branches.
+3. Small-size threshold schemes can be instantiated non-interactively using [Taproot](#taproot). Most commonly, 2-of-3 "escrow" scheme can be implemented as 2 keys aggregated as the main branch for the "happy path" (escrow party not involved), while the other two combinations aggregated in the nested branches.
 
 Note that all three approaches minimize computational costs and metadata leaks, unlike Bitcoin, Stellar and TxVM where all keys are enumerated and checked independently.
 
