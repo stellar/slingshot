@@ -1,5 +1,5 @@
 use super::counterparty::*;
-use super::errors::MuSigError;
+use super::errors::MusigError;
 use super::key::{Multikey, VerificationKey};
 use super::signature::Signature;
 use super::transcript::TranscriptProtocol;
@@ -112,7 +112,7 @@ impl<'t> PartyAwaitingCommitments<'t> {
     pub fn receive_commitments(
         self,
         nonce_commitments: Vec<NonceCommitment>,
-    ) -> Result<(PartyAwaitingShares, Scalar), MuSigError> {
+    ) -> Result<(PartyAwaitingShares, Scalar), MusigError> {
         // Make R = sum_i(R_i). nonce_commitments = R_i from all the parties.
         let R = NonceCommitment::sum(&nonce_commitments);
 
@@ -165,7 +165,7 @@ impl PartyAwaitingShares {
     }
 
     /// Verify and assemble signature shares.
-    pub fn receive_shares(self, shares: Vec<Scalar>) -> Result<Signature, MuSigError> {
+    pub fn receive_shares(self, shares: Vec<Scalar>) -> Result<Signature, MusigError> {
         // Move out self's fields because `self.c` inside `map`'s closure would
         // lead to capturing `self` by reference, while we want
         // to move `self.counterparties` out of it.

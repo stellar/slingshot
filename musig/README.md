@@ -42,10 +42,10 @@ Functions:
 
 ### Signature
 
-A signature is comprised of a scalar `s`, and a RistrettoPoint `R`. In the simple Schnorr signature case, `s` represents the Schnorr signature scalar and `R` represents the nonce commitment. In the MuSig signature case, `s` represents the sum of the Schnorr signature scalars of each party, or `s = sum_i (s_i)`. `R` represents the sum of the nonce commitments of each party, or `R = sum_i (R_i)`. 
+A signature is comprised of a scalar `s`, and a RistrettoPoint `R`. In the simple Schnorr signature case, `s` represents the Schnorr signature scalar and `R` represents the nonce commitment. In the Musig signature case, `s` represents the sum of the Schnorr signature scalars of each party, or `s = sum_i (s_i)`. `R` represents the sum of the nonce commitments of each party, or `R = sum_i (R_i)`. 
 
 Functions:
-- `Signature::verify(...)`: In both the simple Schnorr signature and the MuSig signature cases, the signature verification is the same. For more detail, see the [verification](#verifying) section.
+- `Signature::verify(...)`: In both the simple Schnorr signature and the Musig signature cases, the signature verification is the same. For more detail, see the [verification](#verifying) section.
 
 ## Operations
 
@@ -57,8 +57,8 @@ Input:
 - pubkeys: `Vec<VerificationKey>`. This is a list of compressed public keys that will be aggregated, as long as they can be decompressed successfully.
 
 Operation:
-- Create a new transcript using the tag "MuSig.aggregated-key". 
-- Commit all the pubkeys to the transcript. The transcript state corresponds to the commitment `<L>` in the MuSig paper: `<L> = H(X_1 || X_2 || ... || X_n)`.
+- Create a new transcript using the tag "Musig.aggregated-key". 
+- Commit all the pubkeys to the transcript. The transcript state corresponds to the commitment `<L>` in the Musig paper: `<L> = H(X_1 || X_2 || ... || X_n)`.
 - Create `aggregated_key = sum_i ( a_i * X_i )`. Iterate over the pubkeys, compute the factor `a_i = H(<L>, X_i)`, and add `a_i * X_i` to the aggregated key.
 
 Output:
@@ -309,10 +309,10 @@ Input:
 Operation:
 - Verify that `self.precommitment = commitment.precommit()`.
 - If verification succeeds, create a new `CounterpartyCommitted` using `self.pubkey` and commitment.
-- Else, return `Err(VMError::MuSigShareError)`.
+- Else, return `Err(VMError::MusigShareError)`.
 
 Output:
-- `Result<CounterpartyCommitted, MuSigShareError>`.
+- `Result<CounterpartyCommitted, MusigShareError>`.
 
 ### CounterpartyCommitted
 
@@ -331,7 +331,7 @@ Operation:
 - Verify that `s_i * G == R_i + c * a_i * X_i`.
   `s_i` = share, `G` = [base point](#base-point), `R_i` = self.commitment, `c` = challenge, `a_i` = `multikey.factor_for_key(self.pubkey)`, `X_i` = self.pubkey.
 - If verification succeeds, return `Ok(share)`
-- Else, return `Err(VMError::MuSigShareError)`
+- Else, return `Err(VMError::MusigShareError)`
 
 Output:
 - `Result<Scalar, VMError>`

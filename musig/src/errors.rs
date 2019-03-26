@@ -1,6 +1,6 @@
 /// Represents an error in key aggregation, signing, or verification.
 #[derive(Fail, Clone, Debug, Eq, PartialEq)]
-pub enum MuSigError {
+pub enum MusigError {
     /// This error occurs when a point is not a valid compressed Ristretto point
     #[fail(display = "Point decoding failed.")]
     InvalidPoint,

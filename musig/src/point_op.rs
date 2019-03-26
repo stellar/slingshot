@@ -1,4 +1,4 @@
-use crate::errors::MuSigError;
+use crate::errors::MusigError;
 use curve25519_dalek::constants::RISTRETTO_BASEPOINT_POINT;
 use curve25519_dalek::ristretto::{CompressedRistretto, RistrettoPoint};
 use curve25519_dalek::scalar::Scalar;
@@ -17,7 +17,7 @@ pub struct PointOp {
 
 impl PointOp {
     /// Compute an individual point operation.
-    pub fn compute(self) -> Result<RistrettoPoint, MuSigError> {
+    pub fn compute(self) -> Result<RistrettoPoint, MusigError> {
         let (mut weights, points): (Vec<_>, Vec<_>) = self.arbitrary.into_iter().unzip();
         let mut points: Vec<_> = points.into_iter().map(|p| p.decompress()).collect();
 
@@ -31,13 +31,13 @@ impl PointOp {
         }
 
         RistrettoPoint::optional_multiscalar_mul(weights, points)
-            .ok_or(MuSigError::PointOperationFailed)
+            .ok_or(MusigError::PointOperationFailed)
     }
 
     /// Non-batched verification of an individual point operation
-    pub fn verify(self) -> Result<(), MuSigError> {
+    pub fn verify(self) -> Result<(), MusigError> {
         if !self.compute()?.is_identity() {
-            return Err(MuSigError::PointOperationFailed);
+            return Err(MusigError::PointOperationFailed);
         }
         Ok(())
     }

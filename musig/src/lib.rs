@@ -1,6 +1,6 @@
 #![deny(missing_docs)]
 #![allow(non_snake_case)]
-//! MuSig implementation
+//! Musig implementation
 
 #[macro_use]
 extern crate failure;

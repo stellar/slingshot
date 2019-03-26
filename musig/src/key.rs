@@ -1,4 +1,4 @@
-use super::errors::MuSigError;
+use super::errors::MusigError;
 use super::transcript::TranscriptProtocol;
 use curve25519_dalek::constants::RISTRETTO_BASEPOINT_POINT;
 use curve25519_dalek::ristretto::{CompressedRistretto, RistrettoPoint};
@@ -12,9 +12,9 @@ pub struct Multikey {
 }
 
 impl Multikey {
-    pub fn new(pubkeys: Vec<VerificationKey>) -> Result<Self, MuSigError> {
+    pub fn new(pubkeys: Vec<VerificationKey>) -> Result<Self, MusigError> {
         match pubkeys.len() {
-            0 => return Err(MuSigError::BadArguments),
+            0 => return Err(MusigError::BadArguments),
             1 => {
                 return Ok(Multikey {
                     transcript: None,
@@ -25,7 +25,7 @@ impl Multikey {
         }
 
         // Create transcript for Multikey
-        let mut transcript = Transcript::new(b"MuSig.aggregated-key");
+        let mut transcript = Transcript::new(b"Musig.aggregated-key");
         transcript.commit_u64(b"n", pubkeys.len() as u64);
 
         // Commit pubkeys into the transcript
@@ -38,7 +38,7 @@ impl Multikey {
         let mut aggregated_key = RistrettoPoint::default();
         for X in &pubkeys {
             let a = Multikey::compute_factor(&transcript, X);
-            let X = X.0.decompress().ok_or(MuSigError::InvalidPoint)?;
+            let X = X.0.decompress().ok_or(MusigError::InvalidPoint)?;
             aggregated_key = aggregated_key + a * X;
         }
 

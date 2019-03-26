@@ -64,7 +64,7 @@ impl Signature {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::errors::MuSigError;
+    use crate::errors::MusigError;
     use crate::key::{Multikey, VerificationKey};
     use crate::signer::*;
     use curve25519_dalek::ristretto::CompressedRistretto;
@@ -125,10 +125,7 @@ mod tests {
         ];
         let multikey = multikey_helper(&priv_keys);
 
-        let expected_pubkey = CompressedRistretto::from_slice(&[
-            56, 92, 251, 79, 34, 221, 181, 222, 11, 112, 55, 45, 154, 242, 40, 250, 247, 1, 109,
-            126, 150, 210, 181, 6, 117, 95, 44, 102, 38, 28, 144, 49,
-        ]);
+        let expected_pubkey = CompressedRistretto::from_slice(&[60, 118, 86, 112, 148, 29, 45, 106, 212, 7, 119, 198, 76, 112, 161, 226, 21, 242, 242, 170, 66, 127, 36, 62, 160, 233, 199, 29, 206, 18, 250, 67]);
 
         assert_eq!(expected_pubkey, multikey.aggregated_key().0);
     }
@@ -162,7 +159,7 @@ mod tests {
         privkeys: Vec<Scalar>,
         multikey: Multikey,
         transcript: Transcript,
-    ) -> Result<Signature, MuSigError> {
+    ) -> Result<Signature, MusigError> {
         let pubkeys: Vec<_> = privkeys
             .iter()
             .map(|privkey| VerificationKey((privkey * RISTRETTO_BASEPOINT_POINT).compress()))
