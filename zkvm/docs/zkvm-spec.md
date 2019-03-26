@@ -448,9 +448,7 @@ to reduce number of Keccak-f permutations to just one per challenge.
 
 ### Predicate
 
-A _predicate_ is a representation of a condition that unlocks the [contract](#contract-type).
-Predicate is encoded as a [point](#point) representing a node
-of a [predicate tree](#predicate-tree).
+A _predicate_ is a representation of a condition that unlocks the [contract](#contract-type). It is encoded as a [point](#point).
 
 
 
@@ -792,7 +790,7 @@ V == v·B + 0·B2
 ### Taproot tree
 Based on Gregory Maxwell's [Taproot proposal](https://lists.linuxfoundation.org/pipermail/bitcoin-dev/2018-January/015614.html), the Taproot tree provides efficient and privacy-preserving storage of smart contracts. Multi-party blockchain contracts typically have a top-level "success clause" (all parties agree and sign) or "alternative clauses" to let a party exit the contract based on pre-determined constraints. The Taproot tree has three significant features.
 
-1. The alternative clauses `{C_i}`, each of which is a [program](#program), are stored as [blinding programs](#blinding-program) and compressed in a [Merkle tree](#merkle-binary-tree) with root `M`.
+1. The alternative clauses `{C_i}`, each of which is a [program](#program), are stored as [blinded programs](#blinded-program) and compressed in a [Merkle tree](#merkle-binary-tree) with root `M`.
 2. A signing key `X` and the Merkle root `M` (from 1) are committed to a single signing key `P` using a hash function `h1`, such that `P = X + h1(X, M)`. This makes signing for `P` possible if parties want to sign for `X` and avoids revealing the alternative clauses.
 3. Calling a program will check a [call proof](#call-proof) to verify the program's inclusion in the Taproot tree before executing the program.
 
@@ -1623,7 +1621,7 @@ Multi-signature predicate can be constructed in three ways:
 
 1. For N-of-N schemes, a set of independent public keys can be merged using a [MuSig](https://eprint.iacr.org/2018/068) scheme as described in [transaction signature](#transaction-signature). This allows non-interactive key generation, and only a simple interactive signing protocol.
 2. For threshold schemes (M-of-N, M ≠ N), a single public key can be constructed using a variant of a Feldman-VSS scheme, but this requires interactive key generation.
-3. Small-size threshold schemes can be instantiated non-interactively using a [predicate tree](#predicate-tree). Most commonly, 2-of-3 "escrow" scheme can be implemented as 2 keys aggregated as the main branch for the "happy path" (escrow party not involved), while the other two combinations aggregated in the nested branches.
+3. Small-size threshold schemes can be instantiated non-interactively using a [Taproot tree](#taproot-tree). Most commonly, 2-of-3 "escrow" scheme can be implemented as 2 keys aggregated as the main branch for the "happy path" (escrow party not involved), while the other two combinations aggregated in the nested branches.
 
 Note that all three approaches minimize computational costs and metadata leaks, unlike Bitcoin, Stellar and TxVM where all keys are enumerated and checked independently.
 
@@ -1821,7 +1819,7 @@ which makes it impossible to compute such argument on the fly.
 This allows for a simpler type system (no integers, only scalars),
 while limiting programs to have pre-determined structure.
 
-In general, there are no jumps or cleartext conditionals apart from a specialized [predicate tree](#predicate-tree).
+In general, there are no jumps or cleartext conditionals.
 Note, however, that with the use of [delegation](#delegate),
 program structure can be determined right before the use.
 
