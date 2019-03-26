@@ -22,7 +22,7 @@ pub enum MerkleNeighbor {
 pub struct MerkleTree {
     size: usize,
     label: &'static [u8],
-    root: MerkleNode,
+    root: Option<MerkleNode>,
 }
 
 enum MerkleNode {
@@ -32,16 +32,32 @@ enum MerkleNode {
 
 impl MerkleTree {
     /// Constructs a new MerkleTree based on the input list of entries.
-    pub fn build<M: MerkleItem>(label: &'static [u8], list: &[M]) -> Option<Self> {
-        if list.len() == 0 {
-            return None;
-        }
-        let t = Transcript::new(label);
-        Some(MerkleTree {
+    pub fn build<M: MerkleItem>(label: &'static [u8], list: &[M]) -> Self {
+        let root = match list.len() {
+            0 => None,
+            _ => {
+                let t = Transcript::new(label);
+                Some(Self::build_tree(t, list))
+            }
+        };
+        MerkleTree {
             size: list.len(),
             label,
-            root: Self::build_tree(t, list),
-        })
+            root: root,
+        }
+    }
+
+    /// Returns the root hash of the Merkle tree.
+    pub fn hash(&self) -> [u8; 32] {
+        match &self.root {
+            None => {
+                let t = Transcript::new(self.label);
+                let mut result = [0u8; 32]; // xxx why must i preinitialize this?
+                Self::empty(t, &mut result);
+                result
+            }
+            Some(root) => root.hash().clone(),
+        }
     }
 
     /// Builds the Merkle path of inclusion for the entry at the given index in the
@@ -52,8 +68,13 @@ impl MerkleTree {
         }
         let t = Transcript::new(self.label);
         let mut result = Vec::new();
-        self.root.subpath(t, index, self.size, &mut result);
-        Ok(result)
+        match &self.root {
+            Some(x) => {
+                x.subpath(t, index, self.size, &mut result);
+                Ok(result)
+            }
+            _ => Err(VMError::InvalidMerkleProof),
+        }
     }
 
     /// Verifies the Merkle path for an item givne the path and the Merkle root.
@@ -199,13 +220,9 @@ mod tests {
         ($num:ident, $idx:ident) => {
             let (item, root, proof) = {
                 let items = test_items(*$num as usize);
-                let tree = MerkleTree::build(b"test", &items).unwrap();
+                let tree = MerkleTree::build(b"test", &items);
                 let proof = tree.create_path(*$idx as usize).unwrap();
-                (
-                    items[*$idx as usize].clone(),
-                    tree.root.hash().clone(),
-                    proof,
-                )
+                (items[*$idx as usize].clone(), tree.hash().clone(), proof)
             };
             MerkleTree::verify_path(b"test", &item, proof, &root).unwrap();
         };
@@ -215,11 +232,11 @@ mod tests {
         ($num:ident, $idx:ident, $wrong_idx:ident) => {
             let (item, root, proof) = {
                 let items = test_items(*$num as usize);
-                let tree = MerkleTree::build(b"test", &items).unwrap();
+                let tree = MerkleTree::build(b"test", &items);
                 let proof = tree.create_path(*$idx as usize).unwrap();
                 (
                     items[*$wrong_idx as usize].clone(),
-                    tree.root.hash().clone(),
+                    tree.hash().clone(),
                     proof,
                 )
             };
@@ -230,7 +247,7 @@ mod tests {
     #[test]
     fn invalid_range() {
         let entries = test_items(5);
-        let root = MerkleTree::build(b"test", &entries).unwrap();
+        let root = MerkleTree::build(b"test", &entries);
         assert!(root.create_path(7).is_err())
     }
 
