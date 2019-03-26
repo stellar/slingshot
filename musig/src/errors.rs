@@ -2,7 +2,7 @@
 #[derive(Fail, Clone, Debug, Eq, PartialEq)]
 pub enum MusigError {
     /// This error occurs when a point is not a valid compressed Ristretto point
-    #[fail(display = "Point decoding failed.")]
+    #[fail(display = "Point decoding failed")]
     InvalidPoint,
 
     /// This error occurs when a signature share fails to verify
@@ -13,7 +13,7 @@ pub enum MusigError {
     },
 
     /// This error occurs when an individual point operation failed.
-    #[fail(display = "Point operation failed.")]
+    #[fail(display = "Point operation failed")]
     PointOperationFailed,
 
     /// This error occurs when a function is called with bad arguments.
