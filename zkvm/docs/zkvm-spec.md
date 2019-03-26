@@ -31,8 +31,6 @@ ZkVM defines a procedural representation for blockchain transactions and the rul
     * [Anchor](#anchor)
     * [Transcript](#transcript)
     * [Predicate](#predicate)
-    * [Predicate tree](#predicate-tree)
-    * [Predicate disjunction](#predicate-disjunction)
     * [Program predicate](#program-predicate)
     * [Program](#program)
     * [Contract payload](#contract-payload)
@@ -47,6 +45,9 @@ ZkVM defines a procedural representation for blockchain transactions and the rul
     * [Aggregated signature](#aggregated-signature)
     * [Transaction signature](#transaction-signature)
     * [Unblinding proof](#unblinding-proof)
+    * [Taproot tree](#taproot-tree)
+    * [Call proof](#call-proof)
+    * [Blinded program](#blinded-program)
 * [VM operation](#vm-operation)
     * [VM state](#vm-state)
     * [VM execution](#vm-execution)
@@ -452,46 +453,6 @@ Predicate is encoded as a [point](#point) representing a node
 of a [predicate tree](#predicate-tree).
 
 
-### Predicate tree
-
-A _predicate tree_ is a composition of [predicates](#predicate) and [programs](#program) that
-provide a flexible way to open a [contract](#contract-type).
-
-Each node in a predicate tree is formed with one of the following:
-
-1. [Verification key](#verification-key): can be satisfied by signing a transaction using [`signtx`](#signtx) or signing and executing a program using [`delegate`](#delegate).
-2. [Disjunction](#predicate-disjunction) of other predicates. Choice is made using [`select:n:k`](#select) instruction, where `n` is the number of predicates and `k` the index of the chosen predicate.
-3. [Program commitment](#program-predicate). The structure of the commitment prevents signing and requires user to reveal and evaluate the program using the [`call`](#call) instruction.
-
-
-### Predicate disjunction
-
-Disjunction of two predicates is implemented using a commitment `f` that
-commits to _n_ [predicates](#predicate) `X_0`, `X_1`, ..., `X_{n-1}`
-as a scalar factor on a [primary base point](#base-points) `B` added to the predicate `X_0`:
-
-```
-OR(X_0,...,X_{n-1}) = X_0 + f(X_0, ..., X_{n-1})·B
-```
-
-Commitment scheme is defined using the [transcript](#transcript) protocol
-by committing compressed 32-byte points `X_0`, `X_1`, ..., `X_{n-1}` and squeezing a scalar
-that is bound to all `n` predicates:
-
-```
-// given [X[0], ..., X[n-1]]
-T = Transcript("ZkVM.predicate")
-T.commit("n"), byte(n))
-for i=0 to i=n-1 {T.commit("X", X[i])}
-f = T.challenge_scalar("f")
-OR = X[0] + f·B
-``` 
-
-The choice between the branches is performed using the [`select:n:k`](#select) instruction, where `n` represents the number of predicates and k the index of the chosen branch.
-
-Disjunction allows signing ([`signtx`](#signtx), [`delegate`](#delegate)) for the [key](#verification-key) `X_0` without
-revealing the whole set of predicates `{X_i}` using the adjusted secret scalar `dlog(X_0) + f(X_0,...,X_{n-1})`.
-
 
 ### Program predicate
 
@@ -828,6 +789,39 @@ V == v·B + 0·B2
 1. Prover shows `v`.
 2. Verifier checks equality `V == v·B`.
 
+### Taproot tree
+Based on Gregory Maxwell's [Taproot proposal](https://lists.linuxfoundation.org/pipermail/bitcoin-dev/2018-January/015614.html), the Taproot tree provides efficient and privacy-preserving storage of smart contracts. Multi-party blockchain contracts typically have a top-level "success clause" (all parties agree and sign) or "alternative clauses" to let a party exit the contract based on pre-determined constraints. The Taproot tree has three significant features.
+
+1. The alternative clauses `{C_i}`, each of which is a [program](#program), are stored as [blinding programs](#blinding-program) and compressed in a [Merkle tree](#merkle-binary-tree) with root `M`.
+2. A signing key `X` and the Merkle root `M` (from 1) are committed to a single signing key `P` using a hash function `h1`, such that `P = X + h1(X, M)`. This makes signing for `P` possible if parties want to sign for `X` and avoids revealing the alternative clauses.
+3. Calling a program will check a [call proof](#call-proof) to verify the program's inclusion in the Taproot tree before executing the program.
+
+The commitment scheme is defined using the [transcript](#transcript) protocol by committing (1) the signing key, as a compressed 32-byte point, and (2) the root of the Merkle tree constructed from the `n` programs and (3) squeezing a scalar bound to all `n` programs.
+
+```
+// given Merkle root M and signing key X
+t = Transcript("ZkVM.taproot")
+t.commit_bytes(b"key", X; // Compressed Ristretto
+t.commit_bytes(b"merkle", M); // [u8; 32]
+t.challenge_scalar(b"h")
+```
+
+In this context, navigating to a branch involves selecting a leaf node program to run. A branch is chosen using the [`call`](#call) instruction, which also takes a program and [call proof](#call-proof). If, using this information, the relation `P = X + h1(X, M)` is verified, then the associated program will be executed.
+
+
+### Call proof
+An argument to the [`call`](#call) instruction, this proof is an extension of the Merkle path and contains the information to verify that a program is represented in the [Taproot tree](#taproot-tree). It contains `X`, the signing key; a list of left-right neighbors, each a LE32 item, but excluding the program leaf and root hash; and a LE32 bit pattern, indicating each neighbor's position.
+
+### Blinded program
+The blinded program is used for efficient construction of the Merkle tree, and it can either contain a program or its accompanying blinding factor. Thus, blinding factors are simply even items in the Merkle tree. We add the computation of the per-clause blinding factor, and we commit them as follows.
+
+```
+// given program prog and key blinding_key
+t = Transcript("ZkVM.taproot-blinding)
+t.commit("program", prog)
+t.commit("key", blinding_key)
+t.challenge_bytes("blinding")
+```
 
 
 
@@ -998,9 +992,8 @@ Code | Instruction                | Stack diagram                              |
 0x1d | [`nonce`](#nonce)          |    _pred blockid_ → _contract_             | Modifies [tx log](#transaction-log)
 0x1e | [`log`](#log)              |            _data_ → ø                      | Modifies [tx log](#transaction-log)
 0x1f | [`signtx`](#signtx)        |        _contract_ → _results..._           | Modifies [deferred verification keys](#transaction-signature)
-0x20 | [`call`](#call)            |_contract bf prog_ → _results..._           | [Defers point operations](#deferred-point-operations)
-0x21 | [`select:n:k`](#select)    | _contract x0...xn-1_ → _contract’_         | [Defers point operations](#deferred-point-operations)
-0x22 | [`delegate`](#delegate)    |_contract prog sig_ → _results..._          | [Defers point operations](#deferred-point-operations)
+0x20 | [`call`](#call)            |_contract(P) prf prog_ **call** → _results_ | Defers point operations](#deferred-point-operations)
+0x21 | [`delegate`](#delegate)    |_contract prog sig_ → _results..._          | [Defers point operations](#deferred-point-operations)
   —  | [`ext`](#ext)              |                 ø → ø                      | Fails if [extension flag](#vm-state) is not set.
 
 
@@ -1521,37 +1514,20 @@ is deferred until the end of VM execution.
 
 #### call
 
-_contract(P) bf prog_ **call** → _results..._
-
-1. Pops the [data](#data-type) `prog`, its associated [data](#data-type) blinding factor `bf`, and a [contract](#contract-type) `contract`.
-2. Reads the [predicate](#predicate) `P` from the contract and its associated blinding factor.
-3. Forms a statement for [program predicate](#program-predicate) of `prog` being equal to `P`:
-    ```
-    0 == -P + h(prog)·B2
-    ```
-4. Adds the statement to the [deferred point operations](#deferred-point-operations).
-5. Places the [payload](#contract-payload) on the stack (last item on top), discarding the contract.
-6. Set the `prog` as current.
-
-Fails if either of the top two item is not a [data](#data-type) or
-the third-from-the-top is not a [contract](#contract-type).
-
-### select 
-_contract(P) X0 ... X{n-1}_ **select:_n_:_k_** → _contract(Xk)_
-
-1. Pops all N [predicates](#predicate) `X_0`, `X_1`, ..., `X_{n-1}` (in that order) and a [contract](#contract-type) `contract`.
+_contract(P) prf prog_ **call** → _results..._
+1. Pops program [data](#data-type) `prog`, the extended Merkle proof [data](#data-type) `prf`, and a [contract](#contract-type) `contract`.
 2. Reads the [predicate](#predicate) `P` from the contract.
-3. Forms a statement for [predicate disjunction](#predicate-disjunction) of `X_0,...X_{n-1}` being equal to `P`:
+3. Uses the [`callproof`](#call-proof) `prf` and the [program](#program) `prog` to get the signing key `X` and compute the supposed Merkle root `M`.
+4. Forms a statement to verify a relation between `P`, `M`, and `X`:
     ```
-    0 == -P + X_0 + f(X_0, ..., X_{n-1})·B
+    0 == -P + X + h1(X, M)·G
     ```
-4. Adds the statement to the [deferred point operations](#deferred-point-operations).
-5. Replaces the contract's predicate with `X_k` and pushes the contract back onto the stack.
+5. Adds the statement to the [deferred point operations](#deferred-point-operations).
+6. Places the [payload](#contract-payload) on the stack (last item on top), disregarding the contract.
+7. Set the `prog` as current.
 
-Immediate data `n` and `k` are encoded as 8-bit unsigned integers (`u8`).
+Fails if the top two items are not [data](#data-type) or the third from top is not a [contract](#contract-type).
 
-Fails if the top N items are not valid [points](#point),
-or if the `n+1`th from the top item is not a [contract](#contract-type).
 
 #### delegate
 
