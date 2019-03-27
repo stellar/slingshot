@@ -805,14 +805,14 @@ t.commit_bytes(b"merkle", M); // [u8; 32]
 t.challenge_scalar(b"h")
 ```
 
-Typically, to select a program to run from a leaf of the Merkle tree, we must navigate branches from the Merkle root. We tweak this procedure: the Merkle root is constructed from a provided Merkle path. It is then used to verify a relation between the contract predicate and the provided program. A branch is chosen using the [`call`](#call) instruction, which takes a program, [call proof](#call-proof), and contract. The [predicate](#predicate) `P` is read from the contract. The call proof contains the signing key `X`, a list of left-right neighbors, and the Merkle path. The neighbor list, Merkle path, and the provided program are used to reconstruct the Merkle root `M`. If the relation `P = X + h1(X, M)` is verified, then the associated program will be executed.
+Typically, to select a program to run from a leaf of the Merkle tree, we must navigate branches from the Merkle root. Here, the Merkle root is constructed from a provided Merkle path. It is then used to verify a relation between the contract predicate and the provided program. A branch is chosen using the [`call`](#call) instruction, which takes a program, [call proof](#call-proof), and contract. The [predicate](#predicate) `P` is read from the contract. The call proof contains the signing key `X`, a list of left-right neighbors, and the Merkle path. The neighbor list, Merkle path, and the provided program are used to reconstruct the Merkle root `M`. If the relation `P = X + h1(X, M)` is verified, then the program will be executed.
 
 
 ### Call proof
 
 This struct is an argument to the [`call`](#call) instruction. It contains the information to verify that a program is represented in the [Taproot](#taproot) Merkle tree, in the following fields:
  - `X`, the signing key
- - `neighbors`, an array of left-right neighbors in the Merkle tree. Each is a LE32 item representing the hash of its children. It is the neighbor of an item on the Merkle path to the leaf hash of the program string. The leaf hash and root hash are not included. Neighbor hashes are ordered from bottom-most to top-most. As an example, consider a Merkle tree with more than three levels. The first element is the neighbor of the leaf hash; the second element is the neighbor of the leaf hash's parent; and the last is a child of the Merkle root.
+ - `neighbors`, an array of left-right neighbors in the Merkle tree. Each is a hash of its children, stored as a 256-bit blob. It is the neighbor of an item on the Merkle path to the leaf hash of the program string. The leaf hash and root hash are not included. Neighbor hashes are ordered from bottom-most to top-most. As an example, consider a Merkle tree with more than three levels. The first element is the neighbor of the leaf hash; the second element is the neighbor of the leaf hash's parent; and the last is a child of the Merkle root.
  - `positions`, a pattern indicating each neighbor's position. 0 represents a left neighbor, and 1 represents a right neighbor. This is a 32-bit little-endian integer, where the lower bits indicate the position of the lower-level neighbors. These bits are ordered identically to `neighbors`, because there is a one-to-one correspondence between their elements. Consider the example in the previous paragraph again. The position of the leaf hash's neighbor is represented by the first bit; the position of the neighbor of the leaf hash's parent is represented by the second bit; and the position of a child of the Merkle root is the last bit.
 
 ![An example Merkle tree to demonstrate the call proof.](taproot_example.svg)
@@ -835,6 +835,8 @@ t.commit("program", prog)
 t.commit("key", blinding_key)
 t.challenge_scalar(b"blinding")
 ```
+
+Note: this provides domain separation from the ordinary Merkle leaf hash, making it impossible to open a blinding branch into a program. This ensures that in a multi-party contract, an untrusted party cannot hide a malicious clause in a blinding branch; other parties will check that the node's hash is computed via a separate function.
 
 
 
@@ -1005,7 +1007,7 @@ Code | Instruction                | Stack diagram                              |
 0x1d | [`nonce`](#nonce)          |    _pred blockid_ → _contract_             | Modifies [tx log](#transaction-log)
 0x1e | [`log`](#log)              |            _data_ → ø                      | Modifies [tx log](#transaction-log)
 0x1f | [`signtx`](#signtx)        |        _contract_ → _results..._           | Modifies [deferred verification keys](#transaction-signature)
-0x20 | [`call`](#call)            |_contract(P) prf prog_ **call** → _results_ | [Defers point operations](#deferred-point-operations)
+0x20 | [`call`](#call)            |_contract(P) proof prog_ → _results..._     | [Defers point operations](#deferred-point-operations)
 0x21 | [`delegate`](#delegate)    |_contract prog sig_ → _results..._          | [Defers point operations](#deferred-point-operations)
   —  | [`ext`](#ext)              |                 ø → ø                      | Fails if [extension flag](#vm-state) is not set.
 
@@ -1527,10 +1529,10 @@ is deferred until the end of VM execution.
 
 #### call
 
-_contract(P) prf prog_ **call** → _results..._
-1. Pops program [data](#data-type) `prog`, the extended Merkle proof [data](#data-type) `prf`, and a [contract](#contract-type) `contract`.
+_contract(P) proof prog_ **call** → _results..._
+1. Pops program [data](#data-type) `prog`, the [call proof](#call-proof) `proof`, and a [contract](#contract-type) `contract`.
 2. Reads the [predicate](#predicate) `P` from the contract.
-3. Reads the signing key `X`, list of neighbors `neighbors`, and their positions `positions` from the [call proof](#call-proof) `prf`.
+3. Reads the signing key `X`, list of neighbors `neighbors`, and their positions `positions` from the [call proof](#call-proof) `proof`.
 4. Uses the [program](#program) `prog`, `neighbors`, and `positions` to compute the Merkle root `M`.
 5. Forms a statement to verify a relation between `P`, `M`, and `X`:
     ```
