@@ -812,12 +812,12 @@ Typically, to select a program to run from a leaf of the Merkle tree, we must na
 
 This struct is an argument to the [`call`](#call) instruction. It contains the information to verify that a program is represented in the [Taproot](#taproot) Merkle tree, in the following fields:
  - `X`, the signing key
- - `neighbors`, an array of left-right neighbors in the Merkle tree. Each is a LE32 item representing the hash of its children. The leaf hash of the program string and root hash are not included. Neighbor hashes are ordered from bottom-most to top-most. The first hash is the neighbor of the leaf hash of the program string, and the last is a child of the Merkle root.
- - `positions`, a pattern indicating each neighbor's position. 0 represents a left neighbor, and 1 represents a right neighbor. This is a 32-bit little-endian integer, where the lower bits indicate the position of the lower-level neighbors. These bits are ordered identically to `neighbors`, because there is a one-to-one correspondence between their elements. The position of the leaf hash's neighbor is represented by the first bit, and the position of a child of the Merkle root is the last bit.
+ - `neighbors`, an array of left-right neighbors in the Merkle tree. Each is a LE32 item representing the hash of its children. It is the neighbor of an item on the Merkle path to the leaf hash of the program string. The leaf hash and root hash are not included. Neighbor hashes are ordered from bottom-most to top-most. As an example, consider a Merkle tree with more than three levels. The first element is the neighbor of the leaf hash; the second element is the neighbor of the leaf hash's parent; and the last is a child of the Merkle root.
+ - `positions`, a pattern indicating each neighbor's position. 0 represents a left neighbor, and 1 represents a right neighbor. This is a 32-bit little-endian integer, where the lower bits indicate the position of the lower-level neighbors. These bits are ordered identically to `neighbors`, because there is a one-to-one correspondence between their elements. Consider the example in the previous paragraph again. The position of the leaf hash's neighbor is represented by the first bit; the position of the neighbor of the leaf hash's parent is represented by the second bit; and the position of a child of the Merkle root is the last bit.
 
 ![An example Merkle tree to demonstrate the call proof.](taproot_example.svg)
 
-Here is an example using the tree above. Suppose we are verifying the program with the leaf hash `C`, with a right neighbor `D`. The parent of `C` is `J = h(C || D)`, with a left neighbor `I`. The parent of `J` is `M = h(I || J)`, with a right neighbor `N`. `M`'s parent is the Merkle root `R`.
+Here is a visual example using the tree above. Suppose we are verifying the program with the leaf hash `C`, with a right neighbor `D`. The parent of `C` is `J = h(C || D)`, with a left neighbor `I`. The parent of `J` is `M = h(I || J)`, with a right neighbor `N`. `M`'s parent is the Merkle root `R`.
 This gives the neighbor list [`D`, `I`, `N`] and bit pattern `101`. The Merkle path is red, while the neighbors are blue.
 
 
