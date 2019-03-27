@@ -1,12 +1,12 @@
 # Signatures: Engineering design doc
 
 This is a signature scheme for signing messages. 
-The first iteration describes the protocol for signing a single message with one public key. 
-The public key can be created from a single party's private key, 
-or it can be created from the aggregation of multiple public keys. 
+This is the second iteration, and describes the protocol for signing a single message with one public key 
+(where the public key can be created from a single party's private key, 
+or it can be created from the aggregation of multiple public keys),
+and for signing multiple messages with multiple public keys.
 
-In future iterations, we can consider signing with public keys that are nested aggregations of public keys, 
-and signing multiple messages in a way that is safe against Russell's attack.
+In future iterations, we can consider signing with public keys that are nested aggregations of public keys.
 
 ## Definitions
 
@@ -34,18 +34,57 @@ Ristretto base point in compressed form:
 B = e2f2ae0a6abc4e71a884a961c500515f58e30b6aa582dd8db6a65945e08d2d76
 ```
 
-### Multikey
+### MusigContext
+
+This is a trait with two functions:
+- `commit(&self, &mut transcript)`: takes a mutable transcript, and commits the internal context to the transcript.
+- `challenge(&self, &verification_key, &mut transcript, &nonce_commitment)`: takes a public key and mutable transcript, and returns the 
+  suitable challenge for that public key. 
+
+### Multikey (implements MusigContext)
 
 Fields:
 - transcript: `Transcript`. All of the pubkeys that the multikey are created from are committed to this transcript. 
 - aggregated_key: `VerificationKey`
+- public_keys: `Vec<VerificationKey`
 
 Functions: 
-- `Multikey::new(...)`: detailed more in [key aggregation](#key-aggregation) section. 
-- `Multikey::factor_for_key(&self, &verification_key)`: computes the `a_i` factor, where `a_i = H(<L>, X_i)`. 
-  `<L>`, or the list of pukeys that go into the aggregated pubkey, has already been committed into `self.transcript`. Therefore, this function simply clones `self.transcript`, commits the verification key (`X_i`) into the transcript 
-    with label "X_i", and then squeezes the challenge scalar `a_i` from the transcript with label "a_i".
+- `Multikey::new(...) -> Self`: detailed more in [key aggregation](#key-aggregation) section. 
+
+- `Multikey::commit(&self, &mut transcript)`: Commits `self.aggregated_key` to the input `transcript` with label "X".
+
+- `Multikey::challenge(&self, &verification_key, &mut transcript, &nonce_commitment) -> Scalar`: 
+  Computes challenge `c_i = a_i * c`, where `a_i = H_agg(<L>, X_i)` and `c = H_sig(X, R, m)`.
+
+  For calculating `a_i`, `<L>` (the list of pubkeys that go into the aggregated pubkey)
+  has already been committed into `self.transcript`. Therefore this function simply clones `self.transcript`, 
+  commits the verification key (`X_i`) into the transcript with label "X_i", 
+  and then squeezes the challenge scalar `a_i` from the transcript with label "a_i".
+
+  For calculating `c`, the message `m` has already been committed to the input `transcript`, 
+  so the function only needs to commit `self.aggregated_key` with label "X" and input `hash_commitment` with label "R", 
+  and then get the challenge scalar `c` with label "c".
+
 - `Multikey::aggregated_key(&self)`: returns the aggregated key stored in the multikey, `self.aggregated_key`.  
+
+### Multimessage (implements MusigContext)
+
+Fields:
+- pairs: `Vec<(VerificationKey, [u8])`
+
+Functions:
+- `Multimessage::new(Vec<(VerificationKey, [u8])) -> Self`: creates a new MultiMessage instance using the inputs.
+
+- `Multimessage::commit(&self, &mut transcript)`: It commits each of the pairs in `self.pairs` to the input `transcript`,
+  by iterating through `self.pairs` and committing the `VerificationKey` with label "X" and the message with label "m".
+
+- `Multimessage::challenge(&self, &verification_key, &mut transcript, &nonce_commitment) -> Scalar`: 
+  Computes challenge `c_i = H(R, <S>, i)`.
+  It first commits the input `nonce_commitment` to the input `transcript` with label "R".
+  It then commits each of the pairs in `self.pairs` to the input `transcript`, by calling `Multimessage::commit(...)`.
+  It then figures out what its index `i` is, by matching the input `verification_key` against all the keys in 
+  `self.pairs`. The index `i` is the index of pair of the key it matches to. It commits `i` to the `transcript` with label "i".
+
 
 ### Signature
 
@@ -76,7 +115,7 @@ The transcript state corresponds to the commitment `<L>` in the Musig paper: `<L
 Iterate over the pubkeys, compute the factor `a_i = H(<L>, X_i)`, and add `a_i * X_i` to the aggregated key.
 
 Output:
-- a new multikey, with the transcript and aggregated key detailed above.
+- a new `Multikey`, with the transcript and aggregated key detailed above.
 
 ### Signing
 
@@ -101,10 +140,10 @@ There are several paths to signing:
     - Signature { s, R }
 
 2. Make a Schnorr signature with one aggregated key (`Multikey`), derived from multiple public keys.
-    - Create an aggregated pubkey. For more information see the [key aggregation](#key-aggregation) section.
+    - Create a `Multikey`. For more information, see the [key aggregation](#key-aggregation) section.
 
     For each party that is taking part in the signing:
-    - Call `Party::new(transcript, privkey, multikey, pubkeys)`.
+    - Call `Party::new(transcript, privkey, multikey)`.
     - Get back `PartyAwaitingPrecommitments` and a `NoncePrecommitment`.
     - Share your `NoncePrecommitment`, and receive other parties' `NoncePrecommitment`s. 
 
@@ -123,24 +162,45 @@ There are several paths to signing:
 
     For more information on each of these states and steps, see the [protocol for party state transitions](#protocol-for-party-state-transitions).
 
+3. Make a Schnorr signature with multiple public keys and multiple messages, in a way that is safe from Russell's attack.
+    - Create a `Multimessage` context by calling `Multimessage::new(...)`. 
+      See the [multimessage](#multimessage) section for more details.
+
+    For each party that is taking part in the signing:
+    - Call `Party::new(transcript, privkey, multimessage)`.
+    - All following steps are the same as in protocol #2, making a Schnorr signature with one aggregated key.
+
 ### Verifying
 
-Signature verification happens in the `Signature::verify(...)` function.
+There are several paths to verifying: 
+1. Normal Schnorr signature verification (covers signing cases #1 and #2 in [signing section](#signing)).
+    Function: `Signature::verify(...)`
 
-Input: 
-- `&self`
-- transcript: `&mut Transcript` - a transcript to which the signed message has already been committed.
-- P: `VerificationKey`
+    Input: 
+    - `&self`
+    - transcript: `&mut Transcript` - a transcript to which the signed message has already been committed.
+    - P: `VerificationKey`
 
-Operation:
-- Make `c = H(X, R, m)`. Since the transcript already has the message `m` committed to it, 
-the function only needs to commit `X` with label "X" and `R` with label "R", 
-and then get the challenge scalar `c` with label "c".
-- Decompress verification key `P`. If this fails, return `Err(VMError::InvalidPoint)`.
-- Check if `s * G == R + c * P`. `G` is the [base point](#base-point).
+    Operation:
+    - Make `c = H(X, R, m)`. Since the transcript already has the message `m` committed to it, 
+    the function only needs to commit `X` with label "X" and `R` with label "R", 
+    and then get the challenge scalar `c` with label "c".
+    - Decompress verification key `P`. If this fails, return `Err(VMError::InvalidPoint)`.
+    - Check if `s * G == R + c * P`. `G` is the [base point](#base-point).
 
-Output:
-- `Ok(())` if verification succeeds, or `Err(VMError)` if the verification or point decompression fail.
+    Output:
+    - `Ok(())` if verification succeeds, or `Err(VMError)` if the verification or point decompression fail.
+
+2. Multi-message Schnorr signature verification (covers signing case #3 in [signing section](#signing)).
+    Function: `Signature::verify_multimessage(...)`
+
+    Input: 
+    - `&self`
+    - transcript: `&mut Transcript` - a transcript to which the signed message has already been committed.
+    - signing_pairs: `Multimessage` 
+
+    Operation:
+    - 
 
 ## Protocol for party state transitions
 
