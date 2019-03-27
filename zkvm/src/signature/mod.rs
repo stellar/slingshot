@@ -16,6 +16,16 @@ use crate::transcript::TranscriptProtocol;
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub struct VerificationKey(pub CompressedRistretto);
 
+/// Deferred signature verification
+#[derive(Clone, Debug)]
+pub struct DeferredVerification {
+    /// Weight for the Ristretto base point.
+    pub static_point_weight: Scalar,
+
+    /// Weights for arbitrary points.
+    pub dynamic_point_weights: Vec<(Scalar, CompressedRistretto)>,
+}
+
 /// A Schnorr signature.
 #[derive(Copy, Clone, Debug)]
 pub struct Signature {
@@ -26,8 +36,12 @@ pub struct Signature {
 // TODO: copy _aggregated funcs over to _single, get rid of vectors.
 impl Signature {
     /// Verifies a signature for a single key
-    pub fn verify_single(&self, transcript: &mut Transcript, pubkey: VerificationKey) -> PointOp {
-        self.verify_aggregated(transcript, &[pubkey])
+    pub fn verify_single(
+        &self,
+        transcript: &mut Transcript,
+        pubkey: VerificationKey,
+    ) -> Result<(), VMError> {
+        self.verify_deferred(transcript, &[pubkey]).verify()
     }
 
     /// Verifies an aggregated signature for a collection of public keys.
@@ -35,7 +49,16 @@ impl Signature {
         &self,
         transcript: &mut Transcript,
         pubkeys: &[VerificationKey],
-    ) -> PointOp {
+    ) -> Result<(), VMError> {
+        self.verify_deferred(transcript, pubkeys).verify()
+    }
+
+    /// Defers signature verification
+    pub fn verify_deferred(
+        &self,
+        transcript: &mut Transcript,
+        pubkeys: &[VerificationKey],
+    ) -> DeferredVerification {
         transcript.commit_u64(b"n", pubkeys.len() as u64);
         for p in pubkeys.iter() {
             transcript.commit_point(b"P", &p.0);
@@ -66,10 +89,9 @@ impl Signature {
         // `0 == -s*B + e*(P0 + x1*P1 + x2*P2 + ...) + R`
         pairs.push((Scalar::one(), self.R));
 
-        PointOp {
-            primary: Some(-self.s),
-            secondary: None,
-            arbitrary: pairs,
+        DeferredVerification {
+            static_point_weight: -self.s,
+            dynamic_point_weights: pairs,
         }
     }
 
@@ -158,6 +180,24 @@ impl VerificationKey {
     }
 }
 
+impl DeferredVerification {
+    /// Non-batched evaluation of a deferred signature verification.
+    pub fn verify(self) -> Result<(), VMError> {
+        let point_op: PointOp = self.into();
+        point_op.verify()
+    }
+
+    /// Batched evaluation of deferred signature verification.
+    pub fn verify_batch(batch: &[DeferredVerification]) -> Result<(), VMError> {
+        PointOp::verify_batch(
+            &batch
+                .into_iter()
+                .map(|p| p.clone().into())
+                .collect::<Vec<_>>(),
+        )
+    }
+}
+
 impl From<CompressedRistretto> for VerificationKey {
     fn from(x: CompressedRistretto) -> Self {
         VerificationKey(x)
@@ -172,7 +212,7 @@ mod tests {
     fn empty() {
         let mut transcript = Transcript::new(b"empty");
         let sig = Signature::sign_aggregated(&mut transcript, &[]);
-        assert!(sig.verify_aggregated(&mut transcript, &[]).verify().is_ok());
+        assert!(sig.verify_aggregated(&mut transcript, &[]).is_ok());
     }
 
     #[test]
@@ -186,7 +226,7 @@ mod tests {
         };
 
         let mut transcript = Transcript::new(b"single_signature");
-        assert!(sig.verify_single(&mut transcript, pubkey).verify().is_ok());
+        assert!(sig.verify_single(&mut transcript, pubkey).is_ok());
     }
 
     #[test]
@@ -200,10 +240,7 @@ mod tests {
 
         let mut transcript = Transcript::new(b"single_signature");
         let wrong_pubkey = VerificationKey::from_secret(&Scalar::random(&mut rand::thread_rng()));
-        assert!(sig
-            .verify_single(&mut transcript, wrong_pubkey)
-            .verify()
-            .is_err());
+        assert!(sig.verify_single(&mut transcript, wrong_pubkey).is_err());
     }
 
     #[test]
@@ -221,7 +258,6 @@ mod tests {
         let mut transcript = Transcript::new(b"two_key_signature");
         assert!(sig
             .verify_aggregated(&mut transcript, &[pubkey1, pubkey2])
-            .verify()
             .is_ok());
     }
 
@@ -240,7 +276,6 @@ mod tests {
         let mut transcript = Transcript::new(b"two_key_signature");
         assert!(sig
             .verify_aggregated(&mut transcript, &[pubkey2, pubkey1])
-            .verify()
             .is_err());
     }
 }

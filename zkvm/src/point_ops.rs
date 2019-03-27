@@ -4,6 +4,7 @@ use curve25519_dalek::scalar::Scalar;
 use curve25519_dalek::traits::{Identity, IsIdentity, VartimeMultiscalarMul};
 
 use super::errors::VMError;
+use super::signature::DeferredVerification;
 
 /// Deferred point operation.
 #[derive(Clone, Debug)]
@@ -99,6 +100,20 @@ impl PointOp {
         }
 
         Ok(())
+    }
+}
+
+impl From<DeferredVerification> for PointOp {
+    fn from(x: DeferredVerification) -> Self {
+        let mut primary = Scalar::zero();
+        if x.static_point_weight != primary {
+            primary = x.static_point_weight
+        }
+        Self {
+            primary: Some(primary),
+            secondary: None,
+            arbitrary: x.dynamic_point_weights,
+        }
     }
 }
 

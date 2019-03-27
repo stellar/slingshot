@@ -773,8 +773,11 @@ where
         // Verify signature using Verification key, over the message `program`
         let mut t = Transcript::new(b"ZkVM.delegate");
         t.commit_bytes(b"prog", &prog.clone().to_bytes());
-        self.delegate
-            .verify_point_op(|| signature.verify_single(&mut t, verification_key))?;
+        self.delegate.verify_point_op(|| {
+            signature
+                .verify_deferred(&mut t, &[verification_key])
+                .into()
+        })?;
 
         // Replace current program with new program
         self.continue_with_program(prog)?;

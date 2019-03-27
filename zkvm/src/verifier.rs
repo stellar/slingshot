@@ -97,10 +97,11 @@ impl<'t> Verifier<'t> {
         let mut signtx_transcript = Transcript::new(b"ZkVM.signtx");
         signtx_transcript.commit_bytes(b"txid", &txid.0);
 
-        let signtx_point_op = tx
-            .signature
-            .verify_aggregated(&mut signtx_transcript, &verifier.signtx_keys);
-        verifier.deferred_operations.push(signtx_point_op);
+        verifier.deferred_operations.push(
+            tx.signature
+                .verify_deferred(&mut signtx_transcript, &verifier.signtx_keys)
+                .into(),
+        );
         // Verify all deferred crypto operations.
         PointOp::verify_batch(&verifier.deferred_operations[..])?;
 
