@@ -1,7 +1,6 @@
 use crate::encoding::SliceReader;
 use crate::errors::VMError;
 use crate::ops::Instruction;
-use crate::predicate::Predicate;
 use crate::scalar_witness::ScalarWitness;
 use crate::types::Data;
 use core::borrow::Borrow;
@@ -41,7 +40,6 @@ impl Program {
     def_op!(alloc, Alloc, Option<ScalarWitness>);
     def_op!(and, And);
     def_op!(borrow, Borrow);
-    def_op!(call, Call);
     def_op!(cloak, Cloak, usize, usize);
     def_op!(r#const, Const);
     def_op!(contract, Contract, usize);
@@ -65,7 +63,6 @@ impl Program {
     def_op!(range, Range, BitRange);
     def_op!(retire, Retire);
     def_op!(roll, Roll, usize);
-    def_op!(select, Select, u8, u8);
     def_op!(sign_tx, Signtx);
     def_op!(unblind, Unblind);
     def_op!(var, Var);
@@ -119,58 +116,5 @@ impl Program {
     pub fn push<T: Into<Data>>(&mut self, data: T) -> &mut Program {
         self.0.push(Instruction::Push(data.into()));
         self
-    }
-
-    /// Takes predicate and closure to add choose operations for
-    /// predicate tree traversal.
-    pub fn choose_predicate<F, T>(
-        &mut self,
-        pred: Predicate,
-        choose_fn: F,
-    ) -> Result<&mut Program, VMError>
-    where
-        F: FnOnce(PredicateTree) -> Result<T, VMError>,
-    {
-        choose_fn(PredicateTree {
-            prog: self,
-            pred: pred,
-        })?;
-        Ok(self)
-    }
-}
-
-/// Adds data and instructions to traverse a predicate tree.
-pub struct PredicateTree<'a> {
-    prog: &'a mut Program,
-    pred: Predicate,
-}
-
-impl<'a> PredicateTree<'a> {
-    /// Kth Predicate branch
-    pub fn select(self, k: usize) -> Result<Self, VMError> {
-        let preds = self.pred.to_disjunction()?;
-        let n = preds.len();
-        let selected = preds[k].clone();
-        if k >= n {
-            return Err(VMError::PredicateIndexInvalid);
-        }
-        let prog = self.prog;
-        for pred in preds.iter() {
-            prog.push(pred.as_opaque());
-        }
-        prog.select(n as u8, k as u8);
-        Ok(Self {
-            pred: selected,
-            prog,
-        })
-    }
-
-    /// Pushes program to the stack and calls the contract protected
-    /// by the program predicate.
-    pub fn call(self) -> Result<(), VMError> {
-        let (subprog, blinding) = self.pred.to_program()?;
-        self.prog.push(Data::Opaque(blinding)).call();
-        self.prog.push(subprog).call();
-        Ok(())
     }
 }

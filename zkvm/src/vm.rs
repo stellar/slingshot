@@ -317,8 +317,6 @@ where
                 Instruction::Nonce => self.nonce()?,
                 Instruction::Log => self.log()?,
                 Instruction::Signtx => self.signtx()?,
-                Instruction::Call => self.call()?,
-                Instruction::Select(n, k) => self.select(n, k)?,
                 Instruction::Delegate => self.delegate()?,
                 Instruction::Ext(opcode) => self.ext(opcode)?,
             }
@@ -708,48 +706,6 @@ where
         for item in contract.payload.into_iter() {
             self.push_item(item);
         }
-        Ok(())
-    }
-
-    fn call(&mut self) -> Result<(), VMError> {
-        // Pop program, blinding factor, contract, and predicate
-        let prog = self.pop_item()?.to_data()?;
-        let blinding = self.pop_item()?.to_data()?;
-        let contract = self.pop_item()?.to_contract()?;
-        let predicate = contract.predicate;
-
-        // 0 = -P + h(prog) * B2
-        self.delegate.verify_point_op(|| {
-            predicate
-                .prove_program_predicate(&prog.clone().to_bytes(), &blinding.clone().to_bytes())
-        })?;
-
-        // Place contract payload on the stack
-        for item in contract.payload.into_iter() {
-            self.push_item(item);
-        }
-
-        // Replace current program with new program
-        self.continue_with_program(prog)?;
-        Ok(())
-    }
-
-    fn select(&mut self, n: u8, k: u8) -> Result<(), VMError> {
-        if k >= n {
-            return Err(VMError::PredicateIndexInvalid);
-        }
-
-        let mut preds: Vec<Predicate> = Vec::with_capacity(n as usize);
-        for _ in 0..n {
-            preds.insert(0, self.pop_item()?.to_data()?.to_predicate()?);
-        }
-        let mut contract = self.pop_item()?.to_contract()?;
-        let p = &contract.predicate;
-        self.delegate
-            .verify_point_op(|| p.prove_disjunction(&preds))?;
-
-        contract.predicate = preds.remove(k as usize);
-        self.push_item(contract);
         Ok(())
     }
 

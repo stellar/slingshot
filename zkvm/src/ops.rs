@@ -45,8 +45,6 @@ pub enum Instruction {
     Nonce,
     Log,
     Signtx,
-    Call,
-    Select(u8, u8),
     Delegate,
     Ext(u8),
 }
@@ -88,12 +86,10 @@ pub enum Opcode {
     Nonce = 0x1d,
     Log = 0x1e,
     Signtx = 0x1f,
-    Call = 0x20,
-    Select = 0x21,
     Delegate = MAX_OPCODE,
 }
 
-const MAX_OPCODE: u8 = 0x22;
+const MAX_OPCODE: u8 = 0x20;
 
 impl Opcode {
     /// Converts the opcode to `u8`.
@@ -202,12 +198,6 @@ impl Instruction {
             Opcode::Nonce => Ok(Instruction::Nonce),
             Opcode::Log => Ok(Instruction::Log),
             Opcode::Signtx => Ok(Instruction::Signtx),
-            Opcode::Call => Ok(Instruction::Call),
-            Opcode::Select => {
-                let n = program.read_u8()?;
-                let k = program.read_u8()?;
-                Ok(Instruction::Select(n, k))
-            }
             Opcode::Delegate => Ok(Instruction::Delegate),
         }
     }
@@ -273,12 +263,6 @@ impl Instruction {
             Instruction::Nonce => write(Opcode::Nonce),
             Instruction::Log => write(Opcode::Log),
             Instruction::Signtx => write(Opcode::Signtx),
-            Instruction::Call => write(Opcode::Call),
-            Instruction::Select(n, k) => {
-                write(Opcode::Select);
-                encoding::write_u8(*n, program);
-                encoding::write_u8(*k, program);
-            }
             Instruction::Delegate => write(Opcode::Delegate),
             Instruction::Ext(x) => program.push(*x),
         };
