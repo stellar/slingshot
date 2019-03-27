@@ -815,7 +815,7 @@ This struct is an argument to the [`call`](#call) instruction. It contains the i
  - `neighbors`, an array of left-right neighbors in the Merkle tree. Each is a LE32 item representing the hash of its children. The leaf hash of the program string and root hash are not included. Neighbor hashes are ordered from bottom-most to top-most. The first hash is the neighbor of the leaf hash of the program string, and the last is a child of the Merkle root.
  - `positions`, a pattern indicating each neighbor's position. 0 represents a left neighbor, and 1 represents a right neighbor. This is a 32-bit little-endian integer, where the lower bits indicate the position of the lower-level neighbors. These bits are ordered identically to `neighbors`, because there is a one-to-one correspondence between their elements. The position of the leaf hash's neighbor is represented by the first bit, and the position of a child of the Merkle root is the last bit.
 
-![An example Merkle tree to demonstrate the call proof.](#taproot_example.svg)
+![An example Merkle tree to demonstrate the call proof.](taproot_example.svg)
 
 Here is an example using the tree above. Suppose we are verifying the program with the leaf hash `C`, with a right neighbor `D`. The parent of `C` is `J = h(C || D)`, with a left neighbor `I`. The parent of `J` is `M = h(I || J)`, with a right neighbor `N`. `M`'s parent is the Merkle root `R`.
 This gives the neighbor list [`D`, `I`, `N`] and bit pattern `101`. The Merkle path is red, while the neighbors are blue.
