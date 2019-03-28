@@ -3,6 +3,7 @@ use bulletproofs::r1cs::R1CSProof;
 use curve25519_dalek::ristretto::CompressedRistretto;
 use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
+use musig::Signature;
 use serde::de::Visitor;
 use serde::{self, Deserialize, Deserializer, Serialize, Serializer};
 use spacesuit;
@@ -19,7 +20,6 @@ use crate::ops::Instruction;
 use crate::point_ops::PointOp;
 use crate::predicate::Predicate;
 use crate::scalar_witness::ScalarWitness;
-use crate::signature::*;
 use crate::txlog::{Entry, TxID, TxLog};
 use crate::types::*;
 
@@ -88,7 +88,7 @@ impl Tx {
         let prog_len = r.read_size()?;
         let program = r.read_bytes(prog_len)?.to_vec();
 
-        let signature = Signature::from_bytes(r.read_u8x64()?)?;
+        let signature = Signature::from_bytes(r.read_u8x64()?).map_err(|_| VMError::FormatError)?;
         let proof =
             R1CSProof::from_bytes(r.read_bytes(r.len())?).map_err(|_| VMError::FormatError)?;
         Ok(Tx {
@@ -756,7 +756,8 @@ where
     fn delegate(&mut self) -> Result<(), VMError> {
         // Signature
         let sig = self.pop_item()?.to_data()?.to_bytes();
-        let signature = Signature::from_bytes(SliceReader::parse(&sig, |r| r.read_u8x64())?)?;
+        let signature = Signature::from_bytes(SliceReader::parse(&sig, |r| r.read_u8x64())?)
+            .map_err(|_| VMError::FormatError)?;
 
         // Program
         let prog = self.pop_item()?.to_data()?;
@@ -773,11 +774,8 @@ where
         // Verify signature using Verification key, over the message `program`
         let mut t = Transcript::new(b"ZkVM.delegate");
         t.commit_bytes(b"prog", &prog.clone().to_bytes());
-        self.delegate.verify_point_op(|| {
-            signature
-                .verify_deferred(&mut t, &[verification_key])
-                .into()
-        })?;
+        self.delegate
+            .verify_point_op(|| signature.verify(&mut t, verification_key).into())?;
 
         // Replace current program with new program
         self.continue_with_program(prog)?;

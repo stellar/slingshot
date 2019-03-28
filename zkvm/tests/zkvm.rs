@@ -1,11 +1,13 @@
 use bulletproofs::{BulletproofGens, PedersenGens};
-use curve25519_dalek::constants::RISTRETTO_BASEPOINT_COMPRESSED;
+use curve25519_dalek::constants::{RISTRETTO_BASEPOINT_COMPRESSED, RISTRETTO_BASEPOINT_POINT};
 use curve25519_dalek::scalar::Scalar;
 use hex;
+use merlin::Transcript;
+use musig::{Multikey, Party, PartyAwaitingShares, Signature, VerificationKey};
 
 use zkvm::{
-    Anchor, Commitment, Contract, Data, Output, PortableItem, Predicate, Program, Prover,
-    Signature, TxHeader, TxID, VMError, Value, Verifier,
+    Anchor, Commitment, Contract, Data, Output, PortableItem, Predicate, Program, Prover, TxHeader,
+    TxID, VMError, Value, Verifier,
 };
 
 // TODO(vniu): move builder convenience functions into separate crate,
@@ -131,6 +133,39 @@ fn make_output(qty: u64, flv: Scalar, pred: Predicate) -> Contract {
     }
 }
 
+fn sign_helper(privkeys: Vec<Scalar>, multikey: Multikey, transcript: Transcript) -> Signature {
+    let pubkeys: Vec<_> = privkeys
+        .iter()
+        .map(|privkey| VerificationKey((privkey * RISTRETTO_BASEPOINT_POINT).compress()))
+        .collect();
+
+    let mut transcripts: Vec<_> = pubkeys.iter().map(|_| transcript.clone()).collect();
+
+    let (parties, precomms): (Vec<_>, Vec<_>) = privkeys
+        .clone()
+        .into_iter()
+        .zip(transcripts.iter_mut())
+        .map(|(x_i, transcript)| Party::new(transcript, x_i, multikey.clone(), pubkeys.clone()))
+        .unzip();
+
+    let (parties, comms): (Vec<_>, Vec<_>) = parties
+        .into_iter()
+        .map(|p| p.receive_precommitments(precomms.clone()))
+        .unzip();
+
+    let (parties, shares): (Vec<_>, Vec<_>) = parties
+        .into_iter()
+        .map(|p| p.receive_commitments(comms.clone()).unwrap())
+        .unzip();
+
+    let signatures: Vec<_> = parties
+        .into_iter()
+        .map(|p: PartyAwaitingShares| p.receive_shares(shares.clone()).unwrap())
+        .collect();
+
+    signatures[0].clone()
+}
+
 fn build_and_verify(program: Program, keys: &Vec<Scalar>) -> Result<TxID, VMError> {
     let (tx, _, _) = {
         // Build tx
@@ -142,6 +177,13 @@ fn build_and_verify(program: Program, keys: &Vec<Scalar>) -> Result<TxID, VMErro
         };
         let gens = PedersenGens::default();
         Prover::build_tx(program, header, &bp_gens, |t, verification_keys| {
+            if verification_keys.len() == 0 {
+                println!("verification keys length is zero!");
+                return Ok(Signature {
+                    R: RISTRETTO_BASEPOINT_COMPRESSED,
+                    s: Scalar::zero(),
+                });
+            }
             let signtx_keys: Vec<Scalar> = verification_keys
                 .iter()
                 .filter_map(|vk| {
@@ -153,7 +195,13 @@ fn build_and_verify(program: Program, keys: &Vec<Scalar>) -> Result<TxID, VMErro
                     None
                 })
                 .collect();
-            Signature::sign_aggregated(t, &signtx_keys)
+            println!("calling this sign_helper");
+            Ok(sign_helper(
+                signtx_keys,
+                Multikey::new(verification_keys.to_vec())
+                    .map_err(|_| VMError::KeyAggregationFailed)?,
+                t.clone(),
+            ))
         })?
     };
 
@@ -565,6 +613,7 @@ fn predicate_disjunction_program_path() {
             .push(spend_prog.clone())
             .call()
     });
+    println!("building program...");
     build_and_verify(prog, &vec![key_scalar]).unwrap();
 
     let wrong_prog = Program::build(|p| {

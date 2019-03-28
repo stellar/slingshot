@@ -2,9 +2,9 @@ use bulletproofs::PedersenGens;
 use curve25519_dalek::ristretto::{CompressedRistretto, RistrettoPoint};
 use curve25519_dalek::scalar::Scalar;
 use curve25519_dalek::traits::{Identity, IsIdentity, VartimeMultiscalarMul};
+use musig::DeferredVerification;
 
 use super::errors::VMError;
-use super::signature::DeferredVerification;
 
 /// Deferred point operation.
 #[derive(Clone, Debug)]
@@ -103,16 +103,12 @@ impl PointOp {
     }
 }
 
-impl From<DeferredVerification> for PointOp {
-    fn from(x: DeferredVerification) -> Self {
-        let mut primary = Scalar::zero();
-        if x.static_point_weight != primary {
-            primary = x.static_point_weight
-        }
-        Self {
-            primary: Some(primary),
+impl Into<PointOp> for DeferredVerification {
+    fn into(self) -> PointOp {
+        PointOp {
+            primary: Some(self.static_point_weight),
             secondary: None,
-            arbitrary: x.dynamic_point_weights,
+            arbitrary: self.dynamic_point_weights,
         }
     }
 }

@@ -2,6 +2,7 @@ use bulletproofs::r1cs;
 use bulletproofs::{BulletproofGens, PedersenGens};
 use curve25519_dalek::ristretto::CompressedRistretto;
 use merlin::Transcript;
+use musig::{Signature, VerificationKey};
 use std::collections::VecDeque;
 
 use crate::constraints::Commitment;
@@ -10,7 +11,6 @@ use crate::ops::Instruction;
 use crate::point_ops::PointOp;
 use crate::predicate::Predicate;
 use crate::program::Program;
-use crate::signature::{Signature, VerificationKey};
 use crate::txlog::{TxID, TxLog};
 use crate::types::Data;
 use crate::vm::{Delegate, Tx, TxHeader, VM};
@@ -80,7 +80,7 @@ impl<'t, 'g> Prover<'t, 'g> {
         sign_tx_fn: F,
     ) -> Result<(Tx, TxID, TxLog), VMError>
     where
-        F: FnOnce(&mut Transcript, &Vec<VerificationKey>) -> Signature,
+        F: FnOnce(&mut Transcript, &Vec<VerificationKey>) -> Result<Signature, VMError>,
     {
         // Prepare the constraint system
         let mut r1cs_transcript = Transcript::new(b"ZkVM.r1cs");
@@ -110,7 +110,7 @@ impl<'t, 'g> Prover<'t, 'g> {
         // TBD: implement holistic Signer trait/interface for tx signing
         let mut signtx_transcript = Transcript::new(b"ZkVM.signtx");
         signtx_transcript.commit_bytes(b"txid", &txid.0);
-        let signature = sign_tx_fn(&mut signtx_transcript, &prover.signtx_keys);
+        let signature = sign_tx_fn(&mut signtx_transcript, &prover.signtx_keys)?;
 
         // Generate the R1CS proof
         let proof = prover

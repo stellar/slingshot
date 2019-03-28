@@ -6,16 +6,22 @@ use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
 
 #[derive(Clone)]
+/// MuSig aggregated key.
 pub struct Multikey {
     transcript: Option<Transcript>,
     aggregated_key: VerificationKey,
 }
 
 impl Multikey {
+    /// Constructs a new MuSig multikey aggregating the pubkeys.
     pub fn new(pubkeys: Vec<VerificationKey>) -> Result<Self, MusigError> {
         match pubkeys.len() {
-            0 => return Err(MusigError::BadArguments),
+            0 => {
+                println!("we have zero pubkeys!");
+                return Err(MusigError::BadArguments);
+            }
             1 => {
+                println!("we have one pubkey");
                 return Ok(Multikey {
                     transcript: None,
                     aggregated_key: pubkeys[0],
@@ -55,6 +61,7 @@ impl Multikey {
         a_i_transcript.challenge_scalar(b"a_i")
     }
 
+    /// Returns scalar factor for component in aggregated key.
     pub fn factor_for_key(&self, X_i: &VerificationKey) -> Scalar {
         match &self.transcript {
             Some(t) => Multikey::compute_factor(&t, X_i),
@@ -62,6 +69,7 @@ impl Multikey {
         }
     }
 
+    /// Returns VerificationKey representation of aggregated key.
     pub fn aggregated_key(&self) -> VerificationKey {
         self.aggregated_key
     }

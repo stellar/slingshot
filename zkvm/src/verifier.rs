@@ -2,6 +2,7 @@ use bulletproofs::r1cs;
 use bulletproofs::{BulletproofGens, PedersenGens};
 use curve25519_dalek::ristretto::CompressedRistretto;
 use merlin::Transcript;
+use musig::{Multikey, VerificationKey};
 
 use crate::constraints::Commitment;
 use crate::encoding::*;
@@ -9,7 +10,7 @@ use crate::errors::VMError;
 use crate::ops::Instruction;
 use crate::point_ops::PointOp;
 use crate::predicate::Predicate;
-use crate::signature::VerificationKey;
+// use crate::signature::VerificationKey;
 use crate::types::Data;
 use crate::vm::{Delegate, Tx, VerifiedTx, VM};
 
@@ -97,11 +98,19 @@ impl<'t> Verifier<'t> {
         let mut signtx_transcript = Transcript::new(b"ZkVM.signtx");
         signtx_transcript.commit_bytes(b"txid", &txid.0);
 
-        verifier.deferred_operations.push(
-            tx.signature
-                .verify_deferred(&mut signtx_transcript, &verifier.signtx_keys)
-                .into(),
-        );
+        if verifier.signtx_keys.len() != 0 {
+            verifier.deferred_operations.push(
+                tx.signature
+                    .verify(
+                        &mut signtx_transcript,
+                        Multikey::new(verifier.signtx_keys)
+                            .map_err(|_| VMError::KeyAggregationFailed)?
+                            .aggregated_key(),
+                    )
+                    .into(),
+            );
+        }
+
         // Verify all deferred crypto operations.
         PointOp::verify_batch(&verifier.deferred_operations[..])?;
 

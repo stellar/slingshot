@@ -1,6 +1,7 @@
 use super::counterparty::NonceCommitment;
+use super::deferred_verification::DeferredVerification;
+use super::errors::MusigError;
 use super::key::VerificationKey;
-use super::point_op::PointOp;
 use super::transcript::TranscriptProtocol;
 use curve25519_dalek::constants::RISTRETTO_BASEPOINT_POINT;
 use curve25519_dalek::ristretto::CompressedRistretto;
@@ -10,7 +11,9 @@ use merlin::Transcript;
 /// A Schnorr signature.
 #[derive(Debug, Clone)]
 pub struct Signature {
+    /// s
     pub s: Scalar,
+    /// R
     pub R: CompressedRistretto,
 }
 
@@ -41,7 +44,7 @@ impl Signature {
     }
 
     /// Verifies a signature for a single VerificationKey
-    pub fn verify(&self, transcript: &mut Transcript, X: VerificationKey) -> PointOp {
+    pub fn verify(&self, transcript: &mut Transcript, X: VerificationKey) -> DeferredVerification {
         // Make c = H(X, R, m)
         // The message `m` has already been fed into the transcript
         let c = {
@@ -54,10 +57,30 @@ impl Signature {
         // `s * G = R + c * X`
         //      ->
         // `0 == (-s * G) + (1 * R) + (c * X)`
-        PointOp {
-            primary: Some(-self.s),
-            arbitrary: vec![(Scalar::one(), self.R), (c, X.0)],
+        DeferredVerification {
+            static_point_weight: -self.s,
+            dynamic_point_weights: vec![(Scalar::one(), self.R), (c, X.0)],
         }
+    }
+
+    /// Decodes a signature from 64-byte array.
+    pub fn from_bytes(sig: [u8; 64]) -> Result<Self, MusigError> {
+        let mut Rbuf = [0u8; 32];
+        let mut sbuf = [0u8; 32];
+        Rbuf[..].copy_from_slice(&sig[..32]);
+        sbuf[..].copy_from_slice(&sig[32..]);
+        Ok(Signature {
+            R: CompressedRistretto(Rbuf),
+            s: Scalar::from_canonical_bytes(sbuf).ok_or(MusigError::BadArguments)?,
+        })
+    }
+
+    /// Encodes the signature as a 64-byte array.
+    pub fn to_bytes(&self) -> [u8; 64] {
+        let mut buf = [0u8; 64];
+        buf[..32].copy_from_slice(self.R.as_bytes());
+        buf[32..].copy_from_slice(self.s.as_bytes());
+        buf
     }
 }
 
