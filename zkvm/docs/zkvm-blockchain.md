@@ -329,7 +329,7 @@ Procedure:
 
 Input:
 - `txs`,
-  a list of [transactions](zkvm.md#transaction).
+  a list of [transactions](zkvm-spec.md#transaction).
 - `version`,
   a version number for a block.
 - `timestamp_ms`,
@@ -337,9 +337,9 @@ Input:
   00:00:00 UTC Jan 1, 1970.
 
 Outputs:
-- a list of [transaction logs](zkvm.md#transaction-log),
+- a list of [transaction logs](zkvm-spec.md#transaction-log),
   one per transaction in `txs`.
-- a list of [transaction IDs](zkvm.md#transaction-id),
+- a list of [transaction IDs](zkvm-spec.md#transaction-id),
   one per transaction in `txs`.
 
 Procedure:
