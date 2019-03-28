@@ -17,11 +17,9 @@ impl Multikey {
     pub fn new(pubkeys: Vec<VerificationKey>) -> Result<Self, MusigError> {
         match pubkeys.len() {
             0 => {
-                println!("we have zero pubkeys!");
                 return Err(MusigError::BadArguments);
             }
             1 => {
-                println!("we have one pubkey");
                 return Ok(Multikey {
                     transcript: None,
                     aggregated_key: pubkeys[0],
@@ -61,7 +59,7 @@ impl Multikey {
         a_i_transcript.challenge_scalar(b"a_i")
     }
 
-    /// Returns scalar factor for component in aggregated key.
+    /// Returns `a_i` factor for component key in aggregated key.
     pub fn factor_for_key(&self, X_i: &VerificationKey) -> Scalar {
         match &self.transcript {
             Some(t) => Multikey::compute_factor(&t, X_i),

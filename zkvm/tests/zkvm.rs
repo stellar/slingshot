@@ -178,7 +178,6 @@ fn build_and_verify(program: Program, keys: &Vec<Scalar>) -> Result<TxID, VMErro
         let gens = PedersenGens::default();
         Prover::build_tx(program, header, &bp_gens, |t, verification_keys| {
             if verification_keys.len() == 0 {
-                println!("verification keys length is zero!");
                 return Ok(Signature {
                     R: RISTRETTO_BASEPOINT_COMPRESSED,
                     s: Scalar::zero(),
@@ -195,7 +194,6 @@ fn build_and_verify(program: Program, keys: &Vec<Scalar>) -> Result<TxID, VMErro
                     None
                 })
                 .collect();
-            println!("calling this sign_helper");
             Ok(sign_helper(
                 signtx_keys,
                 Multikey::new(verification_keys.to_vec())
@@ -613,7 +611,6 @@ fn predicate_disjunction_program_path() {
             .push(spend_prog.clone())
             .call()
     });
-    println!("building program...");
     build_and_verify(prog, &vec![key_scalar]).unwrap();
 
     let wrong_prog = Program::build(|p| {

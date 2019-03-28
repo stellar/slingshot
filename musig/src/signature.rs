@@ -11,9 +11,9 @@ use merlin::Transcript;
 /// A Schnorr signature.
 #[derive(Debug, Clone)]
 pub struct Signature {
-    /// s
+    /// Signature using nonce, message, and private key
     pub s: Scalar,
-    /// R
+    /// Nonce commitment
     pub R: CompressedRistretto,
 }
 

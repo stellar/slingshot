@@ -10,7 +10,6 @@ use crate::errors::VMError;
 use crate::ops::Instruction;
 use crate::point_ops::PointOp;
 use crate::predicate::Predicate;
-// use crate::signature::VerificationKey;
 use crate::types::Data;
 use crate::vm::{Delegate, Tx, VerifiedTx, VM};
 
