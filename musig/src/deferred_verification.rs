@@ -1,5 +1,4 @@
 use crate::errors::MusigError;
-use bulletproofs::PedersenGens;
 use curve25519_dalek::constants::RISTRETTO_BASEPOINT_POINT;
 use curve25519_dalek::ristretto::{CompressedRistretto, RistrettoPoint};
 use curve25519_dalek::scalar::Scalar;
@@ -42,8 +41,6 @@ impl DeferredVerification {
 
     /// Batched evaluation of deferred signature verification.
     pub fn verify_batch(batch: &[DeferredVerification]) -> Result<(), MusigError> {
-        let gens = PedersenGens::default();
-
         // Get the total number of points in batch
         let dyn_length: usize = batch.iter().map(|p| p.dynamic_point_weights.len()).sum();
         let length = 2 + dyn_length; // include the (B, B_blinding) pair
@@ -52,9 +49,7 @@ impl DeferredVerification {
         let mut points: Vec<Option<RistrettoPoint>> = Vec::with_capacity(length);
 
         // Add base points
-        points.push(Some(gens.B));
-        points.push(Some(gens.B_blinding));
-        weights.push(Scalar::zero());
+        points.push(Some(RISTRETTO_BASEPOINT_POINT));
         weights.push(Scalar::zero());
 
         let mut rng = rand::thread_rng();
