@@ -99,6 +99,7 @@ impl<'t> Verifier<'t> {
 
         if verifier.signtx_keys.len() != 0 {
             verifier.deferred_operations.push(
+                // TODO: change this to use multi-message context
                 tx.signature
                     .verify(
                         &mut signtx_transcript,

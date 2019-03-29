@@ -704,6 +704,7 @@ where
     // _contract_ **signtx** → _results..._
     fn signtx(&mut self) -> Result<(), VMError> {
         let contract = self.pop_item()?.to_contract()?;
+        // TODO: use multi-message API to sign the entire contract ID.
         self.delegate.process_tx_signature(contract.predicate)?;
         for item in contract.payload.into_iter() {
             self.push_item(item);
@@ -773,6 +774,7 @@ where
 
         // Verify signature using Verification key, over the message `program`
         let mut t = Transcript::new(b"ZkVM.delegate");
+        // TODO: commit the contract ID, to bind signature to this instance.
         t.commit_bytes(b"prog", &prog.clone().to_bytes());
         self.delegate
             .verify_point_op(|| signature.verify(&mut t, verification_key).into())?;

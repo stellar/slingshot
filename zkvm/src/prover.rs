@@ -110,6 +110,7 @@ impl<'t, 'g> Prover<'t, 'g> {
         // TBD: implement holistic Signer trait/interface for tx signing
         let mut signtx_transcript = Transcript::new(b"ZkVM.signtx");
         signtx_transcript.commit_bytes(b"txid", &txid.0);
+        // TODO: change this to use multi-message context
         let signature = sign_tx_fn(&mut signtx_transcript, &prover.signtx_keys)?;
 
         // Generate the R1CS proof
