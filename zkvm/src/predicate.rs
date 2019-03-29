@@ -9,7 +9,9 @@ use merlin::Transcript;
 
 use crate::encoding;
 use crate::errors::VMError;
+use crate::merkle::MerkleNeighbor;
 use crate::point_ops::PointOp;
+use crate::program::Program;
 use crate::signature::VerificationKey;
 use crate::transcript::TranscriptProtocol;
 
@@ -24,16 +26,36 @@ pub enum Predicate {
     /// constructing aggregated signature.
     Key(VerificationKey),
 
-    /// Disjunction of n predicates.
-    Merkle(PredicateDisjunction),
+    /// Taproot Merkle tree.
+    Tree(PredicateTree),
 }
 
 #[derive(Clone, Debug)]
-pub struct PredicateDisjunction {
-    preds: Vec<Predicate>,
+pub struct PredicateTree {
+    progs: Vec<Program>,
+    key: VerificationKey,
+    blinding: [u8; 32],
     // We precompute the disjunction predicate when composing it via `Predicate::or()`,
     // so that we can keep `to_point`/`encode` methods non-failable across all types.
     precomputed_point: CompressedRistretto,
+}
+
+#[derive(Clone, Debug)]
+pub struct CallProof {
+    // List of left-right neighbors, excluding the root and leaf hash
+    neighbors: Vec<MerkleNeighbor>,
+
+    // Signing key X
+    // PRTODO: Check if we want new SigningKey struct
+    signing_key: VerificationKey,
+
+    // Bit pattern indicating neighbor position
+    positions: u32,
+}
+
+pub enum BlindedProgram {
+    Program(Program),
+    Blinding([u8; 32]),
 }
 
 impl Predicate {
@@ -47,7 +69,7 @@ impl Predicate {
         match self {
             Predicate::Opaque(p) => *p,
             Predicate::Key(k) => k.0,
-            Predicate::Or(d) => d.precomputed_point,
+            Predicate::Tree(d) => d.precomputed_point,
         }
     }
 
@@ -86,6 +108,24 @@ impl Predicate {
         t.commit_bytes(b"blinding", blinding);
         t.commit_bytes(b"prog", &prog);
         t.challenge_scalar(b"h")
+    }
+
+    fn commit_taproot(key: &CompressedRistretto, root: &[u8]) -> Scalar {
+        let mut t = Transcript::new(b"ZkVM.taproot");
+        t.commit_bytes(b"key", &key.to_bytes());
+        t.commit_bytes(b"merkle", root);
+        t.challenge_scalar(b"h")
+    }
+
+    fn prove_call(call_proof: &CallProof, leaf_prog: &[u8]) -> PointOp {
+        // PRTODO: Recompute the Merkle root M
+
+        // P = X + h(X, M)
+        PointOp {
+            primary: None,
+            secondary: None,
+            arbitrary: Vec::new(),
+        }
     }
 }
 

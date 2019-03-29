@@ -482,5 +482,3 @@ fn issue_and_spend() {
         panic!("Issue $6 and input $4, output $11 and $1 should have failed but didn't");
     }
 }
-
-
