@@ -36,3 +36,4 @@ pub use self::txlog::{Entry, TxID, TxLog, UTXO};
 pub use self::types::{Data, Item, Value, WideValue};
 pub use self::verifier::Verifier;
 pub use self::vm::{Tx, TxHeader, VerifiedTx};
+pub use musig::{Signature, VerificationKey};
