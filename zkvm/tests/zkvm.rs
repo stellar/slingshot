@@ -133,6 +133,7 @@ fn make_output(qty: u64, flv: Scalar, pred: Predicate) -> Contract {
     }
 }
 
+// TODO: replace this with multi-message single-signer API
 fn sign_helper(privkeys: Vec<Scalar>, multikey: Multikey, transcript: Transcript) -> Signature {
     let pubkeys: Vec<_> = privkeys
         .iter()
