@@ -36,9 +36,9 @@ B = e2f2ae0a6abc4e71a884a961c500515f58e30b6aa582dd8db6a65945e08d2d76
 
 ### MusigContext
 
-This is a trait with two functions:
+This is a private trait with two functions:
 - `commit(&self, &mut transcript)`: takes a mutable transcript, and commits the internal context to the transcript.
-- `challenge(&self, &verification_key, &mut transcript, &nonce_commitment) -> Scalar`: takes a public key and mutable transcript, and returns the 
+- `challenge(&self, &verification_key, &mut transcript) -> Scalar`: takes a public key and mutable transcript, and returns the 
   suitable challenge for that public key. 
 - `get_pubkeys(&self) -> Vec<VerificationKey>`: returns the associate public keys.
 
@@ -54,7 +54,7 @@ Functions:
 
 - `Multikey::commit(&self, &mut transcript)`: Commits `self.aggregated_key` to the input `transcript` with label "X".
 
-- `Multikey::challenge(&self, &verification_key, &mut transcript, &nonce_commitment) -> Scalar`: 
+- `Multikey::challenge(&self, &verification_key, &mut transcript) -> Scalar`: 
   Computes challenge `c_i = a_i * c`, where `a_i = H_agg(<L>, X_i)` and `c = H_sig(X, R, m)`.
 
   For calculating `a_i`, `<L>` (the list of pubkeys that go into the aggregated pubkey)
@@ -62,9 +62,11 @@ Functions:
   commits the verification key (`X_i`) into the transcript with label "X_i", 
   and then squeezes the challenge scalar `a_i` from the transcript with label "a_i".
 
-  For calculating `c`, the message `m` has already been committed to the input `transcript`, 
-  so the function only needs to commit `self.aggregated_key` with label "X" and input `hash_commitment` with label "R", 
-  and then get the challenge scalar `c` with label "c".
+  For calculating `c`: the message `m`, the nonce commitment sum `R`, and the aggregated key `X` 
+  have already been committed to the input `transcript`.
+  It then gets the challenge scalar `c` from the transcript with label "c".
+
+  Returns `c_i = a_i * c`.
 
 - `Multikey::aggregated_key(&self)`: returns the aggregated key stored in the multikey, `self.aggregated_key`.  
 
@@ -78,15 +80,23 @@ Fields:
 Functions:
 - `Multimessage::new(Vec<(VerificationKey, [u8])) -> Self`: creates a new MultiMessage instance using the inputs.
 
-- `Multimessage::commit(&self, &mut transcript)`: It commits to the number of pairs, with `transcript.commit_u64(self.pairs.len())`. It then commits each of the pairs in `self.pairs` to the input `transcript`,
+- `Multimessage::commit(&self, &mut transcript)`: 
+  It commits to the number of pairs, with `transcript.commit_u64(self.pairs.len())`. 
+  It then commits each of the pairs in `self.pairs` to the input `transcript`,
   by iterating through `self.pairs` and committing the `VerificationKey` with label "X" and the message with label "m".
 
-- `Multimessage::challenge(&self, &verification_key, &mut transcript, &nonce_commitment) -> Scalar`: 
+- `Multimessage::challenge(&self, &verification_key, &mut transcript) -> Scalar`: 
   Computes challenge `c_i = H(R, <S>, i)`.
-  It first commits the input `nonce_commitment` to the input `transcript` with label "R".
-  It then commits each of the pairs in `self.pairs` to the input `transcript`, by calling `Multimessage::commit(...)`.
+  The nonce commitment sum `R`, and the pairs `<S>`, have already been committed to the input `transcript`.
+
+  It forks the input transcript by cloning it. The non-forked transcript (input `transcript`) gets domain 
+  separated with `transcript.commit("dom-sep", "Musig.multi-message-boundary")`.
+  This prevents later steps from being able to get the same challenges that come from the forked transcript.
+ 
   It then figures out what its index `i` is, by matching the input `verification_key` against all the keys in 
-  `self.pairs`. The index `i` is the index of pair of the key it matches to. It commits `i` to the `transcript` with label "i".
+  `self.pairs`. The index `i` is the index of pair of the key it matches to. 
+  It commits `i` to the forked transcript with label "i".
+  It then gets and returns the challenge scalar `c_i` from the forked transcript with label "c_i".
 
 - `Multikey::get_pubkeys(&self)`: returns the list of public keys, without the messages, from `self.pairs`.
 
@@ -318,7 +328,9 @@ Operation:
 This checks that the stored precommitments match the received commitments. 
 If it succeeds, it will return `CounterpartyCommitted`s.
 - Make `nonce_sum` = sum(`nonce_commitments`)
-- Make `c_i` = `context.challenge(self.privkey, &mut transcript, `nonce_sum`)`
+- Commit `nonce_sum` to `self.transcript` with label "R".
+- Commit the context to `self.transcript` by calling `MusigContext::challenge(...)`.
+- Make `c_i` = `context.challenge(self.privkey, &mut transcript)`
 - Make `s_i` = `r_i + c_i * x_i`, where `x_i` = `self.privkey` and `r_i` = `self.nonce`
 
 Output: 
