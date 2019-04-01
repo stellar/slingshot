@@ -34,13 +34,8 @@ enum MerkleNode {
 impl MerkleTree {
     /// Constructs a new MerkleTree based on the input list of entries.
     pub fn build<M: MerkleItem>(label: &'static [u8], list: &[M]) -> Self {
-        let root = match list.len() {
-            0 => None,
-            _ => {
-                let t = Transcript::new(label);
-                Some(Self::build_tree(t, list))
-            }
-        };
+        let t = Transcript::new(label);
+        let root = Self::build_tree(t, list);
         MerkleTree {
             size: list.len(),
             label,
@@ -123,8 +118,8 @@ impl MerkleTree {
                 let mut node = [0u8; 32];
                 let left = Self::build_tree(t.clone(), &list[..k]);
                 let right = Self::build_tree(t.clone(), &list[k..]);
-                t.commit_bytes(b"L", left.hash());
-                t.commit_bytes(b"R", right.hash());
+                t.commit_bytes(b"L", &left.hash());
+                t.commit_bytes(b"R", &right.hash());
                 t.challenge_bytes(b"merkle.node", &mut node);
                 return MerkleNode::Node(node, Box::new(left), Box::new(right));
             }
@@ -164,17 +159,17 @@ impl MerkleNode {
         index: usize,
         size: usize,
         result: &mut Vec<MerkleNeighbor>,
-    ) -> Result<_, VMError> {
+    ) -> Result<(), VMError> {
         match self {
             MerkleNode::Empty => Err(VMError::InvalidMerkleProof),
             MerkleNode::Leaf(_) => Ok(()),
             MerkleNode::Node(_, l, r) => {
                 let k = size.next_power_of_two() / 2;
                 if index >= k {
-                    result.insert(0, MerkleNeighbor::Left(*l.hash()));
+                    result.insert(0, MerkleNeighbor::Left(l.hash()));
                     r.subpath(t, index - k, size - k, result)
                 } else {
-                    result.insert(0, MerkleNeighbor::Right(*r.hash()));
+                    result.insert(0, MerkleNeighbor::Right(r.hash()));
                     return l.subpath(t, index, k, result);
                 }
             }
