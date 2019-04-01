@@ -34,9 +34,9 @@ We call a type **witness** if it contains secret data and structure necessary fo
 
 [Predicate](zkvm-spec.md#predicate) is an enum:
 
-* `Predicate::Opaque` is an _opaque type_ to represent all predicates for the verifier’s VM. It also represents the unused opaque branches of a [predicate tree](zkvm-spec.md#predicate-tree) in the prover’s VM.
+* `Predicate::Opaque` is an _opaque type_ to represent all predicates for the verifier’s VM.
 * `Predicate::Key` is a _witness type_ representing a signing key for [`delegate`](zkvm-spec.md#delegate) and [`signtx`](zkvm-spec.md#signtx) instructions.
-* `Predicate::Or` is a _witness type_ representing a disjunction of n predicates that can be navigated with the [`select`](zkvm-spec.md#select) instruction.
+* `Predicate::Tree` is a _witness type_ representing the [Taproot](zkvm-spec.md#taproot) Merkle tree for the [`call`](zkvm-spec.md#call) instruction.
 * `Predicate::Program` is a _witness type_ representing a program commitment for the [`call`](zkvm-spec.md#call) instruction.
 
 ### Variables

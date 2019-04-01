@@ -316,7 +316,7 @@ mod tests {
             let mut prover_transcript = Transcript::new(b"MixTest");
             let mut rng = rand::thread_rng();
 
-            let mut prover = Prover::new(&bp_gens, &pc_gens, &mut prover_transcript);
+            let mut prover = Prover::new(&pc_gens, &mut prover_transcript);
             let (A_com, A_var) = A.commit(&mut prover, &mut rng);
             let (B_com, B_var) = B.commit(&mut prover, &mut rng);
             let (C_com, C_var) = C.commit(&mut prover, &mut rng);
@@ -324,13 +324,13 @@ mod tests {
 
             mix(&mut prover, A_var, B_var, C_var, D_var)?;
 
-            let proof = prover.prove()?;
+            let proof = prover.prove(&bp_gens)?;
             (proof, A_com, B_com, C_com, D_com)
         };
 
         // Verifier makes a `ConstraintSystem` instance representing a merge gadget
         let mut verifier_transcript = Transcript::new(b"MixTest");
-        let mut verifier = Verifier::new(&bp_gens, &pc_gens, &mut verifier_transcript);
+        let mut verifier = Verifier::new(&mut verifier_transcript);
 
         let A_var = A_com.commit(&mut verifier);
         let B_var = B_com.commit(&mut verifier);
@@ -339,7 +339,7 @@ mod tests {
 
         mix(&mut verifier, A_var, B_var, C_var, D_var)?;
 
-        Ok(verifier.verify(&proof)?)
+        Ok(verifier.verify(&proof, &pc_gens, &bp_gens)?)
     }
 
     #[test]
@@ -448,20 +448,20 @@ mod tests {
             let mut prover_transcript = Transcript::new(b"KMixTest");
             let mut rng = rand::thread_rng();
 
-            let mut prover = Prover::new(&bp_gens, &pc_gens, &mut prover_transcript);
+            let mut prover = Prover::new(&pc_gens, &mut prover_transcript);
             let (input_com, input_vars) = inputs.commit(&mut prover, &mut rng);
             let (mid_com, mid_vars) = mid.commit(&mut prover, &mut rng);
             let (output_com, output_vars) = outputs.commit(&mut prover, &mut rng);
 
             call_mix_gadget(&mut prover, &input_vars, &mid_vars, &output_vars)?;
 
-            let proof = prover.prove()?;
+            let proof = prover.prove(&bp_gens)?;
             (proof, input_com, mid_com, output_com)
         };
 
         // Verifier makes a `ConstraintSystem` instance representing a merge gadget
         let mut verifier_transcript = Transcript::new(b"KMixTest");
-        let mut verifier = Verifier::new(&bp_gens, &pc_gens, &mut verifier_transcript);
+        let mut verifier = Verifier::new(&mut verifier_transcript);
 
         let input_vars = input_com.commit(&mut verifier);
         let mid_vars = mid_com.commit(&mut verifier);
@@ -470,7 +470,7 @@ mod tests {
         // Verifier adds constraints to the constraint system
         assert!(call_mix_gadget(&mut verifier, &input_vars, &mid_vars, &output_vars).is_ok());
 
-        Ok(verifier.verify(&proof)?)
+        Ok(verifier.verify(&proof, &pc_gens, &bp_gens)?)
     }
 
     // Note: the output vectors for order_by_flavor does not have to be in a particular order,
@@ -479,9 +479,8 @@ mod tests {
     #[test]
     fn order_by_flavor_test() {
         let pc_gens = PedersenGens::default();
-        let bp_gens = BulletproofGens::new(128, 1);
         let mut transcript = Transcript::new(b"OrderByFlavorTest");
-        let mut prover_cs = Prover::new(&bp_gens, &pc_gens, &mut transcript);
+        let mut prover_cs = Prover::new(&pc_gens, &mut transcript);
 
         // k = 1
         assert_eq!(
@@ -606,9 +605,8 @@ mod tests {
 
     fn combine_by_flavor_helper(inputs: &Vec<Value>) -> (Vec<Value>, Vec<Value>) {
         let pc_gens = PedersenGens::default();
-        let bp_gens = BulletproofGens::new(128, 1);
         let mut transcript = Transcript::new(b"CombineByFlavorTest");
-        let mut prover_cs = Prover::new(&bp_gens, &pc_gens, &mut transcript);
+        let mut prover_cs = Prover::new(&pc_gens, &mut transcript);
 
         let (allocated_mid, allocated_output) = combine_by_flavor(&inputs, &mut prover_cs).unwrap();
         let mid = allocated_mid

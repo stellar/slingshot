@@ -79,6 +79,21 @@ impl Xprv {
         }
     }
 
+    /// Returns a leaf private key. Users must provide customize, in order to
+    /// separate sibling keys from one another through unique derivation paths.
+    pub fn derive_key(&self, customize: impl FnOnce(&mut Transcript)) -> Scalar {
+        let mut t = Transcript::new(b"Keytree.derivation");
+        t.commit_bytes(b"pt", self.precompressed_pubkey.as_bytes());
+        t.commit_bytes(b"dk", &self.dk);
+
+        // change the derivation path for this key
+        customize(&mut t);
+
+        // squeeze a challenge scalar
+        let f = t.challenge_scalar(b"f.leaf");
+        self.scalar + f
+    }
+
     /// Serializes this Xprv to a sequence of bytes.
     pub fn to_bytes(&self) -> [u8; 64] {
         let mut buf = [0u8; 64];
@@ -137,6 +152,24 @@ impl Xpub {
             dk: child_dk,
             precompressed_pubkey: child_point.compress(),
         }
+    }
+
+    /// Returns a leaf Xpub, which can safely be shared.
+    /// Users must provide customize, in order to separate sibling keys from one another
+    /// through unique derivation paths.
+    pub fn derive_key(&self, customize: impl FnOnce(&mut Transcript)) -> CompressedRistretto {
+        let mut t = Transcript::new(b"Keytree.derivation");
+        t.commit_bytes(b"pt", self.precompressed_pubkey.as_bytes());
+        t.commit_bytes(b"dk", &self.dk);
+
+        // change the derivation path for this key
+        customize(&mut t);
+
+        // squeeze a challenge scalar
+        let f = t.challenge_scalar(b"f.leaf");
+        // TBD: change this to VerificationKey after we factor out Musig (#239)
+        //      in order to preserve uncompressed point.
+        (self.point + (f * &constants::RISTRETTO_BASEPOINT_POINT)).compress()
     }
 
     /// Serializes this Xpub to a sequence of bytes.
@@ -214,6 +247,20 @@ mod tests {
         assert_eq!(
             to_hex_32(xprv.precompressed_pubkey.to_bytes()),
             "7414c0c5238c2277318ba3e51fc6fb8e836a2d9b4c04508f93cd5a455422221b"
+        );
+    }
+
+    #[test]
+    fn random_xprv_leaf_test() {
+        let seed = [0u8; 32];
+        let mut rng = ChaChaRng::from_seed(seed);
+        let xprv = Xprv::random(&mut rng).derive_key(|t| {
+            t.commit_u64(b"invoice_id", 10034);
+        });
+
+        assert_eq!(
+            hex::encode(xprv.as_bytes()),
+            "a71e5435c3374eef60928c3bac1378dcbc91bc1d554e09242247a0861fd12c0c"
         );
     }
 
@@ -310,6 +357,21 @@ mod tests {
         assert_eq!(
             to_hex_32(xpub.precompressed_pubkey.to_bytes()),
             "7414c0c5238c2277318ba3e51fc6fb8e836a2d9b4c04508f93cd5a455422221b"
+        );
+    }
+
+    #[test]
+    fn random_xpub_leaf_test() {
+        let seed = [0u8; 32];
+        let mut rng = ChaChaRng::from_seed(seed);
+        let xprv = Xprv::random(&mut rng);
+        let xpub = xprv.to_xpub().derive_key(|t| {
+            t.commit_u64(b"invoice_id", 10034);
+        });
+
+        assert_eq!(
+            hex::encode(xpub.as_bytes()),
+            "a202e8a0b6fb7123bf1e2aaaf90ed9c3c55f7d1975ed4b63b4417e5d7397c048"
         );
     }
 
