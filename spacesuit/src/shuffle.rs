@@ -171,7 +171,7 @@ mod tests {
             let mut prover_transcript = Transcript::new(b"ShuffleTest");
             let mut rng = rand::thread_rng();
 
-            let mut prover = Prover::new(&bp_gens, &pc_gens, &mut prover_transcript);
+            let mut prover = Prover::new(&pc_gens, &mut prover_transcript);
 
             let (input_com, input_vars): (Vec<CompressedRistretto>, Vec<Variable>) = input
                 .iter()
@@ -183,14 +183,14 @@ mod tests {
                 .unzip();
 
             scalar_shuffle(&mut prover, input_vars, output_vars)?;
-            let proof = prover.prove()?;
+            let proof = prover.prove(&bp_gens)?;
 
             (proof, input_com, output_com)
         };
 
         // Verifier makes a `ConstraintSystem` instance representing a shuffle gadget
         let mut verifier_transcript = Transcript::new(b"ShuffleTest");
-        let mut verifier = Verifier::new(&bp_gens, &pc_gens, &mut verifier_transcript);
+        let mut verifier = Verifier::new(&mut verifier_transcript);
 
         let input_vars: Vec<Variable> = input_com.iter().map(|com| verifier.commit(*com)).collect();
         let output_vars: Vec<Variable> =
@@ -199,7 +199,7 @@ mod tests {
         // Verifier adds constraints to the constraint system
         scalar_shuffle(&mut verifier, input_vars, output_vars)?;
 
-        Ok(verifier.verify(&proof)?)
+        Ok(verifier.verify(&proof, &pc_gens, &bp_gens)?)
     }
 
     // Helper functions to make the tests easier to read
@@ -301,19 +301,19 @@ mod tests {
             let mut prover_transcript = Transcript::new(b"ValueShuffleTest");
             let mut rng = rand::thread_rng();
 
-            let mut prover = Prover::new(&bp_gens, &pc_gens, &mut prover_transcript);
+            let mut prover = Prover::new(&pc_gens, &mut prover_transcript);
             let (input_com, input_vars) = input.commit(&mut prover, &mut rng);
             let (output_com, output_vars) = output.commit(&mut prover, &mut rng);
 
             assert!(value_shuffle(&mut prover, input_vars, output_vars).is_ok());
 
-            let proof = prover.prove()?;
+            let proof = prover.prove(&bp_gens)?;
             (proof, input_com, output_com)
         };
 
         // Verifier makes a `ConstraintSystem` instance representing a shuffle gadget
         let mut verifier_transcript = Transcript::new(b"ValueShuffleTest");
-        let mut verifier = Verifier::new(&bp_gens, &pc_gens, &mut verifier_transcript);
+        let mut verifier = Verifier::new(&mut verifier_transcript);
 
         let input_vars = input_com.commit(&mut verifier);
         let output_vars = output_com.commit(&mut verifier);
@@ -322,7 +322,7 @@ mod tests {
         assert!(value_shuffle(&mut verifier, input_vars, output_vars).is_ok());
 
         // Verifier verifies proof
-        Ok(verifier.verify(&proof)?)
+        Ok(verifier.verify(&proof, &pc_gens, &bp_gens)?)
     }
 
     #[test]
@@ -385,19 +385,19 @@ mod tests {
             let mut prover_transcript = Transcript::new(b"PaddedShuffleTest");
             let mut rng = rand::thread_rng();
 
-            let mut prover = Prover::new(&bp_gens, &pc_gens, &mut prover_transcript);
+            let mut prover = Prover::new(&pc_gens, &mut prover_transcript);
             let (input_com, input_vars) = input.commit(&mut prover, &mut rng);
             let (output_com, output_vars) = output.commit(&mut prover, &mut rng);
 
             assert!(padded_shuffle(&mut prover, input_vars, output_vars).is_ok());
 
-            let proof = prover.prove()?;
+            let proof = prover.prove(&bp_gens)?;
             (proof, input_com, output_com)
         };
 
         // Verifier makes a `ConstraintSystem` instance representing a shuffle gadget
         let mut verifier_transcript = Transcript::new(b"PaddedShuffleTest");
-        let mut verifier = Verifier::new(&bp_gens, &pc_gens, &mut verifier_transcript);
+        let mut verifier = Verifier::new(&mut verifier_transcript);
 
         let input_vars = input_com.commit(&mut verifier);
         let output_vars = output_com.commit(&mut verifier);
@@ -406,6 +406,6 @@ mod tests {
         assert!(padded_shuffle(&mut verifier, input_vars, output_vars).is_ok());
 
         // Verifier verifies proof
-        Ok(verifier.verify(&proof)?)
+        Ok(verifier.verify(&proof, &pc_gens, &bp_gens)?)
     }
 }
