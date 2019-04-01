@@ -22,10 +22,11 @@ pub enum MerkleNeighbor {
 pub struct MerkleTree {
     size: usize,
     label: &'static [u8],
-    root: Option<MerkleNode>,
+    root: MerkleNode,
 }
 
 enum MerkleNode {
+    Empty,
     Leaf([u8; 32]),
     Node([u8; 32], Box<MerkleNode>, Box<MerkleNode>),
 }
@@ -43,21 +44,13 @@ impl MerkleTree {
         MerkleTree {
             size: list.len(),
             label,
-            root: root,
+            root,
         }
     }
 
     /// Returns the root hash of the Merkle tree.
     pub fn hash(&self) -> [u8; 32] {
-        match &self.root {
-            None => {
-                let t = Transcript::new(self.label);
-                let mut result = [0u8; 32]; // xxx why must i preinitialize this?
-                Self::empty(t, &mut result);
-                result
-            }
-            Some(root) => root.hash().clone(),
-        }
+        return self.root.hash();
     }
 
     /// Builds the Merkle path of inclusion for the entry at the given index in the
@@ -68,13 +61,8 @@ impl MerkleTree {
         }
         let t = Transcript::new(self.label);
         let mut result = Vec::new();
-        match &self.root {
-            Some(x) => {
-                x.subpath(t, index, self.size, &mut result);
-                Ok(result)
-            }
-            _ => Err(VMError::InvalidMerkleProof),
-        }
+        self.root.subpath(t, index, self.size, &mut result)?;
+        Ok(result)
     }
 
     /// Verifies the Merkle path for an item givne the path and the Merkle root.
@@ -170,14 +158,21 @@ impl MerkleTree {
 }
 
 impl MerkleNode {
-    fn subpath(&self, t: Transcript, index: usize, size: usize, result: &mut Vec<MerkleNeighbor>) {
+    fn subpath(
+        &self,
+        t: Transcript,
+        index: usize,
+        size: usize,
+        result: &mut Vec<MerkleNeighbor>,
+    ) -> Result<_, VMError> {
         match self {
-            MerkleNode::Leaf(_) => return,
+            MerkleNode::Empty => Err(VMError::InvalidMerkleProof),
+            MerkleNode::Leaf(_) => Ok(()),
             MerkleNode::Node(_, l, r) => {
                 let k = size.next_power_of_two() / 2;
                 if index >= k {
                     result.insert(0, MerkleNeighbor::Left(*l.hash()));
-                    return r.subpath(t, index - k, size - k, result);
+                    r.subpath(t, index - k, size - k, result)
                 } else {
                     result.insert(0, MerkleNeighbor::Right(*r.hash()));
                     return l.subpath(t, index, k, result);
@@ -187,10 +182,16 @@ impl MerkleNode {
     }
 
     /// Returns the hash of a Merkle tree.
-    fn hash(&self) -> &[u8; 32] {
+    fn hash(&self) -> [u8; 32] {
         match self {
-            MerkleNode::Leaf(h) => h,
-            MerkleNode::Node(h, _, _) => h,
+            MerkleNode::Empty => {
+                let t = Transcript::new(self.label);
+                let mut result = [0u8; 32];
+                Self::empty(t, &mut result);
+                result
+            }
+            MerkleNode::Leaf(h) => h.clone(),
+            MerkleNode::Node(h, _, _) => h.clone(),
         }
     }
 }
