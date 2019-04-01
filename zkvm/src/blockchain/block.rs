@@ -1,9 +1,10 @@
 use super::errors::BCError;
-use crate::{MerkleTree, TxLog};
+use crate::{MerkleTree, Tx, TxID, TxLog, Verifier};
 use merlin::Transcript;
 
 pub struct BlockID(pub [u8; 32]);
 
+#[derive(Clone)]
 pub struct BlockHeader {
     pub version: u64,
     pub height: u64,
@@ -16,7 +17,6 @@ pub struct BlockHeader {
     pub ext: [u8],
 }
 
-#[derive(Clone)]
 impl BlockHeader {
     pub fn id(&self) -> BlockID {
         let t = Transcript::new("ZkVM.blockheader");
@@ -58,22 +58,22 @@ pub struct Block {
 impl Block {
     pub fn validate(&self, prev: &BlockHeader) -> Result<Vec<TxLog>, BCError> {
         if self.header.version < prev.version {
-            return Err(VersionReversion);
+            return Err(BCError::VersionReversion);
         }
         if self.header.version == 1 && self.header.ext.len() != 0 {
-            return Err(IllegalExtension);
+            return Err(BCError::IllegalExtension);
         }
         if self.header.height != prev.height + 1 {
-            return Err(BadHeight);
+            return Err(BCError::BadHeight);
         }
         if self.header.prev != prev.id() {
-            return Err(MismatchedPrev);
+            return Err(BCError::MismatchedPrev);
         }
         if self.header.timestamp_ms <= prev.timestamp_ms {
-            return Err(BadBlockTimestamp);
+            return Err(BCError::BadBlockTimestamp);
         }
         if self.header.refscount > prev.refscount + 1 {
-            return Err(BadRefscount);
+            return Err(BCError::BadRefscount);
         }
 
         let mut txlogs: Vec<TxLog> = Vec::new();
@@ -82,10 +82,10 @@ impl Block {
         for tx in self.txs.iter() {
             if tx.mintime_ms > self.header.timestamp_ms || self.header.timestamp_ms > tx.maxtime_ms
             {
-                return Err(BadTxTimestamp(tx));
+                return Err(BCError::BadTxTimestamp(tx));
             }
             if self.header.version == 1 && tx.header.version != 1 {
-                return Err(BadTxVersion(tx));
+                return Err(BCError::BadTxVersion(tx));
             }
             let txlog = Verifier::verify_tx(tx, bp_gens)?;
             txlogs.push(txlog);
@@ -96,7 +96,7 @@ impl Block {
         let merkle_tree = MerkleTree::build(b"transaction_ids", &txids[..]);
         let txroot = merkle_tree.hash();
         if self.header.txroot != txroot {
-            return Err(TxrootMismatch);
+            return Err(BCError::TxrootMismatch);
         }
 
         Ok(txlogs)

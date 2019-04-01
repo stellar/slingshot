@@ -1,6 +1,6 @@
 use crate::Tx;
 
-#[derive(Fail)]
+#[derive(Debug, Fail)]
 pub enum BCError {
     #[fail(display = "version reversion")]
     VersionReversion,

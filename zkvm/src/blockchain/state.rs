@@ -1,5 +1,5 @@
-use super::block::{Block, BlockHeader};
-use crate::{Entry, VMError, UTXO};
+use super::block::{Block, BlockHeader, BlockID};
+use crate::{Entry, VMError, TxLog, UTXO};
 use std::collections::{HashSet, VecDeque};
 
 #[derive(Clone)]
@@ -13,11 +13,10 @@ pub struct BCState {
     pub initial_id: BlockID,
 }
 
-#[derive(Clone)]
 impl BCState {
     pub fn make_initial(timestamp_ms: u64, refscount: u64) -> BCState {
         let initialHeader = BlockHeader::make_initial(timestamp_ms, refscount);
-        State {
+        BCState {
             initial: initialHeader.clone(),
             initial_id: initialHeader.id(),
             tip: initialHeader,
@@ -33,7 +32,7 @@ impl BCState {
 
         // Remove expired nonces.
         while let Some(nonce_pair) = new_state.nonces.front() {
-            if nonce_pair.1 >= timestamp_ms {
+            if nonce_pair.1 >= b.header.timestamp_ms {
                 break;
             }
             new_state.nonces.pop_front();
@@ -46,7 +45,7 @@ impl BCState {
         }
     }
 
-    fn apply_txlog(&mut self) -> Result<(), VMError> {
+    fn apply_txlog(&mut self, txlog: &TxLog) -> Result<(), VMError> {
         for entry in txlog.iter() {
             if let Entry::Nonce(blockID, exp_ms, anchor) = entry {
                 // xxx check blockID is self.initialID or in self.ref_ids
