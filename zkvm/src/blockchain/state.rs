@@ -1,5 +1,5 @@
-use crate::{Entry, UTXO, VMError};
 use super::block::{Block, BlockHeader};
+use crate::{Entry, VMError, UTXO};
 use std::collections::{HashSet, VecDeque};
 
 #[derive(Clone)]
@@ -7,10 +7,10 @@ pub struct BCState {
     pub initial: BlockHeader,
     pub tip: BlockHeader,
     pub utxos: HashSet<UTXO>,
-    pub nonces: VecDeque<([u8; 32], i64)>,
-    pub ref_ids: VecDeque<BlockID>,
+    pub nonces: VecDeque<([u8; 32], i64)>, // xxx need fast lookup by anchor
+    pub ref_ids: VecDeque<BlockID>,        // xxx need fast lookup by blockID
 
-    pub initial_id: BlockID;
+    pub initial_id: BlockID,
 }
 
 #[derive(Clone)]
@@ -19,11 +19,11 @@ impl BCState {
         let initialHeader = BlockHeader::make_initial(timestamp_ms, refscount);
         State {
             initial: initialHeader.clone(),
-            tip: initialHeader.clone(),
+            initial_id: initialHeader.id(),
+            tip: initialHeader,
             utxos: HashSet::new(),
             nonces: VecDeque::new(),
             ref_ids: VecDeque::new(),
-            initial_id: initialHeader.id()
         }
     }
 
@@ -54,7 +54,7 @@ impl BCState {
                 // xxx add (anchor, exp_ms) to self.nonces
             }
         }
-        
+
         for entry in txlog.iter() {
             match entry {
                 Entry::Input(contractID) => {
