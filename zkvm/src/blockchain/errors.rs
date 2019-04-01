@@ -1,5 +1,3 @@
-use crate::Tx;
-
 #[derive(Debug, Fail)]
 pub enum BCError {
     #[fail(display = "version reversion")]
@@ -21,10 +19,10 @@ pub enum BCError {
     BadRefscount,
 
     #[fail(display = "bad tx timestamp")]
-    BadTxTimestamp(Tx),
+    BadTxTimestamp,
 
     #[fail(display = "bad tx version")]
-    BadTxVersion(Tx),
+    BadTxVersion,
 
     #[fail(display = "txroot mismatch")]
     TxrootMismatch,

@@ -2,6 +2,7 @@ use super::errors::BCError;
 use crate::{MerkleTree, Tx, TxID, TxLog, Verifier};
 use merlin::Transcript;
 
+#[derive(Clone, PartialEq)]
 pub struct BlockID(pub [u8; 32]);
 
 #[derive(Clone)]
@@ -14,15 +15,15 @@ pub struct BlockHeader {
     pub utxoroot: [u8; 32],
     pub nonceroot: [u8; 32],
     pub refscount: u64,
-    pub ext: [u8],
+    pub ext: Box<[u8]>,
 }
 
 impl BlockHeader {
     pub fn id(&self) -> BlockID {
-        let t = Transcript::new("ZkVM.blockheader");
+        let t = Transcript::new(b"ZkVM.blockheader");
         t.commit_u64(b"version", self.version);
         t.commit_u64(b"height", self.height);
-        t.commit_bytes(b"previd", &self.prev);
+        t.commit_bytes(b"previd", &self.prev.0);
         t.commit_u64(b"timestamp_ms", self.timestamp_ms);
         t.commit_bytes(b"txroot", &self.txroot);
         t.commit_bytes(b"utxoroot", &self.utxoroot);
@@ -45,7 +46,7 @@ impl BlockHeader {
             utxoroot: [0; 32],
             nonceroot: [0; 32],
             refscount: refscount,
-            ext: [],
+            ext: Box::new([]),
         }
     }
 }
@@ -80,12 +81,12 @@ impl Block {
         let mut txids: Vec<TxID> = Vec::new();
 
         for tx in self.txs.iter() {
-            if tx.mintime_ms > self.header.timestamp_ms || self.header.timestamp_ms > tx.maxtime_ms
+            if tx.header.mintime_ms > self.header.timestamp_ms || self.header.timestamp_ms > tx.header.maxtime_ms
             {
-                return Err(BCError::BadTxTimestamp(tx));
+                return Err(BCError::BadTxTimestamp);
             }
             if self.header.version == 1 && tx.header.version != 1 {
-                return Err(BCError::BadTxVersion(tx));
+                return Err(BCError::BadTxVersion);
             }
             let txlog = Verifier::verify_tx(tx, bp_gens)?;
             txlogs.push(txlog);
