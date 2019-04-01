@@ -79,7 +79,7 @@ impl<'t> Delegate<r1cs::Verifier<'t>> for Verifier<'t> {
 impl<'t> Verifier<'t> {
     /// Verifies the `Tx` object by executing the VM and returns the `VerifiedTx`.
     /// Returns an error if the program is malformed or any of the proofs are not valid.
-    pub fn verify_tx(tx: Tx, bp_gens: &BulletproofGens) -> Result<VerifiedTx, VMError> {
+    pub fn verify_tx(tx: &Tx, bp_gens: &BulletproofGens) -> Result<VerifiedTx, VMError> {
         let mut r1cs_transcript = Transcript::new(b"ZkVM.r1cs");
         let cs = r1cs::Verifier::new(&mut r1cs_transcript);
 

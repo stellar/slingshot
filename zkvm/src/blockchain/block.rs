@@ -88,10 +88,15 @@ impl Block {
             if self.header.version == 1 && tx.header.version != 1 {
                 return Err(BCError::BadTxVersion);
             }
-            let txlog = Verifier::verify_tx(tx, bp_gens)?;
-            txlogs.push(txlog);
-            let txid = tx.id(txlog);
-            txids.push(txid);
+
+            match Verifier::verify_tx(tx, bp_gens) {
+                Ok(verified) => {
+                    let txid = TxID::from_log(&verified.log);
+                    txids.push(txid);
+                    txlogs.push(verified.log);
+                }
+            }
+
         }
 
         let merkle_tree = MerkleTree::build(b"transaction_ids", &txids[..]);

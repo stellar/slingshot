@@ -26,4 +26,7 @@ pub enum BCError {
 
     #[fail(display = "txroot mismatch")]
     TxrootMismatch,
+
+    #[fail(display = "tx validation")]
+    TxValidation
 }
