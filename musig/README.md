@@ -1,9 +1,9 @@
 # Signatures: Engineering design doc
 
 This is a signature scheme for signing messages. 
-This is the second iteration, and describes the protocol for signing a single message with one public key 
+This design doc describes the protocol for signing a single message with one public key 
 (where the public key can be created from a single party's private key, 
-or it can be created from the aggregation of multiple public keys),
+or from the aggregation of multiple public keys),
 and for signing multiple messages with multiple public keys.
 
 In future iterations, we can consider signing with public keys that are nested aggregations of public keys.
@@ -78,7 +78,7 @@ Fields:
 Functions:
 - `Multimessage::new(Vec<(VerificationKey, [u8])) -> Self`: creates a new MultiMessage instance using the inputs.
 
-- `Multimessage::commit(&self, &mut transcript)`: It commits each of the pairs in `self.pairs` to the input `transcript`,
+- `Multimessage::commit(&self, &mut transcript)`: It commits to the number of pairs, with `transcript.commit_u64(self.pairs.len())`. It then commits each of the pairs in `self.pairs` to the input `transcript`,
   by iterating through `self.pairs` and committing the `VerificationKey` with label "X" and the message with label "m".
 
 - `Multimessage::challenge(&self, &verification_key, &mut transcript, &nonce_commitment) -> Scalar`: 
