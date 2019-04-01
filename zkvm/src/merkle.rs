@@ -26,7 +26,7 @@ pub struct MerkleTree {
 }
 
 enum MerkleNode {
-    Empty,
+    Empty([u8; 32]),
     Leaf([u8; 32]),
     Node([u8; 32], Box<MerkleNode>, Box<MerkleNode>),
 }
@@ -95,23 +95,20 @@ impl MerkleTree {
     /// Builds and returns the root hash of a Merkle tree constructed from
     /// the supplied list.
     pub fn root<M: MerkleItem>(label: &'static [u8], list: &[M]) -> [u8; 32] {
-        let t = Transcript::new(label);
-        let mut result = [0u8; 32];
-        Self::node(t, list, &mut result);
-        result
+        let tree = Self::build(label, list);
+        tree.root.hash()
     }
 
     fn build_tree<M: MerkleItem>(mut t: Transcript, list: &[M]) -> MerkleNode {
+        let mut h = [0u8; 32];
         match list.len() {
             0 => {
-                let mut leaf = [0u8; 32];
-                Self::empty(t, &mut leaf);
-                return MerkleNode::Leaf(leaf);
+                Self::empty(t, &mut h);
+                MerkleNode::Empty(h)
             }
             1 => {
-                let mut leaf = [0u8; 32];
-                Self::leaf(t, &list[0], &mut leaf);
-                return MerkleNode::Leaf(leaf);
+                Self::leaf(t, &list[0], &mut h);
+                MerkleNode::Leaf(h)
             }
             n => {
                 let k = n.next_power_of_two() / 2;
@@ -121,23 +118,7 @@ impl MerkleTree {
                 t.commit_bytes(b"L", &left.hash());
                 t.commit_bytes(b"R", &right.hash());
                 t.challenge_bytes(b"merkle.node", &mut node);
-                return MerkleNode::Node(node, Box::new(left), Box::new(right));
-            }
-        }
-    }
-
-    fn node<M: MerkleItem>(mut t: Transcript, list: &[M], result: &mut [u8; 32]) {
-        match list.len() {
-            0 => Self::empty(t, result),
-            1 => Self::leaf(t, &list[0], result),
-            n => {
-                let k = n.next_power_of_two() / 2;
-                let mut righthash = [0u8; 32];
-                Self::node(t.clone(), &list[..k], result);
-                Self::node(t.clone(), &list[k..], &mut righthash);
-                t.commit_bytes(b"L", result);
-                t.commit_bytes(b"R", &righthash);
-                t.challenge_bytes(b"merkle.node", result);
+                MerkleNode::Node(node, Box::new(left), Box::new(right))
             }
         }
     }
@@ -161,7 +142,7 @@ impl MerkleNode {
         result: &mut Vec<MerkleNeighbor>,
     ) -> Result<(), VMError> {
         match self {
-            MerkleNode::Empty => Err(VMError::InvalidMerkleProof),
+            MerkleNode::Empty(_) => Err(VMError::InvalidMerkleProof),
             MerkleNode::Leaf(_) => Ok(()),
             MerkleNode::Node(_, l, r) => {
                 let k = size.next_power_of_two() / 2;
@@ -179,12 +160,7 @@ impl MerkleNode {
     /// Returns the hash of a Merkle tree.
     fn hash(&self) -> [u8; 32] {
         match self {
-            MerkleNode::Empty => {
-                let t = Transcript::new(self.label);
-                let mut result = [0u8; 32];
-                Self::empty(t, &mut result);
-                result
-            }
+            MerkleNode::Empty(h) => h.clone(),
             MerkleNode::Leaf(h) => h.clone(),
             MerkleNode::Node(h, _, _) => h.clone(),
         }
