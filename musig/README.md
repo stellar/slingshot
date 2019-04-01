@@ -215,11 +215,12 @@ There are several paths to verifying:
     - multimessage: `Multimessage` 
 
     Operation:
-    - Iterate through each (pubkey, message) pair in `multimessage`. For each, create `c_i` by calling
-      `multimessage.challenge(...)` and passing in the verification key, transcript, and `self.R`. 
-      Then, decompress the verification key to make `X_i: RistrettoPoint`. 
-      If this fails, return `Err(VMError::InvalidPoint)`.
-    - Check if `s * G == sum_i(X_i * c_i) + R`. `G` is the [base point](#base-point).
+    - Use `multimessage.commit(&mut transcript)` to commit the key
+    - Commit the `self.R` to the transcript with label "R".
+    - Use `multimessage.challenge(pubkey, &mut transcript)` to get the per-pubkey challenge `c_i`.
+    - Sum up `sum_i(X_i * c_i)` into `cX`. This requires decompressing each pubkey to make `X_i`. 
+      If the decompression fails, return `Err(VMError::InvalidPoint)`.
+    - Check if `s * G == cX + R`. `G` is the [base point](#base-point).
 
     Output:
     - `Ok(())` if verification succeeds, or `Err(VMError)` if the verification or point decompression fail.
@@ -327,9 +328,9 @@ Operation:
 - Call `commit_nonce(...)` on each of `self.counterparties`, with the received `nonce_commitments`. 
 This checks that the stored precommitments match the received commitments. 
 If it succeeds, it will return `CounterpartyCommitted`s.
+- Commit the context to `self.transcript` by calling `MusigContext::challenge(...)`.
 - Make `nonce_sum` = sum(`nonce_commitments`)
 - Commit `nonce_sum` to `self.transcript` with label "R".
-- Commit the context to `self.transcript` by calling `MusigContext::challenge(...)`.
 - Make `c_i` = `context.challenge(self.privkey, &mut transcript)`
 - Make `s_i` = `r_i + c_i * x_i`, where `x_i` = `self.privkey` and `r_i` = `self.nonce`
 
