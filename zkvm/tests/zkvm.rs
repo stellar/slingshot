@@ -137,8 +137,8 @@ fn build_and_verify(program: Program, keys: &Vec<Scalar>) -> Result<TxID, VMErro
         let bp_gens = BulletproofGens::new(256, 1);
         let header = TxHeader {
             version: 0u64,
-            mintime: 0u64,
-            maxtime: 0u64,
+            mintime_ms: 0u64,
+            maxtime_ms: 0u64,
         };
         let gens = PedersenGens::default();
         Prover::build_tx(program, header, &bp_gens, |t, verification_keys| {
@@ -160,7 +160,7 @@ fn build_and_verify(program: Program, keys: &Vec<Scalar>) -> Result<TxID, VMErro
     // Verify tx
     let bp_gens = BulletproofGens::new(256, 1);
 
-    let vtx = Verifier::verify_tx(tx, &bp_gens)?;
+    let vtx = Verifier::verify_tx(&tx, &bp_gens)?;
     Ok(vtx.id)
 }
 

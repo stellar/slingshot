@@ -106,8 +106,8 @@ mod tests {
     fn txlog_helper() -> Vec<Entry> {
         vec![
             Entry::Header(TxHeader {
-                mintime: 0,
-                maxtime: 0,
+                mintime_ms: 0,
+                maxtime_ms: 0,
                 version: 0,
             }),
             Entry::Issue(
