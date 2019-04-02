@@ -36,11 +36,11 @@ B = e2f2ae0a6abc4e71a884a961c500515f58e30b6aa582dd8db6a65945e08d2d76
 
 ### MusigContext
 
-This is a private trait with two functions:
+This is a private trait with three functions:
 - `commit(&self, &mut transcript)`: takes a mutable transcript, and commits the internal context to the transcript.
 - `challenge(&self, &verification_key, &mut transcript) -> Scalar`: takes a public key and mutable transcript, and returns the 
   suitable challenge for that public key. 
-- `get_pubkeys(&self) -> Vec<VerificationKey>`: returns the associate public keys.
+- `get_pubkeys(&self) -> Vec<VerificationKey>`: returns the associated public keys.
 
 ### Multikey (implements MusigContext)
 
@@ -217,7 +217,7 @@ There are several paths to verifying:
 
     Operation:
     - Use `multimessage.commit(&mut transcript)` to commit the key
-    - Commit the `self.R` to the transcript with label "R".
+    - Commit `self.R` to the transcript with label "R".
     - Use `multimessage.challenge(pubkey, &mut transcript)` to get the per-pubkey challenge `c_i`.
     - Sum up `sum_i(X_i * c_i)` into `cX`. This requires decompressing each pubkey to make `X_i`. 
       If the decompression fails, return `Err(VMError::InvalidPoint)`.
