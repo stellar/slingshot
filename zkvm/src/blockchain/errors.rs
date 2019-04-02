@@ -1,7 +1,7 @@
 use crate::errors::VMError;
 
 #[derive(Debug, Fail)]
-pub enum BCError {
+pub enum BlockchainError {
     #[fail(display = "version reversion")]
     VersionReversion,
 

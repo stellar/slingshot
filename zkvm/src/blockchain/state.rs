@@ -1,10 +1,10 @@
 use super::block::{Block, BlockHeader, BlockID};
-use super::errors::BCError;
+use super::errors::BlockchainError;
 use crate::{Entry, TxLog, VMError, UTXO};
 use std::collections::{HashSet, VecDeque};
 
 #[derive(Clone)]
-pub struct BCState {
+pub struct BlockchainState {
     pub initial: BlockHeader,
     pub tip: BlockHeader,
     pub utxos: HashSet<UTXO>,
@@ -14,10 +14,10 @@ pub struct BCState {
     pub initial_id: BlockID,
 }
 
-impl BCState {
-    pub fn make_initial(timestamp_ms: u64, refscount: u64) -> BCState {
+impl BlockchainState {
+    pub fn make_initial(timestamp_ms: u64, refscount: u64) -> BlockchainState {
         let initialHeader = BlockHeader::make_initial(timestamp_ms, refscount);
-        BCState {
+        BlockchainState {
             initial: initialHeader.clone(),
             initial_id: initialHeader.id(),
             tip: initialHeader,
@@ -27,7 +27,7 @@ impl BCState {
         }
     }
 
-    pub fn apply_block(&self, b: &Block) -> Result<BCState, BCError> {
+    pub fn apply_block(&self, b: &Block) -> Result<BlockchainState, BlockchainError> {
         let txlogs = b.validate(&self.tip)?;
         let mut new_state = self.clone();
 
@@ -41,7 +41,7 @@ impl BCState {
 
         for txlog in txlogs.iter() {
             if let Err(err) = new_state.apply_txlog(&txlog) {
-                return Err(BCError::TxValidation(err));
+                return Err(BlockchainError::TxValidation(err));
             }
         }
 

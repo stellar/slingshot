@@ -1,7 +1,7 @@
 use bulletproofs::BulletproofGens;
 use merlin::Transcript;
 
-use super::errors::BCError;
+use super::errors::BlockchainError;
 use crate::{MerkleTree, Tx, TxID, TxLog, Verifier};
 
 #[derive(Clone, PartialEq)]
@@ -17,7 +17,7 @@ pub struct BlockHeader {
     pub utxoroot: [u8; 32],
     pub nonceroot: [u8; 32],
     pub refscount: u64,
-    pub ext: Box<[u8]>,
+    pub ext: Vec<u8>,
 }
 
 impl BlockHeader {
@@ -48,7 +48,7 @@ impl BlockHeader {
             utxoroot: [0; 32],
             nonceroot: [0; 32],
             refscount: refscount,
-            ext: Box::new([]),
+            ext: Vec::new(),
         }
     }
 }
@@ -59,37 +59,37 @@ pub struct Block {
 }
 
 impl Block {
-    pub fn validate(&self, prev: &BlockHeader) -> Result<Vec<TxLog>, BCError> {
+    pub fn validate(&self, prev: &BlockHeader) -> Result<Vec<TxLog>, BlockchainError> {
         if self.header.version < prev.version {
-            return Err(BCError::VersionReversion);
+            return Err(BlockchainError::VersionReversion);
         }
         if self.header.version == 1 && self.header.ext.len() != 0 {
-            return Err(BCError::IllegalExtension);
+            return Err(BlockchainError::IllegalExtension);
         }
         if self.header.height != prev.height + 1 {
-            return Err(BCError::BadHeight);
+            return Err(BlockchainError::BadHeight);
         }
         if self.header.prev != prev.id() {
-            return Err(BCError::MismatchedPrev);
+            return Err(BlockchainError::MismatchedPrev);
         }
         if self.header.timestamp_ms <= prev.timestamp_ms {
-            return Err(BCError::BadBlockTimestamp);
+            return Err(BlockchainError::BadBlockTimestamp);
         }
         if self.header.refscount > prev.refscount + 1 {
-            return Err(BCError::BadRefscount);
+            return Err(BlockchainError::BadRefscount);
         }
 
-        let mut txlogs: Vec<TxLog> = Vec::new();
-        let mut txids: Vec<TxID> = Vec::new();
+        let mut txlogs: Vec<TxLog> = Vec::with_capacity(self.txs.len());
+        let mut txids: Vec<TxID> = Vec::with_capacity(self.txs.len());
 
         for tx in self.txs.iter() {
             if tx.header.mintime_ms > self.header.timestamp_ms
                 || self.header.timestamp_ms > tx.header.maxtime_ms
             {
-                return Err(BCError::BadTxTimestamp);
+                return Err(BlockchainError::BadTxTimestamp);
             }
             if self.header.version == 1 && tx.header.version != 1 {
-                return Err(BCError::BadTxVersion);
+                return Err(BlockchainError::BadTxVersion);
             }
 
             // TODO(bobg): The API currently requires anticipating how many multipliers (generators) are needed,
@@ -106,14 +106,14 @@ impl Block {
                     txids.push(txid);
                     txlogs.push(verified.log);
                 }
-                Err(err) => return Err(BCError::TxValidation(err)),
+                Err(err) => return Err(BlockchainError::TxValidation(err)),
             }
         }
 
         let merkle_tree = MerkleTree::build(b"transaction_ids", &txids[..]);
         let txroot = merkle_tree.hash();
         if &self.header.txroot != txroot {
-            return Err(BCError::TxrootMismatch);
+            return Err(BlockchainError::TxrootMismatch);
         }
 
         Ok(txlogs)
