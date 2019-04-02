@@ -89,7 +89,7 @@ impl<'t> Verifier<'t> {
             cs: cs,
         };
 
-        let vm = VM::new(tx.header, VerifierRun::new(tx.program), &mut verifier);
+        let vm = VM::new(tx.header, VerifierRun::new(tx.program.clone()), &mut verifier);
 
         let (txid, txlog) = vm.run()?;
 

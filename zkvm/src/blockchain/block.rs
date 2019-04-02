@@ -1,6 +1,8 @@
+use bulletproofs::{BulletproofGens};
+use merlin::Transcript;
+
 use super::errors::BCError;
 use crate::{MerkleTree, Tx, TxID, TxLog, Verifier};
-use merlin::Transcript;
 
 #[derive(Clone, PartialEq)]
 pub struct BlockID(pub [u8; 32]);
@@ -20,7 +22,7 @@ pub struct BlockHeader {
 
 impl BlockHeader {
     pub fn id(&self) -> BlockID {
-        let t = Transcript::new(b"ZkVM.blockheader");
+        let mut t = Transcript::new(b"ZkVM.blockheader");
         t.commit_u64(b"version", self.version);
         t.commit_u64(b"height", self.height);
         t.commit_bytes(b"previd", &self.prev.0);
@@ -31,7 +33,7 @@ impl BlockHeader {
         t.commit_u64(b"refscount", self.refscount);
         t.commit_bytes(b"ext", &self.ext);
 
-        let result: [u8; 32];
+        let mut result = [0u8; 32];
         t.challenge_bytes(b"id", &mut result);
         BlockID(result)
     }
@@ -81,7 +83,8 @@ impl Block {
         let mut txids: Vec<TxID> = Vec::new();
 
         for tx in self.txs.iter() {
-            if tx.header.mintime_ms > self.header.timestamp_ms || self.header.timestamp_ms > tx.header.maxtime_ms
+            if tx.header.mintime_ms > self.header.timestamp_ms
+                || self.header.timestamp_ms > tx.header.maxtime_ms
             {
                 return Err(BCError::BadTxTimestamp);
             }
@@ -89,14 +92,22 @@ impl Block {
                 return Err(BCError::BadTxVersion);
             }
 
-            match Verifier::verify_tx(tx, bp_gens) {
+            // TODO(bobg): The API currently requires anticipating how many multipliers (generators) are needed,
+            // _before_ knowing what's in the transaction.
+            // The value is 64 for each range proof,
+            // and there are at least as many range proofs as outputs in the tx.
+            // Guessing a value should _not_ be part of the tx-verifying API.
+            // Related: https://github.com/dalek-cryptography/bulletproofs/pull/263
+            let bp_gens = BulletproofGens::new(64 * 64, 1);
+
+            match Verifier::verify_tx(tx, &bp_gens) {
                 Ok(verified) => {
                     let txid = TxID::from_log(&verified.log);
                     txids.push(txid);
                     txlogs.push(verified.log);
                 }
+                Err(err) => return Err(BCError::TxValidation(err)),
             }
-
         }
 
         let merkle_tree = MerkleTree::build(b"transaction_ids", &txids[..]);

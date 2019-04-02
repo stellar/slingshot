@@ -29,7 +29,7 @@ impl BCState {
 
     pub fn apply_block(&self, b: &Block) -> Result<BCState, BCError> {
         let txlogs = b.validate(&self.tip)?;
-        let new_state = self.clone();
+        let mut new_state = self.clone();
 
         // Remove expired nonces.
         while let Some(nonce_pair) = new_state.nonces.front() {
@@ -51,6 +51,7 @@ impl BCState {
     fn apply_txlog(&mut self, txlog: &TxLog) -> Result<(), VMError> {
         for entry in txlog.iter() {
             if let Entry::Nonce(blockID, exp_ms, anchor) = entry {
+                // xxx note, when filling in this code, rename the destructing vars to remove the leading _
                 // xxx check blockID is self.initialID or in self.ref_ids
                 // xxx check anchor is not in self.nonces
                 // xxx add (anchor, exp_ms) to self.nonces
@@ -67,6 +68,8 @@ impl BCState {
                 Entry::Output(output) => {
                     // xxx add output.id to self.utxos
                 }
+
+                _ => {}
             }
         }
 
