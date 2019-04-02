@@ -51,6 +51,34 @@ impl BlockHeader {
             ext: Vec::new(),
         }
     }
+
+    pub fn validate(&self, prev: &Self) -> Result<(), BlockchainError> {
+        check(
+            self.version >= prev.version,
+            BlockchainError::VersionReversion,
+        )?;
+        check(
+            self.version > 1 || self.ext.len() == 0,
+            BlockchainError::IllegalExtension,
+        )?;
+        check(self.height == prev.height + 1, BlockchainError::BadHeight)?;
+        check(self.prev == prev.id(), BlockchainError::MismatchedPrev)?;
+        check(
+            self.timestamp_ms > prev.timestamp_ms,
+            BlockchainError::BadBlockTimestamp,
+        )?;
+        check(
+            self.refscount <= prev.refscount + 1,
+            BlockchainError::BadRefscount,
+        )
+    }
+}
+
+fn check(cond: bool, err: BlockchainError) -> Result<(), BlockchainError> {
+    if !cond {
+        return Err(err);
+    }
+    Ok(())
 }
 
 pub struct Block {
@@ -60,24 +88,7 @@ pub struct Block {
 
 impl Block {
     pub fn validate(&self, prev: &BlockHeader) -> Result<Vec<TxLog>, BlockchainError> {
-        if self.header.version < prev.version {
-            return Err(BlockchainError::VersionReversion);
-        }
-        if self.header.version == 1 && self.header.ext.len() != 0 {
-            return Err(BlockchainError::IllegalExtension);
-        }
-        if self.header.height != prev.height + 1 {
-            return Err(BlockchainError::BadHeight);
-        }
-        if self.header.prev != prev.id() {
-            return Err(BlockchainError::MismatchedPrev);
-        }
-        if self.header.timestamp_ms <= prev.timestamp_ms {
-            return Err(BlockchainError::BadBlockTimestamp);
-        }
-        if self.header.refscount > prev.refscount + 1 {
-            return Err(BlockchainError::BadRefscount);
-        }
+        self.header.validate(prev)?;
 
         let mut txlogs: Vec<TxLog> = Vec::with_capacity(self.txs.len());
         let mut txids: Vec<TxID> = Vec::with_capacity(self.txs.len());
