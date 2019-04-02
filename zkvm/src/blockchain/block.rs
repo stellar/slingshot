@@ -87,7 +87,7 @@ pub struct Block {
 }
 
 impl Block {
-    pub fn validate(&self, prev: &BlockHeader) -> Result<Vec<TxLog>, BlockchainError> {
+    pub fn validate(&self, prev: &BlockHeader, bp_gens: &BulletproofGens) -> Result<Vec<TxLog>, BlockchainError> {
         self.header.validate(prev)?;
 
         let mut txlogs: Vec<TxLog> = Vec::with_capacity(self.txs.len());
@@ -103,15 +103,7 @@ impl Block {
                 return Err(BlockchainError::BadTxVersion);
             }
 
-            // TODO(bobg): The API currently requires anticipating how many multipliers (generators) are needed,
-            // _before_ knowing what's in the transaction.
-            // The value is 64 for each range proof,
-            // and there are at least as many range proofs as outputs in the tx.
-            // Guessing a value should _not_ be part of the tx-verifying API.
-            // Related: https://github.com/dalek-cryptography/bulletproofs/pull/263
-            let bp_gens = BulletproofGens::new(64 * 64, 1);
-
-            match Verifier::verify_tx(tx, &bp_gens) {
+            match Verifier::verify_tx(tx, bp_gens) {
                 Ok(verified) => {
                     let txid = TxID::from_log(&verified.log);
                     txids.push(txid);

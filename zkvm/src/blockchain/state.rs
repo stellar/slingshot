@@ -1,7 +1,9 @@
+use bulletproofs::BulletproofGens;
+use std::collections::{HashSet, VecDeque};
+
 use super::block::{Block, BlockHeader, BlockID};
 use super::errors::BlockchainError;
 use crate::{Entry, TxLog, VMError, UTXO};
-use std::collections::{HashSet, VecDeque};
 
 #[derive(Clone)]
 pub struct BlockchainState {
@@ -27,8 +29,12 @@ impl BlockchainState {
         }
     }
 
-    pub fn apply_block(&self, b: &Block) -> Result<BlockchainState, BlockchainError> {
-        let txlogs = b.validate(&self.tip)?;
+    pub fn apply_block(
+        &self,
+        b: &Block,
+        bp_gens: &BulletproofGens,
+    ) -> Result<BlockchainState, BlockchainError> {
+        let txlogs = b.validate(&self.tip, bp_gens)?;
         let mut new_state = self.clone();
 
         // Remove expired nonces.
