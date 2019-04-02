@@ -28,6 +28,9 @@ benchmarks with `cargo bench`.
 This is a research project sponsored by [Interstellar][interstellar],
 developed by Henry de Valence, Cathie Yun, and Oleg Andreev.
 
+The Spacesuit repository was moved from [this location][old_repo] on 2/7/2019.
+
+
 [bp_website]: https://crypto.stanford.edu/bulletproofs/
 [bp_repo]: https://github.com/dalek-cryptography/bulletproofs/
 [interstellar]: https://interstellar.com/
@@ -35,3 +38,4 @@ developed by Henry de Valence, Cathie Yun, and Oleg Andreev.
 [spacesuit_repo]: https://github.com/interstellar/slingshot/blob/main/spacesuit
 [spacesuit_crate]: https://crates.io/crates/spacesuit
 [criterion]: https://github.com/japaric/criterion.rs
+[old_repo]: https://github.com/interstellar/spacesuit
