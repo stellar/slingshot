@@ -2,7 +2,7 @@ use bulletproofs::r1cs;
 use bulletproofs::{BulletproofGens, PedersenGens};
 use curve25519_dalek::ristretto::CompressedRistretto;
 use merlin::Transcript;
-use musig::{Multikey, VerificationKey};
+use musig::VerificationKey;
 
 use crate::constraints::Commitment;
 use crate::encoding::*;
@@ -79,7 +79,14 @@ impl<'t> Delegate<r1cs::Verifier<'t>> for Verifier<'t> {
 impl<'t> Verifier<'t> {
     /// Verifies the `Tx` object by executing the VM and returns the `VerifiedTx`.
     /// Returns an error if the program is malformed or any of the proofs are not valid.
-    pub fn verify_tx(tx: Tx, bp_gens: &BulletproofGens) -> Result<VerifiedTx, VMError> {
+    pub fn verify_tx<F>(
+        tx: Tx,
+        bp_gens: &BulletproofGens,
+        key_agg_fn: F,
+    ) -> Result<VerifiedTx, VMError>
+    where
+        F: FnOnce(&[VerificationKey]) -> Result<VerificationKey, VMError>,
+    {
         let mut r1cs_transcript = Transcript::new(b"ZkVM.r1cs");
         let cs = r1cs::Verifier::new(&mut r1cs_transcript);
 
@@ -101,12 +108,7 @@ impl<'t> Verifier<'t> {
             verifier.deferred_operations.push(
                 // TODO: change this to use multi-message context
                 tx.signature
-                    .verify(
-                        &mut signtx_transcript,
-                        Multikey::new(verifier.signtx_keys)
-                            .map_err(|_| VMError::KeyAggregationFailed)?
-                            .aggregated_key(),
-                    )
+                    .verify(&mut signtx_transcript, key_agg_fn(&verifier.signtx_keys)?)
                     .into(),
             );
         }

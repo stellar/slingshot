@@ -1,14 +1,15 @@
 use bulletproofs::{BulletproofGens, PedersenGens};
-use curve25519_dalek::constants::{RISTRETTO_BASEPOINT_COMPRESSED, RISTRETTO_BASEPOINT_POINT};
+use curve25519_dalek::constants::RISTRETTO_BASEPOINT_COMPRESSED;
 use curve25519_dalek::scalar::Scalar;
 use hex;
-use merlin::Transcript;
-use musig::{Multikey, Party, PartyAwaitingShares, Signature, VerificationKey};
+use musig::Signature;
 
 use zkvm::{
     Anchor, Commitment, Contract, Data, Output, PortableItem, Predicate, Program, Prover, TxHeader,
     TxID, VMError, Value, Verifier,
 };
+
+use zkvm::keys;
 
 // TODO(vniu): move builder convenience functions into separate crate,
 // and refactor tests and Token
@@ -133,40 +134,6 @@ fn make_output(qty: u64, flv: Scalar, pred: Predicate) -> Contract {
     }
 }
 
-// TODO: replace this with multi-message single-signer API
-fn sign_helper(privkeys: Vec<Scalar>, multikey: Multikey, transcript: Transcript) -> Signature {
-    let pubkeys: Vec<_> = privkeys
-        .iter()
-        .map(|privkey| VerificationKey((privkey * RISTRETTO_BASEPOINT_POINT).compress()))
-        .collect();
-
-    let mut transcripts: Vec<_> = pubkeys.iter().map(|_| transcript.clone()).collect();
-
-    let (parties, precomms): (Vec<_>, Vec<_>) = privkeys
-        .clone()
-        .into_iter()
-        .zip(transcripts.iter_mut())
-        .map(|(x_i, transcript)| Party::new(transcript, x_i, multikey.clone(), pubkeys.clone()))
-        .unzip();
-
-    let (parties, comms): (Vec<_>, Vec<_>) = parties
-        .into_iter()
-        .map(|p| p.receive_precommitments(precomms.clone()))
-        .unzip();
-
-    let (parties, shares): (Vec<_>, Vec<_>) = parties
-        .into_iter()
-        .map(|p| p.receive_commitments(comms.clone()).unwrap())
-        .unzip();
-
-    let signatures: Vec<_> = parties
-        .into_iter()
-        .map(|p: PartyAwaitingShares| p.receive_shares(shares.clone()).unwrap())
-        .collect();
-
-    signatures[0].clone()
-}
-
 fn build_and_verify(program: Program, keys: &Vec<Scalar>) -> Result<TxID, VMError> {
     let (tx, _, _) = {
         // Build tx
@@ -195,11 +162,9 @@ fn build_and_verify(program: Program, keys: &Vec<Scalar>) -> Result<TxID, VMErro
                     None
                 })
                 .collect();
-            Ok(sign_helper(
-                signtx_keys,
-                Multikey::new(verification_keys.to_vec())
-                    .map_err(|_| VMError::KeyAggregationFailed)?,
-                t.clone(),
+            Ok(Signature::sign_single(
+                &mut t.clone(),
+                keys::aggregated_privkey(&signtx_keys),
             ))
         })?
     };
@@ -207,7 +172,7 @@ fn build_and_verify(program: Program, keys: &Vec<Scalar>) -> Result<TxID, VMErro
     // Verify tx
     let bp_gens = BulletproofGens::new(256, 1);
 
-    let vtx = Verifier::verify_tx(tx, &bp_gens)?;
+    let vtx = Verifier::verify_tx(tx, &bp_gens, |keys| keys::aggregated_pubkey(keys))?;
     Ok(vtx.id)
 }
 
