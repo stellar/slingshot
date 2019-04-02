@@ -1,4 +1,4 @@
-use bulletproofs::{BulletproofGens};
+use bulletproofs::BulletproofGens;
 use merlin::Transcript;
 
 use super::errors::BCError;

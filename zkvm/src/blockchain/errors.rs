@@ -30,5 +30,5 @@ pub enum BCError {
     TxrootMismatch,
 
     #[fail(display = "tx validation")]
-    TxValidation(VMError)
+    TxValidation(VMError),
 }

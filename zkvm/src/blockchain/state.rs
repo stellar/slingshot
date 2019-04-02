@@ -1,6 +1,6 @@
 use super::block::{Block, BlockHeader, BlockID};
 use super::errors::BCError;
-use crate::{Entry, VMError, TxLog, UTXO};
+use crate::{Entry, TxLog, VMError, UTXO};
 use std::collections::{HashSet, VecDeque};
 
 #[derive(Clone)]
