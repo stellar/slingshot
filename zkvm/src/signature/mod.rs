@@ -5,6 +5,7 @@
 use bulletproofs::PedersenGens;
 use curve25519_dalek::ristretto::{CompressedRistretto, RistrettoPoint};
 use curve25519_dalek::scalar::Scalar;
+use curve25519_dalek::traits::Identity;
 use merlin::Transcript;
 
 use crate::errors::VMError;
@@ -22,6 +23,12 @@ pub use self::signer::Party;
 /// that lets the verifier to check the signature.
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub struct VerificationKey(pub CompressedRistretto);
+
+impl Default for VerificationKey {
+    fn default() -> VerificationKey {
+        VerificationKey(CompressedRistretto::identity())
+    }
+}
 
 /// A Schnorr signature.
 #[derive(Copy, Clone, Debug)]

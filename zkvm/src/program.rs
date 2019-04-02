@@ -1,9 +1,11 @@
 use crate::encoding::SliceReader;
 use crate::errors::VMError;
+use crate::merkle::MerkleItem;
 use crate::ops::Instruction;
 use crate::scalar_witness::ScalarWitness;
 use crate::types::Data;
 use core::borrow::Borrow;
+use merlin::Transcript;
 use spacesuit::BitRange;
 
 /// A builder type for assembling a sequence of `Instruction`s with chained method calls.
@@ -40,6 +42,7 @@ impl Program {
     def_op!(alloc, Alloc, Option<ScalarWitness>);
     def_op!(and, And);
     def_op!(borrow, Borrow);
+    def_op!(call, Call);
     def_op!(cloak, Cloak, usize, usize);
     def_op!(r#const, Const);
     def_op!(contract, Contract, usize);
@@ -116,5 +119,13 @@ impl Program {
     pub fn push<T: Into<Data>>(&mut self, data: T) -> &mut Program {
         self.0.push(Instruction::Push(data.into()));
         self
+    }
+}
+
+impl MerkleItem for Program {
+    fn commit(&self, t: &mut Transcript) {
+        let mut buf = Vec::new();
+        &self.encode(&mut buf);
+        t.commit_bytes(b"program", &buf);
     }
 }

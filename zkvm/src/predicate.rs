@@ -8,6 +8,7 @@ use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
 
 use crate::encoding;
+use crate::encoding::SliceReader;
 use crate::errors::VMError;
 use crate::merkle::MerkleNeighbor;
 use crate::point_ops::PointOp;
@@ -40,23 +41,24 @@ pub struct PredicateTree {
     precomputed_point: CompressedRistretto,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct CallProof {
-    // List of left-right neighbors, excluding the root and leaf hash
-    neighbors: Vec<MerkleNeighbor>,
-
-    // Signing key X
-    // PRTODO: Check if we want new SigningKey struct
-    signing_key: VerificationKey,
+    // Signing key
+    // PRTODO: Check if we want new SigningKey struct.
+    pub signing_key: VerificationKey,
 
     // Bit pattern indicating neighbor position
-    positions: u32,
+    pub positions: u32,
+
+    // List of left-right neighbors, excluding the root and leaf hash
+    pub neighbors: Vec<MerkleNeighbor>,
 }
 
-pub enum BlindedProgram {
-    Program(Program),
-    Blinding([u8; 32]),
-}
+// PRTODO: Rewrite MerkleItem stuff using BlindedProgram. 
+// pub enum BlindedProgram {
+//     Program(Program),
+//     Blinding([u8; 32]),
+// }
 
 impl Predicate {
     /// Returns the number of bytes needed to serialize the Predicate.
@@ -78,15 +80,15 @@ impl Predicate {
         encoding::write_point(&self.to_point(), prog);
     }
 
-    /// Verifies whether the current predicate is a commitment to a program `prog`.
+    /// Verifies whether the current predicate is a commitment to a signing key `key` and Merkle root `root`.
     /// Returns a `PointOp` instance that can be verified in a batch with other operations.
-    pub fn prove_program_predicate(&self, prog: &[u8], blinding: &[u8]) -> PointOp {
-        let h = Self::commit_program(prog, blinding);
-        // P == h*B2   ->   0 == -P + h*B2
+    pub fn prove_taproot(&self, key: &CompressedRistretto, root: &[u8]) -> PointOp {
+        let h = Self::commit_taproot(&key.to_bytes(), root);
+        // P == X + h1(X, M)*B -> 0 == -P + X + h1(X, M)*B
         PointOp {
-            primary: None,
-            secondary: Some(h),
-            arbitrary: vec![(-Scalar::one(), self.to_point())],
+            primary: Some(h),
+            secondary: None,
+            arbitrary: vec![(-Scalar::one(), self.to_point()), (Scalar::one(), *key)],
         }
     }
 
@@ -103,34 +105,60 @@ impl Predicate {
         Predicate::Opaque(self.to_point())
     }
 
-    fn commit_program(prog: &[u8], blinding: &[u8]) -> Scalar {
-        let mut t = Transcript::new(b"ZkVM.predicate");
-        t.commit_bytes(b"blinding", blinding);
-        t.commit_bytes(b"prog", &prog);
-        t.challenge_scalar(b"h")
-    }
-
-    fn commit_taproot(key: &CompressedRistretto, root: &[u8]) -> Scalar {
+    fn commit_taproot(key: &[u8], root: &[u8]) -> Scalar {
         let mut t = Transcript::new(b"ZkVM.taproot");
-        t.commit_bytes(b"key", &key.to_bytes());
+        t.commit_bytes(b"key", key);
         t.commit_bytes(b"merkle", root);
         t.challenge_scalar(b"h")
-    }
-
-    fn prove_call(call_proof: &CallProof, leaf_prog: &[u8]) -> PointOp {
-        // PRTODO: Recompute the Merkle root M
-
-        // P = X + h(X, M)
-        PointOp {
-            primary: None,
-            secondary: None,
-            arbitrary: Vec::new(),
-        }
     }
 }
 
 impl Into<CompressedRistretto> for Predicate {
     fn into(self) -> CompressedRistretto {
         self.to_point()
+    }
+}
+
+impl CallProof {
+    pub fn serialized_length(&self) -> usize {
+        // VerificationKey is a 32-byte array
+        // MerkleNeighbor is a 32-byte array
+        32 + 4 + self.neighbors.len() * 32
+    }
+
+    pub fn parse(data: &[u8]) -> Result<Self, VMError> {
+        SliceReader::parse(data, |r| {
+            let mut call_proof = CallProof::default();
+            call_proof.signing_key = VerificationKey(r.read_point()?);
+            call_proof.positions = r.read_u32()?;
+            let mut neighbors = vec![];
+            while r.len() > 0 {
+                neighbors.push(r.read_u8x32()?);
+            }
+            for i in 0..neighbors.len() {
+                if call_proof.positions & (1 << 31 - i) == 0 {
+                    call_proof
+                        .neighbors
+                        .push(MerkleNeighbor::Left(neighbors[i]));
+                } else {
+                    call_proof
+                        .neighbors
+                        .push(MerkleNeighbor::Right(neighbors[i]));
+                }
+            }
+            Ok(call_proof)
+        })
+    }
+
+    /// Serializes the call proof to a byte array
+    pub fn encode(&self, buf: &mut Vec<u8>) {
+        encoding::write_point(&self.signing_key.0, buf);
+        encoding::write_u32(self.positions, buf);
+        for n in &self.neighbors {
+            match n {
+                MerkleNeighbor::Left(l) => encoding::write_bytes(l, buf),
+                MerkleNeighbor::Right(r) => encoding::write_bytes(r, buf),
+            }
+        }
     }
 }

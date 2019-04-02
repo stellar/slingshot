@@ -15,6 +15,7 @@ use crate::contract::{Anchor, Contract, Output, PortableItem};
 use crate::encoding;
 use crate::encoding::SliceReader;
 use crate::errors::VMError;
+use crate::merkle::MerkleTree;
 use crate::ops::Instruction;
 use crate::point_ops::PointOp;
 use crate::predicate::Predicate;
@@ -317,6 +318,7 @@ where
                 Instruction::Nonce => self.nonce()?,
                 Instruction::Log => self.log()?,
                 Instruction::Signtx => self.signtx()?,
+                Instruction::Call => self.call()?,
                 Instruction::Delegate => self.delegate()?,
                 Instruction::Ext(opcode) => self.ext(opcode)?,
             }
@@ -691,6 +693,35 @@ where
             self.push_item(v);
         }
 
+        Ok(())
+    }
+
+    fn call(&mut self) -> Result<(), VMError> {
+        let program_data = self.pop_item()?.to_data()?;
+        let program = program_data.clone().to_program()?;
+        let call_proof = self.pop_item()?.to_data()?.to_call_proof()?;
+        let contract = self.pop_item()?.to_contract()?;
+        let predicate = contract.predicate;
+
+        let signing_key = call_proof.signing_key;
+        let neighbors = call_proof.neighbors;
+
+        // Compute Merkle root M.
+        let transcript = Transcript::new(b"ZkVM.taproot");
+        let root = MerkleTree::compute_root_from_path(&program, transcript, &neighbors);
+
+        // 0 == -P + X + h1(X, M)*B
+        self.delegate.verify_point_op(|| {
+            predicate.prove_taproot(&signing_key.0, &root)
+        })?;
+
+        // Places contract payload on stack.
+        for item in contract.payload.into_iter() {
+            self.push_item(item);
+        }
+
+        // Sets program as current.
+        self.continue_with_program(program_data)?;
         Ok(())
     }
 

@@ -9,7 +9,7 @@ use crate::constraints::{Commitment, Constraint, Expression, Variable};
 use crate::contract::{Contract, Output, PortableItem};
 use crate::encoding::SliceReader;
 use crate::errors::VMError;
-use crate::predicate::Predicate;
+use crate::predicate::{CallProof, Predicate};
 use crate::program::Program;
 use crate::scalar_witness::ScalarWitness;
 use crate::transcript::TranscriptProtocol;
@@ -59,6 +59,9 @@ pub enum Data {
 
     /// An input object (claimed UTXO).
     Output(Box<Output>),
+
+    /// A call proof.
+    CallProof(CallProof),
 }
 
 /// Represents a value of an issued asset in the VM.
@@ -157,6 +160,7 @@ impl Data {
             Data::Commitment(commitment) => commitment.serialized_length(),
             Data::Scalar(scalar) => scalar.serialized_length(),
             Data::Output(output) => output.serialized_length(),
+            Data::CallProof(call_proof) => call_proof.serialized_length(),
         }
     }
 
@@ -216,6 +220,15 @@ impl Data {
         }
     }
 
+    /// Downcast the data item to a `CallProof` type.
+    pub fn to_call_proof(self) -> Result<CallProof, VMError> {
+        match self {
+            Data::Opaque(data) => CallProof::parse(&data),
+            Data::CallProof(c) => Ok(c),
+            _ => Err(VMError::TypeNotCallProof),
+        }
+    }
+
     /// Downcast the data item to an `ScalarWitness` type.
     pub fn to_scalar(self) -> Result<ScalarWitness, VMError> {
         match self {
@@ -237,6 +250,7 @@ impl Data {
             Data::Commitment(commitment) => commitment.encode(buf),
             Data::Scalar(scalar) => scalar.encode(buf),
             Data::Output(output) => output.encode(buf),
+            Data::CallProof(call_proof) => call_proof.encode(buf),
         };
     }
 }

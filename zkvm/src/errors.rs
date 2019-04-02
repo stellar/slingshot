@@ -60,6 +60,10 @@ pub enum VMError {
     #[fail(display = "Item is not an output.")]
     TypeNotOutput,
 
+    /// This error occurs whn an instruction requires a call proof data type.
+    #[fail(display = "Item is not a call proof.")]
+    TypeNotCallProof,
+
     /// This error occurs when an instruction requires a constraint type.
     #[fail(display = "Item is not a constraint.")]
     TypeNotConstraint,

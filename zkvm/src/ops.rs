@@ -45,6 +45,7 @@ pub enum Instruction {
     Nonce,
     Log,
     Signtx,
+    Call,
     Delegate,
     Ext(u8),
 }
@@ -86,10 +87,11 @@ pub enum Opcode {
     Nonce = 0x1d,
     Log = 0x1e,
     Signtx = 0x1f,
+    Call = 0x20,
     Delegate = MAX_OPCODE,
 }
 
-const MAX_OPCODE: u8 = 0x20;
+const MAX_OPCODE: u8 = 0x21;
 
 impl Opcode {
     /// Converts the opcode to `u8`.
@@ -198,6 +200,7 @@ impl Instruction {
             Opcode::Nonce => Ok(Instruction::Nonce),
             Opcode::Log => Ok(Instruction::Log),
             Opcode::Signtx => Ok(Instruction::Signtx),
+            Opcode::Call => Ok(Instruction::Call),
             Opcode::Delegate => Ok(Instruction::Delegate),
         }
     }
@@ -263,6 +266,7 @@ impl Instruction {
             Instruction::Nonce => write(Opcode::Nonce),
             Instruction::Log => write(Opcode::Log),
             Instruction::Signtx => write(Opcode::Signtx),
+            Instruction::Call => write(Opcode::Call),
             Instruction::Delegate => write(Opcode::Delegate),
             Instruction::Ext(x) => program.push(*x),
         };
