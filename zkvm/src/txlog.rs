@@ -124,7 +124,7 @@ mod tests {
     fn valid_txid_proof() {
         let (entry, txid, proof) = {
             let entries = txlog_helper();
-            let root = MerkleTree::build(b"ZkVM.txid", &entries).unwrap();
+            let root = MerkleTree::build(b"ZkVM.txid", &entries);
             let index = 3;
             let proof = root.create_path(index).unwrap();
             (entries[index].clone(), TxID::from_log(&entries), proof)
@@ -136,7 +136,7 @@ mod tests {
     fn invalid_txid_proof() {
         let (entry, txid, proof) = {
             let entries = txlog_helper();
-            let root = MerkleTree::build(b"ZkVM.txid", &entries).unwrap();
+            let root = MerkleTree::build(b"ZkVM.txid", &entries);
             let index = 3;
             let proof = root.create_path(index).unwrap();
             (entries[index + 1].clone(), TxID::from_log(&entries), proof)
