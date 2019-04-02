@@ -47,7 +47,7 @@ This is a private trait with two functions:
 Fields:
 - transcript: `Transcript`. All of the pubkeys that the multikey are created from are committed to this transcript. 
 - aggregated_key: `VerificationKey`
-- public_keys: `Vec<VerificationKey`
+- public_keys: `Vec<VerificationKey>`
 
 Functions: 
 - `Multikey::new(...) -> Self`: detailed more in [key aggregation](#key-aggregation) section. 
@@ -75,10 +75,10 @@ Functions:
 ### Multimessage (implements MusigContext)
 
 Fields:
-- pairs: `Vec<(VerificationKey, [u8])`
+- pairs: `Vec<(VerificationKey, [u8])>`
 
 Functions:
-- `Multimessage::new(Vec<(VerificationKey, [u8])) -> Self`: creates a new MultiMessage instance using the inputs.
+- `Multimessage::new(Vec<(VerificationKey, [u8])>) -> Self`: creates a new MultiMessage instance using the inputs.
 
 - `Multimessage::commit(&self, &mut transcript)`: 
   It commits to the number of pairs, with `transcript.commit_u64(self.pairs.len())`. 
@@ -109,8 +109,9 @@ In the Musig signature case, `s` represents the sum of the Schnorr signature sca
 `R` represents the sum of the nonce commitments of each party, or `R = sum_i (R_i)`. 
 
 Functions:
-- `Signature::verify(...)`: In both the simple Schnorr signature and the Musig signature cases, 
-the signature verification is the same. For more detail, see the [verification](#verifying) section.
+- `Signature::verify(...)`
+- `Signature::verify_multimessage(...)`
+For more detail, see the [verification](#verifying) section.
 
 ## Operations
 
@@ -152,7 +153,7 @@ There are several paths to signing:
     - Make `s = r + c * x` where `x = privkey`
 
     Output:
-    - Signature { s, R }
+    - Signature { `s`, `R` }
 
 2. Make a Schnorr signature with one aggregated key (`Multikey`), derived from multiple public keys.
     - Create a `Multikey`. For more information, see the [key aggregation](#key-aggregation) section.
@@ -270,7 +271,7 @@ Function: `new<C: MusigContext>(...)`
 Input: 
 - transcript: `&mut Transcript` - a transcript to which the message to be signed has already been committed.
 - privkey: `Scalar`
-- context: `C` // Is this a clear way to write that the context must implement trait `MusigContext`?
+- context: `C`
 
 Operation:
 - Use the transcript to generate a random factor (the nonce), by committing to the privkey and passing in a `thread_rng`.
@@ -285,7 +286,6 @@ Output:
 - The nonce precommitment: `NoncePrecommitment`
 
 ### PartyAwaitingPrecommitments<C: MusigContext> 
-// Is this ^ a clear way to denote that the party state is parameterized by `MusigContext`?
 
 Fields: 
 - transcript: `Transcript`
