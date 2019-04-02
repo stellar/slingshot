@@ -44,7 +44,7 @@ impl MerkleTree {
     }
 
     /// Returns the root hash of the Merkle tree.
-    pub fn hash(&self) -> [u8; 32] {
+    pub fn hash(&self) -> &[u8; 32] {
         return self.root.hash();
     }
 
@@ -96,7 +96,7 @@ impl MerkleTree {
     /// the supplied list.
     pub fn root<M: MerkleItem>(label: &'static [u8], list: &[M]) -> [u8; 32] {
         let tree = Self::build(label, list);
-        tree.root.hash()
+        tree.root.hash().clone()
     }
 
     fn build_tree<M: MerkleItem>(mut t: Transcript, list: &[M]) -> MerkleNode {
@@ -115,8 +115,8 @@ impl MerkleTree {
                 let mut node = [0u8; 32];
                 let left = Self::build_tree(t.clone(), &list[..k]);
                 let right = Self::build_tree(t.clone(), &list[k..]);
-                t.commit_bytes(b"L", &left.hash());
-                t.commit_bytes(b"R", &right.hash());
+                t.commit_bytes(b"L", left.hash());
+                t.commit_bytes(b"R", right.hash());
                 t.challenge_bytes(b"merkle.node", &mut node);
                 MerkleNode::Node(node, Box::new(left), Box::new(right))
             }
@@ -147,10 +147,10 @@ impl MerkleNode {
             MerkleNode::Node(_, l, r) => {
                 let k = size.next_power_of_two() / 2;
                 if index >= k {
-                    result.insert(0, MerkleNeighbor::Left(l.hash()));
+                    result.insert(0, MerkleNeighbor::Left(l.hash().clone()));
                     r.subpath(t, index - k, size - k, result)
                 } else {
-                    result.insert(0, MerkleNeighbor::Right(r.hash()));
+                    result.insert(0, MerkleNeighbor::Right(r.hash().clone()));
                     return l.subpath(t, index, k, result);
                 }
             }
@@ -158,11 +158,11 @@ impl MerkleNode {
     }
 
     /// Returns the hash of a Merkle tree.
-    fn hash(&self) -> [u8; 32] {
+    fn hash(&self) -> &[u8; 32] {
         match self {
-            MerkleNode::Empty(h) => h.clone(),
-            MerkleNode::Leaf(h) => h.clone(),
-            MerkleNode::Node(h, _, _) => h.clone(),
+            MerkleNode::Empty(h) => &h,
+            MerkleNode::Leaf(h) => &h,
+            MerkleNode::Node(h, _, _) => &h,
         }
     }
 }
