@@ -68,9 +68,9 @@ Functions:
 
   Returns `c_i = a_i * c`.
 
-- `Multikey::aggregated_key(&self)`: returns the aggregated key stored in the multikey, `self.aggregated_key`.  
+- `Multikey::aggregated_key(&self) -> VerificationKey`: returns the aggregated key stored in the multikey, `self.aggregated_key`.  
 
-- `Multikey::get_pubkeys(&self)`: returns the list of public keys, `self.public_keys`.
+- `Multikey::get_pubkeys(&self) -> Vec<VerificationKey>`: returns the list of public keys, `self.public_keys`.
 
 ### Multimessage (implements MusigContext)
 
@@ -98,7 +98,7 @@ Functions:
   It commits `i` to the forked transcript with label "i".
   It then gets and returns the challenge scalar `c_i` from the forked transcript with label "c_i".
 
-- `Multikey::get_pubkeys(&self)`: returns the list of public keys, without the messages, from `self.pairs`.
+- `Multikey::get_pubkeys(&self) -> Vec<VerificationKey>`: returns the list of public keys, without the messages, from `self.pairs`.
 
 
 ### Signature
@@ -109,8 +109,8 @@ In the Musig signature case, `s` represents the sum of the Schnorr signature sca
 `R` represents the sum of the nonce commitments of each party, or `R = sum_i (R_i)`. 
 
 Functions:
-- `Signature::verify(...)`
-- `Signature::verify_multimessage(...)`
+- `Signature::verify(...) -> Result<(), VMError>`
+- `Signature::verify_multimessage(...) -> Result<(), VMError>`
 For more detail, see the [verification](#verifying) section.
 
 ## Operations
@@ -158,21 +158,24 @@ There are several paths to signing:
 2. Make a Schnorr signature with one aggregated key (`Multikey`), derived from multiple public keys.
     - Create a `Multikey`. For more information, see the [key aggregation](#key-aggregation) section.
 
-    For each party that is taking part in the signing:
+    Each party gets initialized, and makes and shares its nonce precommitment:
     - Call `Party::new(transcript, privkey, multikey)`.
     - Get back `PartyAwaitingPrecommitments` and a `NoncePrecommitment`.
     - Share your `NoncePrecommitment`, and receive other parties' `NoncePrecommitment`s. 
 
+    Each party receives and stores other parties' precommitments, and shares its nonce commitment.
     - Call `receive_precommitments(precommitments)` on your `PartyAwaitingPrecommitments` state, 
     inputting a vector of all parties' precommitments.
     - Get back `PartyAwaitingCommitments` and a `NonceCommitment`.
     - Share your `NonceCommitment`, and receive other parties' `NonceCommitment`s.
 
+    Each party receives and validates other parties' commitments, and shares its signature share.
     - Call `receive_commitments(commitments)` on your `PartyAwaitingCommitments` state, 
     inputting a vector of all parties' commitments.
     - Get back `PartyAwaitingShares` and a `Share`.
     - Share your `Share`, and receive other parties' `Share`s.
 
+    Each party receives and validates other parties' signature shares, and returns a signature.
     - Call `receive_shares(share)` on your `PartyAwaitingShares`.
     - Get back `Signature`. You are done!
 
@@ -184,7 +187,7 @@ There are several paths to signing:
 
     For each party that is taking part in the signing:
     - Call `Party::new(transcript, privkey, multimessage)`.
-    - All following steps are the same as in protocol #2, making a Schnorr signature with one aggregated key.
+    - All following steps are the same as in protocol #2.
 
 ### Verifying
 
