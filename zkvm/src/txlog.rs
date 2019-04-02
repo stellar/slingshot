@@ -30,12 +30,12 @@ pub struct TxID(pub [u8; 32]);
 
 impl MerkleItem for TxID {
     fn commit(&self, t: &mut Transcript) {
-        t.commit_bytes(self.0)
+        t.commit_bytes(b"txid", &self.0)
     }
 }
 
 /// UTXO is a unique 32-byte identifier of a transaction output
-#[derive(Copy, Clone, PartialEq, Debug)]
+#[derive(Copy, Clone, Eq, Hash, PartialEq, Debug)]
 pub struct UTXO(pub [u8; 32]);
 
 impl UTXO {

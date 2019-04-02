@@ -451,7 +451,7 @@ Output:
 
 Procedure:
 1. Create a [transcript](zkvm-spec.md#transcript) `T` with label `transaction_ids`.
-2. Return `MerkleHash(T, txids)`.
+2. Return `MerkleHash(T, txids)` using the label `txid` for each transaction ID in the list.
 
 ## Compute utxoroot
 

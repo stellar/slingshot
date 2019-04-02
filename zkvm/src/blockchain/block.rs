@@ -101,7 +101,7 @@ impl Block {
 
         let merkle_tree = MerkleTree::build(b"transaction_ids", &txids[..]);
         let txroot = merkle_tree.hash();
-        if self.header.txroot != txroot {
+        if &self.header.txroot != txroot {
             return Err(BCError::TxrootMismatch);
         }
 

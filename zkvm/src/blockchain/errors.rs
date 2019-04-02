@@ -1,3 +1,5 @@
+use crate::errors::VMError;
+
 #[derive(Debug, Fail)]
 pub enum BCError {
     #[fail(display = "version reversion")]
@@ -28,5 +30,5 @@ pub enum BCError {
     TxrootMismatch,
 
     #[fail(display = "tx validation")]
-    TxValidation
+    TxValidation(VMError)
 }

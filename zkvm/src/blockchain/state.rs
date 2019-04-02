@@ -1,4 +1,5 @@
 use super::block::{Block, BlockHeader, BlockID};
+use super::errors::BCError;
 use crate::{Entry, VMError, TxLog, UTXO};
 use std::collections::{HashSet, VecDeque};
 
@@ -7,7 +8,7 @@ pub struct BCState {
     pub initial: BlockHeader,
     pub tip: BlockHeader,
     pub utxos: HashSet<UTXO>,
-    pub nonces: VecDeque<([u8; 32], i64)>, // xxx need fast lookup by anchor
+    pub nonces: VecDeque<([u8; 32], u64)>, // xxx need fast lookup by anchor
     pub ref_ids: VecDeque<BlockID>,        // xxx need fast lookup by blockID
 
     pub initial_id: BlockID,
@@ -26,7 +27,7 @@ impl BCState {
         }
     }
 
-    pub fn apply_block(&self, b: &Block) -> Result<BCState, VMError> {
+    pub fn apply_block(&self, b: &Block) -> Result<BCState, BCError> {
         let txlogs = b.validate(&self.tip)?;
         let new_state = self.clone();
 
@@ -40,9 +41,11 @@ impl BCState {
 
         for txlog in txlogs.iter() {
             if let Err(err) = new_state.apply_txlog(&txlog) {
-                return Err(err);
+                return Err(BCError::TxValidation(err));
             }
         }
+
+        Ok(new_state)
     }
 
     fn apply_txlog(&mut self, txlog: &TxLog) -> Result<(), VMError> {
