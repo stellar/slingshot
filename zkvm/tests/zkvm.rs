@@ -2,11 +2,14 @@ use bulletproofs::{BulletproofGens, PedersenGens};
 use curve25519_dalek::constants::RISTRETTO_BASEPOINT_COMPRESSED;
 use curve25519_dalek::scalar::Scalar;
 use hex;
+use musig::Signature;
 
 use zkvm::{
-    Anchor, Commitment, Contract, Data, Output, PortableItem, Predicate, Program, Prover,
-    Signature, TxHeader, TxID, VMError, Value, Verifier,
+    Anchor, Commitment, Contract, Data, Output, PortableItem, Predicate, Program, Prover, TxHeader,
+    TxID, VMError, Value, Verifier,
 };
+
+use zkvm::keys;
 
 // TODO(vniu): move builder convenience functions into separate crate,
 // and refactor tests and Token
@@ -142,6 +145,12 @@ fn build_and_verify(program: Program, keys: &Vec<Scalar>) -> Result<TxID, VMErro
         };
         let gens = PedersenGens::default();
         Prover::build_tx(program, header, &bp_gens, |t, verification_keys| {
+            if verification_keys.len() == 0 {
+                return Ok(Signature {
+                    R: RISTRETTO_BASEPOINT_COMPRESSED,
+                    s: Scalar::zero(),
+                });
+            }
             let signtx_keys: Vec<Scalar> = verification_keys
                 .iter()
                 .filter_map(|vk| {
@@ -153,14 +162,17 @@ fn build_and_verify(program: Program, keys: &Vec<Scalar>) -> Result<TxID, VMErro
                     None
                 })
                 .collect();
-            Signature::sign_aggregated(t, &signtx_keys)
+            Ok(Signature::sign_single(
+                &mut t.clone(),
+                keys::aggregated_privkey(&signtx_keys),
+            ))
         })?
     };
 
     // Verify tx
     let bp_gens = BulletproofGens::new(256, 1);
 
-    let vtx = Verifier::verify_tx(tx, &bp_gens)?;
+    let vtx = Verifier::verify_tx(tx, &bp_gens, |keys| keys::aggregated_pubkey(keys))?;
     Ok(vtx.id)
 }
 
