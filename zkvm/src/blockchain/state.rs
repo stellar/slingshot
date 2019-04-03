@@ -37,7 +37,7 @@ impl BlockchainState {
         key_agg_fn: F,
     ) -> Result<BlockchainState, BlockchainError>
     where
-        F: FnOnce(&[VerificationKey]) -> Result<VerificationKey, VMError>,
+        F: Clone + Fn(&[VerificationKey]) -> Result<VerificationKey, VMError>,
     {
         let txlogs = b.validate(&self.tip, bp_gens, key_agg_fn)?;
         let mut new_state = self.clone();

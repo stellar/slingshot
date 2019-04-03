@@ -3,7 +3,7 @@ use merlin::Transcript;
 use musig::VerificationKey;
 
 use super::errors::BlockchainError;
-use crate::{MerkleTree, Tx, TxID, TxLog, Verifier, VMError};
+use crate::{MerkleTree, Tx, TxID, TxLog, VMError, Verifier};
 
 #[derive(Clone, PartialEq)]
 pub struct BlockID(pub [u8; 32]);
@@ -95,7 +95,7 @@ impl Block {
         key_agg_fn: F,
     ) -> Result<Vec<TxLog>, BlockchainError>
     where
-        F: FnOnce(&[VerificationKey]) -> Result<VerificationKey, VMError>,
+        F: Clone + Fn(&[VerificationKey]) -> Result<VerificationKey, VMError>,
     {
         self.header.validate(prev)?;
 
@@ -112,7 +112,7 @@ impl Block {
                 return Err(BlockchainError::BadTxVersion);
             }
 
-            match Verifier::verify_tx(tx, bp_gens, key_agg_fn) {
+            match Verifier::verify_tx(tx, bp_gens, key_agg_fn.clone()) {
                 Ok(verified) => {
                     let txid = TxID::from_log(&verified.log);
                     txids.push(txid);
