@@ -210,7 +210,7 @@ mod tests {
             .map(|p| p.receive_commitments(comms.clone()).unwrap())
             .unzip();
 
-        let signatures: Vec<_> = parties
+        let signatures: Vec<Signature> = parties
             .into_iter()
             .map(|p: PartyAwaitingShares| p.receive_shares(shares.clone()).unwrap())
             .collect();

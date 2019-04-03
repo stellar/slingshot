@@ -1,12 +1,12 @@
 # Signatures: Engineering design doc
 
 This is a signature scheme for signing messages. 
-The first iteration describes the protocol for signing a single message with one public key. 
-The public key can be created from a single party's private key, 
-or it can be created from the aggregation of multiple public keys. 
+This design doc describes the protocol for signing a single message with one public key 
+(where the public key can be created from a single party's private key, 
+or from the aggregation of multiple public keys),
+and for signing multiple messages with multiple public keys.
 
-In future iterations, we can consider signing with public keys that are nested aggregations of public keys, 
-and signing multiple messages in a way that is safe against Russell's attack.
+In future iterations, we can consider signing with public keys that are nested aggregations of public keys.
 
 ## Definitions
 
@@ -34,18 +34,76 @@ Ristretto base point in compressed form:
 B = e2f2ae0a6abc4e71a884a961c500515f58e30b6aa582dd8db6a65945e08d2d76
 ```
 
-### Multikey
+### MusigContext
+
+This is a private trait with three functions:
+- `commit(&self, &mut transcript)`: takes a mutable transcript, and commits the internal context to the transcript.
+- `challenge(&self, &verification_key, &mut transcript) -> Scalar`: takes a public key and mutable transcript, and returns the 
+  suitable challenge for that public key. 
+- `get_pubkeys(&self) -> Vec<VerificationKey>`: returns the associated public keys.
+
+### Multikey 
+
+Implements MusigContext
 
 Fields:
 - transcript: `Transcript`. All of the pubkeys that the multikey are created from are committed to this transcript. 
 - aggregated_key: `VerificationKey`
+- public_keys: `Vec<VerificationKey>`
 
 Functions: 
-- `Multikey::new(...)`: detailed more in [key aggregation](#key-aggregation) section. 
-- `Multikey::factor_for_key(&self, &verification_key)`: computes the `a_i` factor, where `a_i = H(<L>, X_i)`. 
-  `<L>`, or the list of pukeys that go into the aggregated pubkey, has already been committed into `self.transcript`. Therefore, this function simply clones `self.transcript`, commits the verification key (`X_i`) into the transcript 
-    with label "X_i", and then squeezes the challenge scalar `a_i` from the transcript with label "a_i".
-- `Multikey::aggregated_key(&self)`: returns the aggregated key stored in the multikey, `self.aggregated_key`.  
+- `Multikey::new(...) -> Self`: detailed more in [key aggregation](#key-aggregation) section. 
+
+- `Multikey::commit(&self, &mut transcript)`: Commits `self.aggregated_key` to the input `transcript` with label "X".
+
+- `Multikey::challenge(&self, &verification_key, &mut transcript) -> Scalar`: 
+  Computes challenge `c_i = a_i * c`, where `a_i = H_agg(<L>, X_i)` and `c = H_sig(X, R, m)`.
+
+  For calculating `a_i`, `<L>` (the list of pubkeys that go into the aggregated pubkey)
+  has already been committed into `self.transcript`. Therefore this function simply clones `self.transcript`, 
+  commits the verification key (`X_i`) into the transcript with label "X_i", 
+  and then squeezes the challenge scalar `a_i` from the transcript with label "a_i".
+
+  For calculating `c`: the message `m`, the nonce commitment sum `R`, and the aggregated key `X` 
+  have already been committed to the input `transcript`.
+  It then gets the challenge scalar `c` from the transcript with label "c".
+
+  Returns `c_i = a_i * c`.
+
+- `Multikey::aggregated_key(&self) -> VerificationKey`: returns the aggregated key stored in the multikey, `self.aggregated_key`.  
+
+- `Multikey::get_pubkeys(&self) -> Vec<VerificationKey>`: returns the list of public keys, `self.public_keys`.
+
+### Multimessage
+
+Implements MusigContext
+
+Fields:
+- pairs: `Vec<(VerificationKey, [u8])>`
+
+Functions:
+- `Multimessage::new(Vec<(VerificationKey, [u8])>) -> Self`: creates a new MultiMessage instance using the inputs.
+
+- `Multimessage::commit(&self, &mut transcript)`: 
+  It commits to the number of pairs, with `transcript.commit_u64(self.pairs.len())`. 
+  It then commits each of the pairs in `self.pairs` to the input `transcript`,
+  by iterating through `self.pairs` and committing the `VerificationKey` with label "X" and the message with label "m".
+
+- `Multimessage::challenge(&self, &verification_key, &mut transcript) -> Scalar`: 
+  Computes challenge `c_i = H(R, <S>, i)`.
+  The nonce commitment sum `R`, and the pairs `<S>`, have already been committed to the input `transcript`.
+
+  It forks the input transcript by cloning it. The non-forked transcript (input `transcript`) gets domain 
+  separated with `transcript.commit("dom-sep", "Musig.multi-message-boundary")`.
+  This prevents later steps from being able to get the same challenges that come from the forked transcript.
+ 
+  It then figures out what its index `i` is, by matching the input `verification_key` against all the keys in 
+  `self.pairs`. The index `i` is the index of pair of the key it matches to. 
+  It commits `i` to the forked transcript with label "i".
+  It then gets and returns the challenge scalar `c_i` from the forked transcript with label "c_i".
+
+- `Multikey::get_pubkeys(&self) -> Vec<VerificationKey>`: returns the list of public keys, without the messages, from `self.pairs`.
+
 
 ### Signature
 
@@ -55,8 +113,9 @@ In the Musig signature case, `s` represents the sum of the Schnorr signature sca
 `R` represents the sum of the nonce commitments of each party, or `R = sum_i (R_i)`. 
 
 Functions:
-- `Signature::verify(...)`: In both the simple Schnorr signature and the Musig signature cases, 
-the signature verification is the same. For more detail, see the [verification](#verifying) section.
+- `Signature::verify(...) -> Result<(), VMError>`
+- `Signature::verify_multimessage(...) -> Result<(), VMError>`
+For more detail, see the [verification](#verifying) section.
 
 ## Operations
 
@@ -76,7 +135,7 @@ The transcript state corresponds to the commitment `<L>` in the Musig paper: `<L
 Iterate over the pubkeys, compute the factor `a_i = H(<L>, X_i)`, and add `a_i * X_i` to the aggregated key.
 
 Output:
-- a new multikey, with the transcript and aggregated key detailed above.
+- a new `Multikey`, with the transcript and aggregated key detailed above.
 
 ### Signing
 
@@ -98,49 +157,81 @@ There are several paths to signing:
     - Make `s = r + c * x` where `x = privkey`
 
     Output:
-    - Signature { s, R }
+    - Signature { `s`, `R` }
 
 2. Make a Schnorr signature with one aggregated key (`Multikey`), derived from multiple public keys.
-    - Create an aggregated pubkey. For more information see the [key aggregation](#key-aggregation) section.
+    - Create a `Multikey`. For more information, see the [key aggregation](#key-aggregation) section.
 
-    For each party that is taking part in the signing:
-    - Call `Party::new(transcript, privkey, multikey, pubkeys)`.
+    Each party gets initialized, and makes and shares its nonce precommitment.
+    - Call `Party::new(transcript, privkey, multikey)`.
     - Get back `PartyAwaitingPrecommitments` and a `NoncePrecommitment`.
     - Share your `NoncePrecommitment`, and receive other parties' `NoncePrecommitment`s. 
 
+    Each party receives and stores other parties' precommitments, and shares its nonce commitment.
     - Call `receive_precommitments(precommitments)` on your `PartyAwaitingPrecommitments` state, 
     inputting a vector of all parties' precommitments.
     - Get back `PartyAwaitingCommitments` and a `NonceCommitment`.
     - Share your `NonceCommitment`, and receive other parties' `NonceCommitment`s.
 
+    Each party receives and validates other parties' commitments, and shares its signature share.
     - Call `receive_commitments(commitments)` on your `PartyAwaitingCommitments` state, 
     inputting a vector of all parties' commitments.
     - Get back `PartyAwaitingShares` and a `Share`.
     - Share your `Share`, and receive other parties' `Share`s.
 
+    Each party receives and validates other parties' signature shares, and returns a signature.
     - Call `receive_shares(share)` on your `PartyAwaitingShares`.
     - Get back `Signature`. You are done!
 
     For more information on each of these states and steps, see the [protocol for party state transitions](#protocol-for-party-state-transitions).
 
+3. Make a Schnorr signature with multiple public keys and multiple messages, in a way that is safe from Russell's attack.
+    - Create a `Multimessage` context by calling `Multimessage::new(...)`. 
+      See the [multimessage](#multimessage) section for more details.
+
+    For each party that is taking part in the signing:
+    - Call `Party::new(transcript, privkey, multimessage)`.
+    - All following steps are the same as in protocol #2.
+
 ### Verifying
 
-Signature verification happens in the `Signature::verify(...)` function.
+There are several paths to verifying: 
+1. Normal Schnorr signature verification (covers cases #1 and #2 in [signing section](#signing)).
+    Function: `Signature::verify(...)`
 
-Input: 
-- `&self`
-- transcript: `&mut Transcript` - a transcript to which the signed message has already been committed.
-- P: `VerificationKey`
+    Input: 
+    - `&self`
+    - transcript: `&mut Transcript` - a transcript to which the signed message has already been committed.
+    - P: `VerificationKey`
 
-Operation:
-- Make `c = H(X, R, m)`. Since the transcript already has the message `m` committed to it, 
-the function only needs to commit `X` with label "X" and `R` with label "R", 
-and then get the challenge scalar `c` with label "c".
-- Decompress verification key `P`. If this fails, return `Err(VMError::InvalidPoint)`.
-- Check if `s * G == R + c * P`. `G` is the [base point](#base-point).
+    Operation:
+    - Make `c = H(X, R, m)`. Since the transcript already has the message `m` committed to it, 
+    the function only needs to commit `X` with label "X" and `R` with label "R", 
+    and then get the challenge scalar `c` with label "c".
+    - Decompress verification key `P`. If this fails, return `Err(VMError::InvalidPoint)`.
+    - Check if `s * G == R + c * P`. `G` is the [base point](#base-point).
 
-Output:
-- `Ok(())` if verification succeeds, or `Err(VMError)` if the verification or point decompression fail.
+    Output:
+    - `Ok(())` if verification succeeds, or `Err(VMError)` if the verification or point decompression fail.
+
+2. Multi-message Schnorr signature verification (covers case #3 in [signing section](#signing)).
+    Function: `Signature::verify_multimessage(...)`
+
+    Input: 
+    - `&self`
+    - transcript: `&mut Transcript` - a transcript to which the signed message has already been committed.
+    - multimessage: `Multimessage` 
+
+    Operation:
+    - Use `multimessage.commit(&mut transcript)` to commit the key
+    - Commit `self.R` to the transcript with label "R".
+    - Use `multimessage.challenge(pubkey, &mut transcript)` to get the per-pubkey challenge `c_i`.
+    - Sum up `sum_i(X_i * c_i)` into `cX`. This requires decompressing each pubkey to make `X_i`. 
+      If the decompression fails, return `Err(VMError::InvalidPoint)`.
+    - Check if `s * G == cX + R`. `G` is the [base point](#base-point).
+
+    Output:
+    - `Ok(())` if verification succeeds, or `Err(VMError)` if the verification or point decompression fail.
 
 ## Protocol for party state transitions
 
@@ -152,17 +243,17 @@ Party state transitions overview:
 ```
 Party{}
   ↓
-.new(transcript, privkey, multikey, Vec<pubkey>) → NoncePrecommitment([u8; 32])
+.new(transcript, privkey, context) → NoncePrecommitment([u8; 32])
   ↓
-PartyAwaitingPrecommitments{transcript, privkey, multikey, nonce, noncecommitment, Vec<Counterparty>}
+PartyAwaitingPrecommitments{transcript, privkey, context, nonce, noncecommitment, Vec<Counterparty>}
   ↓
 .receive_precommitments(self, Vec<precommitment>) → NonceCommitment(RistrettoPoint)
   ↓
-PartyAwaitingCommitments{transcript, privkey, multikey, nonce, Vec<CounterpartyPrecommitted>}
+PartyAwaitingCommitments{transcript, privkey, context, nonce, Vec<CounterpartyPrecommitted>}
   ↓
 .receive_commitments(self, Vec<commitment>) → Share(Scalar)
   ↓
-PartyAwaitingShares{multikey, c, R, Vec, CounterpartyCommitted>} 
+PartyAwaitingShares{context, c, R, Vec, CounterpartyCommitted>} 
   ↓
 .receive_shares(self, Vec<share>) → Signature{s, R}
 
@@ -174,38 +265,37 @@ as well as its counterparties' messages. This makes the protocol slightly simple
 (Future work: potentially remove this redundancy).
 
 Also, for now we will assume that all of the messages passed into each party state arrive in the same order 
-(each party's message is in the same index). 
-This allows us to skip the step of ordering them / assigning indexes. 
+(each party's message is in the same index). This allows us to skip the step of ordering them / assigning indexes. 
 (Future work: allow for unordered inputs, have the parties sort them.)
 
 ### Party
 
 Fields: none
 
-Function: `new(...)`
+Function: `new<C: MusigContext>(...)`
 
 Input: 
 - transcript: `&mut Transcript` - a transcript to which the message to be signed has already been committed.
 - privkey: `Scalar`
-- multikey: `Multikey`
-- pubkeys: `Vec<VerificationKey>` - all the public keys that went into the multikey. 
-  The list is assumed to be in the same order as the upcoming lists of `NoncePrecommitment`s, `NonceCommitment`s, and `Share`s.
+- context: `C`
 
 Operation:
 - Use the transcript to generate a random factor (the nonce), by committing to the privkey and passing in a `thread_rng`.
 - Use the nonce to create a nonce commitment and precommitment
 - Clone the transcript
-- Create a vector of `Counterparty`s by calling `Counterparty::new(...)` with the input pubkeys.
+- Create a vector of `Counterparty`s by calling `Counterparty::new(...)` with the each of the pubkeys in the context. 
+  Get the list of pubkeys by calling `context::get_pubkeys()`.
 
-Output: 
+Output:
+
 - The next state in the protocol: `PartyAwaitingPrecommitments` 
 - The nonce precommitment: `NoncePrecommitment`
 
-### PartyAwaitingPrecommitments
+### PartyAwaitingPrecommitments<C: MusigContext> 
 
 Fields: 
 - transcript: `Transcript`
-- multikey: `Multikey`
+- context: `C`
 - privkey: `Scalar`
 - nonce: `Scalar`
 - nonce_commitment: `RistrettoPoint`
@@ -225,11 +315,11 @@ Output:
 - the next state in the protocol: `PartyAwaitingCommitments`
 - the nonce commitment: `NonceCommitment`
 
-### PartyAwaitingCommitments
+### PartyAwaitingCommitments<C: MusigContext>
 
 Fields:
 - transcript: `Transcript`
-- multikey: `Multikey`
+- context: `C`
 - privkey: `Scalar`
 - nonce: `Scalar`
 - counterparties: `Vec<CounterpartyPrecommitted>`
@@ -244,19 +334,20 @@ Operation:
 - Call `commit_nonce(...)` on each of `self.counterparties`, with the received `nonce_commitments`. 
 This checks that the stored precommitments match the received commitments. 
 If it succeeds, it will return `CounterpartyCommitted`s.
+- Commit the context to `self.transcript` by calling `MusigContext::challenge(...)`.
 - Make `nonce_sum` = sum(`nonce_commitments`)
-- Make `c` = challenge scalar after committing `multikey.aggregated_key()` and `nonce_sum` into the transcript
-- Make `a_i` = `multikey.factor_for_key(self.privkey)`
-- Make `s_i` = `r_i + c * a_i * x_i`, where `x_i` = `self.privkey` and `r_i` = `self.nonce`
+- Commit `nonce_sum` to `self.transcript` with label "R".
+- Make `c_i` = `context.challenge(self.privkey, &mut transcript)`
+- Make `s_i` = `r_i + c_i * x_i`, where `x_i` = `self.privkey` and `r_i` = `self.nonce`
 
 Output: 
 - The next state in the protocol: `PartyAwaitingShares`
 - The signature share: `Share`
 
-### PartyAwaitingShares
+### PartyAwaitingShares<C: MusigContext>
 
 Fields:
-- multikey: `Multikey`
+- context: `C`
 - counterparties: `Vec<CounterpartyCommitted>`
 - challenge: `Scalar`
 - nonce_sum: `RistrettoPoint`
@@ -291,7 +382,7 @@ CounterpartyPrecommitted{precommitment, pubkey}
   ↓
 CounterpartyCommitted{commitment, pubkey}
   ↓
-.sign(share, challenge, multikey)
+.sign(share, challenge, context)
   ↓
  s_i
 
@@ -307,7 +398,7 @@ Fields: pubkey
 Function: `new(...)`
 
 Input: 
-- pubkey: `VerificationKey`
+- context: `VerificationKey`
 
 Operation:
 - Create a new `Counterparty` instance with the input pubkey in the `pubkey` field
@@ -355,17 +446,18 @@ Fields:
 - commitment: `NonceCommitment`
 - pubkey: `VerificationKey`
 
-Function: `sign(...)`
+Function: `sign<C: MusigContext>(...)`
 
 Input:
 - share: `Scalar`
-- challenge: `Scalar`
-- multikey: `&Multikey`
+- nonce_sum: `RistrettoPoint`
+- context: `C`
+- transcript: `&mut transcript`
 
 Operation:
-- Verify that `s_i * G == R_i + c * a_i * X_i`.
-  `s_i` = share, `G` = [base point](#base-point), `R_i` = self.commitment, `c` = challenge, 
-  `a_i` = `multikey.factor_for_key(self.pubkey)`, `X_i` = self.pubkey.
+- Verify that `s_i * G == R_i + c_i * X_i`.
+  `s_i` = share, `G` = [base point](#base-point), `R_i` = self.commitment,
+  `c_i` = `context.challenge(self.pubkey, &mut transcript, nonce_sum)`, `X_i` = self.pubkey.
 - If verification succeeds, return `Ok(share)`
 - Else, return `Err(VMError::MusigShareError)`
 
