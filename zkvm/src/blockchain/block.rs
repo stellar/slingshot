@@ -87,7 +87,11 @@ pub struct Block {
 }
 
 impl Block {
-    pub fn validate(&self, prev: &BlockHeader, bp_gens: &BulletproofGens) -> Result<Vec<TxLog>, BlockchainError> {
+    pub fn validate(
+        &self,
+        prev: &BlockHeader,
+        bp_gens: &BulletproofGens,
+    ) -> Result<Vec<TxLog>, BlockchainError> {
         self.header.validate(prev)?;
 
         let mut txlogs: Vec<TxLog> = Vec::with_capacity(self.txs.len());
