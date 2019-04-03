@@ -158,7 +158,7 @@ There are several paths to signing:
 2. Make a Schnorr signature with one aggregated key (`Multikey`), derived from multiple public keys.
     - Create a `Multikey`. For more information, see the [key aggregation](#key-aggregation) section.
 
-    Each party gets initialized, and makes and shares its nonce precommitment:
+    Each party gets initialized, and makes and shares its nonce precommitment.
     - Call `Party::new(transcript, privkey, multikey)`.
     - Get back `PartyAwaitingPrecommitments` and a `NoncePrecommitment`.
     - Share your `NoncePrecommitment`, and receive other parties' `NoncePrecommitment`s. 
