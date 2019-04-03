@@ -261,8 +261,7 @@ as well as its counterparties' messages. This makes the protocol slightly simple
 (Future work: potentially remove this redundancy).
 
 Also, for now we will assume that all of the messages passed into each party state arrive in the same order 
-(each party's message is in the same index). 
-This allows us to skip the step of ordering them / assigning indexes. 
+(each party's message is in the same index). This allows us to skip the step of ordering them / assigning indexes. 
 (Future work: allow for unordered inputs, have the parties sort them.)
 
 ### Party
