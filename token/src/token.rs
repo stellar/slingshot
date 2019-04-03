@@ -1,4 +1,5 @@
 use curve25519_dalek::scalar::Scalar;
+use zkvm::keys;
 use zkvm::{Commitment, Data, Output, Predicate, Program, Value};
 
 /// Represents a ZkVM Token with unique flavor and embedded
@@ -96,7 +97,7 @@ mod tests {
 
         // Verify tx
         let bp_gens = BulletproofGens::new(256, 1);
-        assert!(Verifier::verify_tx(&tx, &bp_gens).is_ok());
+        assert!(Verifier::verify_tx(tx, &bp_gens, |keys| keys::aggregated_pubkey(keys)).is_ok());
     }
 
     #[test]
@@ -128,7 +129,7 @@ mod tests {
 
         // Verify tx
         let bp_gens = BulletproofGens::new(256, 1);
-        assert!(Verifier::verify_tx(&tx, &bp_gens).is_ok());
+        assert!(Verifier::verify_tx(tx, &bp_gens, |keys| keys::aggregated_pubkey(keys)).is_ok());
     }
 
     // Helper functions
@@ -153,7 +154,10 @@ mod tests {
                     None
                 })
                 .collect();
-            Signature::sign_aggregated(t, &signtx_keys)
+            Ok(Signature::sign_single(
+                &mut t.clone(),
+                keys::aggregated_privkey(&signtx_keys),
+            ))
         })
     }
 }
