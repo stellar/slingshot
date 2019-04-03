@@ -42,7 +42,9 @@ This is a private trait with three functions:
   suitable challenge for that public key. 
 - `get_pubkeys(&self) -> Vec<VerificationKey>`: returns the associated public keys.
 
-### Multikey (implements MusigContext)
+### Multikey 
+
+Implements MusigContext
 
 Fields:
 - transcript: `Transcript`. All of the pubkeys that the multikey are created from are committed to this transcript. 
@@ -72,7 +74,9 @@ Functions:
 
 - `Multikey::get_pubkeys(&self) -> Vec<VerificationKey>`: returns the list of public keys, `self.public_keys`.
 
-### Multimessage (implements MusigContext)
+### Multimessage
+
+Implements MusigContext
 
 Fields:
 - pairs: `Vec<(VerificationKey, [u8])>`
