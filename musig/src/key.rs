@@ -5,11 +5,23 @@ use curve25519_dalek::ristretto::{CompressedRistretto, RistrettoPoint};
 use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
 
+trait MusigContext {
+    /// Takes a mutable transcript, and commits the internal context to the transcript.
+    fn commit(&self, transcript: &mut Transcript);
+
+    /// Takes a public key and mutable transcript, and returns the suitable challenge for that public key.
+    fn challenge(&self, pubkey: &VerificationKey, transcript: &mut Transcript) -> Scalar;
+
+    /// Returns the associated public keys.
+    fn get_pubkeys(&self) -> Vec<VerificationKey>;
+}
+
 #[derive(Clone)]
 /// MuSig aggregated key.
 pub struct Multikey {
     transcript: Option<Transcript>,
     aggregated_key: VerificationKey,
+    public_keys: Vec<VerificationKey>,
 }
 
 impl Multikey {
@@ -23,6 +35,7 @@ impl Multikey {
                 return Ok(Multikey {
                     transcript: None,
                     aggregated_key: pubkeys[0],
+                    public_keys: pubkeys,
                 });
             }
             _ => {}
@@ -49,6 +62,7 @@ impl Multikey {
         Ok(Multikey {
             transcript: Some(transcript),
             aggregated_key: aggregated_key.into(),
+            public_keys: pubkeys,
         })
     }
 
@@ -73,8 +87,22 @@ impl Multikey {
     }
 }
 
-/// Verification key (aka "pubkey") is a wrapper type around a Ristretto point and it's compressed variation
-/// that lets the verifier check the validity of a signature.
+impl MusigContext for Multikey {
+    fn commit(&self, _transcript: &mut Transcript) {
+        unimplemented!()
+    }
+
+    fn challenge(&self, _pubkey: &VerificationKey, _transcript: &mut Transcript) -> Scalar {
+        unimplemented!()
+    }
+
+    fn get_pubkeys(&self) -> Vec<VerificationKey> {
+        self.public_keys.clone()
+    }
+}
+
+/// Verification key (aka "pubkey") is a wrapper type around a Ristretto point
+/// that lets the verifier to check the signature.
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub struct VerificationKey {
     point: RistrettoPoint,

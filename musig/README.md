@@ -102,7 +102,7 @@ Functions:
   It commits `i` to the forked transcript with label "i".
   It then gets and returns the challenge scalar `c_i` from the forked transcript with label "c_i".
 
-- `Multikey::get_pubkeys(&self) -> Vec<VerificationKey>`: returns the list of public keys, without the messages, from `self.pairs`.
+- `Multimessage::get_pubkeys(&self) -> Vec<VerificationKey>`: returns the list of public keys, without the messages, from `self.pairs`.
 
 
 ### Signature
