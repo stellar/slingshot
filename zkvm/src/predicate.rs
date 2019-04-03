@@ -80,18 +80,6 @@ impl Predicate {
         encoding::write_point(&self.to_point(), prog);
     }
 
-    /// Verifies whether the current predicate is a commitment to a signing key `key` and Merkle root `root`.
-    /// Returns a `PointOp` instance that can be verified in a batch with other operations.
-    pub fn prove_taproot(&self, key: &CompressedRistretto, root: &[u8]) -> PointOp {
-        let h = Self::commit_taproot(&key.to_bytes(), root);
-        // P == X + h1(X, M)*B -> 0 == -P + X + h1(X, M)*B
-        PointOp {
-            primary: Some(h),
-            secondary: None,
-            arbitrary: vec![(-Scalar::one(), self.to_point()), (Scalar::one(), *key)],
-        }
-    }
-
     /// Downcasts the predicate to a verification key
     pub fn to_key(self) -> Result<VerificationKey, VMError> {
         match self {
@@ -110,6 +98,18 @@ impl Predicate {
         t.commit_bytes(b"key", key);
         t.commit_bytes(b"merkle", root);
         t.challenge_scalar(b"h")
+    }
+
+    /// Verifies whether the current predicate is a commitment to a signing key `key` and Merkle root `root`.
+    /// Returns a `PointOp` instance that can be verified in a batch with other operations.
+    pub fn prove_taproot(&self, key: &CompressedRistretto, root: &[u8]) -> PointOp {
+        let h = Self::commit_taproot(&key.to_bytes(), root);
+        // P == X + h1(X, M)*B -> 0 == -P + X + h1(X, M)*B
+        PointOp {
+            primary: Some(h),
+            secondary: None,
+            arbitrary: vec![(-Scalar::one(), self.to_point()), (Scalar::one(), *key)],
+        }
     }
 }
 
