@@ -80,7 +80,7 @@ impl<'t> Verifier<'t> {
     /// Verifies the `Tx` object by executing the VM and returns the `VerifiedTx`.
     /// Returns an error if the program is malformed or any of the proofs are not valid.
     pub fn verify_tx<F>(
-        tx: Tx,
+        tx: &Tx,
         bp_gens: &BulletproofGens,
         key_agg_fn: F,
     ) -> Result<VerifiedTx, VMError>
