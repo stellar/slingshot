@@ -5,7 +5,7 @@ use curve25519_dalek::ristretto::{CompressedRistretto, RistrettoPoint};
 use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
 
-trait MusigContext {
+pub(crate) trait MusigContext {
     /// Takes a mutable transcript, and commits the internal context to the transcript.
     fn commit(&self, transcript: &mut Transcript);
 
@@ -66,19 +66,12 @@ impl Multikey {
         })
     }
 
+    /// Returns `a_i` factor for component key in aggregated key.
+    /// a_i = H(<L>, X_i). The list of pubkeys, <L>, has already been committed to the transcript.
     fn compute_factor(transcript: &Transcript, X_i: &VerificationKey) -> Scalar {
-        // a_i = H(<L>, X_i). Components of <L> have already been fed to transcript.
         let mut a_i_transcript = transcript.clone();
         a_i_transcript.commit_point(b"X_i", X_i.as_compressed());
         a_i_transcript.challenge_scalar(b"a_i")
-    }
-
-    /// Returns `a_i` factor for component key in aggregated key.
-    pub fn factor_for_key(&self, X_i: &VerificationKey) -> Scalar {
-        match &self.transcript {
-            Some(t) => Multikey::compute_factor(&t, X_i),
-            None => Scalar::one(),
-        }
     }
 
     /// Returns VerificationKey representation of aggregated key.
@@ -88,12 +81,24 @@ impl Multikey {
 }
 
 impl MusigContext for Multikey {
-    fn commit(&self, _transcript: &mut Transcript) {
-        unimplemented!()
+    fn commit(&self, transcript: &mut Transcript) {
+        transcript.commit_point(b"X", self.aggregated_key.as_compressed());
     }
 
-    fn challenge(&self, _pubkey: &VerificationKey, _transcript: &mut Transcript) -> Scalar {
-        unimplemented!()
+    fn challenge(&self, pubkey: &VerificationKey, transcript: &mut Transcript) -> Scalar {
+        // Make c = H(X, R, m)
+        // The message `m`, nonce commitment `R`, and aggregated key `X` 
+        // have already been fed into the transcript.
+        let c = transcript.challenge_scalar(b"c");
+
+        // Make a_i, the per-party factor. a_i = H(<L>, X_i).
+        // The list of pubkeys, <L>, has already been committed to self.transcript.
+        let a_i = match &self.transcript {
+            Some(t) => Multikey::compute_factor(&t, &pubkey),
+            None => Scalar::one(),
+        };
+
+        c * a_i
     }
 
     fn get_pubkeys(&self) -> Vec<VerificationKey> {

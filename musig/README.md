@@ -450,14 +450,13 @@ Function: `sign<C: MusigContext>(...)`
 
 Input:
 - share: `Scalar`
-- nonce_sum: `RistrettoPoint`
 - context: `C`
 - transcript: `&mut transcript`
 
 Operation:
 - Verify that `s_i * G == R_i + c_i * X_i`.
   `s_i` = share, `G` = [base point](#base-point), `R_i` = self.commitment,
-  `c_i` = `context.challenge(self.pubkey, &mut transcript, nonce_sum)`, `X_i` = self.pubkey.
+  `c_i` = `context.challenge(self.pubkey, &mut transcript)`, `X_i` = self.pubkey.
 - If verification succeeds, return `Ok(share)`
 - Else, return `Err(VMError::MusigShareError)`
 

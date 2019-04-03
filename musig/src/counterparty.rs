@@ -1,5 +1,5 @@
 use super::errors::MusigError;
-use super::key::{Multikey, VerificationKey};
+use super::key::{VerificationKey, MusigContext};
 use crate::transcript::TranscriptProtocol;
 use curve25519_dalek::constants::RISTRETTO_BASEPOINT_POINT;
 use curve25519_dalek::ristretto::{CompressedRistretto, RistrettoPoint};
@@ -87,11 +87,11 @@ impl CounterpartyPrecommitted {
 }
 
 impl CounterpartyCommitted {
-    pub(super) fn sign(
+    pub(super) fn sign<C: MusigContext>(
         self,
         share: Scalar,
-        challenge: Scalar,
-        multikey: &Multikey,
+        context: &C,
+        transcript: &mut Transcript,
     ) -> Result<Scalar, MusigError> {
         // Check if s_i * G == R_i + c * a_i * X_i.
         //   s_i = share
@@ -101,10 +101,10 @@ impl CounterpartyCommitted {
         //   a_i = multikey.factor_for_key(self.pubkey)
         //   X_i = self.pubkey
         let S_i = share * RISTRETTO_BASEPOINT_POINT;
-        let a_i = multikey.factor_for_key(&self.pubkey);
+        let c_i = context.challenge(&self.pubkey, &mut transcript);
         let X_i = self.pubkey.into_point();
 
-        if S_i != self.commitment.0 + challenge * a_i * X_i {
+        if S_i != self.commitment.0 + c_i * X_i {
             return Err(MusigError::ShareError {
                 pubkey: self.pubkey.into_compressed().to_bytes(),
             });
