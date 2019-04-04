@@ -29,6 +29,9 @@ features = ["yoloproofs"]
 [dependencies.spacesuit]
 path = "../spacesuit"
 
+[dependencies.musig]
+path = "../musig"
+
 [dev-dependencies]
 criterion = "0.2"
 hex = "^0.3"

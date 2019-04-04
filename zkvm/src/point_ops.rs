@@ -2,6 +2,7 @@ use bulletproofs::PedersenGens;
 use curve25519_dalek::ristretto::{CompressedRistretto, RistrettoPoint};
 use curve25519_dalek::scalar::Scalar;
 use curve25519_dalek::traits::{Identity, IsIdentity, VartimeMultiscalarMul};
+use musig::DeferredVerification;
 
 use super::errors::VMError;
 
@@ -99,6 +100,16 @@ impl PointOp {
         }
 
         Ok(())
+    }
+}
+
+impl Into<PointOp> for DeferredVerification {
+    fn into(self) -> PointOp {
+        PointOp {
+            primary: Some(self.static_point_weight),
+            secondary: None,
+            arbitrary: self.dynamic_point_weights,
+        }
     }
 }
 

@@ -1,20 +1,24 @@
-use super::VerificationKey;
-use crate::errors::VMError;
-use crate::transcript::TranscriptProtocol;
-use curve25519_dalek::ristretto::RistrettoPoint;
+use super::errors::MusigError;
+use super::transcript::TranscriptProtocol;
+use curve25519_dalek::constants::RISTRETTO_BASEPOINT_POINT;
+use curve25519_dalek::ristretto::{CompressedRistretto, RistrettoPoint};
 use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
 
 #[derive(Clone)]
+/// MuSig aggregated key.
 pub struct Multikey {
     transcript: Option<Transcript>,
     aggregated_key: VerificationKey,
 }
 
 impl Multikey {
-    pub fn new(pubkeys: Vec<VerificationKey>) -> Result<Self, VMError> {
+    /// Constructs a new MuSig multikey aggregating the pubkeys.
+    pub fn new(pubkeys: Vec<VerificationKey>) -> Result<Self, MusigError> {
         match pubkeys.len() {
-            0 => return Err(VMError::BadArguments),
+            0 => {
+                return Err(MusigError::BadArguments);
+            }
             1 => {
                 return Ok(Multikey {
                     transcript: None,
@@ -25,7 +29,7 @@ impl Multikey {
         }
 
         // Create transcript for Multikey
-        let mut transcript = Transcript::new(b"MuSig.aggregated-key");
+        let mut transcript = Transcript::new(b"Musig.aggregated-key");
         transcript.commit_u64(b"n", pubkeys.len() as u64);
 
         // Commit pubkeys into the transcript
@@ -38,7 +42,8 @@ impl Multikey {
         let mut aggregated_key = RistrettoPoint::default();
         for X in &pubkeys {
             let a = Multikey::compute_factor(&transcript, X);
-            aggregated_key = aggregated_key + a * X.into_point();
+            let X = X.0.decompress().ok_or(MusigError::InvalidPoint)?;
+            aggregated_key = aggregated_key + a * X;
         }
 
         Ok(Multikey {
@@ -54,6 +59,7 @@ impl Multikey {
         a_i_transcript.challenge_scalar(b"a_i")
     }
 
+    /// Returns `a_i` factor for component key in aggregated key.
     pub fn factor_for_key(&self, X_i: &VerificationKey) -> Scalar {
         match &self.transcript {
             Some(t) => Multikey::compute_factor(&t, X_i),
@@ -61,7 +67,31 @@ impl Multikey {
         }
     }
 
+    /// Returns VerificationKey representation of aggregated key.
     pub fn aggregated_key(&self) -> VerificationKey {
         self.aggregated_key
+    }
+}
+
+/// Verification key (aka "pubkey") is a wrapper type around a Ristretto point
+/// that lets the verifier to check the signature.
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub struct VerificationKey(pub CompressedRistretto);
+
+impl VerificationKey {
+    /// Constructs a VerificationKey from a private key.
+    pub fn from_secret(privkey: &Scalar) -> Self {
+        VerificationKey(Self::from_secret_uncompressed(privkey).compress())
+    }
+
+    /// Constructs an uncompressed VerificationKey point from a private key.
+    pub(crate) fn from_secret_uncompressed(privkey: &Scalar) -> RistrettoPoint {
+        (privkey * RISTRETTO_BASEPOINT_POINT)
+    }
+}
+
+impl From<CompressedRistretto> for VerificationKey {
+    fn from(x: CompressedRistretto) -> Self {
+        VerificationKey(x)
     }
 }

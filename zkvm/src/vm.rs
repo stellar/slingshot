@@ -3,6 +3,7 @@ use bulletproofs::r1cs::R1CSProof;
 use curve25519_dalek::ristretto::CompressedRistretto;
 use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
+use musig::Signature;
 use serde::de::Visitor;
 use serde::{self, Deserialize, Deserializer, Serialize, Serializer};
 use spacesuit;
@@ -19,7 +20,6 @@ use crate::ops::Instruction;
 use crate::point_ops::PointOp;
 use crate::predicate::Predicate;
 use crate::scalar_witness::ScalarWitness;
-use crate::signature::*;
 use crate::txlog::{Entry, TxID, TxLog};
 use crate::types::*;
 
@@ -88,7 +88,7 @@ impl Tx {
         let prog_len = r.read_size()?;
         let program = r.read_bytes(prog_len)?.to_vec();
 
-        let signature = Signature::from_bytes(r.read_u8x64()?)?;
+        let signature = Signature::from_bytes(r.read_u8x64()?).map_err(|_| VMError::FormatError)?;
         let proof =
             R1CSProof::from_bytes(r.read_bytes(r.len())?).map_err(|_| VMError::FormatError)?;
         Ok(Tx {
@@ -704,6 +704,7 @@ where
     // _contract_ **signtx** → _results..._
     fn signtx(&mut self) -> Result<(), VMError> {
         let contract = self.pop_item()?.to_contract()?;
+        // TODO: use multi-message API to sign the entire contract ID.
         self.delegate.process_tx_signature(contract.predicate)?;
         for item in contract.payload.into_iter() {
             self.push_item(item);
@@ -756,7 +757,8 @@ where
     fn delegate(&mut self) -> Result<(), VMError> {
         // Signature
         let sig = self.pop_item()?.to_data()?.to_bytes();
-        let signature = Signature::from_bytes(SliceReader::parse(&sig, |r| r.read_u8x64())?)?;
+        let signature = Signature::from_bytes(SliceReader::parse(&sig, |r| r.read_u8x64())?)
+            .map_err(|_| VMError::FormatError)?;
 
         // Program
         let prog = self.pop_item()?.to_data()?;
@@ -772,9 +774,10 @@ where
 
         // Verify signature using Verification key, over the message `program`
         let mut t = Transcript::new(b"ZkVM.delegate");
+        // TODO: commit the contract ID, to bind signature to this instance.
         t.commit_bytes(b"prog", &prog.clone().to_bytes());
         self.delegate
-            .verify_point_op(|| signature.verify_single(&mut t, verification_key))?;
+            .verify_point_op(|| signature.verify(&mut t, verification_key).into())?;
 
         // Replace current program with new program
         self.continue_with_program(prog)?;

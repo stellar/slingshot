@@ -7,13 +7,13 @@ use bulletproofs::PedersenGens;
 use curve25519_dalek::ristretto::CompressedRistretto;
 use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
+use musig::VerificationKey;
 use std::borrow::Borrow;
 
 use crate::encoding;
 use crate::errors::VMError;
 use crate::point_ops::PointOp;
 use crate::program::Program;
-use crate::signature::VerificationKey;
 use crate::transcript::TranscriptProtocol;
 
 /// Represents a ZkVM predicate with its optional witness data.

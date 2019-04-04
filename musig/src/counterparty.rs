@@ -1,6 +1,5 @@
-use super::multikey::Multikey;
-use super::VerificationKey;
-use crate::errors::VMError;
+use super::errors::MusigError;
+use super::key::{Multikey, VerificationKey};
 use crate::transcript::TranscriptProtocol;
 use curve25519_dalek::constants::RISTRETTO_BASEPOINT_POINT;
 use curve25519_dalek::ristretto::{CompressedRistretto, RistrettoPoint};
@@ -20,7 +19,7 @@ impl NonceCommitment {
     }
 
     pub(super) fn precommit(&self) -> NoncePrecommitment {
-        let mut h = Transcript::new(b"MuSig.nonce-precommit");
+        let mut h = Transcript::new(b"Musig.nonce-precommit");
         h.commit_point(b"R", &self.0.compress());
         let mut precommitment = [0u8; 32];
         h.challenge_bytes(b"precommitment", &mut precommitment);
@@ -70,13 +69,13 @@ impl CounterpartyPrecommitted {
     pub(super) fn commit_nonce(
         self,
         commitment: NonceCommitment,
-    ) -> Result<CounterpartyCommitted, VMError> {
+    ) -> Result<CounterpartyCommitted, MusigError> {
         // Check H(commitment) =? precommitment
         let received_precommitment = commitment.precommit();
         let equal = self.precommitment.0.ct_eq(&received_precommitment.0);
         if equal.unwrap_u8() == 0 {
-            return Err(VMError::MuSigShareError {
-                pubkey: self.pubkey.into_compressed().to_bytes(),
+            return Err(MusigError::ShareError {
+                pubkey: self.pubkey.0.to_bytes(),
             });
         }
 
@@ -93,7 +92,7 @@ impl CounterpartyCommitted {
         share: Scalar,
         challenge: Scalar,
         multikey: &Multikey,
-    ) -> Result<Scalar, VMError> {
+    ) -> Result<Scalar, MusigError> {
         // Check if s_i * G == R_i + c * a_i * X_i.
         //   s_i = share
         //   G = RISTRETTO_BASEPOINT_POINT
@@ -103,11 +102,11 @@ impl CounterpartyCommitted {
         //   X_i = self.pubkey
         let S_i = share * RISTRETTO_BASEPOINT_POINT;
         let a_i = multikey.factor_for_key(&self.pubkey);
-        let X_i: RistrettoPoint = self.pubkey.into_point();
+        let X_i = self.pubkey.0.decompress().ok_or(MusigError::InvalidPoint)?;
 
         if S_i != self.commitment.0 + challenge * a_i * X_i {
-            return Err(VMError::MuSigShareError {
-                pubkey: self.pubkey.into_compressed().to_bytes(),
+            return Err(MusigError::ShareError {
+                pubkey: self.pubkey.0.to_bytes(),
             });
         }
 
