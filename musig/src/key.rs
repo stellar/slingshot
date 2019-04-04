@@ -73,7 +73,6 @@ impl Multikey {
     }
 }
 
-
 /// Verification key (aka "pubkey") is a wrapper type around a Ristretto point and it's compressed variation
 /// that lets the verifier check the validity of a signature.
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
