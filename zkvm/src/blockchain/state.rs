@@ -11,7 +11,7 @@ pub struct BlockchainState {
     pub initial: BlockHeader,
     pub tip: BlockHeader,
     pub utxos: HashSet<UTXO>,
-    pub nonces: VecDeque<([u8; 32], u64)>, // xxx need fast lookup by anchor
+    pub nonces: VecDeque<([u8; 32], u64)>, // xxx need to keep sorted by expiration time; need fast lookup by anchor
     pub ref_ids: VecDeque<BlockID>,        // xxx need fast lookup by blockID
 
     pub initial_id: BlockID,
