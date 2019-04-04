@@ -1,18 +1,13 @@
 //! Definition of all instructions in ZkVM,
 //! their codes and decoding/encoding utility functions.
 
-use core::borrow::Borrow;
-use core::mem;
-
 use crate::encoding;
 use crate::encoding::SliceReader;
 use crate::errors::VMError;
+use crate::scalar_witness::ScalarWitness;
 use crate::types::Data;
-
-/// A builder type for assembling a sequence of `Instruction`s with chained method calls.
-/// E.g. `let prog = Program::new().push(...).input().push(...).output(1).to_vec()`.
-#[derive(Clone, Debug)]
-pub struct Program(Vec<Instruction>);
+use core::mem;
+use spacesuit::BitRange;
 
 /// A decoded instruction.
 #[derive(Clone, Debug)]
@@ -24,7 +19,7 @@ pub enum Instruction {
     Roll(usize), // index of the item
     Const,
     Var,
-    Alloc,
+    Alloc(Option<ScalarWitness>),
     Mintime,
     Maxtime,
     Expr,
@@ -32,18 +27,15 @@ pub enum Instruction {
     Add,
     Mul,
     Eq,
-    Range(u8), // bitwidth (1..64)
+    Range(BitRange), // bitwidth (0...64)
     And,
     Or,
+    Not,
     Verify,
-    Blind,
-    Reblind,
     Unblind,
     Issue,
     Borrow,
     Retire,
-    Qty,
-    Flavor,
     Cloak(usize, usize), // M inputs, N outputs
     Import,
     Export,
@@ -54,8 +46,7 @@ pub enum Instruction {
     Log,
     Signtx,
     Call,
-    Left,
-    Right,
+    Select(u8, u8),
     Delegate,
     Ext(u8),
 }
@@ -82,31 +73,27 @@ pub enum Opcode {
     Range = 0x0e,
     And = 0x0f,
     Or = 0x10,
-    Verify = 0x11,
-    Blind = 0x12,
-    Reblind = 0x13,
-    Unblind = 0x14,
-    Issue = 0x15,
-    Borrow = 0x16,
-    Retire = 0x17,
-    Qty = 0x18,
-    Flavor = 0x19,
-    Cloak = 0x1a,
-    Import = 0x1b,
-    Export = 0x1c,
-    Input = 0x1d,
-    Output = 0x1e,
-    Contract = 0x1f,
-    Nonce = 0x20,
-    Log = 0x21,
-    Signtx = 0x22,
-    Call = 0x23,
-    Left = 0x24,
-    Right = 0x25,
+    Not = 0x11,
+    Verify = 0x12,
+    Unblind = 0x13,
+    Issue = 0x14,
+    Borrow = 0x15,
+    Retire = 0x16,
+    Cloak = 0x17,
+    Import = 0x18,
+    Export = 0x19,
+    Input = 0x1a,
+    Output = 0x1b,
+    Contract = 0x1c,
+    Nonce = 0x1d,
+    Log = 0x1e,
+    Signtx = 0x1f,
+    Call = 0x20,
+    Select = 0x21,
     Delegate = MAX_OPCODE,
 }
 
-const MAX_OPCODE: u8 = 0x26;
+const MAX_OPCODE: u8 = 0x22;
 
 impl Opcode {
     /// Converts the opcode to `u8`.
@@ -175,7 +162,7 @@ impl Instruction {
             }
             Opcode::Const => Ok(Instruction::Const),
             Opcode::Var => Ok(Instruction::Var),
-            Opcode::Alloc => Ok(Instruction::Alloc),
+            Opcode::Alloc => Ok(Instruction::Alloc(None)),
             Opcode::Mintime => Ok(Instruction::Mintime),
             Opcode::Maxtime => Ok(Instruction::Maxtime),
             Opcode::Expr => Ok(Instruction::Expr),
@@ -184,20 +171,18 @@ impl Instruction {
             Opcode::Mul => Ok(Instruction::Mul),
             Opcode::Eq => Ok(Instruction::Eq),
             Opcode::Range => {
-                let bit_width = program.read_u8()?;
+                let bit_width =
+                    BitRange::new(program.read_u8()? as usize).ok_or(VMError::FormatError)?;
                 Ok(Instruction::Range(bit_width))
             }
             Opcode::And => Ok(Instruction::And),
             Opcode::Or => Ok(Instruction::Or),
+            Opcode::Not => Ok(Instruction::Not),
             Opcode::Verify => Ok(Instruction::Verify),
-            Opcode::Blind => Ok(Instruction::Blind),
-            Opcode::Reblind => Ok(Instruction::Reblind),
             Opcode::Unblind => Ok(Instruction::Unblind),
             Opcode::Issue => Ok(Instruction::Issue),
             Opcode::Borrow => Ok(Instruction::Borrow),
             Opcode::Retire => Ok(Instruction::Retire),
-            Opcode::Qty => Ok(Instruction::Qty),
-            Opcode::Flavor => Ok(Instruction::Flavor),
             Opcode::Cloak => {
                 let m = program.read_size()?;
                 let n = program.read_size()?;
@@ -218,8 +203,11 @@ impl Instruction {
             Opcode::Log => Ok(Instruction::Log),
             Opcode::Signtx => Ok(Instruction::Signtx),
             Opcode::Call => Ok(Instruction::Call),
-            Opcode::Left => Ok(Instruction::Left),
-            Opcode::Right => Ok(Instruction::Right),
+            Opcode::Select => {
+                let n = program.read_u8()?;
+                let k = program.read_u8()?;
+                Ok(Instruction::Select(n, k))
+            }
             Opcode::Delegate => Ok(Instruction::Delegate),
         }
     }
@@ -245,7 +233,7 @@ impl Instruction {
             }
             Instruction::Const => write(Opcode::Const),
             Instruction::Var => write(Opcode::Var),
-            Instruction::Alloc => write(Opcode::Alloc),
+            Instruction::Alloc(_) => write(Opcode::Alloc),
             Instruction::Mintime => write(Opcode::Mintime),
             Instruction::Maxtime => write(Opcode::Maxtime),
             Instruction::Expr => write(Opcode::Expr),
@@ -253,21 +241,19 @@ impl Instruction {
             Instruction::Add => write(Opcode::Add),
             Instruction::Mul => write(Opcode::Mul),
             Instruction::Eq => write(Opcode::Eq),
-            Instruction::Range(bit_width) => {
+            Instruction::Range(n) => {
                 write(Opcode::Range);
-                program.push(*bit_width);
+                let bit_width: BitRange = *n;
+                program.push(bit_width.into());
             }
             Instruction::And => write(Opcode::And),
             Instruction::Or => write(Opcode::Or),
+            Instruction::Not => write(Opcode::Not),
             Instruction::Verify => write(Opcode::Verify),
-            Instruction::Blind => write(Opcode::Blind),
-            Instruction::Reblind => write(Opcode::Reblind),
             Instruction::Unblind => write(Opcode::Unblind),
             Instruction::Issue => write(Opcode::Issue),
             Instruction::Borrow => write(Opcode::Borrow),
             Instruction::Retire => write(Opcode::Retire),
-            Instruction::Qty => write(Opcode::Qty),
-            Instruction::Flavor => write(Opcode::Flavor),
             Instruction::Cloak(m, n) => {
                 write(Opcode::Cloak);
                 encoding::write_u32(*m as u32, program);
@@ -288,111 +274,13 @@ impl Instruction {
             Instruction::Log => write(Opcode::Log),
             Instruction::Signtx => write(Opcode::Signtx),
             Instruction::Call => write(Opcode::Call),
-            Instruction::Left => write(Opcode::Left),
-            Instruction::Right => write(Opcode::Right),
+            Instruction::Select(n, k) => {
+                write(Opcode::Select);
+                encoding::write_u8(*n, program);
+                encoding::write_u8(*k, program);
+            }
             Instruction::Delegate => write(Opcode::Delegate),
             Instruction::Ext(x) => program.push(*x),
         };
-    }
-
-    /// Encodes the iterator of instructions into a buffer.
-    pub fn encode_program<I>(iterator: I, program: &mut Vec<u8>)
-    where
-        I: IntoIterator,
-        I::Item: Borrow<Self>,
-    {
-        for i in iterator.into_iter() {
-            i.borrow().encode(program);
-        }
-    }
-}
-
-macro_rules! def_op {
-    ($func_name:ident, $op:ident) => (
-           /// Adds a `$func_name` instruction.
-           pub fn $func_name(&mut self) -> &mut Program{
-             self.0.push(Instruction::$op);
-             self
-        }
-    );
-    ($func_name:ident, $op:ident, $type:ty) => (
-           /// Adds a `$func_name` instruction.
-           pub fn $func_name(&mut self, arg :$type) -> &mut Program{
-             self.0.push(Instruction::$op(arg));
-             self
-        }
-    );
-}
-
-impl Program {
-    def_op!(add, Add);
-    def_op!(alloc, Alloc);
-    def_op!(and, And);
-    def_op!(blind, Blind);
-    def_op!(borrow, Borrow);
-    def_op!(call, Call);
-    def_op!(r#const, Const);
-    def_op!(contract, Contract, usize);
-    def_op!(delegate, Delegate);
-    def_op!(drop, Drop);
-    def_op!(dup, Dup, usize);
-    def_op!(eq, Eq);
-    def_op!(export, Export);
-    def_op!(expr, Expr);
-    def_op!(flavor, Flavor);
-    def_op!(import, Import);
-    def_op!(input, Input);
-    def_op!(issue, Issue);
-    def_op!(left, Left);
-    def_op!(log, Log);
-    def_op!(maxtime, Maxtime);
-    def_op!(mintime, Mintime);
-    def_op!(mul, Mul);
-    def_op!(neg, Neg);
-    def_op!(nonce, Nonce);
-    def_op!(or, Or);
-    def_op!(output, Output, usize);
-    def_op!(qty, Qty);
-    def_op!(range, Range, u8);
-    def_op!(reblind, Reblind);
-    def_op!(retire, Retire);
-    def_op!(right, Right);
-    def_op!(roll, Roll, usize);
-    def_op!(sign_tx, Signtx);
-    def_op!(unblind, Unblind);
-    def_op!(var, Var);
-    def_op!(verify, Verify);
-
-    /// Creates an empty `Program`.
-    pub fn new() -> Self {
-        Program(vec![])
-    }
-
-    /// Creates an empty `Program` and passes its &mut to the closure to let it add the instructions.
-    /// Returns the resulting program.
-    pub fn build<F>(builder: F) -> Self
-    where
-        F: FnOnce(&mut Self) -> &mut Self,
-    {
-        let mut program = Self::new();
-        builder(&mut program);
-        program
-    }
-
-    /// Converts the program to a plain vector of instructions.
-    pub fn to_vec(self) -> Vec<Instruction> {
-        self.0
-    }
-
-    /// Adds a `push` instruction with an immediate data type that can be converted into `Data`.
-    pub fn push<T: Into<Data>>(&mut self, data: T) -> &mut Program {
-        self.0.push(Instruction::Push(data.into()));
-        self
-    }
-
-    /// Adds a `cloak` instruction for `m` inputs and `n` outputs.
-    pub fn cloak(&mut self, m: usize, n: usize) -> &mut Program {
-        self.0.push(Instruction::Cloak(m, n));
-        self
     }
 }

@@ -142,18 +142,29 @@ Exporting funds from TxVM for peg-out to Stellar requires three steps:
 2. Change the temporary account’s signer to a
    [preauthorized transaction](https://www.stellar.org/developers/guides/concepts/multi-sig.html#pre-authorized-transaction)
    as described below;
-3. [Retire](https://github.com/chain/txvm/blob/main/specifications/txvm.md#retire)
-   some imported funds in a transaction where the `retire` instruction is immediately followed by a
-   [log](https://github.com/chain/txvm/blob/main/specifications/txvm.md#log)
-   of this JSON string:
-   `{"asset":ASSET,"temp":TEMP,"seqnum":SEQNUM,"exporter":EXPORTER}`,
+3. Lock the TxVM funds to be exported in a smart contract,
+   to be unlocked after the peg-out step.
+   If peg-out succeeds,
+   the smart contract
+   [retires](https://github.com/chain/txvm/blob/main/specifications/txvm.md#retire)
+   the locked-up funds.
+   If peg-out fails,
+   the smart contract repays the locked-up funds to the exporter.
+   Along with the funds, the smart contract stores the exporter’s pubkey
+   (in case repayment is needed)
+   and a JSON string of the form:
+   `{"asset":ASSET,"temp":TEMP,"seqnum":SEQNUM,"exporter":EXPORTER,"amount":AMOUNT,"anchor":ANCHOR,"pubkey":PUBKEY}`,
    where
    - ASSET is the Stellar asset code
      (as base64-encoded XDR)
      of the funds to peg out;
    - TEMP is the temporary account created in step 1;
    - SEQNUM is the sequence number of the temporary account;
-   - EXPORTER is the creator of the temporary account and the intended recipient of the peg-out funds.
+   - EXPORTER is the creator of the temporary account on the Stellar side,
+     and the intended recipient of the peg-out funds;
+   - AMOUNT is the amount of the given asset being exported;
+   - ANCHOR is the TxVM anchor in the value stored in the contract;
+   - PUBKEY is the TxVM pubkey of the exporter.
 
 The temporary account will be closed
 (merged back to the exporter’s account)
@@ -194,17 +205,10 @@ It then publishes the preauthorized transaction described above that closes
 (merges)
 the temp account and pays the pegged-out funds to the recipient.
 
-Note:
-it is possible for the TxVM export transaction to succeed and the preauthorized peg-out transaction to fail
-(e.g.
-if the destination account no longer exists or does not have the correct
+After peg-out,
+the funds locked in the export contract are either retired,
+if peg-out was successful,
+or repaid to the exporter,
+if peg-out encounters a non-retriable failure
+(for instance, the destination account no longer exists or does not have the correct
 [trustline](https://www.stellar.org/developers/guides/concepts/assets.html#trustlines)).
-This is a loss-of-funds scenario that requires further refinement for improved safety.
-For example,
-the export transaction could lock the exported funds in a smart contract that can either
-(a)
-`retire` those funds or
-(b)
-repay them to the exporter,
-at the custodian’s discretion,
-depending on whether the peg-out transaction succeeds.

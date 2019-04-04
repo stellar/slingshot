@@ -3,20 +3,23 @@ use bulletproofs::r1cs::R1CSProof;
 use curve25519_dalek::ristretto::CompressedRistretto;
 use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
+use musig::Signature;
+use serde::de::Visitor;
+use serde::{self, Deserialize, Deserializer, Serialize, Serializer};
 use spacesuit;
-use spacesuit::SignedInteger;
+use spacesuit::BitRange;
 use std::iter::FromIterator;
 use std::mem;
 
 use crate::constraints::{Commitment, Constraint, Expression, Variable};
-use crate::contract::{Contract, PortableItem};
+use crate::contract::{Anchor, Contract, Output, PortableItem};
+use crate::encoding;
 use crate::encoding::SliceReader;
 use crate::errors::VMError;
 use crate::ops::Instruction;
 use crate::point_ops::PointOp;
 use crate::predicate::Predicate;
 use crate::scalar_witness::ScalarWitness;
-use crate::signature::*;
 use crate::txlog::{Entry, TxID, TxLog};
 use crate::types::*;
 
@@ -29,11 +32,31 @@ pub struct TxHeader {
     /// Version of the transaction
     pub version: u64,
 
-    /// Timestamp before which tx is invalid (sec)
+    /// Timestamp before which tx is invalid (in milliseconds since the Unix epoch)
     pub mintime: u64,
 
-    /// Timestamp after which tx is invalid (sec)
+    /// Timestamp after which tx is invalid (in milliseconds since the Unix epoch)
     pub maxtime: u64,
+}
+
+impl TxHeader {
+    fn serialized_size(&self) -> usize {
+        8 * 3
+    }
+
+    fn encode(&self, buf: &mut Vec<u8>) {
+        encoding::write_u64(self.version, buf);
+        encoding::write_u64(self.mintime, buf);
+        encoding::write_u64(self.maxtime, buf);
+    }
+
+    fn decode<'a>(reader: &mut SliceReader<'a>) -> Result<Self, VMError> {
+        Ok(TxHeader {
+            version: reader.read_u64()?,
+            mintime: reader.read_u64()?,
+            maxtime: reader.read_u64()?,
+        })
+    }
 }
 
 /// Instance of a transaction that contains all necessary data to validate it.
@@ -49,6 +72,90 @@ pub struct Tx {
 
     /// Constraint system proof for all the constraints
     pub proof: R1CSProof,
+}
+
+impl Tx {
+    fn encode(&self, buf: &mut Vec<u8>) {
+        self.header.encode(buf);
+        encoding::write_size(self.program.len(), buf);
+        buf.extend(&self.program);
+        buf.extend_from_slice(&self.signature.to_bytes());
+        buf.extend_from_slice(&self.proof.to_bytes());
+    }
+
+    fn decode<'a>(r: &mut SliceReader<'a>) -> Result<Tx, VMError> {
+        let header = TxHeader::decode(r)?;
+        let prog_len = r.read_size()?;
+        let program = r.read_bytes(prog_len)?.to_vec();
+
+        let signature = Signature::from_bytes(r.read_u8x64()?).map_err(|_| VMError::FormatError)?;
+        let proof =
+            R1CSProof::from_bytes(r.read_bytes(r.len())?).map_err(|_| VMError::FormatError)?;
+        Ok(Tx {
+            header,
+            program,
+            signature,
+            proof,
+        })
+    }
+
+    /// Serializes the tx into a byte array.
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let mut buf = Vec::with_capacity(self.serialized_size());
+        self.encode(&mut buf);
+        buf
+    }
+
+    /// Returns the size in bytes required to serialize the `Tx`.
+    pub fn serialized_size(&self) -> usize {
+        // header is 8 bytes * 3 fields = 24 bytes
+        // program length is 4 bytes
+        // program is self.program.len() bytes
+        // signature is 64 bytes
+        // proof is 14*32 + the ipp bytes
+        self.header.serialized_size() + 4 + self.program.len() + 64 + self.proof.serialized_size()
+    }
+
+    /// Deserializes the tx from a byte slice.
+    ///
+    /// Returns an error if the byte slice cannot be parsed into a `Tx`.
+    pub fn from_bytes(slice: &[u8]) -> Result<Tx, VMError> {
+        SliceReader::parse(slice, |r| Self::decode(r))
+    }
+}
+
+impl Serialize for Tx {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_bytes(&self.to_bytes()[..])
+    }
+}
+impl<'de> Deserialize<'de> for Tx {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct TxVisitor;
+
+        impl<'de> Visitor<'de> for TxVisitor {
+            type Value = Tx;
+
+            fn expecting(&self, formatter: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
+                formatter.write_str("a valid Tx")
+            }
+
+            fn visit_bytes<E>(self, v: &[u8]) -> Result<Tx, E>
+            where
+                E: serde::de::Error,
+            {
+                Tx::from_bytes(v).map_err(serde::de::Error::custom)
+            }
+        }
+
+        deserializer.deserialize_bytes(TxVisitor)
+    }
 }
 
 /// Represents a verified transaction: a txid and a list of state updates.
@@ -75,9 +182,8 @@ where
     // we allow treating unassigned opcodes as no-ops.
     extension: bool,
 
-    // set to true by `input` and `nonce` instructions
-    // when the txid is guaranteed to be unique.
-    unique: bool,
+    // updated by nonce/input/issue/contract/output instructions
+    last_anchor: Option<Anchor>,
 
     // stack of all items in the VM
     stack: Vec<Item>,
@@ -87,7 +193,6 @@ where
     current_run: D::RunType,
     run_stack: Vec<D::RunType>,
     txlog: TxLog,
-    variable_commitments: Vec<VariableCommitment>,
 }
 
 pub(crate) trait Delegate<CS: r1cs::ConstraintSystem> {
@@ -121,21 +226,6 @@ pub(crate) trait Delegate<CS: r1cs::ConstraintSystem> {
     fn new_run(&self, prog: Data) -> Result<Self::RunType, VMError>;
 }
 
-/// And indirect reference to a high-level variable within a constraint system.
-/// Variable types store index of such commitments that allows replacing them.
-#[derive(Debug)]
-pub struct VariableCommitment {
-    /// Pedersen commitment to a variable
-    commitment: Commitment,
-
-    /// Attached/detached state
-    /// None - if the variable is not attached to the CS yet,
-    /// so its commitment is replaceable via `reblind`.
-    /// Some - if variable is attached to the CS yet and has an index in CS,
-    /// so its commitment is no longer replaceable via `reblind`.
-    variable: Option<r1cs::Variable>,
-}
-
 impl<'d, CS, D> VM<'d, CS, D>
 where
     CS: r1cs::ConstraintSystem,
@@ -147,13 +237,12 @@ where
             mintime: header.mintime,
             maxtime: header.maxtime,
             extension: header.version > CURRENT_VERSION,
-            unique: false,
+            last_anchor: None,
             delegate,
             stack: Vec::new(),
             current_run: run,
             run_stack: Vec::new(),
             txlog: vec![Entry::Header(header)],
-            variable_commitments: Vec::new(),
         }
     }
 
@@ -169,8 +258,8 @@ where
             return Err(VMError::StackNotClean);
         }
 
-        if self.unique == false {
-            return Err(VMError::NotUniqueTxid);
+        if self.last_anchor.is_none() {
+            return Err(VMError::AnchorMissing);
         }
 
         let txid = TxID::from_log(&self.txlog[..]);
@@ -202,7 +291,7 @@ where
                 Instruction::Roll(i) => self.roll(i)?,
                 Instruction::Const => self.r#const()?,
                 Instruction::Var => self.var()?,
-                Instruction::Alloc => unimplemented!(),
+                Instruction::Alloc(sw) => self.alloc(sw)?,
                 Instruction::Mintime => self.mintime()?,
                 Instruction::Maxtime => self.maxtime()?,
                 Instruction::Expr => self.expr()?,
@@ -213,15 +302,12 @@ where
                 Instruction::Range(i) => self.range(i)?,
                 Instruction::And => self.and()?,
                 Instruction::Or => self.or()?,
+                Instruction::Not => self.not()?,
                 Instruction::Verify => self.verify()?,
-                Instruction::Blind => unimplemented!(),
-                Instruction::Reblind => unimplemented!(),
-                Instruction::Unblind => unimplemented!(),
+                Instruction::Unblind => self.unblind()?,
                 Instruction::Issue => self.issue()?,
-                Instruction::Borrow => unimplemented!(),
+                Instruction::Borrow => self.borrow()?,
                 Instruction::Retire => self.retire()?,
-                Instruction::Qty => unimplemented!(),
-                Instruction::Flavor => unimplemented!(),
                 Instruction::Cloak(m, n) => self.cloak(m, n)?,
                 Instruction::Import => unimplemented!(),
                 Instruction::Export => unimplemented!(),
@@ -232,8 +318,7 @@ where
                 Instruction::Log => self.log()?,
                 Instruction::Signtx => self.signtx()?,
                 Instruction::Call => self.call()?,
-                Instruction::Left => self.left()?,
-                Instruction::Right => self.right()?,
+                Instruction::Select(n, k) => self.select(n, k)?,
                 Instruction::Delegate => self.delegate()?,
                 Instruction::Ext(opcode) => self.ext(opcode)?,
             }
@@ -321,12 +406,9 @@ where
         Ok(())
     }
 
-    fn range(&mut self, i: u8) -> Result<(), VMError> {
-        if i < 1 || i > 64 {
-            return Err(VMError::InvalidBitrange);
-        }
+    fn range(&mut self, i: BitRange) -> Result<(), VMError> {
         let expr = self.pop_item()?.to_expression()?;
-        self.add_range_proof(i as usize, expr.clone())?;
+        self.add_range_proof(i, expr.clone())?;
         self.push_item(expr);
         Ok(())
     }
@@ -347,23 +429,59 @@ where
         Ok(())
     }
 
+    fn not(&mut self) -> Result<(), VMError> {
+        let c1 = self.pop_item()?.to_constraint()?;
+        let c2 = Constraint::Not(Box::new(c1));
+        self.push_item(c2);
+        Ok(())
+    }
+
     fn verify(&mut self) -> Result<(), VMError> {
         let constraint = self.pop_item()?.to_constraint()?;
         constraint.verify(self.delegate.cs())?;
         Ok(())
     }
 
+    fn unblind(&mut self) -> Result<(), VMError> {
+        // Pop scalar `v` and commitment `V`
+        let v_scalar = self.pop_item()?.to_data()?.to_scalar()?.to_scalar();
+        let v_point = self.pop_item()?.to_data()?.to_commitment()?.to_point();
+
+        self.delegate.verify_point_op(|| {
+            // Check V = vB => V-vB = 0
+            PointOp {
+                primary: Some(-v_scalar),
+                secondary: None,
+                arbitrary: vec![(Scalar::one(), v_point)],
+            }
+        })?;
+
+        // Push commitment item
+        self.push_item(Data::Opaque(v_point.as_bytes().to_vec()));
+        Ok(())
+    }
+
     fn r#const(&mut self) -> Result<(), VMError> {
-        let data = self.pop_item()?.to_data()?.to_bytes();
-        let scalar = SliceReader::parse(&data, |r| r.read_scalar())?;
-        self.push_item(Expression::constant(scalar));
+        let scalar_witness = self.pop_item()?.to_data()?.to_scalar()?;
+        self.push_item(Expression::constant(scalar_witness));
         Ok(())
     }
 
     fn var(&mut self) -> Result<(), VMError> {
-        let comm = self.pop_item()?.to_data()?.to_commitment()?;
-        let v = self.commitment_to_variable(comm);
+        let commitment = self.pop_item()?.to_data()?.to_commitment()?;
+        let v = Variable { commitment };
         self.push_item(v);
+        Ok(())
+    }
+
+    fn alloc(&mut self, sw: Option<ScalarWitness>) -> Result<(), VMError> {
+        let var = self
+            .delegate
+            .cs()
+            .allocate(sw.map(|s| s.to_scalar()))
+            .map_err(|e| VMError::R1CSError(e))?;
+        let expr = Expression::LinearCombination(vec![(var, Scalar::one())], sw);
+        self.push_item(expr);
         Ok(())
     }
 
@@ -377,16 +495,19 @@ where
         Ok(())
     }
 
+    // pred blockid `nonce` → contract
     fn nonce(&mut self) -> Result<(), VMError> {
+        let blockid = self.pop_item()?.to_data()?.to_bytes();
+        let blockid = SliceReader::parse(&blockid, |r| r.read_u8x32())?;
         let predicate = self.pop_item()?.to_data()?.to_predicate()?;
-        let point = predicate.to_point();
-        let contract = Contract {
-            predicate,
-            payload: Vec::new(),
-        };
-        self.txlog.push(Entry::Nonce(point, self.maxtime));
+        let nonce_anchor = Anchor::nonce(blockid, &predicate, self.maxtime);
+
+        self.last_anchor = Some(nonce_anchor); // will be immediately moved into contract below
+        let contract = self.make_output(predicate, vec![])?.into_contract().0;
+
+        self.txlog
+            .push(Entry::Nonce(blockid, self.maxtime, nonce_anchor));
         self.push_item(contract);
-        self.unique = true;
         Ok(())
     }
 
@@ -403,8 +524,8 @@ where
         let flv = self.pop_item()?.to_variable()?;
         let qty = self.pop_item()?.to_variable()?;
 
-        let (flv_point, _) = self.attach_variable(flv)?;
-        let (qty_point, _) = self.attach_variable(qty)?;
+        let (flv_point, _) = self.delegate.commit_variable(&flv.commitment)?;
+        let (qty_point, _) = self.delegate.commit_variable(&qty.commitment)?;
 
         self.delegate.verify_point_op(|| {
             let flv_scalar = Value::issue_flavor(&predicate, metadata);
@@ -416,55 +537,94 @@ where
             }
         })?;
 
-        let value = Value { qty, flv };
+        let value = Value {
+            qty: qty.commitment.clone(),
+            flv: flv.commitment,
+        };
 
         let qty_expr = self.variable_to_expression(qty)?;
-        self.add_range_proof(64, qty_expr)?;
+        self.add_range_proof(BitRange::max(), qty_expr)?;
 
         self.txlog.push(Entry::Issue(qty_point, flv_point));
 
-        let contract = Contract {
-            predicate,
-            payload: vec![PortableItem::Value(value)],
-        };
+        let payload = vec![PortableItem::Value(value)];
+        let contract = self.make_output(predicate, payload)?.into_contract().0;
 
         self.push_item(contract);
+        Ok(())
+    }
+
+    fn borrow(&mut self) -> Result<(), VMError> {
+        let flv = self.pop_item()?.to_variable()?;
+        let qty = self.pop_item()?.to_variable()?;
+
+        let (_, flv_var) = self.delegate.commit_variable(&flv.commitment)?;
+        let (_, qty_var) = self.delegate.commit_variable(&qty.commitment)?;
+        let flv_assignment = flv.commitment.assignment().map(|sw| sw.to_scalar());
+        let qty_assignment = ScalarWitness::option_to_integer(qty.commitment.assignment())?;
+
+        spacesuit::range_proof(
+            self.delegate.cs(),
+            qty_var.into(),
+            qty_assignment,
+            BitRange::max(),
+        )
+        .map_err(|_| VMError::R1CSInconsistency)?;
+
+        let neg_qty_var = self
+            .delegate
+            .cs()
+            .allocate(qty_assignment.map(|q| -q.to_scalar()))
+            .map_err(|e| VMError::R1CSError(e))?;
+        self.delegate.cs().constrain(qty_var + neg_qty_var);
+        let value = Value {
+            qty: qty.commitment.clone(),
+            flv: flv.commitment,
+        };
+        let wide_value = WideValue {
+            r1cs_qty: neg_qty_var,
+            r1cs_flv: flv_var,
+            witness: match (qty_assignment, flv_assignment) {
+                (Some(q), Some(f)) => Some((q, f)),
+                _ => None,
+            },
+        };
+        self.push_item(wide_value);
+        self.push_item(value);
         Ok(())
     }
 
     fn retire(&mut self) -> Result<(), VMError> {
         let value = self.pop_item()?.to_value()?;
-        let qty = self.variable_to_commitment(value.qty);
-        let flv = self.variable_to_commitment(value.flv);
-        self.txlog.push(Entry::Retire(qty.into(), flv.into()));
+        self.txlog
+            .push(Entry::Retire(value.qty.into(), value.flv.into()));
         Ok(())
     }
 
     /// _input_ **input** → _contract_
     fn input(&mut self) -> Result<(), VMError> {
-        let input = self.pop_item()?.to_data()?.to_input()?;
-        let (contract, utxo) = input.unfreeze(|c| self.commitment_to_variable(c));
+        let output = self.pop_item()?.to_data()?.to_output()?;
+        let (contract, contract_id) = output.into_contract();
         self.push_item(contract);
-        self.txlog.push(Entry::Input(utxo));
-        self.unique = true;
+        self.txlog.push(Entry::Input(contract_id));
+        self.last_anchor = Some(contract_id.to_anchor().ratchet());
         Ok(())
     }
 
     /// _items... predicate_ **output:_k_** → ø
     fn output(&mut self, k: usize) -> Result<(), VMError> {
-        let contract = self.pop_contract(k)?;
-        let frozen_contract = contract.freeze(|v| self.variable_to_commitment(v));
-        self.txlog.push(Entry::Output(frozen_contract));
+        let output = self.pop_output(k)?;
+        self.txlog.push(Entry::Output(output));
         Ok(())
     }
 
     fn contract(&mut self, k: usize) -> Result<(), VMError> {
-        let contract = self.pop_contract(k)?;
-        self.push_item(contract);
+        let output = self.pop_output(k)?;
+        self.push_item(output.into_contract().0);
         Ok(())
     }
 
-    fn pop_contract(&mut self, k: usize) -> Result<Contract, VMError> {
+    fn pop_output(&mut self, k: usize) -> Result<Output, VMError> {
         let predicate = self.pop_item()?.to_data()?.to_predicate()?;
 
         if k > self.stack.len() {
@@ -477,7 +637,7 @@ where
             .map(|item| item.to_portable())
             .collect::<Result<Vec<_>, _>>()?;
 
-        Ok(Contract { predicate, payload })
+        self.make_output(predicate, payload)
     }
 
     fn cloak(&mut self, m: usize, n: usize) -> Result<(), VMError> {
@@ -495,20 +655,18 @@ where
             return Err(VMError::StackUnderflow);
         }
 
-        let mut output_values: Vec<Value> = Vec::with_capacity(2 * n);
+        let mut output_values: Vec<Value> = Vec::with_capacity(n);
 
         let mut cloak_ins: Vec<spacesuit::AllocatedValue> = Vec::with_capacity(m);
-        let mut cloak_outs: Vec<spacesuit::AllocatedValue> = Vec::with_capacity(2 * n);
+        let mut cloak_outs: Vec<spacesuit::AllocatedValue> = Vec::with_capacity(n);
 
         // Make cloak outputs and output values using (qty,flv) commitments
         for _ in 0..n {
             let flv = self.pop_item()?.to_data()?.to_commitment()?;
             let qty = self.pop_item()?.to_data()?.to_commitment()?;
 
-            let flv = self.commitment_to_variable(flv);
-            let qty = self.commitment_to_variable(qty);
-
             let value = Value { qty, flv };
+
             let cloak_value = self.value_to_cloak_value(&value)?;
 
             // insert in the same order as they are on stack (the deepest item will be at index 0)
@@ -546,6 +704,7 @@ where
     // _contract_ **signtx** → _results..._
     fn signtx(&mut self) -> Result<(), VMError> {
         let contract = self.pop_item()?.to_contract()?;
+        // TODO: use multi-message API to sign the entire contract ID.
         self.delegate.process_tx_signature(contract.predicate)?;
         for item in contract.payload.into_iter() {
             self.push_item(item);
@@ -554,14 +713,17 @@ where
     }
 
     fn call(&mut self) -> Result<(), VMError> {
-        // Pop program contract and predicate
+        // Pop program, blinding factor, contract, and predicate
         let prog = self.pop_item()?.to_data()?;
+        let blinding = self.pop_item()?.to_data()?;
         let contract = self.pop_item()?.to_contract()?;
         let predicate = contract.predicate;
 
         // 0 = -P + h(prog) * B2
-        self.delegate
-            .verify_point_op(|| predicate.prove_program_predicate(&prog.clone().to_bytes()))?;
+        self.delegate.verify_point_op(|| {
+            predicate
+                .prove_program_predicate(&prog.clone().to_bytes(), &blinding.clone().to_bytes())
+        })?;
 
         // Place contract payload on the stack
         for item in contract.payload.into_iter() {
@@ -573,40 +735,30 @@ where
         Ok(())
     }
 
-    fn left_or_right<F>(&mut self, assign: F) -> Result<(), VMError>
-    where
-        F: FnOnce(&mut Contract, Predicate, Predicate) -> (),
-    {
-        let r = self.pop_item()?.to_data()?.to_predicate()?;
-        let l = self.pop_item()?.to_data()?.to_predicate()?;
+    fn select(&mut self, n: u8, k: u8) -> Result<(), VMError> {
+        if k >= n {
+            return Err(VMError::PredicateIndexInvalid);
+        }
 
+        let mut preds: Vec<Predicate> = Vec::with_capacity(n as usize);
+        for _ in 0..n {
+            preds.insert(0, self.pop_item()?.to_data()?.to_predicate()?);
+        }
         let mut contract = self.pop_item()?.to_contract()?;
         let p = &contract.predicate;
+        self.delegate
+            .verify_point_op(|| p.prove_disjunction(&preds))?;
 
-        self.delegate.verify_point_op(|| p.prove_or(&l, &r))?;
-
-        assign(&mut contract, l, r);
-
+        contract.predicate = preds.remove(k as usize);
         self.push_item(contract);
         Ok(())
-    }
-
-    fn left(&mut self) -> Result<(), VMError> {
-        self.left_or_right(|contract, left, _| {
-            contract.predicate = left;
-        })
-    }
-
-    fn right(&mut self) -> Result<(), VMError> {
-        self.left_or_right(|contract, _, right| {
-            contract.predicate = right;
-        })
     }
 
     fn delegate(&mut self) -> Result<(), VMError> {
         // Signature
         let sig = self.pop_item()?.to_data()?.to_bytes();
-        let signature = Signature::from_bytes(SliceReader::parse(&sig, |r| r.read_u8x64())?)?;
+        let signature = Signature::from_bytes(SliceReader::parse(&sig, |r| r.read_u8x64())?)
+            .map_err(|_| VMError::FormatError)?;
 
         // Program
         let prog = self.pop_item()?.to_data()?;
@@ -622,9 +774,10 @@ where
 
         // Verify signature using Verification key, over the message `program`
         let mut t = Transcript::new(b"ZkVM.delegate");
+        // TODO: commit the contract ID, to bind signature to this instance.
         t.commit_bytes(b"prog", &prog.clone().to_bytes());
         self.delegate
-            .verify_point_op(|| signature.verify_single(&mut t, verification_key))?;
+            .verify_point_op(|| signature.verify(&mut t, verification_key).into())?;
 
         // Replace current program with new program
         self.continue_with_program(prog)?;
@@ -659,46 +812,14 @@ where
         self.stack.push(item.into())
     }
 
-    fn commitment_to_variable(&mut self, commitment: Commitment) -> Variable {
-        let index = self.variable_commitments.len();
-
-        self.variable_commitments.push(VariableCommitment {
-            commitment: commitment,
-            variable: None,
-        });
-        Variable { index }
-    }
-
-    fn variable_to_commitment(&self, var: Variable) -> Commitment {
-        self.variable_commitments[var.index].commitment.clone()
-    }
-
-    fn attach_variable(
-        &mut self,
-        var: Variable,
-    ) -> Result<(CompressedRistretto, r1cs::Variable), VMError> {
-        // This subscript never fails because the variable is created only via `commitment_to_variable`.
-        let v_com = &self.variable_commitments[var.index];
-        match v_com.variable {
-            Some(v) => Ok((v_com.commitment.to_point(), v)),
-            None => {
-                let (point, r1cs_var) = self.delegate.commit_variable(&v_com.commitment)?;
-                self.variable_commitments[var.index].variable = Some(r1cs_var);
-                Ok((point, r1cs_var))
-            }
-        }
-    }
-
     fn value_to_cloak_value(
         &mut self,
         value: &Value,
     ) -> Result<spacesuit::AllocatedValue, VMError> {
         Ok(spacesuit::AllocatedValue {
-            q: self.attach_variable(value.qty)?.1,
-            f: self.attach_variable(value.flv)?.1,
-            assignment: self
-                .value_witness(&value)?
-                .map(|(q, f)| spacesuit::Value { q, f }),
+            q: self.delegate.commit_variable(&value.qty)?.1,
+            f: self.delegate.commit_variable(&value.flv)?.1,
+            assignment: value.assignment()?.map(|(q, f)| spacesuit::Value { q, f }),
         })
     }
 
@@ -716,9 +837,9 @@ where
     fn item_to_wide_value(&mut self, item: Item) -> Result<WideValue, VMError> {
         match item {
             Item::Value(value) => Ok(WideValue {
-                r1cs_qty: self.attach_variable(value.qty)?.1,
-                r1cs_flv: self.attach_variable(value.flv)?.1,
-                witness: self.value_witness(&value)?,
+                r1cs_qty: self.delegate.commit_variable(&value.qty)?.1,
+                r1cs_flv: self.delegate.commit_variable(&value.flv)?.1,
+                witness: value.assignment()?,
             }),
             Item::WideValue(w) => Ok(w),
             _ => Err(VMError::TypeNotWideValue),
@@ -726,32 +847,12 @@ where
     }
 
     fn variable_to_expression(&mut self, var: Variable) -> Result<Expression, VMError> {
-        let (_, r1cs_var) = self.attach_variable(var)?;
+        let (_, r1cs_var) = self.delegate.commit_variable(&var.commitment)?;
 
         Ok(Expression::LinearCombination(
             vec![(r1cs_var, Scalar::one())],
-            self.variable_assignment(var),
+            var.commitment.assignment(),
         ))
-    }
-
-    /// Returns Ok(Some((qty,flv))) assignment pair if it's missing or consistent.
-    /// Return Err if the witness is present, but is inconsistent.
-    fn value_witness(&mut self, value: &Value) -> Result<Option<(SignedInteger, Scalar)>, VMError> {
-        match (
-            self.variable_assignment(value.qty),
-            self.variable_assignment(value.flv),
-        ) {
-            (Some(ScalarWitness::Integer(q)), Some(ScalarWitness::Scalar(f))) => Ok(Some((q, f))),
-            (None, None) => Ok(None),
-            (_, _) => return Err(VMError::InconsistentWitness),
-        }
-    }
-
-    fn variable_assignment(&mut self, var: Variable) -> Option<ScalarWitness> {
-        self.variable_commitments[var.index]
-            .commitment
-            .witness()
-            .map(|(content, _)| content)
     }
 
     fn continue_with_program(&mut self, prog: Data) -> Result<(), VMError> {
@@ -761,7 +862,7 @@ where
         Ok(())
     }
 
-    fn add_range_proof(&mut self, bitrange: usize, expr: Expression) -> Result<(), VMError> {
+    fn add_range_proof(&mut self, bitrange: BitRange, expr: Expression) -> Result<(), VMError> {
         let (lc, assignment) = match expr {
             Expression::Constant(x) => (r1cs::LinearCombination::from(x), Some(x)),
             Expression::LinearCombination(terms, assignment) => {
@@ -775,5 +876,21 @@ where
             bitrange,
         )
         .map_err(|_| VMError::R1CSInconsistency)
+    }
+
+    /// Creates and anchors the contract
+    fn make_output(
+        &mut self,
+        predicate: Predicate,
+        payload: Vec<PortableItem>,
+    ) -> Result<Output, VMError> {
+        let anchor = mem::replace(&mut self.last_anchor, None).ok_or(VMError::AnchorMissing)?;
+        let output = Output::new(Contract {
+            anchor,
+            predicate,
+            payload,
+        });
+        self.last_anchor = Some(output.id().to_anchor());
+        Ok(output)
     }
 }

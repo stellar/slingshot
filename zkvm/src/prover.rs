@@ -2,6 +2,7 @@ use bulletproofs::r1cs;
 use bulletproofs::{BulletproofGens, PedersenGens};
 use curve25519_dalek::ristretto::CompressedRistretto;
 use merlin::Transcript;
+use musig::{Signature, VerificationKey};
 use std::collections::VecDeque;
 
 use crate::constraints::Commitment;
@@ -9,7 +10,7 @@ use crate::errors::VMError;
 use crate::ops::Instruction;
 use crate::point_ops::PointOp;
 use crate::predicate::Predicate;
-use crate::signature::{Signature, VerificationKey};
+use crate::program::Program;
 use crate::txlog::{TxID, TxLog};
 use crate::types::Data;
 use crate::vm::{Delegate, Tx, TxHeader, VM};
@@ -17,16 +18,16 @@ use crate::vm::{Delegate, Tx, TxHeader, VM};
 /// Prover passes the list of instructions through the VM,
 /// creates an aggregated transaction signature (for `signtx` instruction),
 /// creates a R1CS proof and returns a complete `Tx` object that can be published.
-pub struct Prover<'a, 'b> {
+pub struct Prover<'t, 'g> {
     signtx_keys: Vec<VerificationKey>,
-    cs: r1cs::Prover<'a, 'b>,
+    cs: r1cs::Prover<'t, 'g>,
 }
 
 pub(crate) struct ProverRun {
     program: VecDeque<Instruction>,
 }
 
-impl<'a, 'b> Delegate<r1cs::Prover<'a, 'b>> for Prover<'a, 'b> {
+impl<'t, 'g> Delegate<r1cs::Prover<'t, 'g>> for Prover<'t, 'g> {
     type RunType = ProverRun;
 
     fn commit_variable(
@@ -59,36 +60,36 @@ impl<'a, 'b> Delegate<r1cs::Prover<'a, 'b>> for Prover<'a, 'b> {
 
     fn new_run(&self, data: Data) -> Result<Self::RunType, VMError> {
         Ok(ProverRun {
-            program: data.to_program()?.into(),
+            program: data.to_program()?.to_vec().into(),
         })
     }
 
-    fn cs(&mut self) -> &mut r1cs::Prover<'a, 'b> {
+    fn cs(&mut self) -> &mut r1cs::Prover<'t, 'g> {
         &mut self.cs
     }
 }
 
-impl<'a, 'b> Prover<'a, 'b> {
+impl<'t, 'g> Prover<'t, 'g> {
     /// Builds a transaction with a given list of instructions and a `TxHeader`.
     /// Returns a transaction `Tx` along with its ID (`TxID`) and a transaction log (`TxLog`).
     /// Fails if the input program is malformed, or some witness data is missing.
-    pub fn build_tx<'g, F>(
-        program: Vec<Instruction>,
+    pub fn build_tx<F>(
+        program: Program,
         header: TxHeader,
-        bp_gens: &'g BulletproofGens,
+        bp_gens: &BulletproofGens,
         sign_tx_fn: F,
     ) -> Result<(Tx, TxID, TxLog), VMError>
     where
-        F: FnOnce(&mut Transcript, &Vec<VerificationKey>) -> Signature,
+        F: FnOnce(&mut Transcript, &Vec<VerificationKey>) -> Result<Signature, VMError>,
     {
         // Prepare the constraint system
         let mut r1cs_transcript = Transcript::new(b"ZkVM.r1cs");
         let pc_gens = PedersenGens::default();
-        let cs = r1cs::Prover::new(bp_gens, &pc_gens, &mut r1cs_transcript);
+        let cs = r1cs::Prover::new(&pc_gens, &mut r1cs_transcript);
 
         // Serialize the tx program
         let mut bytecode = Vec::new();
-        Instruction::encode_program(program.iter(), &mut bytecode);
+        program.encode(&mut bytecode);
 
         let mut prover = Prover {
             signtx_keys: Vec::new(),
@@ -98,7 +99,7 @@ impl<'a, 'b> Prover<'a, 'b> {
         let vm = VM::new(
             header,
             ProverRun {
-                program: program.into(),
+                program: program.to_vec().into(),
             },
             &mut prover,
         );
@@ -109,10 +110,14 @@ impl<'a, 'b> Prover<'a, 'b> {
         // TBD: implement holistic Signer trait/interface for tx signing
         let mut signtx_transcript = Transcript::new(b"ZkVM.signtx");
         signtx_transcript.commit_bytes(b"txid", &txid.0);
-        let signature = sign_tx_fn(&mut signtx_transcript, &prover.signtx_keys);
+        // TODO: change this to use multi-message context
+        let signature = sign_tx_fn(&mut signtx_transcript, &prover.signtx_keys)?;
 
         // Generate the R1CS proof
-        let proof = prover.cs.prove().map_err(|_| VMError::InvalidR1CSProof)?;
+        let proof = prover
+            .cs
+            .prove(bp_gens)
+            .map_err(|_| VMError::InvalidR1CSProof)?;
 
         Ok((
             Tx {

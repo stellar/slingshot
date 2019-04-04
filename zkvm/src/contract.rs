@@ -1,9 +1,10 @@
-use crate::constraints::{Commitment, Variable};
+use merlin::Transcript;
+
+use crate::constraints::Commitment;
 use crate::encoding;
 use crate::encoding::SliceReader;
 use crate::errors::VMError;
 use crate::predicate::Predicate;
-use crate::txlog::{TxID, UTXO};
 use crate::types::{Data, Value};
 
 /// Prefix for the data type in the Output Structure
@@ -12,229 +13,218 @@ pub const DATA_TYPE: u8 = 0x00;
 /// Prefix for the value type in the Output Structure
 pub const VALUE_TYPE: u8 = 0x01;
 
+/// A unique identifier for an anchor
+#[derive(Copy, Clone, Debug)]
+pub struct Anchor([u8; 32]);
+
+/// A unique identifier for a contract.
+#[derive(Copy, Clone, Debug)]
+pub struct ContractID([u8; 32]);
+
 /// A ZkVM contract that holds a _payload_ (a list of portable items) protected by a _predicate_.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Contract {
-    pub(crate) payload: Vec<PortableItem>,
-    pub(crate) predicate: Predicate,
-}
+    /// Anchor string which makes the contract unique.
+    pub anchor: Anchor,
 
-/// Representation of items that can be stored within outputs and contracts.
-#[derive(Debug)]
-pub enum PortableItem {
-    Data(Data),
-    Value(Value),
-}
+    /// List of payload items.
+    pub payload: Vec<PortableItem>,
 
-/// Representation of a claimed UTXO for the `input` instruction.
-#[derive(Clone, Debug)]
-pub struct Input {
-    prev_output: Output,
-    utxo: UTXO,
-    txid: TxID,
-}
-
-/// Representation of a Contract inside an Input that can be cloned.
-#[derive(Clone, Debug)]
-pub struct Output {
-    /// Contract payload
-    pub payload: Vec<FrozenItem>,
-    /// Contract predicate
+    /// Predicate that guards access to the contract’s payload.
     pub predicate: Predicate,
 }
 
-/// Representation of a PortableItem inside an Input that can be cloned.
+/// Representation of items that can be stored within outputs and contracts.
 #[derive(Clone, Debug)]
-#[allow(missing_docs)]
-pub enum FrozenItem {
+pub enum PortableItem {
+    /// Plain data payload
     Data(Data),
-    Value(FrozenValue),
+
+    /// Value payload
+    Value(Value),
 }
 
-/// Representation of a Value inside an Input that can be cloned.
-/// Note: values do not necessarily have open commitments. Some can be reblinded,
-/// others can be passed-through to an output without going through `cloak` and the constraint system.
+/// Representation of the claimed UTXO
 #[derive(Clone, Debug)]
-pub struct FrozenValue {
-    /// Commitment to value's quantity
-    pub qty: Commitment,
-    /// Commitment to value's flavor
-    pub flv: Commitment,
-}
-
-impl Input {
-    /// Creates an Input with a given Output and transaction id
-    pub fn new(prev_output: Output, txid: TxID) -> Self {
-        let utxo = UTXO::from_output(&prev_output.to_bytes(), &txid);
-        Input {
-            prev_output,
-            utxo,
-            txid,
-        }
-    }
-
-    /// Parses an input from a byte array.
-    pub fn from_bytes(data: Vec<u8>) -> Result<Self, VMError> {
-        let output = SliceReader::parse(&data, |r| Self::decode(r))?;
-        Ok(output)
-    }
-
-    /// Precise serialized length in bytes for the Input
-    pub fn serialized_length(&self) -> usize {
-        32 + self.prev_output.serialized_length()
-    }
-
-    /// Serializes the input to a byte array.
-    pub fn encode(&self, buf: &mut Vec<u8>) {
-        encoding::write_bytes(&self.txid.0, buf);
-        self.prev_output.encode(buf);
-    }
-
-    /// Unfreezes the input by converting it to the Contract an UTXO ID.
-    pub(crate) fn unfreeze<F>(self, com_to_var: F) -> (Contract, UTXO)
-    where
-        F: FnMut(Commitment) -> Variable,
-    {
-        (self.prev_output.unfreeze(com_to_var), self.utxo)
-    }
-
-    fn decode<'a>(reader: &mut SliceReader<'a>) -> Result<Self, VMError> {
-        // Input  =  PreviousTxID || PreviousOutput
-        // PreviousTxID  =  <32 bytes>
-        let txid = TxID(reader.read_u8x32()?);
-        let (prev_output, contract_bytes) = reader.slice(|r| Output::decode(r))?;
-        let utxo = UTXO::from_output(contract_bytes, &txid);
-        Ok(Input {
-            prev_output,
-            utxo,
-            txid,
-        })
-    }
+pub struct Output {
+    contract: Contract,
+    id: ContractID,
 }
 
 impl Output {
-    /// Converts self to vector of bytes
-    pub fn to_bytes(&self) -> Vec<u8> {
-        let mut buf = Vec::with_capacity(self.serialized_length());
-        self.encode(&mut buf);
-        buf
+    /// Creates an Output with a given contract
+    pub fn new(contract: Contract) -> Self {
+        let mut buf = Vec::with_capacity(contract.serialized_length());
+        contract.encode(&mut buf);
+        let id = ContractID::from_serialized_contract(&buf);
+        Self { id, contract }
     }
 
-    /// Precise length of a serialized contract
+    /// Returns the contract ID
+    pub fn id(&self) -> ContractID {
+        self.id
+    }
+
+    /// Converts output to a contract and also returns its precomputed ID
+    pub fn into_contract(self) -> (Contract, ContractID) {
+        (self.contract, self.id)
+    }
+
+    /// Precise length of a serialized output
+    pub fn serialized_length(&self) -> usize {
+        self.contract.serialized_length()
+    }
+
+    /// Serializes the output to a byte array
+    pub fn encode(&self, buf: &mut Vec<u8>) {
+        self.contract.encode(buf)
+    }
+
+    /// Parses an output
+    pub fn decode<'a>(output: &mut SliceReader<'a>) -> Result<Self, VMError> {
+        let (contract, id) = Contract::decode(output)?;
+        Ok(Self { contract, id })
+    }
+}
+
+impl Anchor {
+    /// Provides a view into the anchor’s bytes.
+    pub fn as_bytes(&self) -> &[u8] {
+        &self.0
+    }
+
+    /// Computes a nonce anchor from its components
+    pub fn nonce(blockid: [u8; 32], predicate: &Predicate, maxtime: u64) -> Self {
+        let mut t = Transcript::new(b"ZkVM.nonce");
+        t.commit_bytes(b"blockid", &blockid);
+        t.commit_bytes(b"predicate", predicate.to_point().as_bytes());
+        t.commit_u64(b"maxtime", maxtime);
+        let mut nonce = [0u8; 32];
+        t.challenge_bytes(b"anchor", &mut nonce);
+        Self(nonce)
+    }
+
+    /// Ratchet the anchor into a new anchor
+    pub fn ratchet(mut self) -> Self {
+        let mut t = Transcript::new(b"ZkVM.ratchet-anchor");
+        t.commit_bytes(b"old", &self.0);
+        t.challenge_bytes(b"new", &mut self.0);
+        self
+    }
+}
+
+impl ContractID {
+    /// Provides a view into the contract ID's bytes.
+    pub fn as_bytes(&self) -> &[u8] {
+        &self.0
+    }
+
+    fn from_serialized_contract(bytes: &[u8]) -> Self {
+        let mut t = Transcript::new(b"ZkVM.contractid");
+        t.commit_bytes(b"contract", bytes);
+        let mut id = [0u8; 32];
+        t.challenge_bytes(b"id", &mut id);
+        Self(id)
+    }
+
+    /// Re-wraps contract ID bytes into Anchor
+    pub(crate) fn to_anchor(self) -> Anchor {
+        Anchor(self.0)
+    }
+}
+
+impl PortableItem {
+    /// Precise length of a serialized payload item
     fn serialized_length(&self) -> usize {
-        let mut size = 32 + 4;
-        for item in self.payload.iter() {
-            match item {
-                FrozenItem::Data(d) => size += 1 + 4 + d.serialized_length(),
-                FrozenItem::Value(_) => size += 1 + 64,
-            }
+        match self {
+            PortableItem::Data(d) => 1 + 4 + d.serialized_length(),
+            PortableItem::Value(_) => 1 + 64,
         }
-        size
     }
 
     /// Serializes the contract to a byte array
     fn encode(&self, buf: &mut Vec<u8>) {
-        encoding::write_point(&self.predicate.to_point(), buf);
-        encoding::write_u32(self.payload.len() as u32, buf);
-
-        for p in self.payload.iter() {
-            match p {
-                // Data = 0x00 || LE32(len) || <bytes>
-                FrozenItem::Data(d) => {
-                    encoding::write_u8(DATA_TYPE, buf);
-                    encoding::write_u32(d.serialized_length() as u32, buf);
-                    d.encode(buf);
-                }
-                // Value = 0x01 || <32 bytes> || <32 bytes>
-                FrozenItem::Value(v) => {
-                    encoding::write_u8(VALUE_TYPE, buf);
-                    encoding::write_point(&v.qty.to_point(), buf);
-                    encoding::write_point(&v.flv.to_point(), buf);
-                }
+        match self {
+            // Data = 0x00 || LE32(len) || <bytes>
+            PortableItem::Data(d) => {
+                encoding::write_u8(DATA_TYPE, buf);
+                encoding::write_u32(d.serialized_length() as u32, buf);
+                d.encode(buf);
+            }
+            // Value = 0x01 || <32 bytes> || <32 bytes>
+            PortableItem::Value(v) => {
+                encoding::write_u8(VALUE_TYPE, buf);
+                encoding::write_point(&v.qty.to_point(), buf);
+                encoding::write_point(&v.flv.to_point(), buf);
             }
         }
     }
 
-    /// Converts Output to a Contract and uses provided closure
-    /// to allocate R1CS variables for the Values stored in the contract’s payload.
-    fn unfreeze<F>(self, mut com_to_var: F) -> Contract
-    where
-        F: FnMut(Commitment) -> Variable,
-    {
-        let payload = self
-            .payload
-            .into_iter()
-            .map(|p| match p {
-                FrozenItem::Data(d) => PortableItem::Data(d),
-                FrozenItem::Value(v) => PortableItem::Value(Value {
-                    qty: com_to_var(v.qty),
-                    flv: com_to_var(v.flv),
-                }),
-            })
-            .collect::<Vec<_>>();
-        let predicate = self.predicate;
-        Contract { payload, predicate }
-    }
-
     fn decode<'a>(output: &mut SliceReader<'a>) -> Result<Self, VMError> {
-        //    Output  =  Predicate  ||  LE32(k)  ||  Item[0]  || ... ||  Item[k-1]
-        // Predicate  =  <32 bytes>
-        //      Item  =  enum { Data, Value }
-        //      Data  =  0x00  ||  LE32(len)  ||  <bytes>
-        //     Value  =  0x01  ||  <32 bytes> ||  <32 bytes>
-
-        let predicate = Predicate::Opaque(output.read_point()?);
-        let k = output.read_size()?;
-
-        // sanity check: avoid allocating unreasonably more memory
-        // just because an untrusted length prefix says so.
-        if k > output.len() {
-            return Err(VMError::FormatError);
+        match output.read_u8()? {
+            DATA_TYPE => {
+                let len = output.read_size()?;
+                let bytes = output.read_bytes(len)?;
+                Ok(PortableItem::Data(Data::Opaque(bytes.to_vec())))
+            }
+            VALUE_TYPE => {
+                let qty = Commitment::Closed(output.read_point()?);
+                let flv = Commitment::Closed(output.read_point()?);
+                Ok(PortableItem::Value(Value { qty, flv }))
+            }
+            _ => Err(VMError::FormatError),
         }
-
-        let mut payload: Vec<FrozenItem> = Vec::with_capacity(k);
-        for _ in 0..k {
-            let item = match output.read_u8()? {
-                DATA_TYPE => {
-                    let len = output.read_size()?;
-                    let bytes = output.read_bytes(len)?;
-                    FrozenItem::Data(Data::Opaque(bytes.to_vec()))
-                }
-                VALUE_TYPE => {
-                    let qty = Commitment::Closed(output.read_point()?);
-                    let flv = Commitment::Closed(output.read_point()?);
-
-                    FrozenItem::Value(FrozenValue { qty, flv })
-                }
-                _ => return Err(VMError::FormatError),
-            };
-            payload.push(item);
-        }
-
-        Ok(Output { predicate, payload })
     }
 }
 
 impl Contract {
-    /// Converts Contract to an Output and uses provided closure
-    /// to get the commitments for the variables inside the contract’s Values.
-    pub(crate) fn freeze<F>(self, mut var_to_com: F) -> Output
-    where
-        F: FnMut(Variable) -> Commitment,
-    {
-        let payload = self
-            .payload
-            .into_iter()
-            .map(|i| match i {
-                PortableItem::Data(d) => FrozenItem::Data(d),
-                PortableItem::Value(v) => FrozenItem::Value(FrozenValue {
-                    flv: var_to_com(v.flv),
-                    qty: var_to_com(v.qty),
-                }),
-            })
-            .collect::<Vec<_>>();
-        let predicate = self.predicate;
+    fn serialized_length(&self) -> usize {
+        let mut size = 32 + 32 + 4;
+        for item in self.payload.iter() {
+            size += item.serialized_length();
+        }
+        size
+    }
 
-        Output { payload, predicate }
+    fn encode(&self, buf: &mut Vec<u8>) {
+        encoding::write_bytes(&self.anchor.0, buf);
+        encoding::write_point(&self.predicate.to_point(), buf);
+        encoding::write_u32(self.payload.len() as u32, buf);
+        for item in self.payload.iter() {
+            item.encode(buf);
+        }
+    }
+
+    fn decode<'a>(reader: &mut SliceReader<'a>) -> Result<(Self, ContractID), VMError> {
+        //    Output  =  Anchor  ||  Predicate  ||  LE32(k)  ||  Item[0]  || ... ||  Item[k-1]
+        //    Anchor  =  <32 bytes>
+        // Predicate  =  <32 bytes>
+        //      Item  =  enum { Data, Value }
+        //      Data  =  0x00  ||  LE32(len)  ||  <bytes>
+        //     Value  =  0x01  ||  <32 bytes> ||  <32 bytes>
+        let (contract, serialized_contract) = reader.slice(|r| {
+            let anchor = Anchor(r.read_u8x32()?);
+            let predicate = Predicate::Opaque(r.read_point()?);
+            let k = r.read_size()?;
+
+            // sanity check: avoid allocating unreasonably more memory
+            // just because an untrusted length prefix says so.
+            if k > r.len() {
+                return Err(VMError::FormatError);
+            }
+            let mut payload: Vec<PortableItem> = Vec::with_capacity(k);
+            for _ in 0..k {
+                payload.push(PortableItem::decode(r)?);
+            }
+            Ok(Contract {
+                anchor,
+                predicate,
+                payload,
+            })
+        })?;
+
+        let id = ContractID::from_serialized_contract(serialized_contract);
+
+        Ok((contract, id))
     }
 }

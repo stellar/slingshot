@@ -42,7 +42,7 @@ Stands for _extended private key_: consists of a secret [scalar](#scalar) and a 
 ```rust
 struct Xprv {
   scalar: Scalar,
-  dk: [u8; 32]
+  dk: [u8; 32],
 }
 ```
 
@@ -52,8 +52,8 @@ Stands for _extended public key_: consists of a [point](#point) and a [derivatio
 
 ```rust
 struct Xpub {
-  point: CompressedRistretto,
-  dk: [u8; 32]
+  point: RistrettoPoint,
+  dk: [u8; 32],
 }
 ```
 
@@ -65,6 +65,8 @@ If you need to share an individual public key, use [leaf key derivation](#derive
 
 ## Operations
 
+![Operations on Keys](operations.png)
+
 ### Generate key
 
 1. Acquire a secure random number generator.
@@ -74,6 +76,7 @@ If you need to share an individual public key, use [leaf key derivation](#derive
 	```
 	xprv = Xprv { scalar, dk }
 	```
+
 5. Return the resulting extended private key `xprv`.
 
 ### Convert Xprv to Xpub
@@ -89,30 +92,33 @@ Xpub {
 
 ### Derive an intermediate key
 
-1. Create Merlin `t = Transcript::new("Keytree.intermediate")`.
-2. Commit [xpub](#xpub) to transcript (if xprv is provided, compute xpub from xprv):
+This applies to both Xpubs and Xprvs.
+
+1. Create a Merlin transcript `t = Transcript::new("Keytree.derivation")`.
+2. If you are deriving from a parent Xprv, [create its corresponding parent Xpub first](#convert-xprv-to-xpub).
+3. Commit [xpub](#xpub) to the transcript:
 	```
 	t.commit_bytes("pt", xpub.point)
 	t.commit_bytes("dk", xpub.dk)
 	```
-3. Provide the transcript to the user to commit an arbitrary derivation path or index:
+4. Provide the transcript to the user to commit an arbitrary derivation path or index:
 	```
-	t.commit_bytes(label, data) 
+	t.commit_bytes(label, data)
 	```
 	E.g. `t.commit_u64("account", account_id)` for an account within a hierarchy of keys.
-4. Squeeze a blinding factor `f`:
+5. Squeeze a blinding factor `f`:
 	```
-	f = t.challenge_scalar("f")
+	f = t.challenge_scalar("f.intermediate")
 	```
-5. Squeeze a new derivation key `dk2` (32 bytes):
+6. Squeeze a new derivation key `dk2` (32 bytes):
 	```
 	dk2 = t.challenge_bytes("dk")
 	```
-5. For `xprv` (if provided):
+7. If you are deriving a child Xprv from a parent Xprv:
 	```
 	child = Xprv { scalar: parent.scalar + f, dk: dk2 }
 	```
-6. For `xpub`:
+	 If you are deriving a child Xpub from a parent Xpub:
 	```
 	child = Xpub { point: parent.point + f·B, dk: dk2 }
 	```
@@ -121,26 +127,27 @@ Xpub {
 
 Similar to the intermediate derivation, but for safety is domain-separated so the same index produces unrelated public key.
 
-1. Create Merlin `t = Transcript::new("Keytree.leaf")`.
-2. Commit [xpub](#xpub) to transcript (if xprv is provided, compute xpub from xprv):
+1. Create a Merlin transcript `t = Transcript::new("Keytree.derivation")`.
+2. If you are deriving from a parent Xprv, [create its corresponding parent Xpub first](#convert-xprv-to-xpub).
+3. Commit [xpub](#xpub) to the provided key's transcript:
 	```
 	t.commit_bytes("pt", xpub.point)
 	t.commit_bytes("dk", xpub.dk)
 	```
-3. Provide the transcript to the user to commit an arbitrary selector data (could be structured):
+4. Provide the transcript to the user to commit an arbitrary selector data (could be structured):
 	```
 	t.commit_bytes(label, data)
 	```
 	E.g. `t.commit_u64("invoice", invoice_index)` for a receiving address.
-4. Squeeze a blinding factor `f`:
+5. Squeeze a blinding factor `f`:
 	```
-	f = t.challenge_scalar("f")
+	f = t.challenge_scalar("f.leaf")
 	```
-5. For `xprv` (if provided) returns a blinded scalar:
+6. If you are deriving a child Xprv from a parent Xprv:
 	```
 	child = parent.scalar + f
 	```
-6. For `xpub` returns a blinded public key:
+	 If you are deriving a child Xpub from a parent Xpub:
 	```
 	child = parent.point + f·B
 	```

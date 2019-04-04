@@ -12,15 +12,15 @@ $ ./slidechaind
 
 This will create and run a new `slidechaind` instance,
 generating a random keypair for the custodian account and funding the account with Stellar testnet funds.
-`slidechaind` will log the custodian account ID:
-we will need to use this for future commands.
+`slidechaind` will log the custodian account ID and hex-encoded initial block ID:
+we will need to use these for future commands.
 
 Next,
 we will want to peg in funds from the Stellar network.
 
 ```sh
 $ go build ./cmd/peg
-$ ./peg -custodian [custodian account ID] -amount 100
+$ ./peg -custodian [custodian account ID] -amount 100 -bcid [initial block ID]
 ```
 
 This will peg-in 100 lumens to slidechain,

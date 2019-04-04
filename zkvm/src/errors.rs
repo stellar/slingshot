@@ -48,21 +48,29 @@ pub enum VMError {
     #[fail(display = "Item is not an expression.")]
     TypeNotExpression,
 
-    /// This error occurs when an instruction requires a predicate type.
+    /// This error occurs when an instruction requires a predicate data type.
     #[fail(display = "Item is not a predicate.")]
     TypeNotPredicate,
 
-    /// This error occurs when an instruction requires a commitment type.
+    /// This error occurs when an instruction requires a commitment data type.
     #[fail(display = "Item is not a commitment.")]
     TypeNotCommitment,
 
-    /// This error occurs when an instruction requires an input type.
-    #[fail(display = "Item is not an input.")]
-    TypeNotInput,
+    /// This error occurs when an instruction requires an output data type.
+    #[fail(display = "Item is not an output.")]
+    TypeNotOutput,
 
     /// This error occurs when an instruction requires a constraint type.
     #[fail(display = "Item is not a constraint.")]
     TypeNotConstraint,
+
+    /// This error occurs when an instruction requires a scalar data type.
+    #[fail(display = "Item is not a scalar.")]
+    TypeNotScalar,
+
+    /// This errors occurs when an instruction expects a predicate disjunction type.
+    #[fail(display = "Item is not a disjunction.")]
+    TypeNotDisjunction,
 
     /// This error occurs when an instruction expects a key type.
     #[fail(display = "Item is not a key.")]
@@ -96,13 +104,20 @@ pub enum VMError {
     #[fail(display = "Stack is not cleared by the program")]
     StackNotClean,
 
-    /// This error occurs when VM's uniqueness flag remains false.
-    #[fail(display = "Tx ID is not made unique via `input` or `nonce`")]
-    NotUniqueTxid,
+    /// This error occurs when VM's anchor remains unset.
+    #[fail(display = "VM anchor is not set via `input` or `nonce`")]
+    AnchorMissing,
 
     /// This error occurs when VM's deferred schnorr checks fail
     #[fail(display = "Deferred point operations failed")]
     PointOperationsFailed,
+
+    /// This error occurs when a MuSig signature share fails to verify
+    #[fail(display = "Share #{:?} failed to verify correctly", pubkey)]
+    MuSigShareError {
+        /// The pubkey corresponding to the MuSig share that failed to verify correctly
+        pubkey: [u8; 32],
+    },
 
     /// This error occurs when R1CS proof verification failed.
     #[fail(display = "R1CS proof is invalid")]
@@ -123,4 +138,20 @@ pub enum VMError {
     /// This error occurs when we supply a number not in the range [1,64]
     #[fail(display = "Bitrange for rangeproof is not between 1 and 64")]
     InvalidBitrange,
+
+    /// This error occurs when a Merkle proof of inclusion is invalid.
+    #[fail(display = "Invalid Merkle proof.")]
+    InvalidMerkleProof,
+
+    /// This error occurs when the an index of a selected predicate is invalid.
+    #[fail(display = "Predicate index out of bounds")]
+    PredicateIndexInvalid,
+
+    /// This error occurs when a function is called with bad arguments.
+    #[fail(display = "Bad arguments")]
+    BadArguments,
+
+    /// This error occurs when key aggregation fails.
+    #[fail(display = "Key aggregation failed")]
+    KeyAggregationFailed,
 }

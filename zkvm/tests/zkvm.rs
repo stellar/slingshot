@@ -1,9 +1,18 @@
 use bulletproofs::{BulletproofGens, PedersenGens};
+use curve25519_dalek::constants::RISTRETTO_BASEPOINT_COMPRESSED;
 use curve25519_dalek::scalar::Scalar;
 use hex;
+use musig::Signature;
 
-use zkvm::*;
+use zkvm::{
+    Anchor, Commitment, Contract, Data, Output, PortableItem, Predicate, Program, Prover, TxHeader,
+    TxID, VMError, Value, Verifier,
+};
 
+use zkvm::keys;
+
+// TODO(vniu): move builder convenience functions into separate crate,
+// and refactor tests and Token
 trait ProgramHelper {
     fn issue_helper(
         &mut self,
@@ -28,29 +37,25 @@ impl ProgramHelper for Program {
         issuance_pred: Predicate,
         nonce_pred: Predicate,
     ) -> &mut Self {
-        self.push(Commitment::blinded_with_factor(qty, Scalar::from(1u64))) // stack: qty
+        let dummy_block_id = Data::Opaque([0xffu8; 32].to_vec());
+        self.push(nonce_pred)
+            .push(dummy_block_id)
+            .nonce()
+            .sign_tx() // stack is clean
+            .push(Commitment::blinded_with_factor(qty, Scalar::from(1u64))) // stack: qty
             .var() // stack: qty-var
             .push(Commitment::unblinded(flv)) // stack: qty-var, flv
             .var() // stack: qty-var, flv-var
             .push(Data::default()) // stack: qty-var, flv-var, data
             .push(issuance_pred) // stack: qty-var, flv-var, data, pred
             .issue() // stack: issue-contract
-            .push(nonce_pred) // stack: issue-contract, pred
-            .nonce() // stack: issue-contract, nonce-contract
-            .sign_tx() // stack: issue-contract
             .sign_tx(); // stack: issued-value
         self
     }
 
     fn input_helper(&mut self, qty: u64, flv: Scalar, pred: Predicate) -> &mut Self {
-        let prev_output = Output {
-            payload: vec![FrozenItem::Value(FrozenValue {
-                qty: Commitment::blinded(qty),
-                flv: Commitment::blinded(flv),
-            })],
-            predicate: pred,
-        };
-        self.push(Input::new(prev_output, TxID([0; 32]))) // stack: input-data
+        let prev_output = make_output(qty, flv, pred);
+        self.push(Output::new(prev_output)) // stack: input-data
             .input() // stack: input-contract
             .sign_tx(); // stack: input-value
         self
@@ -75,9 +80,18 @@ impl ProgramHelper for Program {
     }
 }
 
+/// Generates a secret Scalar / key Predicate pair
+fn generate_predicate() -> (Predicate, Scalar) {
+    let gens = PedersenGens::default();
+
+    let scalar = Scalar::from(0u64);
+    let pred = Predicate::Key((scalar * gens.B).compress().into());
+    (pred, scalar)
+}
+
 /// Generates the given number of signing key Predicates, returning
 /// the Predicates and the secret signing keys.
-fn predicate_helper(pred_num: usize) -> (Vec<Predicate>, Vec<Scalar>) {
+fn generate_predicates(pred_num: usize) -> (Vec<Predicate>, Vec<Scalar>) {
     let gens = PedersenGens::default();
 
     let scalars: Vec<Scalar> = (0..pred_num)
@@ -95,7 +109,7 @@ fn predicate_helper(pred_num: usize) -> (Vec<Predicate>, Vec<Scalar>) {
 
 /// Returns the secret Scalar and Predicate used to issue
 /// a flavor, along with the flavor Scalar.
-fn issuance_helper() -> (Scalar, Predicate, Scalar) {
+fn make_flavor() -> (Scalar, Predicate, Scalar) {
     let gens = PedersenGens::default();
     let scalar = Scalar::from(100u64);
     let predicate = Predicate::Key((scalar * gens.B).compress().into());
@@ -103,8 +117,25 @@ fn issuance_helper() -> (Scalar, Predicate, Scalar) {
     (scalar, predicate, flavor)
 }
 
-fn test_helper(program: Vec<Instruction>, keys: &Vec<Scalar>) -> Result<TxID, VMError> {
-    let (tx, txid, txlog) = {
+/// Creates an Output contract with given quantity, flavor, and predicate.
+fn make_output(qty: u64, flv: Scalar, pred: Predicate) -> Contract {
+    let anchor = Anchor::nonce(
+        [0u8; 32],
+        &Predicate::Opaque(RISTRETTO_BASEPOINT_COMPRESSED),
+        0,
+    );
+    Contract {
+        anchor,
+        payload: vec![PortableItem::Value(Value {
+            qty: Commitment::blinded(qty),
+            flv: Commitment::blinded(flv),
+        })],
+        predicate: pred,
+    }
+}
+
+fn build_and_verify(program: Program, keys: &Vec<Scalar>) -> Result<TxID, VMError> {
+    let (tx, _, _) = {
         // Build tx
         let bp_gens = BulletproofGens::new(256, 1);
         let header = TxHeader {
@@ -114,6 +145,12 @@ fn test_helper(program: Vec<Instruction>, keys: &Vec<Scalar>) -> Result<TxID, VM
         };
         let gens = PedersenGens::default();
         Prover::build_tx(program, header, &bp_gens, |t, verification_keys| {
+            if verification_keys.len() == 0 {
+                return Ok(Signature {
+                    R: RISTRETTO_BASEPOINT_COMPRESSED,
+                    s: Scalar::zero(),
+                });
+            }
             let signtx_keys: Vec<Scalar> = verification_keys
                 .iter()
                 .filter_map(|vk| {
@@ -125,14 +162,17 @@ fn test_helper(program: Vec<Instruction>, keys: &Vec<Scalar>) -> Result<TxID, VM
                     None
                 })
                 .collect();
-            Signature::sign_aggregated(t, &signtx_keys)
+            Ok(Signature::sign_single(
+                &mut t.clone(),
+                keys::aggregated_privkey(&signtx_keys),
+            ))
         })?
     };
 
     // Verify tx
     let bp_gens = BulletproofGens::new(256, 1);
 
-    let vtx = Verifier::verify_tx(tx, &bp_gens)?;
+    let vtx = Verifier::verify_tx(tx, &bp_gens, |keys| keys::aggregated_pubkey(keys))?;
     Ok(vtx.id)
 }
 
@@ -142,19 +182,18 @@ fn issue_contract(
     issuance_pred: Predicate,
     nonce_pred: Predicate,
     output_pred: Predicate,
-) -> Vec<Instruction> {
+) -> Program {
     Program::build(|p| {
         p.issue_helper(qty, flv, issuance_pred, nonce_pred) // stack: issued-val
             .output_helper(output_pred) // stack: empty
     })
-    .to_vec()
 }
 
 #[test]
 fn issue() {
     // Generate predicates
-    let (predicates, mut scalars) = predicate_helper(2);
-    let (issuance_scalar, issuance_pred, flavor) = issuance_helper();
+    let (predicates, mut scalars) = generate_predicates(2);
+    let (issuance_scalar, issuance_pred, flavor) = make_flavor();
     scalars.push(issuance_scalar);
 
     let correct_program = issue_contract(
@@ -165,12 +204,12 @@ fn issue() {
         predicates[1].clone(), // output predicate
     );
 
-    match test_helper(correct_program, &scalars) {
+    match build_and_verify(correct_program, &scalars) {
         Err(err) => return assert!(false, err.to_string()),
         Ok(txid) => {
             // Check txid
             assert_eq!(
-                "5245c74137fec1e97159a45e737c4eb8e703fb0f1d151e842351e2ab834763be",
+                "316f835973819a8cf6219010faf712bd17a1fe6fa2cc6350e4d96483b2065d82",
                 hex::encode(txid.0)
             );
         }
@@ -184,7 +223,7 @@ fn issue() {
         predicates[1].clone(), // output predicate
     );
 
-    if test_helper(wrong_program, &scalars).is_ok() {
+    if build_and_verify(wrong_program, &scalars).is_ok() {
         panic!("Issuing with wrong issuance predicate should fail, but didn't");
     }
 }
@@ -195,19 +234,18 @@ fn spend_1_1_contract(
     flv: Scalar,
     input_pred: Predicate,
     output_pred: Predicate,
-) -> Vec<Instruction> {
+) -> Program {
     Program::build(|p| {
         p.input_helper(input, flv, input_pred)
             .cloak_helper(1, vec![(output, flv)])
             .output_helper(output_pred)
     })
-    .to_vec()
 }
 
 #[test]
 fn spend_1_1() {
     // Generate predicates and flavor
-    let (predicates, scalars) = predicate_helper(2);
+    let (predicates, scalars) = generate_predicates(2);
     let flavor = Scalar::from(1u64);
 
     let correct_program = spend_1_1_contract(
@@ -218,7 +256,7 @@ fn spend_1_1() {
         predicates[1].clone(), // output predicate
     );
 
-    match test_helper(correct_program, &scalars) {
+    match build_and_verify(correct_program, &scalars) {
         Err(err) => panic!(err.to_string()),
         _ => (),
     }
@@ -231,7 +269,7 @@ fn spend_1_1() {
         predicates[1].clone(), // output predicate
     );
 
-    if test_helper(wrong_program, &scalars).is_ok() {
+    if build_and_verify(wrong_program, &scalars).is_ok() {
         panic!("Input $5, output $10 should have failed but didn't");
     }
 }
@@ -244,20 +282,19 @@ fn spend_1_2_contract(
     input_pred: Predicate,
     output_1_pred: Predicate,
     output_2_pred: Predicate,
-) -> Vec<Instruction> {
+) -> Program {
     Program::build(|p| {
         p.input_helper(input, flv, input_pred) // stack: input
             .cloak_helper(1, vec![(output_1, flv), (output_2, flv)]) // stack: output-1, output-2
             .output_helper(output_2_pred) // stack: output-1
             .output_helper(output_1_pred) // stack: empty
     })
-    .to_vec()
 }
 
 #[test]
 fn spend_1_2() {
     // Generate predicates and flavor
-    let (predicates, scalars) = predicate_helper(3);
+    let (predicates, scalars) = generate_predicates(3);
     let flavor = Scalar::from(1u64);
 
     let correct_program = spend_1_2_contract(
@@ -270,7 +307,7 @@ fn spend_1_2() {
         predicates[2].clone(), // output 2 predicate
     );
 
-    match test_helper(correct_program, &scalars) {
+    match build_and_verify(correct_program, &scalars) {
         Err(err) => assert!(false, err.to_string()),
         _ => (),
     }
@@ -285,7 +322,7 @@ fn spend_1_2() {
         predicates[2].clone(), // output 2 predicate
     );
 
-    if test_helper(wrong_program, &scalars).is_ok() {
+    if build_and_verify(wrong_program, &scalars).is_ok() {
         panic!("Input $10, output $11 and $1 should have failed but didn't");
     }
 }
@@ -298,20 +335,19 @@ fn spend_2_1_contract(
     input_1_pred: Predicate,
     input_2_pred: Predicate,
     output_pred: Predicate,
-) -> Vec<Instruction> {
+) -> Program {
     Program::build(|p| {
         p.input_helper(input_1, flv, input_1_pred) // stack: input-1
             .input_helper(input_2, flv, input_2_pred) // stack: input-1, input-2
             .cloak_helper(2, vec![(output, flv)]) // stack: output
             .output_helper(output_pred) // stack: empty
     })
-    .to_vec()
 }
 
 #[test]
 fn spend_2_1() {
     // Generate predicates and flavor
-    let (predicates, scalars) = predicate_helper(3);
+    let (predicates, scalars) = generate_predicates(3);
     let flavor = Scalar::from(1u64);
 
     let correct_program = spend_2_1_contract(
@@ -324,7 +360,7 @@ fn spend_2_1() {
         predicates[2].clone(), // output predicate
     );
 
-    match test_helper(correct_program, &scalars) {
+    match build_and_verify(correct_program, &scalars) {
         Err(err) => assert!(false, err.to_string()),
         _ => (),
     }
@@ -339,7 +375,7 @@ fn spend_2_1() {
         predicates[2].clone(), // output predicate
     );
 
-    if test_helper(wrong_program, &scalars).is_ok() {
+    if build_and_verify(wrong_program, &scalars).is_ok() {
         panic!("Input $6 and $4, output $11 and $1 should have failed but didn't");
     }
 }
@@ -354,7 +390,7 @@ fn spend_2_2_contract(
     input_2_pred: Predicate,
     output_1_pred: Predicate,
     output_2_pred: Predicate,
-) -> Vec<Instruction> {
+) -> Program {
     Program::build(|p| {
         p.input_helper(input_1, flv, input_1_pred) // stack: input-1
             .input_helper(input_2, flv, input_2_pred) // stack: input-1, input-2
@@ -362,13 +398,12 @@ fn spend_2_2_contract(
             .output_helper(output_2_pred) // stack: output-1
             .output_helper(output_1_pred) // stack: empty
     })
-    .to_vec()
 }
 
 #[test]
 fn spend_2_2() {
     // Generate predicates and flavor
-    let (predicates, scalars) = predicate_helper(4);
+    let (predicates, scalars) = generate_predicates(4);
     let flavor = Scalar::from(1u64);
 
     let correct_program = spend_2_2_contract(
@@ -383,7 +418,7 @@ fn spend_2_2() {
         predicates[3].clone(), // output 2 predicate
     );
 
-    match test_helper(correct_program, &scalars) {
+    match build_and_verify(correct_program, &scalars) {
         Err(err) => assert!(false, err.to_string()),
         _ => (),
     }
@@ -400,7 +435,7 @@ fn spend_2_2() {
         predicates[3].clone(), // output 2 predicate
     );
 
-    if test_helper(wrong_program, &scalars).is_ok() {
+    if build_and_verify(wrong_program, &scalars).is_ok() {
         panic!("Input $6 and $4, output $11 and $1 should have failed but didn't");
     }
 }
@@ -416,7 +451,7 @@ fn issue_and_spend_contract(
     input_pred: Predicate,
     output_1_pred: Predicate,
     output_2_pred: Predicate,
-) -> Vec<Instruction> {
+) -> Program {
     Program::build(|p| {
         p.issue_helper(issue_qty, flv, issuance_pred, nonce_pred) // stack: issued-val
             .input_helper(input_qty, flv, input_pred) // stack: issued-val, input-val
@@ -424,14 +459,13 @@ fn issue_and_spend_contract(
             .output_helper(output_2_pred) // stack: output-1
             .output_helper(output_1_pred) // stack: empty
     })
-    .to_vec()
 }
 
 #[test]
 fn issue_and_spend() {
     // Generate predicates and flavor
-    let (predicates, mut scalars) = predicate_helper(4);
-    let (issuance_scalar, issuance_pred, flavor) = issuance_helper();
+    let (predicates, mut scalars) = generate_predicates(4);
+    let (issuance_scalar, issuance_pred, flavor) = make_flavor();
     scalars.push(issuance_scalar);
 
     let correct_program = issue_and_spend_contract(
@@ -447,7 +481,7 @@ fn issue_and_spend() {
         predicates[3].clone(), // output 2 predicate
     );
 
-    match test_helper(correct_program, &scalars) {
+    match build_and_verify(correct_program, &scalars) {
         Err(err) => assert!(false, err.to_string()),
         _ => (),
     }
@@ -465,7 +499,98 @@ fn issue_and_spend() {
         predicates[3].clone(), // output 2 predicate
     );
 
-    if test_helper(wrong_program, &scalars).is_ok() {
+    if build_and_verify(wrong_program, &scalars).is_ok() {
         panic!("Issue $6 and input $4, output $11 and $1 should have failed but didn't");
+    }
+}
+
+/// Program that spends an input on the stack unlocked with knowledge of a secret Scalar.
+fn spend_with_secret_scalar(qty: u64, flavor: Scalar, pred: Predicate, secret: Scalar) -> Program {
+    Program::build(|p| {
+        p.cloak_helper(1, vec![(qty, flavor)])
+            .output_helper(pred)
+            .r#const()
+            .push(secret)
+            .r#const()
+            .eq()
+            .verify()
+    })
+}
+
+#[test]
+fn predicate_disjunction_happy_path() {
+    let (key_pred, key_scalar) = generate_predicate();
+    let (output_pred, _) = generate_predicate();
+
+    // Generate program predicate
+    let secret_scalar = Scalar::from(101u64);
+    let (qty, flavor) = (10u64, Scalar::from(1u64));
+    let program_pred = Predicate::unblinded_program(spend_with_secret_scalar(
+        qty,
+        flavor,
+        output_pred.clone(),
+        secret_scalar,
+    ));
+
+    // Make disjunction and output
+    let disjunction = Predicate::disjunction(vec![key_pred.clone(), program_pred.clone()]).unwrap();
+    let prev_output = make_output(qty, flavor, disjunction.clone());
+
+    let prog = Program::build(|p| {
+        p.push(Output::new(prev_output))
+            .input()
+            .push(key_pred)
+            .push(program_pred)
+            .select(2, 0)
+            .sign_tx()
+            .cloak_helper(1, vec![(qty, flavor)])
+            .output_helper(output_pred)
+    });
+    build_and_verify(prog, &vec![key_scalar]).unwrap();
+}
+
+#[test]
+fn predicate_disjunction_program_path() {
+    let (key_pred, key_scalar) = generate_predicate();
+    let (output_pred, _) = generate_predicate();
+
+    // Quantity, flavor
+    let (qty, flavor) = (10u64, Scalar::from(1u64));
+
+    // Generate program predicate
+    let secret_scalar = Scalar::from(101u64);
+    let spend_prog = spend_with_secret_scalar(qty, flavor, output_pred.clone(), secret_scalar);
+    let program_pred = Predicate::unblinded_program(spend_prog.clone());
+
+    // Make disjunction and output
+    let disjunction = Predicate::disjunction(vec![key_pred.clone(), program_pred.clone()]).unwrap();
+    let prev_output = make_output(qty, flavor, disjunction.clone());
+
+    let prog = Program::build(|p| {
+        p.push(secret_scalar)
+            .push(Output::new(prev_output.clone()))
+            .input()
+            .push(key_pred.clone())
+            .push(program_pred.clone())
+            .select(2, 1)
+            .push(Data::Opaque(Vec::new()))
+            .push(spend_prog.clone())
+            .call()
+    });
+    build_and_verify(prog, &vec![key_scalar]).unwrap();
+
+    let wrong_prog = Program::build(|p| {
+        p.push(secret_scalar + Scalar::one())
+            .push(Output::new(prev_output))
+            .input()
+            .push(key_pred)
+            .push(program_pred)
+            .select(2, 1)
+            .push(Data::Opaque(Vec::new()))
+            .push(spend_prog)
+            .call()
+    });
+    if build_and_verify(wrong_prog, &vec![key_scalar]).is_ok() {
+        panic!("Unlocking input with incorrect secret scalar should have failed but didn't");
     }
 }

@@ -1,3 +1,4 @@
+use bit_range::BitRange;
 use bulletproofs::r1cs::{ConstraintSystem, LinearCombination, R1CSError};
 use curve25519_dalek::scalar::Scalar;
 
@@ -8,20 +9,18 @@ pub fn range_proof<CS: ConstraintSystem>(
     cs: &mut CS,
     mut v: LinearCombination,
     v_assignment: Option<SignedInteger>,
-    n: usize,
+    n: BitRange,
 ) -> Result<(), R1CSError> {
     let mut exp_2 = Scalar::one();
-    for i in 0..n {
+    let n_usize: usize = n.into();
+    for i in 0..n_usize {
         // Create low-level variables and add them to constraints
-        let (a, b, o) = cs.allocate(|| {
-            let q: u64 = v_assignment
-                .ok_or(R1CSError::MissingAssignment)?
-                .to_u64()
-                // TBD: change to R1CSError::InvalidAssignment
-                .ok_or(R1CSError::MissingAssignment)?;
-            let bit: u64 = (q >> i) & 1;
-            Ok(((1 - bit).into(), bit.into(), Scalar::zero()))
-        })?;
+        let (a, b, o) = cs.allocate_multiplier(v_assignment.and_then(|q| {
+            q.to_u64().map(|q| {
+                let bit: u64 = (q >> i) & 1;
+                ((1 - bit).into(), bit.into())
+            })
+        }))?;
 
         // Enforce a * b = 0, so one of (a,b) is zero
         cs.constrain(o.into());
@@ -72,6 +71,9 @@ mod tests {
         // Common
         let pc_gens = PedersenGens::default();
         let bp_gens = BulletproofGens::new(128, 1);
+        let bit_width = BitRange::new(n).ok_or(R1CSError::GadgetError {
+            description: "Invalid Bitrange; Bitrange must be between 0 and 64".to_string(),
+        })?;
 
         // Prover's scope
         let (proof, commitment) = {
@@ -79,26 +81,26 @@ mod tests {
             let mut prover_transcript = Transcript::new(b"RangeProofTest");
             let mut rng = rand::thread_rng();
 
-            let mut prover = Prover::new(&bp_gens, &pc_gens, &mut prover_transcript);
+            let mut prover = Prover::new(&pc_gens, &mut prover_transcript);
 
             let (com, var) = prover.commit(v_val.into(), Scalar::random(&mut rng));
-            assert!(range_proof(&mut prover, var.into(), Some(v_val), n).is_ok());
+            assert!(range_proof(&mut prover, var.into(), Some(v_val), bit_width).is_ok());
 
-            let proof = prover.prove()?;
+            let proof = prover.prove(&bp_gens)?;
 
             (proof, com)
         };
 
         // Verifier makes a `ConstraintSystem` instance representing a merge gadget
         let mut verifier_transcript = Transcript::new(b"RangeProofTest");
-        let mut verifier = Verifier::new(&bp_gens, &pc_gens, &mut verifier_transcript);
+        let mut verifier = Verifier::new(&mut verifier_transcript);
 
         let var = verifier.commit(commitment);
 
         // Verifier adds constraints to the constraint system
-        assert!(range_proof(&mut verifier, var.into(), None, n).is_ok());
+        assert!(range_proof(&mut verifier, var.into(), None, bit_width).is_ok());
 
         // Verifier verifies proof
-        Ok(verifier.verify(&proof)?)
+        Ok(verifier.verify(&proof, &pc_gens, &bp_gens)?)
     }
 }
