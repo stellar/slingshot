@@ -15,19 +15,7 @@ import (
 	"github.com/stellar/go/xdr"
 )
 
-func (c *Custodian) doPostPegOut(ctx context.Context, p pegOut, txid []byte) error {
-	// The contract needs a non-zero selector to retire funds if the peg-out succeeded.
-	// Else, it requires a zero selector so the funds are returned.
-	var selector int64
-	if p.State == pegOutOK {
-		selector = 1
-	}
-
-	// The refdata stored in the database has pegged-out state equal to 0.
-	// We set the pegOut struct state to this value temporarily.
-	// This lets us correctly reconstruct the contract's stack and call it.
-	currentState := p.State
-	p.State = 0
+func (c *Custodian) doPostPegOut(ctx context.Context, p pegOut) error {
 	var asset xdr.Asset
 	err := asset.UnmarshalBinary(p.AssetXDR)
 	if err != nil {
@@ -40,9 +28,12 @@ func (c *Custodian) doPostPegOut(ctx context.Context, p pegOut, txid []byte) err
 		return errors.Wrap(err, "marshaling reference data")
 	}
 
-	// We set the pegged-out state to its actual current state. This does not
-	// affect contract functionality, but it maintains the accuracy of our data structures.
-	p.State = currentState
+	// The contract needs a non-zero selector to retire funds if the peg-out succeeded.
+	// Else, it requires a zero selector so the funds are returned.
+	var selector int64
+	if p.State == pegOutOK {
+		selector = 1
+	}
 
 	// Build post-peg-out contract.
 	b := new(txvmutil.Builder)
@@ -100,13 +91,13 @@ func (c *Custodian) doPostPegOut(ctx context.Context, p pegOut, txid []byte) err
 	// Delete relevant row from exports table.
 	// TODO(debnil): Implement a mechanism to recover in case of a crash here.
 	// Currently, the txvm funds will be retired or refunded, but the db will not be updated.
-	result, err := c.DB.ExecContext(ctx, `DELETE FROM exports WHERE txid=$1`, txid)
+	result, err := c.DB.ExecContext(ctx, `DELETE FROM exports WHERE txid=$1`, p.TxID)
 	if err != nil {
-		return errors.Wrapf(err, "deleting export for tx %x", txid)
+		return errors.Wrapf(err, "deleting export for tx %x", p.TxID)
 	}
 	numAffected, err := result.RowsAffected()
 	if err != nil {
-		return errors.Wrapf(err, "checking rows affected by exports delete query for txid %x", txid)
+		return errors.Wrapf(err, "checking rows affected by exports delete query for txid %x", p.TxID)
 	}
 	if numAffected != 1 {
 		return fmt.Errorf("got %d rows affected by exports delete query, want 1", numAffected)

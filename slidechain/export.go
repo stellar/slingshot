@@ -27,7 +27,7 @@ import (
 )
 
 type pegOut struct {
-	TxID     []byte      `json:"txid,omitempty"`
+	TxID     []byte      `json:"-"`
 	AssetXDR []byte      `json:"asset"`
 	TempAddr string      `json:"temp"`
 	Seqnum   int64       `json:"seqnum"`
@@ -35,7 +35,7 @@ type pegOut struct {
 	Amount   int64       `json:"amount"`
 	Anchor   []byte      `json:"anchor"`
 	Pubkey   []byte      `json:"pubkey"`
-	State    pegOutState `json:"state,omitempty"`
+	State    pegOutState `json:"-"`
 }
 
 type pegOutState int
@@ -119,7 +119,7 @@ func (c *Custodian) pegOutFromExports(ctx context.Context, pegouts chan<- pegOut
 			return
 		case <-ch:
 		}
-		const q = `SELECT txid, ref FROM exports WHERE pegged_out IN ($1, $2)`
+		const q = `SELECT txid, pegout_json FROM exports WHERE pegged_out IN ($1, $2)`
 
 		var (
 			txids, refs [][]byte

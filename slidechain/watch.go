@@ -148,7 +148,7 @@ func (c *Custodian) watchExports(ctx context.Context) {
 
 			// Record the export in the db,
 			// then wake up a goroutine that executes peg-outs on the main chain.
-			const q = `INSERT INTO exports (txid, ref) VALUES ($1, $2)`
+			const q = `INSERT INTO exports (txid, pegout_json) VALUES ($1, $2)`
 			_, err = c.DB.ExecContext(ctx, q, tx.ID.Bytes(), exportRef)
 			if err != nil {
 				return errors.Wrapf(err, "recording export tx %x", tx.ID.Bytes())
@@ -173,7 +173,7 @@ func (c *Custodian) watchPegOuts(ctx context.Context, pegouts <-chan pegOut) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			const q = `SELECT txid, ref FROM exports WHERE pegged_out IN ($1, $2)`
+			const q = `SELECT txid, pegout_json FROM exports WHERE pegged_out IN ($1, $2)`
 			var txids, refs [][]byte
 			err := sqlutil.ForQueryRows(ctx, c.DB, q, pegOutOK, pegOutFail, func(txid, ref []byte) {
 				txids = append(txids, txid)
@@ -188,7 +188,8 @@ func (c *Custodian) watchPegOuts(ctx context.Context, pegouts <-chan pegOut) {
 				if err != nil {
 					log.Fatalf("unmarshaling reference: %s", err)
 				}
-				err = c.doPostPegOut(ctx, p, txid)
+				p.TxID = txid
+				err = c.doPostPegOut(ctx, p)
 				if err != nil {
 					log.Fatalf("doing post-peg-out: %s", err)
 				}
@@ -197,11 +198,7 @@ func (c *Custodian) watchPegOuts(ctx context.Context, pegouts <-chan pegOut) {
 			if !ok {
 				log.Fatalf("peg-outs channel closed")
 			}
-			// This peg-out struct is marshalled into a JSON, which must equal the reference data in the export tx.
-			// That requires that the post-peg-out struct txid be empty.
-			txid := p.TxID
-			p.TxID = []byte{}
-			err := c.doPostPegOut(ctx, p, txid)
+			err := c.doPostPegOut(ctx, p)
 			if err != nil {
 				log.Fatalf("doing post-peg-out: %s", err)
 			}
