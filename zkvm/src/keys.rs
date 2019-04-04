@@ -5,13 +5,22 @@ use merlin::Transcript;
 use musig::VerificationKey;
 
 use crate::errors::VMError;
-use crate::point_ops::PointOp;
 use crate::transcript::TranscriptProtocol;
 
 /// Creates an aggregated Schnorr private key for signing from
 /// a single party's set of private keys.
-pub fn aggregated_privkey(privkeys: &[Scalar]) -> Scalar {
-    let mut transcript = Transcript::new(b"ZkVM.key");
+pub fn aggregated_privkey(privkeys: &[Scalar]) -> Result<Scalar, VMError> {
+    match privkeys.len() {
+        0 => {
+            return Err(VMError::BadArguments);
+        }
+        1 => {
+            return Ok(privkeys[0]);
+        }
+        _ => {}
+    }
+
+    let mut transcript = Transcript::new(b"Musig.aggregated-key");
     // Derive public keys from privkeys
     let pubkeys = privkeys
         .iter()
@@ -22,41 +31,17 @@ pub fn aggregated_privkey(privkeys: &[Scalar]) -> Scalar {
     let n = pubkeys.len();
     transcript.commit_u64(b"n", n as u64);
     for p in pubkeys.iter() {
-        transcript.commit_point(b"P", &p.0);
+        transcript.commit_point(b"X", &p.0);
     }
 
     // Generate aggregated private key
-    privkeys
+    Ok(privkeys
         .iter()
         .map(|p| {
-            let x = transcript.challenge_scalar(b"x");
+            let mut transcript = transcript.clone();
+            transcript.commit_point(b"X_i", &VerificationKey::from_secret(p).0);
+            let x = transcript.challenge_scalar(b"a_i");
             p * x
         })
-        .sum()
-}
-
-/// Creates an aggregated Schnorr public key for verifying signatures from a
-/// single party's set of private keys.
-pub fn aggregated_pubkey(pubkeys: &[VerificationKey]) -> Result<VerificationKey, VMError> {
-    let mut transcript = Transcript::new(b"ZkVM.key");
-    transcript.commit_u64(b"n", pubkeys.len() as u64);
-    for p in pubkeys.iter() {
-        transcript.commit_point(b"P", &p.0);
-    }
-
-    let pairs = pubkeys
-        .iter()
-        .map(|p| {
-            let x = transcript.challenge_scalar(b"x");
-            (x, p.0)
-        })
-        .collect::<Vec<_>>();
-
-    let pubkey_op = PointOp {
-        primary: None,
-        secondary: None,
-        arbitrary: pairs,
-    };
-
-    Ok(VerificationKey(pubkey_op.compute()?.compress()))
+        .sum())
 }
