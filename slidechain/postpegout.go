@@ -16,6 +16,16 @@ import (
 )
 
 func (c *Custodian) doPostPegOut(ctx context.Context, p pegOut, txid []byte) error {
+	// The contract needs a non-zero selector to retire funds if the peg-out succeeded.
+	// Else, it requires a zero selector so the funds are returned.
+	var selector int64
+	if p.State == pegOutOK {
+		selector = 1
+	}
+	// The refdata stored in the database has pegged-out state of 0. We set the state to this
+	// value, so we can properly reconstruct the data and call the contract.
+	currentState := p.State
+	p.State = 0
 	var asset xdr.Asset
 	err := asset.UnmarshalBinary(p.AssetXDR)
 	if err != nil {
@@ -27,12 +37,10 @@ func (c *Custodian) doPostPegOut(ctx context.Context, p pegOut, txid []byte) err
 	if err != nil {
 		return errors.Wrap(err, "marshaling reference data")
 	}
-	// The contract needs a non-zero selector to retire funds if the peg-out succeeded.
-	// Else, it requires a zero selector so the funds are returned.
-	var selector int64
-	if p.State == pegOutOK {
-		selector = 1
-	}
+
+	// We set the pegged-out state back to its true current state. This does not
+	// affect contract functionality, but it maintains the accuracy of our data structures.
+	p.State = currentState
 	// Build post-peg-out contract.
 	b := new(txvmutil.Builder)
 	b.Tuple(func(contract *txvmutil.TupleBuilder) { // {'C', ...}

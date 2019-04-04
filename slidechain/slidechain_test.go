@@ -578,7 +578,7 @@ func isPostPegOutTx(tx *bc.Tx, asset xdr.Asset, amount int64, tempAddr, exporter
 	}
 	if foundRetire {
 		var logRef pegOut
-		err := json.Unmarshal(tx.Log[2][2].(txvm.Bytes), logRef)
+		err := json.Unmarshal(tx.Log[2][2].(txvm.Bytes), &logRef)
 		if err != nil {
 			log.Printf("unmarshaling log item: %s", err)
 			return false
