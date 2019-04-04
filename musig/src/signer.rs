@@ -128,7 +128,7 @@ impl<'t> PartyAwaitingCommitments<'t> {
         // The message `m` has already been fed into the transcript.
         let c = {
             self.transcript
-                .commit_point(b"X", self.multikey.aggregated_key().as_compressed_point());
+                .commit_point(b"X", self.multikey.aggregated_key().as_compressed());
             self.transcript.commit_point(b"R", &R.compress());
             self.transcript.challenge_scalar(b"c")
         };

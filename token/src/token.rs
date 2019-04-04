@@ -147,7 +147,7 @@ mod tests {
                 .iter()
                 .filter_map(|vk| {
                     for k in &keys {
-                        if (k * gens.B).compress() == *vk.as_compressed_point() {
+                        if (k * gens.B).compress() == *vk.as_compressed() {
                             return Some(*k);
                         }
                     }

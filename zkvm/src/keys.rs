@@ -22,7 +22,7 @@ pub fn aggregated_privkey(privkeys: &[Scalar]) -> Scalar {
     let n = pubkeys.len();
     transcript.commit_u64(b"n", n as u64);
     for p in pubkeys.iter() {
-        transcript.commit_point(b"P", p.as_compressed_point());
+        transcript.commit_point(b"P", p.as_compressed());
     }
 
     // Generate aggregated private key
@@ -41,7 +41,7 @@ pub fn aggregated_pubkey(pubkeys: &[VerificationKey]) -> Result<VerificationKey,
     let mut transcript = Transcript::new(b"ZkVM.key");
     transcript.commit_u64(b"n", pubkeys.len() as u64);
     for p in pubkeys.iter() {
-        transcript.commit_point(b"P", p.as_compressed_point());
+        transcript.commit_point(b"P", p.as_compressed());
     }
 
     let pairs = pubkeys

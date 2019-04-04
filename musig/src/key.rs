@@ -35,7 +35,7 @@ impl Multikey {
         // Commit pubkeys into the transcript
         // <L> = H(X_1 || X_2 || ... || X_n)
         for X in &pubkeys {
-            transcript.commit_point(b"X", X.as_compressed_point());
+            transcript.commit_point(b"X", X.as_compressed());
         }
 
         // aggregated_key = sum_i ( a_i * X_i )
@@ -55,7 +55,7 @@ impl Multikey {
     fn compute_factor(transcript: &Transcript, X_i: &VerificationKey) -> Scalar {
         // a_i = H(<L>, X_i). Components of <L> have already been fed to transcript.
         let mut a_i_transcript = transcript.clone();
-        a_i_transcript.commit_point(b"X_i", X_i.as_compressed_point());
+        a_i_transcript.commit_point(b"X_i", X_i.as_compressed());
         a_i_transcript.challenge_scalar(b"a_i")
     }
 
@@ -112,7 +112,7 @@ impl VerificationKey {
     }
 
     /// Returns a reference to the compressed ristretto point
-    pub fn as_compressed_point(&self) -> &CompressedRistretto {
+    pub fn as_compressed(&self) -> &CompressedRistretto {
         &self.precompressed
     }
 }
