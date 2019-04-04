@@ -58,5 +58,5 @@ pub fn aggregated_pubkey(pubkeys: &[VerificationKey]) -> Result<VerificationKey,
         arbitrary: pairs,
     };
 
-    Ok(VerificationKey(pubkey_op.compute()?.compress()))
+    Ok(VerificationKey::from(pubkey_op.compute()?))
 }

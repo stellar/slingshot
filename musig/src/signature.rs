@@ -59,7 +59,7 @@ impl Signature {
         // `0 == (-s * G) + (1 * R) + (c * X)`
         DeferredVerification {
             static_point_weight: -self.s,
-            dynamic_point_weights: vec![(Scalar::one(), self.R), (c, X.0)],
+            dynamic_point_weights: vec![(Scalar::one(), self.R), (c, X.into_compressed())],
         }
     }
 
