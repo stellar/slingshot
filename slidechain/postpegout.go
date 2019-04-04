@@ -22,8 +22,9 @@ func (c *Custodian) doPostPegOut(ctx context.Context, p pegOut, txid []byte) err
 	if p.State == pegOutOK {
 		selector = 1
 	}
-	// The refdata stored in the database has pegged-out state of 0. We set the state to this
-	// value, so we can properly reconstruct the data and call the contract.
+	// The refdata stored in the database has pegged-out state equal to 0.
+	// We set the pegOut struct state to this value temporarily.
+	// This lets us correctly reconstruct the contract's stack and call it.
 	currentState := p.State
 	p.State = 0
 	var asset xdr.Asset
@@ -38,9 +39,10 @@ func (c *Custodian) doPostPegOut(ctx context.Context, p pegOut, txid []byte) err
 		return errors.Wrap(err, "marshaling reference data")
 	}
 
-	// We set the pegged-out state back to its true current state. This does not
+	// We set the pegged-out state to its actual current state. This does not
 	// affect contract functionality, but it maintains the accuracy of our data structures.
 	p.State = currentState
+
 	// Build post-peg-out contract.
 	b := new(txvmutil.Builder)
 	b.Tuple(func(contract *txvmutil.TupleBuilder) { // {'C', ...}
