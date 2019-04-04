@@ -22,9 +22,6 @@ mod types;
 mod verifier;
 mod vm;
 
-// TODO: remove this when we move musig in another crate
-pub mod signature;
-
 pub use self::constraints::{Commitment, Constraint, Expression, Variable};
 pub use self::contract::{Anchor, Contract, ContractID, Output, PortableItem};
 pub use self::errors::VMError;
@@ -34,9 +31,11 @@ pub use self::predicate::Predicate;
 pub use self::program::Program;
 pub use self::prover::Prover;
 pub use self::scalar_witness::ScalarWitness;
-pub use self::signature::{Signature, VerificationKey};
 pub use self::transcript::TranscriptProtocol;
 pub use self::txlog::{Entry, TxID, TxLog, UTXO};
 pub use self::types::{Data, Item, Value, WideValue};
 pub use self::verifier::Verifier;
 pub use self::vm::{Tx, TxHeader, VerifiedTx};
+pub use musig::{Signature, VerificationKey};
+
+pub mod keys;

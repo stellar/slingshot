@@ -1,19 +1,24 @@
 use super::counterparty::NonceCommitment;
-use super::VerificationKey;
-use crate::errors::VMError;
-use crate::transcript::TranscriptProtocol;
+use super::deferred_verification::DeferredVerification;
+use super::errors::MusigError;
+use super::key::VerificationKey;
+use super::transcript::TranscriptProtocol;
 use curve25519_dalek::constants::RISTRETTO_BASEPOINT_POINT;
 use curve25519_dalek::ristretto::CompressedRistretto;
 use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
 
+/// A Schnorr signature.
 #[derive(Debug, Clone)]
 pub struct Signature {
+    /// Signature using nonce, message, and private key
     pub s: Scalar,
+    /// Nonce commitment
     pub R: CompressedRistretto,
 }
 
 impl Signature {
+    /// Creates a signature for a single private key, bypassing the party state transitions
     pub fn sign_single(transcript: &mut Transcript, privkey: Scalar) -> Signature {
         let X = VerificationKey::from_secret(&privkey); // pubkey
 
@@ -38,9 +43,8 @@ impl Signature {
         Signature { s, R: R.compress() }
     }
 
-    pub fn verify(&self, transcript: &mut Transcript, X: VerificationKey) -> Result<(), VMError> {
-        let G = RISTRETTO_BASEPOINT_POINT;
-
+    /// Verifies a signature for a single VerificationKey
+    pub fn verify(&self, transcript: &mut Transcript, X: VerificationKey) -> DeferredVerification {
         // Make c = H(X, R, m)
         // The message `m` has already been fed into the transcript
         let c = {
@@ -49,25 +53,43 @@ impl Signature {
             transcript.challenge_scalar(b"c")
         };
 
-        let X = X.0.decompress().ok_or(VMError::InvalidPoint)?;
-        let R = self.R.decompress().ok_or(VMError::InvalidPoint)?;
-
-        // Check sG = R + c * X
-        if self.s * G == R + c * X {
-            Ok(())
-        } else {
-            Err(VMError::PointOperationsFailed)
+        // Form the final linear combination:
+        // `s * G = R + c * X`
+        //      ->
+        // `0 == (-s * G) + (1 * R) + (c * X)`
+        DeferredVerification {
+            static_point_weight: -self.s,
+            dynamic_point_weights: vec![(Scalar::one(), self.R), (c, X.0)],
         }
+    }
+
+    /// Decodes a signature from 64-byte array.
+    pub fn from_bytes(sig: [u8; 64]) -> Result<Self, MusigError> {
+        let mut Rbuf = [0u8; 32];
+        let mut sbuf = [0u8; 32];
+        Rbuf[..].copy_from_slice(&sig[..32]);
+        sbuf[..].copy_from_slice(&sig[32..]);
+        Ok(Signature {
+            R: CompressedRistretto(Rbuf),
+            s: Scalar::from_canonical_bytes(sbuf).ok_or(MusigError::BadArguments)?,
+        })
+    }
+
+    /// Encodes the signature as a 64-byte array.
+    pub fn to_bytes(&self) -> [u8; 64] {
+        let mut buf = [0u8; 64];
+        buf[..32].copy_from_slice(self.R.as_bytes());
+        buf[32..].copy_from_slice(self.s.as_bytes());
+        buf
     }
 }
 
 #[cfg(test)]
 mod tests {
-
     use super::*;
-    use crate::errors::VMError;
-    use crate::signature::signer::*;
-    use crate::signature::{multikey::Multikey, VerificationKey};
+    use crate::errors::MusigError;
+    use crate::key::{Multikey, VerificationKey};
+    use crate::signer::*;
     use curve25519_dalek::ristretto::CompressedRistretto;
 
     #[test]
@@ -79,15 +101,18 @@ mod tests {
 
         assert!(sig
             .verify(&mut Transcript::new(b"example transcript"), X)
+            .verify()
             .is_ok());
 
         let priv_bad = Scalar::from(2u64);
         let X_bad = VerificationKey::from_secret(&priv_bad);
         assert!(sig
             .verify(&mut Transcript::new(b"example transcript"), X_bad)
+            .verify()
             .is_err());
         assert!(sig
             .verify(&mut Transcript::new(b"invalid transcript"), X)
+            .verify()
             .is_err());
     }
 
@@ -108,6 +133,7 @@ mod tests {
                 &mut Transcript::new(b"example transcript"),
                 multikey.aggregated_key()
             )
+            .verify()
             .is_ok());
     }
 
@@ -123,8 +149,8 @@ mod tests {
         let multikey = multikey_helper(&priv_keys);
 
         let expected_pubkey = CompressedRistretto::from_slice(&[
-            56, 92, 251, 79, 34, 221, 181, 222, 11, 112, 55, 45, 154, 242, 40, 250, 247, 1, 109,
-            126, 150, 210, 181, 6, 117, 95, 44, 102, 38, 28, 144, 49,
+            60, 118, 86, 112, 148, 29, 45, 106, 212, 7, 119, 198, 76, 112, 161, 226, 21, 242, 242,
+            170, 66, 127, 36, 62, 160, 233, 199, 29, 206, 18, 250, 67,
         ]);
 
         assert_eq!(expected_pubkey, multikey.aggregated_key().0);
@@ -159,7 +185,7 @@ mod tests {
         privkeys: Vec<Scalar>,
         multikey: Multikey,
         transcript: Transcript,
-    ) -> Result<Signature, VMError> {
+    ) -> Result<Signature, MusigError> {
         let pubkeys: Vec<_> = privkeys
             .iter()
             .map(|privkey| VerificationKey((privkey * RISTRETTO_BASEPOINT_POINT).compress()))
@@ -184,7 +210,7 @@ mod tests {
             .map(|p| p.receive_commitments(comms.clone()).unwrap())
             .unzip();
 
-        let signatures: Vec<_> = parties
+        let signatures: Vec<Signature> = parties
             .into_iter()
             .map(|p: PartyAwaitingShares| p.receive_shares(shares.clone()).unwrap())
             .collect();
@@ -222,6 +248,7 @@ mod tests {
                 &mut Transcript::new(b"example transcript"),
                 multikey.aggregated_key()
             )
+            .verify()
             .is_ok());
     }
 }

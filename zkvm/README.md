@@ -44,3 +44,5 @@ All instructions that perform relatively expensive scalar-point multiplications 
 * [Ristretto group](https://ristretto.group)
 * [Bulletproofs R1CS](https://doc-internal.dalek.rs/develop/bulletproofs/notes/r1cs_proof/index.html)
 * [Cloak](../spacesuit/spec.md)
+
+The ZkVM repository was moved from [this location](https://github.com/interstellar/zkvm) on 2/6/2019.

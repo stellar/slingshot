@@ -119,7 +119,7 @@ pub enum VMError {
     /// This error occurs when a MuSig signature share fails to verify
     #[fail(display = "Share #{:?} failed to verify correctly", pubkey)]
     MuSigShareError {
-        /// The pubkey corresponding to the MuSig share that failed fo verify correctly
+        /// The pubkey corresponding to the MuSig share that failed to verify correctly
         pubkey: [u8; 32],
     },
 
@@ -154,4 +154,8 @@ pub enum VMError {
     /// This error occurs when a function is called with bad arguments.
     #[fail(display = "Bad arguments")]
     BadArguments,
+
+    /// This error occurs when key aggregation fails.
+    #[fail(display = "Key aggregation failed")]
+    KeyAggregationFailed,
 }
