@@ -696,6 +696,21 @@ where
         Ok(())
     }
 
+    // Prover:
+    // - remember the signing key (Scalar) in a list and make a sig later.
+    // Verifier:
+    // - remember the verificaton key (Point) in a list and check a sig later.
+    // Both: put the payload onto the stack.
+    // _contract_ **signtx** → _results..._
+    fn signtx(&mut self) -> Result<(), VMError> {
+        let contract = self.pop_item()?.to_contract()?;
+        self.delegate.process_tx_signature(contract.predicate)?;
+        for item in contract.payload.into_iter() {
+            self.push_item(item);
+        }
+        Ok(())
+    }
+
     fn call(&mut self) -> Result<(), VMError> {
         let program_data = self.pop_item()?.to_data()?;
         let program = program_data.clone().to_program()?;
@@ -722,21 +737,6 @@ where
 
         // Sets program as current.
         self.continue_with_program(program_data)?;
-        Ok(())
-    }
-
-    // Prover:
-    // - remember the signing key (Scalar) in a list and make a sig later.
-    // Verifier:
-    // - remember the verificaton key (Point) in a list and check a sig later.
-    // Both: put the payload onto the stack.
-    // _contract_ **signtx** → _results..._
-    fn signtx(&mut self) -> Result<(), VMError> {
-        let contract = self.pop_item()?.to_contract()?;
-        self.delegate.process_tx_signature(contract.predicate)?;
-        for item in contract.payload.into_iter() {
-            self.push_item(item);
-        }
         Ok(())
     }
 

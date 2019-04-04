@@ -1,9 +1,12 @@
 use crate::encoding::SliceReader;
 use crate::errors::VMError;
-use crate::merkle::MerkleItem;
+use crate::merkle::{MerkleItem,MerkleNeighbor, MerkleTree};
 use crate::ops::Instruction;
+use crate::predicate::{CallProof, PredicateTree};
 use crate::scalar_witness::ScalarWitness;
 use crate::types::Data;
+
+use bit_array::BitArray;
 use core::borrow::Borrow;
 use merlin::Transcript;
 use spacesuit::BitRange;
@@ -120,6 +123,33 @@ impl Program {
         self.0.push(Instruction::Push(data.into()));
         self
     }
+
+    // Takes predicate tree and index of program in Merkle tree to verify the program's membership in
+    // that Merkle tree and call the program.
+    // PRTODO: Would the index of the program in the tree be passed? If not, how does this work?
+    pub fn choose_call(&mut self, pred_tree: PredicateTree, index: usize) -> Result<&mut Program, VMError> {
+        let tree = MerkleTree::build(b"ZkVM.taproot", &pred_tree.progs).unwrap();
+        let neighbors = tree.create_path(index).unwrap();
+        let mut positions: u32 = 0;
+        for i in 0..neighbors.len() {
+            match neighbors[i] {
+                MerkleNeighbor::Right(x) => {
+                    positions = positions | 1 << (31 - i)
+                }
+            }
+        };
+        let call_proof = CallProof {
+            signing_key: pred_tree.key,
+            neighbors: neighbors,
+            positions: positions,
+        };
+
+        // PRTODO: I want to push both the program and the contract on the stack here,
+        // but I'm unsure how to do that in a way that differentiates the two.
+        self.push(Data::CallProof(call_proof)).call();
+        self.push(self.clone()).call();
+        Ok(self)
+    } 
 }
 
 impl MerkleItem for Program {

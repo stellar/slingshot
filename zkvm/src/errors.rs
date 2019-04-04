@@ -71,10 +71,10 @@ pub enum VMError {
     /// This error occurs when an instruction requires a scalar data type.
     #[fail(display = "Item is not a scalar.")]
     TypeNotScalar,
-
-    /// This errors occurs when an instruction expects a predicate disjunction type.
-    #[fail(display = "Item is not a disjunction.")]
-    TypeNotDisjunction,
+    
+    /// This error occurs when an instruction expects a predicate tree type.
+    #[fail(display = "Item is not a predicate tree.")]
+    TypeNotPredicateTree,
 
     /// This error occurs when an instruction expects a key type.
     #[fail(display = "Item is not a key.")]

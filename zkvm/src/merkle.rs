@@ -32,6 +32,7 @@ enum MerkleNode {
 
 impl MerkleTree {
     /// Constructs a new MerkleTree based on the input list of entries.
+    // PRTODO: Make this take an iterator, instead of a list.
     pub fn build<M: MerkleItem>(label: &'static [u8], list: &[M]) -> Option<Self> {
         if list.len() == 0 {
             return None;
