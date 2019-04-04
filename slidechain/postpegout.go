@@ -22,6 +22,7 @@ func (c *Custodian) doPostPegOut(ctx context.Context, p pegOut, txid []byte) err
 	if p.State == pegOutOK {
 		selector = 1
 	}
+
 	// The refdata stored in the database has pegged-out state equal to 0.
 	// We set the pegOut struct state to this value temporarily.
 	// This lets us correctly reconstruct the contract's stack and call it.
