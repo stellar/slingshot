@@ -18,6 +18,7 @@ jobs:
     working_directory: /go/src/github.com/interstellar/slingshot
     steps:
       - checkout
+      - run: sudo apt install -y libsqlite3-dev
 
       # specify any bash command here prefixed with `run: `
       - run: go vet ./slidechain/...
