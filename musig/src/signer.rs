@@ -1,7 +1,8 @@
 use super::counterparty::*;
 use super::errors::MusigError;
-use super::key::{Multikey, VerificationKey, MusigContext};
+use super::key::{Multikey, MusigContext, VerificationKey};
 use super::signature::Signature;
+use super::transcript::TranscriptProtocol;
 use curve25519_dalek::constants::RISTRETTO_BASEPOINT_POINT;
 use curve25519_dalek::ristretto::RistrettoPoint;
 use curve25519_dalek::scalar::Scalar;
@@ -109,7 +110,7 @@ impl<'t> PartyAwaitingCommitments<'t> {
     /// Provide nonce commitments to the party and transition to the next round
     /// if they match the precommitments.
     pub fn receive_commitments(
-        self,
+        mut self,
         nonce_commitments: Vec<NonceCommitment>,
     ) -> Result<(PartyAwaitingShares<'t>, Scalar), MusigError> {
         // Make R = sum_i(R_i). nonce_commitments = R_i from all the parties.
@@ -123,9 +124,15 @@ impl<'t> PartyAwaitingCommitments<'t> {
             .map(|(counterparty, commitment)| counterparty.commit_nonce(commitment))
             .collect::<Result<_, _>>()?;
 
-        // Make a_i = H(L, X_i)
+        // Commit the context with label "X", and commit the nonce sum with label "R"
+        self.multikey.commit(&mut self.transcript);
+        self.transcript.commit_point(b"R", &R.compress());
+
+        // Make a copy of the transcript for extracting the challenge c_i.
+        // This way, we can pass self.transcript to the next state so the next state
+        // can also extract the same challenge (for checking signature share validity).
+        let mut transcript = self.transcript.clone();
         let X_i = VerificationKey::from(self.x_i * RISTRETTO_BASEPOINT_POINT);
-        let mut transcript = self.transcript;
         let c_i = self.multikey.challenge(&X_i, &mut transcript);
 
         // Generate share: s_i = r_i + c * a_i * x_i
@@ -134,7 +141,7 @@ impl<'t> PartyAwaitingCommitments<'t> {
         // Store received nonce commitments in next state
         Ok((
             PartyAwaitingShares {
-                transcript,
+                transcript: self.transcript,
                 multikey: self.multikey,
                 R,
                 counterparties,
@@ -162,7 +169,7 @@ impl<'t> PartyAwaitingShares<'t> {
         // to move `self.counterparties` out of it.
         // See also RFC2229: https://github.com/rust-lang/rfcs/pull/2229
         let multikey = &self.multikey;
-        let mut transcript = self.transcript;
+        let transcript = self.transcript;
 
         // Check that all shares are valid. If so, create s from them.
         // s = sum(s_i), s_i = shares[i]
@@ -170,7 +177,7 @@ impl<'t> PartyAwaitingShares<'t> {
             .counterparties
             .into_iter()
             .zip(shares)
-            .map(|(counterparty, share)| counterparty.sign(share, multikey, &mut transcript))
+            .map(|(counterparty, share)| counterparty.sign(share, multikey, &transcript))
             .sum::<Result<_, _>>()?;
 
         Ok(Signature {

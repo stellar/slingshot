@@ -87,7 +87,7 @@ impl MusigContext for Multikey {
 
     fn challenge(&self, pubkey: &VerificationKey, transcript: &mut Transcript) -> Scalar {
         // Make c = H(X, R, m)
-        // The message `m`, nonce commitment `R`, and aggregated key `X` 
+        // The message `m`, nonce commitment `R`, and aggregated key `X`
         // have already been fed into the transcript.
         let c = transcript.challenge_scalar(b"c");
 
