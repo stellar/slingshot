@@ -1,7 +1,7 @@
 # Check https://circleci.com/docs/2.0/language-go/ for more details
 version: 2
 jobs:
-  build:
+  go-tests:
     docker:
       - image: circleci/golang:1.11
     working_directory: /go/src/github.com/interstellar/slingshot
@@ -13,8 +13,7 @@ jobs:
       - run: go vet ./slidechain/...
       - run: test `gofmt -s -l ./slidechain | grep -vF /vendor/ | wc -l` -eq 0
       - run: go test -v ./slidechain/... -timeout 60m
-
-  build:
+  zkvm-tests:
     docker:
       # specify the version
       - image: circleci/rust:nightly-2018-12-31
