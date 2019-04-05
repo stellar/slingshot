@@ -19,7 +19,7 @@ jobs:
       # specify the version
       - image: circleci/rust:nightly-2018-12-31
     environment:
-      RUSTFLAGS: "-C opt-level=0" cargo bench "DONOTMATCHANYBENCHMARK"
+      RUSTFLAGS: \"-C opt-level=0\" cargo bench \"DONOTMATCHANYBENCHMARK\"
     working_directory: /go/src/github.com/interstellar/slingshot
     steps:
       - checkout
