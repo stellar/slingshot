@@ -78,7 +78,7 @@ func TestPegOut(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err = c.DB.Exec("INSERT INTO exports (txid, ref) VALUES ($1, $2)", txid, ref)
+	_, err = c.DB.Exec("INSERT INTO exports (txid, pegout_json) VALUES ($1, $2)", txid, ref)
 	if err != nil && err != context.Canceled {
 		t.Fatal(err)
 	}
