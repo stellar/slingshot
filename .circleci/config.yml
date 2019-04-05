@@ -3,18 +3,7 @@ version: 2
 jobs:
   build:
     docker:
-      # specify the version
       - image: circleci/golang:1.11
-
-      # Specify service dependencies here if necessary
-      # CircleCI maintains a library of pre-built images
-      # documented at https://circleci.com/docs/2.0/circleci-images/
-      # - image: circleci/postgres:9.4
-
-    #### TEMPLATE_NOTE: go expects specific checkout path representing url
-    #### expecting it in the form of
-    ####   /go/src/github.com/circleci/go-tool
-    ####   /go/src/bitbucket.org/circleci/go-tool
     working_directory: /go/src/github.com/interstellar/slingshot
     steps:
       - checkout
@@ -24,3 +13,17 @@ jobs:
       - run: go vet ./slidechain/...
       - run: test `gofmt -s -l ./slidechain | grep -vF /vendor/ | wc -l` -eq 0
       - run: go test -v ./slidechain/... -timeout 60m
+
+  build:
+    docker:
+      # specify the version
+      - image: circleci/rust:nightly-2018-12-31
+    environment:
+      RUSTFLAGS: "-C opt-level=0" cargo bench "DONOTMATCHANYBENCHMARK"
+    working_directory: /go/src/github.com/interstellar/slingshot
+    steps:
+      - checkout
+      - run: cd zkvm
+      - run: rustup component add rustfmt-preview
+      - run: cargo fmt --all -- --check
+      - run: cargo test
