@@ -27,7 +27,7 @@ import (
 )
 
 type pegOut struct {
-	TxID     []byte      `json:"txid,omitempty"`
+	TxID     []byte      `json:"-"`
 	AssetXDR []byte      `json:"asset"`
 	TempAddr string      `json:"temp"`
 	Seqnum   int64       `json:"seqnum"`
@@ -35,7 +35,7 @@ type pegOut struct {
 	Amount   int64       `json:"amount"`
 	Anchor   []byte      `json:"anchor"`
 	Pubkey   []byte      `json:"pubkey"`
-	State    pegOutState `json:"state,omitempty"`
+	State    pegOutState `json:"-"`
 }
 
 type pegOutState int
@@ -119,47 +119,43 @@ func (c *Custodian) pegOutFromExports(ctx context.Context, pegouts chan<- pegOut
 			return
 		case <-ch:
 		}
-		const q = `SELECT txid, anchor, pubkey, asset_xdr, amount, seqnum, exporter, temp_addr FROM exports WHERE pegged_out IN ($1, $2)`
+		const q = `SELECT txid, pegout_json FROM exports WHERE pegged_out IN ($1, $2)`
 
 		var (
-			txids, anchors, assetXDRs, pubkeys [][]byte
-			amounts, seqnums                   []int64
-			exporters, tempAddrs               []string
+			txids, refs [][]byte
 		)
-		err := sqlutil.ForQueryRows(ctx, c.DB, q, pegOutNotYet, pegOutRetry, func(txid, anchor, pubkey, assetXDR []byte, amount, seqnum int64, exporter, tempAddr string) {
+		err := sqlutil.ForQueryRows(ctx, c.DB, q, pegOutNotYet, pegOutRetry, func(txid, ref []byte) {
 			txids = append(txids, txid)
-			amounts = append(amounts, amount)
-			assetXDRs = append(assetXDRs, assetXDR)
-			exporters = append(exporters, exporter)
-			tempAddrs = append(tempAddrs, tempAddr)
-			seqnums = append(seqnums, seqnum)
-			anchors = append(anchors, anchor)
-			pubkeys = append(pubkeys, pubkey)
+			refs = append(refs, ref)
 		})
 		if err != nil {
 			log.Fatalf("reading export rows: %s", err)
 		}
 		for i, txid := range txids {
-			var asset xdr.Asset
-			err = xdr.SafeUnmarshal(assetXDRs[i], &asset)
+			var p pegOut
+			err := json.Unmarshal(refs[i], &p)
 			if err != nil {
-				log.Fatalf("unmarshalling asset from XDR %x: %s", assetXDRs[i], err)
+				log.Fatalf("unmarshaling refdata: %s", err)
+			}
+			var asset xdr.Asset
+			err = xdr.SafeUnmarshal(p.AssetXDR, &asset)
+			if err != nil {
+				log.Fatalf("unmarshalling asset from XDR %x: %s", p.AssetXDR, err)
 			}
 			var tempID xdr.AccountId
-			err = tempID.SetAddress(tempAddrs[i])
+			err = tempID.SetAddress(p.TempAddr)
 			if err != nil {
-				log.Fatalf("setting temp address to %s: %s", tempAddrs[i], err)
+				log.Fatalf("setting temp address to %s: %s", p.TempAddr, err)
 			}
 			var exporter xdr.AccountId
-			err = exporter.SetAddress(exporters[i])
+			err = exporter.SetAddress(p.Exporter)
 			if err != nil {
-				log.Fatalf("setting exporter address to %s: %s", exporters[i], err)
+				log.Fatalf("setting exporter address to %s: %s", p.Exporter, err)
 			}
 
-			log.Printf("pegging out export %x: %d of %s to %s", txid, amounts[i], asset.String(), exporters[i])
-
+			log.Printf("pegging out export %x: %d of %s to %s", txid, p.Amount, asset.String(), p.Exporter)
 			peggedOut := pegOutOK
-			err = c.pegOut(ctx, exporter, asset, amounts[i], tempID, xdr.SequenceNumber(seqnums[i]))
+			err = c.pegOut(ctx, exporter, asset, p.Amount, tempID, xdr.SequenceNumber(p.Seqnum))
 			if err != nil {
 				peggedOut = pegOutFail
 				if herr, ok := errors.Root(err).(*horizon.Error); ok {
@@ -172,6 +168,7 @@ func (c *Custodian) pegOutFromExports(ctx context.Context, pegouts chan<- pegOut
 					}
 				}
 			}
+			p.State = peggedOut
 			result, err := c.DB.ExecContext(ctx, `UPDATE exports SET pegged_out=$1 WHERE txid=$2`, peggedOut, txid)
 			if err != nil {
 				log.Fatalf("updating pegged_out in export table: %s", err)
@@ -184,18 +181,10 @@ func (c *Custodian) pegOutFromExports(ctx context.Context, pegouts chan<- pegOut
 				log.Fatalf("got %d rows affected by update exports query for txid %x, want 1", numAffected, txid)
 			}
 			// Send peg-out info to goroutine for successes and non-retriable failures.
+			// The goroutine needs the txid to look up rows in the exports table, so it is stored in the peg-out struct.
 			if peggedOut == pegOutOK || peggedOut == pegOutFail {
-				pegouts <- pegOut{
-					TxID:     txid,
-					AssetXDR: assetXDRs[i],
-					TempAddr: tempAddrs[i],
-					Seqnum:   seqnums[i],
-					Exporter: exporters[i],
-					Amount:   amounts[i],
-					State:    peggedOut,
-					Anchor:   anchors[i],
-					Pubkey:   pubkeys[i],
-				}
+				p.TxID = txid
+				pegouts <- p
 			}
 		}
 	}
