@@ -121,7 +121,7 @@ mod tests {
         let privkey = Scalar::from(1u64);
         let privkeys = vec![privkey];
         let multikey = multikey_helper(&privkeys);
-        let sig = sign_helper(
+        let (sig, _) = sign_helper(
             privkeys,
             multikey.clone(),
             Transcript::new(b"example transcript"),
@@ -185,7 +185,7 @@ mod tests {
         privkeys: Vec<Scalar>,
         multikey: Multikey,
         transcript: Transcript,
-    ) -> Result<Signature, MusigError> {
+    ) -> Result<(Signature, Scalar), MusigError> {
         let pubkeys: Vec<_> = privkeys
             .iter()
             .map(|privkey| VerificationKey::from(privkey * RISTRETTO_BASEPOINT_POINT))
@@ -222,7 +222,14 @@ mod tests {
             assert_eq!(cmp.R, sig.R)
         }
 
-        Ok(signatures[0].clone())
+        // Check that all party transcripts are in sync at end of the protocol
+        let cmp_challenge = transcripts[0].clone().challenge_scalar(b"test");
+        for mut transcript in transcripts {
+            let challenge = transcript.challenge_scalar(b"test");
+            assert_eq!(cmp_challenge, challenge);
+        }
+
+        Ok((signatures[0].clone(), cmp_challenge))
     }
 
     #[test]
@@ -236,7 +243,7 @@ mod tests {
         ];
         let multikey = multikey_helper(&priv_keys);
 
-        let signature = sign_helper(
+        let (signature, _) = sign_helper(
             priv_keys,
             multikey.clone(),
             Transcript::new(b"example transcript"),
@@ -250,5 +257,35 @@ mod tests {
             )
             .verify()
             .is_ok());
+    }
+
+    #[test]
+    fn check_transcripts() {
+        // super secret, sshhh!
+        let priv_keys = vec![
+            Scalar::from(1u64),
+            Scalar::from(2u64),
+            Scalar::from(3u64),
+            Scalar::from(4u64),
+        ];
+        let multikey = multikey_helper(&priv_keys);
+
+        let (signature, prover_challenge) = sign_helper(
+            priv_keys,
+            multikey.clone(),
+            Transcript::new(b"example transcript"),
+        )
+        .unwrap();
+
+        let verifier_transcript = &mut Transcript::new(b"example transcript");
+        assert!(signature
+            .verify(verifier_transcript, multikey.aggregated_key())
+            .verify()
+            .is_ok());
+
+        let verifier_challenge = verifier_transcript.challenge_scalar(b"test");
+
+        // Test that prover and verifier transcript states are the same after running protocol
+        assert_eq!(prover_challenge, verifier_challenge);
     }
 }

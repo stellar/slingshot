@@ -32,8 +32,8 @@ pub struct PartyAwaitingCommitments<'t> {
 }
 
 /// State of the party when awaiting signature shares from other parties.
-pub struct PartyAwaitingShares<'t> {
-    transcript: &'t mut Transcript,
+pub struct PartyAwaitingShares {
+    transcript: Transcript,
     multikey: Multikey,
     R: RistrettoPoint,
     counterparties: Vec<CounterpartyCommitted>,
@@ -112,7 +112,7 @@ impl<'t> PartyAwaitingCommitments<'t> {
     pub fn receive_commitments(
         mut self,
         nonce_commitments: Vec<NonceCommitment>,
-    ) -> Result<(PartyAwaitingShares<'t>, Scalar), MusigError> {
+    ) -> Result<(PartyAwaitingShares, Scalar), MusigError> {
         // Make R = sum_i(R_i). nonce_commitments = R_i from all the parties.
         let R = NonceCommitment::sum(&nonce_commitments);
 
@@ -131,9 +131,11 @@ impl<'t> PartyAwaitingCommitments<'t> {
         // Make a copy of the transcript for extracting the challenge c_i.
         // This way, we can pass self.transcript to the next state so the next state
         // can also extract the same challenge (for checking signature share validity).
-        let mut transcript = self.transcript.clone();
+        let transcript = self.transcript.clone();
+
+        // Get per-party challenge c_i
         let X_i = VerificationKey::from(self.x_i * RISTRETTO_BASEPOINT_POINT);
-        let c_i = self.multikey.challenge(&X_i, &mut transcript);
+        let c_i = self.multikey.challenge(&X_i, &mut self.transcript);
 
         // Generate share: s_i = r_i + c * a_i * x_i
         let s_i = self.r_i + c_i * self.x_i;
@@ -141,7 +143,7 @@ impl<'t> PartyAwaitingCommitments<'t> {
         // Store received nonce commitments in next state
         Ok((
             PartyAwaitingShares {
-                transcript: self.transcript,
+                transcript,
                 multikey: self.multikey,
                 R,
                 counterparties,
@@ -151,7 +153,7 @@ impl<'t> PartyAwaitingCommitments<'t> {
     }
 }
 
-impl<'t> PartyAwaitingShares<'t> {
+impl<'t> PartyAwaitingShares {
     /// Assemble trusted signature shares (e.g. when all keys owned by one signer)
     pub fn receive_trusted_shares(self, shares: Vec<Scalar>) -> Signature {
         // s = sum(s_i), s_i = shares[i]
