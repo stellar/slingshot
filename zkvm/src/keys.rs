@@ -8,8 +8,8 @@ use crate::errors::VMError;
 use crate::transcript::TranscriptProtocol;
 
 /// Creates an aggregated Schnorr private key for signing from
-/// a single party's set of private keys. 
-/// Mirrors the MuSig multi-party aggregation scheme so that 
+/// a single party's set of private keys.
+/// Mirrors the MuSig multi-party aggregation scheme so that
 /// aggregated pubkeys are consistent across both methods.
 pub fn aggregated_privkey(privkeys: &[Scalar]) -> Result<Scalar, VMError> {
     match privkeys.len() {
