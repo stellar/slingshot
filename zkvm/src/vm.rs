@@ -16,7 +16,6 @@ use crate::contract::{Anchor, Contract, Output, PortableItem};
 use crate::encoding;
 use crate::encoding::SliceReader;
 use crate::errors::VMError;
-use crate::merkle::MerkleTree;
 use crate::ops::Instruction;
 use crate::point_ops::PointOp;
 use crate::predicate::Predicate;
@@ -719,17 +718,12 @@ where
         let contract = self.pop_item()?.to_contract()?;
         let predicate = contract.predicate;
 
-        let signing_key = call_proof.signing_key;
+        let signing_key = call_proof.verification_key;
         let neighbors = call_proof.neighbors;
 
-        // Compute Merkle root M.
-        let transcript = Transcript::new(b"ZkVM.taproot");
-        let root = MerkleTree::compute_root_from_path(&program, transcript, &neighbors);
-
         // 0 == -P + X + h1(X, M)*B
-        self.delegate.verify_point_op(|| {
-            predicate.prove_taproot(&signing_key.0, &root)
-        })?;
+        self.delegate
+            .verify_point_op(|| predicate.prove_taproot(&program, &neighbors, &signing_key))?;
 
         // Places contract payload on stack.
         for item in contract.payload.into_iter() {

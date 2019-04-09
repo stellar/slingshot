@@ -95,3 +95,9 @@ impl From<CompressedRistretto> for VerificationKey {
         VerificationKey(x)
     }
 }
+
+impl Default for VerificationKey {
+    fn default() -> Self {
+        VerificationKey(CompressedRistretto::default())
+    }
+}
