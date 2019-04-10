@@ -57,21 +57,6 @@ pub enum PredicateLeaf {
     Blinding([u8; 32]),
 }
 
-impl MerkleItem for PredicateLeaf {
-    fn commit(&self, t: &mut Transcript) {
-        match self {
-            PredicateLeaf::Program(prog) => {
-                let mut buf = Vec::new();
-                prog.encode(&mut buf);
-                t.commit_bytes(b"predicate_leaf", &buf);
-            }
-            PredicateLeaf::Blinding(bytes) => {
-                t.commit_bytes(b"predicate_leaf", &bytes.clone());
-            }
-        }
-    }
-}
-
 impl Predicate {
     /// Returns the number of bytes needed to serialize the Predicate.
     pub fn serialized_length(&self) -> usize {
@@ -201,6 +186,28 @@ impl Into<CompressedRistretto> for Predicate {
     }
 }
 
+impl PredicateTree {
+    /// Creates the call proof and returns that with the program at an index.
+    pub fn create_callproof_program(
+        &self,
+        prog_index: usize
+    ) -> Result<(CallProof, Program), VMError> {
+        let poss_leaf = &self.leaves[2*prog_index];
+        let leaf_index = match poss_leaf {
+            PredicateLeaf::Blinding(_) => 2*prog_index + 1,
+            PredicateLeaf::Program(_) => 2*prog_index,
+        };
+        let tree = MerkleTree::build(b"ZkVM.taproot", &self.leaves);
+        let neighbors = tree.create_path(leaf_index).unwrap();
+        let call_proof = CallProof {
+            verification_key: self.key,
+            neighbors: neighbors,
+        };
+        let program = self.leaves[leaf_index].clone().to_program()?;
+        Ok((call_proof, program))
+    }
+}
+
 impl CallProof {
     pub fn serialized_length(&self) -> usize {
         // VerificationKey is a 32-byte array
@@ -250,6 +257,31 @@ impl CallProof {
             match n {
                 MerkleNeighbor::Left(l) => encoding::write_bytes(l, buf),
                 MerkleNeighbor::Right(r) => encoding::write_bytes(r, buf),
+            }
+        }
+    }
+}
+
+impl PredicateLeaf {
+    /// Downcasts the predicate leaf to a program.
+    pub fn to_program(self) -> Result<Program, VMError> {
+        match self {
+            PredicateLeaf::Program(p) => Ok(p),
+            _ => Err(VMError::TypeNotProgram),
+        }
+    }
+}
+
+impl MerkleItem for PredicateLeaf {
+    fn commit(&self, t: &mut Transcript) {
+        match self {
+            PredicateLeaf::Program(prog) => {
+                let mut buf = Vec::new();
+                prog.encode(&mut buf);
+                t.commit_bytes(b"predicate_leaf", &buf);
+            }
+            PredicateLeaf::Blinding(bytes) => {
+                t.commit_bytes(b"predicate_leaf", &bytes.clone());
             }
         }
     }

@@ -1,8 +1,8 @@
 use crate::encoding::SliceReader;
 use crate::errors::VMError;
-use crate::merkle::{MerkleNeighbor, MerkleTree};
+use crate::merkle::MerkleTree;
 use crate::ops::Instruction;
-use crate::predicate::{CallProof, PredicateTree};
+use crate::predicate::{CallProof, PredicateLeaf, PredicateTree};
 use crate::scalar_witness::ScalarWitness;
 use crate::types::Data;
 
@@ -122,32 +122,21 @@ impl Program {
         self
     }
 
-    /// Takes predicate tree and index of program in Merkle tree to verify the program's membership in
-    /// that Merkle tree and call the program.
-    // PRTODO: Would the index of the program in the tree be passed? If not, how does this work?
+    /// Takes predicate tree and index of program in Merkle tree to verify
+    /// the program's membership in that Merkle tree and call the program.
     pub fn choose_call(
         &mut self,
         pred_tree: PredicateTree,
-        index: usize,
+        prog_index: usize,
     ) -> Result<&mut Program, VMError> {
-        let tree = MerkleTree::build(b"ZkVM.taproot", &pred_tree.leaves);
-        let neighbors = tree.create_path(index).unwrap();
-        let mut positions: u32 = 0;
-        for i in 0..neighbors.len() {
-            match neighbors[i] {
-                MerkleNeighbor::Right(_) => positions = positions | 1 << i,
-                _ => {}
-            }
-        }
-        let call_proof = CallProof {
-            verification_key: pred_tree.key,
-            neighbors: neighbors,
-        };
+        let (call_proof, program) = pred_tree.create_callproof_program(prog_index)?;
 
         // PRTODO: I want to push both the program and the contract on the stack here,
         // but I'm unsure how to do that in a way that differentiates the two.
+        // Push contract, call proof, program.
+        self.push(Data::Program(program)).call();
         self.push(Data::CallProof(call_proof)).call();
-        self.push(self.clone()).call();
+        self.push(Data::Program(program)).call();
         Ok(self)
     }
 }
