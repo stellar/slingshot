@@ -131,10 +131,6 @@ impl Program {
     ) -> Result<&mut Program, VMError> {
         let (call_proof, program) = pred_tree.create_callproof_program(prog_index)?;
 
-        // PRTODO: I want to push both the program and the contract on the stack here,
-        // but I'm unsure how to do that in a way that differentiates the two.
-        // Push contract, call proof, program.
-        self.push(Data::Program(program)).call();
         self.push(Data::CallProof(call_proof)).call();
         self.push(Data::Program(program)).call();
         Ok(self)
