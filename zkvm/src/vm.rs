@@ -718,12 +718,9 @@ where
         let contract = self.pop_item()?.to_contract()?;
         let predicate = contract.predicate;
 
-        let signing_key = call_proof.verification_key;
-        let neighbors = call_proof.neighbors;
-
         // 0 == -P + X + h1(X, M)*B
         self.delegate
-            .verify_point_op(|| predicate.prove_taproot(&program, &neighbors, &signing_key))?;
+            .verify_point_op(|| predicate.prove_taproot(&program, &call_proof))?;
 
         // Places contract payload on stack.
         for item in contract.payload.into_iter() {

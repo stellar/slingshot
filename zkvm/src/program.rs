@@ -1,8 +1,7 @@
 use crate::encoding::SliceReader;
 use crate::errors::VMError;
-use crate::merkle::MerkleTree;
 use crate::ops::Instruction;
-use crate::predicate::{CallProof, PredicateLeaf, PredicateTree};
+use crate::predicate::PredicateTree;
 use crate::scalar_witness::ScalarWitness;
 use crate::types::Data;
 
@@ -130,7 +129,6 @@ impl Program {
         prog_index: usize,
     ) -> Result<&mut Program, VMError> {
         let (call_proof, program) = pred_tree.create_callproof_program(prog_index)?;
-
         self.push(Data::CallProof(call_proof)).call();
         self.push(Data::Program(program)).call();
         Ok(self)
