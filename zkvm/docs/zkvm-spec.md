@@ -396,11 +396,10 @@ Uniqueness is provided via the [anchor](#anchor).
 ### Anchor
 
 _Anchor_ is a 32-byte unique string that provides uniqueness to the [contract ID](#contract-id).
-Anchors can be created by the [`nonce`](#nonce) instruction or generated from unique contract IDs used earlier in the same transaction. These are tracked by the VM via [last anchor](#vm-state):
+Anchors are generated from unique contract IDs used earlier in the same transaction. These are tracked by the VM via [last anchor](#vm-state):
 
-1. Nonce contract has its anchor computed from the nonce parameters (see [`nonce`](#nonce) instruction).
-2. Claimed UTXO ([`input`](#input)) sets the VM’s [last anchor](#vm-state) to its _ratcheted_ [contract ID](#contract-id) (see [`input`](#input)).
-3. Newly created contracts and outputs ([`contract`](#contract), [`output`](#contract)) consume the VM’s [last anchor](#vm-state) and replace it with its [contract ID](#contract-id).
+1. Claimed UTXO ([`input`](#input)) sets the VM’s [last anchor](#vm-state) to its _ratcheted_ [contract ID](#contract-id) (see [`input`](#input)).
+2. Newly created contracts and outputs ([`contract`](#contract), [`output`](#contract)) consume the VM’s [last anchor](#vm-state) and replace it with its [contract ID](#contract-id).
 
 VM fails if:
 
@@ -545,7 +544,6 @@ following instructions:
 * [`output`](#output)
 * [`issue`](#issue)
 * [`retire`](#retire)
-* [`nonce`](#nonce)
 * [`log`](#log)
 * [`import`](#import)
 * [`export`](#export)
@@ -614,16 +612,6 @@ Retire entry is added using [`retire`](#retire) instruction.
 ```
 T.commit("retire.q", qty_commitment)
 T.commit("retire.f", flavor_commitment)
-```
-
-#### Nonce entry
-
-Nonce entry is added using [`nonce`](#nonce) instruction.
-
-```
-T.commit("nonce.b", blockid)
-T.commit("nonce.t", maxtime)
-T.commit("nonce.n", nonce_anchor)
 ```
 
 #### Data entry
@@ -1004,11 +992,10 @@ Code | Instruction                | Stack diagram                              |
 0x1a | [`input`](#input)          |      _prevoutput_ → _contract_             | Modifies [tx log](#transaction-log)
 0x1b | [`output:k`](#output)      |   _items... pred_ → ø                      | Modifies [tx log](#transaction-log)
 0x1c | [`contract:k`](#contract)  |   _items... pred_ → _contract_             | 
-0x1d | [`nonce`](#nonce)          |    _pred blockid_ → _contract_             | Modifies [tx log](#transaction-log)
-0x1e | [`log`](#log)              |            _data_ → ø                      | Modifies [tx log](#transaction-log)
-0x1f | [`signtx`](#signtx)        |        _contract_ → _results..._           | Modifies [deferred verification keys](#transaction-signature)
-0x20 | [`call`](#call)            |_contract(P) proof prog_ → _results..._     | [Defers point operations](#deferred-point-operations)
-0x21 | [`delegate`](#delegate)    |_contract prog sig_ → _results..._          | [Defers point operations](#deferred-point-operations)
+0x1d | [`log`](#log)              |            _data_ → ø                      | Modifies [tx log](#transaction-log)
+0x1e | [`signtx`](#signtx)        |        _contract_ → _results..._           | Modifies [deferred verification keys](#transaction-signature)
+0x1f | [`call`](#call)            |_contract(P) proof prog_ → _results..._     | [Defers point operations](#deferred-point-operations)
+0x20 | [`delegate`](#delegate)    |_contract prog sig_ → _results..._          | [Defers point operations](#deferred-point-operations)
   —  | [`ext`](#ext)              |                 ø → ø                      | Fails if [extension flag](#vm-state) is not set.
 
 
@@ -1461,47 +1448,6 @@ Immediate data `k` is encoded as [LE32](#le32).
 
 Fails if VM’s [last anchor](#vm-state) is missing.
 
-#### nonce
-
-_pred blockid_ **nonce** → _contract_
-
-1. Pops [32-byte string](#data-type) `blockid` from the stack.
-2. Pops [predicate](#predicate) `pred` from the stack.
-3. Computes the nonce [anchor](#anchor) value:
-    ```
-    T = Transcript("ZkVM.nonce")
-    T.commit("blockid", blockid)
-    T.commit("predicate", pred)
-    T.commit("maxtime", LE64(tx.maxtime))
-    nonce_anchor = T.challenge_bytes("anchor")
-    ```
-4. Pushes a new [contract](#contract-type) with:
-    * an empty [payload](#contract-payload)
-    * predicate set to `pred`
-    * anchor set to `nonce_anchor`.
-5. Sets the [VM’s last anchor](#vm-state) to [contract ID](#contract-id) of that contract.
-6. Adds [nonce entry](#nonce-entry) to the [transaction log](#transaction-log) with the `blockid`, transaction [maxtime](#time-bounds) and `nonce_anchor`.
-
-Fails if:
-* `blockid` is a not a 32-byte [data string](#data-type).
-* `pred` is not a valid [point](#point).
-
-**Discussion**
-
-A nonce serves two purposes:
-
-1. It provides a unique anchor for an issuing transaction if other anchors are not available (i.e., from other values already on the stack);
-2. It binds the entire transaction to a particular blockchain, protecting not only against cross-blockchain replays, but also potential blockchain forks. This is a necessary feature for stateless signing devices that rely on blockchain proofs.
-
-Blockchain state machine performs the following checks:
-
-1. The `blockid` is checked against the IDs of “recent” blocks when the transaction is applied to the blockchain. It must match a recent block, or the initial block of the blockchain.
-2. The `nonce_anchor` is checked for uniqueness against “recent” nonce anchors.
-
-To perform these checks, validators must keep a set of recent nonces and a set of recent block headers available. For scalability and to reduce resource demands on the network, these sets must be limited in size. So verifiers can and should impose reasonable limits on the value of exp (which is the time by which the transaction must be included in a block or become invalid).
-
-To support long-living pre-signed transactions, the protocol allows a nonce to use the blockchain’s initial block ID regardless of the `refscount` limit specified in the block headers.
-
 
 #### log
 
@@ -1792,10 +1738,9 @@ ZkVM has similar or almost identical properties as TxVM:
 4. Contracts are first-class types implementing [object-capability model](https://en.wikipedia.org/wiki/Object-capability_model).
 5. VM assumes small UTXO-based blockchain state and very simple validation rules outside the VM.
 6. Each unspent transaction output (UTXO) is a _contract_ which holds arbitrary collection of data and values.
-7. Optional _time-bounded nonces_ as a way to guarantee uniqueness when transaction has no link to previous transactions.
-8. _Transaction log_ as an append-only list of effects of the transaction (inputs, outputs, nonces etc.)
-9. Contracts use linear logic by imperatively producing the effects they require instead of observing and verifying their context.
-10. Execution can be _delegated to a signed program_ which is provided at the moment of opening a contract.
+7. _Transaction log_ as an append-only list of effects of the transaction (inputs, outputs, etc.)
+8. Contracts use linear logic by imperatively producing the effects they require instead of observing and verifying their context.
+9. Execution can be _delegated to a signed program_ which is provided at the moment of opening a contract.
 
 At the same time, ZkVM improves on the following tradeoffs in TxVM:
 
@@ -1905,7 +1850,7 @@ In ZkVM:
 
 * [Transaction ID](#transaction-id) is globally unique,
 * [UTXO](#utxo) is globally unique,
-* [Nonce](#nonce) is globally unique,
+* Nonces are replaced with synthetic "nonce units" added via synthetic UTXOs introduced by each block,
 * [Contract](#contract-type) is globally unique,
 * [Value](#value-type) is **not** unique.
 
@@ -1922,7 +1867,7 @@ TxVM ensures transaction uniqueness this way:
 * Each value has a unique “anchor” (32-byte payload)
 * When values are split/merged, anchor is one-way hashed to produce new anchor(s).
 * `finalize` instruction consumes a zero-quantity value, effectively consuming a unique anchor.
-* Anchors are originally produced via `nonce` instruction that uses blockchain state to prevent reuse of nonces.
+* Anchors are originally produced by synthetic UTXOs added by each block.
 * Issuance of new assets consumes a zero-quantity value, moving the anchor from it to the new value.
 
 **Pro:**
@@ -1945,14 +1890,14 @@ Another potential issue: UTXOs are not guaranteed to be always unique. E.g. if a
 ZkVM ensures transaction uniqueness this way:
 
 * Values do not have anchors.
-* We still have `nonce` instruction with the same semantics
+* Instead of the `nonce` instruction, the initial anchors are tied to a block via "nonce units" introduced by each block.
 * `issue` does not consume zero value
 * `finalize` does not consume zero value
 * `claim/borrow` can produce an arbitrary value and its negative at any point
 * Each UTXO ID is defined as `Hash(contract)`, that is contents of the contract are unique due to a contract’s anchor.
 * Transaction ID is a hash of the finalized log.
 * Newly created contracts consume the "last anchor" tracked by VM and set it to their contract ID.
-* When VM finishes, it checks that "last anchor" is present, which means that the log contains either an [input](#input-entry) or a [nonce](#nonce-entry).
+* When VM finishes, it checks that "last anchor" is present, which means that the log contains at least one [input entry](#input-entry).
 * Inputs and outputs are represented in the log as contract IDs which the blockchain state machine should remove/insert accordingly.
 
 **Pros:**

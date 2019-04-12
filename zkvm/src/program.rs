@@ -59,7 +59,6 @@ impl Program {
     def_op!(mintime, Mintime);
     def_op!(mul, Mul);
     def_op!(neg, Neg);
-    def_op!(nonce, Nonce);
     def_op!(or, Or);
     def_op!(output, Output, usize);
     def_op!(range, Range, BitRange);

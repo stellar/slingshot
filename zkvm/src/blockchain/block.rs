@@ -15,8 +15,6 @@ pub struct BlockHeader {
     pub timestamp_ms: u64,
     pub txroot: [u8; 32],
     pub utxoroot: [u8; 32],
-    pub nonceroot: [u8; 32],
-    pub refscount: u64,
     pub ext: Vec<u8>,
 }
 
@@ -29,8 +27,6 @@ impl BlockHeader {
         t.commit_u64(b"timestamp_ms", self.timestamp_ms);
         t.commit_bytes(b"txroot", &self.txroot);
         t.commit_bytes(b"utxoroot", &self.utxoroot);
-        t.commit_bytes(b"nonceroot", &self.nonceroot);
-        t.commit_u64(b"refscount", self.refscount);
         t.commit_bytes(b"ext", &self.ext);
 
         let mut result = [0u8; 32];
@@ -46,8 +42,6 @@ impl BlockHeader {
             timestamp_ms: timestamp_ms,
             txroot: [0; 32],
             utxoroot: [0; 32],
-            nonceroot: [0; 32],
-            refscount: refscount,
             ext: Vec::new(),
         }
     }
@@ -67,10 +61,7 @@ impl BlockHeader {
             self.timestamp_ms > prev.timestamp_ms,
             BlockchainError::BadBlockTimestamp,
         )?;
-        check(
-            self.refscount <= prev.refscount + 1,
-            BlockchainError::BadRefscount,
-        )
+        Ok(())
     }
 }
 

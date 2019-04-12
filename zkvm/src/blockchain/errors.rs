@@ -17,9 +17,6 @@ pub enum BlockchainError {
     #[fail(display = "bad block timestamp")]
     BadBlockTimestamp,
 
-    #[fail(display = "bad refscount")]
-    BadRefscount,
-
     #[fail(display = "bad tx timestamp")]
     BadTxTimestamp,
 
