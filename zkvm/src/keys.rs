@@ -42,7 +42,7 @@ pub fn aggregated_privkey(privkeys: &[Scalar]) -> Result<Scalar, VMError> {
         .iter()
         .map(|p| {
             let mut transcript = transcript.clone();
-            transcript.commit_point(b"X_i", &VerificationKey::from_secret(p).0);
+            transcript.commit_point(b"X_i", VerificationKey::from_secret(p).as_compressed());
             let x = transcript.challenge_scalar(b"a_i");
             p * x
         })
