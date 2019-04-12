@@ -2,11 +2,11 @@ use bulletproofs::{BulletproofGens, PedersenGens};
 use curve25519_dalek::constants::RISTRETTO_BASEPOINT_COMPRESSED;
 use curve25519_dalek::scalar::Scalar;
 use hex;
-use musig::Signature;
-
+use musig::{Signature, VerificationKey};
+use rand::Rng;
 use zkvm::{
-    Anchor, Commitment, Contract, Data, Output, PortableItem, Predicate, Program, Prover, TxHeader,
-    TxID, VMError, Value, Verifier,
+    Anchor, Commitment, Contract, Data, Output, PortableItem, Predicate, PredicateTree, Program,
+    Prover, TxHeader, TxID, VMError, Value, Verifier,
 };
 
 use zkvm::keys;
@@ -78,6 +78,15 @@ impl ProgramHelper for Program {
         self.output(1); // stack: empty
         self
     }
+}
+
+/// Generates a secret Scalar / key Predicate pair
+fn generate_predicate() -> (Predicate, Scalar) {
+    let gens = PedersenGens::default();
+
+    let scalar = Scalar::from(0u64);
+    let pred = Predicate::Key((scalar * gens.B).compress().into());
+    (pred, scalar)
 }
 
 /// Generates the given number of signing key Predicates, returning
@@ -492,5 +501,76 @@ fn issue_and_spend() {
 
     if build_and_verify(wrong_program, &scalars).is_ok() {
         panic!("Issue $6 and input $4, output $11 and $1 should have failed but didn't");
+    }
+}
+
+/// Program that spends an input on the stack unlocked with knowledge of a secret Scalar.
+fn spend_with_secret_scalar(qty: u64, flavor: Scalar, pred: Predicate, secret: Scalar) -> Program {
+    Program::build(|p| {
+        p.cloak_helper(1, vec![(qty, flavor)])
+            .output_helper(pred)
+            .r#const()
+            .push(secret)
+            .r#const()
+            .eq()
+            .verify()
+    })
+}
+
+#[test]
+fn taproot_happy_path() {
+    let sk = Scalar::from(24u64);
+    let pk = VerificationKey::from_secret(&sk);
+    let pred_tree = PredicateTree::new(Some(pk), vec![], [0u8; 32]).unwrap();
+    let factor = pred_tree.adjustment_factor();
+    let prev_output = make_output(101u64, Scalar::from(1u64), Predicate::Tree(pred_tree));
+
+    let prog = Program::build(|p| {
+        p.push(Output::new(prev_output))
+            .input()
+            .sign_tx()
+            .push(Predicate::Key(pk)) // send to the key
+            .output(1)
+    });
+
+    build_and_verify(prog, &vec![sk + factor]).unwrap();
+}
+
+#[test]
+fn taproot_program_path() {
+    let sk = Scalar::from(24u64);
+    let pk = VerificationKey::from_secret(&sk);
+
+    let (qty, flavor) = (101u64, Scalar::from(1u64));
+    let (output_pred, _) = generate_predicate();
+    let secret_scalar = Scalar::from(101u64);
+    let spend_prog = spend_with_secret_scalar(qty, flavor, output_pred.clone(), secret_scalar);
+    
+    let blinding_key = rand::thread_rng().gen::<[u8; 32]>();
+    let tree = PredicateTree::new(Some(pk), vec![spend_prog], blinding_key).unwrap();
+    let factor = tree.adjustment_factor();
+    let (call_proof, call_prog) = tree.create_callproof_program(0).unwrap();
+    let prev_output = make_output(qty, flavor, Predicate::Tree(tree));
+
+    let prog = Program::build(|p| {
+        p.push(secret_scalar)
+            .push(Output::new(prev_output.clone()))
+            .input()
+            .push(Data::CallProof(call_proof.clone()))
+            .push(call_prog.clone())
+            .call()
+    });
+    build_and_verify(prog, &vec![sk + factor]).unwrap();
+
+    let wrong_prog = Program::build(|p| {
+        p.push(secret_scalar + Scalar::one())
+            .push(Output::new(prev_output.clone()))
+            .input()
+            .push(Data::CallProof(call_proof))
+            .push(call_prog)
+            .call()
+    });
+    if build_and_verify(wrong_prog, &vec![sk + factor]).is_ok() {
+        panic!("Unlocking input with incorrect secret scalar should have failed but didn't");
     }
 }
