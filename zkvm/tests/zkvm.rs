@@ -545,7 +545,7 @@ fn taproot_program_path() {
     let (output_pred, _) = generate_predicate();
     let secret_scalar = Scalar::from(101u64);
     let spend_prog = spend_with_secret_scalar(qty, flavor, output_pred.clone(), secret_scalar);
-    
+
     let blinding_key = rand::thread_rng().gen::<[u8; 32]>();
     let tree = PredicateTree::new(Some(pk), vec![spend_prog], blinding_key).unwrap();
     let factor = tree.adjustment_factor();
