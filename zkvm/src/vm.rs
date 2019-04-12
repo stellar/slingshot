@@ -712,6 +712,7 @@ where
     }
 
     fn call(&mut self) -> Result<(), VMError> {
+        // Pop program, call proof, and contract
         let program_data = self.pop_item()?.to_data()?;
         let program = program_data.clone().to_program()?;
         let call_proof = self.pop_item()?.to_data()?.to_call_proof()?;
@@ -722,12 +723,12 @@ where
         self.delegate
             .verify_point_op(|| predicate.prove_taproot(&program, &call_proof))?;
 
-        // Places contract payload on stack.
+        // Place contract payload on the stack
         for item in contract.payload.into_iter() {
             self.push_item(item);
         }
 
-        // Sets program as current.
+        // Replace current program with new program
         self.continue_with_program(program_data)?;
         Ok(())
     }
