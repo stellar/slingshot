@@ -5,13 +5,25 @@ use merlin::Transcript;
 use musig::VerificationKey;
 
 use crate::errors::VMError;
-use crate::point_ops::PointOp;
 use crate::transcript::TranscriptProtocol;
 
 /// Creates an aggregated Schnorr private key for signing from
 /// a single party's set of private keys.
-pub fn aggregated_privkey(privkeys: &[Scalar]) -> Scalar {
-    let mut transcript = Transcript::new(b"ZkVM.key");
+/// Mirrors the MuSig multi-party aggregation scheme so that
+/// aggregated pubkeys are consistent across both methods.
+pub fn aggregated_privkey(privkeys: &[Scalar]) -> Result<Scalar, VMError> {
+    match privkeys.len() {
+        0 => {
+            return Err(VMError::BadArguments);
+        }
+        1 => {
+            return Ok(privkeys[0]);
+        }
+        _ => {}
+    }
+
+    // Initialize transcript to match Musig aggregation scheme.
+    let mut transcript = Transcript::new(b"Musig.aggregated-key");
     // Derive public keys from privkeys
     let pubkeys = privkeys
         .iter()
@@ -22,41 +34,17 @@ pub fn aggregated_privkey(privkeys: &[Scalar]) -> Scalar {
     let n = pubkeys.len();
     transcript.commit_u64(b"n", n as u64);
     for p in pubkeys.iter() {
-        transcript.commit_point(b"P", p.as_compressed());
+        transcript.commit_point(b"X", p.as_compressed());
     }
 
     // Generate aggregated private key
-    privkeys
+    Ok(privkeys
         .iter()
         .map(|p| {
-            let x = transcript.challenge_scalar(b"x");
+            let mut transcript = transcript.clone();
+            transcript.commit_point(b"X_i", &VerificationKey::from_secret(p).0);
+            let x = transcript.challenge_scalar(b"a_i");
             p * x
         })
-        .sum()
-}
-
-/// Creates an aggregated Schnorr public key for verifying signatures from a
-/// single party's set of private keys.
-pub fn aggregated_pubkey(pubkeys: &[VerificationKey]) -> Result<VerificationKey, VMError> {
-    let mut transcript = Transcript::new(b"ZkVM.key");
-    transcript.commit_u64(b"n", pubkeys.len() as u64);
-    for p in pubkeys.iter() {
-        transcript.commit_point(b"P", p.as_compressed());
-    }
-
-    let pairs = pubkeys
-        .iter()
-        .map(|p| {
-            let x = transcript.challenge_scalar(b"x");
-            (x, p.into_compressed())
-        })
-        .collect::<Vec<_>>();
-
-    let pubkey_op = PointOp {
-        primary: None,
-        secondary: None,
-        arbitrary: pairs,
-    };
-
-    Ok(VerificationKey::from(pubkey_op.compute()?))
+        .sum())
 }
