@@ -97,7 +97,7 @@ mod tests {
 
         // Verify tx
         let bp_gens = BulletproofGens::new(256, 1);
-        assert!(Verifier::verify_tx(tx, &bp_gens).is_ok());
+        assert!(Verifier::verify_tx(&tx, &bp_gens).is_ok());
     }
 
     #[test]
@@ -129,7 +129,7 @@ mod tests {
 
         // Verify tx
         let bp_gens = BulletproofGens::new(256, 1);
-        assert!(Verifier::verify_tx(tx, &bp_gens).is_ok());
+        assert!(Verifier::verify_tx(&tx, &bp_gens).is_ok());
     }
 
     // Helper functions
