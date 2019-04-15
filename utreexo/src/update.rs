@@ -1,0 +1,33 @@
+use super::hash::Hash;
+use super::proof::{Proof, ProofStep};
+use super::utreexo::Utreexo;
+
+use std::collections::HashMap;
+
+pub struct Update<'a> {
+    u: &'a Utreexo,
+    updated: HashMap<Hash, ProofStep>,
+}
+
+impl<'a> Update<'a> {
+    pub fn proof(&self, leaf: &Hash) -> Proof {
+        let mut item = *leaf;
+        let mut result = Proof {
+            leaf: item.clone(),
+            steps: Vec::new(),
+        };
+        loop {
+            match self.updated.get(&item) {
+                None => return result,
+                Some(step) => {
+                    result.steps.push(step.clone());
+                    if step.left {
+                        item = (self.u.hasher)(&step.h, &item);
+                    } else {
+                        item = (self.u.hasher)(&item, &step.h);
+                    }
+                }
+            }
+        }
+    }
+}
