@@ -52,7 +52,7 @@ impl Predicate {
     pub fn to_point(&self) -> CompressedRistretto {
         match self {
             Predicate::Opaque(p) => *p,
-            Predicate::Key(k) => k.0,
+            Predicate::Key(k) => *k.as_compressed(),
             Predicate::Or(d) => d.precomputed_point,
             Predicate::Program(prog, blinding) => {
                 let mut bytecode = Vec::new();

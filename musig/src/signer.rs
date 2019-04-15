@@ -128,13 +128,13 @@ impl<'t> PartyAwaitingCommitments<'t> {
         // The message `m` has already been fed into the transcript.
         let c = {
             self.transcript
-                .commit_point(b"X", &self.multikey.aggregated_key().0);
+                .commit_point(b"X", self.multikey.aggregated_key().as_compressed());
             self.transcript.commit_point(b"R", &R.compress());
             self.transcript.challenge_scalar(b"c")
         };
 
         // Make a_i = H(L, X_i)
-        let X_i = VerificationKey((self.x_i * RISTRETTO_BASEPOINT_POINT).compress());
+        let X_i = VerificationKey::from(self.x_i * RISTRETTO_BASEPOINT_POINT);
         let a_i = self.multikey.factor_for_key(&X_i);
 
         // Generate share: s_i = r_i + c * a_i * x_i

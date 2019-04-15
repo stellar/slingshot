@@ -2,7 +2,7 @@ use bulletproofs::{BulletproofGens, PedersenGens};
 use curve25519_dalek::constants::RISTRETTO_BASEPOINT_COMPRESSED;
 use curve25519_dalek::scalar::Scalar;
 use hex;
-use musig::Signature;
+use musig::{Signature, VerificationKey};
 
 use zkvm::{
     Anchor, Commitment, Contract, Data, Output, PortableItem, Predicate, Program, Prover, TxHeader,
@@ -68,7 +68,7 @@ fn generate_predicate() -> (Predicate, Scalar) {
     let gens = PedersenGens::default();
 
     let scalar = Scalar::from(0u64);
-    let pred = Predicate::Key((scalar * gens.B).compress().into());
+    let pred = Predicate::Key(VerificationKey::from(scalar * gens.B));
     (pred, scalar)
 }
 
@@ -84,7 +84,7 @@ fn generate_predicates(pred_num: usize) -> (Vec<Predicate>, Vec<Scalar>) {
 
     let predicates: Vec<Predicate> = scalars
         .iter()
-        .map(|s| Predicate::Key((s * gens.B).compress().into()))
+        .map(|s| Predicate::Key((s * gens.B).into()))
         .collect();
 
     (predicates, scalars)
@@ -95,7 +95,7 @@ fn generate_predicates(pred_num: usize) -> (Vec<Predicate>, Vec<Scalar>) {
 fn make_flavor() -> (Scalar, Predicate, Scalar) {
     let gens = PedersenGens::default();
     let scalar = Scalar::from(100u64);
-    let predicate = Predicate::Key((scalar * gens.B).compress().into());
+    let predicate = Predicate::Key((scalar * gens.B).into());
     let flavor = Value::issue_flavor(&predicate, Data::default());
     (scalar, predicate, flavor)
 }
@@ -133,7 +133,7 @@ fn build_and_verify(program: Program, keys: &Vec<Scalar>) -> Result<TxID, VMErro
                 .iter()
                 .filter_map(|vk| {
                     for k in keys {
-                        if (k * gens.B).compress() == vk.0 {
+                        if (k * gens.B).compress() == *vk.as_compressed() {
                             return Some(*k);
                         }
                     }

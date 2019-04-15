@@ -33,7 +33,7 @@ impl Signature {
         let R = NonceCommitment::new(RISTRETTO_BASEPOINT_POINT * r);
 
         let c = {
-            transcript.commit_point(b"X", &X.0);
+            transcript.commit_point(b"X", X.as_compressed());
             transcript.commit_point(b"R", &R.compress());
             transcript.challenge_scalar(b"c")
         };
@@ -48,7 +48,7 @@ impl Signature {
         // Make c = H(X, R, m)
         // The message `m` has already been fed into the transcript
         let c = {
-            transcript.commit_point(b"X", &X.0);
+            transcript.commit_point(b"X", X.as_compressed());
             transcript.commit_point(b"R", &self.R);
             transcript.challenge_scalar(b"c")
         };
@@ -59,7 +59,7 @@ impl Signature {
         // `0 == (-s * G) + (1 * R) + (c * X)`
         DeferredVerification {
             static_point_weight: -self.s,
-            dynamic_point_weights: vec![(Scalar::one(), self.R), (c, X.0)],
+            dynamic_point_weights: vec![(Scalar::one(), self.R), (c, X.into_compressed())],
         }
     }
 
@@ -153,7 +153,7 @@ mod tests {
             170, 66, 127, 36, 62, 160, 233, 199, 29, 206, 18, 250, 67,
         ]);
 
-        assert_eq!(expected_pubkey, multikey.aggregated_key().0);
+        assert_eq!(expected_pubkey, multikey.aggregated_key().into_compressed());
     }
 
     fn multikey_helper(priv_keys: &Vec<Scalar>) -> Multikey {
@@ -161,7 +161,7 @@ mod tests {
         Multikey::new(
             priv_keys
                 .iter()
-                .map(|priv_key| VerificationKey((G * priv_key).compress()))
+                .map(|priv_key| VerificationKey::from(G * priv_key))
                 .collect(),
         )
         .unwrap()
@@ -188,7 +188,7 @@ mod tests {
     ) -> Result<Signature, MusigError> {
         let pubkeys: Vec<_> = privkeys
             .iter()
-            .map(|privkey| VerificationKey((privkey * RISTRETTO_BASEPOINT_POINT).compress()))
+            .map(|privkey| VerificationKey::from(privkey * RISTRETTO_BASEPOINT_POINT))
             .collect();
 
         let mut transcripts: Vec<_> = pubkeys.iter().map(|_| transcript.clone()).collect();
