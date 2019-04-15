@@ -28,8 +28,14 @@ pub enum Entry {
 #[derive(Copy, Clone, PartialEq, Debug)]
 pub struct TxID(pub [u8; 32]);
 
+impl MerkleItem for TxID {
+    fn commit(&self, t: &mut Transcript) {
+        t.commit_bytes(b"txid", &self.0)
+    }
+}
+
 /// UTXO is a unique 32-byte identifier of a transaction output
-#[derive(Copy, Clone, PartialEq, Debug)]
+#[derive(Copy, Clone, Eq, Hash, PartialEq, Debug)]
 pub struct UTXO(pub [u8; 32]);
 
 impl UTXO {
@@ -56,8 +62,8 @@ impl MerkleItem for Entry {
         match self {
             Entry::Header(h) => {
                 t.commit_u64(b"tx.version", h.version);
-                t.commit_u64(b"tx.mintime", h.mintime);
-                t.commit_u64(b"tx.maxtime", h.maxtime);
+                t.commit_u64(b"tx.mintime", h.mintime_ms);
+                t.commit_u64(b"tx.maxtime", h.maxtime_ms);
             }
             Entry::Issue(q, f) => {
                 t.commit_point(b"issue.q", q);
@@ -100,8 +106,8 @@ mod tests {
     fn txlog_helper() -> Vec<Entry> {
         vec![
             Entry::Header(TxHeader {
-                mintime: 0,
-                maxtime: 0,
+                mintime_ms: 0,
+                maxtime_ms: 0,
                 version: 0,
             }),
             Entry::Issue(
