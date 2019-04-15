@@ -1,5 +1,4 @@
 use bulletproofs::BulletproofGens;
-use musig::VerificationKey;
 use std::collections::{HashSet, VecDeque};
 
 use super::block::{Block, BlockHeader, BlockID};
@@ -34,12 +33,8 @@ impl BlockchainState {
         &self,
         b: &Block,
         bp_gens: &BulletproofGens,
-        key_agg_fn: F,
-    ) -> Result<BlockchainState, BlockchainError>
-    where
-        F: Clone + Fn(&[VerificationKey]) -> Result<VerificationKey, VMError>,
-    {
-        let txlogs = b.validate(&self.tip, bp_gens, key_agg_fn)?;
+    ) -> Result<BlockchainState, BlockchainError> {
+        let txlogs = b.validate(&self.tip, bp_gens)?;
         let mut new_state = self.clone();
 
         // Remove expired nonces.

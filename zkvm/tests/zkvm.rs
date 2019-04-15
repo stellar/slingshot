@@ -172,7 +172,7 @@ fn build_and_verify(program: Program, keys: &Vec<Scalar>) -> Result<TxID, VMErro
     // Verify tx
     let bp_gens = BulletproofGens::new(256, 1);
 
-    let vtx = Verifier::verify_tx(tx, &bp_gens)?;
+    let vtx = Verifier::verify_tx(&tx, &bp_gens)?;
     Ok(vtx.id)
 }
 

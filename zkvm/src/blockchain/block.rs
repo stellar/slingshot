@@ -1,9 +1,8 @@
 use bulletproofs::BulletproofGens;
 use merlin::Transcript;
-use musig::VerificationKey;
 
 use super::errors::BlockchainError;
-use crate::{MerkleTree, Tx, TxID, TxLog, VMError, Verifier};
+use crate::{MerkleTree, Tx, TxID, TxLog, Verifier};
 
 #[derive(Clone, PartialEq)]
 pub struct BlockID(pub [u8; 32]);
@@ -88,15 +87,11 @@ pub struct Block {
 }
 
 impl Block {
-    pub fn validate<F>(
+    pub fn validate(
         &self,
         prev: &BlockHeader,
         bp_gens: &BulletproofGens,
-        key_agg_fn: F,
-    ) -> Result<Vec<TxLog>, BlockchainError>
-    where
-        F: Clone + Fn(&[VerificationKey]) -> Result<VerificationKey, VMError>,
-    {
+    ) -> Result<Vec<TxLog>, BlockchainError> {
         self.header.validate(prev)?;
 
         let mut txlogs: Vec<TxLog> = Vec::with_capacity(self.txs.len());
@@ -112,7 +107,7 @@ impl Block {
                 return Err(BlockchainError::BadTxVersion);
             }
 
-            match Verifier::verify_tx(tx, bp_gens, key_agg_fn.clone()) {
+            match Verifier::verify_tx(tx, bp_gens) {
                 Ok(verified) => {
                     let txid = TxID::from_log(&verified.log);
                     txids.push(txid);
