@@ -97,7 +97,7 @@ mod tests {
 
         // Verify tx
         let bp_gens = BulletproofGens::new(256, 1);
-        assert!(Verifier::verify_tx(tx, &bp_gens).is_ok());
+        assert!(Verifier::verify_tx(&tx, &bp_gens).is_ok());
     }
 
     #[test]
@@ -129,7 +129,7 @@ mod tests {
 
         // Verify tx
         let bp_gens = BulletproofGens::new(256, 1);
-        assert!(Verifier::verify_tx(tx, &bp_gens).is_ok());
+        assert!(Verifier::verify_tx(&tx, &bp_gens).is_ok());
     }
 
     // Helper functions
@@ -137,8 +137,8 @@ mod tests {
         let bp_gens = BulletproofGens::new(256, 1);
         let header = TxHeader {
             version: 0u64,
-            mintime: 0u64,
-            maxtime: 0u64,
+            mintime_ms: 0u64,
+            maxtime_ms: 0u64,
         };
         // TBD: figure out better + more robust signing mechanism
         let gens = PedersenGens::default();

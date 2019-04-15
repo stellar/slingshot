@@ -5,6 +5,7 @@
 extern crate failure;
 extern crate serde;
 
+mod blockchain;
 mod constraints;
 mod contract;
 mod encoding;
