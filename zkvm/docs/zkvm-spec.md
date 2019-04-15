@@ -1858,7 +1858,7 @@ In contrast, in TxVM:
 
 * [Transaction ID](#transaction-id) is globally unique,
 * [UTXO](#utxo) is **not** unique,
-* [Nonce](#nonce) is globally unique,
+* `Nonce` is globally unique,
 * [Contract](#contract-type) is globally unique,
 * [Value](#value-type) is globally unique.
 
