@@ -223,7 +223,7 @@ impl Data {
     /// Downcast the data item to a `CallProof` type.
     pub fn to_call_proof(self) -> Result<CallProof, VMError> {
         match self {
-            Data::Opaque(data) => CallProof::parse(&data),
+            Data::Opaque(data) => SliceReader::parse(&data, |r| CallProof::decode(r)),
             Data::CallProof(c) => Ok(c),
             _ => Err(VMError::TypeNotCallProof),
         }
