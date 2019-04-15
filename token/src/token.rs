@@ -97,7 +97,7 @@ mod tests {
 
         // Verify tx
         let bp_gens = BulletproofGens::new(256, 1);
-        assert!(Verifier::verify_tx(tx, &bp_gens, |keys| keys::aggregated_pubkey(keys)).is_ok());
+        assert!(Verifier::verify_tx(tx, &bp_gens).is_ok());
     }
 
     #[test]
@@ -129,7 +129,7 @@ mod tests {
 
         // Verify tx
         let bp_gens = BulletproofGens::new(256, 1);
-        assert!(Verifier::verify_tx(tx, &bp_gens, |keys| keys::aggregated_pubkey(keys)).is_ok());
+        assert!(Verifier::verify_tx(tx, &bp_gens).is_ok());
     }
 
     // Helper functions
@@ -156,7 +156,7 @@ mod tests {
                 .collect();
             Ok(Signature::sign_single(
                 &mut t.clone(),
-                keys::aggregated_privkey(&signtx_keys),
+                keys::aggregated_privkey(&signtx_keys)?,
             ))
         })
     }

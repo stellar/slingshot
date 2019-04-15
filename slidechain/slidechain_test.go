@@ -537,12 +537,18 @@ func isImportTx(tx *bc.Tx, amount int64, assetXDR []byte, recipPubKey ed25519.Pu
 	return true
 }
 
-// isPostPegOutTx returns whether or not a txvm transaction matches the slidechain post-export tx format.
+// isPostPegOutTx returns whether or not a txvm transaction matches the slidechain post-peg-out tx format.
 //
-// Expected log is
+// Expected log for retirement:
 // {"I", ...}
 // {"X", ...}
 // {"L", ...}
+// {"F", ...}
+//
+// Expected log for refund:
+// {"I", ...}
+// {"L", ...}
+// {"O", ...}
 // {"F", ...}
 func isPostPegOutTx(tx *bc.Tx, asset xdr.Asset, amount int64, tempAddr, exporter string, seqnum int64, anchor, pubkey []byte) bool {
 	if len(tx.Log) != 4 {
@@ -551,10 +557,16 @@ func isPostPegOutTx(tx *bc.Tx, asset xdr.Asset, amount int64, tempAddr, exporter
 	if tx.Log[0][0].(txvm.Bytes)[0] != txvm.InputCode {
 		return false
 	}
-	if tx.Log[1][0].(txvm.Bytes)[0] != txvm.RetireCode {
-		return false
+	secondCode := tx.Log[1][0].(txvm.Bytes)[0]
+	thirdCode := tx.Log[2][0].(txvm.Bytes)[0]
+	var foundRetire, foundRefund bool
+	if secondCode == txvm.RetireCode && thirdCode == txvm.LogCode {
+		foundRetire = true
 	}
-	if tx.Log[2][0].(txvm.Bytes)[0] != txvm.LogCode {
+	if secondCode == txvm.LogCode && thirdCode == txvm.OutputCode {
+		foundRefund = true
+	}
+	if !foundRetire && !foundRefund {
 		return false
 	}
 	if tx.Log[3][0].(txvm.Bytes)[0] != txvm.FinalizeCode {
@@ -564,18 +576,25 @@ func isPostPegOutTx(tx *bc.Tx, asset xdr.Asset, amount int64, tempAddr, exporter
 	if err != nil {
 		return false
 	}
-	ref := pegOut{
-		AssetXDR: assetXDR,
-		TempAddr: tempAddr,
-		Seqnum:   seqnum,
-		Exporter: exporter,
-		Amount:   amount,
-		Anchor:   anchor,
-		Pubkey:   pubkey,
-	}
-	refdata, err := json.Marshal(ref)
-	if !bytes.Equal(refdata, tx.Log[2][2].(txvm.Bytes)) {
-		return false
+	if foundRetire {
+		var logRef pegOut
+		err := json.Unmarshal(tx.Log[2][2].(txvm.Bytes), &logRef)
+		if err != nil {
+			log.Printf("unmarshaling log item: %s", err)
+			return false
+		}
+		ref := pegOut{
+			AssetXDR: assetXDR,
+			TempAddr: tempAddr,
+			Seqnum:   seqnum,
+			Exporter: exporter,
+			Amount:   amount,
+			Anchor:   anchor,
+			Pubkey:   pubkey,
+		}
+		if !reflect.DeepEqual(logRef, ref) {
+			return false
+		}
 	}
 	return true
 }

@@ -164,7 +164,7 @@ fn build_and_verify(program: Program, keys: &Vec<Scalar>) -> Result<TxID, VMErro
                 .collect();
             Ok(Signature::sign_single(
                 &mut t.clone(),
-                keys::aggregated_privkey(&signtx_keys),
+                keys::aggregated_privkey(&signtx_keys)?,
             ))
         })?
     };
@@ -172,7 +172,7 @@ fn build_and_verify(program: Program, keys: &Vec<Scalar>) -> Result<TxID, VMErro
     // Verify tx
     let bp_gens = BulletproofGens::new(256, 1);
 
-    let vtx = Verifier::verify_tx(tx, &bp_gens, |keys| keys::aggregated_pubkey(keys))?;
+    let vtx = Verifier::verify_tx(tx, &bp_gens)?;
     Ok(vtx.id)
 }
 
