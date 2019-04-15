@@ -42,7 +42,6 @@ pub enum Instruction {
     Input,
     Output(usize),   // payload count
     Contract(usize), // payload count
-    Nonce,
     Log,
     Signtx,
     Call,
@@ -85,15 +84,14 @@ pub enum Opcode {
     Input = 0x1a,
     Output = 0x1b,
     Contract = 0x1c,
-    Nonce = 0x1d,
-    Log = 0x1e,
-    Signtx = 0x1f,
-    Call = 0x20,
-    Select = 0x21,
+    Log = 0x1d,
+    Signtx = 0x1e,
+    Call = 0x1f,
+    Select = 0x20,
     Delegate = MAX_OPCODE,
 }
 
-const MAX_OPCODE: u8 = 0x22;
+const MAX_OPCODE: u8 = 0x21;
 
 impl Opcode {
     /// Converts the opcode to `u8`.
@@ -199,7 +197,6 @@ impl Instruction {
                 let k = program.read_size()?;
                 Ok(Instruction::Contract(k))
             }
-            Opcode::Nonce => Ok(Instruction::Nonce),
             Opcode::Log => Ok(Instruction::Log),
             Opcode::Signtx => Ok(Instruction::Signtx),
             Opcode::Call => Ok(Instruction::Call),
@@ -270,7 +267,6 @@ impl Instruction {
                 write(Opcode::Contract);
                 encoding::write_u32(*k as u32, program);
             }
-            Instruction::Nonce => write(Opcode::Nonce),
             Instruction::Log => write(Opcode::Log),
             Instruction::Signtx => write(Opcode::Signtx),
             Instruction::Call => write(Opcode::Call),

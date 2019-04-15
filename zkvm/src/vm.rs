@@ -182,7 +182,7 @@ where
     // we allow treating unassigned opcodes as no-ops.
     extension: bool,
 
-    // updated by nonce/input/issue/contract/output instructions
+    // updated by input/issue/contract/output instructions
     last_anchor: Option<Anchor>,
 
     // stack of all items in the VM
@@ -314,7 +314,6 @@ where
                 Instruction::Input => self.input()?,
                 Instruction::Output(k) => self.output(k)?,
                 Instruction::Contract(k) => self.contract(k)?,
-                Instruction::Nonce => self.nonce()?,
                 Instruction::Log => self.log()?,
                 Instruction::Signtx => self.signtx()?,
                 Instruction::Call => self.call()?,
@@ -492,22 +491,6 @@ where
 
     fn maxtime(&mut self) -> Result<(), VMError> {
         self.push_item(Expression::constant(self.maxtime_ms));
-        Ok(())
-    }
-
-    // pred blockid `nonce` → contract
-    fn nonce(&mut self) -> Result<(), VMError> {
-        let blockid = self.pop_item()?.to_data()?.to_bytes();
-        let blockid = SliceReader::parse(&blockid, |r| r.read_u8x32())?;
-        let predicate = self.pop_item()?.to_data()?.to_predicate()?;
-        let nonce_anchor = Anchor::nonce(blockid, &predicate, self.maxtime_ms);
-
-        self.last_anchor = Some(nonce_anchor); // will be immediately moved into contract below
-        let contract = self.make_output(predicate, vec![])?.into_contract().0;
-
-        self.txlog
-            .push(Entry::Nonce(blockid, self.maxtime_ms, nonce_anchor));
-        self.push_item(contract);
         Ok(())
     }
 

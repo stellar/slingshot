@@ -93,15 +93,14 @@ impl Anchor {
         &self.0
     }
 
-    /// Computes a nonce anchor from its components
-    pub fn nonce(blockid: [u8; 32], predicate: &Predicate, maxtime: u64) -> Self {
-        let mut t = Transcript::new(b"ZkVM.nonce");
-        t.commit_bytes(b"blockid", &blockid);
-        t.commit_bytes(b"predicate", predicate.to_point().as_bytes());
-        t.commit_u64(b"maxtime", maxtime);
-        let mut nonce = [0u8; 32];
-        t.challenge_bytes(b"anchor", &mut nonce);
-        Self(nonce)
+    /// Converts raw bytes into an Anchor.
+    ///
+    /// WARNING: This is intended to be used for testing only.
+    /// TBD: add an API later which is tailored to
+    /// (a) specifying initial utxo set, and/or
+    /// (b) per-block minted utxos.
+    pub fn from_raw_bytes(raw_bytes: [u8; 32]) -> Self {
+        Self(raw_bytes)
     }
 
     /// Ratchet the anchor into a new anchor
