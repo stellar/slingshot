@@ -246,7 +246,7 @@ impl CallProof {
         call_proof.verification_key = VerificationKey(reader.read_point()?);
         let positions = reader.read_u32()?;
         if positions == 0 {
-            return Err(VMError::FormatError)
+            return Err(VMError::FormatError);
         }
         let mut neighbors = vec![];
         let num_neighbors = positions.leading_zeros();

@@ -5,8 +5,8 @@ use hex;
 use musig::{Signature, VerificationKey};
 use rand::Rng;
 use zkvm::{
-    Anchor, Commitment, Contract, Data, Output, PortableItem, Predicate, PredicateTree,
-    Program, Prover, TxHeader, TxID, VMError, Value, Verifier,
+    Anchor, Commitment, Contract, Data, Output, PortableItem, Predicate, PredicateTree, Program,
+    Prover, TxHeader, TxID, VMError, Value, Verifier,
 };
 
 use zkvm::keys;
