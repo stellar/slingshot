@@ -10,6 +10,18 @@ pub struct Update<'a> {
 }
 
 impl<'a> Update<'a> {
+    pub fn new(u: &Utreexo) -> Update {
+        return Update {
+            u: u,
+            updated: HashMap::new(),
+        };
+    }
+
+    pub fn add(&mut self, l: &Hash, r: &Hash) {
+        self.updated.insert(*l, ProofStep { h: *r, left: false });
+        self.updated.insert(*r, ProofStep { h: *l, left: true });
+    }
+
     pub fn proof(&self, leaf: &Hash) -> Proof {
         let mut item = *leaf;
         let mut result = Proof {
