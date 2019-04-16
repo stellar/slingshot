@@ -80,7 +80,7 @@ impl Predicate {
     pub fn to_point(&self) -> CompressedRistretto {
         match self {
             Predicate::Opaque(p) => *p,
-            Predicate::Key(k) => k.0,
+            Predicate::Key(k) => k.into_compressed(),
             Predicate::Tree(d) => d.precomputed_point,
         }
     }
@@ -94,7 +94,13 @@ impl Predicate {
     pub fn to_key(self) -> Result<VerificationKey, VMError> {
         match self {
             Predicate::Key(k) => Ok(k),
-            Predicate::Tree(t) => Ok(VerificationKey(t.precomputed_point)),
+            Predicate::Tree(t) => {
+                let ovk = VerificationKey::from_compressed(t.precomputed_point);
+                match ovk {
+                    Some(k) => Ok(k),
+                    None => Err(VMError::InvalidPoint),
+                }
+            }
             _ => Err(VMError::TypeNotKey),
         }
     }
@@ -125,19 +131,22 @@ impl Predicate {
         let key = &call_proof.verification_key;
         let neighbors = &call_proof.neighbors;
         let root = MerkleTree::compute_root_from_path(b"ZkVM.taproot", program, neighbors);
-        let h = Self::commit_taproot(&key.0.to_bytes(), &root);
+        let h = Self::commit_taproot(&key.into_compressed().to_bytes(), &root);
 
         // P == X + h1(X, M)*B -> 0 == -P + X + h1(X, M)*B
         PointOp {
             primary: Some(h),
             secondary: None,
-            arbitrary: vec![(-Scalar::one(), self.to_point()), (Scalar::one(), key.0)],
+            arbitrary: vec![
+                (-Scalar::one(), self.to_point()),
+                (Scalar::one(), key.into_compressed()),
+            ],
         }
     }
 
     /// Helper to create an unsignable key
     fn unsignable_key() -> VerificationKey {
-        VerificationKey(PedersenGens::default().B_blinding.compress())
+        VerificationKey::from(PedersenGens::default().B_blinding)
     }
 }
 
@@ -162,10 +171,10 @@ impl PredicateTree {
         let root = MerkleTree::root(b"ZkVM.taproot", &leaves);
 
         // P = X + h(X, M)*G
-        let adjustment_factor = Predicate::commit_taproot(key.0.as_bytes(), &root);
+        let adjustment_factor = Predicate::commit_taproot(key.into_compressed().as_bytes(), &root);
         let precomputed_point = {
             let h = adjustment_factor;
-            let x = key.0.decompress().ok_or(VMError::InvalidPoint)?;
+            let x = key.into_point();
             let p = x + h * PedersenGens::default().B;
             p.compress()
         };
@@ -243,7 +252,12 @@ impl CallProof {
 
     pub fn decode<'a>(reader: &mut SliceReader<'a>) -> Result<Self, VMError> {
         let mut call_proof = CallProof::default();
-        call_proof.verification_key = VerificationKey(reader.read_point()?);
+        let point = reader.read_point()?;
+        let ovk = VerificationKey::from_compressed(point);
+        match ovk {
+            Some(k) => call_proof.verification_key = k,
+            None => return Err(VMError::InvalidPoint),
+        }
         let positions = reader.read_u32()?;
         if positions == 0 {
             return Err(VMError::FormatError);
@@ -264,7 +278,7 @@ impl CallProof {
 
     /// Serializes the call proof to a byte array
     pub fn encode(&self, buf: &mut Vec<u8>) {
-        encoding::write_point(&self.verification_key.0, buf);
+        encoding::write_point(self.verification_key.as_compressed(), buf);
 
         let num_neighbors = self.neighbors.len();
         let mut positions: u32 = 1 << 31 - num_neighbors;
