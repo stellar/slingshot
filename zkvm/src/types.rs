@@ -10,7 +10,7 @@ use crate::contract::{Contract, Output, PortableItem};
 use crate::encoding::SliceReader;
 use crate::errors::VMError;
 use crate::predicate::{CallProof, Predicate};
-use crate::program::Program;
+use crate::program::{Program, ProgramWitness};
 use crate::scalar_witness::ScalarWitness;
 use crate::transcript::TranscriptProtocol;
 
@@ -62,6 +62,9 @@ pub enum Data {
 
     /// A call proof.
     CallProof(CallProof),
+
+    /// A program witness.
+    ProgramWitness(ProgramWitness),
 }
 
 /// Represents a value of an issued asset in the VM.
@@ -161,6 +164,7 @@ impl Data {
             Data::Scalar(scalar) => scalar.serialized_length(),
             Data::Output(output) => output.serialized_length(),
             Data::CallProof(call_proof) => call_proof.serialized_length(),
+            Data::ProgramWitness(pw) => pw.serialized_length(),
         }
     }
 
@@ -195,6 +199,10 @@ impl Data {
         match self {
             Data::Opaque(data) => Program::parse(&data),
             Data::Program(program) => Ok(program),
+            Data::ProgramWitness(pw) => match pw {
+                ProgramWitness::Program(prog) => Ok(prog),
+                ProgramWitness::Opaque(data) => Program::parse(&data),
+            },
             _ => Err(VMError::TypeNotProgram),
         }
     }
@@ -241,6 +249,15 @@ impl Data {
         }
     }
 
+    /// Downcast the data item to a `ProgramWitness` type.
+    pub fn to_program_witness(self) -> Result<ProgramWitness, VMError> {
+        match self {
+            Data::Opaque(data) => Ok(ProgramWitness::Opaque(data)),
+            Data::ProgramWitness(pw) => Ok(pw),
+            _ => Err(VMError::TypeNotProgramWitness),
+        }
+    }
+
     /// Encodes the data item to an opaque bytestring.
     pub fn encode(&self, buf: &mut Vec<u8>) {
         match self {
@@ -251,6 +268,7 @@ impl Data {
             Data::Scalar(scalar) => scalar.encode(buf),
             Data::Output(output) => output.encode(buf),
             Data::CallProof(call_proof) => call_proof.encode(buf),
+            Data::ProgramWitness(pw) => pw.encode(buf),
         };
     }
 }

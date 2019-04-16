@@ -5,8 +5,8 @@ use hex;
 use musig::{Signature, VerificationKey};
 use rand::Rng;
 use zkvm::{
-    Anchor, Commitment, Contract, Data, Output, PortableItem, Predicate, PredicateTree, Program,
-    Prover, TxHeader, TxID, VMError, Value, Verifier,
+    Anchor, Commitment, Contract, Data, Output, PortableItem, Predicate, PredicateTree,
+    Program, Prover, TxHeader, TxID, VMError, Value, Verifier,
 };
 
 use zkvm::keys;
@@ -549,7 +549,7 @@ fn taproot_program_path() {
     let blinding_key = rand::thread_rng().gen::<[u8; 32]>();
     let tree = PredicateTree::new(Some(pk), vec![spend_prog], blinding_key).unwrap();
     let factor = tree.adjustment_factor();
-    let (call_proof, call_prog) = tree.create_callproof_program(0).unwrap();
+    let (call_proof, call_prog_wit) = tree.create_callproof_program(0).unwrap();
     let prev_output = make_output(qty, flavor, Predicate::Tree(tree));
 
     let prog = Program::build(|p| {
@@ -557,7 +557,7 @@ fn taproot_program_path() {
             .push(Output::new(prev_output.clone()))
             .input()
             .push(Data::CallProof(call_proof.clone()))
-            .push(call_prog.clone())
+            .push(Data::ProgramWitness(call_prog_wit.clone()))
             .call()
     });
     build_and_verify(prog, &vec![sk + factor]).unwrap();
@@ -567,7 +567,7 @@ fn taproot_program_path() {
             .push(Output::new(prev_output.clone()))
             .input()
             .push(Data::CallProof(call_proof))
-            .push(call_prog)
+            .push(Data::ProgramWitness(call_prog_wit.clone()))
             .call()
     });
     if build_and_verify(wrong_prog, &vec![sk + factor]).is_ok() {

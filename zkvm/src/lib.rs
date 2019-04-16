@@ -28,7 +28,7 @@ pub use self::errors::VMError;
 pub use self::merkle::{MerkleItem, MerkleNeighbor, MerkleTree};
 pub use self::ops::{Instruction, Opcode};
 pub use self::predicate::{Predicate, PredicateTree};
-pub use self::program::Program;
+pub use self::program::{Program, ProgramWitness};
 pub use self::prover::Prover;
 pub use self::scalar_witness::ScalarWitness;
 pub use self::transcript::TranscriptProtocol;

@@ -15,7 +15,7 @@ use crate::encoding::SliceReader;
 use crate::errors::VMError;
 use crate::merkle::{MerkleItem, MerkleNeighbor, MerkleTree};
 use crate::point_ops::PointOp;
-use crate::program::Program;
+use crate::program::{Program, ProgramWitness};
 use crate::transcript::TranscriptProtocol;
 
 /// Represents a ZkVM predicate with its optional witness data.
@@ -66,7 +66,7 @@ pub struct CallProof {
 /// but from the prover's perspective, some leafs are dummy uniformly random nodes.
 #[derive(Clone, Debug)]
 pub enum PredicateLeaf {
-    Program(Program),
+    Program(ProgramWitness),
     Blinding([u8; 32]),
 }
 
@@ -121,7 +121,7 @@ impl Predicate {
 
     /// Verifies whether the current predicate is a commitment to a signing key `key` and Merkle root `root`.
     /// Returns a `PointOp` instance that can be verified in a batch with other operations.
-    pub fn prove_taproot(&self, program: &Program, call_proof: &CallProof) -> PointOp {
+    pub fn prove_taproot(&self, program: &ProgramWitness, call_proof: &CallProof) -> PointOp {
         let key = &call_proof.verification_key;
         let neighbors = &call_proof.neighbors;
         let root = MerkleTree::compute_root_from_path(b"ZkVM.taproot", program, neighbors);
@@ -190,7 +190,7 @@ impl PredicateTree {
     pub fn create_callproof_program(
         &self,
         prog_index: usize,
-    ) -> Result<(CallProof, Program), VMError> {
+    ) -> Result<(CallProof, ProgramWitness), VMError> {
         let possible_leaf = &self.leaves[2 * prog_index];
         let leaf_index = match possible_leaf {
             PredicateLeaf::Blinding(_) => 2 * prog_index + 1,
@@ -202,7 +202,7 @@ impl PredicateTree {
             verification_key: self.key,
             neighbors,
         };
-        let program = self.leaves[leaf_index].clone().to_program()?;
+        let program = self.leaves[leaf_index].clone().to_program_witness()?;
         Ok((call_proof, program))
     }
 
@@ -221,7 +221,7 @@ impl PredicateTree {
         for prog in progs.iter() {
             let blinding = rand::thread_rng().gen::<[u8; 32]>();
             let blinding_leaf = PredicateLeaf::Blinding(blinding);
-            let program_leaf = PredicateLeaf::Program(prog.clone());
+            let program_leaf = PredicateLeaf::Program(ProgramWitness::Program(prog.clone()));
             if blinding[0] & 1 == 0 {
                 leaves.push(blinding_leaf);
                 leaves.push(program_leaf);
@@ -241,7 +241,7 @@ impl CallProof {
         32 + 4 + self.neighbors.len() * 32
     }
 
-    pub fn decode<'a>(reader: &mut SliceReader<'a>) ->Result<Self, VMError> {
+    pub fn decode<'a>(reader: &mut SliceReader<'a>) -> Result<Self, VMError> {
         let mut call_proof = CallProof::default();
         call_proof.verification_key = VerificationKey(reader.read_point()?);
         let positions = reader.read_u32()?;
@@ -267,7 +267,7 @@ impl CallProof {
         encoding::write_point(&self.verification_key.0, buf);
 
         let num_neighbors = self.neighbors.len();
-        let mut positions: u32 = 1 << 31-num_neighbors;
+        let mut positions: u32 = 1 << 31 - num_neighbors;
         for (i, n) in self.neighbors.iter().enumerate() {
             match n {
                 MerkleNeighbor::Right(_) => {
@@ -287,11 +287,11 @@ impl CallProof {
 }
 
 impl PredicateLeaf {
-    /// Downcasts the predicate leaf to a program.
-    pub fn to_program(self) -> Result<Program, VMError> {
+    /// Downcasts the predicate leaf to a program witness.
+    pub fn to_program_witness(self) -> Result<ProgramWitness, VMError> {
         match self {
             PredicateLeaf::Program(p) => Ok(p),
-            _ => Err(VMError::TypeNotProgram),
+            _ => Err(VMError::TypeNotProgramWitness),
         }
     }
 }
@@ -324,8 +324,8 @@ mod tests {
         let blinding_key = rand::thread_rng().gen::<[u8; 32]>();
         let tree = PredicateTree::new(None, progs, blinding_key).unwrap();
         let tree_pred = Predicate::Tree(tree.clone());
-        let (call_proof, prog) = tree.create_callproof_program(0).unwrap();
-        let op = tree_pred.prove_taproot(&prog, &call_proof);
+        let (call_proof, prog_wit) = tree.create_callproof_program(0).unwrap();
+        let op = tree_pred.prove_taproot(&prog_wit, &call_proof);
         assert!(op.verify().is_ok());
     }
 
@@ -339,7 +339,8 @@ mod tests {
         let tree = PredicateTree::new(None, progs, blinding_key).unwrap();
         let tree_pred = Predicate::Tree(tree.clone());
         let (call_proof, _) = tree.create_callproof_program(0).unwrap();
-        let op = tree_pred.prove_taproot(&prog3, &call_proof);
+        let pw = ProgramWitness::Program(prog3);
+        let op = tree_pred.prove_taproot(&pw, &call_proof);
         assert!(op.verify().is_err())
     }
 }

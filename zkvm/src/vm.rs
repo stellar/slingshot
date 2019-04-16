@@ -714,14 +714,14 @@ where
     fn call(&mut self) -> Result<(), VMError> {
         // Pop program, call proof, and contract
         let program_data = self.pop_item()?.to_data()?;
-        let program = program_data.clone().to_program()?;
+        let program_witness = program_data.clone().to_program_witness()?;
         let call_proof = self.pop_item()?.to_data()?.to_call_proof()?;
         let contract = self.pop_item()?.to_contract()?;
         let predicate = contract.predicate;
 
         // 0 == -P + X + h1(X, M)*B
         self.delegate
-            .verify_point_op(|| predicate.prove_taproot(&program, &call_proof))?;
+            .verify_point_op(|| predicate.prove_taproot(&program_witness, &call_proof))?;
 
         // Place contract payload on the stack
         for item in contract.payload.into_iter() {

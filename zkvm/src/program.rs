@@ -15,6 +15,15 @@ use spacesuit::BitRange;
 #[derive(Clone, Debug)]
 pub struct Program(Vec<Instruction>);
 
+/// Represents a view of a program.
+#[derive(Clone, Debug)]
+pub enum ProgramWitness {
+    /// `ProgramWitness::Opaque` represents the verifier's view - a Vector of bytecode-as-is.
+    Opaque(Vec<u8>),
+    /// `ProgramWitness::Program` represents the prover's view - a Program struct.
+    Program(Program),
+}
+
 macro_rules! def_op {
     ($func_name:ident, $op:ident) => (
            /// Adds a `$func_name` instruction.
@@ -132,15 +141,42 @@ impl Program {
     ) -> Result<&mut Program, VMError> {
         let (call_proof, program) = pred_tree.create_callproof_program(prog_index)?;
         self.push(Data::CallProof(call_proof)).call();
-        self.push(Data::Program(program)).call();
+        self.push(Data::ProgramWitness(program)).call();
         Ok(self)
     }
 }
 
-impl MerkleItem for Program {
+impl ProgramWitness {
+    /// Returns the number of bytes needed to serialize the ProgramWitness.
+    pub fn serialized_length(&self) -> usize {
+        match self {
+            ProgramWitness::Program(prog) => prog.serialized_length(),
+            ProgramWitness::Opaque(vec) => vec.len(),
+        }
+    }
+
+    /// Encodes a program witness into a buffer.
+    pub fn encode(&self, buf: &mut Vec<u8>) {
+        match self {
+            ProgramWitness::Program(prog) => prog.encode(buf),
+            ProgramWitness::Opaque(bytes) => {
+                for i in bytes.iter() {
+                    buf.push(*i.borrow());
+                }
+            }
+        }
+    }
+}
+
+impl MerkleItem for ProgramWitness {
     fn commit(&self, t: &mut Transcript) {
-        let mut buf = Vec::new();
-        self.encode(&mut buf);
-        t.commit_bytes(b"program", &buf);
+        match self {
+            ProgramWitness::Program(prog) => {
+                let mut buf = Vec::new();
+                prog.encode(&mut buf);
+                t.commit_bytes(b"program", &buf);
+            }
+            ProgramWitness::Opaque(bytes) => t.commit_bytes(b"program", &bytes),
+        }
     }
 }

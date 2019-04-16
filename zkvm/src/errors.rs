@@ -72,6 +72,10 @@ pub enum VMError {
     #[fail(display = "Item is not a scalar.")]
     TypeNotScalar,
 
+    /// This error occurs when an instruction requires a program witness.
+    #[fail(display = "Item is not a program witness.")]
+    TypeNotProgramWitness,
+
     /// This error occurs when an instruction expects a predicate tree type.
     #[fail(display = "Item is not a predicate tree.")]
     TypeNotPredicateTree,
