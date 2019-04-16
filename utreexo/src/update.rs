@@ -4,13 +4,13 @@ use super::utreexo::Utreexo;
 
 use std::collections::HashMap;
 
-pub struct Update<'a> {
-    u: &'a Utreexo,
+pub struct Update {
+    u: Utreexo,
     updated: HashMap<Hash, ProofStep>,
 }
 
-impl<'a> Update<'a> {
-    pub fn new(u: &Utreexo) -> Update {
+impl Update {
+    pub fn new(u: Utreexo) -> Update {
         return Update {
             u: u,
             updated: HashMap::new(),

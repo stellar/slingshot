@@ -7,6 +7,7 @@ use std::collections::HashMap;
 
 pub type HashFn = fn(&Hash, &Hash) -> Hash;
 
+#[derive(Clone)]
 pub struct Utreexo {
     pub roots: Vec<Option<Hash>>,
     pub hasher: HashFn,
@@ -34,7 +35,7 @@ impl Utreexo {
             heights: Vec::new(),
             roots: HashMap::new(),
         };
-        let mut update = Update::new(self);
+        let mut update = Update::new(self.clone());
 
         for d in deletions {
             let i: usize;
@@ -90,12 +91,12 @@ impl Utreexo {
             self.roots[i] = if h.is_empty() { None } else { Some(h[0]) }
         }
         
-        // xxx truncate self.roots to w.heights.len()
+        self.roots.truncate(w.heights.len());
 
         Ok(update)
     }
 
-    pub fn del_helper(
+    fn del_helper(
         &self,
         w: &Worktree,
         item: &Hash,
