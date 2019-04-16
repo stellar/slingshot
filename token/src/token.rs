@@ -62,18 +62,21 @@ impl Token {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use zkvm::{Anchor, Contract};
+
     use bulletproofs::{BulletproofGens, PedersenGens};
     use zkvm::{
         Entry, Predicate, Program, Prover, Signature, Tx, TxHeader, TxID, TxLog, VMError,
         VerificationKey, Verifier,
     };
 
-    fn add_nonce(p: &mut Program, nonce_key: &Scalar) {
-        let dummy_block_id = Data::Opaque([0xffu8; 32].to_vec());
-        p.push(Predicate::Key(VerificationKey::from_secret(nonce_key)))
-            .push(dummy_block_id)
-            .nonce()
-            .sign_tx();
+    fn add_dummy_input(p: &mut Program, dummy_key: &Scalar) {
+        let contract = Contract {
+            anchor: Anchor::from_raw_bytes([0u8; 32]),
+            payload: vec![],
+            predicate: Predicate::Key(VerificationKey::from_secret(dummy_key)),
+        };
+        p.push(Output::new(contract)).input().sign_tx();
     }
 
     #[test]
@@ -81,7 +84,7 @@ mod tests {
         let (tx, _, _) = {
             let issue_key = Scalar::from(1u64);
             let dest_key = Scalar::from(2u64);
-            let nonce_key = Scalar::from(3u64);
+            let dummy_key = Scalar::from(3u64);
             let usd = Token::new(
                 Predicate::Key(VerificationKey::from_secret(&issue_key)),
                 b"USD".to_vec(),
@@ -89,15 +92,15 @@ mod tests {
             let dest = Predicate::Key(VerificationKey::from_secret(&dest_key));
 
             let program = Program::build(|p| {
-                add_nonce(p, &nonce_key);
+                add_dummy_input(p, &dummy_key);
                 usd.issue_to(p, 10u64, dest.clone())
             });
-            build(program, vec![issue_key, nonce_key]).unwrap()
+            build(program, vec![issue_key, dummy_key]).unwrap()
         };
 
         // Verify tx
         let bp_gens = BulletproofGens::new(256, 1);
-        assert!(Verifier::verify_tx(tx, &bp_gens, |keys| keys::aggregated_pubkey(keys)).is_ok());
+        assert!(Verifier::verify_tx(&tx, &bp_gens).is_ok());
     }
 
     #[test]
@@ -106,17 +109,17 @@ mod tests {
         let (tx, _, _) = {
             let issue_key = Scalar::from(1u64);
             let dest_key = Scalar::from(2u64);
-            let nonce_key = Scalar::from(3u64);
+            let dummy_key = Scalar::from(3u64);
             let usd = Token::new(
                 Predicate::Key(VerificationKey::from_secret(&issue_key)),
                 b"USD".to_vec(),
             );
             let dest = Predicate::Key(VerificationKey::from_secret(&dest_key));
             let issue_program = Program::build(|p| {
-                add_nonce(p, &nonce_key);
+                add_dummy_input(p, &dummy_key);
                 usd.issue_to(p, 10u64, dest.clone())
             });
-            let (_, _, issue_txlog) = build(issue_program, vec![issue_key, nonce_key]).unwrap();
+            let (_, _, issue_txlog) = build(issue_program, vec![issue_key, dummy_key]).unwrap();
 
             let mut retire_program = Program::new();
             let issue_output = match &issue_txlog[3] {
@@ -129,7 +132,7 @@ mod tests {
 
         // Verify tx
         let bp_gens = BulletproofGens::new(256, 1);
-        assert!(Verifier::verify_tx(tx, &bp_gens, |keys| keys::aggregated_pubkey(keys)).is_ok());
+        assert!(Verifier::verify_tx(&tx, &bp_gens).is_ok());
     }
 
     // Helper functions
@@ -137,8 +140,8 @@ mod tests {
         let bp_gens = BulletproofGens::new(256, 1);
         let header = TxHeader {
             version: 0u64,
-            mintime: 0u64,
-            maxtime: 0u64,
+            mintime_ms: 0u64,
+            maxtime_ms: 0u64,
         };
         // TBD: figure out better + more robust signing mechanism
         let gens = PedersenGens::default();
@@ -147,7 +150,7 @@ mod tests {
                 .iter()
                 .filter_map(|vk| {
                     for k in &keys {
-                        if (k * gens.B).compress() == vk.0 {
+                        if (k * gens.B).compress() == *vk.as_compressed() {
                             return Some(*k);
                         }
                     }
@@ -156,7 +159,7 @@ mod tests {
                 .collect();
             Ok(Signature::sign_single(
                 &mut t.clone(),
-                keys::aggregated_privkey(&signtx_keys),
+                keys::aggregated_privkey(&signtx_keys)?,
             ))
         })
     }

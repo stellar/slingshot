@@ -35,27 +35,27 @@ impl Multikey {
         // Commit pubkeys into the transcript
         // <L> = H(X_1 || X_2 || ... || X_n)
         for X in &pubkeys {
-            transcript.commit_point(b"X", &X.0);
+            transcript.commit_point(b"X", X.as_compressed());
         }
 
         // aggregated_key = sum_i ( a_i * X_i )
         let mut aggregated_key = RistrettoPoint::default();
         for X in &pubkeys {
             let a = Multikey::compute_factor(&transcript, X);
-            let X = X.0.decompress().ok_or(MusigError::InvalidPoint)?;
+            let X = X.into_point();
             aggregated_key = aggregated_key + a * X;
         }
 
         Ok(Multikey {
             transcript: Some(transcript),
-            aggregated_key: VerificationKey(aggregated_key.compress()),
+            aggregated_key: aggregated_key.into(),
         })
     }
 
     fn compute_factor(transcript: &Transcript, X_i: &VerificationKey) -> Scalar {
         // a_i = H(<L>, X_i). Components of <L> have already been fed to transcript.
         let mut a_i_transcript = transcript.clone();
-        a_i_transcript.commit_point(b"X_i", &X_i.0);
+        a_i_transcript.commit_point(b"X_i", X_i.as_compressed());
         a_i_transcript.challenge_scalar(b"a_i")
     }
 
@@ -73,26 +73,55 @@ impl Multikey {
     }
 }
 
-/// Verification key (aka "pubkey") is a wrapper type around a Ristretto point
-/// that lets the verifier to check the signature.
+/// Verification key (aka "pubkey") is a wrapper type around a Ristretto point and it's compressed variation
+/// that lets the verifier check the validity of a signature.
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
-pub struct VerificationKey(pub CompressedRistretto);
+pub struct VerificationKey {
+    point: RistrettoPoint,
+    precompressed: CompressedRistretto,
+}
 
 impl VerificationKey {
     /// Constructs a VerificationKey from a private key.
     pub fn from_secret(privkey: &Scalar) -> Self {
-        VerificationKey(Self::from_secret_uncompressed(privkey).compress())
+        Self::from_secret_uncompressed(privkey).into()
     }
 
     /// Constructs an uncompressed VerificationKey point from a private key.
     pub(crate) fn from_secret_uncompressed(privkey: &Scalar) -> RistrettoPoint {
         (privkey * RISTRETTO_BASEPOINT_POINT)
     }
+
+    /// Creates new key from a compressed form,remembers the compressed point.
+    pub fn from_compressed(p: CompressedRistretto) -> Option<Self> {
+        Some(VerificationKey {
+            point: p.decompress()?,
+            precompressed: p,
+        })
+    }
+
+    /// Converts the Verification key to a compressed point
+    pub fn into_compressed(self) -> CompressedRistretto {
+        self.precompressed
+    }
+
+    /// Converts the Verification key to a ristretto point
+    pub fn into_point(self) -> RistrettoPoint {
+        self.point
+    }
+
+    /// Returns a reference to the compressed ristretto point
+    pub fn as_compressed(&self) -> &CompressedRistretto {
+        &self.precompressed
+    }
 }
 
-impl From<CompressedRistretto> for VerificationKey {
-    fn from(x: CompressedRistretto) -> Self {
-        VerificationKey(x)
+impl From<RistrettoPoint> for VerificationKey {
+    fn from(p: RistrettoPoint) -> Self {
+        VerificationKey {
+            point: p,
+            precompressed: p.compress(),
+        }
     }
 }
 

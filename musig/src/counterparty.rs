@@ -75,7 +75,7 @@ impl CounterpartyPrecommitted {
         let equal = self.precommitment.0.ct_eq(&received_precommitment.0);
         if equal.unwrap_u8() == 0 {
             return Err(MusigError::ShareError {
-                pubkey: self.pubkey.0.to_bytes(),
+                pubkey: self.pubkey.into_compressed().to_bytes(),
             });
         }
 
@@ -102,11 +102,11 @@ impl CounterpartyCommitted {
         //   X_i = self.pubkey
         let S_i = share * RISTRETTO_BASEPOINT_POINT;
         let a_i = multikey.factor_for_key(&self.pubkey);
-        let X_i = self.pubkey.0.decompress().ok_or(MusigError::InvalidPoint)?;
+        let X_i = self.pubkey.into_point();
 
         if S_i != self.commitment.0 + challenge * a_i * X_i {
             return Err(MusigError::ShareError {
-                pubkey: self.pubkey.0.to_bytes(),
+                pubkey: self.pubkey.into_compressed().to_bytes(),
             });
         }
 

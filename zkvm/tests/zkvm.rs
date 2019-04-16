@@ -4,6 +4,7 @@ use curve25519_dalek::scalar::Scalar;
 use hex;
 use musig::{Signature, VerificationKey};
 use rand::Rng;
+
 use zkvm::{
     Anchor, Commitment, Contract, Data, Output, PortableItem, Predicate, PredicateTree, Program,
     Prover, TxHeader, TxID, VMError, Value, Verifier,
@@ -14,13 +15,7 @@ use zkvm::keys;
 // TODO(vniu): move builder convenience functions into separate crate,
 // and refactor tests and Token
 trait ProgramHelper {
-    fn issue_helper(
-        &mut self,
-        qty: u64,
-        flv: Scalar,
-        issuance_pred: Predicate,
-        nonce_pred: Predicate,
-    ) -> &mut Self;
+    fn issue_helper(&mut self, qty: u64, flv: Scalar, issuance_pred: Predicate) -> &mut Self;
 
     fn input_helper(&mut self, qty: u64, flv: Scalar, pred: Predicate) -> &mut Self;
 
@@ -30,19 +25,8 @@ trait ProgramHelper {
 }
 
 impl ProgramHelper for Program {
-    fn issue_helper(
-        &mut self,
-        qty: u64,
-        flv: Scalar,
-        issuance_pred: Predicate,
-        nonce_pred: Predicate,
-    ) -> &mut Self {
-        let dummy_block_id = Data::Opaque([0xffu8; 32].to_vec());
-        self.push(nonce_pred)
-            .push(dummy_block_id)
-            .nonce()
-            .sign_tx() // stack is clean
-            .push(Commitment::blinded_with_factor(qty, Scalar::from(1u64))) // stack: qty
+    fn issue_helper(&mut self, qty: u64, flv: Scalar, issuance_pred: Predicate) -> &mut Self {
+        self.push(Commitment::blinded_with_factor(qty, Scalar::from(1u64))) // stack: qty
             .var() // stack: qty-var
             .push(Commitment::unblinded(flv)) // stack: qty-var, flv
             .var() // stack: qty-var, flv-var
@@ -85,7 +69,7 @@ fn generate_predicate() -> (Predicate, Scalar) {
     let gens = PedersenGens::default();
 
     let scalar = Scalar::from(0u64);
-    let pred = Predicate::Key((scalar * gens.B).compress().into());
+    let pred = Predicate::Key(VerificationKey::from(scalar * gens.B));
     (pred, scalar)
 }
 
@@ -101,7 +85,7 @@ fn generate_predicates(pred_num: usize) -> (Vec<Predicate>, Vec<Scalar>) {
 
     let predicates: Vec<Predicate> = scalars
         .iter()
-        .map(|s| Predicate::Key((s * gens.B).compress().into()))
+        .map(|s| Predicate::Key((s * gens.B).into()))
         .collect();
 
     (predicates, scalars)
@@ -112,20 +96,15 @@ fn generate_predicates(pred_num: usize) -> (Vec<Predicate>, Vec<Scalar>) {
 fn make_flavor() -> (Scalar, Predicate, Scalar) {
     let gens = PedersenGens::default();
     let scalar = Scalar::from(100u64);
-    let predicate = Predicate::Key((scalar * gens.B).compress().into());
+    let predicate = Predicate::Key((scalar * gens.B).into());
     let flavor = Value::issue_flavor(&predicate, Data::default());
     (scalar, predicate, flavor)
 }
 
 /// Creates an Output contract with given quantity, flavor, and predicate.
 fn make_output(qty: u64, flv: Scalar, pred: Predicate) -> Contract {
-    let anchor = Anchor::nonce(
-        [0u8; 32],
-        &Predicate::Opaque(RISTRETTO_BASEPOINT_COMPRESSED),
-        0,
-    );
     Contract {
-        anchor,
+        anchor: Anchor::from_raw_bytes([0u8; 32]),
         payload: vec![PortableItem::Value(Value {
             qty: Commitment::blinded(qty),
             flv: Commitment::blinded(flv),
@@ -140,8 +119,8 @@ fn build_and_verify(program: Program, keys: &Vec<Scalar>) -> Result<TxID, VMErro
         let bp_gens = BulletproofGens::new(256, 1);
         let header = TxHeader {
             version: 0u64,
-            mintime: 0u64,
-            maxtime: 0u64,
+            mintime_ms: 0u64,
+            maxtime_ms: 0u64,
         };
         let gens = PedersenGens::default();
         Prover::build_tx(program, header, &bp_gens, |t, verification_keys| {
@@ -155,7 +134,7 @@ fn build_and_verify(program: Program, keys: &Vec<Scalar>) -> Result<TxID, VMErro
                 .iter()
                 .filter_map(|vk| {
                     for k in keys {
-                        if (k * gens.B).compress() == vk.0 {
+                        if (k * gens.B).compress() == *vk.as_compressed() {
                             return Some(*k);
                         }
                     }
@@ -164,7 +143,7 @@ fn build_and_verify(program: Program, keys: &Vec<Scalar>) -> Result<TxID, VMErro
                 .collect();
             Ok(Signature::sign_single(
                 &mut t.clone(),
-                keys::aggregated_privkey(&signtx_keys),
+                keys::aggregated_privkey(&signtx_keys)?,
             ))
         })?
     };
@@ -172,60 +151,8 @@ fn build_and_verify(program: Program, keys: &Vec<Scalar>) -> Result<TxID, VMErro
     // Verify tx
     let bp_gens = BulletproofGens::new(256, 1);
 
-    let vtx = Verifier::verify_tx(tx, &bp_gens, |keys| keys::aggregated_pubkey(keys))?;
+    let vtx = Verifier::verify_tx(&tx, &bp_gens)?;
     Ok(vtx.id)
-}
-
-fn issue_contract(
-    qty: u64,
-    flv: Scalar,
-    issuance_pred: Predicate,
-    nonce_pred: Predicate,
-    output_pred: Predicate,
-) -> Program {
-    Program::build(|p| {
-        p.issue_helper(qty, flv, issuance_pred, nonce_pred) // stack: issued-val
-            .output_helper(output_pred) // stack: empty
-    })
-}
-
-#[test]
-fn issue() {
-    // Generate predicates
-    let (predicates, mut scalars) = generate_predicates(2);
-    let (issuance_scalar, issuance_pred, flavor) = make_flavor();
-    scalars.push(issuance_scalar);
-
-    let correct_program = issue_contract(
-        1u64,
-        flavor,
-        issuance_pred,
-        predicates[0].clone(), // nonce predicate
-        predicates[1].clone(), // output predicate
-    );
-
-    match build_and_verify(correct_program, &scalars) {
-        Err(err) => return assert!(false, err.to_string()),
-        Ok(txid) => {
-            // Check txid
-            assert_eq!(
-                "316f835973819a8cf6219010faf712bd17a1fe6fa2cc6350e4d96483b2065d82",
-                hex::encode(txid.0)
-            );
-        }
-    }
-
-    let wrong_program = issue_contract(
-        1u64,
-        flavor,
-        predicates[0].clone(), // WRONG issuance predicate
-        predicates[0].clone(), // nonce predicate
-        predicates[1].clone(), // output predicate
-    );
-
-    if build_and_verify(wrong_program, &scalars).is_ok() {
-        panic!("Issuing with wrong issuance predicate should fail, but didn't");
-    }
 }
 
 fn spend_1_1_contract(
@@ -447,14 +374,13 @@ fn issue_and_spend_contract(
     output_2: u64,
     flv: Scalar,
     issuance_pred: Predicate,
-    nonce_pred: Predicate,
     input_pred: Predicate,
     output_1_pred: Predicate,
     output_2_pred: Predicate,
 ) -> Program {
     Program::build(|p| {
-        p.issue_helper(issue_qty, flv, issuance_pred, nonce_pred) // stack: issued-val
-            .input_helper(input_qty, flv, input_pred) // stack: issued-val, input-val
+        p.input_helper(input_qty, flv, input_pred) // stack: issued-val, input-val
+            .issue_helper(issue_qty, flv, issuance_pred) // stack: issued-val
             .cloak_helper(2, vec![(output_1, flv), (output_2, flv)]) // stack: output-1, output-2
             .output_helper(output_2_pred) // stack: output-1
             .output_helper(output_1_pred) // stack: empty
@@ -464,7 +390,7 @@ fn issue_and_spend_contract(
 #[test]
 fn issue_and_spend() {
     // Generate predicates and flavor
-    let (predicates, mut scalars) = generate_predicates(4);
+    let (predicates, mut scalars) = generate_predicates(3);
     let (issuance_scalar, issuance_pred, flavor) = make_flavor();
     scalars.push(issuance_scalar);
 
@@ -475,10 +401,9 @@ fn issue_and_spend() {
         1u64,
         flavor,
         issuance_pred.clone(),
-        predicates[0].clone(), // nonce predicate
-        predicates[1].clone(), // input predicate
-        predicates[2].clone(), // output 1 predicate
-        predicates[3].clone(), // output 2 predicate
+        predicates[0].clone(), // input predicate
+        predicates[1].clone(), // output 1 predicate
+        predicates[2].clone(), // output 2 predicate
     );
 
     match build_and_verify(correct_program, &scalars) {
@@ -493,10 +418,9 @@ fn issue_and_spend() {
         1u64,
         flavor,
         issuance_pred,
-        predicates[0].clone(), // nonce predicate
-        predicates[1].clone(), // input predicate
-        predicates[2].clone(), // output 1 predicate
-        predicates[3].clone(), // output 2 predicate
+        predicates[0].clone(), // input predicate
+        predicates[1].clone(), // output 1 predicate
+        predicates[2].clone(), // output 2 predicate
     );
 
     if build_and_verify(wrong_program, &scalars).is_ok() {

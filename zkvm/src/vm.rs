@@ -33,10 +33,10 @@ pub struct TxHeader {
     pub version: u64,
 
     /// Timestamp before which tx is invalid (in milliseconds since the Unix epoch)
-    pub mintime: u64,
+    pub mintime_ms: u64,
 
     /// Timestamp after which tx is invalid (in milliseconds since the Unix epoch)
-    pub maxtime: u64,
+    pub maxtime_ms: u64,
 }
 
 impl TxHeader {
@@ -46,15 +46,15 @@ impl TxHeader {
 
     fn encode(&self, buf: &mut Vec<u8>) {
         encoding::write_u64(self.version, buf);
-        encoding::write_u64(self.mintime, buf);
-        encoding::write_u64(self.maxtime, buf);
+        encoding::write_u64(self.mintime_ms, buf);
+        encoding::write_u64(self.maxtime_ms, buf);
     }
 
     fn decode<'a>(reader: &mut SliceReader<'a>) -> Result<Self, VMError> {
         Ok(TxHeader {
             version: reader.read_u64()?,
-            mintime: reader.read_u64()?,
-            maxtime: reader.read_u64()?,
+            mintime_ms: reader.read_u64()?,
+            maxtime_ms: reader.read_u64()?,
         })
     }
 }
@@ -175,14 +175,14 @@ where
     CS: r1cs::ConstraintSystem,
     D: Delegate<CS>,
 {
-    mintime: u64,
-    maxtime: u64,
+    mintime_ms: u64,
+    maxtime_ms: u64,
 
     // is true when tx version is in the future and
     // we allow treating unassigned opcodes as no-ops.
     extension: bool,
 
-    // updated by nonce/input/issue/contract/output instructions
+    // updated by input/issue/contract/output instructions
     last_anchor: Option<Anchor>,
 
     // stack of all items in the VM
@@ -234,8 +234,8 @@ where
     /// Instantiates a new VM instance.
     pub fn new(header: TxHeader, run: D::RunType, delegate: &'d mut D) -> Self {
         VM {
-            mintime: header.mintime,
-            maxtime: header.maxtime,
+            mintime_ms: header.mintime_ms,
+            maxtime_ms: header.maxtime_ms,
             extension: header.version > CURRENT_VERSION,
             last_anchor: None,
             delegate,
@@ -314,7 +314,6 @@ where
                 Instruction::Input => self.input()?,
                 Instruction::Output(k) => self.output(k)?,
                 Instruction::Contract(k) => self.contract(k)?,
-                Instruction::Nonce => self.nonce()?,
                 Instruction::Log => self.log()?,
                 Instruction::Signtx => self.signtx()?,
                 Instruction::Call => self.call()?,
@@ -485,28 +484,12 @@ where
     }
 
     fn mintime(&mut self) -> Result<(), VMError> {
-        self.push_item(Expression::constant(self.mintime));
+        self.push_item(Expression::constant(self.mintime_ms));
         Ok(())
     }
 
     fn maxtime(&mut self) -> Result<(), VMError> {
-        self.push_item(Expression::constant(self.maxtime));
-        Ok(())
-    }
-
-    // pred blockid `nonce` → contract
-    fn nonce(&mut self) -> Result<(), VMError> {
-        let blockid = self.pop_item()?.to_data()?.to_bytes();
-        let blockid = SliceReader::parse(&blockid, |r| r.read_u8x32())?;
-        let predicate = self.pop_item()?.to_data()?.to_predicate()?;
-        let nonce_anchor = Anchor::nonce(blockid, &predicate, self.maxtime);
-
-        self.last_anchor = Some(nonce_anchor); // will be immediately moved into contract below
-        let contract = self.make_output(predicate, vec![])?.into_contract().0;
-
-        self.txlog
-            .push(Entry::Nonce(blockid, self.maxtime, nonce_anchor));
-        self.push_item(contract);
+        self.push_item(Expression::constant(self.maxtime_ms));
         Ok(())
     }
 

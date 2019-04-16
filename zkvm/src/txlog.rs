@@ -1,7 +1,7 @@
 use curve25519_dalek::ristretto::CompressedRistretto;
 use merlin::Transcript;
 
-use crate::contract::{Anchor, ContractID, Output};
+use crate::contract::{ContractID, Output};
 use crate::merkle::{MerkleItem, MerkleTree};
 use crate::transcript::TranscriptProtocol;
 use crate::vm::TxHeader;
@@ -18,7 +18,6 @@ pub enum Entry {
     Retire(CompressedRistretto, CompressedRistretto),
     Input(ContractID),
     Output(Output),
-    Nonce([u8; 32], u64, Anchor),
     Data(Vec<u8>),
     Import, // TBD: parameters
     Export, // TBD: parameters
@@ -28,8 +27,14 @@ pub enum Entry {
 #[derive(Copy, Clone, PartialEq, Debug)]
 pub struct TxID(pub [u8; 32]);
 
+impl MerkleItem for TxID {
+    fn commit(&self, t: &mut Transcript) {
+        t.commit_bytes(b"txid", &self.0)
+    }
+}
+
 /// UTXO is a unique 32-byte identifier of a transaction output
-#[derive(Copy, Clone, PartialEq, Debug)]
+#[derive(Copy, Clone, Eq, Hash, PartialEq, Debug)]
 pub struct UTXO(pub [u8; 32]);
 
 impl UTXO {
@@ -56,8 +61,8 @@ impl MerkleItem for Entry {
         match self {
             Entry::Header(h) => {
                 t.commit_u64(b"tx.version", h.version);
-                t.commit_u64(b"tx.mintime", h.mintime);
-                t.commit_u64(b"tx.maxtime", h.maxtime);
+                t.commit_u64(b"tx.mintime", h.mintime_ms);
+                t.commit_u64(b"tx.maxtime", h.maxtime_ms);
             }
             Entry::Issue(q, f) => {
                 t.commit_point(b"issue.q", q);
@@ -72,11 +77,6 @@ impl MerkleItem for Entry {
             }
             Entry::Output(output) => {
                 t.commit_bytes(b"output", output.id().as_bytes());
-            }
-            Entry::Nonce(blockid, maxtime, anchor) => {
-                t.commit_bytes(b"nonce.b", blockid);
-                t.commit_u64(b"nonce.t", *maxtime);
-                t.commit_bytes(b"nonce.n", anchor.as_bytes());
             }
             Entry::Data(data) => {
                 t.commit_bytes(b"data", data);
@@ -100,8 +100,8 @@ mod tests {
     fn txlog_helper() -> Vec<Entry> {
         vec![
             Entry::Header(TxHeader {
-                mintime: 0,
-                maxtime: 0,
+                mintime_ms: 0,
+                maxtime_ms: 0,
                 version: 0,
             }),
             Entry::Issue(

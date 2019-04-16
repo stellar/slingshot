@@ -113,7 +113,7 @@ pub enum VMError {
     StackNotClean,
 
     /// This error occurs when VM's anchor remains unset.
-    #[fail(display = "VM anchor is not set via `input` or `nonce`")]
+    #[fail(display = "VM anchor is not set via `input`")]
     AnchorMissing,
 
     /// This error occurs when VM's deferred schnorr checks fail
