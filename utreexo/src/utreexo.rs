@@ -7,7 +7,7 @@ use std::collections::HashMap;
 
 pub type HashFn = fn(&Hash, &Hash) -> Hash;
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub struct Utreexo {
     pub roots: Vec<Option<Hash>>,
     pub hasher: HashFn,
@@ -160,11 +160,14 @@ fn find_root(h: &Hash, hashes: &[Hash]) -> Option<usize> {
 mod tests {
     use super::*;
 
+    fn hashfn(a: &Hash, b: &Hash) -> Hash {
+        // xxx
+    }
+
     #[test]
     fn utreexo() {
         let items: [Hash; 12]; // xxx initialize with hashes
-                               // xxx define hashfn
-        let mut u = utreexo::new(hashfn);
+        let mut u = Utreexo::new(hashfn);
 
         // Try to delete from an empty tree, should give an invalid-proof error.
         let p1 = Proof {
@@ -172,64 +175,40 @@ mod tests {
             steps: vec![],
         };
         match u.update(&[p1], &[]) {
-            Err(uerr) => {
-                if uerr != UError::Invalid {
-                    // xxx unexpected error
-                }
-            }
-            _ => {
-                // xxx unexpected success
-            }
+            Err(uerr) => assert_eq!(uerr, UError::Invalid),
+            _ => panic!("unexpected success deleting from empty tree")
         }
 
         // Add 11 leaves.
         let mut proofs: [Proof; 11];
         match u.update(&[], &items[..11]) {
-            Err(uerr) => {
-                // xxx unexpected error
-            }
+            Err(uerr) => panic!("error {} inserting items into empty tree", uerr),
             Ok(upd) => {
                 for i in 0..11 {
-                    proof[i] = upd.proof(&items[i]);
+                    proofs[i] = upd.proof(&items[i]);
                 }
             }
         }
 
         // Remove one of them.
         match u.update(&proofs[..10], &[]) {
-            Err(uerr) => {
-                // xxx unexpected error
-            }
+            Err(uerr) => panic!("error {} removing an item from the tree", uerr),
             Ok(upd) => {
                 for i in 0..10 {
-                    if let Err(uerr) = proofs[i].update(upd) {
-                        // xxx unexpected error
-                    }
+                    assert!(proofs[i].update(upd).is_ok());
                 }
                 let p10 = proofs[10].clone();
                 match p10.update(upd) {
-                    Err(uerr) => {
-                        if uerr != UError::Invalid {
-                            // xxx unexpected error
-                        }
-                    }
-                    _ => {
-                        // xxx unexpected success
-                    }
+                    Err(uerr) => assert_eq!(uerr, UError::Invalid),
+                    _ => panic!("unexpected success updating proof of deleted value")
                 }
             }
         }
 
         let saved = u.clone();
         match u.update(&[proofs[10]], &[]) {
-            Err(uerr) => {
-                if uerr != UError::Invalid {
-                    // xxx unexpected error
-                }
-            }
-            _ => {
-                // xxx unexpected success
-            }
+            Err(uerr) => assert_eq!(uerr, UError::Invalid),
+            _ => panic!("unexpected success re-deleting deleted value")
         }
         assert!(saved == u);
     }

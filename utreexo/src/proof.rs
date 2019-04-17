@@ -8,6 +8,7 @@ pub struct ProofStep {
     pub left: bool,
 }
 
+#[derive(Clone)]
 pub struct Proof {
     pub leaf: Hash,
     pub steps: Vec<ProofStep>,
