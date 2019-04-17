@@ -5,8 +5,8 @@ use super::utreexo::Utreexo;
 use std::collections::HashMap;
 
 pub struct Update {
-    u: Utreexo,
-    updated: HashMap<Hash, ProofStep>,
+    pub(crate) u: Utreexo,
+    pub(crate) updated: HashMap<Hash, ProofStep>,
 }
 
 impl Update {
@@ -18,12 +18,12 @@ impl Update {
     }
 
     pub fn add(&mut self, l: &Hash, r: &Hash) {
-        self.updated.insert(*l, ProofStep { h: *r, left: false });
-        self.updated.insert(*r, ProofStep { h: *l, left: true });
+        self.updated.insert(l.clone(), ProofStep { h: r.clone(), left: false });
+        self.updated.insert(r.clone(), ProofStep { h: l.clone(), left: true });
     }
 
     pub fn proof(&self, leaf: &Hash) -> Proof {
-        let mut item = *leaf;
+        let mut item = leaf.clone();
         let mut result = Proof {
             leaf: item.clone(),
             steps: Vec::new(),

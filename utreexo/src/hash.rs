@@ -1,1 +1,2 @@
-pub type Hash = [u8; 32];
+#[derive(Clone, PartialEq, Eq, Hash)]
+pub struct Hash([u8; 32]);

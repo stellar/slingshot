@@ -76,8 +76,9 @@ impl Utreexo {
             i += 1;
         }
 
-        i = w.heights.len()-1;
-        while i >= 0 {
+        i = w.heights.len();
+        while i > 0 {
+            i -= 1;
             if !w.heights[i].is_empty() {
                 break;
             }
@@ -88,7 +89,7 @@ impl Utreexo {
             if self.roots.len() <= i {
                 self.roots.push(None);
             }
-            self.roots[i] = if h.is_empty() { None } else { Some(h[0]) }
+            self.roots[i] = if h.is_empty() { None } else { Some(h[0].clone()) }
         }
         
         self.roots.truncate(w.heights.len());
