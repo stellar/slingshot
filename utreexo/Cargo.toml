@@ -1,7 +1,8 @@
 [package]
 name = "utreexo"
 version = "0.1.0"
-authors = ["bobg <bobg@emphatic.com>"]
+authors = ["Bob Glickstein <bobg@emphatic.com>"]
 edition = "2018"
 
 [dependencies]
+failure = "0.1"
