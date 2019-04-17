@@ -154,4 +154,8 @@ pub enum VMError {
     /// This error occurs when key aggregation fails.
     #[fail(display = "Key aggregation failed")]
     KeyAggregationFailed,
+
+    /// This error occurs when an input is invalid.
+    #[fail(display = "Input is invalid")]
+    InvalidInput,
 }

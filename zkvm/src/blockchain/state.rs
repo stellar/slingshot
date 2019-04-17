@@ -3,7 +3,7 @@ use std::collections::HashSet;
 
 use super::block::{Block, BlockHeader, BlockID};
 use super::errors::BlockchainError;
-use crate::{Entry, TxID, TxLog, VMError, UTXO};
+use crate::{Entry, TxLog, VMError, UTXO};
 
 #[derive(Clone)]
 pub struct BlockchainState {
@@ -51,7 +51,7 @@ impl BlockchainState {
                     if self.utxos.contains(&utxo) {
                         self.utxos.remove(&utxo);
                     } else {
-                        return Err(VMError::FormatError);
+                        return Err(VMError::InvalidInput);
                     }
                 }
 
