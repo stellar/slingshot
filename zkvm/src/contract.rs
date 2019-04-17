@@ -5,7 +5,6 @@ use crate::encoding;
 use crate::encoding::SliceReader;
 use crate::errors::VMError;
 use crate::predicate::Predicate;
-use crate::txlog::UTXO;
 use crate::types::{Data, Value};
 
 /// Prefix for the data type in the Output Structure
@@ -19,7 +18,7 @@ pub const VALUE_TYPE: u8 = 0x01;
 pub struct Anchor([u8; 32]);
 
 /// A unique identifier for a contract.
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Eq, Hash, Debug, PartialEq)]
 pub struct ContractID([u8; 32]);
 
 /// A ZkVM contract that holds a _payload_ (a list of portable items) protected by a _predicate_.
@@ -117,11 +116,6 @@ impl ContractID {
     /// Provides a view into the contract ID's bytes.
     pub fn as_bytes(&self) -> &[u8] {
         &self.0
-    }
-
-    /// Returns the contractID as a UTXO
-    pub fn as_utxo(&self) -> UTXO {
-        UTXO(self.0)
     }
 
     fn from_serialized_contract(bytes: &[u8]) -> Self {

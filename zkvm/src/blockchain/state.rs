@@ -3,13 +3,13 @@ use std::collections::HashSet;
 
 use super::block::{Block, BlockHeader, BlockID};
 use super::errors::BlockchainError;
-use crate::{Entry, TxLog, VMError, UTXO};
+use crate::{ContractID, Entry, TxLog, VMError};
 
 #[derive(Clone)]
 pub struct BlockchainState {
     pub initial: BlockHeader,
     pub tip: BlockHeader,
-    pub utxos: HashSet<UTXO>,
+    pub utxos: HashSet<ContractID>,
 
     pub initial_id: BlockID,
 }
@@ -47,17 +47,14 @@ impl BlockchainState {
             match entry {
                 // Remove input from UTXO set
                 Entry::Input(input) => {
-                    let utxo = input.as_utxo();
-                    if self.utxos.contains(&utxo) {
-                        self.utxos.remove(&utxo);
-                    } else {
+                    if !self.utxos.remove(&input) {
                         return Err(VMError::InvalidInput);
                     }
                 }
 
                 // Add output entry to UTXO set
                 Entry::Output(output) => {
-                    self.utxos.insert(UTXO::from_output(output));
+                    self.utxos.insert(output.id());
                 }
                 _ => {}
             }
@@ -110,8 +107,8 @@ mod tests {
             .unwrap();
 
         // Check that output0 was consumed
-        assert_eq!(state.utxos.contains(&output0.id().as_utxo()), false);
-        assert_eq!(state.utxos.contains(&output1.id().as_utxo()), true);
+        assert!(!state.utxos.contains(&output0.id()));
+        assert!(state.utxos.contains(&output1.id()));
 
         // Consume output1
         state

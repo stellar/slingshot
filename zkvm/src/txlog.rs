@@ -33,17 +33,6 @@ impl MerkleItem for TxID {
     }
 }
 
-/// UTXO is a unique 32-byte identifier of a transaction output
-#[derive(Copy, Clone, Eq, Hash, PartialEq, Debug)]
-pub struct UTXO(pub [u8; 32]);
-
-impl UTXO {
-    /// Computes UTXO identifier from an output.
-    pub fn from_output(output: &Output) -> Self {
-        output.id().as_utxo()
-    }
-}
-
 impl TxID {
     /// Computes TxID from a tx log
     pub fn from_log(list: &[Entry]) -> Self {
