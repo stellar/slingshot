@@ -26,11 +26,7 @@ impl Utreexo {
         };
     }
 
-    pub fn update(
-        &mut self,
-        deletions: Vec<Proof>,
-        insertions: Vec<Hash>,
-    ) -> Result<Update, UError> {
+    pub fn update(&mut self, deletions: &[Proof], insertions: &[Hash]) -> Result<Update, UError> {
         let mut w = Worktree {
             heights: Vec::new(),
             roots: HashMap::new(),
@@ -58,7 +54,7 @@ impl Utreexo {
         if w.heights.is_empty() {
             w.heights.push(Vec::new());
         }
-        w.heights[0].extend(insertions);
+        w.heights[0].extend_from_slice(insertions);
 
         let mut i = 0;
         while i < w.heights.len() {
@@ -89,9 +85,13 @@ impl Utreexo {
             if self.roots.len() <= i {
                 self.roots.push(None);
             }
-            self.roots[i] = if h.is_empty() { None } else { Some(h[0].clone()) }
+            self.roots[i] = if h.is_empty() {
+                None
+            } else {
+                Some(h[0].clone())
+            }
         }
-        
+
         self.roots.truncate(w.heights.len());
 
         Ok(update)
@@ -154,4 +154,83 @@ fn find_root(h: &Hash, hashes: &[Hash]) -> Option<usize> {
         }
     }
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn utreexo() {
+        let items: [Hash; 12]; // xxx initialize with hashes
+                               // xxx define hashfn
+        let mut u = utreexo::new(hashfn);
+
+        // Try to delete from an empty tree, should give an invalid-proof error.
+        let p1 = Proof {
+            leaf: items[0].clone(),
+            steps: vec![],
+        };
+        match u.update(&[p1], &[]) {
+            Err(uerr) => {
+                if uerr != UError::Invalid {
+                    // xxx unexpected error
+                }
+            }
+            _ => {
+                // xxx unexpected success
+            }
+        }
+
+        // Add 11 leaves.
+        let mut proofs: [Proof; 11];
+        match u.update(&[], &items[..11]) {
+            Err(uerr) => {
+                // xxx unexpected error
+            }
+            Ok(upd) => {
+                for i in 0..11 {
+                    proof[i] = upd.proof(&items[i]);
+                }
+            }
+        }
+
+        // Remove one of them.
+        match u.update(&proofs[..10], &[]) {
+            Err(uerr) => {
+                // xxx unexpected error
+            }
+            Ok(upd) => {
+                for i in 0..10 {
+                    if let Err(uerr) = proofs[i].update(upd) {
+                        // xxx unexpected error
+                    }
+                }
+                let p10 = proofs[10].clone();
+                match p10.update(upd) {
+                    Err(uerr) => {
+                        if uerr != UError::Invalid {
+                            // xxx unexpected error
+                        }
+                    }
+                    _ => {
+                        // xxx unexpected success
+                    }
+                }
+            }
+        }
+
+        let saved = u.clone();
+        match u.update(&[proofs[10]], &[]) {
+            Err(uerr) => {
+                if uerr != UError::Invalid {
+                    // xxx unexpected error
+                }
+            }
+            _ => {
+                // xxx unexpected success
+            }
+        }
+        assert!(saved == u);
+    }
 }
