@@ -5,6 +5,7 @@ use crate::encoding;
 use crate::encoding::SliceReader;
 use crate::errors::VMError;
 use crate::predicate::Predicate;
+use crate::txlog::UTXO;
 use crate::types::{Data, Value};
 
 /// Prefix for the data type in the Output Structure
@@ -116,6 +117,11 @@ impl ContractID {
     /// Provides a view into the contract ID's bytes.
     pub fn as_bytes(&self) -> &[u8] {
         &self.0
+    }
+
+    /// Returns the contractID as a UTXO
+    pub fn as_utxo(&self) -> UTXO {
+        UTXO(self.0)
     }
 
     fn from_serialized_contract(bytes: &[u8]) -> Self {
