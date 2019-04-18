@@ -33,22 +33,6 @@ impl MerkleItem for TxID {
     }
 }
 
-/// UTXO is a unique 32-byte identifier of a transaction output
-#[derive(Copy, Clone, Eq, Hash, PartialEq, Debug)]
-pub struct UTXO(pub [u8; 32]);
-
-impl UTXO {
-    /// Computes UTXO identifier from an output and transaction id.
-    pub fn from_output(output: &[u8], txid: &TxID) -> Self {
-        let mut t = Transcript::new(b"ZkVM.utxo");
-        t.commit_bytes(b"txid", &txid.0);
-        t.commit_bytes(b"output", &output);
-        let mut utxo = UTXO([0u8; 32]);
-        t.challenge_bytes(b"id", &mut utxo.0);
-        utxo
-    }
-}
-
 impl TxID {
     /// Computes TxID from a tx log
     pub fn from_log(list: &[Entry]) -> Self {
@@ -72,8 +56,8 @@ impl MerkleItem for Entry {
                 t.commit_point(b"retire.q", q);
                 t.commit_point(b"retire.f", f);
             }
-            Entry::Input(id) => {
-                t.commit_bytes(b"input", id.as_bytes());
+            Entry::Input(contract) => {
+                t.commit_bytes(b"input", contract.as_bytes());
             }
             Entry::Output(output) => {
                 t.commit_bytes(b"output", output.id().as_bytes());

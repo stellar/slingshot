@@ -1,7 +1,6 @@
 use bulletproofs::{BulletproofGens, PedersenGens};
 use curve25519_dalek::constants::RISTRETTO_BASEPOINT_COMPRESSED;
 use curve25519_dalek::scalar::Scalar;
-use hex;
 use musig::{Signature, VerificationKey};
 
 use zkvm::{

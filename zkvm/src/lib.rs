@@ -33,7 +33,7 @@ pub use self::program::Program;
 pub use self::prover::Prover;
 pub use self::scalar_witness::ScalarWitness;
 pub use self::transcript::TranscriptProtocol;
-pub use self::txlog::{Entry, TxID, TxLog, UTXO};
+pub use self::txlog::{Entry, TxID, TxLog};
 pub use self::types::{Data, Item, Value, WideValue};
 pub use self::verifier::Verifier;
 pub use self::vm::{Tx, TxHeader, VerifiedTx};
