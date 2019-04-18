@@ -164,6 +164,7 @@ impl PredicateTree {
         progs: Vec<Program>,
         blinding_key: [u8; 32],
     ) -> Result<Self, VMError> {
+        // If the key is None, use a point with provably unknown discrete log w.r.t. primary basepoint.
         let key = key.unwrap_or_else(|| Predicate::unsignable_key());
         let leaves = Self::create_merkle_leaves(&progs, blinding_key);
         if leaves.len() > (1 << 31) {
