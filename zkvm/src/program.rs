@@ -138,9 +138,10 @@ impl Program {
         pred_tree: PredicateTree,
         prog_index: usize,
     ) -> Result<&mut Program, VMError> {
-        let (call_proof, program) = pred_tree.create_callproof_program(prog_index)?;
-        self.push(Data::Opaque(call_proof.to_bytes())).call();
-        self.push(Data::Program(program)).call();
+        let (call_proof, program) = pred_tree.create_callproof(prog_index)?;
+        self.push(Data::Opaque(call_proof.to_bytes()))
+            .push(Data::Program(program))
+            .call();
         Ok(self)
     }
 }

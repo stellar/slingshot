@@ -473,7 +473,7 @@ fn taproot_program_path() {
     let blinding_key = rand::thread_rng().gen::<[u8; 32]>();
     let tree = PredicateTree::new(Some(pk), vec![spend_prog], blinding_key).unwrap();
     let factor = tree.adjustment_factor();
-    let (call_proof, call_prog) = tree.create_callproof_program(0).unwrap();
+    let (call_proof, call_prog) = tree.create_callproof(0).unwrap();
     let prev_output = make_output(qty, flavor, Predicate::Tree(tree));
 
     let prog = Program::build(|p| {

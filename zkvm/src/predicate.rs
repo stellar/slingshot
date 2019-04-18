@@ -116,9 +116,9 @@ impl Predicate {
         Predicate::Opaque(self.to_point())
     }
 
-    fn commit_taproot(key: &[u8], root: &[u8]) -> Scalar {
+    fn commit_taproot(key: &VerificationKey, root: &[u8; 32]) -> Scalar {
         let mut t = Transcript::new(b"ZkVM.taproot");
-        t.commit_bytes(b"key", key);
+        t.commit_bytes(b"key", &key.as_compressed().to_bytes());
         t.commit_bytes(b"merkle", root);
         t.challenge_scalar(b"h")
     }
@@ -129,7 +129,7 @@ impl Predicate {
         let key = &call_proof.verification_key;
         let neighbors = &call_proof.neighbors;
         let root = MerkleTree::compute_root_from_path(b"ZkVM.taproot", program_item, neighbors);
-        let h = Self::commit_taproot(&key.into_compressed().to_bytes(), &root);
+        let h = Self::commit_taproot(key, &root);
 
         // P == X + h1(X, M)*B -> 0 == -P + X + h1(X, M)*B
         PointOp {
@@ -170,7 +170,7 @@ impl PredicateTree {
         let root = MerkleTree::root(b"ZkVM.taproot", &leaves);
 
         // P = X + h(X, M)*G
-        let adjustment_factor = Predicate::commit_taproot(key.into_compressed().as_bytes(), &root);
+        let adjustment_factor = Predicate::commit_taproot(&key, &root);
         let precomputed_key = {
             let h = adjustment_factor;
             let x = key.into_point();
@@ -195,29 +195,28 @@ impl PredicateTree {
     }
 
     /// Creates the call proof and returns that with the program at an index.
-    pub fn create_callproof_program(
-        &self,
-        prog_index: usize,
-    ) -> Result<(CallProof, Program), VMError> {
+    pub fn create_callproof(&self, prog_index: usize) -> Result<(CallProof, Program), VMError> {
         // The `prog_index` is used over the list of the programs,
         // but the actual tree contains also contains blinding factors,
         // so we need to adjust the index accordingly.
         // Blinding factors are located randomly to the left or right of the program leaf,
         // so we simply pick the left leaf, check it, and if it's not the program, pick the right one instead.
-        let possible_leaf = self.get_leaf(2 * prog_index);
+        if prog_index >= self.leaves.len() / 2 {
+            return Err(VMError::BadArguments);
+        }
+        let possible_leaf = &self.leaves[2 * prog_index];
         let leaf_index = match possible_leaf {
             PredicateLeaf::Blinding(_) => 2 * prog_index + 1,
             PredicateLeaf::Program(_) => 2 * prog_index,
         };
-        let leaves = self.get_leaves();
-        let tree = MerkleTree::build(b"ZkVM.taproot", leaves);
+        let tree = MerkleTree::build(b"ZkVM.taproot", &self.leaves);
         let neighbors = tree.create_path(leaf_index)?;
-        let verification_key = self.get_key().clone();
+        let verification_key = self.key.clone();
         let call_proof = CallProof {
             verification_key,
             neighbors,
         };
-        let program = self.get_leaf(leaf_index).clone().to_program()?;
+        let program = self.leaves[leaf_index].clone().to_program()?;
         Ok((call_proof, program))
     }
 
@@ -234,7 +233,8 @@ impl PredicateTree {
 
         let mut leaves = Vec::new();
         for prog in progs.iter() {
-            let blinding = rand::thread_rng().gen::<[u8; 32]>();
+            let mut blinding = [0u8; 32];
+            t.challenge_bytes(b"blinding", &mut blinding);
             let blinding_leaf = PredicateLeaf::Blinding(blinding);
             let program_leaf = PredicateLeaf::Program(ProgramItem::Program(prog.clone()));
             if blinding[0] & 1 == 0 {
@@ -246,21 +246,6 @@ impl PredicateTree {
             }
         }
         leaves
-    }
-
-    /// Get the predicate leaves.
-    pub fn get_leaves(&self) -> &Vec<PredicateLeaf> {
-        &self.leaves
-    }
-
-    /// Get the predicate leaf at an index.
-    pub fn get_leaf(&self, index: usize) -> &PredicateLeaf {
-        &self.leaves[index]
-    }
-
-    /// Get the verification key.
-    pub fn get_key(&self) -> &VerificationKey {
-        &self.key
     }
 }
 
@@ -359,7 +344,7 @@ mod tests {
         let blinding_key = rand::thread_rng().gen::<[u8; 32]>();
         let tree = PredicateTree::new(None, progs, blinding_key).unwrap();
         let tree_pred = Predicate::Tree(tree.clone());
-        let (call_proof, prog) = tree.create_callproof_program(0).unwrap();
+        let (call_proof, prog) = tree.create_callproof(0).unwrap();
         let op = tree_pred.prove_taproot(&ProgramItem::Program(prog), &call_proof);
         assert!(op.verify().is_ok());
     }
@@ -373,7 +358,7 @@ mod tests {
         let blinding_key = rand::thread_rng().gen::<[u8; 32]>();
         let tree = PredicateTree::new(None, progs, blinding_key).unwrap();
         let tree_pred = Predicate::Tree(tree.clone());
-        let (call_proof, _) = tree.create_callproof_program(0).unwrap();
+        let (call_proof, _) = tree.create_callproof(0).unwrap();
         let op = tree_pred.prove_taproot(&ProgramItem::Program(prog3), &call_proof);
         assert!(op.verify().is_err())
     }
