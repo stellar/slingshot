@@ -3,6 +3,7 @@
 
 #[macro_use]
 extern crate failure;
+extern crate rayon;
 extern crate serde;
 
 mod blockchain;

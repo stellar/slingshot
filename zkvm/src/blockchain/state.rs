@@ -1,4 +1,5 @@
 use bulletproofs::BulletproofGens;
+use rayon::prelude::*;
 use std::collections::HashSet;
 
 use super::block::{Block, BlockHeader, BlockID};
@@ -66,12 +67,11 @@ impl BlockchainState {
     /// Executes a list of transactions, returning their tx IDs and tx logs.
     pub fn execute_txlist(
         txs: Vec<Tx>,
+        bp_gens: BulletproofGens,
         version: u64,
         timestamp_ms: u64,
     ) -> Result<Vec<(TxID, TxLog)>, BlockchainError> {
-        let bp_gens = BulletproofGens::new(256, 1);
-
-        txs.iter()
+        txs.par_iter()
             .map(|tx| {
                 if tx.header.mintime_ms > timestamp_ms || tx.header.maxtime_ms < timestamp_ms {
                     return Err(BlockchainError::BadTxTimestamp);
