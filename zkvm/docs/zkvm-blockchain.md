@@ -34,7 +34,7 @@ The blockchain state contains:
   (the header with height 1).
   This never changes.
 - `tipheader`: The latest block header.
-- `utxos`: The set of current [utxo IDs](zkvm-spec.md#utxo).
+- `utxos`: The list of current [utxo IDs](zkvm-spec.md#utxo).
 
 ## Block
 
@@ -119,7 +119,7 @@ Inputs:
 - `timestamp_ms`,
   the current time as a number of milliseconds since the Unix epoch: 00:00:00 UTC Jan 1, 1970.
 - `utxos`,
-  the initial utxo set that bootstraps [ZkVM anchors](zkvm-spec.md#anchor).
+  the initial list of [utxo IDs](zkvm-spec.md#utxo) needed to bootstrap [ZkVM anchors](zkvm-spec.md#anchor).
 
 
 Output:
@@ -127,7 +127,7 @@ Output:
 
 Procedure:
 1. [Compute txroot](#compute-txroot) from an empty list of transaction ids.
-2. [Compute utxoroot](#compute-utxoroot) from a set of `utxos`.
+2. [Compute utxoroot](#compute-utxoroot) from `utxos`.
 3. Return a [block header](#block-header) with its fields set as follows:
    - `version`: 1
    - `height`: 1
@@ -320,14 +320,8 @@ Procedure:
       verify its ID is in `state′.utxos`,
       then remove it.
    2. If an output entry,
-      add its utxo ID to `state′.utxos`.
+      append its utxo ID to `state′.utxos`.
 3. Return `state′`.
-
-Note: utxos may be consumed in the same block,
-or even the same transaction,
-in which they are created.
-Implementations should therefore not try to reorder or batch step 3,
-at least not without taking extra care to cancel out such “local pairs” first.
 
 ## Compute txroot
 
@@ -344,7 +338,7 @@ Procedure:
 ## Compute utxoroot
 
 Input:
-- Unordered set `utxos` of [utxo IDs](zkvm-spec.md#utxo).
+- Ordered list `utxos` of [utxo IDs](zkvm-spec.md#utxo).
 
 Output:
 - [Merkle root hash](zkvm-spec.md#merkle-binary-tree) of the given utxos.
