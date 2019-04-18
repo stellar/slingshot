@@ -1,4 +1,5 @@
 use bulletproofs::BulletproofGens;
+use std::borrow::Borrow;
 use std::collections::HashSet;
 
 use super::block::{Block, BlockHeader, BlockID};
@@ -63,9 +64,13 @@ impl BlockchainState {
         Ok(())
     }
 
-    fn apply_txlogs(&mut self, txlist: &[TxLog]) -> Result<(), VMError> {
-        for txlog in txlist.iter() {
-            self.apply_txlog(txlog)?;
+    fn apply_txlogs<I>(&mut self, txlist: I) -> Result<(), VMError>
+    where
+        I: Iterator,
+        I::Item: Borrow<TxLog>,
+    {
+        for txlog in txlist {
+            self.apply_txlog(txlog.borrow())?;
         }
         Ok(())
     }
