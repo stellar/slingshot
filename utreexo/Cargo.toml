@@ -6,3 +6,4 @@ edition = "2018"
 
 [dependencies]
 failure = "0.1"
+merlin = "1.0.1"

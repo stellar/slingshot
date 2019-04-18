@@ -159,14 +159,25 @@ fn find_root(h: &Hash, hashes: &[Hash]) -> Option<usize> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use merlin::Transcript;
 
     fn hashfn(a: &Hash, b: &Hash) -> Hash {
-        // xxx
+        let mut t = Transcript::new(b"hash");
+        t.commit_bytes(b"a", &a.0);
+        t.commit_bytes(b"b", &b.0);
+
+        let mut h: Hash;
+        t.challenge_bytes(b"hash", &mut h.0);
+        h
     }
 
     #[test]
     fn utreexo() {
-        let items: [Hash; 12]; // xxx initialize with hashes
+        let items: [Hash; 12];
+        for i in 0..12 {
+            items[0] = Hash([i; 32]);
+        }
+
         let mut u = Utreexo::new(hashfn);
 
         // Try to delete from an empty tree, should give an invalid-proof error.
@@ -176,7 +187,7 @@ mod tests {
         };
         match u.update(&[p1], &[]) {
             Err(uerr) => assert_eq!(uerr, UError::Invalid),
-            _ => panic!("unexpected success deleting from empty tree")
+            _ => panic!("unexpected success deleting from empty tree"),
         }
 
         // Add 11 leaves.
@@ -200,7 +211,7 @@ mod tests {
                 let p10 = proofs[10].clone();
                 match p10.update(upd) {
                     Err(uerr) => assert_eq!(uerr, UError::Invalid),
-                    _ => panic!("unexpected success updating proof of deleted value")
+                    _ => panic!("unexpected success updating proof of deleted value"),
                 }
             }
         }
@@ -208,7 +219,7 @@ mod tests {
         let saved = u.clone();
         match u.update(&[proofs[10]], &[]) {
             Err(uerr) => assert_eq!(uerr, UError::Invalid),
-            _ => panic!("unexpected success re-deleting deleted value")
+            _ => panic!("unexpected success re-deleting deleted value"),
         }
         assert!(saved == u);
     }

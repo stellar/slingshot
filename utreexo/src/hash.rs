@@ -1,2 +1,2 @@
 #[derive(Clone, PartialEq, Eq, Hash)]
-pub struct Hash([u8; 32]);
+pub struct Hash(pub [u8; 32]);
