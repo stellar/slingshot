@@ -224,7 +224,7 @@ pub(crate) trait Delegate<CS: r1cs::ConstraintSystem> {
     fn next_instruction(&mut self, run: &mut Self::RunType)
         -> Result<Option<Instruction>, VMError>;
 
-    fn new_run(&self, prog: Data) -> Result<Self::RunType, VMError>;
+    fn new_run(&self, prog: ProgramItem) -> Result<Self::RunType, VMError>;
 }
 
 impl<'d, CS, D> VM<'d, CS, D>
@@ -697,11 +697,8 @@ where
 
     fn call(&mut self) -> Result<(), VMError> {
         // Pop program, call proof, and contract
-        println!("Top of instruction fn call()");
         let program_data = self.pop_item()?.to_data()?;
-        println!("Just above program assignment");
-        let program = program_data.clone().to_program_item()?.to_program()?;
-        println!("Just below program assignment");
+        let program_item = program_data.clone().to_program_item()?;
         let call_proof_bytes = self.pop_item()?.to_data()?.to_bytes();
         let call_proof = SliceReader::parse(&call_proof_bytes, |r| CallProof::decode(r))?;
         let contract = self.pop_item()?.to_contract()?;
@@ -709,7 +706,7 @@ where
 
         // 0 == -P + X + h1(X, M)*B
         self.delegate
-            .verify_point_op(|| predicate.prove_taproot(&program, &call_proof))?;
+            .verify_point_op(|| predicate.prove_taproot(&program_item, &call_proof))?;
 
         // Place contract payload on the stack
         for item in contract.payload.into_iter() {
@@ -717,7 +714,7 @@ where
         }
 
         // Replace current program with new program
-        self.continue_with_program(program_data)?;
+        self.continue_with_program(program_data.to_program_item()?)?;
         Ok(())
     }
 
@@ -747,7 +744,7 @@ where
             .verify_point_op(|| signature.verify(&mut t, verification_key).into())?;
 
         // Replace current program with new program
-        self.continue_with_program(prog)?;
+        self.continue_with_program(prog.to_program_item()?)?;
         Ok(())
     }
 
@@ -822,7 +819,7 @@ where
         ))
     }
 
-    fn continue_with_program(&mut self, prog: Data) -> Result<(), VMError> {
+    fn continue_with_program(&mut self, prog: ProgramItem) -> Result<(), VMError> {
         let new_run = self.delegate.new_run(prog)?;
         let paused_run = mem::replace(&mut self.current_run, new_run);
         self.run_stack.push(paused_run);

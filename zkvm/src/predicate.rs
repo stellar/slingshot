@@ -127,10 +127,10 @@ impl Predicate {
 
     /// Verifies whether the current predicate is a commitment to a signing key `key` and Merkle root `root`.
     /// Returns a `PointOp` instance that can be verified in a batch with other operations.
-    pub fn prove_taproot(&self, program: &Program, call_proof: &CallProof) -> PointOp {
+    pub fn prove_taproot(&self, program_item: &ProgramItem, call_proof: &CallProof) -> PointOp {
         let key = &call_proof.verification_key;
         let neighbors = &call_proof.neighbors;
-        let root = MerkleTree::compute_root_from_path(b"ZkVM.taproot", program, neighbors);
+        let root = MerkleTree::compute_root_from_path(b"ZkVM.taproot", program_item, neighbors);
         let h = Self::commit_taproot(&key.into_compressed().to_bytes(), &root);
 
         // P == X + h1(X, M)*B -> 0 == -P + X + h1(X, M)*B
@@ -326,16 +326,9 @@ impl CallProof {
 impl PredicateLeaf {
     /// Downcasts the predicate leaf to a program.
     pub fn to_program(self) -> Result<Program, VMError> {
-        println!("Top of PredicateLeaf to_program()");
         match self {
-            PredicateLeaf::Program(p) =>{ 
-                println!("Matched PredicateLeaf::Program");
-                p.to_program()
-            },
-            _ => {
-                println!("Matched PredicateLeaf::__");
-                Err(VMError::TypeNotProgram)
-            }
+            PredicateLeaf::Program(p) => p.to_program(),
+            _ =>  Err(VMError::TypeNotProgram),
         }
     }
 }
@@ -343,14 +336,8 @@ impl PredicateLeaf {
 impl MerkleItem for PredicateLeaf {
     fn commit(&self, t: &mut Transcript) {
         match self {
-            PredicateLeaf::Program(prog) => {
-                let mut buf = Vec::new();
-                prog.encode(&mut buf);
-                t.commit_bytes(b"program", &buf);
-            }
-            PredicateLeaf::Blinding(bytes) => {
-                t.commit_bytes(b"blinding", &bytes.clone());
-            }
+            PredicateLeaf::Program(prog) => prog.commit(t),
+            PredicateLeaf::Blinding(bytes) => t.commit_bytes(b"blinding", &bytes.clone()),
         }
     }
 }
@@ -369,7 +356,7 @@ mod tests {
         let tree = PredicateTree::new(None, progs, blinding_key).unwrap();
         let tree_pred = Predicate::Tree(tree.clone());
         let (call_proof, prog) = tree.create_callproof_program(0).unwrap();
-        let op = tree_pred.prove_taproot(&prog, &call_proof);
+        let op = tree_pred.prove_taproot(&ProgramItem::Program(prog), &call_proof);
         assert!(op.verify().is_ok());
     }
 
@@ -383,7 +370,7 @@ mod tests {
         let tree = PredicateTree::new(None, progs, blinding_key).unwrap();
         let tree_pred = Predicate::Tree(tree.clone());
         let (call_proof, _) = tree.create_callproof_program(0).unwrap();
-        let op = tree_pred.prove_taproot(&prog3, &call_proof);
+        let op = tree_pred.prove_taproot(&ProgramItem::Program(prog3), &call_proof);
         assert!(op.verify().is_err())
     }
 }

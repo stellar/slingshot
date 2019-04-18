@@ -10,7 +10,7 @@ use crate::errors::VMError;
 use crate::ops::Instruction;
 use crate::point_ops::PointOp;
 use crate::predicate::Predicate;
-use crate::program::Program;
+use crate::program::{Program, ProgramItem};
 use crate::txlog::{TxID, TxLog};
 use crate::types::Data;
 use crate::vm::{Delegate, Tx, TxHeader, VM};
@@ -58,10 +58,9 @@ impl<'t, 'g> Delegate<r1cs::Prover<'t, 'g>> for Prover<'t, 'g> {
         Ok(run.program.pop_front())
     }
 
-    fn new_run(&self, data: Data) -> Result<Self::RunType, VMError> {
-        println!("In ProverRun new_run()");
+    fn new_run(&self, data: ProgramItem) -> Result<Self::RunType, VMError> {
         Ok(ProverRun {
-            program: data.to_program_item()?.to_program()?.to_vec().into(),
+            program: data.to_program()?.to_vec().into(),
         })
     }
 

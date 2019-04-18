@@ -221,7 +221,6 @@ impl Data {
 
     /// Downcast the data item to a `ProgramItem` type.
     pub fn to_program_item(self) -> Result<ProgramItem, VMError> {
-        println!("In Data to_program_item()");
         match self {
             Data::Opaque(data) => Ok(ProgramItem::Bytecode(data)),
             Data::Program(prog) => Ok(ProgramItem::Program(prog)),
