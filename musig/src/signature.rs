@@ -87,8 +87,9 @@ impl Signature {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::context::Multikey;
     use crate::errors::MusigError;
-    use crate::key::{Multikey, VerificationKey};
+    use crate::key::VerificationKey;
     use crate::signer::*;
     use curve25519_dalek::ristretto::CompressedRistretto;
 

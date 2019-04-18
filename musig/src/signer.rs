@@ -1,6 +1,6 @@
+use super::context::MusigContext;
 use super::counterparty::*;
 use super::errors::MusigError;
-use super::key::MusigContext;
 use super::signature::Signature;
 use super::transcript::TranscriptProtocol;
 use curve25519_dalek::constants::RISTRETTO_BASEPOINT_POINT;

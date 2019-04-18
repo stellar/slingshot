@@ -1,5 +1,6 @@
+use super::context::MusigContext;
 use super::errors::MusigError;
-use super::key::{MusigContext, VerificationKey};
+use super::key::VerificationKey;
 use crate::transcript::TranscriptProtocol;
 use curve25519_dalek::constants::RISTRETTO_BASEPOINT_POINT;
 use curve25519_dalek::ristretto::{CompressedRistretto, RistrettoPoint};

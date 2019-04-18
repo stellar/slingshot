@@ -5,6 +5,7 @@ use curve25519_dalek::ristretto::RistrettoPoint;
 use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
 
+/// The context for signing - can either be a Multikey or Multimessage context.
 pub trait MusigContext {
     /// Takes a mutable transcript, and commits the internal context to the transcript.
     fn commit(&self, transcript: &mut Transcript);
@@ -55,20 +56,20 @@ impl Multikey {
         // Commit pubkeys into the transcript
         // <L> = H(X_1 || X_2 || ... || X_n)
         for X in &pubkeys {
-            prf.commit_point(b"X", &X.0);
+            prf.commit_point(b"X", X.as_compressed());
         }
 
         // aggregated_key = sum_i ( a_i * X_i )
         let mut aggregated_key = RistrettoPoint::default();
         for (i, X) in pubkeys.iter().enumerate() {
             let a = Multikey::compute_factor(&prf, i);
-            let X = X.0.decompress().ok_or(MusigError::InvalidPoint)?;
+            let X = X.into_point();
             aggregated_key = aggregated_key + a * X;
         }
 
         Ok(Multikey {
             prf: Some(prf),
-            aggregated_key: VerificationKey(aggregated_key.compress()),
+            aggregated_key: VerificationKey::from(aggregated_key),
             public_keys: pubkeys,
         })
     }
@@ -89,7 +90,7 @@ impl Multikey {
 
 impl MusigContext for Multikey {
     fn commit(&self, transcript: &mut Transcript) {
-        transcript.commit_point(b"X", &self.aggregated_key.0);
+        transcript.commit_point(b"X", self.aggregated_key.as_compressed());
     }
 
     fn challenge(&self, i: usize, transcript: &mut Transcript) -> Scalar {
@@ -114,6 +115,7 @@ impl MusigContext for Multikey {
 }
 
 impl<M: AsRef<[u8]>> Multimessage<M> {
+    /// Constructs a new multimessage context
     pub fn new(pairs: Vec<(VerificationKey, M)>) -> Self {
         Self { pairs }
     }
@@ -123,7 +125,7 @@ impl<M: AsRef<[u8]>> MusigContext for Multimessage<M> {
     fn commit(&self, transcript: &mut Transcript) {
         transcript.commit_u64(b"Musig.Multimessage", self.pairs.len() as u64);
         for (key, msg) in &self.pairs {
-            transcript.commit_point(b"X", &key.0);
+            transcript.commit_point(b"X", key.as_compressed());
             transcript.commit_bytes(b"m", msg.as_ref());
         }
     }
