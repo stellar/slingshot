@@ -18,14 +18,14 @@ impl BlockchainState {
     pub fn make_initial(
         timestamp_ms: u64,
         refscount: u64,
-        utxos: Option<Vec<ContractID>>,
+        utxos: Vec<ContractID>,
     ) -> BlockchainState {
-        let initialHeader = BlockHeader::make_initial(timestamp_ms, refscount, utxos.as_ref());
+        let initialHeader = BlockHeader::make_initial(timestamp_ms, refscount, &utxos);
         BlockchainState {
             initial: initialHeader.clone(),
             initial_id: initialHeader.id(),
             tip: initialHeader,
-            utxos: utxos.map_or(Vec::new(), |u| u),
+            utxos: utxos,
         }
     }
 
@@ -97,7 +97,7 @@ mod tests {
 
     #[test]
     fn test_apply_txlog() {
-        let mut state = BlockchainState::make_initial(0u64, 0u64, None);
+        let mut state = BlockchainState::make_initial(0u64, 0u64, Vec::new());
 
         // Add two outputs
         let (output0, output1) = (Output::new(rand_contract()), Output::new(rand_contract()));

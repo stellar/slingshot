@@ -37,18 +37,14 @@ impl BlockHeader {
         BlockID(result)
     }
 
-    pub fn make_initial(
-        timestamp_ms: u64,
-        refscount: u64,
-        utxos: Option<&Vec<ContractID>>,
-    ) -> BlockHeader {
+    pub fn make_initial(timestamp_ms: u64, refscount: u64, utxos: &Vec<ContractID>) -> BlockHeader {
         BlockHeader {
             version: 1,
             height: 1,
             prev: BlockID([0; 32]),
             timestamp_ms: timestamp_ms,
-            txroot: [0; 32],
-            utxoroot: utxos.map_or([0; 32], |u| Root::utxo(u).0),
+            txroot: Root::tx(&[]).0,
+            utxoroot: Root::utxo(utxos).0,
             ext: Vec::new(),
         }
     }
