@@ -54,7 +54,7 @@ pub struct PredicateTree {
 
 /// Call proof represents a proof that a certain program is committed via the merkle tree into the predicate.
 /// Used by `call` instruction. The program is not the part of the proof.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 pub struct CallProof {
     // Pure verification key
     pub verification_key: VerificationKey,
@@ -261,29 +261,27 @@ impl CallProof {
 
     /// Decodes the call proof from bytes.
     pub fn decode<'a>(reader: &mut SliceReader<'a>) -> Result<Self, VMError> {
-        let mut call_proof = CallProof::default();
-        let point = reader.read_point()?;
-        let ovk = VerificationKey::from_compressed(point);
-        match ovk {
-            Some(k) => call_proof.verification_key = k,
-            None => return Err(VMError::InvalidPoint),
-        }
+        let verification_key =
+            VerificationKey::from_compressed(reader.read_point()?).ok_or(VMError::InvalidPoint)?;
+
         let positions = reader.read_u32()?;
         if positions == 0 {
             return Err(VMError::FormatError);
         }
-        let mut neighbors = vec![];
-        let num_neighbors = 31 - positions.leading_zeros();
+        let num_neighbors = (31 - positions.leading_zeros()) as usize;
+        let mut neighbors = Vec::with_capacity(num_neighbors);
         for i in 0..num_neighbors {
-            let neighbor_bytes = reader.read_u8x32()?;
-            if positions & (1 << i) == 0 {
-                neighbors.push(MerkleNeighbor::Left(neighbor_bytes));
+            let bytes = reader.read_u8x32()?;
+            neighbors.push(if positions & (1 << i) == 0 {
+                MerkleNeighbor::Left(bytes)
             } else {
-                neighbors.push(MerkleNeighbor::Right(neighbor_bytes));
-            }
+                MerkleNeighbor::Right(bytes)
+            });
         }
-        call_proof.neighbors = neighbors;
-        Ok(call_proof)
+        Ok(CallProof {
+            verification_key,
+            neighbors,
+        })
     }
 
     /// Serializes the call proof to a byte array.
