@@ -97,16 +97,16 @@ impl Program {
         program
     }
 
-    /// Creates a program from parsing the Bytecode data slice of encoded instructions.
-    pub(crate) fn parse(data: &[u8]) -> Result<Self, VMError> {
-        SliceReader::parse(data, |r| {
-            let mut program = Self::new();
-            while r.len() > 0 {
-                program.0.push(Instruction::parse(r)?);
-            }
-            Ok(program)
-        })
-    }
+    // /// Creates a program from parsing the Bytecode data slice of encoded instructions.
+    // pub(crate) fn parse(data: &[u8]) -> Result<Self, VMError> {
+    //     SliceReader::parse(data, |r| {
+    //         let mut program = Self::new();
+    //         while r.len() > 0 {
+    //             program.0.push(Instruction::parse(r)?);
+    //         }
+    //         Ok(program)
+    //     })
+    // }
 
     /// Converts the program to a plain vector of instructions.
     pub fn to_vec(self) -> Vec<Instruction> {
@@ -174,7 +174,8 @@ impl ProgramItem {
     }
 
     /// Downcasts a program item into a vector of bytes.
-    pub fn to_bytes(self) -> Result<Vec<u8>, VMError> {
+    /// Fails if called on a non-opaque `ProgramItem::Program`.
+    pub fn to_bytecode(self) -> Result<Vec<u8>, VMError> {
         match self {
             ProgramItem::Program(_) => return Err(VMError::TypeNotProgram),
             ProgramItem::Bytecode(bytes) => Ok(bytes),

@@ -11,7 +11,6 @@ use crate::ops::Instruction;
 use crate::point_ops::PointOp;
 use crate::predicate::Predicate;
 use crate::program::ProgramItem;
-use crate::types::Data;
 use crate::vm::{Delegate, Tx, VerifiedTx, VM};
 
 /// This is the entry point API for verifying a transaction.
@@ -70,7 +69,7 @@ impl<'t> Delegate<r1cs::Verifier<'t>> for Verifier<'t> {
     }
 
     fn new_run(&self, prog: ProgramItem) -> Result<Self::RunType, VMError> {
-        Ok(VerifierRun::new(prog.to_bytes()?))
+        Ok(VerifierRun::new(prog.to_bytecode()?))
     }
 
     fn cs(&mut self) -> &mut r1cs::Verifier<'t> {

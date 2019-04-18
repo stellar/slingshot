@@ -12,7 +12,6 @@ use crate::point_ops::PointOp;
 use crate::predicate::Predicate;
 use crate::program::{Program, ProgramItem};
 use crate::txlog::{TxID, TxLog};
-use crate::types::Data;
 use crate::vm::{Delegate, Tx, TxHeader, VM};
 /// This is the entry point API for creating a transaction.
 /// Prover passes the list of instructions through the VM,

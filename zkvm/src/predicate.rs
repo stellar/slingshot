@@ -8,7 +8,6 @@ use curve25519_dalek::ristretto::CompressedRistretto;
 use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
 use musig::VerificationKey;
-use rand::Rng;
 
 use crate::encoding;
 use crate::encoding::SliceReader;
@@ -226,7 +225,7 @@ impl PredicateTree {
         t.commit_u64(b"n", n);
         t.commit_bytes(b"key", &blinding_key);
         for prog in progs.iter() {
-            let mut buf = Vec::new();
+            let mut buf = Vec::with_capacity(prog.serialized_length());
             prog.encode(&mut buf);
             t.commit_bytes(b"prog", &buf);
         }
@@ -237,6 +236,10 @@ impl PredicateTree {
             t.challenge_bytes(b"blinding", &mut blinding);
             let blinding_leaf = PredicateLeaf::Blinding(blinding);
             let program_leaf = PredicateLeaf::Program(ProgramItem::Program(prog.clone()));
+
+            // Sacrifice one bit of entropy in the blinding factor
+            // to make the position of the program random and
+            // make the tree indistinguishable from non-blinded trees.
             if blinding[0] & 1 == 0 {
                 leaves.push(blinding_leaf);
                 leaves.push(program_leaf);
@@ -306,7 +309,7 @@ impl CallProof {
     }
 
     pub fn to_bytes(&self) -> Vec<u8> {
-        let mut buf = Vec::new();
+        let mut buf = Vec::with_capacity(self.serialized_length());
         self.encode(&mut buf);
         buf
     }
