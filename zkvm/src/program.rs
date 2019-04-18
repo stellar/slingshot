@@ -175,6 +175,7 @@ impl ProgramItem {
 
     /// Downcasts a program item into a vector of bytes.
     /// Fails if called on a non-opaque `ProgramItem::Program`.
+    /// Use `encode` method to serialize both opaque/nonopaque programs.
     pub fn to_bytecode(self) -> Result<Vec<u8>, VMError> {
         match self {
             ProgramItem::Program(_) => return Err(VMError::TypeNotProgram),
