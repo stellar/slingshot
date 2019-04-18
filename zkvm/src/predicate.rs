@@ -259,6 +259,7 @@ impl CallProof {
         32 + 4 + self.neighbors.len() * 32
     }
 
+    /// Decodes the call proof from bytes.
     pub fn decode<'a>(reader: &mut SliceReader<'a>) -> Result<Self, VMError> {
         let mut call_proof = CallProof::default();
         let point = reader.read_point()?;
@@ -285,7 +286,7 @@ impl CallProof {
         Ok(call_proof)
     }
 
-    /// Serializes the call proof to a byte array
+    /// Serializes the call proof to a byte array.
     pub fn encode(&self, buf: &mut Vec<u8>) {
         encoding::write_point(self.verification_key.as_compressed(), buf);
 
