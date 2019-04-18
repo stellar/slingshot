@@ -18,7 +18,8 @@ use crate::encoding::SliceReader;
 use crate::errors::VMError;
 use crate::ops::Instruction;
 use crate::point_ops::PointOp;
-use crate::predicate::Predicate;
+use crate::predicate::{CallProof, Predicate};
+use crate::program::ProgramItem;
 use crate::scalar_witness::ScalarWitness;
 use crate::txlog::{Entry, TxID, TxLog};
 use crate::types::*;
@@ -696,15 +697,19 @@ where
 
     fn call(&mut self) -> Result<(), VMError> {
         // Pop program, call proof, and contract
+        println!("Top of instruction fn call()");
         let program_data = self.pop_item()?.to_data()?;
-        let program_witness = program_data.clone().to_program_witness()?;
-        let call_proof = self.pop_item()?.to_data()?.to_call_proof()?;
+        println!("Just above program assignment");
+        let program = program_data.clone().to_program_item()?.to_program()?;
+        println!("Just below program assignment");
+        let call_proof_bytes = self.pop_item()?.to_data()?.to_bytes();
+        let call_proof = SliceReader::parse(&call_proof_bytes, |r| CallProof::decode(r))?;
         let contract = self.pop_item()?.to_contract()?;
         let predicate = contract.predicate;
 
         // 0 == -P + X + h1(X, M)*B
         self.delegate
-            .verify_point_op(|| predicate.prove_taproot(&program_witness, &call_proof))?;
+            .verify_point_op(|| predicate.prove_taproot(&program, &call_proof))?;
 
         // Place contract payload on the stack
         for item in contract.payload.into_iter() {

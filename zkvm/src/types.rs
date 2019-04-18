@@ -9,8 +9,8 @@ use crate::constraints::{Commitment, Constraint, Expression, Variable};
 use crate::contract::{Contract, Output, PortableItem};
 use crate::encoding::SliceReader;
 use crate::errors::VMError;
-use crate::predicate::{CallProof, Predicate};
-use crate::program::{Program, ProgramWitness};
+use crate::predicate::Predicate;
+use crate::program::{Program, ProgramItem};
 use crate::scalar_witness::ScalarWitness;
 use crate::transcript::TranscriptProtocol;
 
@@ -59,12 +59,6 @@ pub enum Data {
 
     /// An input object (claimed UTXO).
     Output(Box<Output>),
-
-    /// A call proof.
-    CallProof(CallProof),
-
-    /// A program witness.
-    ProgramWitness(ProgramWitness),
 }
 
 /// Represents a value of an issued asset in the VM.
@@ -163,8 +157,6 @@ impl Data {
             Data::Commitment(commitment) => commitment.serialized_length(),
             Data::Scalar(scalar) => scalar.serialized_length(),
             Data::Output(output) => output.serialized_length(),
-            Data::CallProof(call_proof) => call_proof.serialized_length(),
-            Data::ProgramWitness(pw) => pw.serialized_length(),
         }
     }
 
@@ -194,19 +186,6 @@ impl Data {
         }
     }
 
-    /// Downcast the data item to a `Program` type.
-    pub fn to_program(self) -> Result<Program, VMError> {
-        match self {
-            Data::Opaque(data) => Program::parse(&data),
-            Data::Program(program) => Ok(program),
-            Data::ProgramWitness(pw) => match pw {
-                ProgramWitness::Program(prog) => Ok(prog),
-                ProgramWitness::Opaque(data) => Program::parse(&data),
-            },
-            _ => Err(VMError::TypeNotProgram),
-        }
-    }
-
     /// Downcast the data item to a `Commitment` type.
     pub fn to_commitment(self) -> Result<Commitment, VMError> {
         match self {
@@ -228,15 +207,6 @@ impl Data {
         }
     }
 
-    /// Downcast the data item to a `CallProof` type.
-    pub fn to_call_proof(self) -> Result<CallProof, VMError> {
-        match self {
-            Data::Opaque(data) => SliceReader::parse(&data, |r| CallProof::decode(r)),
-            Data::CallProof(c) => Ok(c),
-            _ => Err(VMError::TypeNotCallProof),
-        }
-    }
-
     /// Downcast the data item to an `ScalarWitness` type.
     pub fn to_scalar(self) -> Result<ScalarWitness, VMError> {
         match self {
@@ -249,12 +219,13 @@ impl Data {
         }
     }
 
-    /// Downcast the data item to a `ProgramWitness` type.
-    pub fn to_program_witness(self) -> Result<ProgramWitness, VMError> {
+    /// Downcast the data item to a `ProgramItem` type.
+    pub fn to_program_item(self) -> Result<ProgramItem, VMError> {
+        println!("In Data to_program_item()");
         match self {
-            Data::Opaque(data) => Ok(ProgramWitness::Opaque(data)),
-            Data::ProgramWitness(pw) => Ok(pw),
-            _ => Err(VMError::TypeNotProgramWitness),
+            Data::Opaque(data) => Ok(ProgramItem::Bytecode(data)),
+            Data::Program(prog) => Ok(ProgramItem::Program(prog)),
+            _ => Err(VMError::TypeNotProgramItem),
         }
     }
 
@@ -267,8 +238,6 @@ impl Data {
             Data::Commitment(commitment) => commitment.encode(buf),
             Data::Scalar(scalar) => scalar.encode(buf),
             Data::Output(output) => output.encode(buf),
-            Data::CallProof(call_proof) => call_proof.encode(buf),
-            Data::ProgramWitness(pw) => pw.encode(buf),
         };
     }
 }

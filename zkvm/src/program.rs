@@ -17,10 +17,10 @@ pub struct Program(Vec<Instruction>);
 
 /// Represents a view of a program.
 #[derive(Clone, Debug)]
-pub enum ProgramWitness {
-    /// `ProgramWitness::Opaque` represents the verifier's view - a Vector of bytecode-as-is.
-    Opaque(Vec<u8>),
-    /// `ProgramWitness::Program` represents the prover's view - a Program struct.
+pub enum ProgramItem {
+    /// `ProgramItem::Bytecode` represents the verifier's view - a Vector of bytecode-as-is.
+    Bytecode(Vec<u8>),
+    /// `ProgramItem::Program` represents the prover's view - a Program struct.
     Program(Program),
 }
 
@@ -97,7 +97,7 @@ impl Program {
         program
     }
 
-    /// Creates a program from parsing the opaque data slice of encoded instructions.
+    /// Creates a program from parsing the Bytecode data slice of encoded instructions.
     pub(crate) fn parse(data: &[u8]) -> Result<Self, VMError> {
         SliceReader::parse(data, |r| {
             let mut program = Self::new();
@@ -139,43 +139,65 @@ impl Program {
         prog_index: usize,
     ) -> Result<&mut Program, VMError> {
         let (call_proof, program) = pred_tree.create_callproof_program(prog_index)?;
-        self.push(Data::CallProof(call_proof)).call();
-        self.push(Data::ProgramWitness(program)).call();
+        self.push(Data::Opaque(call_proof.to_bytes())).call();
+        self.push(Data::Program(program)).call();
         Ok(self)
     }
 }
 
-impl ProgramWitness {
-    /// Returns the number of bytes needed to serialize the ProgramWitness.
+impl ProgramItem {
+    /// Returns the number of bytes needed to serialize the ProgramItem.
     pub fn serialized_length(&self) -> usize {
         match self {
-            ProgramWitness::Program(prog) => prog.serialized_length(),
-            ProgramWitness::Opaque(vec) => vec.len(),
+            ProgramItem::Program(prog) => prog.serialized_length(),
+            ProgramItem::Bytecode(vec) => vec.len(),
         }
     }
 
-    /// Encodes a program witness into a buffer.
+    /// Encodes a program item into a buffer.
     pub fn encode(&self, buf: &mut Vec<u8>) {
+        println!("Top of ProgramItem encode()");
         match self {
-            ProgramWitness::Program(prog) => prog.encode(buf),
-            ProgramWitness::Opaque(bytes) => {
-                for i in bytes.iter() {
-                    buf.push(*i.borrow());
-                }
+            ProgramItem::Program(prog) => {
+                println!("Matched ProgramItem::Program");
+                prog.encode(buf)
+            },
+            ProgramItem::Bytecode(bytes) => {
+                println!("Matched ProgramItem::Bytecode");
+                buf.extend_from_slice(&bytes);
             }
+        }
+    }
+
+    /// Downcasts a program item into a program.
+    pub fn to_program(self) -> Result<Program, VMError> {
+        println!("Top of ProgramItem to_program()");
+        match self {
+            ProgramItem::Program(prog) => {
+                println!("Matched ProgramItem::Program");
+                Ok(prog)
+            },
+            ProgramItem::Bytecode(_) => {
+                println!("Matched ProgramItem::Bytecode");
+                return Err(VMError::TypeNotProgram)
+            },
         }
     }
 }
 
-impl MerkleItem for ProgramWitness {
+impl MerkleItem for ProgramItem {
     fn commit(&self, t: &mut Transcript) {
         match self {
-            ProgramWitness::Program(prog) => {
-                let mut buf = Vec::new();
-                prog.encode(&mut buf);
-                t.commit_bytes(b"program", &buf);
-            }
-            ProgramWitness::Opaque(bytes) => t.commit_bytes(b"program", &bytes),
+            ProgramItem::Program(prog) => prog.commit(t),
+            ProgramItem::Bytecode(bytes) => t.commit_bytes(b"program", &bytes),
         }
+    }
+}
+
+impl MerkleItem for Program {
+    fn commit(&self, t: &mut Transcript) {
+        let mut buf = Vec::new();
+        self.encode(&mut buf);
+        t.commit_bytes(b"program", &buf);
     }
 }

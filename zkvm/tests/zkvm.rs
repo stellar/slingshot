@@ -473,15 +473,15 @@ fn taproot_program_path() {
     let blinding_key = rand::thread_rng().gen::<[u8; 32]>();
     let tree = PredicateTree::new(Some(pk), vec![spend_prog], blinding_key).unwrap();
     let factor = tree.adjustment_factor();
-    let (call_proof, call_prog_wit) = tree.create_callproof_program(0).unwrap();
+    let (call_proof, call_prog) = tree.create_callproof_program(0).unwrap();
     let prev_output = make_output(qty, flavor, Predicate::Tree(tree));
 
     let prog = Program::build(|p| {
         p.push(secret_scalar)
             .push(Output::new(prev_output.clone()))
             .input()
-            .push(Data::CallProof(call_proof.clone()))
-            .push(Data::ProgramWitness(call_prog_wit.clone()))
+            .push(Data::Opaque(call_proof.to_bytes().clone()))
+            .push(Data::Program(call_prog.clone()))
             .call()
     });
     build_and_verify(prog, &vec![sk + factor]).unwrap();
@@ -490,8 +490,8 @@ fn taproot_program_path() {
         p.push(secret_scalar + Scalar::one())
             .push(Output::new(prev_output.clone()))
             .input()
-            .push(Data::CallProof(call_proof))
-            .push(Data::ProgramWitness(call_prog_wit.clone()))
+            .push(Data::Opaque(call_proof.to_bytes().clone()))
+            .push(Data::Program(call_prog))
             .call()
     });
     if build_and_verify(wrong_prog, &vec![sk + factor]).is_ok() {

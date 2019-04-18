@@ -59,8 +59,9 @@ impl<'t, 'g> Delegate<r1cs::Prover<'t, 'g>> for Prover<'t, 'g> {
     }
 
     fn new_run(&self, data: Data) -> Result<Self::RunType, VMError> {
+        println!("In ProverRun new_run()");
         Ok(ProverRun {
-            program: data.to_program()?.to_vec().into(),
+            program: data.to_program_item()?.to_program()?.to_vec().into(),
         })
     }
 
