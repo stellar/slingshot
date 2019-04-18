@@ -199,6 +199,11 @@ impl PredicateTree {
         &self,
         prog_index: usize,
     ) -> Result<(CallProof, Program), VMError> {
+        // The `prog_index` is used over the list of the programs,
+        // but the actual tree contains also contains blinding factors,
+        // so we need to adjust the index accordingly.
+        // Blinding factors are located randomly to the left or right of the program leaf,
+        // so we simply pick the left leaf, check it, and if it's not the program, pick the right one instead.
         let possible_leaf = self.get_leaf(2 * prog_index);
         let leaf_index = match possible_leaf {
             PredicateLeaf::Blinding(_) => 2 * prog_index + 1,
