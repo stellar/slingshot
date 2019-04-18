@@ -68,6 +68,7 @@ impl BlockHeader {
             self.timestamp_ms > prev.timestamp_ms,
             BlockchainError::BadBlockTimestamp,
         )?;
+        // TODO: execute transaction list and verify txroot
         Ok(())
     }
 }
