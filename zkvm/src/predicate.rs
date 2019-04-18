@@ -40,6 +40,7 @@ pub struct PredicateTree {
     leaves: Vec<PredicateLeaf>,
     /// Verification key for the tree.
     key: VerificationKey,
+    /// Random seed from which we derive individual blinding factors for each leaf program.
     blinding_key: [u8; 32],
     // We precompute the tweaked aggregated signing key when composing it via `Predicate::tree()`,
     // so that we can keep `to_point`/`encode` methods non-failable across all types.
