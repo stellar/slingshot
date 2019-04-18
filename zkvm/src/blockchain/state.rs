@@ -66,7 +66,7 @@ impl BlockchainState {
 
     fn apply_txlogs<I>(&mut self, txlist: I) -> Result<(), VMError>
     where
-        I: Iterator,
+        I: IntoIterator,
         I::Item: Borrow<TxLog>,
     {
         for txlog in txlist {
