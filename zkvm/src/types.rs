@@ -10,7 +10,7 @@ use crate::contract::{Contract, Output, PortableItem};
 use crate::encoding::SliceReader;
 use crate::errors::VMError;
 use crate::predicate::Predicate;
-use crate::program::Program;
+use crate::program::{Program, ProgramItem};
 use crate::scalar_witness::ScalarWitness;
 use crate::transcript::TranscriptProtocol;
 
@@ -186,15 +186,6 @@ impl Data {
         }
     }
 
-    /// Downcast the data item to a `Program` type.
-    pub fn to_program(self) -> Result<Program, VMError> {
-        match self {
-            Data::Opaque(data) => Program::parse(&data),
-            Data::Program(program) => Ok(program),
-            _ => Err(VMError::TypeNotProgram),
-        }
-    }
-
     /// Downcast the data item to a `Commitment` type.
     pub fn to_commitment(self) -> Result<Commitment, VMError> {
         match self {
@@ -225,6 +216,15 @@ impl Data {
             }
             Data::Scalar(scalar_witness) => Ok(*scalar_witness),
             _ => Err(VMError::TypeNotScalar),
+        }
+    }
+
+    /// Downcast the data item to a `ProgramItem` type.
+    pub fn to_program_item(self) -> Result<ProgramItem, VMError> {
+        match self {
+            Data::Opaque(data) => Ok(ProgramItem::Bytecode(data)),
+            Data::Program(prog) => Ok(ProgramItem::Program(prog)),
+            _ => Err(VMError::TypeNotProgramItem),
         }
     }
 

@@ -18,7 +18,8 @@ use crate::encoding::SliceReader;
 use crate::errors::VMError;
 use crate::ops::Instruction;
 use crate::point_ops::PointOp;
-use crate::predicate::Predicate;
+use crate::predicate::{CallProof, Predicate};
+use crate::program::ProgramItem;
 use crate::scalar_witness::ScalarWitness;
 use crate::txlog::{Entry, TxID, TxLog};
 use crate::types::*;
@@ -223,7 +224,7 @@ pub(crate) trait Delegate<CS: r1cs::ConstraintSystem> {
     fn next_instruction(&mut self, run: &mut Self::RunType)
         -> Result<Option<Instruction>, VMError>;
 
-    fn new_run(&self, prog: Data) -> Result<Self::RunType, VMError>;
+    fn new_run(&self, prog: ProgramItem) -> Result<Self::RunType, VMError>;
 }
 
 impl<'d, CS, D> VM<'d, CS, D>
@@ -317,7 +318,6 @@ where
                 Instruction::Log => self.log()?,
                 Instruction::Signtx => self.signtx()?,
                 Instruction::Call => self.call()?,
-                Instruction::Select(n, k) => self.select(n, k)?,
                 Instruction::Delegate => self.delegate()?,
                 Instruction::Ext(opcode) => self.ext(opcode)?,
             }
@@ -696,17 +696,16 @@ where
     }
 
     fn call(&mut self) -> Result<(), VMError> {
-        // Pop program, blinding factor, contract, and predicate
-        let prog = self.pop_item()?.to_data()?;
-        let blinding = self.pop_item()?.to_data()?;
+        // Pop program, call proof, and contract
+        let program_item = self.pop_item()?.to_data()?.clone().to_program_item()?;
+        let call_proof_bytes = self.pop_item()?.to_data()?.to_bytes();
+        let call_proof = SliceReader::parse(&call_proof_bytes, |r| CallProof::decode(r))?;
         let contract = self.pop_item()?.to_contract()?;
         let predicate = contract.predicate;
 
-        // 0 = -P + h(prog) * B2
-        self.delegate.verify_point_op(|| {
-            predicate
-                .prove_program_predicate(&prog.clone().to_bytes(), &blinding.clone().to_bytes())
-        })?;
+        // 0 == -P + X + h1(X, M)*B
+        self.delegate
+            .verify_point_op(|| predicate.prove_taproot(&program_item, &call_proof))?;
 
         // Place contract payload on the stack
         for item in contract.payload.into_iter() {
@@ -714,26 +713,7 @@ where
         }
 
         // Replace current program with new program
-        self.continue_with_program(prog)?;
-        Ok(())
-    }
-
-    fn select(&mut self, n: u8, k: u8) -> Result<(), VMError> {
-        if k >= n {
-            return Err(VMError::PredicateIndexInvalid);
-        }
-
-        let mut preds: Vec<Predicate> = Vec::with_capacity(n as usize);
-        for _ in 0..n {
-            preds.insert(0, self.pop_item()?.to_data()?.to_predicate()?);
-        }
-        let mut contract = self.pop_item()?.to_contract()?;
-        let p = &contract.predicate;
-        self.delegate
-            .verify_point_op(|| p.prove_disjunction(&preds))?;
-
-        contract.predicate = preds.remove(k as usize);
-        self.push_item(contract);
+        self.continue_with_program(program_item)?;
         Ok(())
     }
 
@@ -763,7 +743,7 @@ where
             .verify_point_op(|| signature.verify(&mut t, verification_key).into())?;
 
         // Replace current program with new program
-        self.continue_with_program(prog)?;
+        self.continue_with_program(prog.to_program_item()?)?;
         Ok(())
     }
 
@@ -838,7 +818,7 @@ where
         ))
     }
 
-    fn continue_with_program(&mut self, prog: Data) -> Result<(), VMError> {
+    fn continue_with_program(&mut self, prog: ProgramItem) -> Result<(), VMError> {
         let new_run = self.delegate.new_run(prog)?;
         let paused_run = mem::replace(&mut self.current_run, new_run);
         self.run_stack.push(paused_run);

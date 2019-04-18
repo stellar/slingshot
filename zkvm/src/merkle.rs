@@ -60,13 +60,12 @@ impl MerkleTree {
         Ok(result)
     }
 
-    /// Verifies the Merkle path for an item givne the path and the Merkle root.
-    pub fn verify_path<M: MerkleItem>(
+    /// Computes the Merkle root, given the Merkle path.
+    pub fn compute_root_from_path<M: MerkleItem>(
         label: &'static [u8],
         entry: &M,
-        proof: Vec<MerkleNeighbor>,
-        root: &[u8; 32],
-    ) -> Result<(), VMError> {
+        proof: &Vec<MerkleNeighbor>,
+    ) -> [u8; 32] {
         let transcript = Transcript::new(label);
         let mut result = [0u8; 32];
         Self::leaf(transcript.clone(), entry, &mut result);
@@ -85,6 +84,17 @@ impl MerkleTree {
                 }
             }
         }
+        result
+    }
+
+    /// Verifies the Merkle path for an item given the path and the Merkle root.
+    pub fn verify_path<M: MerkleItem>(
+        label: &'static [u8],
+        entry: &M,
+        proof: Vec<MerkleNeighbor>,
+        root: &[u8; 32],
+    ) -> Result<(), VMError> {
+        let result = Self::compute_root_from_path(label, entry, &proof);
         if result.ct_eq(root).unwrap_u8() == 1 {
             Ok(())
         } else {

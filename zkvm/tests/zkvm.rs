@@ -2,10 +2,11 @@ use bulletproofs::{BulletproofGens, PedersenGens};
 use curve25519_dalek::constants::RISTRETTO_BASEPOINT_COMPRESSED;
 use curve25519_dalek::scalar::Scalar;
 use musig::{Signature, VerificationKey};
+use rand::Rng;
 
 use zkvm::{
-    Anchor, Commitment, Contract, Data, Output, PortableItem, Predicate, Program, Prover, TxHeader,
-    TxID, VMError, Value, Verifier,
+    Anchor, Commitment, Contract, Data, Output, PortableItem, Predicate, PredicateTree, Program,
+    Prover, TxHeader, TxID, VMError, Value, Verifier,
 };
 
 use zkvm::keys;
@@ -440,79 +441,59 @@ fn spend_with_secret_scalar(qty: u64, flavor: Scalar, pred: Predicate, secret: S
 }
 
 #[test]
-fn predicate_disjunction_happy_path() {
-    let (key_pred, key_scalar) = generate_predicate();
-    let (output_pred, _) = generate_predicate();
-
-    // Generate program predicate
-    let secret_scalar = Scalar::from(101u64);
-    let (qty, flavor) = (10u64, Scalar::from(1u64));
-    let program_pred = Predicate::unblinded_program(spend_with_secret_scalar(
-        qty,
-        flavor,
-        output_pred.clone(),
-        secret_scalar,
-    ));
-
-    // Make disjunction and output
-    let disjunction = Predicate::disjunction(vec![key_pred.clone(), program_pred.clone()]).unwrap();
-    let prev_output = make_output(qty, flavor, disjunction.clone());
+fn taproot_happy_path() {
+    let sk = Scalar::from(24u64);
+    let pk = VerificationKey::from_secret(&sk);
+    let pred_tree = PredicateTree::new(Some(pk), vec![], [0u8; 32]).unwrap();
+    let factor = pred_tree.adjustment_factor();
+    let prev_output = make_output(101u64, Scalar::from(1u64), Predicate::Tree(pred_tree));
 
     let prog = Program::build(|p| {
         p.push(Output::new(prev_output))
             .input()
-            .push(key_pred)
-            .push(program_pred)
-            .select(2, 0)
             .sign_tx()
-            .cloak_helper(1, vec![(qty, flavor)])
-            .output_helper(output_pred)
+            .push(Predicate::Key(pk)) // send to the key
+            .output(1)
     });
-    build_and_verify(prog, &vec![key_scalar]).unwrap();
+
+    build_and_verify(prog, &vec![sk + factor]).unwrap();
 }
 
 #[test]
-fn predicate_disjunction_program_path() {
-    let (key_pred, key_scalar) = generate_predicate();
+fn taproot_program_path() {
+    let sk = Scalar::from(24u64);
+    let pk = VerificationKey::from_secret(&sk);
+
+    let (qty, flavor) = (101u64, Scalar::from(1u64));
     let (output_pred, _) = generate_predicate();
-
-    // Quantity, flavor
-    let (qty, flavor) = (10u64, Scalar::from(1u64));
-
-    // Generate program predicate
     let secret_scalar = Scalar::from(101u64);
     let spend_prog = spend_with_secret_scalar(qty, flavor, output_pred.clone(), secret_scalar);
-    let program_pred = Predicate::unblinded_program(spend_prog.clone());
 
-    // Make disjunction and output
-    let disjunction = Predicate::disjunction(vec![key_pred.clone(), program_pred.clone()]).unwrap();
-    let prev_output = make_output(qty, flavor, disjunction.clone());
+    let blinding_key = rand::thread_rng().gen::<[u8; 32]>();
+    let tree = PredicateTree::new(Some(pk), vec![spend_prog], blinding_key).unwrap();
+    let factor = tree.adjustment_factor();
+    let (call_proof, call_prog) = tree.create_callproof(0).unwrap();
+    let prev_output = make_output(qty, flavor, Predicate::Tree(tree));
 
     let prog = Program::build(|p| {
         p.push(secret_scalar)
             .push(Output::new(prev_output.clone()))
             .input()
-            .push(key_pred.clone())
-            .push(program_pred.clone())
-            .select(2, 1)
-            .push(Data::Opaque(Vec::new()))
-            .push(spend_prog.clone())
+            .push(Data::Opaque(call_proof.to_bytes().clone()))
+            .push(Data::Program(call_prog.clone()))
             .call()
     });
-    build_and_verify(prog, &vec![key_scalar]).unwrap();
+    build_and_verify(prog, &vec![sk + factor]).unwrap();
 
     let wrong_prog = Program::build(|p| {
         p.push(secret_scalar + Scalar::one())
-            .push(Output::new(prev_output))
+            .push(Output::new(prev_output.clone()))
             .input()
-            .push(key_pred)
-            .push(program_pred)
-            .select(2, 1)
-            .push(Data::Opaque(Vec::new()))
-            .push(spend_prog)
+            .push(Data::Opaque(call_proof.to_bytes().clone()))
+            .push(Data::Program(call_prog))
             .call()
     });
-    if build_and_verify(wrong_prog, &vec![key_scalar]).is_ok() {
+    if build_and_verify(wrong_prog, &vec![sk + factor]).is_ok() {
         panic!("Unlocking input with incorrect secret scalar should have failed but didn't");
     }
 }

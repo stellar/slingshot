@@ -1,16 +1,28 @@
 use crate::encoding::SliceReader;
 use crate::errors::VMError;
+use crate::merkle::MerkleItem;
 use crate::ops::Instruction;
-use crate::predicate::Predicate;
+use crate::predicate::PredicateTree;
 use crate::scalar_witness::ScalarWitness;
 use crate::types::Data;
+
 use core::borrow::Borrow;
+use merlin::Transcript;
 use spacesuit::BitRange;
 
 /// A builder type for assembling a sequence of `Instruction`s with chained method calls.
 /// E.g. `let prog = Program::new().push(...).input().push(...).output(1).to_vec()`.
 #[derive(Clone, Debug)]
 pub struct Program(Vec<Instruction>);
+
+/// Represents a view of a program.
+#[derive(Clone, Debug)]
+pub enum ProgramItem {
+    /// `ProgramItem::Bytecode` represents the verifier's view - a Vector of bytecode-as-is.
+    Bytecode(Vec<u8>),
+    /// `ProgramItem::Program` represents the prover's view - a Program struct.
+    Program(Program),
+}
 
 macro_rules! def_op {
     ($func_name:ident, $op:ident) => (
@@ -64,7 +76,6 @@ impl Program {
     def_op!(range, Range, BitRange);
     def_op!(retire, Retire);
     def_op!(roll, Roll, usize);
-    def_op!(select, Select, u8, u8);
     def_op!(sign_tx, Signtx);
     def_op!(unblind, Unblind);
     def_op!(var, Var);
@@ -86,16 +97,16 @@ impl Program {
         program
     }
 
-    /// Creates a program from parsing the opaque data slice of encoded instructions.
-    pub(crate) fn parse(data: &[u8]) -> Result<Self, VMError> {
-        SliceReader::parse(data, |r| {
-            let mut program = Self::new();
-            while r.len() > 0 {
-                program.0.push(Instruction::parse(r)?);
-            }
-            Ok(program)
-        })
-    }
+    // /// Creates a program from parsing the Bytecode data slice of encoded instructions.
+    // pub(crate) fn parse(data: &[u8]) -> Result<Self, VMError> {
+    //     SliceReader::parse(data, |r| {
+    //         let mut program = Self::new();
+    //         while r.len() > 0 {
+    //             program.0.push(Instruction::parse(r)?);
+    //         }
+    //         Ok(program)
+    //     })
+    // }
 
     /// Converts the program to a plain vector of instructions.
     pub fn to_vec(self) -> Vec<Instruction> {
@@ -120,56 +131,72 @@ impl Program {
         self
     }
 
-    /// Takes predicate and closure to add choose operations for
-    /// predicate tree traversal.
-    pub fn choose_predicate<F, T>(
+    /// Takes predicate tree and index of program in Merkle tree to verify
+    /// the program's membership in that Merkle tree and call the program.
+    pub fn choose_call(
         &mut self,
-        pred: Predicate,
-        choose_fn: F,
-    ) -> Result<&mut Program, VMError>
-    where
-        F: FnOnce(PredicateTree) -> Result<T, VMError>,
-    {
-        choose_fn(PredicateTree {
-            prog: self,
-            pred: pred,
-        })?;
+        pred_tree: PredicateTree,
+        prog_index: usize,
+    ) -> Result<&mut Program, VMError> {
+        let (call_proof, program) = pred_tree.create_callproof(prog_index)?;
+        self.push(Data::Opaque(call_proof.to_bytes()))
+            .push(Data::Program(program))
+            .call();
         Ok(self)
     }
 }
 
-/// Adds data and instructions to traverse a predicate tree.
-pub struct PredicateTree<'a> {
-    prog: &'a mut Program,
-    pred: Predicate,
-}
-
-impl<'a> PredicateTree<'a> {
-    /// Kth Predicate branch
-    pub fn select(self, k: usize) -> Result<Self, VMError> {
-        let preds = self.pred.to_disjunction()?;
-        let n = preds.len();
-        let selected = preds[k].clone();
-        if k >= n {
-            return Err(VMError::PredicateIndexInvalid);
+impl ProgramItem {
+    /// Returns the number of bytes needed to serialize the ProgramItem.
+    pub fn serialized_length(&self) -> usize {
+        match self {
+            ProgramItem::Program(prog) => prog.serialized_length(),
+            ProgramItem::Bytecode(vec) => vec.len(),
         }
-        let prog = self.prog;
-        for pred in preds.iter() {
-            prog.push(pred.as_opaque());
-        }
-        prog.select(n as u8, k as u8);
-        Ok(Self {
-            pred: selected,
-            prog,
-        })
     }
 
-    /// Pushes program to the stack and calls the contract protected
-    /// by the program predicate.
-    pub fn call(self) -> Result<(), VMError> {
-        let (subprog, blinding) = self.pred.to_program()?;
-        self.prog.push(Data::Opaque(blinding)).call();
-        self.prog.push(subprog).call();
-        Ok(())
+    /// Encodes a program item into a buffer.
+    pub fn encode(&self, buf: &mut Vec<u8>) {
+        match self {
+            ProgramItem::Program(prog) => prog.encode(buf),
+            ProgramItem::Bytecode(bytes) => {
+                buf.extend_from_slice(&bytes);
+            }
+        }
+    }
+
+    /// Downcasts a program item into a program.
+    pub fn to_program(self) -> Result<Program, VMError> {
+        match self {
+            ProgramItem::Program(prog) => Ok(prog),
+            ProgramItem::Bytecode(_) => return Err(VMError::TypeNotProgram),
+        }
+    }
+
+    /// Downcasts a program item into a vector of bytes.
+    /// Fails if called on a non-opaque `ProgramItem::Program`.
+    /// Use `encode` method to serialize both opaque/nonopaque programs.
+    pub fn to_bytecode(self) -> Result<Vec<u8>, VMError> {
+        match self {
+            ProgramItem::Program(_) => return Err(VMError::TypeNotProgram),
+            ProgramItem::Bytecode(bytes) => Ok(bytes),
+        }
+    }
+}
+
+impl MerkleItem for ProgramItem {
+    fn commit(&self, t: &mut Transcript) {
+        match self {
+            ProgramItem::Program(prog) => prog.commit(t),
+            ProgramItem::Bytecode(bytes) => t.commit_bytes(b"program", &bytes),
+        }
+    }
+}
+
+impl MerkleItem for Program {
+    fn commit(&self, t: &mut Transcript) {
+        let mut buf = Vec::new();
+        self.encode(&mut buf);
+        t.commit_bytes(b"program", &buf);
     }
 }

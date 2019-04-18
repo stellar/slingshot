@@ -10,9 +10,8 @@ use crate::errors::VMError;
 use crate::ops::Instruction;
 use crate::point_ops::PointOp;
 use crate::predicate::Predicate;
-use crate::program::Program;
+use crate::program::{Program, ProgramItem};
 use crate::txlog::{TxID, TxLog};
-use crate::types::Data;
 use crate::vm::{Delegate, Tx, TxHeader, VM};
 /// This is the entry point API for creating a transaction.
 /// Prover passes the list of instructions through the VM,
@@ -58,7 +57,7 @@ impl<'t, 'g> Delegate<r1cs::Prover<'t, 'g>> for Prover<'t, 'g> {
         Ok(run.program.pop_front())
     }
 
-    fn new_run(&self, data: Data) -> Result<Self::RunType, VMError> {
+    fn new_run(&self, data: ProgramItem) -> Result<Self::RunType, VMError> {
         Ok(ProverRun {
             program: data.to_program()?.to_vec().into(),
         })

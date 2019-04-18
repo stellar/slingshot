@@ -60,6 +60,10 @@ pub enum VMError {
     #[fail(display = "Item is not an output.")]
     TypeNotOutput,
 
+    /// This error occurs whn an instruction requires a call proof data type.
+    #[fail(display = "Item is not a call proof.")]
+    TypeNotCallProof,
+
     /// This error occurs when an instruction requires a constraint type.
     #[fail(display = "Item is not a constraint.")]
     TypeNotConstraint,
@@ -68,9 +72,13 @@ pub enum VMError {
     #[fail(display = "Item is not a scalar.")]
     TypeNotScalar,
 
-    /// This errors occurs when an instruction expects a predicate disjunction type.
-    #[fail(display = "Item is not a disjunction.")]
-    TypeNotDisjunction,
+    /// This error occurs when an instruction requires a program item.
+    #[fail(display = "Item is not a program item.")]
+    TypeNotProgramItem,
+
+    /// This error occurs when an instruction expects a predicate tree type.
+    #[fail(display = "Item is not a predicate tree.")]
+    TypeNotPredicateTree,
 
     /// This error occurs when an instruction expects a key type.
     #[fail(display = "Item is not a key.")]
@@ -143,9 +151,9 @@ pub enum VMError {
     #[fail(display = "Invalid Merkle proof.")]
     InvalidMerkleProof,
 
-    /// This error occurs when the an index of a selected predicate is invalid.
-    #[fail(display = "Predicate index out of bounds")]
-    PredicateIndexInvalid,
+    /// This error occurs when the predicate tree cannot be constructed.
+    #[fail(display = "Invalid predicate tree.")]
+    InvalidPredicateTree,
 
     /// This error occurs when a function is called with bad arguments.
     #[fail(display = "Bad arguments")]
