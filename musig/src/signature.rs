@@ -1,3 +1,4 @@
+use super::context::{Multimessage, MusigContext};
 use super::counterparty::NonceCommitment;
 use super::deferred_verification::DeferredVerification;
 use super::errors::MusigError;
@@ -61,6 +62,33 @@ impl Signature {
             static_point_weight: -self.s,
             dynamic_point_weights: vec![(Scalar::one(), self.R), (c, X.into_compressed())],
         }
+    }
+
+    /// Verifies a signature for a multimessage context
+    pub fn verify_multi<M: AsRef<[u8]>>(
+        &self,
+        transcript: &mut Transcript,
+        messages: Vec<(VerificationKey, M)>,
+    ) -> DeferredVerification {
+        let context = Multimessage::new(messages);
+
+        // Form the final linear combination:
+        // `s * G = R + sum{c_i * X_i}`
+        //      ->
+        // `0 == (-s * G) + (1 * R) + sum{c_i * X_i}`
+        let mut result = DeferredVerification {
+            static_point_weight: -self.s,
+            dynamic_point_weights: Vec::with_capacity(context.len() + 1),
+        };
+
+        result.dynamic_point_weights.push((Scalar::one(), self.R));
+
+        for i in 0..context.len() {
+            let c_i = context.challenge(i, transcript);
+            result.dynamic_point_weights.push((c_i, context.key(i).0));
+        }
+
+        result
     }
 
     /// Decodes a signature from 64-byte array.

@@ -62,11 +62,8 @@ impl Party {
         // Make H(R_i)
         let precommitment = R_i.precommit();
 
-        let counterparties = context
-            .pubkeys()
-            .iter()
-            .enumerate()
-            .map(|(i, pubkey)| Counterparty::new(i, *pubkey))
+        let counterparties = (0..context.len())
+            .map(|i| Counterparty::new(i, context.key(i)))
             .collect();
 
         (

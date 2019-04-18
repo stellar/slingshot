@@ -14,8 +14,11 @@ pub trait MusigContext {
     /// and returns the suitable challenge for that public key.
     fn challenge(&self, index: usize, transcript: &mut Transcript) -> Scalar;
 
-    /// Returns the associated public keys.
-    fn pubkeys(&self) -> Vec<VerificationKey>;
+    /// Length of the number of pubkeys in the context
+    fn len(&self) -> usize;
+
+    /// Returns the pubkey for the index i
+    fn key(&self, index: usize) -> VerificationKey;
 }
 
 /// MuSig aggregated key context
@@ -109,8 +112,12 @@ impl MusigContext for Multikey {
         c * a_i
     }
 
-    fn pubkeys(&self) -> Vec<VerificationKey> {
-        self.public_keys.clone()
+    fn len(&self) -> usize {
+        self.public_keys.len()
+    }
+
+    fn key(&self, index: usize) -> VerificationKey {
+        self.public_keys[index]
     }
 }
 
@@ -133,15 +140,16 @@ impl<M: AsRef<[u8]>> MusigContext for Multimessage<M> {
     fn challenge(&self, i: usize, transcript: &mut Transcript) -> Scalar {
         let mut transcript_i = transcript.clone();
         transcript_i.commit_u64(b"i", i as u64);
-        let c = transcript_i.challenge_scalar(b"c");
+        transcript_i.challenge_scalar(b"c")
 
-        // This domain separates the main transcript from the transcript
-        // used to generate the challenge scalar.
-        transcript.commit_bytes(b"dom-sep", b"Musig.Multimessage.boundary");
-        c
+        // TBD: Do we want to add a domain separator to the transcript?
     }
 
-    fn pubkeys(&self) -> Vec<VerificationKey> {
-        self.pairs.iter().map(|(key, _)| *key).collect()
+    fn len(&self) -> usize {
+        self.pairs.len()
+    }
+
+    fn key(&self, index: usize) -> VerificationKey {
+        self.pairs[index].0
     }
 }

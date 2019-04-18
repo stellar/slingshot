@@ -59,11 +59,11 @@ Functions:
 - `Multikey::commit(&self, &mut transcript)`: Commits `self.aggregated_key` to the input `transcript` with label "X".
 
 - `Multikey::challenge(&self, &verification_key, &mut transcript) -> Scalar`: 
-  Computes challenge `c_i = a_i * c`, where `a_i = H_agg(<L>, X_i)` and `c = H_sig(X, R, m)`.
+  Computes challenge `c_i = a_i * c`, where `a_i = H_agg(<L>, i)` and `c = H_sig(X, R, m)`.
 
   For calculating `a_i`, `<L>` (the list of pubkeys that go into the aggregated pubkey)
   has already been committed into `self.transcript`. Therefore this function simply clones `self.transcript`, 
-  commits the verification key (`X_i`) into the transcript with label "X_i", 
+  commits the index of the party (`i`) into the transcript with label "i", 
   and then squeezes the challenge scalar `a_i` from the transcript with label "a_i".
 
   For calculating `c`: the message `m`, the nonce commitment sum `R`, and the aggregated key `X` 
