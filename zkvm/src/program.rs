@@ -157,9 +157,7 @@ impl ProgramItem {
     /// Encodes a program item into a buffer.
     pub fn encode(&self, buf: &mut Vec<u8>) {
         match self {
-            ProgramItem::Program(prog) => {
-                prog.encode(buf)
-            },
+            ProgramItem::Program(prog) => prog.encode(buf),
             ProgramItem::Bytecode(bytes) => {
                 buf.extend_from_slice(&bytes);
             }
@@ -169,12 +167,8 @@ impl ProgramItem {
     /// Downcasts a program item into a program.
     pub fn to_program(self) -> Result<Program, VMError> {
         match self {
-            ProgramItem::Program(prog) => {
-                Ok(prog)
-            },
-            ProgramItem::Bytecode(_) => {
-                return Err(VMError::TypeNotProgram)
-            },
+            ProgramItem::Program(prog) => Ok(prog),
+            ProgramItem::Bytecode(_) => return Err(VMError::TypeNotProgram),
         }
     }
 

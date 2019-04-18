@@ -328,7 +328,7 @@ impl PredicateLeaf {
     pub fn to_program(self) -> Result<Program, VMError> {
         match self {
             PredicateLeaf::Program(p) => p.to_program(),
-            _ =>  Err(VMError::TypeNotProgram),
+            _ => Err(VMError::TypeNotProgram),
         }
     }
 }
