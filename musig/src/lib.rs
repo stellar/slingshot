@@ -5,6 +5,7 @@
 #[macro_use]
 extern crate failure;
 
+mod context;
 mod counterparty;
 mod deferred_verification;
 mod key;

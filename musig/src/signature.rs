@@ -149,8 +149,8 @@ mod tests {
         let multikey = multikey_helper(&priv_keys);
 
         let expected_pubkey = CompressedRistretto::from_slice(&[
-            60, 118, 86, 112, 148, 29, 45, 106, 212, 7, 119, 198, 76, 112, 161, 226, 21, 242, 242,
-            170, 66, 127, 36, 62, 160, 233, 199, 29, 206, 18, 250, 67,
+            224, 55, 123, 145, 179, 165, 49, 222, 32, 55, 98, 22, 171, 85, 86, 8, 136, 50, 15, 199,
+            239, 6, 119, 17, 228, 9, 231, 89, 28, 228, 113, 87,
         ]);
 
         assert_eq!(expected_pubkey, multikey.aggregated_key().into_compressed());
@@ -197,7 +197,8 @@ mod tests {
             .clone()
             .into_iter()
             .zip(transcripts.iter_mut())
-            .map(|(x_i, transcript)| Party::new(transcript, x_i, multikey.clone(), pubkeys.clone()))
+            .enumerate()
+            .map(|(i, (x_i, transcript))| Party::new(transcript, i, x_i, multikey.clone()))
             .unzip();
 
         let (parties, comms): (Vec<_>, Vec<_>) = parties
@@ -212,7 +213,7 @@ mod tests {
 
         let signatures: Vec<Signature> = parties
             .into_iter()
-            .map(|p: PartyAwaitingShares| p.receive_shares(shares.clone()).unwrap())
+            .map(|p| p.receive_shares(shares.clone()).unwrap())
             .collect();
 
         // Check that signatures from all parties are the same

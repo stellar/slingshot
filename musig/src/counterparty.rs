@@ -36,22 +36,25 @@ impl NonceCommitment {
 }
 
 pub struct Counterparty {
+    position: usize,
     pubkey: VerificationKey,
 }
 
 pub struct CounterpartyPrecommitted {
     precommitment: NoncePrecommitment,
+    position: usize,
     pubkey: VerificationKey,
 }
 
 pub struct CounterpartyCommitted {
     commitment: NonceCommitment,
+    position: usize,
     pubkey: VerificationKey,
 }
 
 impl Counterparty {
-    pub(super) fn new(pubkey: VerificationKey) -> Self {
-        Counterparty { pubkey }
+    pub(super) fn new(position: usize, pubkey: VerificationKey) -> Self {
+        Counterparty { position, pubkey }
     }
 
     pub(super) fn precommit_nonce(
@@ -60,6 +63,7 @@ impl Counterparty {
     ) -> CounterpartyPrecommitted {
         CounterpartyPrecommitted {
             precommitment,
+            position: self.position,
             pubkey: self.pubkey,
         }
     }
@@ -81,13 +85,14 @@ impl CounterpartyPrecommitted {
 
         Ok(CounterpartyCommitted {
             commitment: commitment,
+            position: self.position,
             pubkey: self.pubkey,
         })
     }
 }
 
 impl CounterpartyCommitted {
-    pub(super) fn sign<C: MusigContext>(
+    pub(super) fn check_share<C: MusigContext>(
         self,
         share: Scalar,
         context: &C,
@@ -101,7 +106,7 @@ impl CounterpartyCommitted {
         //   a_i = multikey.factor_for_key(self.pubkey)
         //   X_i = self.pubkey
         let S_i = share * RISTRETTO_BASEPOINT_POINT;
-        let c_i = context.challenge(&self.pubkey, &mut transcript.clone());
+        let c_i = context.challenge(self.position, &mut transcript.clone());
         let X_i = self.pubkey.into_point();
 
         if S_i != self.commitment.0 + c_i * X_i {

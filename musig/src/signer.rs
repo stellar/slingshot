@@ -1,6 +1,6 @@
 use super::counterparty::*;
 use super::errors::MusigError;
-use super::key::{Multikey, MusigContext, VerificationKey};
+use super::key::MusigContext;
 use super::signature::Signature;
 use super::transcript::TranscriptProtocol;
 use curve25519_dalek::constants::RISTRETTO_BASEPOINT_POINT;
@@ -13,9 +13,10 @@ use rand;
 pub struct Party {}
 
 /// State of the party when awaiting nonce precommitments from other parties.
-pub struct PartyAwaitingPrecommitments<'t> {
+pub struct PartyAwaitingPrecommitments<'t, C: MusigContext> {
     transcript: &'t mut Transcript,
-    multikey: Multikey,
+    context: C,
+    position: usize,
     x_i: Scalar,
     r_i: Scalar,
     R_i: NonceCommitment,
@@ -23,32 +24,32 @@ pub struct PartyAwaitingPrecommitments<'t> {
 }
 
 /// State of the party when awaiting nonce commitments from other parties.
-pub struct PartyAwaitingCommitments<'t> {
+pub struct PartyAwaitingCommitments<'t, C: MusigContext> {
     transcript: &'t mut Transcript,
-    multikey: Multikey,
+    context: C,
+    position: usize,
     x_i: Scalar,
     r_i: Scalar,
     counterparties: Vec<CounterpartyPrecommitted>,
 }
 
 /// State of the party when awaiting signature shares from other parties.
-pub struct PartyAwaitingShares {
+pub struct PartyAwaitingShares<C: MusigContext> {
     transcript: Transcript,
-    multikey: Multikey,
+    context: C,
     R: RistrettoPoint,
     counterparties: Vec<CounterpartyCommitted>,
 }
 
 impl Party {
     /// Create new signing party for a given transcript.
-    pub fn new<'t>(
+    pub fn new<'t, C: MusigContext>(
         // The message `m` has already been fed into the transcript
         transcript: &'t mut Transcript,
+        position: usize,
         x_i: Scalar,
-        multikey: Multikey,
-        // TBD: move this inside Multikey API to avoid such redundancy.
-        pubkeys: Vec<VerificationKey>,
-    ) -> (PartyAwaitingPrecommitments<'t>, NoncePrecommitment) {
+        context: C,
+    ) -> (PartyAwaitingPrecommitments<'t, C>, NoncePrecommitment) {
         let mut rng = transcript
             .build_rng()
             .commit_witness_bytes(b"x_i", &x_i.to_bytes())
@@ -61,15 +62,18 @@ impl Party {
         // Make H(R_i)
         let precommitment = R_i.precommit();
 
-        let counterparties = pubkeys
+        let counterparties = context
+            .pubkeys()
             .iter()
-            .map(|pubkey| Counterparty::new(*pubkey))
+            .enumerate()
+            .map(|(i, pubkey)| Counterparty::new(i, *pubkey))
             .collect();
 
         (
             PartyAwaitingPrecommitments {
                 transcript,
-                multikey,
+                context,
+                position,
                 x_i,
                 r_i,
                 R_i,
@@ -80,12 +84,12 @@ impl Party {
     }
 }
 
-impl<'t> PartyAwaitingPrecommitments<'t> {
+impl<'t, C: MusigContext> PartyAwaitingPrecommitments<'t, C> {
     /// Provide nonce precommitments to the party and transition to the next round.
     pub fn receive_precommitments(
         self,
         nonce_precommitments: Vec<NoncePrecommitment>,
-    ) -> (PartyAwaitingCommitments<'t>, NonceCommitment) {
+    ) -> (PartyAwaitingCommitments<'t, C>, NonceCommitment) {
         let counterparties = self
             .counterparties
             .into_iter()
@@ -96,7 +100,8 @@ impl<'t> PartyAwaitingPrecommitments<'t> {
         (
             PartyAwaitingCommitments {
                 transcript: self.transcript,
-                multikey: self.multikey,
+                context: self.context,
+                position: self.position,
                 x_i: self.x_i,
                 r_i: self.r_i,
                 counterparties,
@@ -106,13 +111,13 @@ impl<'t> PartyAwaitingPrecommitments<'t> {
     }
 }
 
-impl<'t> PartyAwaitingCommitments<'t> {
+impl<'t, C: MusigContext> PartyAwaitingCommitments<'t, C> {
     /// Provide nonce commitments to the party and transition to the next round
     /// if they match the precommitments.
     pub fn receive_commitments(
         mut self,
         nonce_commitments: Vec<NonceCommitment>,
-    ) -> Result<(PartyAwaitingShares, Scalar), MusigError> {
+    ) -> Result<(PartyAwaitingShares<C>, Scalar), MusigError> {
         // Make R = sum_i(R_i). nonce_commitments = R_i from all the parties.
         let R = NonceCommitment::sum(&nonce_commitments);
 
@@ -125,7 +130,7 @@ impl<'t> PartyAwaitingCommitments<'t> {
             .collect::<Result<_, _>>()?;
 
         // Commit the context with label "X", and commit the nonce sum with label "R"
-        self.multikey.commit(&mut self.transcript);
+        self.context.commit(&mut self.transcript);
         self.transcript.commit_point(b"R", &R.compress());
 
         // Make a copy of the transcript for extracting the challenge c_i.
@@ -134,8 +139,7 @@ impl<'t> PartyAwaitingCommitments<'t> {
         let transcript = self.transcript.clone();
 
         // Get per-party challenge c_i
-        let X_i = VerificationKey::from(self.x_i * RISTRETTO_BASEPOINT_POINT);
-        let c_i = self.multikey.challenge(&X_i, &mut self.transcript);
+        let c_i = self.context.challenge(self.position, &mut self.transcript);
 
         // Generate share: s_i = r_i + c * a_i * x_i
         let s_i = self.r_i + c_i * self.x_i;
@@ -144,7 +148,7 @@ impl<'t> PartyAwaitingCommitments<'t> {
         Ok((
             PartyAwaitingShares {
                 transcript,
-                multikey: self.multikey,
+                context: self.context,
                 R,
                 counterparties,
             },
@@ -153,7 +157,7 @@ impl<'t> PartyAwaitingCommitments<'t> {
     }
 }
 
-impl<'t> PartyAwaitingShares {
+impl<'t, C: MusigContext> PartyAwaitingShares<C> {
     /// Assemble trusted signature shares (e.g. when all keys owned by one signer)
     pub fn receive_trusted_shares(self, shares: Vec<Scalar>) -> Signature {
         // s = sum(s_i), s_i = shares[i]
@@ -170,7 +174,7 @@ impl<'t> PartyAwaitingShares {
         // lead to capturing `self` by reference, while we want
         // to move `self.counterparties` out of it.
         // See also RFC2229: https://github.com/rust-lang/rfcs/pull/2229
-        let multikey = &self.multikey;
+        let context = &self.context;
         let transcript = self.transcript;
 
         // Check that all shares are valid. If so, create s from them.
@@ -179,7 +183,7 @@ impl<'t> PartyAwaitingShares {
             .counterparties
             .into_iter()
             .zip(shares)
-            .map(|(counterparty, share)| counterparty.sign(share, multikey, &transcript))
+            .map(|(counterparty, share)| counterparty.check_share(share, context, &transcript))
             .sum::<Result<_, _>>()?;
 
         Ok(Signature {

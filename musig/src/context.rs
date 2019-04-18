@@ -1,7 +1,7 @@
 use super::errors::MusigError;
+use super::key::VerificationKey;
 use super::transcript::TranscriptProtocol;
-use curve25519_dalek::constants::RISTRETTO_BASEPOINT_POINT;
-use curve25519_dalek::ristretto::{CompressedRistretto, RistrettoPoint};
+use curve25519_dalek::ristretto::RistrettoPoint;
 use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
 
@@ -17,12 +17,18 @@ pub trait MusigContext {
     fn pubkeys(&self) -> Vec<VerificationKey>;
 }
 
+/// MuSig aggregated key context
 #[derive(Clone)]
-/// MuSig aggregated key.
 pub struct Multikey {
-    transcript: Option<Transcript>,
+    prf: Option<Transcript>,
     aggregated_key: VerificationKey,
     public_keys: Vec<VerificationKey>,
+}
+
+/// MuSig multimessage context
+#[derive(Clone)]
+pub struct Multimessage<M: AsRef<[u8]>> {
+    pairs: Vec<(VerificationKey, M)>,
 }
 
 impl Multikey {
@@ -34,7 +40,7 @@ impl Multikey {
             }
             1 => {
                 return Ok(Multikey {
-                    transcript: None,
+                    prf: None,
                     aggregated_key: pubkeys[0],
                     public_keys: pubkeys,
                 });
@@ -43,36 +49,36 @@ impl Multikey {
         }
 
         // Create transcript for Multikey
-        let mut transcript = Transcript::new(b"Musig.aggregated-key");
-        transcript.commit_u64(b"n", pubkeys.len() as u64);
+        let mut prf = Transcript::new(b"Musig.aggregated-key");
+        prf.commit_u64(b"n", pubkeys.len() as u64);
 
         // Commit pubkeys into the transcript
         // <L> = H(X_1 || X_2 || ... || X_n)
         for X in &pubkeys {
-            transcript.commit_point(b"X", X.as_compressed());
+            prf.commit_point(b"X", &X.0);
         }
 
         // aggregated_key = sum_i ( a_i * X_i )
         let mut aggregated_key = RistrettoPoint::default();
         for (i, X) in pubkeys.iter().enumerate() {
-            let a = Multikey::compute_factor(&transcript, i);
-            let X = X.into_point();
+            let a = Multikey::compute_factor(&prf, i);
+            let X = X.0.decompress().ok_or(MusigError::InvalidPoint)?;
             aggregated_key = aggregated_key + a * X;
         }
 
         Ok(Multikey {
-            transcript: Some(transcript),
-            aggregated_key: aggregated_key.into(),
+            prf: Some(prf),
+            aggregated_key: VerificationKey(aggregated_key.compress()),
             public_keys: pubkeys,
         })
     }
 
     /// Returns `a_i` factor for component key in aggregated key.
     /// a_i = H(<L>, X_i). The list of pubkeys, <L>, has already been committed to the transcript.
-    fn compute_factor(transcript: &Transcript, i: usize) -> Scalar {
-        let mut a_i_transcript = transcript.clone();
-        a_i_transcript.commit_u64(b"i", i as u64);
-        a_i_transcript.challenge_scalar(b"a_i")
+    fn compute_factor(prf: &Transcript, i: usize) -> Scalar {
+        let mut a_i_prf = prf.clone();
+        a_i_prf.commit_u64(b"i", i as u64);
+        a_i_prf.challenge_scalar(b"a_i")
     }
 
     /// Returns VerificationKey representation of aggregated key.
@@ -83,7 +89,7 @@ impl Multikey {
 
 impl MusigContext for Multikey {
     fn commit(&self, transcript: &mut Transcript) {
-        transcript.commit_point(b"X", self.aggregated_key.as_compressed());
+        transcript.commit_point(b"X", &self.aggregated_key.0);
     }
 
     fn challenge(&self, i: usize, transcript: &mut Transcript) -> Scalar {
@@ -94,7 +100,7 @@ impl MusigContext for Multikey {
 
         // Make a_i, the per-party factor. a_i = H(<L>, X_i).
         // The list of pubkeys, <L>, has already been committed to self.transcript.
-        let a_i = match &self.transcript {
+        let a_i = match &self.prf {
             Some(t) => Multikey::compute_factor(&t, i),
             None => Scalar::one(),
         };
@@ -107,54 +113,33 @@ impl MusigContext for Multikey {
     }
 }
 
-/// Verification key (aka "pubkey") is a wrapper type around a Ristretto point
-/// that lets the verifier to check the signature.
-#[derive(Copy, Clone, PartialEq, Eq, Debug)]
-pub struct VerificationKey {
-    point: RistrettoPoint,
-    precompressed: CompressedRistretto,
-}
-
-impl VerificationKey {
-    /// Constructs a VerificationKey from a private key.
-    pub fn from_secret(privkey: &Scalar) -> Self {
-        Self::from_secret_uncompressed(privkey).into()
-    }
-
-    /// Constructs an uncompressed VerificationKey point from a private key.
-    pub(crate) fn from_secret_uncompressed(privkey: &Scalar) -> RistrettoPoint {
-        (privkey * RISTRETTO_BASEPOINT_POINT)
-    }
-
-    /// Creates new key from a compressed form,remembers the compressed point.
-    pub fn from_compressed(p: CompressedRistretto) -> Option<Self> {
-        Some(VerificationKey {
-            point: p.decompress()?,
-            precompressed: p,
-        })
-    }
-
-    /// Converts the Verification key to a compressed point
-    pub fn into_compressed(self) -> CompressedRistretto {
-        self.precompressed
-    }
-
-    /// Converts the Verification key to a ristretto point
-    pub fn into_point(self) -> RistrettoPoint {
-        self.point
-    }
-
-    /// Returns a reference to the compressed ristretto point
-    pub fn as_compressed(&self) -> &CompressedRistretto {
-        &self.precompressed
+impl<M: AsRef<[u8]>> Multimessage<M> {
+    pub fn new(pairs: Vec<(VerificationKey, M)>) -> Self {
+        Self { pairs }
     }
 }
 
-impl From<RistrettoPoint> for VerificationKey {
-    fn from(p: RistrettoPoint) -> Self {
-        VerificationKey {
-            point: p,
-            precompressed: p.compress(),
+impl<M: AsRef<[u8]>> MusigContext for Multimessage<M> {
+    fn commit(&self, transcript: &mut Transcript) {
+        transcript.commit_u64(b"Musig.Multimessage", self.pairs.len() as u64);
+        for (key, msg) in &self.pairs {
+            transcript.commit_point(b"X", &key.0);
+            transcript.commit_bytes(b"m", msg.as_ref());
         }
+    }
+
+    fn challenge(&self, i: usize, transcript: &mut Transcript) -> Scalar {
+        let mut transcript_i = transcript.clone();
+        transcript_i.commit_u64(b"i", i as u64);
+        let c = transcript_i.challenge_scalar(b"c");
+
+        // This domain separates the main transcript from the transcript
+        // used to generate the challenge scalar.
+        transcript.commit_bytes(b"dom-sep", b"Musig.Multimessage.boundary");
+        c
+    }
+
+    fn pubkeys(&self) -> Vec<VerificationKey> {
+        self.pairs.iter().map(|(key, _)| *key).collect()
     }
 }

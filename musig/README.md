@@ -5,6 +5,8 @@ This design doc describes the protocol for signing a single message with one pub
 (where the public key can be created from a single party's private key, 
 or from the aggregation of multiple public keys),
 and for signing multiple messages with multiple public keys.
+The public key aggregation and multi-message signing protocols are implemented from the paper,
+["Simple Schnorr Multi-Signatures with Applications to Bitcoin"](https://eprint.iacr.org/2018/068.pdf).
 
 In future iterations, we can consider signing with public keys that are nested aggregations of public keys.
 
