@@ -62,6 +62,13 @@ impl BlockchainState {
 
         Ok(())
     }
+
+    fn apply_txlist(&mut self, txlist: &[TxLog]) -> Result<(), VMError> {
+        for txlog in txlist.iter() {
+            self.apply_txlog(txlog)?;
+        }
+        Ok(())
+    }
 }
 
 #[cfg(test)]
