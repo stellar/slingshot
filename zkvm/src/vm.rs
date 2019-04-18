@@ -697,8 +697,7 @@ where
 
     fn call(&mut self) -> Result<(), VMError> {
         // Pop program, call proof, and contract
-        let program_data = self.pop_item()?.to_data()?;
-        let program_item = program_data.clone().to_program_item()?;
+        let program_item = self.pop_item()?.to_data()?.clone().to_program_item()?;
         let call_proof_bytes = self.pop_item()?.to_data()?.to_bytes();
         let call_proof = SliceReader::parse(&call_proof_bytes, |r| CallProof::decode(r))?;
         let contract = self.pop_item()?.to_contract()?;
@@ -714,7 +713,7 @@ where
         }
 
         // Replace current program with new program
-        self.continue_with_program(program_data.to_program_item()?)?;
+        self.continue_with_program(program_item)?;
         Ok(())
     }
 
