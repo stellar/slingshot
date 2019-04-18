@@ -38,13 +38,16 @@ pub enum Predicate {
 pub struct PredicateTree {
     /// Vector of the programs and blinding factors, stored as Merkelized predicate leafs.
     leaves: Vec<PredicateLeaf>,
+
     /// Verification key for the tree.
     key: VerificationKey,
+
     /// Random seed from which we derive individual blinding factors for each leaf program.
     blinding_key: [u8; 32],
+
     // We precompute the tweaked aggregated signing key when composing it via `Predicate::tree()`,
     // so that we can keep `to_point`/`encode` methods non-failable across all types.
-    precomputed_point: CompressedRistretto,
+    precomputed_key: VerificationKey,
 
     // Scalar that's added to the signing key - a hash of the merkle root and the pubkey
     adjustment_factor: Scalar,
@@ -82,7 +85,7 @@ impl Predicate {
         match self {
             Predicate::Opaque(p) => *p,
             Predicate::Key(k) => k.into_compressed(),
-            Predicate::Tree(d) => d.precomputed_point,
+            Predicate::Tree(d) => d.precomputed_key.into_compressed(),
         }
     }
 
@@ -95,13 +98,7 @@ impl Predicate {
     pub fn to_key(self) -> Result<VerificationKey, VMError> {
         match self {
             Predicate::Key(k) => Ok(k),
-            Predicate::Tree(t) => {
-                let ovk = VerificationKey::from_compressed(t.precomputed_point);
-                match ovk {
-                    Some(k) => Ok(k),
-                    None => Err(VMError::InvalidPoint),
-                }
-            }
+            Predicate::Tree(t) => Ok(t.precomputed_key),
             _ => Err(VMError::TypeNotKey),
         }
     }
@@ -174,18 +171,18 @@ impl PredicateTree {
 
         // P = X + h(X, M)*G
         let adjustment_factor = Predicate::commit_taproot(key.into_compressed().as_bytes(), &root);
-        let precomputed_point = {
+        let precomputed_key = {
             let h = adjustment_factor;
             let x = key.into_point();
             let p = x + h * PedersenGens::default().B;
-            p.compress()
+            VerificationKey::from(p)
         };
 
         Ok(Self {
             leaves,
             blinding_key,
             key,
-            precomputed_point,
+            precomputed_key,
             adjustment_factor,
         })
     }

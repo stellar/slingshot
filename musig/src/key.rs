@@ -127,7 +127,7 @@ impl From<RistrettoPoint> for VerificationKey {
 
 impl Default for VerificationKey {
     fn default() -> Self {
-        VerificationKey{
+        VerificationKey {
             point: RistrettoPoint::default(),
             precompressed: CompressedRistretto::default(),
         }
