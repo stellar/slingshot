@@ -68,10 +68,8 @@ impl Signature {
     pub fn verify_multi<M: AsRef<[u8]>>(
         &self,
         transcript: &mut Transcript,
-        messages: Vec<(VerificationKey, M)>,
+        context: Multimessage<M>,
     ) -> DeferredVerification {
-        let context = Multimessage::new(messages);
-
         // Form the final linear combination:
         // `s * G = R + sum{c_i * X_i}`
         //      ->
@@ -115,14 +113,14 @@ impl Signature {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::context::Multikey;
+    use crate::context::{Multikey, Multimessage, MusigContext};
     use crate::errors::MusigError;
     use crate::key::VerificationKey;
     use crate::signer::*;
     use curve25519_dalek::ristretto::CompressedRistretto;
 
     #[test]
-    fn sign_verify_single() {
+    fn sign_verify_single_pubkey() {
         let privkey = Scalar::from(1u64);
         let sig = Signature::sign_single(&mut Transcript::new(b"example transcript"), privkey);
 
@@ -146,7 +144,7 @@ mod tests {
     }
 
     #[test]
-    fn sign_single_multi() {
+    fn sign_verify_single_multikey() {
         let privkey = Scalar::from(1u64);
         let privkeys = vec![privkey];
         let multikey = multikey_helper(&privkeys);
@@ -167,7 +165,7 @@ mod tests {
     }
 
     #[test]
-    fn make_aggregated_pubkey() {
+    fn make_multikey() {
         // super secret, sshhh!
         let priv_keys = vec![
             Scalar::from(1u64),
@@ -197,7 +195,7 @@ mod tests {
     }
 
     #[test]
-    fn sign_message() {
+    fn sign_multikey() {
         // super secret, sshhh!
         let priv_keys = vec![
             Scalar::from(1u64),
@@ -207,12 +205,12 @@ mod tests {
         ];
         let multikey = multikey_helper(&priv_keys);
 
-        sign_helper(priv_keys, multikey, Transcript::new(b"example transcript")).unwrap();
+        assert!(sign_helper(priv_keys, multikey, Transcript::new(b"example transcript")).is_ok());
     }
 
-    fn sign_helper(
+    fn sign_helper<C: MusigContext + Clone>(
         privkeys: Vec<Scalar>,
-        multikey: Multikey,
+        context: C,
         transcript: Transcript,
     ) -> Result<(Signature, Scalar), MusigError> {
         let pubkeys: Vec<_> = privkeys
@@ -227,7 +225,7 @@ mod tests {
             .into_iter()
             .zip(transcripts.iter_mut())
             .enumerate()
-            .map(|(i, (x_i, transcript))| Party::new(transcript, i, x_i, multikey.clone()))
+            .map(|(i, (x_i, transcript))| Party::new(transcript, i, x_i, context.clone()))
             .unzip();
 
         let (parties, comms): (Vec<_>, Vec<_>) = parties
@@ -263,7 +261,7 @@ mod tests {
     }
 
     #[test]
-    fn verify_sig() {
+    fn verify_multikey() {
         // super secret, sshhh!
         let priv_keys = vec![
             Scalar::from(1u64),
@@ -290,7 +288,7 @@ mod tests {
     }
 
     #[test]
-    fn check_transcripts() {
+    fn check_transcripts_multikey() {
         // super secret, sshhh!
         let priv_keys = vec![
             Scalar::from(1u64),
@@ -312,6 +310,96 @@ mod tests {
             .verify(verifier_transcript, multikey.aggregated_key())
             .verify()
             .is_ok());
+
+        let verifier_challenge = verifier_transcript.challenge_scalar(b"test");
+
+        // Test that prover and verifier transcript states are the same after running protocol
+        assert_eq!(prover_challenge, verifier_challenge);
+    }
+
+    #[test]
+    fn sign_multimessage() {
+        // super secret, sshhh!
+        let priv_keys = vec![
+            Scalar::from(1u64),
+            Scalar::from(2u64),
+            Scalar::from(3u64),
+            Scalar::from(4u64),
+        ];
+        let messages = vec![b"message1", b"message2", b"message3", b"message4"];
+        let multimessage = multimessage_helper(&priv_keys, messages);
+
+        assert!(sign_helper(
+            priv_keys,
+            multimessage,
+            Transcript::new(b"example transcript")
+        )
+        .is_ok());
+    }
+
+    fn multimessage_helper<M: AsRef<[u8]>>(
+        priv_keys: &Vec<Scalar>,
+        messages: Vec<M>,
+    ) -> Multimessage<M> {
+        let G = RISTRETTO_BASEPOINT_POINT;
+        let pairs = priv_keys
+            .iter()
+            .zip(messages.into_iter())
+            .map(|(priv_key, msg)| (VerificationKey((priv_key * G).compress()), msg))
+            .collect();
+
+        Multimessage::new(pairs)
+    }
+
+    #[test]
+    fn verify_multimessage() {
+        // super secret, sshhh!
+        let priv_keys = vec![
+            Scalar::from(1u64),
+            Scalar::from(2u64),
+            Scalar::from(3u64),
+            Scalar::from(4u64),
+        ];
+        let messages = vec![b"message1", b"message2", b"message3", b"message4"];
+        let multimessage = multimessage_helper(&priv_keys, messages);
+
+        let (signature, _) = sign_helper(
+            priv_keys,
+            multimessage.clone(),
+            Transcript::new(b"example transcript"),
+        )
+        .unwrap();
+
+        assert!(signature
+            .verify_multi(&mut Transcript::new(b"example transcript"), multimessage,)
+            .verify()
+            .is_ok());
+    }
+
+    #[test]
+    fn check_transcripts_multimessage() {
+        // super secret, sshhh!
+        let priv_keys = vec![
+            Scalar::from(1u64),
+            Scalar::from(2u64),
+            Scalar::from(3u64),
+            Scalar::from(4u64),
+        ];
+        let messages = vec![b"message1", b"message2", b"message3", b"message4"];
+        let multimessage = multimessage_helper(&priv_keys, messages);
+
+        let (signature, prover_challenge) = sign_helper(
+            priv_keys,
+            multimessage.clone(),
+            Transcript::new(b"example transcript"),
+        )
+        .unwrap();
+
+        let verifier_transcript = &mut Transcript::new(b"example transcript");
+        // assert!(
+        signature.verify_multi(verifier_transcript, multimessage);
+        // .verify()
+        // .is_ok());
 
         let verifier_challenge = verifier_transcript.challenge_scalar(b"test");
 
