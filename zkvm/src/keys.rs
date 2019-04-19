@@ -40,9 +40,10 @@ pub fn aggregated_privkey(privkeys: &[Scalar]) -> Result<Scalar, VMError> {
     // Generate aggregated private key
     Ok(privkeys
         .iter()
-        .map(|p| {
+        .enumerate()
+        .map(|(i, p)| {
             let mut transcript = transcript.clone();
-            transcript.commit_point(b"X_i", VerificationKey::from_secret(p).as_compressed());
+            transcript.commit_u64(b"i", i as u64);
             let x = transcript.challenge_scalar(b"a_i");
             p * x
         })

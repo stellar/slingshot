@@ -240,11 +240,10 @@ mod tests {
     }
 
     fn multikey_helper(priv_keys: &Vec<Scalar>) -> Multikey {
-        let G = RISTRETTO_BASEPOINT_POINT;
         Multikey::new(
             priv_keys
                 .iter()
-                .map(|priv_key| VerificationKey::from(G * priv_key))
+                .map(|priv_key| VerificationKey::from_secret(priv_key))
                 .collect(),
         )
         .unwrap()
@@ -273,7 +272,7 @@ mod tests {
     ) -> Result<(Signature, Scalar), MusigError> {
         let pubkeys: Vec<_> = privkeys
             .iter()
-            .map(|privkey| VerificationKey::from(privkey * RISTRETTO_BASEPOINT_POINT))
+            .map(|privkey| VerificationKey::from_secret(privkey))
             .collect();
 
         let mut transcripts: Vec<_> = pubkeys.iter().map(|_| transcript.clone()).collect();
@@ -399,11 +398,10 @@ mod tests {
         priv_keys: &Vec<Scalar>,
         messages: Vec<M>,
     ) -> Vec<(VerificationKey, M)> {
-        let G = RISTRETTO_BASEPOINT_POINT;
         priv_keys
             .iter()
             .zip(messages.into_iter())
-            .map(|(priv_key, msg)| (VerificationKey::from(priv_key * G), msg))
+            .map(|(priv_key, msg)| (VerificationKey::from_secret(priv_key), msg))
             .collect()
     }
 
