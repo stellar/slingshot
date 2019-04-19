@@ -64,28 +64,27 @@ impl BlockchainState {
         Ok(())
     }
 
-    /// Executes a list of transactions, returning their tx IDs and tx logs.
-    pub fn execute_txlist(
-        txs: Vec<Tx>,
-        bp_gens: BulletproofGens,
-        version: u64,
+    /// Executes a transaction, returning its tx ID and tx log.
+    pub fn execute_tx(
+        tx: &Tx,
+        bp_gens: &BulletproofGens,
+        block_version: u64,
         timestamp_ms: u64,
-    ) -> Result<Vec<(TxID, TxLog)>, BlockchainError> {
-        txs.par_iter()
-            .map(|tx| {
-                if tx.header.mintime_ms > timestamp_ms || tx.header.maxtime_ms < timestamp_ms {
-                    return Err(BlockchainError::BadTxTimestamp);
-                }
-                if version == 1 && version != tx.header.version {
-                    return Err(BlockchainError::VersionReversion);
-                }
+    ) -> Result<(TxID, TxLog), BlockchainError> {
+        if tx.header.mintime_ms > timestamp_ms || tx.header.maxtime_ms < timestamp_ms {
+            return Err(BlockchainError::BadTxTimestamp);
+        }
 
-                // Verify tx
-                let vtx = Verifier::verify_tx(&tx, &bp_gens)
-                    .map_err(|e| BlockchainError::TxValidation(e))?;
-                Ok((vtx.id, vtx.log))
-            })
-            .collect()
+        // Check that, for the current block version, this tx version is
+        // supported. For block versions higher than 1, we do not yet know
+        // what tx versions to support, so we accept all.
+        if block_version == 1 && block_version != tx.header.version {
+            return Err(BlockchainError::VersionReversion);
+        }
+
+        // Verify tx
+        let vtx = Verifier::verify_tx(tx, bp_gens).map_err(|e| BlockchainError::TxValidation(e))?;
+        Ok((vtx.id, vtx.log))
     }
 }
 
