@@ -40,7 +40,6 @@ A _key blinding scheme_ for deriving hierarchies of public keys for [Ristretto](
 
 An API for issuing assets using ZkVM.
 
-
 ### [Slidechain demo](slidechain)
 
 A demonstration of a minimal [Stellar](https://stellar.org/) sidechain.
