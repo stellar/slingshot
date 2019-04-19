@@ -10,10 +10,10 @@ use merlin::Transcript;
 use rand;
 
 /// Entry point to multi-party signing protocol.
-pub struct Party {}
+pub struct Signer {}
 
 /// State of the party when awaiting nonce precommitments from other parties.
-pub struct PartyAwaitingPrecommitments<'t, C: MusigContext> {
+pub struct SignerAwaitingPrecommitments<'t, C: MusigContext> {
     transcript: &'t mut Transcript,
     context: C,
     position: usize,
@@ -24,7 +24,7 @@ pub struct PartyAwaitingPrecommitments<'t, C: MusigContext> {
 }
 
 /// State of the party when awaiting nonce commitments from other parties.
-pub struct PartyAwaitingCommitments<'t, C: MusigContext> {
+pub struct SignerAwaitingCommitments<'t, C: MusigContext> {
     transcript: &'t mut Transcript,
     context: C,
     position: usize,
@@ -34,14 +34,14 @@ pub struct PartyAwaitingCommitments<'t, C: MusigContext> {
 }
 
 /// State of the party when awaiting signature shares from other parties.
-pub struct PartyAwaitingShares<C: MusigContext> {
+pub struct SignerAwaitingShares<C: MusigContext> {
     transcript: Transcript,
     context: C,
     R: RistrettoPoint,
     counterparties: Vec<CounterpartyCommitted>,
 }
 
-impl Party {
+impl Signer {
     /// Create new signing party for a given transcript.
     pub fn new<'t, C: MusigContext>(
         // The message `m` has already been fed into the transcript
@@ -49,7 +49,7 @@ impl Party {
         position: usize,
         x_i: Scalar,
         context: C,
-    ) -> (PartyAwaitingPrecommitments<'t, C>, NoncePrecommitment) {
+    ) -> (SignerAwaitingPrecommitments<'t, C>, NoncePrecommitment) {
         let mut rng = transcript
             .build_rng()
             .commit_witness_bytes(b"x_i", &x_i.to_bytes())
@@ -67,7 +67,7 @@ impl Party {
             .collect();
 
         (
-            PartyAwaitingPrecommitments {
+            SignerAwaitingPrecommitments {
                 transcript,
                 context,
                 position,
@@ -81,12 +81,12 @@ impl Party {
     }
 }
 
-impl<'t, C: MusigContext> PartyAwaitingPrecommitments<'t, C> {
+impl<'t, C: MusigContext> SignerAwaitingPrecommitments<'t, C> {
     /// Provide nonce precommitments to the party and transition to the next round.
     pub fn receive_precommitments(
         self,
         nonce_precommitments: Vec<NoncePrecommitment>,
-    ) -> (PartyAwaitingCommitments<'t, C>, NonceCommitment) {
+    ) -> (SignerAwaitingCommitments<'t, C>, NonceCommitment) {
         let counterparties = self
             .counterparties
             .into_iter()
@@ -95,7 +95,7 @@ impl<'t, C: MusigContext> PartyAwaitingPrecommitments<'t, C> {
             .collect();
         // Store received nonce precommitments in next state
         (
-            PartyAwaitingCommitments {
+            SignerAwaitingCommitments {
                 transcript: self.transcript,
                 context: self.context,
                 position: self.position,
@@ -108,13 +108,13 @@ impl<'t, C: MusigContext> PartyAwaitingPrecommitments<'t, C> {
     }
 }
 
-impl<'t, C: MusigContext> PartyAwaitingCommitments<'t, C> {
+impl<'t, C: MusigContext> SignerAwaitingCommitments<'t, C> {
     /// Provide nonce commitments to the party and transition to the next round
     /// if they match the precommitments.
     pub fn receive_commitments(
         mut self,
         nonce_commitments: Vec<NonceCommitment>,
-    ) -> Result<(PartyAwaitingShares<C>, Scalar), MusigError> {
+    ) -> Result<(SignerAwaitingShares<C>, Scalar), MusigError> {
         // Make R = sum_i(R_i). nonce_commitments = R_i from all the parties.
         let R = NonceCommitment::sum(&nonce_commitments);
 
@@ -143,7 +143,7 @@ impl<'t, C: MusigContext> PartyAwaitingCommitments<'t, C> {
 
         // Store received nonce commitments in next state
         Ok((
-            PartyAwaitingShares {
+            SignerAwaitingShares {
                 transcript,
                 context: self.context,
                 R,
@@ -154,7 +154,7 @@ impl<'t, C: MusigContext> PartyAwaitingCommitments<'t, C> {
     }
 }
 
-impl<'t, C: MusigContext> PartyAwaitingShares<C> {
+impl<'t, C: MusigContext> SignerAwaitingShares<C> {
     /// Assemble trusted signature shares (e.g. when all keys owned by one signer)
     pub fn receive_trusted_shares(self, shares: Vec<Scalar>) -> Signature {
         // s = sum(s_i), s_i = shares[i]

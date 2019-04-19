@@ -172,7 +172,7 @@ mod tests {
     use crate::context::{Multikey, Multimessage, MusigContext};
     use crate::errors::MusigError;
     use crate::key::VerificationKey;
-    use crate::signer::Party;
+    use crate::signer::Signer;
     use curve25519_dalek::ristretto::CompressedRistretto;
 
     #[test]
@@ -282,7 +282,7 @@ mod tests {
             .into_iter()
             .zip(transcripts.iter_mut())
             .enumerate()
-            .map(|(i, (x_i, transcript))| Party::new(transcript, i, x_i, context.clone()))
+            .map(|(i, (x_i, transcript))| Signer::new(transcript, i, x_i, context.clone()))
             .unzip();
 
         let (parties, comms): (Vec<_>, Vec<_>) = parties
