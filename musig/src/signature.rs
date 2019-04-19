@@ -67,9 +67,12 @@ impl Signature {
     /// Verifies a signature for a multimessage context
     pub fn verify_multi<M: AsRef<[u8]>>(
         &self,
-        transcript: &mut Transcript,
+        mut transcript: &mut Transcript,
         context: Multimessage<M>,
     ) -> DeferredVerification {
+        context.commit(&mut transcript);
+        transcript.commit_point(b"R", &self.R);
+
         // Form the final linear combination:
         // `s * G = R + sum{c_i * X_i}`
         //      ->
@@ -371,7 +374,7 @@ mod tests {
         .unwrap();
 
         assert!(signature
-            .verify_multi(&mut Transcript::new(b"example transcript"), multimessage,)
+            .verify_multi(&mut Transcript::new(b"example transcript"), multimessage)
             .verify()
             .is_ok());
     }
@@ -396,10 +399,10 @@ mod tests {
         .unwrap();
 
         let verifier_transcript = &mut Transcript::new(b"example transcript");
-        // assert!(
-        signature.verify_multi(verifier_transcript, multimessage);
-        // .verify()
-        // .is_ok());
+        assert!(signature
+            .verify_multi(verifier_transcript, multimessage)
+            .verify()
+            .is_ok());
 
         let verifier_challenge = verifier_transcript.challenge_scalar(b"test");
 
