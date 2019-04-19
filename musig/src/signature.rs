@@ -134,7 +134,9 @@ impl Signature {
 
         for i in 0..context.len() {
             let c_i = context.challenge(i, transcript);
-            result.dynamic_point_weights.push((c_i, context.key(i).into_compressed()));
+            result
+                .dynamic_point_weights
+                .push((c_i, context.key(i).into_compressed()));
         }
 
         result
