@@ -26,7 +26,7 @@ based on the [Bulletproofs](https://doc.dalek.rs/bulletproofs/index.html) zero-k
 
 ### [Musig](musig)
 
-A pure Rust implementation of the [MuSig signature aggregation scheme](https://eprint.iacr.org/2018/068) by Maxwell, Poelstra, Seurin and Wuille.
+A pure Rust implementation of the [Simple Schnorr Multi-Signatures](https://eprint.iacr.org/2018/068) by Maxwell, Poelstra, Seurin and Wuille.
 
 * [Musig README](musig/README.md)
 
