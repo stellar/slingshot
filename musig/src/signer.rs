@@ -174,8 +174,7 @@ impl<'t, C: MusigContext> SignerAwaitingShares<C> {
         let context = &self.context;
         let transcript = self.transcript;
 
-        // Check that all shares are valid. If so, create s from them.
-        // s = sum(s_i), s_i = shares[i]
+        // Check that all shares are valid and sum them up.
         let s = self
             .counterparties
             .into_iter()

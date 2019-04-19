@@ -95,13 +95,8 @@ impl CounterpartyCommitted {
         context: &C,
         transcript: &Transcript,
     ) -> Result<Scalar, MusigError> {
-        // Check if s_i * G == R_i + c * a_i * X_i.
-        //   s_i = share
-        //   G = RISTRETTO_BASEPOINT_POINT
-        //   R_i = self.commitment
-        //   c = challenge
-        //   a_i = multikey.factor_for_key(self.pubkey)
-        //   X_i = self.pubkey
+        // Check the partial Schnorr signature:
+        // s_i * G == R_i + c_i * X_i.
         let S_i = share * RISTRETTO_BASEPOINT_POINT;
         let c_i = context.challenge(self.position, &mut transcript.clone());
         let X_i = self.pubkey.into_point();
