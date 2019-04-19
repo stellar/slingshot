@@ -67,7 +67,7 @@ impl Counterparty {
 }
 
 impl CounterpartyPrecommitted {
-    pub(super) fn commit_nonce(
+    pub(super) fn verify_nonce(
         self,
         commitment: NonceCommitment,
     ) -> Result<CounterpartyCommitted, MusigError> {
@@ -89,7 +89,7 @@ impl CounterpartyPrecommitted {
 }
 
 impl CounterpartyCommitted {
-    pub(super) fn check_share<C: MusigContext>(
+    pub(super) fn verify_share<C: MusigContext>(
         self,
         share: Scalar,
         context: &C,

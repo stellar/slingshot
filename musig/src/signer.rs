@@ -123,7 +123,7 @@ impl<'t, C: MusigContext> PartyAwaitingCommitments<'t, C> {
             .counterparties
             .into_iter()
             .zip(nonce_commitments)
-            .map(|(counterparty, commitment)| counterparty.commit_nonce(commitment))
+            .map(|(counterparty, commitment)| counterparty.verify_nonce(commitment))
             .collect::<Result<_, _>>()?;
 
         // Commit the context with label "X", and commit the nonce sum with label "R"
@@ -180,7 +180,7 @@ impl<'t, C: MusigContext> PartyAwaitingShares<C> {
             .counterparties
             .into_iter()
             .zip(shares)
-            .map(|(counterparty, share)| counterparty.check_share(share, context, &transcript))
+            .map(|(counterparty, share)| counterparty.verify_share(share, context, &transcript))
             .sum::<Result<_, _>>()?;
 
         Ok(Signature {

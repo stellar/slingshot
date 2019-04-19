@@ -58,7 +58,10 @@ impl Signature {
     {
         let mut privkeys = privkeys.into_iter().peekable();
 
-        if messages.len() != privkeys.len() || messages.len() == 0 {
+        if messages.len() != privkeys.len() {
+            return Err(MusigError::BadArguments);
+        }
+        if privkeys.len() == 0 {
             return Err(MusigError::BadArguments);
         }
 
