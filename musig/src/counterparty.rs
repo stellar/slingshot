@@ -1,8 +1,9 @@
+use super::context::MusigContext;
 use super::errors::MusigError;
-use super::key::{Multikey, VerificationKey};
+use super::key::VerificationKey;
 use crate::transcript::TranscriptProtocol;
 use curve25519_dalek::constants::RISTRETTO_BASEPOINT_POINT;
-use curve25519_dalek::ristretto::{CompressedRistretto, RistrettoPoint};
+use curve25519_dalek::ristretto::RistrettoPoint;
 use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
 use subtle::ConstantTimeEq;
@@ -26,32 +27,31 @@ impl NonceCommitment {
         NoncePrecommitment(precommitment)
     }
 
-    pub(super) fn compress(&self) -> CompressedRistretto {
-        self.0.compress()
-    }
-
     pub(super) fn sum(commitments: &Vec<Self>) -> RistrettoPoint {
         commitments.iter().map(|R_i| R_i.0).sum()
     }
 }
 
 pub struct Counterparty {
+    position: usize,
     pubkey: VerificationKey,
 }
 
 pub struct CounterpartyPrecommitted {
     precommitment: NoncePrecommitment,
+    position: usize,
     pubkey: VerificationKey,
 }
 
 pub struct CounterpartyCommitted {
     commitment: NonceCommitment,
+    position: usize,
     pubkey: VerificationKey,
 }
 
 impl Counterparty {
-    pub(super) fn new(pubkey: VerificationKey) -> Self {
-        Counterparty { pubkey }
+    pub(super) fn new(position: usize, pubkey: VerificationKey) -> Self {
+        Counterparty { position, pubkey }
     }
 
     pub(super) fn precommit_nonce(
@@ -60,13 +60,14 @@ impl Counterparty {
     ) -> CounterpartyPrecommitted {
         CounterpartyPrecommitted {
             precommitment,
+            position: self.position,
             pubkey: self.pubkey,
         }
     }
 }
 
 impl CounterpartyPrecommitted {
-    pub(super) fn commit_nonce(
+    pub(super) fn verify_nonce(
         self,
         commitment: NonceCommitment,
     ) -> Result<CounterpartyCommitted, MusigError> {
@@ -81,32 +82,28 @@ impl CounterpartyPrecommitted {
 
         Ok(CounterpartyCommitted {
             commitment: commitment,
+            position: self.position,
             pubkey: self.pubkey,
         })
     }
 }
 
 impl CounterpartyCommitted {
-    pub(super) fn sign(
+    pub(super) fn verify_share<C: MusigContext>(
         self,
         share: Scalar,
-        challenge: Scalar,
-        multikey: &Multikey,
+        context: &C,
+        transcript: &Transcript,
     ) -> Result<Scalar, MusigError> {
-        // Check if s_i * G == R_i + c * a_i * X_i.
-        //   s_i = share
-        //   G = RISTRETTO_BASEPOINT_POINT
-        //   R_i = self.commitment
-        //   c = challenge
-        //   a_i = multikey.factor_for_key(self.pubkey)
-        //   X_i = self.pubkey
+        // Check the partial Schnorr signature:
+        // s_i * G == R_i + c_i * X_i.
         let S_i = share * RISTRETTO_BASEPOINT_POINT;
-        let a_i = multikey.factor_for_key(&self.pubkey);
+        let c_i = context.challenge(self.position, &mut transcript.clone());
         let X_i = self.pubkey.into_point();
 
-        if S_i != self.commitment.0 + challenge * a_i * X_i {
+        if S_i != self.commitment.0 + c_i * X_i {
             return Err(MusigError::ShareError {
-                pubkey: self.pubkey.into_compressed().to_bytes(),
+                pubkey: X_i.compress().to_bytes(),
             });
         }
 

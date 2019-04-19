@@ -5,6 +5,8 @@ This design doc describes the protocol for signing a single message with one pub
 (where the public key can be created from a single party's private key, 
 or from the aggregation of multiple public keys),
 and for signing multiple messages with multiple public keys.
+The public key aggregation and multi-message signing protocols are implemented from the paper,
+["Simple Schnorr Multi-Signatures with Applications to Bitcoin"](https://eprint.iacr.org/2018/068.pdf).
 
 In future iterations, we can consider signing with public keys that are nested aggregations of public keys.
 
@@ -57,11 +59,11 @@ Functions:
 - `Multikey::commit(&self, &mut transcript)`: Commits `self.aggregated_key` to the input `transcript` with label "X".
 
 - `Multikey::challenge(&self, &verification_key, &mut transcript) -> Scalar`: 
-  Computes challenge `c_i = a_i * c`, where `a_i = H_agg(<L>, X_i)` and `c = H_sig(X, R, m)`.
+  Computes challenge `c_i = a_i * c`, where `a_i = H_agg(<L>, i)` and `c = H_sig(X, R, m)`.
 
   For calculating `a_i`, `<L>` (the list of pubkeys that go into the aggregated pubkey)
   has already been committed into `self.transcript`. Therefore this function simply clones `self.transcript`, 
-  commits the verification key (`X_i`) into the transcript with label "X_i", 
+  commits the index of the party (`i`) into the transcript with label "i", 
   and then squeezes the challenge scalar `a_i` from the transcript with label "a_i".
 
   For calculating `c`: the message `m`, the nonce commitment sum `R`, and the aggregated key `X` 
@@ -102,7 +104,7 @@ Functions:
   It commits `i` to the forked transcript with label "i".
   It then gets and returns the challenge scalar `c_i` from the forked transcript with label "c_i".
 
-- `Multikey::get_pubkeys(&self) -> Vec<VerificationKey>`: returns the list of public keys, without the messages, from `self.pairs`.
+- `Multimessage::get_pubkeys(&self) -> Vec<VerificationKey>`: returns the list of public keys, without the messages, from `self.pairs`.
 
 
 ### Signature
@@ -450,14 +452,13 @@ Function: `sign<C: MusigContext>(...)`
 
 Input:
 - share: `Scalar`
-- nonce_sum: `RistrettoPoint`
 - context: `C`
 - transcript: `&mut transcript`
 
 Operation:
 - Verify that `s_i * G == R_i + c_i * X_i`.
   `s_i` = share, `G` = [base point](#base-point), `R_i` = self.commitment,
-  `c_i` = `context.challenge(self.pubkey, &mut transcript, nonce_sum)`, `X_i` = self.pubkey.
+  `c_i` = `context.challenge(self.pubkey, &mut transcript)`, `X_i` = self.pubkey.
 - If verification succeeds, return `Ok(share)`
 - Else, return `Err(VMError::MusigShareError)`
 

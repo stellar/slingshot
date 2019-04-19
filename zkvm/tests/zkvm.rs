@@ -65,10 +65,8 @@ impl ProgramHelper for Program {
 
 /// Generates a secret Scalar / key Predicate pair
 fn generate_predicate() -> (Predicate, Scalar) {
-    let gens = PedersenGens::default();
-
     let scalar = Scalar::from(0u64);
-    let pred = Predicate::Key(VerificationKey::from(scalar * gens.B));
+    let pred = Predicate::Key(VerificationKey::from_secret(&scalar));
     (pred, scalar)
 }
 
@@ -93,9 +91,8 @@ fn generate_predicates(pred_num: usize) -> (Vec<Predicate>, Vec<Scalar>) {
 /// Returns the secret Scalar and Predicate used to issue
 /// a flavor, along with the flavor Scalar.
 fn make_flavor() -> (Scalar, Predicate, Scalar) {
-    let gens = PedersenGens::default();
     let scalar = Scalar::from(100u64);
-    let predicate = Predicate::Key((scalar * gens.B).into());
+    let predicate = Predicate::Key(VerificationKey::from_secret(&scalar));
     let flavor = Value::issue_flavor(&predicate, Data::default());
     (scalar, predicate, flavor)
 }
