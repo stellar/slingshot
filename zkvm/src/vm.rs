@@ -531,7 +531,7 @@ where
         self.txlog.push(Entry::Issue(qty_point, flv_point));
 
         let payload = vec![PortableItem::Value(value)];
-        let contract = self.make_output(predicate, payload)?.into_contract().0;
+        let contract = self.make_contract(predicate, payload)?;
 
         self.push_item(contract);
         Ok(())
@@ -586,28 +586,28 @@ where
 
     /// _input_ **input** → _contract_
     fn input(&mut self) -> Result<(), VMError> {
-        let output = self.pop_item()?.to_data()?.to_output()?;
-        let (contract, contract_id) = output.into_contract();
-        self.push_item(contract);
+        let contract = self.pop_item()?.to_data()?.to_output()?;
+        let contract_id = contract.id();
         self.txlog.push(Entry::Input(contract_id));
+        self.push_item(contract);
         self.last_anchor = Some(contract_id.to_anchor().ratchet());
         Ok(())
     }
 
     /// _items... predicate_ **output:_k_** → ø
     fn output(&mut self, k: usize) -> Result<(), VMError> {
-        let output = self.pop_output(k)?;
-        self.txlog.push(Entry::Output(output));
+        let contract = self.pop_contract(k)?;
+        self.txlog.push(Entry::Output(contract));
         Ok(())
     }
 
     fn contract(&mut self, k: usize) -> Result<(), VMError> {
-        let output = self.pop_output(k)?;
-        self.push_item(output.into_contract().0);
+        let contract = self.pop_contract(k)?;
+        self.push_item(contract);
         Ok(())
     }
 
-    fn pop_output(&mut self, k: usize) -> Result<Output, VMError> {
+    fn pop_contract(&mut self, k: usize) -> Result<Contract, VMError> {
         let predicate = self.pop_item()?.to_data()?.to_predicate()?;
 
         if k > self.stack.len() {
@@ -620,7 +620,7 @@ where
             .map(|item| item.to_portable())
             .collect::<Result<Vec<_>, _>>()?;
 
-        self.make_output(predicate, payload)
+        self.make_contract(predicate, payload)
     }
 
     fn cloak(&mut self, m: usize, n: usize) -> Result<(), VMError> {
@@ -687,9 +687,10 @@ where
     // _contract_ **signtx** → _results..._
     fn signtx(&mut self) -> Result<(), VMError> {
         let contract = self.pop_item()?.to_contract()?;
+        let (contract_id, predicate, payload, _anchor) = contract.into_tuple();
         // TODO: use multi-message API to sign the entire contract ID.
-        self.delegate.process_tx_signature(contract.predicate)?;
-        for item in contract.payload.into_iter() {
+        self.delegate.process_tx_signature(predicate)?;
+        for item in payload.into_iter() {
             self.push_item(item);
         }
         Ok(())
@@ -842,18 +843,14 @@ where
     }
 
     /// Creates and anchors the contract
-    fn make_output(
+    fn make_contract(
         &mut self,
         predicate: Predicate,
         payload: Vec<PortableItem>,
-    ) -> Result<Output, VMError> {
+    ) -> Result<Contract, VMError> {
         let anchor = mem::replace(&mut self.last_anchor, None).ok_or(VMError::AnchorMissing)?;
-        let output = Output::new(Contract {
-            anchor,
-            predicate,
-            payload,
-        });
-        self.last_anchor = Some(output.id().to_anchor());
-        Ok(output)
+        let contract = Contract::new(predicate, payload, anchor);
+        self.last_anchor = Some(contract.id().to_anchor());
+        Ok(contract)
     }
 }

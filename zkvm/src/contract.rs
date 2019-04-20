@@ -24,14 +24,17 @@ pub struct ContractID([u8; 32]);
 /// A ZkVM contract that holds a _payload_ (a list of portable items) protected by a _predicate_.
 #[derive(Clone, Debug)]
 pub struct Contract {
-    /// Anchor string which makes the contract unique.
-    pub anchor: Anchor,
-
-    /// List of payload items.
-    pub payload: Vec<PortableItem>,
+    /// ID of the contract
+    id: ContractID,
 
     /// Predicate that guards access to the contract’s payload.
-    pub predicate: Predicate,
+    predicate: Predicate,
+
+    /// List of payload items.
+    payload: Vec<PortableItem>,
+
+    /// Anchor string which makes the contract unique.
+    anchor: Anchor,
 }
 
 /// Representation of items that can be stored within outputs and contracts.
@@ -44,48 +47,48 @@ pub enum PortableItem {
     Value(Value),
 }
 
-/// Representation of the claimed UTXO
-#[derive(Clone, Debug)]
-pub struct Output {
-    contract: Contract,
-    id: ContractID,
-}
+// /// Representation of the claimed UTXO
+// #[derive(Clone, Debug)]
+// pub struct Output {
+//     contract: Contract,
+//     id: ContractID,
+// }
 
-impl Output {
-    /// Creates an Output with a given contract
-    pub fn new(contract: Contract) -> Self {
-        let mut buf = Vec::with_capacity(contract.serialized_length());
-        contract.encode(&mut buf);
-        let id = ContractID::from_serialized_contract(&buf);
-        Self { id, contract }
-    }
+// impl Output {
+//     /// Creates an Output with a given contract
+//     pub fn new(contract: Contract) -> Self {
+//         let mut buf = Vec::with_capacity(contract.serialized_length());
+//         contract.encode(&mut buf);
+//         let id = ContractID::from_serialized_contract(&buf);
+//         Self { id, contract }
+//     }
 
-    /// Returns the contract ID
-    pub fn id(&self) -> ContractID {
-        self.id
-    }
+//     /// Returns the contract ID
+//     pub fn id(&self) -> ContractID {
+//         self.id
+//     }
 
-    /// Converts output to a contract and also returns its precomputed ID
-    pub fn into_contract(self) -> (Contract, ContractID) {
-        (self.contract, self.id)
-    }
+//     /// Converts output to a contract and also returns its precomputed ID
+//     pub fn into_contract(self) -> (Contract, ContractID) {
+//         (self.contract, self.id)
+//     }
 
-    /// Precise length of a serialized output
-    pub fn serialized_length(&self) -> usize {
-        self.contract.serialized_length()
-    }
+//     /// Precise length of a serialized output
+//     pub fn serialized_length(&self) -> usize {
+//         self.contract.serialized_length()
+//     }
 
-    /// Serializes the output to a byte array
-    pub fn encode(&self, buf: &mut Vec<u8>) {
-        self.contract.encode(buf)
-    }
+//     /// Serializes the output to a byte array
+//     pub fn encode(&self, buf: &mut Vec<u8>) {
+//         self.contract.encode(buf)
+//     }
 
-    /// Parses an output
-    pub fn decode<'a>(output: &mut SliceReader<'a>) -> Result<Self, VMError> {
-        let (contract, id) = Contract::decode(output)?;
-        Ok(Self { contract, id })
-    }
-}
+//     /// Parses an output
+//     pub fn decode<'a>(output: &mut SliceReader<'a>) -> Result<Self, VMError> {
+//         let (contract, id) = Contract::decode(output)?;
+//         Ok(Self { contract, id })
+//     }
+// }
 
 impl Anchor {
     /// Provides a view into the anchor’s bytes.
@@ -141,7 +144,6 @@ impl PortableItem {
         }
     }
 
-    /// Serializes the contract to a byte array
     fn encode(&self, buf: &mut Vec<u8>) {
         match self {
             // Data = 0x00 || LE32(len) || <bytes>
@@ -177,7 +179,28 @@ impl PortableItem {
 }
 
 impl Contract {
-    fn serialized_length(&self) -> usize {
+    /// Creates a contract from a given fields
+    pub fn new(predicate: Predicate, payload: Vec<PortableItem>, anchor: Anchor) -> Self {
+        Self {
+            predicate,
+            payload,
+            anchor,
+        }
+        // todo: compute contract id
+    }
+
+    /// Returns the contract's ID
+    pub fn id(&self) -> ContractID {
+        unimplemented!()
+    }
+
+    /// Breaks up the contract into individual fields
+    pub fn into_tuple(self) -> (ContractID, Predicate, Vec<PortableItem>, Anchor) {
+        unimplemented!()
+    }
+
+    /// Precise length of a serialized output
+    pub fn serialized_length(&self) -> usize {
         let mut size = 32 + 32 + 4;
         for item in self.payload.iter() {
             size += item.serialized_length();
@@ -185,7 +208,8 @@ impl Contract {
         size
     }
 
-    fn encode(&self, buf: &mut Vec<u8>) {
+    /// Serializes the contract to a byte array
+    pub fn encode(&self, buf: &mut Vec<u8>) {
         encoding::write_bytes(&self.anchor.0, buf);
         encoding::write_point(&self.predicate.to_point(), buf);
         encoding::write_u32(self.payload.len() as u32, buf);
@@ -194,7 +218,8 @@ impl Contract {
         }
     }
 
-    fn decode<'a>(reader: &mut SliceReader<'a>) -> Result<(Self, ContractID), VMError> {
+    /// Parses a contract from an output object
+    pub fn decode<'a>(reader: &mut SliceReader<'a>) -> Result<Self, VMError> {
         //    Output  =  Anchor  ||  Predicate  ||  LE32(k)  ||  Item[0]  || ... ||  Item[k-1]
         //    Anchor  =  <32 bytes>
         // Predicate  =  <32 bytes>
