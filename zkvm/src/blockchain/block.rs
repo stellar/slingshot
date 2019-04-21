@@ -34,7 +34,7 @@ impl BlockHeader {
         BlockID(result)
     }
 
-    pub fn make_initial(timestamp_ms: u64, refscount: u64) -> BlockHeader {
+    pub fn make_initial(timestamp_ms: u64) -> BlockHeader {
         BlockHeader {
             version: 1,
             height: 1,

@@ -93,8 +93,20 @@ impl Predicate {
         encoding::write_point(&self.to_point(), prog);
     }
 
-    /// Downcasts the predicate to a verification key
-    pub fn to_key(self) -> Result<VerificationKey, VMError> {
+    /// Converts the predicate to a verification key
+    pub fn to_verification_key(self) -> Result<VerificationKey, VMError> {
+        match self {
+            Predicate::Opaque(pt) => {
+                VerificationKey::from_compressed(pt).ok_or(VMError::InvalidPoint)
+            }
+            Predicate::Key(k) => Ok(k),
+            Predicate::Tree(t) => Ok(t.precomputed_key),
+        }
+    }
+
+    /// Downcasts the predicate to a verification key witness.
+    /// TBD: use Multikey
+    pub fn to_verification_key_witness(self) -> Result<VerificationKey, VMError> {
         match self {
             Predicate::Key(k) => Ok(k),
             Predicate::Tree(t) => Ok(t.precomputed_key),

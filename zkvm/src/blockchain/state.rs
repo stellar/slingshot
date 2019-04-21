@@ -3,7 +3,7 @@ use std::collections::HashSet;
 
 use super::block::{Block, BlockHeader, BlockID};
 use super::errors::BlockchainError;
-use crate::{ContractID, Entry, TxLog, VMError};
+use crate::{ContractID, TxEntry, TxLog, VMError};
 
 #[derive(Clone)]
 pub struct BlockchainState {
@@ -15,12 +15,12 @@ pub struct BlockchainState {
 }
 
 impl BlockchainState {
-    pub fn make_initial(timestamp_ms: u64, refscount: u64) -> BlockchainState {
-        let initialHeader = BlockHeader::make_initial(timestamp_ms, refscount);
+    pub fn make_initial(timestamp_ms: u64) -> BlockchainState {
+        let initial_header = BlockHeader::make_initial(timestamp_ms);
         BlockchainState {
-            initial: initialHeader.clone(),
-            initial_id: initialHeader.id(),
-            tip: initialHeader,
+            initial: initial_header.clone(),
+            initial_id: initial_header.id(),
+            tip: initial_header,
             utxos: HashSet::new(),
         }
     }
@@ -46,14 +46,14 @@ impl BlockchainState {
         for entry in txlog.iter() {
             match entry {
                 // Remove input from UTXO set
-                Entry::Input(input) => {
+                TxEntry::Input(input) => {
                     if !self.utxos.remove(&input) {
                         return Err(VMError::InvalidInput);
                     }
                 }
 
                 // Add output entry to UTXO set
-                Entry::Output(output) => {
+                TxEntry::Output(output) => {
                     self.utxos.insert(output.id());
                 }
                 _ => {}
@@ -70,7 +70,7 @@ mod tests {
     use rand::RngCore;
 
     use super::*;
-    use crate::{Anchor, Contract, Data, Output, PortableItem, Predicate, VerificationKey};
+    use crate::{Anchor, Contract, Data, PortableItem, Predicate, VerificationKey};
 
     fn rand_item() -> PortableItem {
         let mut bytes = [0u8; 4];
@@ -81,29 +81,28 @@ mod tests {
     fn rand_contract() -> Contract {
         let mut bytes = [0u8; 32];
         rand::thread_rng().fill_bytes(&mut bytes);
-        Contract {
-            anchor: Anchor::from_raw_bytes(bytes),
-            payload: vec![rand_item(), rand_item(), rand_item()],
-            predicate: Predicate::Key(VerificationKey::from_secret(&Scalar::random(
-                &mut rand::thread_rng(),
-            ))),
-        }
+        let privkey = &Scalar::random(&mut rand::thread_rng());
+        Contract::new(
+            Predicate::Key(VerificationKey::from_secret(privkey)),
+            vec![rand_item(), rand_item(), rand_item()],
+            Anchor::from_raw_bytes(bytes),
+        )
     }
 
     #[test]
     fn test_apply_txlog() {
-        let mut state = BlockchainState::make_initial(0u64, 0u64);
+        let mut state = BlockchainState::make_initial(0u64);
 
         // Add two outputs
-        let (output0, output1) = (Output::new(rand_contract()), Output::new(rand_contract()));
+        let (output0, output1) = (rand_contract(), rand_contract());
         state
             .apply_txlog(&vec![
-                Entry::Output(output0.clone()),
-                Entry::Output(output1.clone()),
+                TxEntry::Output(output0.clone()),
+                TxEntry::Output(output1.clone()),
             ])
             .unwrap();
         state
-            .apply_txlog(&vec![Entry::Input(output0.id())])
+            .apply_txlog(&vec![TxEntry::Input(output0.id())])
             .unwrap();
 
         // Check that output0 was consumed
@@ -112,13 +111,13 @@ mod tests {
 
         // Consume output1
         state
-            .apply_txlog(&vec![Entry::Input(output1.id())])
+            .apply_txlog(&vec![TxEntry::Input(output1.id())])
             .unwrap();
         assert_eq!(state.utxos.is_empty(), true);
 
         // Check error on consuming already-consumed UTXO
         assert!(state
-            .apply_txlog(&vec![Entry::Input(output1.id())])
+            .apply_txlog(&vec![TxEntry::Input(output1.id())])
             .is_err());
     }
 }

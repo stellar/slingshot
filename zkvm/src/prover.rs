@@ -6,19 +6,21 @@ use musig::{Signature, VerificationKey};
 use std::collections::VecDeque;
 
 use crate::constraints::Commitment;
+use crate::contract::ContractID;
 use crate::errors::VMError;
 use crate::ops::Instruction;
 use crate::point_ops::PointOp;
 use crate::predicate::Predicate;
 use crate::program::{Program, ProgramItem};
-use crate::txlog::{TxID, TxLog};
-use crate::vm::{Delegate, Tx, TxHeader, VM};
+use crate::tx::{TxHeader, UnsignedTx};
+use crate::vm::{Delegate, VM};
 /// This is the entry point API for creating a transaction.
 /// Prover passes the list of instructions through the VM,
 /// creates an aggregated transaction signature (for `signtx` instruction),
 /// creates a R1CS proof and returns a complete `Tx` object that can be published.
 pub struct Prover<'t, 'g> {
-    signtx_keys: Vec<VerificationKey>,
+    // TBD: use Multikey as a witness thing
+    signtx_items: Vec<(VerificationKey, ContractID)>,
     cs: r1cs::Prover<'t, 'g>,
 }
 
@@ -44,9 +46,13 @@ impl<'t, 'g> Delegate<r1cs::Prover<'t, 'g>> for Prover<'t, 'g> {
         Ok(())
     }
 
-    fn process_tx_signature(&mut self, pred: Predicate) -> Result<(), VMError> {
-        let k = pred.to_key()?;
-        self.signtx_keys.push(k);
+    fn process_tx_signature(
+        &mut self,
+        pred: Predicate,
+        contract_id: ContractID,
+    ) -> Result<(), VMError> {
+        let k = pred.to_verification_key_witness()?;
+        self.signtx_items.push((k, contract_id));
         Ok(())
     }
 
@@ -72,15 +78,11 @@ impl<'t, 'g> Prover<'t, 'g> {
     /// Builds a transaction with a given list of instructions and a `TxHeader`.
     /// Returns a transaction `Tx` along with its ID (`TxID`) and a transaction log (`TxLog`).
     /// Fails if the input program is malformed, or some witness data is missing.
-    pub fn build_tx<F>(
+    pub fn build_tx(
         program: Program,
         header: TxHeader,
         bp_gens: &BulletproofGens,
-        sign_tx_fn: F,
-    ) -> Result<(Tx, TxID, TxLog), VMError>
-    where
-        F: FnOnce(&mut Transcript, &Vec<VerificationKey>) -> Result<Signature, VMError>,
-    {
+    ) -> Result<UnsignedTx, VMError> {
         // Prepare the constraint system
         let mut r1cs_transcript = Transcript::new(b"ZkVM.r1cs");
         let pc_gens = PedersenGens::default();
@@ -91,7 +93,7 @@ impl<'t, 'g> Prover<'t, 'g> {
         program.encode(&mut bytecode);
 
         let mut prover = Prover {
-            signtx_keys: Vec::new(),
+            signtx_items: Vec::new(),
             cs,
         };
 
@@ -105,28 +107,20 @@ impl<'t, 'g> Prover<'t, 'g> {
 
         let (txid, txlog) = vm.run()?;
 
-        // Sign txid
-        // TBD: implement holistic Signer trait/interface for tx signing
-        let mut signtx_transcript = Transcript::new(b"ZkVM.signtx");
-        signtx_transcript.commit_bytes(b"txid", &txid.0);
-        // TODO: change this to use multi-message context
-        let signature = sign_tx_fn(&mut signtx_transcript, &prover.signtx_keys)?;
-
         // Generate the R1CS proof
         let proof = prover
             .cs
             .prove(bp_gens)
             .map_err(|_| VMError::InvalidR1CSProof)?;
 
-        Ok((
-            Tx {
-                header,
-                signature,
-                proof,
-                program: bytecode,
-            },
+        // Defer signing of the transaction to the UnsignedTx API.
+        Ok(UnsignedTx {
+            header,
+            program: bytecode,
+            proof,
             txid,
             txlog,
-        ))
+            signing_instructions: prover.signtx_items,
+        })
     }
 }

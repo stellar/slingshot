@@ -1503,22 +1503,26 @@ _contract prog sig_ **delegate** → _results..._
     ```
     T = Transcript("ZkVM.delegate")
     ```
-4. Commit the program `prog` to the transcript:
+4. Commit the [contract ID](#contract-id) `contract.id` to the transcript:
+    ```
+    T.commit("contract", contract_id)
+    ```
+5. Commit the program `prog` to the transcript:
     ```
     T.commit("prog", prog)
     ```
-5. Extract nonce commitment `R` and scalar `s` from a 64-byte data `sig`:
+6. Extract nonce commitment `R` and scalar `s` from a 64-byte data `sig`:
     ```
     R = sig[ 0..32]
     s = sig[32..64]
     ```
-6. Perform the [signature protocol](#aggregated-signature) using the transcript `T`, public key `contract.predicate` and the values `R` and `s`:
+7. Perform the [signature protocol](#aggregated-signature) using the transcript `T`, public key `contract.predicate` and the values `R` and `s`:
     ```
     (s = dlog(R) + e·dlog(P))
     s·B  ==  R + e·P
     ```
-7. Add the statement to the list of [deferred point operations](#deferred-point-operations).
-8. Set the `prog` as current.
+8. Add the statement to the list of [deferred point operations](#deferred-point-operations).
+9. Set the `prog` as current.
 
 Fails if:
 1. the `sig` is not a 64-byte long [data](#data-type),

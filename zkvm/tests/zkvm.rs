@@ -1,15 +1,14 @@
 use bulletproofs::{BulletproofGens, PedersenGens};
 use curve25519_dalek::constants::RISTRETTO_BASEPOINT_COMPRESSED;
 use curve25519_dalek::scalar::Scalar;
+use merlin::Transcript;
 use musig::{Signature, VerificationKey};
 use rand::Rng;
 
 use zkvm::{
-    Anchor, Commitment, Contract, Data, Output, PortableItem, Predicate, PredicateTree, Program,
-    Prover, TxHeader, TxID, VMError, Value, Verifier,
+    Anchor, Commitment, Contract, Data, PortableItem, Predicate, PredicateTree, Program, Prover,
+    TxHeader, TxID, VMError, Value, Verifier,
 };
-
-use zkvm::keys;
 
 // TODO(vniu): move builder convenience functions into separate crate,
 // and refactor tests and Token
@@ -38,7 +37,7 @@ impl ProgramHelper for Program {
 
     fn input_helper(&mut self, qty: u64, flv: Scalar, pred: Predicate) -> &mut Self {
         let prev_output = make_output(qty, flv, pred);
-        self.push(Output::new(prev_output)) // stack: input-data
+        self.push(prev_output) // stack: input-data
             .input() // stack: input-contract
             .sign_tx(); // stack: input-value
         self
@@ -98,19 +97,19 @@ fn make_flavor() -> (Scalar, Predicate, Scalar) {
 }
 
 /// Creates an Output contract with given quantity, flavor, and predicate.
-fn make_output(qty: u64, flv: Scalar, pred: Predicate) -> Contract {
-    Contract {
-        anchor: Anchor::from_raw_bytes([0u8; 32]),
-        payload: vec![PortableItem::Value(Value {
+fn make_output(qty: u64, flv: Scalar, predicate: Predicate) -> Contract {
+    Contract::new(
+        predicate,
+        vec![PortableItem::Value(Value {
             qty: Commitment::blinded(qty),
             flv: Commitment::blinded(flv),
         })],
-        predicate: pred,
-    }
+        Anchor::from_raw_bytes([0u8; 32]),
+    )
 }
 
 fn build_and_verify(program: Program, keys: &Vec<Scalar>) -> Result<TxID, VMError> {
-    let (tx, _, _) = {
+    let tx = {
         // Build tx
         let bp_gens = BulletproofGens::new(256, 1);
         let header = TxHeader {
@@ -119,29 +118,39 @@ fn build_and_verify(program: Program, keys: &Vec<Scalar>) -> Result<TxID, VMErro
             maxtime_ms: 0u64,
         };
         let gens = PedersenGens::default();
-        Prover::build_tx(program, header, &bp_gens, |t, verification_keys| {
-            if verification_keys.len() == 0 {
-                return Ok(Signature {
-                    R: RISTRETTO_BASEPOINT_COMPRESSED,
-                    s: Scalar::zero(),
-                });
+        let utx = Prover::build_tx(program, header, &bp_gens)?;
+
+        let sig = if utx.signing_instructions.len() == 0 {
+            Signature {
+                R: RISTRETTO_BASEPOINT_COMPRESSED,
+                s: Scalar::zero(),
             }
-            let signtx_keys: Vec<Scalar> = verification_keys
+        } else {
+            // find all the secret scalars for the pubkeys used in the VM
+            let privkeys: Vec<Scalar> = utx
+                .signing_instructions
                 .iter()
-                .filter_map(|vk| {
+                .filter_map(|(pubkey, _msg)| {
                     for k in keys {
-                        if (k * gens.B).compress() == *vk.as_compressed() {
+                        if (k * gens.B).compress() == *pubkey.as_compressed() {
                             return Some(*k);
                         }
                     }
                     None
                 })
                 .collect();
-            Ok(Signature::sign_single(
-                &mut t.clone(),
-                keys::aggregated_privkey(&signtx_keys)?,
-            ))
-        })?
+
+            let mut signtx_transcript = Transcript::new(b"ZkVM.signtx");
+            signtx_transcript.commit_bytes(b"txid", &utx.txid.0);
+            Signature::sign_multi(
+                privkeys,
+                utx.signing_instructions.clone(),
+                &mut signtx_transcript,
+            )
+            .unwrap()
+        };
+
+        utx.sign(sig)
     };
 
     // Verify tx
@@ -446,7 +455,7 @@ fn taproot_happy_path() {
     let prev_output = make_output(101u64, Scalar::from(1u64), Predicate::Tree(pred_tree));
 
     let prog = Program::build(|p| {
-        p.push(Output::new(prev_output))
+        p.push(prev_output)
             .input()
             .sign_tx()
             .push(Predicate::Key(pk)) // send to the key
@@ -474,7 +483,7 @@ fn taproot_program_path() {
 
     let prog = Program::build(|p| {
         p.push(secret_scalar)
-            .push(Output::new(prev_output.clone()))
+            .push(prev_output.clone())
             .input()
             .push(Data::Opaque(call_proof.to_bytes().clone()))
             .push(Data::Program(call_prog.clone()))
@@ -484,7 +493,7 @@ fn taproot_program_path() {
 
     let wrong_prog = Program::build(|p| {
         p.push(secret_scalar + Scalar::one())
-            .push(Output::new(prev_output.clone()))
+            .push(prev_output.clone())
             .input()
             .push(Data::Opaque(call_proof.to_bytes().clone()))
             .push(Data::Program(call_prog))

@@ -43,6 +43,8 @@ impl Multikey {
                 return Err(MusigError::BadArguments);
             }
             1 => {
+                // Special case: single key can be wrapped in a Multikey type
+                // without a delinearization factor applied.
                 return Ok(Multikey {
                     prf: None,
                     aggregated_key: pubkeys[0],
