@@ -1,6 +1,5 @@
 use curve25519_dalek::scalar::Scalar;
-use zkvm::keys;
-use zkvm::{Commitment, Data, Output, Predicate, Program, Value};
+use zkvm::{Commitment, Contract, Data, Predicate, Program, Value};
 
 /// Represents a ZkVM Token with unique flavor and embedded
 /// metadata protected by a user-supplied Predicate.
@@ -54,7 +53,7 @@ impl Token {
 
     /// Adds instructions to a program to retire a given UTXO.
     /// TBD: accept a qty/Token pairing to retire.
-    pub fn retire<'a>(program: &'a mut Program, prev_output: Output) -> &'a mut Program {
+    pub fn retire<'a>(program: &'a mut Program, prev_output: Contract) -> &'a mut Program {
         program.push(prev_output).input().sign_tx().retire()
     }
 }
@@ -62,21 +61,20 @@ impl Token {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use zkvm::{Anchor, Contract};
-
     use bulletproofs::{BulletproofGens, PedersenGens};
+    use merlin::Transcript;
     use zkvm::{
-        Entry, Predicate, Program, Prover, Signature, Tx, TxHeader, TxID, TxLog, VMError,
-        VerificationKey, Verifier,
+        Anchor, Contract, Predicate, Program, Prover, Signature, Tx, TxEntry, TxHeader, TxID,
+        TxLog, VMError, VerificationKey, Verifier,
     };
 
     fn add_dummy_input(p: &mut Program, dummy_key: &Scalar) {
-        let contract = Contract {
-            anchor: Anchor::from_raw_bytes([0u8; 32]),
-            payload: vec![],
-            predicate: Predicate::Key(VerificationKey::from_secret(dummy_key)),
-        };
-        p.push(Output::new(contract)).input().sign_tx();
+        let contract = Contract::new(
+            Predicate::Key(VerificationKey::from_secret(dummy_key)),
+            vec![],
+            Anchor::from_raw_bytes([0u8; 32]),
+        );
+        p.push(contract).input().sign_tx();
     }
 
     #[test]
@@ -123,7 +121,7 @@ mod tests {
 
             let mut retire_program = Program::new();
             let issue_output = match &issue_txlog[3] {
-                Entry::Output(x) => x.clone(),
+                TxEntry::Output(x) => x.clone(),
                 _ => return assert!(false, "TxLog entry doesn't match: expected Output"),
             };
             Token::retire(&mut retire_program, issue_output);
@@ -145,22 +143,34 @@ mod tests {
         };
         // TBD: figure out better + more robust signing mechanism
         let gens = PedersenGens::default();
-        Prover::build_tx(program, header, &bp_gens, |t, verification_keys| {
-            let signtx_keys: Vec<Scalar> = verification_keys
-                .iter()
-                .filter_map(|vk| {
-                    for k in &keys {
-                        if (k * gens.B).compress() == *vk.as_compressed() {
-                            return Some(*k);
-                        }
+        let utx = Prover::build_tx(program, header, &bp_gens)?;
+
+        // find all the secret scalars for the pubkeys used in the VM
+        let privkeys: Vec<Scalar> = utx
+            .signing_instructions
+            .iter()
+            .filter_map(|(pubkey, _msg)| {
+                for k in keys.iter() {
+                    if (k * gens.B).compress() == *pubkey.as_compressed() {
+                        return Some(*k);
                     }
-                    None
-                })
-                .collect();
-            Ok(Signature::sign_single(
-                &mut t.clone(),
-                keys::aggregated_privkey(&signtx_keys)?,
-            ))
-        })
+                }
+                None
+            })
+            .collect();
+
+        let mut signtx_transcript = Transcript::new(b"ZkVM.signtx");
+        signtx_transcript.commit_bytes(b"txid", &utx.txid.0);
+        let sig = Signature::sign_multi(
+            privkeys,
+            utx.signing_instructions.clone(),
+            &mut signtx_transcript,
+        )
+        .unwrap();
+
+        let txid = utx.txid;
+        let txlog = utx.txlog.clone();
+        let tx = utx.sign(sig);
+        Ok((tx, txid, txlog))
     }
 }
