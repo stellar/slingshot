@@ -13,12 +13,7 @@ pub struct VerificationKey {
 impl VerificationKey {
     /// Constructs a VerificationKey from a private key.
     pub fn from_secret(privkey: &Scalar) -> Self {
-        Self::from_secret_uncompressed(privkey).into()
-    }
-
-    /// Constructs an uncompressed VerificationKey point from a private key.
-    pub(crate) fn from_secret_uncompressed(privkey: &Scalar) -> RistrettoPoint {
-        (privkey * RISTRETTO_BASEPOINT_POINT)
+        (privkey * RISTRETTO_BASEPOINT_POINT).into()
     }
 
     /// Creates new key from a compressed form,remembers the compressed point.
@@ -42,6 +37,21 @@ impl VerificationKey {
     /// Returns a reference to the compressed ristretto point
     pub fn as_compressed(&self) -> &CompressedRistretto {
         &self.precompressed
+    }
+
+    /// Returns a reference to the compressed ristretto point
+    pub fn as_point(&self) -> &RistrettoPoint {
+        &self.point
+    }
+
+    /// Returns the view into byte representation of the verification key
+    pub fn as_bytes(&self) -> &[u8; 32] {
+        self.as_compressed().as_bytes()
+    }
+
+    /// Returns the byte representation of the verification key
+    pub fn to_bytes(&self) -> [u8; 32] {
+        self.as_compressed().to_bytes()
     }
 }
 
