@@ -3,7 +3,7 @@ use std::collections::HashSet;
 
 use super::block::{Block, BlockHeader, BlockID};
 use super::errors::BlockchainError;
-use crate::{ContractID, Entry, TxLog, VMError};
+use crate::{ContractID, Entry, Tx, TxID, TxLog, VMError, Verifier};
 
 #[derive(Clone)]
 pub struct BlockchainState {
@@ -66,6 +66,29 @@ impl BlockchainState {
         }
 
         Ok(())
+    }
+
+    /// Executes a transaction, returning its tx ID and tx log.
+    pub fn execute_tx(
+        tx: &Tx,
+        bp_gens: &BulletproofGens,
+        block_version: u64,
+        timestamp_ms: u64,
+    ) -> Result<(TxID, TxLog), BlockchainError> {
+        if tx.header.mintime_ms > timestamp_ms || tx.header.maxtime_ms < timestamp_ms {
+            return Err(BlockchainError::BadTxTimestamp);
+        }
+
+        // Check that, for the current block version, this tx version is
+        // supported. For block versions higher than 1, we do not yet know
+        // what tx versions to support, so we accept all.
+        if block_version == 1 && tx.header.version != 1 {
+            return Err(BlockchainError::VersionReversion);
+        }
+
+        // Verify tx
+        let vtx = Verifier::verify_tx(tx, bp_gens).map_err(|e| BlockchainError::TxValidation(e))?;
+        Ok((vtx.id, vtx.log))
     }
 }
 
