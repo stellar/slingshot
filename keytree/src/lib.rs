@@ -113,16 +113,13 @@ impl Xprv {
 }
 
 impl Xpub {
-    /// Returns a intermediate child pubkey. Users must provide customize, in order to separate
-    /// sibling keys from one another through unique derivation paths.
+    /// Returns an intermediate Xpub derived using a PRF customized with a user-provided closure.
     pub fn derive_intermediate_key(&self, customize: impl FnOnce(&mut Transcript)) -> Xpub {
         let (xpub, _f) = self.derive_intermediate_helper(self.prepare_prf(), customize);
         xpub
     }
 
-    /// Returns a leaf Xpub, which can safely be shared.
-    /// Users must provide customize, in order to separate sibling keys from one another
-    /// through unique derivation paths.
+    /// Returns a leaf `VerificationKey` derived using a PRF customized with a user-provided closure.
     pub fn derive_key(&self, customize: impl FnOnce(&mut Transcript)) -> VerificationKey {
         let f = self.derive_leaf_helper(self.prepare_prf(), customize);
         (self.pubkey.as_point() + (&f * &constants::RISTRETTO_BASEPOINT_TABLE)).into()
