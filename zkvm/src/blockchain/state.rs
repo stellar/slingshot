@@ -9,19 +9,23 @@ use crate::{ContractID, Entry, TxLog, VMError};
 pub struct BlockchainState {
     pub initial: BlockHeader,
     pub tip: BlockHeader,
-    pub utxos: HashSet<ContractID>,
+    pub utxos: Vec<ContractID>,
 
     pub initial_id: BlockID,
 }
 
 impl BlockchainState {
-    pub fn make_initial(timestamp_ms: u64, refscount: u64) -> BlockchainState {
-        let initialHeader = BlockHeader::make_initial(timestamp_ms, refscount);
+    pub fn make_initial(
+        timestamp_ms: u64,
+        refscount: u64,
+        utxos: Vec<ContractID>,
+    ) -> BlockchainState {
+        let initialHeader = BlockHeader::make_initial(timestamp_ms, refscount, &utxos);
         BlockchainState {
             initial: initialHeader.clone(),
             initial_id: initialHeader.id(),
             tip: initialHeader,
-            utxos: HashSet::new(),
+            utxos: utxos,
         }
     }
 
@@ -47,14 +51,15 @@ impl BlockchainState {
             match entry {
                 // Remove input from UTXO set
                 Entry::Input(input) => {
-                    if !self.utxos.remove(&input) {
-                        return Err(VMError::InvalidInput);
-                    }
+                    match self.utxos.iter().position(|x| x == input) {
+                        Some(pos) => self.utxos.remove(pos),
+                        None => return Err(VMError::InvalidInput),
+                    };
                 }
 
                 // Add output entry to UTXO set
                 Entry::Output(output) => {
-                    self.utxos.insert(output.id());
+                    self.utxos.push(output.id());
                 }
                 _ => {}
             }
@@ -92,7 +97,7 @@ mod tests {
 
     #[test]
     fn test_apply_txlog() {
-        let mut state = BlockchainState::make_initial(0u64, 0u64);
+        let mut state = BlockchainState::make_initial(0u64, 0u64, Vec::new());
 
         // Add two outputs
         let (output0, output1) = (Output::new(rand_contract()), Output::new(rand_contract()));

@@ -4,6 +4,7 @@ use crate::constraints::Commitment;
 use crate::encoding;
 use crate::encoding::SliceReader;
 use crate::errors::VMError;
+use crate::merkle::MerkleItem;
 use crate::predicate::Predicate;
 use crate::types::{Data, Value};
 
@@ -225,5 +226,11 @@ impl Contract {
         let id = ContractID::from_serialized_contract(serialized_contract);
 
         Ok((contract, id))
+    }
+}
+
+impl MerkleItem for ContractID {
+    fn commit(&self, t: &mut Transcript) {
+        t.commit_bytes(b"utxo", self.as_bytes());
     }
 }
