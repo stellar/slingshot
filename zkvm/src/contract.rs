@@ -2,6 +2,7 @@ use crate::constraints::Commitment;
 use crate::encoding;
 use crate::encoding::SliceReader;
 use crate::errors::VMError;
+use crate::merkle::MerkleItem;
 use crate::predicate::Predicate;
 use crate::types::{Data, Value};
 use merlin::Transcript;
@@ -215,5 +216,11 @@ impl PortableItem {
             }
             _ => Err(VMError::FormatError),
         }
+    }
+}
+
+impl MerkleItem for ContractID {
+    fn commit(&self, t: &mut Transcript) {
+        t.commit_bytes(b"utxo", self.as_bytes());
     }
 }

@@ -4,25 +4,28 @@
 use crate::transcript::TranscriptProtocol;
 use curve25519_dalek::constants;
 use curve25519_dalek::ristretto::CompressedRistretto;
-use curve25519_dalek::ristretto::RistrettoPoint;
 use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
+use musig::VerificationKey;
 use rand::{CryptoRng, RngCore};
 
 mod transcript;
 
+#[cfg(test)]
+mod tests;
+
 /// Xprv represents an extended private key.
+#[derive(Copy, Clone, PartialEq, Eq, Default, Debug)]
 pub struct Xprv {
     scalar: Scalar,
-    dk: [u8; 32],
-    precompressed_pubkey: CompressedRistretto,
+    xpub: Xpub,
 }
 
 /// Xpub represents an extended public key.
+#[derive(Copy, Clone, PartialEq, Eq, Default, Debug)]
 pub struct Xpub {
-    point: RistrettoPoint,
+    pubkey: VerificationKey,
     dk: [u8; 32],
-    precompressed_pubkey: CompressedRistretto,
 }
 
 impl Xprv {
@@ -32,65 +35,46 @@ impl Xprv {
         let mut dk = [0u8; 32];
         rng.fill_bytes(&mut dk);
 
-        let precompressed_pubkey = (scalar * &constants::RISTRETTO_BASEPOINT_POINT).compress();
+        let pubkey = VerificationKey::from_secret(&scalar);
 
         Xprv {
             scalar,
-            dk,
-            precompressed_pubkey,
+            xpub: Xpub { pubkey, dk },
         }
     }
 
     /// Returns a new Xpub, generated from the provided Xprv.
-    pub fn to_xpub(&self) -> Xpub {
-        let point = self.scalar * &constants::RISTRETTO_BASEPOINT_POINT;
-        Xpub {
-            point: point,
-            dk: self.dk,
-            precompressed_pubkey: self.precompressed_pubkey,
-        }
+    pub fn as_xpub(&self) -> &Xpub {
+        &self.xpub
     }
 
-    /// Returns a intermediate child xprv. Users must provide customize, in order to separate
-    /// sibling keys from one another through unique derivation paths.
+    /// Converts Xprv into Xpub without consuming self.
+    pub fn to_xpub(&self) -> Xpub {
+        self.xpub
+    }
+
+    /// Converts Xprv into Xpub.
+    pub fn into_xpub(self) -> Xpub {
+        self.xpub
+    }
+
+    /// Returns an intermediate Xprv derived using a PRF customized with a user-provided closure.
     pub fn derive_intermediate_key(&self, customize: impl FnOnce(&mut Transcript)) -> Xprv {
-        let xpub = self.to_xpub();
-
-        let mut t = Transcript::new(b"Keytree.derivation");
-        t.commit_bytes(b"pt", xpub.precompressed_pubkey.as_bytes());
-        t.commit_bytes(b"dk", &xpub.dk);
-
-        // change the derivation path for this key
-        customize(&mut t);
-
-        // squeeze a challenge scalar
-        let f = t.challenge_scalar(b"f.intermediate");
-
-        // squeeze a new derivation key
-        let mut child_dk = [0u8; 32];
-        t.challenge_bytes(b"dk", &mut child_dk);
-
-        let child_point = xpub.point + (f * &constants::RISTRETTO_BASEPOINT_POINT);
+        let (child_xpub, f) = self
+            .xpub
+            .derive_intermediate_helper(self.xpub.prepare_prf(), customize);
 
         Xprv {
-            scalar: self.scalar,
-            dk: child_dk,
-            precompressed_pubkey: child_point.compress(),
+            scalar: self.scalar + f,
+            xpub: child_xpub,
         }
     }
 
-    /// Returns a leaf private key. Users must provide customize, in order to
-    /// separate sibling keys from one another through unique derivation paths.
+    /// Returns a leaf secret scalar derived using a PRF customized with a user-provided closure.
     pub fn derive_key(&self, customize: impl FnOnce(&mut Transcript)) -> Scalar {
-        let mut t = Transcript::new(b"Keytree.derivation");
-        t.commit_bytes(b"pt", self.precompressed_pubkey.as_bytes());
-        t.commit_bytes(b"dk", &self.dk);
-
-        // change the derivation path for this key
-        customize(&mut t);
-
-        // squeeze a challenge scalar
-        let f = t.challenge_scalar(b"f.leaf");
+        let f = self
+            .xpub
+            .derive_leaf_helper(self.xpub.prepare_prf(), customize);
         self.scalar + f
     }
 
@@ -98,7 +82,7 @@ impl Xprv {
     pub fn to_bytes(&self) -> [u8; 64] {
         let mut buf = [0u8; 64];
         buf[..32].copy_from_slice(&self.scalar.to_bytes());
-        buf[32..].copy_from_slice(&self.dk);
+        buf[32..].copy_from_slice(&self.xpub.dk);
         buf
     }
 
@@ -117,65 +101,34 @@ impl Xprv {
         };
         let mut dk = [0u8; 32];
         dk.copy_from_slice(&bytes[32..]);
-        let precompressed_pubkey = (scalar * &constants::RISTRETTO_BASEPOINT_POINT).compress();
 
         return Some(Xprv {
             scalar,
-            dk,
-            precompressed_pubkey,
+            xpub: Xpub {
+                pubkey: VerificationKey::from_secret(&scalar),
+                dk,
+            },
         });
     }
 }
 
 impl Xpub {
-    /// Returns a intermediate child pubkey. Users must provide customize, in order to separate
-    /// sibling keys from one another through unique derivation paths.
+    /// Returns an intermediate Xpub derived using a PRF customized with a user-provided closure.
     pub fn derive_intermediate_key(&self, customize: impl FnOnce(&mut Transcript)) -> Xpub {
-        let mut t = Transcript::new(b"Keytree.derivation");
-        t.commit_bytes(b"pt", self.precompressed_pubkey.as_bytes());
-        t.commit_bytes(b"dk", &self.dk);
-
-        // change the derivation path for this key
-        customize(&mut t);
-
-        // squeeze a challenge scalar
-        let f = t.challenge_scalar(b"f.intermediate");
-
-        // squeeze a new derivation key
-        let mut child_dk = [0u8; 32];
-        t.challenge_bytes(b"dk", &mut child_dk);
-
-        let child_point = self.point + (f * &constants::RISTRETTO_BASEPOINT_POINT);
-
-        Xpub {
-            point: child_point,
-            dk: child_dk,
-            precompressed_pubkey: child_point.compress(),
-        }
+        let (xpub, _f) = self.derive_intermediate_helper(self.prepare_prf(), customize);
+        xpub
     }
 
-    /// Returns a leaf Xpub, which can safely be shared.
-    /// Users must provide customize, in order to separate sibling keys from one another
-    /// through unique derivation paths.
-    pub fn derive_key(&self, customize: impl FnOnce(&mut Transcript)) -> CompressedRistretto {
-        let mut t = Transcript::new(b"Keytree.derivation");
-        t.commit_bytes(b"pt", self.precompressed_pubkey.as_bytes());
-        t.commit_bytes(b"dk", &self.dk);
-
-        // change the derivation path for this key
-        customize(&mut t);
-
-        // squeeze a challenge scalar
-        let f = t.challenge_scalar(b"f.leaf");
-        // TBD: change this to VerificationKey after we factor out Musig (#239)
-        //      in order to preserve uncompressed point.
-        (self.point + (f * &constants::RISTRETTO_BASEPOINT_POINT)).compress()
+    /// Returns a leaf `VerificationKey` derived using a PRF customized with a user-provided closure.
+    pub fn derive_key(&self, customize: impl FnOnce(&mut Transcript)) -> VerificationKey {
+        let f = self.derive_leaf_helper(self.prepare_prf(), customize);
+        (self.pubkey.as_point() + (&f * &constants::RISTRETTO_BASEPOINT_TABLE)).into()
     }
 
     /// Serializes this Xpub to a sequence of bytes.
     pub fn to_bytes(&self) -> [u8; 64] {
         let mut buf = [0u8; 64];
-        buf[..32].copy_from_slice(self.precompressed_pubkey.as_bytes());
+        buf[..32].copy_from_slice(self.pubkey.as_compressed().as_bytes());
         buf[32..].copy_from_slice(&self.dk);
         buf
     }
@@ -187,200 +140,56 @@ impl Xpub {
             return None;
         }
 
-        let precompressed_pubkey = CompressedRistretto::from_slice(&bytes[..32]);
+        let compressed_pubkey = CompressedRistretto::from_slice(&bytes[..32]);
         let mut dk = [0u8; 32];
         dk.copy_from_slice(&bytes[32..]);
 
-        let point = match precompressed_pubkey.decompress() {
+        let pubkey = match VerificationKey::from_compressed(compressed_pubkey) {
             Some(p) => p,
             None => return None,
         };
 
-        Some(Xpub {
-            point,
-            dk,
-            precompressed_pubkey,
-        })
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use hex;
-    use rand::SeedableRng;
-    use rand_chacha::ChaChaRng;
-
-    #[test]
-    fn random_xprv_test() {
-        let seed = [0u8; 32];
-        let mut rng = ChaChaRng::from_seed(seed);
-        let xprv = Xprv::random(&mut rng);
-
-        // the following are hard-coded based on the previous seed
-        assert_eq!(
-            to_hex_32(xprv.dk),
-            "9f07e7be5551387a98ba977c732d080dcb0f29a048e3656912c6533e32ee7aed"
-        );
-        assert_eq!(
-            hex::encode(xprv.scalar.as_bytes()),
-            "4a53c3fbbc59970ee5f85af813875dffc13a904a2e53ae7e65fa0dea6e62c901"
-        );
+        Some(Xpub { pubkey, dk })
     }
 
-    #[test]
-    fn random_xprv_derivation_test() {
-        let seed = [0u8; 32];
-        let mut rng = ChaChaRng::from_seed(seed);
-        let xprv = Xprv::random(&mut rng).derive_intermediate_key(|t| {
-            t.commit_u64(b"account_id", 34);
-        });
-
-        assert_eq!(
-            hex::encode(xprv.scalar.as_bytes()),
-            "4a53c3fbbc59970ee5f85af813875dffc13a904a2e53ae7e65fa0dea6e62c901"
-        );
-        assert_eq!(
-            to_hex_32(xprv.dk),
-            "36e435eabc2a562ef228b82b399fbd004b2cc64103313fa673bd1fca0971f59d"
-        );
-        assert_eq!(
-            to_hex_32(xprv.precompressed_pubkey.to_bytes()),
-            "7414c0c5238c2277318ba3e51fc6fb8e836a2d9b4c04508f93cd5a455422221b"
-        );
+    fn prepare_prf(&self) -> Transcript {
+        let mut t = Transcript::new(b"Keytree.derivation");
+        t.commit_point(b"pt", self.pubkey.as_compressed());
+        t.commit_bytes(b"dk", &self.dk);
+        t
     }
 
-    #[test]
-    fn random_xprv_leaf_test() {
-        let seed = [0u8; 32];
-        let mut rng = ChaChaRng::from_seed(seed);
-        let xprv = Xprv::random(&mut rng).derive_key(|t| {
-            t.commit_u64(b"invoice_id", 10034);
-        });
+    fn derive_intermediate_helper(
+        &self,
+        mut prf: Transcript,
+        customize: impl FnOnce(&mut Transcript),
+    ) -> (Xpub, Scalar) {
+        // change the derivation path for this key
+        customize(&mut prf);
 
-        assert_eq!(
-            hex::encode(xprv.as_bytes()),
-            "a71e5435c3374eef60928c3bac1378dcbc91bc1d554e09242247a0861fd12c0c"
-        );
+        // squeeze a challenge scalar
+        let f = prf.challenge_scalar(b"f.intermediate");
+
+        // squeeze a new derivation key
+        let mut child_dk = [0u8; 32];
+        prf.challenge_bytes(b"dk", &mut child_dk);
+
+        let child_point = self.pubkey.as_point() + (&f * &constants::RISTRETTO_BASEPOINT_TABLE);
+
+        let xpub = Xpub {
+            pubkey: child_point.into(),
+            dk: child_dk,
+        };
+
+        (xpub, f)
     }
 
-    #[test]
-    fn serialize_xprv_test() {
-        let seed = [0u8; 32];
-        let mut rng = ChaChaRng::from_seed(seed);
-        let xprv = Xprv::random(&mut rng);
-        let xprv_bytes = xprv.to_bytes();
-
-        assert_eq!(
-            to_hex_64(xprv_bytes),
-            "4a53c3fbbc59970ee5f85af813875dffc13a904a2e53ae7e65fa0dea6e62c9019f07e7be5551387a98ba977c732d080dcb0f29a048e3656912c6533e32ee7aed"
-        );
+    fn derive_leaf_helper(
+        &self,
+        mut prf: Transcript,
+        customize: impl FnOnce(&mut Transcript),
+    ) -> Scalar {
+        customize(&mut prf);
+        prf.challenge_scalar(b"f.leaf")
     }
-
-    #[test]
-    fn deserialize_xprv_test() {
-        let xprv_bytes = hex::decode("4a53c3fbbc59970ee5f85af813875dffc13a904a2e53ae7e65fa0dea6e62c9019f07e7be5551387a98ba977c732d080dcb0f29a048e3656912c6533e32ee7aed").unwrap();
-        let xprv = Xprv::from_bytes(&xprv_bytes).unwrap();
-
-        let seed = [0u8; 32];
-        let mut rng = ChaChaRng::from_seed(seed);
-        let expected_xprv = Xprv::random(&mut rng);
-
-        assert_eq!(xprv.dk, expected_xprv.dk);
-        assert_eq!(xprv.scalar, expected_xprv.scalar);
-    }
-
-    #[test]
-    fn random_xpub_test() {
-        let seed = [0u8; 32];
-        let mut rng = ChaChaRng::from_seed(seed);
-        let xprv = Xprv::random(&mut rng);
-        let xpub = xprv.to_xpub();
-
-        // hex strings are hard-coded based on the previous seed
-        assert_eq!(
-            to_hex_32(xpub.dk),
-            "9f07e7be5551387a98ba977c732d080dcb0f29a048e3656912c6533e32ee7aed"
-        );
-        assert_eq!(xpub.point.compress(), xpub.precompressed_pubkey); // checks internal consistency
-        assert_eq!(
-            to_hex_32(xpub.precompressed_pubkey.to_bytes()),
-            "9c66a339c8344f922fc3206cb5dae814a594c0177dd3235c254d9c409a65b808"
-        );
-    }
-
-    #[test]
-    fn serialize_xpub_test() {
-        let seed = [0u8; 32];
-        let mut rng = ChaChaRng::from_seed(seed);
-        let xprv = Xprv::random(&mut rng);
-        let xpub = xprv.to_xpub();
-
-        assert_eq!(
-            to_hex_64(xpub.to_bytes()),
-            "9c66a339c8344f922fc3206cb5dae814a594c0177dd3235c254d9c409a65b8089f07e7be5551387a98ba977c732d080dcb0f29a048e3656912c6533e32ee7aed"
-        );
-    }
-
-    #[test]
-    fn deserialize_xpub_test() {
-        let xpub_bytes = hex::decode("9c66a339c8344f922fc3206cb5dae814a594c0177dd3235c254d9c409a65b8089f07e7be5551387a98ba977c732d080dcb0f29a048e3656912c6533e32ee7aed").unwrap();
-        let xpub = Xpub::from_bytes(&xpub_bytes).unwrap();
-
-        let seed = [0u8; 32];
-        let mut rng = ChaChaRng::from_seed(seed);
-        let expected_xprv = Xprv::random(&mut rng);
-        let expected_xpub = expected_xprv.to_xpub();
-
-        assert_eq!(xpub.dk, expected_xpub.dk);
-        assert_eq!(xpub.point, expected_xpub.point);
-        assert_eq!(
-            xpub.precompressed_pubkey,
-            expected_xpub.precompressed_pubkey
-        );
-    }
-
-    #[test]
-    fn random_xpub_derivation_test() {
-        let seed = [0u8; 32];
-        let mut rng = ChaChaRng::from_seed(seed);
-        let xprv = Xprv::random(&mut rng);
-        let xpub = xprv.to_xpub().derive_intermediate_key(|t| {
-            t.commit_u64(b"account_id", 34);
-        });
-
-        assert_eq!(
-            to_hex_32(xpub.dk),
-            "36e435eabc2a562ef228b82b399fbd004b2cc64103313fa673bd1fca0971f59d"
-        );
-        assert_eq!(xpub.point.compress(), xpub.precompressed_pubkey); // checks internal consistency
-        assert_eq!(
-            to_hex_32(xpub.precompressed_pubkey.to_bytes()),
-            "7414c0c5238c2277318ba3e51fc6fb8e836a2d9b4c04508f93cd5a455422221b"
-        );
-    }
-
-    #[test]
-    fn random_xpub_leaf_test() {
-        let seed = [0u8; 32];
-        let mut rng = ChaChaRng::from_seed(seed);
-        let xprv = Xprv::random(&mut rng);
-        let xpub = xprv.to_xpub().derive_key(|t| {
-            t.commit_u64(b"invoice_id", 10034);
-        });
-
-        assert_eq!(
-            hex::encode(xpub.as_bytes()),
-            "a202e8a0b6fb7123bf1e2aaaf90ed9c3c55f7d1975ed4b63b4417e5d7397c048"
-        );
-    }
-
-    fn to_hex_32(input: [u8; 32]) -> String {
-        return hex::encode(&input[..]);
-    }
-
-    fn to_hex_64(input: [u8; 64]) -> String {
-        return hex::encode(&input[..]);
-    }
-
 }

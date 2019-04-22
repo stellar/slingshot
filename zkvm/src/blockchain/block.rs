@@ -2,7 +2,7 @@ use bulletproofs::BulletproofGens;
 use merlin::Transcript;
 
 use super::errors::BlockchainError;
-use crate::{MerkleTree, Tx, TxID, TxLog, Verifier};
+use crate::{ContractID, MerkleTree, Tx, TxID, TxLog, Verifier};
 
 #[derive(Clone, PartialEq)]
 pub struct BlockID(pub [u8; 32]);
@@ -17,6 +17,9 @@ pub struct BlockHeader {
     pub utxoroot: [u8; 32],
     pub ext: Vec<u8>,
 }
+
+#[derive(Clone, PartialEq)]
+pub struct Root(pub [u8; 32]);
 
 impl BlockHeader {
     pub fn id(&self) -> BlockID {
@@ -34,14 +37,14 @@ impl BlockHeader {
         BlockID(result)
     }
 
-    pub fn make_initial(timestamp_ms: u64) -> BlockHeader {
+    pub fn make_initial(timestamp_ms: u64, utxos: &Vec<ContractID>) -> BlockHeader {
         BlockHeader {
             version: 1,
             height: 1,
             prev: BlockID([0; 32]),
             timestamp_ms: timestamp_ms,
-            txroot: [0; 32],
-            utxoroot: [0; 32],
+            txroot: Root::tx(&[]).0,
+            utxoroot: Root::utxo(utxos).0,
             ext: Vec::new(),
         }
     }
@@ -61,6 +64,7 @@ impl BlockHeader {
             self.timestamp_ms > prev.timestamp_ms,
             BlockchainError::BadBlockTimestamp,
         )?;
+        // TODO: execute transaction list and verify txroot
         Ok(())
     }
 }
@@ -115,5 +119,17 @@ impl Block {
         }
 
         Ok(txlogs)
+    }
+}
+
+impl Root {
+    /// Computes the Merkle txroot
+    pub fn tx(txids: &[TxID]) -> Root {
+        Root(MerkleTree::root(b"ZkVM.txroot", txids))
+    }
+
+    /// Computes the Merkle utxoroot
+    pub fn utxo(utxos: &[ContractID]) -> Root {
+        Root(MerkleTree::root(b"ZkVM.utxoroot", utxos))
     }
 }

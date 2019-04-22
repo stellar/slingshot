@@ -3,25 +3,25 @@ use std::collections::HashSet;
 
 use super::block::{Block, BlockHeader, BlockID};
 use super::errors::BlockchainError;
-use crate::{ContractID, TxEntry, TxLog, VMError};
+use crate::{ContractID, Tx, TxEntry, TxID, TxLog, VMError, Verifier};
 
 #[derive(Clone)]
 pub struct BlockchainState {
     pub initial: BlockHeader,
     pub tip: BlockHeader,
-    pub utxos: HashSet<ContractID>,
+    pub utxos: Vec<ContractID>,
 
     pub initial_id: BlockID,
 }
 
 impl BlockchainState {
-    pub fn make_initial(timestamp_ms: u64) -> BlockchainState {
-        let initial_header = BlockHeader::make_initial(timestamp_ms);
+    pub fn make_initial(timestamp_ms: u64, utxos: Vec<ContractID>) -> BlockchainState {
+        let initialHeader = BlockHeader::make_initial(timestamp_ms, &utxos);
         BlockchainState {
-            initial: initial_header.clone(),
-            initial_id: initial_header.id(),
-            tip: initial_header,
-            utxos: HashSet::new(),
+            initial: initialHeader.clone(),
+            initial_id: initialHeader.id(),
+            tip: initialHeader,
+            utxos: utxos,
         }
     }
 
@@ -47,20 +47,44 @@ impl BlockchainState {
             match entry {
                 // Remove input from UTXO set
                 TxEntry::Input(input) => {
-                    if !self.utxos.remove(&input) {
-                        return Err(VMError::InvalidInput);
-                    }
+                    match self.utxos.iter().position(|x| x == input) {
+                        Some(pos) => self.utxos.remove(pos),
+                        None => return Err(VMError::InvalidInput),
+                    };
                 }
 
                 // Add output entry to UTXO set
                 TxEntry::Output(output) => {
-                    self.utxos.insert(output.id());
+                    self.utxos.push(output.id());
                 }
                 _ => {}
             }
         }
 
         Ok(())
+    }
+
+    /// Executes a transaction, returning its tx ID and tx log.
+    pub fn execute_tx(
+        tx: &Tx,
+        bp_gens: &BulletproofGens,
+        block_version: u64,
+        timestamp_ms: u64,
+    ) -> Result<(TxID, TxLog), BlockchainError> {
+        if tx.header.mintime_ms > timestamp_ms || tx.header.maxtime_ms < timestamp_ms {
+            return Err(BlockchainError::BadTxTimestamp);
+        }
+
+        // Check that, for the current block version, this tx version is
+        // supported. For block versions higher than 1, we do not yet know
+        // what tx versions to support, so we accept all.
+        if block_version == 1 && tx.header.version != 1 {
+            return Err(BlockchainError::VersionReversion);
+        }
+
+        // Verify tx
+        let vtx = Verifier::verify_tx(tx, bp_gens).map_err(|e| BlockchainError::TxValidation(e))?;
+        Ok((vtx.id, vtx.log))
     }
 }
 
@@ -91,7 +115,7 @@ mod tests {
 
     #[test]
     fn test_apply_txlog() {
-        let mut state = BlockchainState::make_initial(0u64);
+        let mut state = BlockchainState::make_initial(0u64, Vec::new());
 
         // Add two outputs
         let (output0, output1) = (rand_contract(), rand_contract());
