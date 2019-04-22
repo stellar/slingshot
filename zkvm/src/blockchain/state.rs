@@ -1,5 +1,4 @@
 use bulletproofs::BulletproofGens;
-use std::collections::HashSet;
 
 use super::block::{Block, BlockHeader, BlockID};
 use super::errors::BlockchainError;
@@ -42,7 +41,7 @@ impl BlockchainState {
         Ok(new_state)
     }
 
-    fn apply_txlog(&mut self, txlog: &TxLog) -> Result<(), VMError> {
+    pub fn apply_txlog(&mut self, txlog: &TxLog) -> Result<(), VMError> {
         for entry in txlog.iter() {
             match entry {
                 // Remove input from UTXO set
