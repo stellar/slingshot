@@ -28,18 +28,6 @@ pub struct Xpub {
     dk: [u8; 32],
 }
 
-/// Represents a derivation object for deriving private keys in a batch
-pub struct PrivateDerivation<'a> {
-    prf: Transcript,
-    parent: &'a Xprv,
-}
-
-/// Represents a derivation object for deriving public keys in a batch
-pub struct PublicDerivation<'a> {
-    prf: Transcript,
-    parent: &'a Xpub,
-}
-
 impl Xprv {
     /// Returns a new Xprv, generated using the provided random number generator `rng`.
     pub fn random<T: RngCore + CryptoRng>(mut rng: T) -> Self {
@@ -122,17 +110,6 @@ impl Xprv {
             },
         });
     }
-
-    /// Allows deriving multiple keys in a batch, by reusing common part of the PRF.
-    pub fn batch_derivation<F, T>(&self, closure: F) -> T
-    where
-        F: FnOnce(PrivateDerivation) -> T,
-    {
-        closure(PrivateDerivation {
-            prf: self.xpub.prepare_prf(),
-            parent: self,
-        })
-    }
 }
 
 impl Xpub {
@@ -178,17 +155,6 @@ impl Xpub {
         Some(Xpub { pubkey, dk })
     }
 
-    /// Allows deriving multiple keys in a batch, by reusing common part of the PRF.
-    pub fn batch_derivation<F, T>(&self, closure: F) -> T
-    where
-        F: FnOnce(PublicDerivation) -> T,
-    {
-        closure(PublicDerivation {
-            prf: self.prepare_prf(),
-            parent: self,
-        })
-    }
-
     fn prepare_prf(&self) -> Transcript {
         let mut t = Transcript::new(b"Keytree.derivation");
         t.commit_point(b"pt", self.pubkey.as_compressed());
@@ -228,46 +194,5 @@ impl Xpub {
     ) -> Scalar {
         customize(&mut prf);
         prf.challenge_scalar(b"f.leaf")
-    }
-}
-
-impl<'a> PrivateDerivation<'a> {
-    /// Returns an intermediate Xprv derived using a PRF customized with a user-provided closure.
-    pub fn derive_intermediate_key(&'a self, customize: impl FnOnce(&mut Transcript)) -> Xprv {
-        let (xpub, f) = self
-            .parent
-            .xpub
-            .derive_intermediate_helper(self.prf.clone(), customize);
-        Xprv {
-            scalar: self.parent.scalar + f,
-            xpub,
-        }
-    }
-
-    /// Returns a leaf secret scalar derived using a PRF customized with a user-provided closure.
-    pub fn derive_key(&self, customize: impl FnOnce(&mut Transcript)) -> Scalar {
-        let f = self
-            .parent
-            .xpub
-            .derive_leaf_helper(self.prf.clone(), customize);
-        self.parent.scalar + f
-    }
-}
-
-impl<'a> PublicDerivation<'a> {
-    /// Returns an intermediate Xpub derived using a PRF customized with a user-provided closure.
-    pub fn derive_intermediate_key(&self, customize: impl FnOnce(&mut Transcript)) -> Xpub {
-        let (xpub, _f) = self
-            .parent
-            .derive_intermediate_helper(self.prf.clone(), customize);
-        xpub
-    }
-
-    /// Returns a leaf VerificationKey derived using a PRF customized with a user-provided closure.
-    pub fn derive_key(&self, customize: impl FnOnce(&mut Transcript)) -> VerificationKey {
-        let f = self.parent.derive_leaf_helper(self.prf.clone(), customize);
-        let child_point =
-            self.parent.pubkey.as_point() + (&f * &constants::RISTRETTO_BASEPOINT_TABLE);
-        child_point.into()
     }
 }
