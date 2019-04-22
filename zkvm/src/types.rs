@@ -6,7 +6,7 @@ use merlin::Transcript;
 use spacesuit::SignedInteger;
 
 use crate::constraints::{Commitment, Constraint, Expression, Variable};
-use crate::contract::{Contract, Output, PortableItem};
+use crate::contract::{Contract, PortableItem};
 use crate::encoding::SliceReader;
 use crate::errors::VMError;
 use crate::predicate::Predicate;
@@ -57,8 +57,8 @@ pub enum Data {
     /// A scalar witness (scalar or integer).
     Scalar(Box<ScalarWitness>),
 
-    /// An input object (claimed UTXO).
-    Output(Box<Output>),
+    /// An unspent output (utxo).
+    Output(Box<Contract>),
 }
 
 /// Represents a value of an issued asset in the VM.
@@ -198,10 +198,10 @@ impl Data {
         }
     }
 
-    /// Downcast the data item to an `Output` type.
-    pub fn to_output(self) -> Result<Output, VMError> {
+    /// Downcast the data item to an `Contract` type.
+    pub fn to_output(self) -> Result<Contract, VMError> {
         match self {
-            Data::Opaque(data) => SliceReader::parse(&data, |r| Output::decode(r)),
+            Data::Opaque(data) => SliceReader::parse(&data, |r| Contract::decode(r)),
             Data::Output(i) => Ok(*i),
             _ => Err(VMError::TypeNotOutput),
         }
@@ -236,7 +236,7 @@ impl Data {
             Data::Predicate(predicate) => predicate.encode(buf),
             Data::Commitment(commitment) => commitment.encode(buf),
             Data::Scalar(scalar) => scalar.encode(buf),
-            Data::Output(output) => output.encode(buf),
+            Data::Output(contract) => contract.encode(buf),
         };
     }
 }
@@ -296,8 +296,8 @@ impl From<Commitment> for Data {
     }
 }
 
-impl From<Output> for Data {
-    fn from(x: Output) -> Self {
+impl From<Contract> for Data {
+    fn from(x: Contract) -> Self {
         Data::Output(Box::new(x))
     }
 }

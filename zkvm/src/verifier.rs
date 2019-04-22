@@ -2,16 +2,18 @@ use bulletproofs::r1cs;
 use bulletproofs::{BulletproofGens, PedersenGens};
 use curve25519_dalek::ristretto::CompressedRistretto;
 use merlin::Transcript;
-use musig::{Multikey, VerificationKey};
+use musig::VerificationKey;
 
 use crate::constraints::Commitment;
+use crate::contract::ContractID;
 use crate::encoding::*;
 use crate::errors::VMError;
 use crate::ops::Instruction;
 use crate::point_ops::PointOp;
 use crate::predicate::Predicate;
 use crate::program::ProgramItem;
-use crate::vm::{Delegate, Tx, VerifiedTx, VM};
+use crate::tx::{Tx, VerifiedTx};
+use crate::vm::{Delegate, VM};
 
 /// This is the entry point API for verifying a transaction.
 /// Verifier passes the `Tx` object through the VM,
@@ -19,7 +21,7 @@ use crate::vm::{Delegate, Tx, VerifiedTx, VM};
 /// verifies a R1CS proof and returns a `VerifiedTx` with the log of changes
 /// to be applied to the blockchain state.
 pub struct Verifier<'t> {
-    signtx_keys: Vec<VerificationKey>,
+    signtx_items: Vec<(VerificationKey, ContractID)>,
     deferred_operations: Vec<PointOp>,
     cs: r1cs::Verifier<'t>,
 }
@@ -49,9 +51,13 @@ impl<'t> Delegate<r1cs::Verifier<'t>> for Verifier<'t> {
         Ok(())
     }
 
-    fn process_tx_signature(&mut self, pred: Predicate) -> Result<(), VMError> {
-        let key = VerificationKey::from_compressed(pred.to_point()).ok_or(VMError::InvalidPoint)?;
-        Ok(self.signtx_keys.push(key))
+    fn process_tx_signature(
+        &mut self,
+        pred: Predicate,
+        contract_id: ContractID,
+    ) -> Result<(), VMError> {
+        let key = pred.to_verification_key()?;
+        Ok(self.signtx_items.push((key, contract_id)))
     }
 
     fn next_instruction(
@@ -81,13 +87,16 @@ impl<'t> Verifier<'t> {
     /// Verifies the `Tx` object by executing the VM and returns the `VerifiedTx`.
     /// Returns an error if the program is malformed or any of the proofs are not valid.
     pub fn verify_tx(tx: &Tx, bp_gens: &BulletproofGens) -> Result<VerifiedTx, VMError> {
+        // TBD: provide this as a precomputed object to avoid
+        // creating secondary point per each tx verification
+        let pc_gens = PedersenGens::default();
         let mut r1cs_transcript = Transcript::new(b"ZkVM.r1cs");
         let cs = r1cs::Verifier::new(&mut r1cs_transcript);
 
         let mut verifier = Verifier {
-            signtx_keys: Vec::new(),
+            signtx_items: Vec::new(),
             deferred_operations: Vec::new(),
-            cs: cs,
+            cs,
         };
 
         let vm = VM::new(
@@ -98,38 +107,26 @@ impl<'t> Verifier<'t> {
 
         let (txid, txlog) = vm.run()?;
 
+        // Verify the R1CS proof
+        verifier
+            .cs
+            .verify(&tx.proof, &pc_gens, bp_gens)
+            .map_err(|_| VMError::InvalidR1CSProof)?;
+
         // Verify the signatures over txid
         let mut signtx_transcript = Transcript::new(b"ZkVM.signtx");
         signtx_transcript.commit_bytes(b"txid", &txid.0);
 
-        if verifier.signtx_keys.len() != 0 {
+        if verifier.signtx_items.len() != 0 {
             verifier.deferred_operations.push(
-                // TODO: use MuSig multi-message API, signing contract
-                // IDs in addition to TxID for each key.
                 tx.signature
-                    .verify(
-                        &mut signtx_transcript,
-                        Multikey::new(verifier.signtx_keys)
-                            .map_err(|_| VMError::KeyAggregationFailed)?
-                            .aggregated_key(),
-                    )
+                    .verify_multi(&mut signtx_transcript, verifier.signtx_items)
                     .into(),
             );
         }
 
         // Verify all deferred crypto operations.
         PointOp::verify_batch(&verifier.deferred_operations[..])?;
-
-        // Verify the R1CS proof
-
-        // TBD: provide is as a precomputed object to avoid
-        // creating secondary point per each tx verification
-        let pc_gens = PedersenGens::default();
-
-        verifier
-            .cs
-            .verify(&tx.proof, &pc_gens, bp_gens)
-            .map_err(|_| VMError::InvalidR1CSProof)?;
 
         Ok(VerifiedTx {
             header: tx.header,

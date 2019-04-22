@@ -1,19 +1,15 @@
 use bulletproofs::r1cs;
-use bulletproofs::r1cs::R1CSProof;
 use curve25519_dalek::ristretto::CompressedRistretto;
 use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
 use musig::Signature;
-use serde::de::Visitor;
-use serde::{self, Deserialize, Deserializer, Serialize, Serializer};
 use spacesuit;
 use spacesuit::BitRange;
 use std::iter::FromIterator;
 use std::mem;
 
 use crate::constraints::{Commitment, Constraint, Expression, Variable};
-use crate::contract::{Anchor, Contract, Output, PortableItem};
-use crate::encoding;
+use crate::contract::{Anchor, Contract, ContractID, PortableItem};
 use crate::encoding::SliceReader;
 use crate::errors::VMError;
 use crate::ops::Instruction;
@@ -21,155 +17,11 @@ use crate::point_ops::PointOp;
 use crate::predicate::{CallProof, Predicate};
 use crate::program::ProgramItem;
 use crate::scalar_witness::ScalarWitness;
-use crate::txlog::{Entry, TxID, TxLog};
+use crate::tx::{TxEntry, TxHeader, TxID, TxLog};
 use crate::types::*;
 
 /// Current tx version determines which extension opcodes are treated as noops (see VM.extension flag).
 pub const CURRENT_VERSION: u64 = 1;
-
-/// Header metadata for the transaction
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct TxHeader {
-    /// Version of the transaction
-    pub version: u64,
-
-    /// Timestamp before which tx is invalid (in milliseconds since the Unix epoch)
-    pub mintime_ms: u64,
-
-    /// Timestamp after which tx is invalid (in milliseconds since the Unix epoch)
-    pub maxtime_ms: u64,
-}
-
-impl TxHeader {
-    fn serialized_size(&self) -> usize {
-        8 * 3
-    }
-
-    fn encode(&self, buf: &mut Vec<u8>) {
-        encoding::write_u64(self.version, buf);
-        encoding::write_u64(self.mintime_ms, buf);
-        encoding::write_u64(self.maxtime_ms, buf);
-    }
-
-    fn decode<'a>(reader: &mut SliceReader<'a>) -> Result<Self, VMError> {
-        Ok(TxHeader {
-            version: reader.read_u64()?,
-            mintime_ms: reader.read_u64()?,
-            maxtime_ms: reader.read_u64()?,
-        })
-    }
-}
-
-/// Instance of a transaction that contains all necessary data to validate it.
-pub struct Tx {
-    /// Header metadata
-    pub header: TxHeader,
-
-    /// Program representing the transaction
-    pub program: Vec<u8>,
-
-    /// Aggregated signature of the txid
-    pub signature: Signature,
-
-    /// Constraint system proof for all the constraints
-    pub proof: R1CSProof,
-}
-
-impl Tx {
-    fn encode(&self, buf: &mut Vec<u8>) {
-        self.header.encode(buf);
-        encoding::write_size(self.program.len(), buf);
-        buf.extend(&self.program);
-        buf.extend_from_slice(&self.signature.to_bytes());
-        buf.extend_from_slice(&self.proof.to_bytes());
-    }
-
-    fn decode<'a>(r: &mut SliceReader<'a>) -> Result<Tx, VMError> {
-        let header = TxHeader::decode(r)?;
-        let prog_len = r.read_size()?;
-        let program = r.read_bytes(prog_len)?.to_vec();
-
-        let signature = Signature::from_bytes(r.read_u8x64()?).map_err(|_| VMError::FormatError)?;
-        let proof =
-            R1CSProof::from_bytes(r.read_bytes(r.len())?).map_err(|_| VMError::FormatError)?;
-        Ok(Tx {
-            header,
-            program,
-            signature,
-            proof,
-        })
-    }
-
-    /// Serializes the tx into a byte array.
-    pub fn to_bytes(&self) -> Vec<u8> {
-        let mut buf = Vec::with_capacity(self.serialized_size());
-        self.encode(&mut buf);
-        buf
-    }
-
-    /// Returns the size in bytes required to serialize the `Tx`.
-    pub fn serialized_size(&self) -> usize {
-        // header is 8 bytes * 3 fields = 24 bytes
-        // program length is 4 bytes
-        // program is self.program.len() bytes
-        // signature is 64 bytes
-        // proof is 14*32 + the ipp bytes
-        self.header.serialized_size() + 4 + self.program.len() + 64 + self.proof.serialized_size()
-    }
-
-    /// Deserializes the tx from a byte slice.
-    ///
-    /// Returns an error if the byte slice cannot be parsed into a `Tx`.
-    pub fn from_bytes(slice: &[u8]) -> Result<Tx, VMError> {
-        SliceReader::parse(slice, |r| Self::decode(r))
-    }
-}
-
-impl Serialize for Tx {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        serializer.serialize_bytes(&self.to_bytes()[..])
-    }
-}
-impl<'de> Deserialize<'de> for Tx {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        struct TxVisitor;
-
-        impl<'de> Visitor<'de> for TxVisitor {
-            type Value = Tx;
-
-            fn expecting(&self, formatter: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
-                formatter.write_str("a valid Tx")
-            }
-
-            fn visit_bytes<E>(self, v: &[u8]) -> Result<Tx, E>
-            where
-                E: serde::de::Error,
-            {
-                Tx::from_bytes(v).map_err(serde::de::Error::custom)
-            }
-        }
-
-        deserializer.deserialize_bytes(TxVisitor)
-    }
-}
-
-/// Represents a verified transaction: a txid and a list of state updates.
-pub struct VerifiedTx {
-    /// Transaction header
-    pub header: TxHeader,
-
-    /// Transaction ID
-    pub id: TxID,
-
-    /// Transaction log: a list of changes to the blockchain state (UTXOs to delete/insert, etc.)
-    pub log: TxLog,
-}
 
 pub(crate) struct VM<'d, CS, D>
 where
@@ -212,7 +64,11 @@ pub(crate) trait Delegate<CS: r1cs::ConstraintSystem> {
 
     /// Adds a key represented by Predicate to either verify or
     /// sign a transaction
-    fn process_tx_signature(&mut self, pred: Predicate) -> Result<(), VMError>;
+    fn process_tx_signature(
+        &mut self,
+        pred: Predicate,
+        contract_id: ContractID,
+    ) -> Result<(), VMError>;
 
     /// Returns the delegate's underlying constraint system
     fn cs(&mut self) -> &mut CS;
@@ -243,7 +99,7 @@ where
             stack: Vec::new(),
             current_run: run,
             run_stack: Vec::new(),
-            txlog: vec![Entry::Header(header)],
+            txlog: vec![TxEntry::Header(header)],
         }
     }
 
@@ -496,7 +352,7 @@ where
 
     fn log(&mut self) -> Result<(), VMError> {
         let data = self.pop_item()?.to_data()?;
-        self.txlog.push(Entry::Data(data.to_bytes()));
+        self.txlog.push(TxEntry::Data(data.to_bytes()));
         Ok(())
     }
 
@@ -528,10 +384,10 @@ where
         let qty_expr = self.variable_to_expression(qty)?;
         self.add_range_proof(BitRange::max(), qty_expr)?;
 
-        self.txlog.push(Entry::Issue(qty_point, flv_point));
+        self.txlog.push(TxEntry::Issue(qty_point, flv_point));
 
         let payload = vec![PortableItem::Value(value)];
-        let contract = self.make_output(predicate, payload)?.into_contract().0;
+        let contract = self.make_contract(predicate, payload)?;
 
         self.push_item(contract);
         Ok(())
@@ -580,34 +436,34 @@ where
     fn retire(&mut self) -> Result<(), VMError> {
         let value = self.pop_item()?.to_value()?;
         self.txlog
-            .push(Entry::Retire(value.qty.into(), value.flv.into()));
+            .push(TxEntry::Retire(value.qty.into(), value.flv.into()));
         Ok(())
     }
 
     /// _input_ **input** → _contract_
     fn input(&mut self) -> Result<(), VMError> {
-        let output = self.pop_item()?.to_data()?.to_output()?;
-        let (contract, contract_id) = output.into_contract();
+        let contract = self.pop_item()?.to_data()?.to_output()?;
+        let contract_id = contract.id();
+        self.txlog.push(TxEntry::Input(contract_id));
         self.push_item(contract);
-        self.txlog.push(Entry::Input(contract_id));
         self.last_anchor = Some(contract_id.to_anchor().ratchet());
         Ok(())
     }
 
     /// _items... predicate_ **output:_k_** → ø
     fn output(&mut self, k: usize) -> Result<(), VMError> {
-        let output = self.pop_output(k)?;
-        self.txlog.push(Entry::Output(output));
+        let contract = self.pop_contract(k)?;
+        self.txlog.push(TxEntry::Output(contract));
         Ok(())
     }
 
     fn contract(&mut self, k: usize) -> Result<(), VMError> {
-        let output = self.pop_output(k)?;
-        self.push_item(output.into_contract().0);
+        let contract = self.pop_contract(k)?;
+        self.push_item(contract);
         Ok(())
     }
 
-    fn pop_output(&mut self, k: usize) -> Result<Output, VMError> {
+    fn pop_contract(&mut self, k: usize) -> Result<Contract, VMError> {
         let predicate = self.pop_item()?.to_data()?.to_predicate()?;
 
         if k > self.stack.len() {
@@ -620,7 +476,7 @@ where
             .map(|item| item.to_portable())
             .collect::<Result<Vec<_>, _>>()?;
 
-        self.make_output(predicate, payload)
+        self.make_contract(predicate, payload)
     }
 
     fn cloak(&mut self, m: usize, n: usize) -> Result<(), VMError> {
@@ -687,9 +543,9 @@ where
     // _contract_ **signtx** → _results..._
     fn signtx(&mut self) -> Result<(), VMError> {
         let contract = self.pop_item()?.to_contract()?;
-        // TODO: use multi-message API to sign the entire contract ID.
-        self.delegate.process_tx_signature(contract.predicate)?;
-        for item in contract.payload.into_iter() {
+        let (contract_id, predicate, payload, _anchor) = contract.into_tuple();
+        self.delegate.process_tx_signature(predicate, contract_id)?;
+        for item in payload.into_iter() {
             self.push_item(item);
         }
         Ok(())
@@ -701,14 +557,14 @@ where
         let call_proof_bytes = self.pop_item()?.to_data()?.to_bytes();
         let call_proof = SliceReader::parse(&call_proof_bytes, |r| CallProof::decode(r))?;
         let contract = self.pop_item()?.to_contract()?;
-        let predicate = contract.predicate;
+        let (_contract_id, predicate, payload, _anchor) = contract.into_tuple();
 
         // 0 == -P + X + h1(X, M)*B
         self.delegate
             .verify_point_op(|| predicate.prove_taproot(&program_item, &call_proof))?;
 
         // Place contract payload on the stack
-        for item in contract.payload.into_iter() {
+        for item in payload.into_iter() {
             self.push_item(item);
         }
 
@@ -728,16 +584,18 @@ where
 
         // Place all items in payload onto the stack
         let contract = self.pop_item()?.to_contract()?;
-        for item in contract.payload.into_iter() {
+        let (contract_id, predicate, payload, _anchor) = contract.into_tuple();
+
+        for item in payload.into_iter() {
             self.push_item(item);
         }
 
         // Verification key from predicate
-        let verification_key = contract.predicate.to_key()?;
+        let verification_key = predicate.to_verification_key()?;
 
         // Verify signature using Verification key, over the message `program`
         let mut t = Transcript::new(b"ZkVM.delegate");
-        // TODO: commit the contract ID, to bind signature to this instance.
+        t.commit_bytes(b"contract", contract_id.as_ref());
         t.commit_bytes(b"prog", &prog.clone().to_bytes());
         self.delegate
             .verify_point_op(|| signature.verify(&mut t, verification_key).into())?;
@@ -842,18 +700,14 @@ where
     }
 
     /// Creates and anchors the contract
-    fn make_output(
+    fn make_contract(
         &mut self,
         predicate: Predicate,
         payload: Vec<PortableItem>,
-    ) -> Result<Output, VMError> {
+    ) -> Result<Contract, VMError> {
         let anchor = mem::replace(&mut self.last_anchor, None).ok_or(VMError::AnchorMissing)?;
-        let output = Output::new(Contract {
-            anchor,
-            predicate,
-            payload,
-        });
-        self.last_anchor = Some(output.id().to_anchor());
-        Ok(output)
+        let contract = Contract::new(predicate, payload, anchor);
+        self.last_anchor = Some(contract.id().to_anchor());
+        Ok(contract)
     }
 }

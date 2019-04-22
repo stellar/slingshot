@@ -37,7 +37,7 @@ impl BlockHeader {
         BlockID(result)
     }
 
-    pub fn make_initial(timestamp_ms: u64, refscount: u64, utxos: &Vec<ContractID>) -> BlockHeader {
+    pub fn make_initial(timestamp_ms: u64, utxos: &Vec<ContractID>) -> BlockHeader {
         BlockHeader {
             version: 1,
             height: 1,
