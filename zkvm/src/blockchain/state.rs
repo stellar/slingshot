@@ -1,5 +1,4 @@
 use bulletproofs::BulletproofGens;
-use rayon::prelude::*;
 use std::collections::HashSet;
 
 use super::block::{Block, BlockHeader, BlockID};
