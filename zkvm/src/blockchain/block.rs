@@ -132,15 +132,17 @@ impl Block {
     ) -> Result<Self, BlockchainError> {
         let bp_gens = BulletproofGens::new(1, 256);
         let mut new_state = state.clone();
-        let mut txids = Vec::with_capacity(txs.len());
-        for tx in &txs {
-            let (txid, txlog) =
-                BlockchainState::execute_tx(&tx, &bp_gens, block_version, timestamp_ms)?;
-            new_state
-                .apply_txlog(&txlog)
-                .map_err(|e| BlockchainError::TxValidation(e))?;
-            txids.push(txid);
-        }
+        let txids = txs
+            .iter()
+            .map(|tx| {
+                let (txid, txlog) =
+                    BlockchainState::execute_tx(&tx, &bp_gens, block_version, timestamp_ms)?;
+                new_state
+                    .apply_txlog(&txlog)
+                    .map_err(|e| BlockchainError::TxValidation(e))?;
+                Ok(txid)
+            })
+            .collect::<Result<Vec<_>, _>>()?;
 
         Ok(Self {
             header: BlockHeader {
