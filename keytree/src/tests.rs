@@ -24,8 +24,8 @@ fn random_xprv_test() {
 fn random_xprv_derivation_test() {
     let seed = [0u8; 32];
     let mut rng = ChaChaRng::from_seed(seed);
-    let xprv = Xprv::random(&mut rng).derive_intermediate_key(|t| {
-        t.commit_u64(b"account_id", 34);
+    let xprv = Xprv::random(&mut rng).derive_intermediate_key(|prf| {
+        prf.commit_u64(b"account_id", 34);
     });
 
     assert_eq!(
@@ -46,8 +46,8 @@ fn random_xprv_derivation_test() {
 fn random_xprv_leaf_test() {
     let seed = [0u8; 32];
     let mut rng = ChaChaRng::from_seed(seed);
-    let xprv = Xprv::random(&mut rng).derive_key(|t| {
-        t.commit_u64(b"invoice_id", 10034);
+    let xprv = Xprv::random(&mut rng).derive_key(|prf| {
+        prf.commit_u64(b"invoice_id", 10034);
     });
 
     assert_eq!(
@@ -136,8 +136,8 @@ fn random_xpub_derivation_test() {
     let seed = [0u8; 32];
     let mut rng = ChaChaRng::from_seed(seed);
     let xprv = Xprv::random(&mut rng);
-    let xpub = xprv.to_xpub().derive_intermediate_key(|t| {
-        t.commit_u64(b"account_id", 34);
+    let xpub = xprv.to_xpub().derive_intermediate_key(|prf| {
+        prf.commit_u64(b"account_id", 34);
     });
 
     assert_eq!(
@@ -155,8 +155,8 @@ fn random_xpub_leaf_test() {
     let seed = [0u8; 32];
     let mut rng = ChaChaRng::from_seed(seed);
     let xprv = Xprv::random(&mut rng);
-    let pubkey = xprv.to_xpub().derive_key(|t| {
-        t.commit_u64(b"invoice_id", 10034);
+    let pubkey = xprv.to_xpub().derive_key(|prf| {
+        prf.commit_u64(b"invoice_id", 10034);
     });
 
     assert_eq!(
