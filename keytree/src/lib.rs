@@ -6,19 +6,20 @@ use curve25519_dalek::constants;
 use curve25519_dalek::ristretto::CompressedRistretto;
 use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
-use rand::{CryptoRng, RngCore};
 use musig::VerificationKey;
+use rand::{CryptoRng, RngCore};
 
 mod transcript;
 
 /// Xprv represents an extended private key.
+#[derive(Copy, Clone, PartialEq, Eq, Default, Debug)]
 pub struct Xprv {
     scalar: Scalar,
-    pubkey: VerificationKey,
-    dk: [u8; 32],
+    xpub: Xpub,
 }
 
 /// Xpub represents an extended public key.
+#[derive(Copy, Clone, PartialEq, Eq, Default, Debug)]
 pub struct Xpub {
     pubkey: VerificationKey,
     dk: [u8; 32],
@@ -35,60 +36,40 @@ impl Xprv {
 
         Xprv {
             scalar,
-            pubkey,
-            dk,
+            xpub: Xpub { pubkey, dk },
         }
     }
 
     /// Returns a new Xpub, generated from the provided Xprv.
+    pub fn as_xpub(&self) -> &Xpub {
+        &self.xpub
+    }
+
+    /// Converts Xprv into Xpub without consuming self.
     pub fn to_xpub(&self) -> Xpub {
-        Xpub {
-            pubkey: self.pubkey,
-            dk: self.dk,
-        }
+        self.xpub
+    }
+
+    /// Converts Xprv into Xpub.
+    pub fn into_xpub(self) -> Xpub {
+        self.xpub
     }
 
     /// Returns a intermediate child xprv. Users must provide customize, in order to separate
     /// sibling keys from one another through unique derivation paths.
     pub fn derive_intermediate_key(&self, customize: impl FnOnce(&mut Transcript)) -> Xprv {
-        let xpub = self.to_xpub();
-
-        let mut t = Transcript::new(b"Keytree.derivation");
-        t.commit_point(b"pt", xpub.pubkey.as_compressed());
-        t.commit_bytes(b"dk", &xpub.dk);
-
-        // change the derivation path for this key
-        customize(&mut t);
-
-        // squeeze a challenge scalar
-        let f = t.challenge_scalar(b"f.intermediate");
-
-        // squeeze a new derivation key
-        let mut child_dk = [0u8; 32];
-        t.challenge_bytes(b"dk", &mut child_dk);
-
-        let child_privkey = self.scalar + f;
-        let child_point = xpub.pubkey.as_point() + (&f * &constants::RISTRETTO_BASEPOINT_TABLE);
+        let (child_xpub, f) = self.xpub.derive_intermediate_helper(customize);
 
         Xprv {
-            scalar: child_privkey,
-            pubkey: child_point.into(),
-            dk: child_dk,
+            scalar: self.scalar + f,
+            xpub: child_xpub,
         }
     }
 
     /// Returns a leaf private key. Users must provide customize, in order to
     /// separate sibling keys from one another through unique derivation paths.
     pub fn derive_key(&self, customize: impl FnOnce(&mut Transcript)) -> Scalar {
-        let mut t = Transcript::new(b"Keytree.derivation");
-        t.commit_point(b"pt", self.pubkey.as_compressed());
-        t.commit_bytes(b"dk", &self.dk);
-
-        // change the derivation path for this key
-        customize(&mut t);
-
-        // squeeze a challenge scalar
-        let f = t.challenge_scalar(b"f.leaf");
+        let f = self.xpub.derive_leaf_helper(customize);
         self.scalar + f
     }
 
@@ -96,7 +77,7 @@ impl Xprv {
     pub fn to_bytes(&self) -> [u8; 64] {
         let mut buf = [0u8; 64];
         buf[..32].copy_from_slice(&self.scalar.to_bytes());
-        buf[32..].copy_from_slice(&self.dk);
+        buf[32..].copy_from_slice(&self.xpub.dk);
         buf
     }
 
@@ -118,8 +99,10 @@ impl Xprv {
 
         return Some(Xprv {
             scalar,
-            pubkey: VerificationKey::from_secret(&scalar),
-            dk,
+            xpub: Xpub {
+                pubkey: VerificationKey::from_secret(&scalar),
+                dk,
+            },
         });
     }
 }
@@ -128,41 +111,15 @@ impl Xpub {
     /// Returns a intermediate child pubkey. Users must provide customize, in order to separate
     /// sibling keys from one another through unique derivation paths.
     pub fn derive_intermediate_key(&self, customize: impl FnOnce(&mut Transcript)) -> Xpub {
-        let mut t = Transcript::new(b"Keytree.derivation");
-        t.commit_point(b"pt", self.pubkey.as_compressed());
-        t.commit_bytes(b"dk", &self.dk);
-
-        // change the derivation path for this key
-        customize(&mut t);
-
-        // squeeze a challenge scalar
-        let f = t.challenge_scalar(b"f.intermediate");
-
-        // squeeze a new derivation key
-        let mut child_dk = [0u8; 32];
-        t.challenge_bytes(b"dk", &mut child_dk);
-
-        let child_point = self.pubkey.as_point() + (&f * &constants::RISTRETTO_BASEPOINT_TABLE);
-
-        Xpub {
-            pubkey: child_point.into(),
-            dk: child_dk,
-        }
+        let (xpub, _f) = self.derive_intermediate_helper(customize);
+        xpub
     }
 
     /// Returns a leaf Xpub, which can safely be shared.
     /// Users must provide customize, in order to separate sibling keys from one another
     /// through unique derivation paths.
     pub fn derive_key(&self, customize: impl FnOnce(&mut Transcript)) -> VerificationKey {
-        let mut t = Transcript::new(b"Keytree.derivation");
-        t.commit_point(b"pt", self.pubkey.as_compressed());
-        t.commit_bytes(b"dk", &self.dk);
-
-        // change the derivation path for this key
-        customize(&mut t);
-
-        // squeeze a challenge scalar
-        let f = t.challenge_scalar(b"f.leaf");
+        let f = self.derive_leaf_helper(customize);
 
         let child_point = self.pubkey.as_point() + (&f * &constants::RISTRETTO_BASEPOINT_TABLE);
         child_point.into()
@@ -192,10 +149,50 @@ impl Xpub {
             None => return None,
         };
 
-        Some(Xpub {
-            pubkey,
-            dk
-        })
+        Some(Xpub { pubkey, dk })
+    }
+
+    fn prepare_prf(&self) -> Transcript {
+        let mut t = Transcript::new(b"Keytree.derivation");
+        t.commit_point(b"pt", self.pubkey.as_compressed());
+        t.commit_bytes(b"dk", &self.dk);
+        t
+    }
+
+    fn derive_intermediate_helper(
+        &self,
+        customize: impl FnOnce(&mut Transcript),
+    ) -> (Xpub, Scalar) {
+        let mut t = self.prepare_prf();
+
+        // change the derivation path for this key
+        customize(&mut t);
+
+        // squeeze a challenge scalar
+        let f = t.challenge_scalar(b"f.intermediate");
+
+        // squeeze a new derivation key
+        let mut child_dk = [0u8; 32];
+        t.challenge_bytes(b"dk", &mut child_dk);
+
+        let child_point = self.pubkey.as_point() + (&f * &constants::RISTRETTO_BASEPOINT_TABLE);
+
+        let xpub = Xpub {
+            pubkey: child_point.into(),
+            dk: child_dk,
+        };
+
+        (xpub, f)
+    }
+
+    fn derive_leaf_helper(&self, customize: impl FnOnce(&mut Transcript)) -> Scalar {
+        let mut t = self.prepare_prf();
+
+        // change the derivation path for this key
+        customize(&mut t);
+
+        // return a challenge scalar
+        t.challenge_scalar(b"f.leaf")
     }
 }
 
@@ -214,7 +211,7 @@ mod tests {
 
         // the following are hard-coded based on the previous seed
         assert_eq!(
-            to_hex_32(xprv.dk),
+            to_hex_32(xprv.xpub.dk),
             "9f07e7be5551387a98ba977c732d080dcb0f29a048e3656912c6533e32ee7aed"
         );
         assert_eq!(
@@ -236,11 +233,11 @@ mod tests {
             "55d65740c47cff19c35c2787dbc0e207e901fbb311caa4d583da8efdc7088b03"
         );
         assert_eq!(
-            to_hex_32(xprv.dk),
+            to_hex_32(xprv.xpub.dk),
             "36e435eabc2a562ef228b82b399fbd004b2cc64103313fa673bd1fca0971f59d"
         );
         assert_eq!(
-            to_hex_32(xprv.pubkey.as_compressed().to_bytes()),
+            to_hex_32(xprv.xpub.pubkey.as_compressed().to_bytes()),
             "7414c0c5238c2277318ba3e51fc6fb8e836a2d9b4c04508f93cd5a455422221b"
         );
     }
@@ -281,7 +278,7 @@ mod tests {
         let mut rng = ChaChaRng::from_seed(seed);
         let expected_xprv = Xprv::random(&mut rng);
 
-        assert_eq!(xprv.dk, expected_xprv.dk);
+        assert_eq!(xprv.xpub.dk, expected_xprv.xpub.dk);
         assert_eq!(xprv.scalar, expected_xprv.scalar);
     }
 

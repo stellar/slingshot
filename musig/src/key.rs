@@ -4,7 +4,7 @@ use curve25519_dalek::scalar::Scalar;
 
 /// Verification key (aka "pubkey") is a wrapper type around a Ristretto point
 /// that lets the verifier to check the signature.
-#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+#[derive(Copy, Clone, PartialEq, Eq, Default, Debug)]
 pub struct VerificationKey {
     point: RistrettoPoint,
     precompressed: CompressedRistretto,
