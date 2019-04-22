@@ -130,6 +130,6 @@ impl Root {
 
     /// Computes the Merkle utxoroot
     pub fn utxo(utxos: &[ContractID]) -> Root {
-        Root(MerkleTree::root(b"utxos", utxos))
+        Root(MerkleTree::root(b"ZkVM.utxoroot", utxos))
     }
 }
