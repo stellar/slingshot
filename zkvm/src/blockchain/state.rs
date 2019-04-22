@@ -78,7 +78,7 @@ impl BlockchainState {
         // Check that, for the current block version, this tx version is
         // supported. For block versions higher than 1, we do not yet know
         // what tx versions to support, so we accept all.
-        if block_version == 1 && block_version != tx.header.version {
+        if block_version == 1 && tx.header.version != 1 {
             return Err(BlockchainError::VersionReversion);
         }
 
