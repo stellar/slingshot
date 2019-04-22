@@ -35,8 +35,14 @@ pub enum Expression {
 /// Constraint is a boolean function of expressions and other constraints.
 /// Constraints can be evaluated to true or false. The `verify` instruction
 /// enforces that the final composition evaluates to `true` in zero knowledge.
+///
+/// Note: use dedicated functions `eq()`, `and()`, `or()` and `not()` to create
+/// constraints since they apply guaranteed optimization for cleartext constraints.
 #[derive(Clone, Debug)]
 pub enum Constraint {
+    /// Cleartext constraint: known to the verifier to be true or false.
+    Cleartext(bool),
+
     /// Equality constraint between two expressions.
     /// Created by `eq` instruction.
     Eq(Expression, Expression),
@@ -80,6 +86,12 @@ impl Constraint {
         self,
         cs: &mut CS,
     ) -> Result<(), VMError> {
+        // Return early without updating CS if the constraint is cleartext.
+        match &self {
+            Constraint::Cleartext(true) => return Ok(()),
+            Constraint::Cleartext(false) => return Err(VMError::CleartextConstraintFalse),
+            _ => {}
+        };
         cs.specify_randomized_constraints(move |cs| {
             // Flatten the constraint into one expression
             // Note: cloning because we can't move out of captured variable in an `Fn` closure,
@@ -95,11 +107,77 @@ impl Constraint {
         .map_err(|e| VMError::R1CSError(e))
     }
 
+    /// Creates an equality constraint.
+    ///
+    /// Applies _guaranteed optimization_:
+    /// if both arguments are constant expressions, returns Constraint::Cleartext(bool).
+    pub fn eq(e1: Expression, e2: Expression) -> Self {
+        match (e1, e2) {
+            (Expression::Constant(sw1), Expression::Constant(sw2)) => {
+                Constraint::Cleartext(sw1 == sw2)
+            }
+            (e1, e2) => Constraint::Eq(e1, e2),
+        }
+    }
+
+    /// Creates a conjunction constraint.
+    ///
+    /// Applies _guaranteed optimization_:
+    /// if one argument is a cleartext `false`, returns `false`, otherwise returns other argument.
+    pub fn and(c1: Constraint, c2: Constraint) -> Self {
+        match (c1, c2) {
+            (Constraint::Cleartext(false), _) => Constraint::Cleartext(false),
+            (Constraint::Cleartext(true), other) => other,
+            (_, Constraint::Cleartext(false)) => Constraint::Cleartext(false),
+            (other, Constraint::Cleartext(true)) => other,
+            (c1, c2) => Constraint::And(Box::new(c1), Box::new(c2)),
+        }
+    }
+
+    /// Creates a disjunction constraint.
+    ///
+    /// Applies _guaranteed optimization_:
+    /// if one argument is a cleartext `true`, returns `true`, otherwise returns other argument.
+    pub fn or(c1: Constraint, c2: Constraint) -> Self {
+        match (c1, c2) {
+            (Constraint::Cleartext(false), other) => other,
+            (Constraint::Cleartext(true), _) => Constraint::Cleartext(true),
+            (other, Constraint::Cleartext(false)) => other,
+            (_, Constraint::Cleartext(true)) => Constraint::Cleartext(true),
+            (c1, c2) => Constraint::Or(Box::new(c1), Box::new(c2)),
+        }
+    }
+
+    /// Creates a logical inverse of the constraint.
+    ///
+    /// Applies _guaranteed optimization_:
+    /// if the argument is a cleartext constraint `c`, inverts it.
+    pub fn not(c: Constraint) -> Self {
+        match c {
+            Constraint::Cleartext(b) => Constraint::Cleartext(!b),
+            c => Constraint::Not(Box::new(c)),
+        }
+    }
+
     fn flatten<CS: r1cs::RandomizedConstraintSystem>(
         self,
         cs: &mut CS,
     ) -> Result<(r1cs::LinearCombination, Option<Scalar>), r1cs::R1CSError> {
         match self {
+            // equivalent to (a - b) == 0
+            Constraint::Cleartext(true) => {
+                panic!(
+                    "Cleartext constraint should be optimized away early in `verify` instruction"
+                );
+                //Ok((Scalar::zero().into(), Some(Scalar::zero())))
+            }
+            // equivalent to (a - b) == not-zero, but we choose and fix 1.
+            Constraint::Cleartext(false) => {
+                panic!(
+                    "Cleartext constraint should be optimized away early in `verify` instruction"
+                );
+                //Ok((Scalar::one().into(), Some(Scalar::one())))
+            }
             Constraint::Eq(expr1, expr2) => {
                 let assignment = expr1
                     .eval()

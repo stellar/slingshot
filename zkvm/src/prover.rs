@@ -2,7 +2,7 @@ use bulletproofs::r1cs;
 use bulletproofs::{BulletproofGens, PedersenGens};
 use curve25519_dalek::ristretto::CompressedRistretto;
 use merlin::Transcript;
-use musig::{Signature, VerificationKey};
+use musig::VerificationKey;
 use std::collections::VecDeque;
 
 use crate::constraints::Commitment;
