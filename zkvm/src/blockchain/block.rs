@@ -125,7 +125,7 @@ impl Block {
 impl Root {
     /// Computes the Merkle txroot
     pub fn tx(txids: &[TxID]) -> Root {
-        Root(MerkleTree::root(b"transaction_ids", txids))
+        Root(MerkleTree::root(b"ZkVM.txroot", txids))
     }
 
     /// Computes the Merkle utxoroot
