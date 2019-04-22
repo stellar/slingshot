@@ -1,4 +1,3 @@
-use crate::encoding::SliceReader;
 use crate::errors::VMError;
 use crate::merkle::MerkleItem;
 use crate::ops::Instruction;
