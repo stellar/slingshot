@@ -94,25 +94,25 @@ Xpub {
 
 This applies to both Xpubs and Xprvs.
 
-1. Create a Merlin transcript `t = Transcript::new("Keytree.derivation")`.
+1. Create a Merlin transcript as a PRF instance `prf = Transcript::new("Keytree.derivation")`.
 2. If you are deriving from a parent Xprv, [create its corresponding parent Xpub first](#convert-xprv-to-xpub).
 3. Commit [xpub](#xpub) to the transcript:
 	```
-	t.commit_bytes("pt", xpub.point)
-	t.commit_bytes("dk", xpub.dk)
+	prf.commit_bytes("pt", xpub.point)
+	prf.commit_bytes("dk", xpub.dk)
 	```
 4. Provide the transcript to the user to commit an arbitrary derivation path or index:
 	```
-	t.commit_bytes(label, data)
+	prf.commit_bytes(label, data)
 	```
-	E.g. `t.commit_u64("account", account_id)` for an account within a hierarchy of keys.
+	E.g. `prf.commit_u64("account", account_id)` for an account within a hierarchy of keys.
 5. Squeeze a blinding factor `f`:
 	```
-	f = t.challenge_scalar("f.intermediate")
+	f = prf.challenge_scalar("f.intermediate")
 	```
 6. Squeeze a new derivation key `dk2` (32 bytes):
 	```
-	dk2 = t.challenge_bytes("dk")
+	dk2 = prf.challenge_bytes("dk")
 	```
 7. If you are deriving a child Xprv from a parent Xprv:
 	```
@@ -129,19 +129,19 @@ Similar to the intermediate derivation, but for safety is domain-separated so th
 
 1. Create a Merlin transcript `t = Transcript::new("Keytree.derivation")`.
 2. If you are deriving from a parent Xprv, [create its corresponding parent Xpub first](#convert-xprv-to-xpub).
-3. Commit [xpub](#xpub) to the provided key's transcript:
+3. Commit [xpub](#xpub) to the provided key's PRF:
 	```
-	t.commit_bytes("pt", xpub.point)
-	t.commit_bytes("dk", xpub.dk)
+	prf.commit_bytes("pt", xpub.point)
+	prf.commit_bytes("dk", xpub.dk)
 	```
 4. Provide the transcript to the user to commit an arbitrary selector data (could be structured):
 	```
-	t.commit_bytes(label, data)
+	prf.commit_bytes(label, data)
 	```
-	E.g. `t.commit_u64("invoice", invoice_index)` for a receiving address.
+	E.g. `prf.commit_u64("invoice", invoice_index)` for a receiving address.
 5. Squeeze a blinding factor `f`:
 	```
-	f = t.challenge_scalar("f.leaf")
+	f = prf.challenge_scalar("f.leaf")
 	```
 6. If you are deriving a child Xprv from a parent Xprv:
 	```
@@ -155,5 +155,22 @@ Similar to the intermediate derivation, but for safety is domain-separated so th
 
 ## Test vectors
 
-TBD.
+Root keys:
 
+	R.Xprv: 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+	R.Xpub: 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+
+Derived intermediate children (`R->C`) with `PRF.commit("index", LE64(1))`:
+
+	C.Xprv: ba9bead5df738767ca184900a4a09ce8afe9f7696e8d3ac1fd99f607a785bf005237586d5b496618a49a876e9a7e077b1715f8635b41b48edcaf2934ebe62683
+	C.Xpub: 2ec9d53d9d43b86c73694f4acd4be1c274a3cf8d7512e91acebafc0ed884dd475237586d5b496618a49a876e9a7e077b1715f8635b41b48edcaf2934ebe62683
+
+Derived intermediate grand-children (`C->G`) with `PRF.commit("index", LE64(1))`:
+	
+	G.Xprv: d4719a691dc4e97b27abfc50764d0369a197b3d03b049f0654d4872dd5f01f02f334cb814294776de8551a4e6382c14d05ad2eb6d6391e87069a3fbe2e6ecf77
+	G.Xpub: 1210a34624dfddb312da90ad5e2d3d4649d7eb50d44dad00972d1e1f422a4f29f334cb814294776de8551a4e6382c14d05ad2eb6d6391e87069a3fbe2e6ecf77
+
+Derived leaf keys from the intermediate children (`C->L`) with `PRF.commit("index", LE64(1))`:
+
+	L.Scalar: a7a8928dfeae1479a7bf908bfa929b714a62fe334b68e4557105414113ffca04
+	L.Point:  52ea0c9ce1540e65041565a1057aa6965bbb5b42709c1109da16609248a9d679
