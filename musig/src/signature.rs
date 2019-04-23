@@ -117,11 +117,11 @@ impl Signature {
     /// Verifies a signature for a multimessage context
     pub fn verify_multi<M: AsRef<[u8]>>(
         &self,
-        mut transcript: &mut Transcript,
+        transcript: &mut Transcript,
         messages: Vec<(VerificationKey, M)>,
     ) -> DeferredVerification {
         let context = Multimessage::new(messages);
-        context.commit(&mut transcript);
+        context.commit(transcript);
         transcript.commit_point(b"R", &self.R);
 
         // Form the final linear combination:
