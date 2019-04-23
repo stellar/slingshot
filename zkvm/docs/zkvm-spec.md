@@ -253,6 +253,8 @@ There are three kinds of constraints:
 1. **Linear constraint** is created using the [`eq`](#eq) instruction over two [expressions](#expression-type).
 2. **Conjunction constraint** is created using the [`and`](#and) instruction over two constraints of any type.
 3. **Disjunction constraint** is created using the [`or`](#or) instruction over two constraints of any type.
+4. **Inversion constraint** is created using the [`not`](#not) instruction over a constraint of any type.
+5. **Cleartext constraint** is created as a result of _guaranteed optimization_ of the above instructions when executed with [constant expressions](#constant-expression). Cleartext constraint contains a cleartext boolean `true` or `false`.
 
 Constraints and can be copied and dropped at will.
 
@@ -1098,8 +1100,11 @@ and the resulting expression is also a constant expression.
 _ex1 ex2_ **eq** → _constraint_
 
 1. Pops two [expressions](#expression-type) `ex2`, then `ex1`.
-2. Creates a [constraint](#constraint-type) that represents statement `ex1 - ex2 = 0`.
-3. Pushes the constraint to the stack.
+2. If both `ex1` or `ex2` are [constant expressions](#constant-expression):
+    1. Creates a [cleartext constraint](#constraint-type) with a boolean `true` if the weights are equal, `false` otherwise.
+3. Otherwise:
+    1. Creates a [constraint](#constraint-type) that represents statement `ex1 - ex2 = 0`.
+4. Pushes the constraint to the stack.
 
 Fails if `ex1` and `ex2` are not both [expression types](#expression-type).
 
@@ -1120,7 +1125,10 @@ Fails if `expr` is not an [expression type](#expression-type) or if `n` is not i
 _c1 c2_ **and** → _c3_
 
 1. Pops [constraints](#constraint-type) `c2`, then `c1`.
-2. Creates a _conjunction constraint_ `c3` containing `c1` and `c2`.
+2. If either `c1` or `c2` is a [cleartext constraint](#constraint-type):
+    1. If the cleartext constraint is `false`, returns it; otherwise returns the other constraint.
+3. Otherwise:
+    1. Creates a _conjunction constraint_ `c3` containing `c1` and `c2`.
 3. Pushes `c3` to the stack.
 
 No changes to the [constraint system](#constraint-system) are made until [`verify`](#verify) is executed.
@@ -1132,7 +1140,10 @@ Fails if `c1` and `c2` are not [constraints](#constraint-type).
 _constraint1 constraint2_ **or** → _constraint3_
 
 1. Pops [constraints](#constraint-type) `c2`, then `c1`.
-2. Creates a _disjunction constraint_ `c3` containing `c1` and `c2`.
+2. If either `c1` or `c2` is a [cleartext constraint](#constraint-type):
+    1. If the cleartext constraint is `true`, returns it; otherwise returns the other constraint.
+3. Otherwise:
+    1. Creates a _disjunction constraint_ `c3` containing `c1` and `c2`.
 3. Pushes `c3` to the stack.
 
 No changes to the [constraint system](#constraint-system) are made until [`verify`](#verify) is executed.
@@ -1144,14 +1155,16 @@ Fails if `c1` and `c2` are not [constraints](#constraint-type).
 _constr1_ **not** → _constr2_
 
 1. Pops [constraint](#constraint-type) `c1`.
-2. Create two constraints:
-   ```
-   x * y = 0
-   x * w = 1-y
-   ```
-   where `w` is a free variable and `x` is the evaluation of constraint `c1`.
-3. Wrap the output `y` in a constraint `c2`.
-4. Push `c2` to the stack.
+2. If `c1` is a [cleartext constraint](#constraint-type), returns its negation.
+3. Otherwise:
+    1. Create two constraints:
+       ```
+       x * y = 0
+       x * w = 1-y
+       ```
+       where `w` is a free variable and `x` is the evaluation of constraint `c1`.
+    2. Wrap the output `y` in a constraint `c2`.
+    3. Push `c2` to the stack.
 
 This implements the boolean `not` trick from [Setty, Vu, Panpalia, Braun, Ali, Blumberg, Walfish (2012)](https://eprint.iacr.org/2012/598.pdf) and implemented in [libsnark](https://github.com/scipr-lab/libsnark/blob/dfa74ff270ca295619be1fdf7661f76dff0ae69e/libsnark/gadgetlib1/gadgets/basic_gadgets.hpp#L162-L169).
 
@@ -1161,7 +1174,10 @@ This implements the boolean `not` trick from [Setty, Vu, Panpalia, Braun, Ali, B
 _constr_ **verify** → ø
 
 1. Pops [constraint](#constraint-type) `constr`.
-2. Transforms the constraint `constr` recursively using the following rules:
+2. If `constr` is a [cleartext constraint](#constraint-type):
+    1. If it is `true`, returns immediately.
+    2. If it is `false`, fails execution.
+3. Otherwise, transforms the constraint `constr` recursively using the following rules:
     1. Replace conjunction of two _linear constraints_ `a` and `b` with a linear constraint `c` by combining both constraints with a random challenge `z`:
         ```
         z = transcript.challenge_scalar(b"ZkVM.verify.and-challenge");
