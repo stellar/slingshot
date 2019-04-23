@@ -382,19 +382,19 @@ the validity of the shares that it receives before summing the shares and return
 Thus, it returns `Signature` instead of a `Result`, since it can not fail.
 
 ## Protocol for counterparty state transitions
-Counterparties are states stored internally by a party, that represent the messages received by from its counterparties. 
+Counterparties are states stored internally by a party, that represent the messages received from its counterparties. 
 
 Counterparty state transitions overview:
 ```
-Counterparty{pubkey}
+Counterparty{position, pubkey}
   ↓
 .precommit_nonce(precommitment)
   ↓
-CounterpartyPrecommitted{precommitment, pubkey}
+CounterpartyPrecommitted{precommitment, position, pubkey}
   ↓
 .commit_nonce(commitment)
   ↓
-CounterpartyCommitted{commitment, pubkey}
+CounterpartyCommitted{commitment, position, pubkey}
   ↓
 .sign(share, challenge, context)
   ↓
@@ -407,15 +407,18 @@ Signature = {s: s_total, R: R_total}
 
 ### Counterparty
 
-Fields: pubkey
+Fields: 
+- position: `usize`
+- pubkey: `VerificationKey`
 
 Function: `new(...)`
 
 Input: 
-- context: `VerificationKey`
+- position: `usize`
+- pubkey: `VerificationKey`
 
 Operation:
-- Create a new `Counterparty` instance with the input pubkey in the `pubkey` field
+- Create a new `Counterparty` instance with the inputs
 
 Output: 
 - The new `Counterparty` instance
@@ -425,11 +428,13 @@ Output:
 Function: `precommit_nonce(...)`
 
 Input:
+- `self`
 - precommitment: `NoncePrecommitment`
 
 Operation:
-- Create a new `CounterpartyPrecommitted` instance with `self.pubkey` and the precommitment
-- Future work: receive pubkey in this function, and match against stored counterparties to make sure the pubkey corresponds. 
+- Create a new `CounterpartyPrecommitted` instance with the input precommitment.
+- Future work: receive pubkey (or index) together with the precommitmentin this function, 
+and match against stored counterparties to make sure the pubkey corresponds. 
 This will allow us to receive messages out of order, and do sorting on the party's end.
 
 Output:
@@ -438,17 +443,20 @@ Output:
 ### CounterpartyPrecommitted
 
 Fields:
+- `self`
 - precommitment: `NoncePrecommitment`
+- position: `usize`
 - pubkey: `VerificationKey`
 
-Function: `commit_nonce(...)`
+Function: `verify_nonce(...)`
 
 Input: 
+- `self`
 - commitment: `NonceCommitment`
 
 Operation:
 - Verify that `self.precommitment = commitment.precommit()`.
-- If verification succeeds, create a new `CounterpartyCommitted` using `self.pubkey` and commitment.
+- If verification succeeds, create a new `CounterpartyCommitted` the input commitment.
 - Else, return `Err(VMError::MusigShareError)`.
 
 Output:
@@ -458,11 +466,13 @@ Output:
 
 Fields:
 - commitment: `NonceCommitment`
-- pubkey: `VerificationKey`
+- position: `usize`
+- X_i: `VerificationKey`
 
 Function: `sign<C: MusigContext>(...)`
 
 Input:
+- `self`
 - share: `Scalar`
 - context: `C`
 - transcript: `&mut transcript`
@@ -482,4 +492,8 @@ Output:
 
 ### Using Merlin transcripts for hashing and randomness
 
+The paper uses multiple hashing algorithms (`H_agg` and `H_sig` in the multikey Musig protocol, and `H` in the multimessage protocol). We instead use Merlin transcripts, by feeding the expected hash input to the transcript, and getting a challenge from the transcript instead of a hash output. The benefits of using transcripts is detailed in this [blog post about Merlin transcripts](https://medium.com/@hdevalence/merlin-flexible-composable-transcripts-for-zero-knowledge-proofs-28d9fda22d9a).
+
 ### Changing challenge definition for Multikey case
+
+In order to have a consistent multi-party signer protocol between the Multikey and Multimessage cases, we changed the definition of the hash function `H_agg` in the Multikey case from `c_i = H_agg(<L>, X_i)` to `c_i = H_agg(<L>, i)`. This way, the `.challenge(...)` functions in the Multikey and Multimessage cases are dependent on the public key's index `i`, instead of the public key itself. The safety of the protocol is not changed, since the hash function `H_agg` also takes `<L>`, the encoding of the multiset of the the public keys, as an input, so the hash output is bound to a specific public key in the list both when it takes in `i` and `X_i`.
