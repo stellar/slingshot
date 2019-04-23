@@ -43,7 +43,7 @@ This is a public trait with functions:
 - `challenge(&self, index, &mut transcript) -> Scalar`: takes the index of a public key
 and a mutable transcript, and returns the suitable challenge for that public key from the transcript. 
 - `len(&self) -> usize`: returns the number of pubkeys associated with the context.
-- `key(&self, index: usize)`: returns the key at the index `i`.
+- `key(&self, index: usize)`: returns the key at `index`.
 
 ### Multikey 
 
@@ -77,7 +77,7 @@ Functions:
 
 - `Multikey::len(&self) -> usize`: returns the length of `self.public_keys`.
 
-- `Multikey::key(&self, i) -> VerificationKey`: returns the pubkey at index `i` of `self.public_keys`
+- `Multikey::key(&self, index) -> VerificationKey`: returns the pubkey at `index` of `self.public_keys`
 
 ### Multimessage
 
@@ -197,8 +197,8 @@ There are several paths to signing:
     - Create a `Multimessage` context by calling `Multimessage::new(...)`. 
       See the [multimessage](#multimessage) section for more details.
 
-    For each party that is taking part in the signing:
-    - Call `Party::new(transcript, privkey, multimessage)`.
+    For each signer that is taking part in the signing:
+    - Call `Signer::new(transcript, privkey, multimessage)`.
     - All following steps are the same as in protocol #2.
 
 ### Verifying
@@ -295,7 +295,7 @@ Operation:
 
 Output:
 
-- The next state in the protocol: `PartyAwaitingPrecommitments` 
+- The next state in the protocol: `SignerAwaitingPrecommitments` 
 - The nonce precommitment: `NoncePrecommitment`
 
 ### SignerAwaitingPrecommitments<'t, C: MusigContext> 
@@ -319,7 +319,7 @@ Operation:
 This will return `CounterpartyPrecommitted`s.
 
 Output:
-- the next state in the protocol: `PartyAwaitingCommitments`
+- the next state in the protocol: `SignerAwaitingCommitments`
 - the nonce commitment: `self.R_i`
 
 ### SignerAwaitingCommitments<'t, C: MusigContext>
@@ -349,7 +349,7 @@ If it succeeds, it will return `CounterpartyCommitted`s.
 - Make `s_i` = `r_i + c_i * x_i`.
 
 Output: 
-- The next state in the protocol: `PartyAwaitingShares`
+- The next state in the protocol: `SignerAwaitingShares`
 - The signature share: `s_i`
 
 ### SignerAwaitingShares<C: MusigContext>
@@ -382,7 +382,7 @@ the validity of the shares that it receives before summing the shares and return
 Thus, it returns `Signature` instead of a `Result`, since it can not fail.
 
 ## Protocol for counterparty state transitions
-Counterparties are states stored internally by a party, that represent the messages received from its counterparties. 
+Counterparties are states stored internally by a signer, that represent the messages received from its counterparties. 
 
 Counterparty state transitions overview:
 ```
