@@ -2,13 +2,12 @@
 
 This is a signature scheme for signing messages. 
 This design doc describes the protocol for signing a single message with one public key 
-(where the public key can be created from a single party's private key, 
-or from the aggregation of multiple public keys),
+(where the public key can be created from a single party's private key, or from the aggregation of multiple public keys),
 and for signing multiple messages with multiple public keys.
 The public key aggregation and multi-message signing protocols are implemented from the paper,
 ["Simple Schnorr Multi-Signatures with Applications to Bitcoin"](https://eprint.iacr.org/2018/068.pdf).
 
-In future iterations, we can consider signing with public keys that are nested aggregations of public keys.
+In future work, we can consider signing with public keys that are nested aggregations of public keys.
 
 ## Definitions
 
@@ -42,14 +41,15 @@ This is a private trait with three functions:
 - `commit(&self, &mut transcript)`: takes a mutable transcript, and commits the internal context to the transcript.
 - `challenge(&self, &verification_key, &mut transcript) -> Scalar`: takes a public key and mutable transcript, and returns the 
   suitable challenge for that public key. 
-- `get_pubkeys(&self) -> Vec<VerificationKey>`: returns the associated public keys.
+- `len(&self) -> usize`: returns the number of pubkeys associated with the context.
+- `key(&self, index: usize)`: returns the key at the index `i`.
 
 ### Multikey 
 
 Implements MusigContext
 
 Fields:
-- transcript: `Transcript`. All of the pubkeys that the multikey are created from are committed to this transcript. 
+- prf: `Transcript`. All of the pubkeys that the multikey are created from are committed to this transcript. 
 - aggregated_key: `VerificationKey`
 - public_keys: `Vec<VerificationKey>`
 
@@ -74,14 +74,16 @@ Functions:
 
 - `Multikey::aggregated_key(&self) -> VerificationKey`: returns the aggregated key stored in the multikey, `self.aggregated_key`.  
 
-- `Multikey::get_pubkeys(&self) -> Vec<VerificationKey>`: returns the list of public keys, `self.public_keys`.
+- `Multikey::len(&self) -> usize`: returns the length of `self.public_keys`.
+
+- `Multikey::key(&self, i) -> VerificationKey`: returns the pubkey at index `i` of `self.public_keys`
 
 ### Multimessage
 
 Implements MusigContext
 
 Fields:
-- pairs: `Vec<(VerificationKey, [u8])>`
+- pairs: `Vec<(VerificationKey, &[u8])>`
 
 Functions:
 - `Multimessage::new(Vec<(VerificationKey, [u8])>) -> Self`: creates a new MultiMessage instance using the inputs.
@@ -464,3 +466,10 @@ Operation:
 
 Output:
 - `Result<Scalar, VMError>`
+
+
+## Modifications from the paper
+
+### Using Merlin transcripts for hashing and randomness
+
+### Changing challenge definition for Multikey case
