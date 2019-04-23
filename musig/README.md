@@ -396,7 +396,7 @@ CounterpartyPrecommitted{precommitment, position, pubkey}
   ↓
 CounterpartyCommitted{commitment, position, pubkey}
   ↓
-.sign(share, challenge, context)
+.verify_share(share, context, transcript)
   ↓
  s_i
 
@@ -469,7 +469,7 @@ Fields:
 - position: `usize`
 - X_i: `VerificationKey`
 
-Function: `sign<C: MusigContext>(...)`
+Function: `verify_share<C: MusigContext>(...)`
 
 Input:
 - `self`
