@@ -1,9 +1,11 @@
-use bulletproofs::r1cs::{ConstraintSystem, R1CSError, RandomizedConstraintSystem, Variable};
+use bulletproofs::r1cs::{
+    ConstraintSystem, R1CSError, RandomizableConstraintSystem, RandomizedConstraintSystem, Variable,
+};
 use core::cmp::{max, min};
 use value::{AllocatedValue, Value};
 
 /// Enforces that the output variables `y` are a valid reordering of the inputs variables `x`.
-pub fn scalar_shuffle<CS: ConstraintSystem>(
+pub fn scalar_shuffle<CS: RandomizedConstraintSystem>(
     cs: &mut CS,
     x: Vec<Variable>,
     y: Vec<Variable>,
@@ -20,38 +22,36 @@ pub fn scalar_shuffle<CS: ConstraintSystem>(
         return Ok(());
     }
 
-    cs.specify_randomized_constraints(move |cs| {
-        let z = cs.challenge_scalar(b"shuffle challenge");
+    let z = cs.challenge_scalar(b"shuffle challenge");
 
-        // Make last x multiplier for i = k-1 and k-2
-        let (_, _, last_mulx_out) = cs.multiply(x[k - 1] - z, x[k - 2] - z);
+    // Make last x multiplier for i = k-1 and k-2
+    let (_, _, last_mulx_out) = cs.multiply(x[k - 1] - z, x[k - 2] - z);
 
-        // Make multipliers for x from i == [0, k-3]
-        let first_mulx_out = (0..k - 2).rev().fold(last_mulx_out, |prev_out, i| {
-            let (_, _, o) = cs.multiply(prev_out.into(), x[i] - z);
-            o
-        });
+    // Make multipliers for x from i == [0, k-3]
+    let first_mulx_out = (0..k - 2).rev().fold(last_mulx_out, |prev_out, i| {
+        let (_, _, o) = cs.multiply(prev_out.into(), x[i] - z);
+        o
+    });
 
-        // Make last y multiplier for i = k-1 and k-2
-        let (_, _, last_muly_out) = cs.multiply(y[k - 1] - z, y[k - 2] - z);
+    // Make last y multiplier for i = k-1 and k-2
+    let (_, _, last_muly_out) = cs.multiply(y[k - 1] - z, y[k - 2] - z);
 
-        // Make multipliers for y from i == [0, k-3]
-        let first_muly_out = (0..k - 2).rev().fold(last_muly_out, |prev_out, i| {
-            let (_, _, o) = cs.multiply(prev_out.into(), y[i] - z);
-            o
-        });
+    // Make multipliers for y from i == [0, k-3]
+    let first_muly_out = (0..k - 2).rev().fold(last_muly_out, |prev_out, i| {
+        let (_, _, o) = cs.multiply(prev_out.into(), y[i] - z);
+        o
+    });
 
-        // Constrain last x mul output and last y mul output to be equal
-        cs.constrain(first_mulx_out - first_muly_out);
+    // Constrain last x mul output and last y mul output to be equal
+    cs.constrain(first_mulx_out - first_muly_out);
 
-        Ok(())
-    })
+    Ok(())
 }
 
 /// Enforces that the output values `y` are a valid reordering of the inputs values `x`.
 /// The inputs and outputs are all of the `AllocatedValue` type, which contains the fields
 /// quantity, issuer, and tag. Works for `k` inputs and `k` outputs.
-pub fn value_shuffle<CS: ConstraintSystem>(
+pub fn value_shuffle<CS: RandomizableConstraintSystem>(
     cs: &mut CS,
     x: Vec<AllocatedValue>,
     y: Vec<AllocatedValue>,
@@ -87,7 +87,7 @@ pub fn value_shuffle<CS: ConstraintSystem>(
 
 /// Enforces that the values in `y` are a valid reordering of the values in `x`,
 /// allowing for padding (zero values) in x that can be omitted in y (or the other way around).
-pub fn padded_shuffle<CS: ConstraintSystem>(
+pub fn padded_shuffle<CS: RandomizableConstraintSystem>(
     cs: &mut CS,
     mut x: Vec<AllocatedValue>,
     mut y: Vec<AllocatedValue>,
@@ -182,7 +182,9 @@ mod tests {
                 .map(|v| prover.commit(Scalar::from(*v), Scalar::random(&mut rng)))
                 .unzip();
 
-            scalar_shuffle(&mut prover, input_vars, output_vars)?;
+            prover.specify_randomized_constraints(move |cs| {
+                scalar_shuffle(cs, input_vars.clone(), output_vars.clone())
+            })?;
             let proof = prover.prove(&bp_gens)?;
 
             (proof, input_com, output_com)
@@ -197,7 +199,9 @@ mod tests {
             output_com.iter().map(|com| verifier.commit(*com)).collect();
 
         // Verifier adds constraints to the constraint system
-        scalar_shuffle(&mut verifier, input_vars, output_vars)?;
+        verifier.specify_randomized_constraints(move |cs| {
+            scalar_shuffle(cs, input_vars.clone(), output_vars.clone())
+        })?;
 
         Ok(verifier.verify(&proof, &pc_gens, &bp_gens)?)
     }
