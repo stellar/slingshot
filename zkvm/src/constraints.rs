@@ -62,6 +62,15 @@ pub enum Constraint {
     // this also allows us not to wrap this enum in a struct.
 }
 
+/// This is a subtype of `Constraint` that excludes `::Cleartext` case.
+#[derive(Clone, Debug)]
+enum SecretConstraint {
+    Eq(Expression, Expression),
+    And(Box<Constraint>, Box<Constraint>),
+    Or(Box<Constraint>, Box<Constraint>),
+    Not(Box<Constraint>),
+}
+
 /// Commitment is a represention of an _open_ or _closed_ Pedersen commitment.
 #[derive(Clone, Debug)]
 pub enum Commitment {
@@ -87,17 +96,18 @@ impl Constraint {
         cs: &mut CS,
     ) -> Result<(), VMError> {
         // Return early without updating CS if the constraint is cleartext.
-        match &self {
-            Constraint::Cleartext(true) => return Ok(()),
-            Constraint::Cleartext(false) => return Err(VMError::CleartextConstraintFalse),
-            _ => {}
+        // Note: this makes the matching on ::Cleartext case inside `flatten` function unnecessary.
+        let secret_constraint = match self.into_cleartext() {
+            Ok(true) => return Ok(()),
+            Ok(false) => return Err(VMError::CleartextConstraintFalse),
+            Err(sc) => sc,
         };
         cs.specify_randomized_constraints(move |cs| {
             // Flatten the constraint into one expression
             // Note: cloning because we can't move out of captured variable in an `Fn` closure,
             // and `Box<FnOnce>` is not fully supported yet. (We can update when that happens).
             // Cf. https://github.com/dalek-cryptography/bulletproofs/issues/244
-            let (expr, _) = self.clone().flatten(cs)?;
+            let (expr, _) = secret_constraint.clone().flatten(cs)?;
 
             // Add the resulting expression to the constraint system
             cs.constrain(expr);
@@ -159,39 +169,38 @@ impl Constraint {
         }
     }
 
+    /// Converts the constraint into a cleartext boolean, or a secret subtype that excludes ::Cleartext case.
+    fn into_cleartext(self) -> Result<bool, SecretConstraint> {
+        match self {
+            Constraint::Cleartext(flag) => Ok(flag),
+            Constraint::Eq(expr1, expr2) => Err(SecretConstraint::Eq(expr1, expr2)),
+            Constraint::And(c1, c2) => Err(SecretConstraint::And(c1, c2)),
+            Constraint::Or(c1, c2) => Err(SecretConstraint::Or(c1, c2)),
+            Constraint::Not(c1) => Err(SecretConstraint::Not(c1)),
+        }
+    }
+}
+
+impl SecretConstraint {
     fn flatten<CS: r1cs::RandomizedConstraintSystem>(
         self,
         cs: &mut CS,
     ) -> Result<(r1cs::LinearCombination, Option<Scalar>), r1cs::R1CSError> {
         match self {
-            // equivalent to (a - b) == 0
-            Constraint::Cleartext(true) => {
-                panic!(
-                    "Cleartext constraint should be optimized away early in `verify` instruction"
-                );
-                //Ok((Scalar::zero().into(), Some(Scalar::zero())))
-            }
-            // equivalent to (a - b) == not-zero, but we choose and fix 1.
-            Constraint::Cleartext(false) => {
-                panic!(
-                    "Cleartext constraint should be optimized away early in `verify` instruction"
-                );
-                //Ok((Scalar::one().into(), Some(Scalar::one())))
-            }
-            Constraint::Eq(expr1, expr2) => {
+            SecretConstraint::Eq(expr1, expr2) => {
                 let assignment = expr1
                     .eval()
                     .and_then(|x| expr2.eval().map(|y| (x - y).to_scalar()));
                 Ok((expr1.to_r1cs_lc() - expr2.to_r1cs_lc(), assignment))
             }
-            Constraint::And(c1, c2) => {
+            SecretConstraint::And(c1, c2) => {
                 let (a, a_assg) = c1.flatten(cs)?;
                 let (b, b_assg) = c2.flatten(cs)?;
                 let z = cs.challenge_scalar(b"ZkVM.verify.and-challenge");
                 let assignment = a_assg.and_then(|a| b_assg.map(|b| a + z * b));
                 Ok((a + z * b, assignment))
             }
-            Constraint::Or(c1, c2) => {
+            SecretConstraint::Or(c1, c2) => {
                 let (a, a_assg) = c1.flatten(cs)?;
                 let (b, b_assg) = c2.flatten(cs)?;
                 // output expression: a * b
@@ -199,7 +208,7 @@ impl Constraint {
                 let assignment = a_assg.and_then(|a| b_assg.map(|b| a * b));
                 Ok((r1cs::LinearCombination::from(o), assignment))
             }
-            Constraint::Not(c1) => {
+            SecretConstraint::Not(c1) => {
                 // Compute the input linear combination and its secret assignment
                 let (x_lc, x_assg) = c1.flatten(cs)?;
 
