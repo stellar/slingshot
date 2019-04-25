@@ -471,7 +471,8 @@ impl Add for Expression {
     }
 }
 
-// TBD: Remove this in once PartialEq is impl'd for r1cs::Variable and use #[derive(PartialEq)] instead.
+// TBD: Remove this once PartialEq is impl'd for r1cs::Variable and use #[derive(PartialEq)] instead.
+// See https://github.com/dalek-cryptography/bulletproofs/pull/271
 impl PartialEq for Expression {
     fn eq(&self, other: &Expression) -> bool {
         match (self, other) {
@@ -533,6 +534,7 @@ impl Into<CompressedRistretto> for Commitment {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use merlin::Transcript;
 
     #[test]
     fn expression_arithmetic() {
@@ -603,9 +605,48 @@ mod tests {
             )
         );
 
-        // TBD: const * const => mult consts
-        // TBD: const * expr => mult weights
-        // TBD: expr * const => mult weights
+        let mut cs = MockMultiplierCS { num_vars: 0 };
+
+        let e1 = Expression::Constant(10u64.into());
+        let e2 = Expression::Constant(20u64.into());
+        let e3 = Expression::LinearCombination(
+            vec![(r1cs::Variable::Committed(0), 3u64.into())],
+            Some(3u64.into()),
+        );
+        let e4 = Expression::LinearCombination(
+            vec![(r1cs::Variable::Committed(1), 4u64.into())],
+            Some(4u64.into()),
+        );
+
+        // const * const => mult consts
+        assert_eq!(
+            e1.clone().multiply(e2.clone(), &mut cs),
+            Expression::Constant(200u64.into())
+        );
+        // const * expr => mult weights
+        assert_eq!(
+            e1.clone().multiply(e3.clone(), &mut cs),
+            Expression::LinearCombination(
+                vec![(r1cs::Variable::Committed(0), 30u64.into())],
+                Some(30u64.into())
+            )
+        );
+        // expr * const => mult weights
+        assert_eq!(
+            e3.clone().multiply(e1.clone(), &mut cs),
+            Expression::LinearCombination(
+                vec![(r1cs::Variable::Committed(0), 30u64.into())],
+                Some(30u64.into())
+            )
+        );
+        // expr * expr => allocate new multiplier
+        assert_eq!(
+            e3.clone().multiply(e4.clone(), &mut cs),
+            Expression::LinearCombination(
+                vec![(r1cs::Variable::MultiplierOutput(0), 1u64.into())],
+                Some(12u64.into())
+            )
+        );
     }
 
     #[test]
@@ -699,4 +740,52 @@ mod tests {
         );
     }
 
+    struct MockMultiplierCS {
+        pub num_vars: usize,
+    }
+
+    impl r1cs::ConstraintSystem for MockMultiplierCS {
+        fn transcript(&mut self) -> &mut Transcript {
+            // not used in tests
+            unimplemented!()
+        }
+
+        // simulates a multiplication gate, returning
+        fn multiply(
+            &mut self,
+            _left: r1cs::LinearCombination,
+            _right: r1cs::LinearCombination,
+        ) -> (r1cs::Variable, r1cs::Variable, r1cs::Variable) {
+            let var = self.num_vars;
+            self.num_vars += 1;
+            let l_var = r1cs::Variable::MultiplierLeft(var);
+            let r_var = r1cs::Variable::MultiplierRight(var);
+            let o_var = r1cs::Variable::MultiplierOutput(var);
+            (l_var, r_var, o_var)
+        }
+
+        fn allocate(
+            &mut self,
+            _assignment: Option<Scalar>,
+        ) -> Result<r1cs::Variable, r1cs::R1CSError> {
+            Ok(self.allocate_multiplier(None)?.0)
+        }
+
+        fn allocate_multiplier(
+            &mut self,
+            _assignments: Option<(Scalar, Scalar)>,
+        ) -> Result<(r1cs::Variable, r1cs::Variable, r1cs::Variable), r1cs::R1CSError> {
+            let var = self.num_vars;
+            self.num_vars += 1;
+
+            // Create variables for l,r,o
+            let l_var = r1cs::Variable::MultiplierLeft(var);
+            let r_var = r1cs::Variable::MultiplierRight(var);
+            let o_var = r1cs::Variable::MultiplierOutput(var);
+
+            Ok((l_var, r_var, o_var))
+        }
+
+        fn constrain(&mut self, _lc: r1cs::LinearCombination) {}
+    }
 }
