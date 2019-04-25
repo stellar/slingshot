@@ -38,7 +38,7 @@ pub enum Expression {
 ///
 /// Note: use dedicated functions `eq()`, `and()`, `or()` and `not()` to create
 /// constraints since they apply guaranteed optimization for cleartext constraints.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Constraint {
     /// Cleartext constraint: known to the verifier to be true or false.
     Cleartext(bool),
@@ -48,7 +48,7 @@ pub enum Constraint {
 }
 
 /// This is a subtype of `Constraint` that excludes `::Cleartext` case.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum SecretConstraint {
     /// Equality constraint between two expressions.
     /// Created by `eq` instruction.
@@ -471,6 +471,45 @@ impl Add for Expression {
     }
 }
 
+// TBD: Remove this in once PartialEq is impl'd for r1cs::Variable and use #[derive(PartialEq)] instead.
+impl PartialEq for Expression {
+    fn eq(&self, other: &Expression) -> bool {
+        match (self, other) {
+            (Expression::Constant(a), Expression::Constant(b)) => a == b,
+            (Expression::LinearCombination(v1, a1), Expression::LinearCombination(v2, a2)) => {
+                (a1 == a2)
+                    && v1
+                        .iter()
+                        .zip(v2.iter())
+                        .fold(true, |flag, ((var1, x1), (var2, x2))| {
+                            flag && (x1 == x2)
+                                && match (var1, var2) {
+                                    (
+                                        r1cs::Variable::Committed(a),
+                                        r1cs::Variable::Committed(b),
+                                    ) => a == b,
+                                    (
+                                        r1cs::Variable::MultiplierLeft(a),
+                                        r1cs::Variable::MultiplierLeft(b),
+                                    ) => a == b,
+                                    (
+                                        r1cs::Variable::MultiplierRight(a),
+                                        r1cs::Variable::MultiplierRight(b),
+                                    ) => a == b,
+                                    (
+                                        r1cs::Variable::MultiplierOutput(a),
+                                        r1cs::Variable::MultiplierOutput(b),
+                                    ) => a == b,
+                                    (r1cs::Variable::One(), r1cs::Variable::One()) => true,
+                                    _ => false,
+                                }
+                        })
+            }
+            _ => false,
+        }
+    }
+}
+
 // Upcasting witness/points into Commitment
 
 impl From<CommitmentWitness> for Commitment {
@@ -489,4 +528,46 @@ impl Into<CompressedRistretto> for Commitment {
     fn into(self) -> CompressedRistretto {
         self.to_point()
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn expression_guaranteed_optimization() {
+        // const + const => const
+        assert_eq!(
+            Expression::Constant(1u64.into()) + Expression::Constant(2u64.into()),
+            Expression::Constant(3u64.into())
+        );
+        // const + lincomb => prepend to lincomb
+        assert_eq!(
+            Expression::Constant(1u64.into())
+                + Expression::LinearCombination(
+                    vec![(r1cs::Variable::One(), 2u64.into())],
+                    Some(2u64.into())
+                ),
+            Expression::LinearCombination(
+                vec![
+                    (r1cs::Variable::One(), 1u64.into()),
+                    (r1cs::Variable::One(), 2u64.into())
+                ],
+                Some(3u64.into())
+            )
+        );
+
+        // TBD: const * const => mult consts
+        // TBD: const * expr => mult weights
+        // TBD: expr * const => mult weights
+    }
+
+    #[test]
+    fn constraints_guaranteed_optimization() {
+        // TBD: constr(constexpr, constexpr) => cleartext
+        // TBD: OR(cleartext, other) => {cleartext(true)  || other }
+        // TBD: AND(cleartext, other) => {cleartext(false)  || other }
+        // TBD: NOT(cleartext) => !cleartext
+    }
+
 }
