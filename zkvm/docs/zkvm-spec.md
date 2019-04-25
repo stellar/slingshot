@@ -42,7 +42,6 @@ ZkVM defines a procedural representation for blockchain transactions and the rul
     * [Transaction log](#transaction-log)
     * [Transaction ID](#transaction-id)
     * [Merkle binary tree](#merkle-binary-tree)
-    * [Aggregated signature](#aggregated-signature)
     * [Transaction signature](#transaction-signature)
     * [Unblinding proof](#unblinding-proof)
     * [Taproot](#taproot)
@@ -365,7 +364,7 @@ Pedersen commitments can be opened using the [`unblind`](#unblind) instruction.
 
 A _verification key_ `P` is a commitment to a secret [scalar](#scalar) `x` (_signing key_)
 using the primary [base point](#base-points) `B`: `P = x·B`.
-Verification keys are used to construct [predicates](#predicate) and verify [signatures](#aggregated-signature).
+Verification keys are used to construct [predicates](#predicate) and verify [signatures](#transaction-signature).
 
 
 ### Time bounds
@@ -685,73 +684,14 @@ The resulting merkle binary tree may thus not be balanced; however,
 its shape is uniquely determined by the number of leaves.
 
 
-### Aggregated Signature
-
-Aggregated Signature is a Schnorr proof of knowledge of a set of secret [scalars](#scalar)
-corresponding
-to some [verification keys](#verification-key) in a context of some _message_.
-
-Aggregated Signature is encoded as a 64-byte [data](#data-type).
-
-The protocol is the following:
-
-1. Prover and verifier obtain a [transcript](#transcript) `T` that is assumed to be already bound to the _message_ being signed (see [`signtx`](#signtx) and [transaction signature](#transaction-signature)).
-2. Commit the count `n` of verification keys as [LE32](#le32):
-    ```
-    T.commit("n", LE32(n))
-    ```
-3. Commit all verification keys `P[i]` one by one (in the order they were added during VM execution):
-    ```
-    T.commit("P", P[i])
-    ```
-4. For each key, generate a delinearizing scalar:
-    ```
-    x[i] = T.challenge_scalar("x")
-    ```
-5. Form an aggregated key without computing it right away:
-    ```
-    PA = x[0]·P[0] + ... + x[n-1]·P[n-1]
-    ```
-6. Prover creates a _secret nonce_: a randomly sampled [scalar](#scalar) `r`.
-7. Prover commits to its nonce:
-    ```
-    R = r·B
-    ```
-8. Prover sends `R` to the verifier.
-9. Prover and verifier write the nonce commitment `R` to the transcript:
-    ```
-    T.commit("R", R)
-    ```
-10. Prover and verifier compute a Fiat-Shamir challenge scalar `e` using the transcript:
-    ```
-    e = T.challenge_scalar("e")
-    ```
-11. Prover blinds the secrets `dlog(P[i])` using the nonce and the challenge:
-    ```
-    s = r + e·sum{x[i]·dlog(P[i])}
-    ```
-12. Prover sends `s` to the verifier.
-13. Verifier checks the relation:
-    ```
-    s·B  ==  R + e·PA
-         ==  R + (e·x[0])·P[0] + ... + (e·x[n-1])·P[n-1]
-    ```
-
-Note: if the signing is performed by independent mistrusting parties, it should use pre-commitments to the nonces.
-The MPC protocol for safe aggregated signing is outside the scope of this specification because it does not affect the verification protocol.
-
 ### Transaction signature
 
 Instruction [`signtx`](#signtx) unlocks a contract if its [predicate](#predicate)
 correctly signs the [transaction ID](#transaction-id). The contract‘s predicate
-is added to the array of deferred [verification keys](#verification-key) that
-are later aggregated in a single key and a Schnorr [signature](#aggregated-signature) protocol
-is executed for the [transaction ID](#transaction-id).
+is added to the array of deferred [verification keys](#verification-key) (alongside with associated [contract ID](#contract-id)) that
+are later used in a [multi-message signature](../../musig/docs/musig-spec.md#multi-message-signature) protocol to verify a multi-signature over a [transaction ID](#transaction-id) and the associated [contract IDs](#contract-id).
 
-Aggregated signature verification protocol is based on the [MuSig](https://eprint.iacr.org/2018/068) scheme, but with
-Fiat-Shamir transform defined through the use of the [transcript](#transcript) instead of a composition of hash function calls.
-
-1. Instantiate the [transcript](#transcript) `TA` for transaction signature:
+1. Instantiate the [transcript](#transcript) `T` for transaction signature:
     ```
     T = Transcript("ZkVM.signtx")
     ```
@@ -759,7 +699,7 @@ Fiat-Shamir transform defined through the use of the [transcript](#transcript) i
     ```
     T.commit("txid", txid)
     ```
-3. Perform the [aggregated signature protocol](#aggregated-signature) using the transcript `T`.
+3. Perform the [multi-message signature protocol](../../musig/docs/musig-spec.md#multi-message-signature) using the transcript `T` and the pairs of verification keys and contract IDs as submessages.
 4. Add the verifier's statement to the list of [deferred point operations](#deferred-point-operations).
 
 
@@ -1465,7 +1405,7 @@ _contract_ **signtx** → _results..._
 
 1. Pops the [contract](#contract-type) from the stack.
 2. Adds the contract’s [predicate](#predicate) as a [verification key](#verification-key)
-   to the list of deferred keys for [aggregated transaction signature](#transaction-signature)
+   to the list of deferred keys for [transaction signature](#transaction-signature)
    check at the end of the VM execution.
 3. Places the [payload](#contract-payload) on the stack (last item on top), discarding the contract.
 
@@ -1516,7 +1456,7 @@ _contract prog sig_ **delegate** → _results..._
     R = sig[ 0..32]
     s = sig[32..64]
     ```
-7. Perform the [signature protocol](#aggregated-signature) using the transcript `T`, public key `contract.predicate` and the values `R` and `s`:
+7. Perform the [signature protocol](../../musig/docs/musig-spec.md#single-message-signature) using the transcript `T`, public key `contract.predicate` and the values `R` and `s`:
     ```
     (s = dlog(R) + e·dlog(P))
     s·B  ==  R + e·P
