@@ -43,32 +43,30 @@ pub enum Constraint {
     /// Cleartext constraint: known to the verifier to be true or false.
     Cleartext(bool),
 
+    /// Secret constraint: not known to the verifier whether it is true or false.
+    Secret(SecretConstraint),
+}
+
+/// This is a subtype of `Constraint` that excludes `::Cleartext` case.
+#[derive(Clone, Debug)]
+pub enum SecretConstraint {
     /// Equality constraint between two expressions.
     /// Created by `eq` instruction.
     Eq(Expression, Expression),
 
     /// Conjunction of two constraints: each must evaluate to true.
     /// Created by `and` instruction.
-    And(Box<Constraint>, Box<Constraint>),
+    And(Box<SecretConstraint>, Box<SecretConstraint>),
 
     /// Disjunction of two constraints: at least one must evaluate to true.
     /// Created by `or` instruction.
-    Or(Box<Constraint>, Box<Constraint>),
+    Or(Box<SecretConstraint>, Box<SecretConstraint>),
 
     /// Negation of a constraint: must be zero to evaluate to true.
     /// Created by 'not' instruction.
-    Not(Box<Constraint>),
+    Not(Box<SecretConstraint>),
     // no witness needed as it's normally true/false and we derive it on the fly during processing.
     // this also allows us not to wrap this enum in a struct.
-}
-
-/// This is a subtype of `Constraint` that excludes `::Cleartext` case.
-#[derive(Clone, Debug)]
-enum SecretConstraint {
-    Eq(Expression, Expression),
-    And(Box<Constraint>, Box<Constraint>),
-    Or(Box<Constraint>, Box<Constraint>),
-    Not(Box<Constraint>),
 }
 
 /// Commitment is a represention of an _open_ or _closed_ Pedersen commitment.
@@ -97,10 +95,10 @@ impl Constraint {
     ) -> Result<(), VMError> {
         // Return early without updating CS if the constraint is cleartext.
         // Note: this makes the matching on ::Cleartext case inside `flatten` function unnecessary.
-        let secret_constraint = match self.into_cleartext() {
-            Ok(true) => return Ok(()),
-            Ok(false) => return Err(VMError::CleartextConstraintFalse),
-            Err(sc) => sc,
+        let secret_constraint = match self {
+            Constraint::Cleartext(true) => return Ok(()),
+            Constraint::Cleartext(false) => return Err(VMError::CleartextConstraintFalse),
+            Constraint::Secret(sc) => sc,
         };
         cs.specify_randomized_constraints(move |cs| {
             // Flatten the constraint into one expression
@@ -126,7 +124,7 @@ impl Constraint {
             (Expression::Constant(sw1), Expression::Constant(sw2)) => {
                 Constraint::Cleartext(sw1 == sw2)
             }
-            (e1, e2) => Constraint::Eq(e1, e2),
+            (e1, e2) => Constraint::Secret(SecretConstraint::Eq(e1, e2)),
         }
     }
 
@@ -140,7 +138,9 @@ impl Constraint {
             (Constraint::Cleartext(true), other) => other,
             (_, Constraint::Cleartext(false)) => Constraint::Cleartext(false),
             (other, Constraint::Cleartext(true)) => other,
-            (c1, c2) => Constraint::And(Box::new(c1), Box::new(c2)),
+            (Constraint::Secret(c1), Constraint::Secret(c2)) => {
+                Constraint::Secret(SecretConstraint::And(Box::new(c1), Box::new(c2)))
+            }
         }
     }
 
@@ -154,7 +154,9 @@ impl Constraint {
             (Constraint::Cleartext(true), _) => Constraint::Cleartext(true),
             (other, Constraint::Cleartext(false)) => other,
             (_, Constraint::Cleartext(true)) => Constraint::Cleartext(true),
-            (c1, c2) => Constraint::Or(Box::new(c1), Box::new(c2)),
+            (Constraint::Secret(c1), Constraint::Secret(c2)) => {
+                Constraint::Secret(SecretConstraint::Or(Box::new(c1), Box::new(c2)))
+            }
         }
     }
 
@@ -165,18 +167,7 @@ impl Constraint {
     pub fn not(c: Constraint) -> Self {
         match c {
             Constraint::Cleartext(b) => Constraint::Cleartext(!b),
-            c => Constraint::Not(Box::new(c)),
-        }
-    }
-
-    /// Converts the constraint into a cleartext boolean, or a secret subtype that excludes ::Cleartext case.
-    fn into_cleartext(self) -> Result<bool, SecretConstraint> {
-        match self {
-            Constraint::Cleartext(flag) => Ok(flag),
-            Constraint::Eq(expr1, expr2) => Err(SecretConstraint::Eq(expr1, expr2)),
-            Constraint::And(c1, c2) => Err(SecretConstraint::And(c1, c2)),
-            Constraint::Or(c1, c2) => Err(SecretConstraint::Or(c1, c2)),
-            Constraint::Not(c1) => Err(SecretConstraint::Not(c1)),
+            Constraint::Secret(c) => Constraint::Secret(SecretConstraint::Not(Box::new(c))),
         }
     }
 }
