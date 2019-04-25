@@ -25,7 +25,7 @@ pub const CURRENT_VERSION: u64 = 1;
 
 pub(crate) struct VM<'d, CS, D>
 where
-    CS: r1cs::ConstraintSystem,
+    CS: r1cs::RandomizableConstraintSystem,
     D: Delegate<CS>,
 {
     mintime_ms: u64,
@@ -48,7 +48,7 @@ where
     txlog: TxLog,
 }
 
-pub(crate) trait Delegate<CS: r1cs::ConstraintSystem> {
+pub(crate) trait Delegate<CS: r1cs::RandomizableConstraintSystem> {
     type RunType;
 
     /// Adds a Commitment to the underlying constraint system, producing a high-level variable
@@ -85,7 +85,7 @@ pub(crate) trait Delegate<CS: r1cs::ConstraintSystem> {
 
 impl<'d, CS, D> VM<'d, CS, D>
 where
-    CS: r1cs::ConstraintSystem,
+    CS: r1cs::RandomizableConstraintSystem,
     D: Delegate<CS>,
 {
     /// Instantiates a new VM instance.
@@ -619,7 +619,7 @@ where
 // Utility methods
 impl<'d, CS, D> VM<'d, CS, D>
 where
-    CS: r1cs::ConstraintSystem,
+    CS: r1cs::RandomizableConstraintSystem,
     D: Delegate<CS>,
 {
     fn pop_item(&mut self) -> Result<Item, VMError> {
