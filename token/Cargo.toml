@@ -15,7 +15,7 @@ curve25519-dalek = { version = "1.0.1", features = ["serde"] }
 
 [dependencies.bulletproofs]
 git = "https://github.com/dalek-cryptography/bulletproofs"
-branch = "oleg/one-level-randomization"
+branch = "develop"
 features = ["yoloproofs"]
 
 [dependencies.spacesuit]

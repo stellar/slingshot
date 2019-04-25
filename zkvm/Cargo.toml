@@ -21,7 +21,7 @@ serde = { version = "1.0", features=["derive"] }
 
 [dependencies.bulletproofs]
 git = "https://github.com/dalek-cryptography/bulletproofs"
-branch = "oleg/one-level-randomization"
+branch = "develop"
 features = ["yoloproofs"]
 
 [dependencies.spacesuit]
