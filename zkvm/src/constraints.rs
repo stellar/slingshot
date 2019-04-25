@@ -170,6 +170,15 @@ impl Constraint {
             Constraint::Secret(c) => Constraint::Secret(SecretConstraint::Not(Box::new(c))),
         }
     }
+
+    /// Evaluates the constraint using the optional scalar witness data in the underlying `Expression`s.
+    /// Returns None if the witness is missing in any expression.
+    fn eval(&self) -> Option<bool> {
+        match self {
+            Constraint::Cleartext(flag) => Some(*flag),
+            Constraint::Secret(sc) => sc.eval(),
+        }
+    }
 }
 
 impl SecretConstraint {
@@ -241,6 +250,17 @@ impl SecretConstraint {
 
                 Ok((r1cs::LinearCombination::from(r1), y_assg))
             }
+        }
+    }
+
+    /// Evaluates the constraint using the optional scalar witness data in the underlying `Expression`s.
+    /// Returns None if the witness is missing in any expression.
+    fn eval(&self) -> Option<bool> {
+        match self {
+            SecretConstraint::Eq(e1, e2) => e1.eval().and_then(|x| e2.eval().map(|y| x == y)),
+            SecretConstraint::And(c1, c2) => c1.eval().and_then(|x| c2.eval().map(|y| x && y)),
+            SecretConstraint::Or(c1, c2) => c1.eval().and_then(|x| c2.eval().map(|y| x || y)),
+            SecretConstraint::Not(c1) => c1.eval().map(|x| !x),
         }
     }
 }
@@ -383,6 +403,8 @@ impl Expression {
         }
     }
 
+    /// Evaluates the expression using its optional scalar witness data.
+    /// Returns None if there is no witness.
     fn eval(&self) -> Option<ScalarWitness> {
         match self {
             Expression::Constant(a) => Some(*a),
