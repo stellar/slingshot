@@ -171,6 +171,13 @@ impl Constraint {
         }
     }
 
+    /// Returns the secret assignment to this constraint (true or false),
+    /// based on the assignments to the variables inside the underlying Expressions.
+    /// Returns `None` if any underlying variable does not have an assignment.
+    pub fn assignment(&self) -> Option<bool> {
+        self.eval()
+    }
+
     /// Evaluates the constraint using the optional scalar witness data in the underlying `Expression`s.
     /// Returns None if the witness is missing in any expression.
     fn eval(&self) -> Option<bool> {
