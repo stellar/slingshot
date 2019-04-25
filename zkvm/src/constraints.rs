@@ -535,7 +535,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn expression_guaranteed_optimization() {
+    fn expression_arithmetic() {
         // const + const => const
         assert_eq!(
             Expression::Constant(1u64.into()) + Expression::Constant(2u64.into()),
@@ -556,6 +556,52 @@ mod tests {
                 Some(3u64.into())
             )
         );
+        // lincomb + const => append to lincomb
+        assert_eq!(
+            Expression::LinearCombination(
+                vec![(r1cs::Variable::One(), 1u64.into())],
+                Some(1u64.into())
+            ) + Expression::Constant(2u64.into()),
+            Expression::LinearCombination(
+                vec![
+                    (r1cs::Variable::One(), 1u64.into()),
+                    (r1cs::Variable::One(), 2u64.into())
+                ],
+                Some(3u64.into())
+            )
+        );
+        // lincomb + lincomb => concat
+        assert_eq!(
+            Expression::LinearCombination(
+                vec![(r1cs::Variable::Committed(1), 11u64.into())],
+                Some(100u64.into())
+            ) + Expression::LinearCombination(
+                vec![(r1cs::Variable::Committed(2), 22u64.into())],
+                Some(42u64.into())
+            ),
+            Expression::LinearCombination(
+                vec![
+                    (r1cs::Variable::Committed(1), 11u64.into()),
+                    (r1cs::Variable::Committed(2), 22u64.into())
+                ],
+                Some(142u64.into())
+            )
+        );
+        // -expr => negate weights
+        assert_eq!(
+            -Expression::Constant(1u64.into()),
+            Expression::Constant(-ScalarWitness::from(1))
+        );
+        assert_eq!(
+            -Expression::LinearCombination(
+                vec![(r1cs::Variable::One(), 1u64.into())],
+                Some(1u64.into())
+            ),
+            Expression::LinearCombination(
+                vec![(r1cs::Variable::One(), -Scalar::from(1u64))],
+                Some(-ScalarWitness::from(1))
+            )
+        );
 
         // TBD: const * const => mult consts
         // TBD: const * expr => mult weights
@@ -563,11 +609,94 @@ mod tests {
     }
 
     #[test]
-    fn constraints_guaranteed_optimization() {
-        // TBD: constr(constexpr, constexpr) => cleartext
-        // TBD: OR(cleartext, other) => {cleartext(true)  || other }
-        // TBD: AND(cleartext, other) => {cleartext(false)  || other }
-        // TBD: NOT(cleartext) => !cleartext
+    fn constraints_arithmetic() {
+        // eq(const, const) => cleartext(true)
+        assert_eq!(
+            Constraint::eq(
+                Expression::Constant(1u64.into()),
+                Expression::Constant(1u64.into())
+            ),
+            Constraint::Cleartext(true)
+        );
+        // eq(const1, const2) => cleartext(false)
+        assert_eq!(
+            Constraint::eq(
+                Expression::Constant(1u64.into()),
+                Expression::Constant(2u64.into())
+            ),
+            Constraint::Cleartext(false)
+        );
+        // eq(const, nonconst) => ::Eq
+        let e1 = Expression::Constant(1u64.into());
+        let e2 = Expression::LinearCombination(
+            vec![(r1cs::Variable::One(), 2u64.into())],
+            Some(2u64.into()),
+        );
+        assert_eq!(
+            Constraint::eq(e1.clone(), e2.clone()),
+            Constraint::Secret(SecretConstraint::Eq(e1.clone(), e2.clone()))
+        );
+        assert_eq!(
+            Constraint::eq(e2.clone(), e1.clone()),
+            Constraint::Secret(SecretConstraint::Eq(e2.clone(), e1.clone()))
+        );
+
+        let s1 = SecretConstraint::Eq(e1.clone(), e2.clone());
+        let s2 = SecretConstraint::Eq(e2.clone(), e2.clone());
+        let c1 = Constraint::Secret(s1.clone());
+        let c2 = Constraint::Secret(s2.clone());
+        // and(cleartext(true), other) => other
+        assert_eq!(
+            Constraint::and(Constraint::Cleartext(true), c1.clone()),
+            c1.clone()
+        );
+        // and(cleartext(false), other) => cleartext(false)
+        assert_eq!(
+            Constraint::and(Constraint::Cleartext(false), c1.clone()),
+            Constraint::Cleartext(false)
+        );
+        // and(secret, secret) => ::Or(secret, secret)
+        assert_eq!(
+            Constraint::and(c1.clone(), c2.clone()),
+            Constraint::Secret(SecretConstraint::And(
+                Box::new(s1.clone()),
+                Box::new(s2.clone())
+            ))
+        );
+
+        // or(cleartext(true), other) => cleartext(true)
+        assert_eq!(
+            Constraint::or(Constraint::Cleartext(true), c1.clone()),
+            Constraint::Cleartext(true)
+        );
+        // or(cleartext(false), other) => other
+        assert_eq!(
+            Constraint::or(Constraint::Cleartext(false), c1.clone()),
+            c1.clone()
+        );
+        // or(secret, secret) => ::Or(secret, secret)
+        assert_eq!(
+            Constraint::or(c1.clone(), c2.clone()),
+            Constraint::Secret(SecretConstraint::Or(
+                Box::new(s1.clone()),
+                Box::new(s2.clone())
+            ))
+        );
+
+        // not(cleartext(flag)) => cleartext(!flag)
+        assert_eq!(
+            Constraint::not(Constraint::Cleartext(false)),
+            Constraint::Cleartext(true)
+        );
+        assert_eq!(
+            Constraint::not(Constraint::Cleartext(true)),
+            Constraint::Cleartext(false)
+        );
+        // not(secret) => ::Not(secret)
+        assert_eq!(
+            Constraint::not(c1.clone()),
+            Constraint::Secret(SecretConstraint::Not(Box::new(s1.clone()),))
+        );
     }
 
 }
