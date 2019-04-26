@@ -162,4 +162,8 @@ pub enum VMError {
     /// This error occurs when an input is invalid.
     #[fail(display = "Input is invalid")]
     InvalidInput,
+
+    /// This error occurs when a false cleartext constraint is verified.
+    #[fail(display = "Cleartext constraint is false")]
+    CleartextConstraintFalse,
 }

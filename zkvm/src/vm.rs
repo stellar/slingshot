@@ -256,7 +256,7 @@ where
     fn eq(&mut self) -> Result<(), VMError> {
         let expr2 = self.pop_item()?.to_expression()?;
         let expr1 = self.pop_item()?.to_expression()?;
-        let constraint = Constraint::Eq(expr1, expr2);
+        let constraint = Constraint::eq(expr1, expr2);
         self.push_item(constraint);
         Ok(())
     }
@@ -271,7 +271,7 @@ where
     fn and(&mut self) -> Result<(), VMError> {
         let c2 = self.pop_item()?.to_constraint()?;
         let c1 = self.pop_item()?.to_constraint()?;
-        let c3 = Constraint::And(Box::new(c1), Box::new(c2));
+        let c3 = Constraint::and(c1, c2);
         self.push_item(c3);
         Ok(())
     }
@@ -279,14 +279,14 @@ where
     fn or(&mut self) -> Result<(), VMError> {
         let c2 = self.pop_item()?.to_constraint()?;
         let c1 = self.pop_item()?.to_constraint()?;
-        let c3 = Constraint::Or(Box::new(c1), Box::new(c2));
+        let c3 = Constraint::or(c1, c2);
         self.push_item(c3);
         Ok(())
     }
 
     fn not(&mut self) -> Result<(), VMError> {
         let c1 = self.pop_item()?.to_constraint()?;
-        let c2 = Constraint::Not(Box::new(c1));
+        let c2 = Constraint::not(c1);
         self.push_item(c2);
         Ok(())
     }

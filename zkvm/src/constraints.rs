@@ -35,23 +35,36 @@ pub enum Expression {
 /// Constraint is a boolean function of expressions and other constraints.
 /// Constraints can be evaluated to true or false. The `verify` instruction
 /// enforces that the final composition evaluates to `true` in zero knowledge.
-#[derive(Clone, Debug)]
+///
+/// Note: use dedicated functions `eq()`, `and()`, `or()` and `not()` to create
+/// constraints since they apply guaranteed optimization for cleartext constraints.
+#[derive(Clone, Debug, PartialEq)]
 pub enum Constraint {
+    /// Cleartext constraint: known to the verifier to be true or false.
+    Cleartext(bool),
+
+    /// Secret constraint: not known to the verifier whether it is true or false.
+    Secret(SecretConstraint),
+}
+
+/// This is a subtype of `Constraint` that excludes `::Cleartext` case.
+#[derive(Clone, Debug, PartialEq)]
+pub enum SecretConstraint {
     /// Equality constraint between two expressions.
     /// Created by `eq` instruction.
     Eq(Expression, Expression),
 
     /// Conjunction of two constraints: each must evaluate to true.
     /// Created by `and` instruction.
-    And(Box<Constraint>, Box<Constraint>),
+    And(Box<SecretConstraint>, Box<SecretConstraint>),
 
     /// Disjunction of two constraints: at least one must evaluate to true.
     /// Created by `or` instruction.
-    Or(Box<Constraint>, Box<Constraint>),
+    Or(Box<SecretConstraint>, Box<SecretConstraint>),
 
     /// Negation of a constraint: must be zero to evaluate to true.
     /// Created by 'not' instruction.
-    Not(Box<Constraint>),
+    Not(Box<SecretConstraint>),
     // no witness needed as it's normally true/false and we derive it on the fly during processing.
     // this also allows us not to wrap this enum in a struct.
 }
@@ -80,12 +93,19 @@ impl Constraint {
         self,
         cs: &mut CS,
     ) -> Result<(), VMError> {
+        // Return early without updating CS if the constraint is cleartext.
+        // Note: this makes the matching on ::Cleartext case inside `flatten` function unnecessary.
+        let secret_constraint = match self {
+            Constraint::Cleartext(true) => return Ok(()),
+            Constraint::Cleartext(false) => return Err(VMError::CleartextConstraintFalse),
+            Constraint::Secret(sc) => sc,
+        };
         cs.specify_randomized_constraints(move |cs| {
             // Flatten the constraint into one expression
             // Note: cloning because we can't move out of captured variable in an `Fn` closure,
             // and `Box<FnOnce>` is not fully supported yet. (We can update when that happens).
             // Cf. https://github.com/dalek-cryptography/bulletproofs/issues/244
-            let (expr, _) = self.clone().flatten(cs)?;
+            let (expr, _) = secret_constraint.clone().flatten(cs)?;
 
             // Add the resulting expression to the constraint system
             cs.constrain(expr);
@@ -95,25 +115,99 @@ impl Constraint {
         .map_err(|e| VMError::R1CSError(e))
     }
 
+    /// Creates an equality constraint.
+    ///
+    /// Applies _guaranteed optimization_:
+    /// if both arguments are constant expressions, returns Constraint::Cleartext(bool).
+    pub fn eq(e1: Expression, e2: Expression) -> Self {
+        match (e1, e2) {
+            (Expression::Constant(sw1), Expression::Constant(sw2)) => {
+                Constraint::Cleartext(sw1 == sw2)
+            }
+            (e1, e2) => Constraint::Secret(SecretConstraint::Eq(e1, e2)),
+        }
+    }
+
+    /// Creates a conjunction constraint.
+    ///
+    /// Applies _guaranteed optimization_:
+    /// if one argument is a cleartext `false`, returns `false`, otherwise returns other argument.
+    pub fn and(c1: Constraint, c2: Constraint) -> Self {
+        match (c1, c2) {
+            (Constraint::Cleartext(false), _) => Constraint::Cleartext(false),
+            (Constraint::Cleartext(true), other) => other,
+            (_, Constraint::Cleartext(false)) => Constraint::Cleartext(false),
+            (other, Constraint::Cleartext(true)) => other,
+            (Constraint::Secret(c1), Constraint::Secret(c2)) => {
+                Constraint::Secret(SecretConstraint::And(Box::new(c1), Box::new(c2)))
+            }
+        }
+    }
+
+    /// Creates a disjunction constraint.
+    ///
+    /// Applies _guaranteed optimization_:
+    /// if one argument is a cleartext `true`, returns `true`, otherwise returns other argument.
+    pub fn or(c1: Constraint, c2: Constraint) -> Self {
+        match (c1, c2) {
+            (Constraint::Cleartext(false), other) => other,
+            (Constraint::Cleartext(true), _) => Constraint::Cleartext(true),
+            (other, Constraint::Cleartext(false)) => other,
+            (_, Constraint::Cleartext(true)) => Constraint::Cleartext(true),
+            (Constraint::Secret(c1), Constraint::Secret(c2)) => {
+                Constraint::Secret(SecretConstraint::Or(Box::new(c1), Box::new(c2)))
+            }
+        }
+    }
+
+    /// Creates a logical inverse of the constraint.
+    ///
+    /// Applies _guaranteed optimization_:
+    /// if the argument is a cleartext constraint `c`, inverts it.
+    pub fn not(c: Constraint) -> Self {
+        match c {
+            Constraint::Cleartext(b) => Constraint::Cleartext(!b),
+            Constraint::Secret(c) => Constraint::Secret(SecretConstraint::Not(Box::new(c))),
+        }
+    }
+
+    /// Returns the secret assignment to this constraint (true or false),
+    /// based on the assignments to the variables inside the underlying Expressions.
+    /// Returns `None` if any underlying variable does not have an assignment.
+    pub fn assignment(&self) -> Option<bool> {
+        self.eval()
+    }
+
+    /// Evaluates the constraint using the optional scalar witness data in the underlying `Expression`s.
+    /// Returns None if the witness is missing in any expression.
+    fn eval(&self) -> Option<bool> {
+        match self {
+            Constraint::Cleartext(flag) => Some(*flag),
+            Constraint::Secret(sc) => sc.eval(),
+        }
+    }
+}
+
+impl SecretConstraint {
     fn flatten<CS: r1cs::RandomizedConstraintSystem>(
         self,
         cs: &mut CS,
     ) -> Result<(r1cs::LinearCombination, Option<Scalar>), r1cs::R1CSError> {
         match self {
-            Constraint::Eq(expr1, expr2) => {
+            SecretConstraint::Eq(expr1, expr2) => {
                 let assignment = expr1
                     .eval()
                     .and_then(|x| expr2.eval().map(|y| (x - y).to_scalar()));
                 Ok((expr1.to_r1cs_lc() - expr2.to_r1cs_lc(), assignment))
             }
-            Constraint::And(c1, c2) => {
+            SecretConstraint::And(c1, c2) => {
                 let (a, a_assg) = c1.flatten(cs)?;
                 let (b, b_assg) = c2.flatten(cs)?;
                 let z = cs.challenge_scalar(b"ZkVM.verify.and-challenge");
                 let assignment = a_assg.and_then(|a| b_assg.map(|b| a + z * b));
                 Ok((a + z * b, assignment))
             }
-            Constraint::Or(c1, c2) => {
+            SecretConstraint::Or(c1, c2) => {
                 let (a, a_assg) = c1.flatten(cs)?;
                 let (b, b_assg) = c2.flatten(cs)?;
                 // output expression: a * b
@@ -121,7 +215,7 @@ impl Constraint {
                 let assignment = a_assg.and_then(|a| b_assg.map(|b| a * b));
                 Ok((r1cs::LinearCombination::from(o), assignment))
             }
-            Constraint::Not(c1) => {
+            SecretConstraint::Not(c1) => {
                 // Compute the input linear combination and its secret assignment
                 let (x_lc, x_assg) = c1.flatten(cs)?;
 
@@ -163,6 +257,17 @@ impl Constraint {
 
                 Ok((r1cs::LinearCombination::from(r1), y_assg))
             }
+        }
+    }
+
+    /// Evaluates the constraint using the optional scalar witness data in the underlying `Expression`s.
+    /// Returns None if the witness is missing in any expression.
+    fn eval(&self) -> Option<bool> {
+        match self {
+            SecretConstraint::Eq(e1, e2) => e1.eval().and_then(|x| e2.eval().map(|y| x == y)),
+            SecretConstraint::And(c1, c2) => c1.eval().and_then(|x| c2.eval().map(|y| x && y)),
+            SecretConstraint::Or(c1, c2) => c1.eval().and_then(|x| c2.eval().map(|y| x || y)),
+            SecretConstraint::Not(c1) => c1.eval().map(|x| !x),
         }
     }
 }
@@ -305,6 +410,8 @@ impl Expression {
         }
     }
 
+    /// Evaluates the expression using its optional scalar witness data.
+    /// Returns None if there is no witness.
     fn eval(&self) -> Option<ScalarWitness> {
         match self {
             Expression::Constant(a) => Some(*a),
@@ -371,6 +478,46 @@ impl Add for Expression {
     }
 }
 
+// TBD: Remove this once PartialEq is impl'd for r1cs::Variable and use #[derive(PartialEq)] instead.
+// See https://github.com/dalek-cryptography/bulletproofs/pull/271
+impl PartialEq for Expression {
+    fn eq(&self, other: &Expression) -> bool {
+        match (self, other) {
+            (Expression::Constant(a), Expression::Constant(b)) => a == b,
+            (Expression::LinearCombination(v1, a1), Expression::LinearCombination(v2, a2)) => {
+                (a1 == a2)
+                    && v1
+                        .iter()
+                        .zip(v2.iter())
+                        .fold(true, |flag, ((var1, x1), (var2, x2))| {
+                            flag && (x1 == x2)
+                                && match (var1, var2) {
+                                    (
+                                        r1cs::Variable::Committed(a),
+                                        r1cs::Variable::Committed(b),
+                                    ) => a == b,
+                                    (
+                                        r1cs::Variable::MultiplierLeft(a),
+                                        r1cs::Variable::MultiplierLeft(b),
+                                    ) => a == b,
+                                    (
+                                        r1cs::Variable::MultiplierRight(a),
+                                        r1cs::Variable::MultiplierRight(b),
+                                    ) => a == b,
+                                    (
+                                        r1cs::Variable::MultiplierOutput(a),
+                                        r1cs::Variable::MultiplierOutput(b),
+                                    ) => a == b,
+                                    (r1cs::Variable::One(), r1cs::Variable::One()) => true,
+                                    _ => false,
+                                }
+                        })
+            }
+            _ => false,
+        }
+    }
+}
+
 // Upcasting witness/points into Commitment
 
 impl From<CommitmentWitness> for Commitment {
@@ -388,5 +535,264 @@ impl From<CompressedRistretto> for Commitment {
 impl Into<CompressedRistretto> for Commitment {
     fn into(self) -> CompressedRistretto {
         self.to_point()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use merlin::Transcript;
+
+    #[test]
+    fn expression_arithmetic() {
+        // const + const => const
+        assert_eq!(
+            Expression::Constant(1u64.into()) + Expression::Constant(2u64.into()),
+            Expression::Constant(3u64.into())
+        );
+        // const + lincomb => prepend to lincomb
+        assert_eq!(
+            Expression::Constant(1u64.into())
+                + Expression::LinearCombination(
+                    vec![(r1cs::Variable::One(), 2u64.into())],
+                    Some(2u64.into())
+                ),
+            Expression::LinearCombination(
+                vec![
+                    (r1cs::Variable::One(), 1u64.into()),
+                    (r1cs::Variable::One(), 2u64.into())
+                ],
+                Some(3u64.into())
+            )
+        );
+        // lincomb + const => append to lincomb
+        assert_eq!(
+            Expression::LinearCombination(
+                vec![(r1cs::Variable::One(), 1u64.into())],
+                Some(1u64.into())
+            ) + Expression::Constant(2u64.into()),
+            Expression::LinearCombination(
+                vec![
+                    (r1cs::Variable::One(), 1u64.into()),
+                    (r1cs::Variable::One(), 2u64.into())
+                ],
+                Some(3u64.into())
+            )
+        );
+        // lincomb + lincomb => concat
+        assert_eq!(
+            Expression::LinearCombination(
+                vec![(r1cs::Variable::Committed(1), 11u64.into())],
+                Some(100u64.into())
+            ) + Expression::LinearCombination(
+                vec![(r1cs::Variable::Committed(2), 22u64.into())],
+                Some(42u64.into())
+            ),
+            Expression::LinearCombination(
+                vec![
+                    (r1cs::Variable::Committed(1), 11u64.into()),
+                    (r1cs::Variable::Committed(2), 22u64.into())
+                ],
+                Some(142u64.into())
+            )
+        );
+        // -expr => negate weights
+        assert_eq!(
+            -Expression::Constant(1u64.into()),
+            Expression::Constant(-ScalarWitness::from(1))
+        );
+        assert_eq!(
+            -Expression::LinearCombination(
+                vec![(r1cs::Variable::One(), 1u64.into())],
+                Some(1u64.into())
+            ),
+            Expression::LinearCombination(
+                vec![(r1cs::Variable::One(), -Scalar::from(1u64))],
+                Some(-ScalarWitness::from(1))
+            )
+        );
+
+        let mut cs = MockMultiplierCS { num_vars: 0 };
+
+        let e1 = Expression::Constant(10u64.into());
+        let e2 = Expression::Constant(20u64.into());
+        let e3 = Expression::LinearCombination(
+            vec![(r1cs::Variable::Committed(0), 3u64.into())],
+            Some(3u64.into()),
+        );
+        let e4 = Expression::LinearCombination(
+            vec![(r1cs::Variable::Committed(1), 4u64.into())],
+            Some(4u64.into()),
+        );
+
+        // const * const => mult consts
+        assert_eq!(
+            e1.clone().multiply(e2.clone(), &mut cs),
+            Expression::Constant(200u64.into())
+        );
+        // const * expr => mult weights
+        assert_eq!(
+            e1.clone().multiply(e3.clone(), &mut cs),
+            Expression::LinearCombination(
+                vec![(r1cs::Variable::Committed(0), 30u64.into())],
+                Some(30u64.into())
+            )
+        );
+        // expr * const => mult weights
+        assert_eq!(
+            e3.clone().multiply(e1.clone(), &mut cs),
+            Expression::LinearCombination(
+                vec![(r1cs::Variable::Committed(0), 30u64.into())],
+                Some(30u64.into())
+            )
+        );
+        // expr * expr => allocate new multiplier
+        assert_eq!(
+            e3.clone().multiply(e4.clone(), &mut cs),
+            Expression::LinearCombination(
+                vec![(r1cs::Variable::MultiplierOutput(0), 1u64.into())],
+                Some(12u64.into())
+            )
+        );
+    }
+
+    #[test]
+    fn constraints_arithmetic() {
+        // eq(const, const) => cleartext(true)
+        assert_eq!(
+            Constraint::eq(
+                Expression::Constant(1u64.into()),
+                Expression::Constant(1u64.into())
+            ),
+            Constraint::Cleartext(true)
+        );
+        // eq(const1, const2) => cleartext(false)
+        assert_eq!(
+            Constraint::eq(
+                Expression::Constant(1u64.into()),
+                Expression::Constant(2u64.into())
+            ),
+            Constraint::Cleartext(false)
+        );
+        // eq(const, nonconst) => ::Eq
+        let e1 = Expression::Constant(1u64.into());
+        let e2 = Expression::LinearCombination(
+            vec![(r1cs::Variable::One(), 2u64.into())],
+            Some(2u64.into()),
+        );
+        assert_eq!(
+            Constraint::eq(e1.clone(), e2.clone()),
+            Constraint::Secret(SecretConstraint::Eq(e1.clone(), e2.clone()))
+        );
+        assert_eq!(
+            Constraint::eq(e2.clone(), e1.clone()),
+            Constraint::Secret(SecretConstraint::Eq(e2.clone(), e1.clone()))
+        );
+
+        let s1 = SecretConstraint::Eq(e1.clone(), e2.clone());
+        let s2 = SecretConstraint::Eq(e2.clone(), e2.clone());
+        let c1 = Constraint::Secret(s1.clone());
+        let c2 = Constraint::Secret(s2.clone());
+        // and(cleartext(true), other) => other
+        assert_eq!(
+            Constraint::and(Constraint::Cleartext(true), c1.clone()),
+            c1.clone()
+        );
+        // and(cleartext(false), other) => cleartext(false)
+        assert_eq!(
+            Constraint::and(Constraint::Cleartext(false), c1.clone()),
+            Constraint::Cleartext(false)
+        );
+        // and(secret, secret) => ::Or(secret, secret)
+        assert_eq!(
+            Constraint::and(c1.clone(), c2.clone()),
+            Constraint::Secret(SecretConstraint::And(
+                Box::new(s1.clone()),
+                Box::new(s2.clone())
+            ))
+        );
+
+        // or(cleartext(true), other) => cleartext(true)
+        assert_eq!(
+            Constraint::or(Constraint::Cleartext(true), c1.clone()),
+            Constraint::Cleartext(true)
+        );
+        // or(cleartext(false), other) => other
+        assert_eq!(
+            Constraint::or(Constraint::Cleartext(false), c1.clone()),
+            c1.clone()
+        );
+        // or(secret, secret) => ::Or(secret, secret)
+        assert_eq!(
+            Constraint::or(c1.clone(), c2.clone()),
+            Constraint::Secret(SecretConstraint::Or(
+                Box::new(s1.clone()),
+                Box::new(s2.clone())
+            ))
+        );
+
+        // not(cleartext(flag)) => cleartext(!flag)
+        assert_eq!(
+            Constraint::not(Constraint::Cleartext(false)),
+            Constraint::Cleartext(true)
+        );
+        assert_eq!(
+            Constraint::not(Constraint::Cleartext(true)),
+            Constraint::Cleartext(false)
+        );
+        // not(secret) => ::Not(secret)
+        assert_eq!(
+            Constraint::not(c1.clone()),
+            Constraint::Secret(SecretConstraint::Not(Box::new(s1.clone()),))
+        );
+    }
+
+    struct MockMultiplierCS {
+        pub num_vars: usize,
+    }
+
+    impl r1cs::ConstraintSystem for MockMultiplierCS {
+        fn transcript(&mut self) -> &mut Transcript {
+            // not used in tests
+            unimplemented!()
+        }
+
+        // simulates a multiplication gate, returning
+        fn multiply(
+            &mut self,
+            _left: r1cs::LinearCombination,
+            _right: r1cs::LinearCombination,
+        ) -> (r1cs::Variable, r1cs::Variable, r1cs::Variable) {
+            let var = self.num_vars;
+            self.num_vars += 1;
+            let l_var = r1cs::Variable::MultiplierLeft(var);
+            let r_var = r1cs::Variable::MultiplierRight(var);
+            let o_var = r1cs::Variable::MultiplierOutput(var);
+            (l_var, r_var, o_var)
+        }
+
+        fn allocate(
+            &mut self,
+            _assignment: Option<Scalar>,
+        ) -> Result<r1cs::Variable, r1cs::R1CSError> {
+            Ok(self.allocate_multiplier(None)?.0)
+        }
+
+        fn allocate_multiplier(
+            &mut self,
+            _assignments: Option<(Scalar, Scalar)>,
+        ) -> Result<(r1cs::Variable, r1cs::Variable, r1cs::Variable), r1cs::R1CSError> {
+            let var = self.num_vars;
+            self.num_vars += 1;
+
+            // Create variables for l,r,o
+            let l_var = r1cs::Variable::MultiplierLeft(var);
+            let r_var = r1cs::Variable::MultiplierRight(var);
+            let o_var = r1cs::Variable::MultiplierOutput(var);
+
+            Ok((l_var, r_var, o_var))
+        }
+
+        fn constrain(&mut self, _lc: r1cs::LinearCombination) {}
     }
 }
