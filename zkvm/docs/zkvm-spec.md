@@ -546,8 +546,6 @@ following instructions:
 * [`issue`](#issue)
 * [`retire`](#retire)
 * [`log`](#log)
-* [`import`](#import)
-* [`export`](#export)
 
 See the specification of each instruction for the details of which data is stored.
 
@@ -622,23 +620,6 @@ Data entry is added using [`log`](#log) instruction.
 ```
 T.commit("data", data)
 ```
-
-#### Import entry
-
-Import entry is added using [`import`](#import) instruction.
-
-```
-T.commit("import", proof)
-```
-
-#### Export entry
-
-Export entry is added using [`export`](#export) instruction.
-
-```
-T.commit("export", metadata)
-```
-
 
 
 ### Merkle binary tree
@@ -927,17 +908,15 @@ Code | Instruction                | Stack diagram                              |
 0x15 | [`borrow`](#borrow)        |         _qty flv_ → _–V +V_                | Modifies [CS](#constraint-system)
 0x16 | [`retire`](#retire)        |           _value_ → ø                      | Modifies [CS](#constraint-system), [tx log](#transaction-log)
 0x17 | [`cloak:m:n`](#cloak)      | _widevalues commitments_ → _values_        | Modifies [CS](#constraint-system)
-0x18 | [`import`](#import)        |   _proof qty flv_ → _value_                | Modifies [CS](#constraint-system), [tx log](#transaction-log), [defers point ops](#deferred-point-operations)
-0x19 | [`export`](#export)        |       _value ???_ → ø                      | Modifies [CS](#constraint-system), [tx log](#transaction-log)
  |                                |                                            |
  |     [**Contracts**](#contract-instructions)        |                        |
-0x1a | [`input`](#input)          |      _prevoutput_ → _contract_             | Modifies [tx log](#transaction-log)
-0x1b | [`output:k`](#output)      |   _items... pred_ → ø                      | Modifies [tx log](#transaction-log)
-0x1c | [`contract:k`](#contract)  |   _items... pred_ → _contract_             | 
-0x1d | [`log`](#log)              |            _data_ → ø                      | Modifies [tx log](#transaction-log)
-0x1e | [`signtx`](#signtx)        |        _contract_ → _results..._           | Modifies [deferred verification keys](#transaction-signature)
-0x1f | [`call`](#call)            |_contract(P) proof prog_ → _results..._     | [Defers point operations](#deferred-point-operations)
-0x20 | [`delegate`](#delegate)    |_contract prog sig_ → _results..._          | [Defers point operations](#deferred-point-operations)
+0x18 | [`input`](#input)          |      _prevoutput_ → _contract_             | Modifies [tx log](#transaction-log)
+0x19 | [`output:k`](#output)      |   _items... pred_ → ø                      | Modifies [tx log](#transaction-log)
+0x1a | [`contract:k`](#contract)  |   _items... pred_ → _contract_             | 
+0x1b | [`log`](#log)              |            _data_ → ø                      | Modifies [tx log](#transaction-log)
+0x1c | [`signtx`](#signtx)        |        _contract_ → _results..._           | Modifies [deferred verification keys](#transaction-signature)
+0x1d | [`call`](#call)            |_contract(P) proof prog_ → _results..._     | [Defers point operations](#deferred-point-operations)
+0x1e | [`delegate`](#delegate)    |_contract prog sig_ → _results..._          | [Defers point operations](#deferred-point-operations)
   —  | [`ext`](#ext)              |                 ø → ø                      | Fails if [extension flag](#vm-state) is not set.
 
 
@@ -1288,70 +1267,6 @@ Merges and splits `m` [wide values](#wide-value-type) into `n` [values](#value-t
 4. Pushes `n` [values](#value-type) to the stack, placing them in the same order as their corresponding commitments.
 
 Immediate data `m` and `n` are encoded as two [LE32](#le32)s.
-
-
-#### import
-
-_proof qty flv_ **import** → _value_
-
-1. Pops [variable](#variable-type) `flv` and commits it to the constraint system.
-2. Pops [variable](#variable-type) `qty` and commits it to the constraint system.
-3. Pops [data](#data-type) `proof`.
-4. Creates a [value](#value-type) with variables `qty` and `flv` for quantity and flavor, respectively. 
-5. Computes the _flavor_ scalar defined by the [predicate](#predicate) `pred` using the following [transcript-based](#transcript) protocol:
-    ```
-    T = Transcript("ZkVM.import")
-    T.commit("extflavor", proof.external_flavor_id)
-    T.commit("extaccount", proof.pegging_account_id)
-    flavor = T.challenge_scalar("flavor")
-    ```
-6. Checks that the `flv` has unblinded commitment to `flavor` by [deferring the point operation](#deferred-point-operations):
-    ```
-    flv == flavor·B
-    ```
-7. Checks that the `qty` has unblinded commitment to `quantity` by [deferring the point operation](#deferred-point-operations):
-    ```
-    qty == proof.quantity·B
-    ```
-8. Adds an [import entry](#import-entry) with `proof` to the [transaction log](#transaction-log).
-9. Pushes the imported value to the stack.
-
-Note: the `proof` data contains necessary metadata to check if the value is pegged on the external blockchain.
-It is verified when the transaction is applied to the blockchain state.
-
-TBD: definition of the proof data (quantity, asset id, pegging account, identifier of the pegging transaction)
-
-Fails if:
-* `flv` or `qty` are not [variable types](#variable-type),
-* `proof` is not a [data type](#data-type).
-
-
-
-#### export
-
-_metadata value_ **export** → ø
-
-1. Pops [value](#value-type).
-2. Pops [data](#data-type) `metadata`.
-3. Computes the local flavor based on the pegging metadata:
-    ```
-    T = Transcript("ZkVM.import")
-    T.commit("extflavor", metadata.external_flavor_id)
-    T.commit("extaccount", metadata.pegging_account_id)
-    flavor = T.challenge_scalar("flavor")
-    ```
-4. Adds two constraints to the constraint system using cleartext quantity and flavor in the metadata:
-    ```
-    value.qty == metadata.qty
-    value.flv == flavor
-    ```
-5. Adds an [export entry](#export-entry) with `metadata` to the [transaction log](#transaction-log).
-
-TBD: definition of the metadata data (quantity, asset id, pegging account, target address/accountid)
-
-Fails if:
-* `value` is not a [non-negative value type](#value-type),
-* `metadata` is not a [data type](#data-type).
 
 
 

@@ -60,9 +60,7 @@ impl Program {
     def_op!(drop, Drop);
     def_op!(dup, Dup, usize);
     def_op!(eq, Eq);
-    def_op!(export, Export);
     def_op!(expr, Expr);
-    def_op!(import, Import);
     def_op!(input, Input);
     def_op!(issue, Issue);
     def_op!(log, Log);
