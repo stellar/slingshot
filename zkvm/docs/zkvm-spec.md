@@ -807,9 +807,13 @@ If the execution finishes successfully, VM performs the finishing tasks:
 1. Checks if the stack is empty; fails otherwise.
 2. Checks if the [last anchor](#vm-state) is set; fails otherwise.
 3. Computes [transaction ID](#transaction-id).
-4. Computes a verification statement for [transaction signature](#transaction-signature).
-5. Computes a verification statement for [constraint system proof](#constraint-system-proof).
-6. Executes all [deferred point operations](#deferred-point-operations), including aggregated transaction signature and constraint system proof, using a single multi-scalar multiplication. Fails if the result is not an identity point.
+4. Commits the [transaction ID](#transaction-id) into the R1CS proof transcript before committing low-level variables:
+    ```
+    r1cs_transcript.commit("ZkVM.txid", txid)
+    ```
+5. Computes a verification statement for [transaction signature](#transaction-signature).
+6. Computes a verification statement for [constraint system proof](#constraint-system-proof).
+7. Executes all [deferred point operations](#deferred-point-operations), including aggregated transaction signature and constraint system proof, using a single multi-scalar multiplication. Fails if the result is not an identity point.
 
 If none of the above checks failed, the resulting [transaction log](#transaction-log) is _applied_
 to the blockchain state as described in the blockchain specification (TBD).
