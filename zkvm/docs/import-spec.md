@@ -2,34 +2,95 @@
 
 This protocol defines the process of importing of assets originally issued on the Stellar into ZkVM and exporting them back to the Stellar network.
 
-The protocol uses _trusted custodian_ secured with multi-signatures and stateless validation (only the blockchain state is used).
+The assets may change hands and another user may export the asset back, than the user who imported them in the first place.
+
+The protocol uses _trusted custodian_ secured with multi-signatures and stateless validation (participants rely on validity of the blockchain state instead of the private state of the custodian, plus their honest ).
+
+* [Definitions](#definitions)
+* [Peg-in specification](#peg-in-specification)
+* [Peg-out specification](#peg-out-specification)
+* [Flavor ID mapping](#flavor-id-mapping)
 
 ## Definitions
 
-Some funds exist on a _main chain_.
+### Main chain
 
-These may be _pegged in_.
-This means the funds are immobilized and may not be used in any way on the main chain until they are _pegged out_.
+The Stellar chain where the assets are originally issued.
 
-Once funds are _pegged in_, they are _imported_ to the sidechain.
-Importing means issuing new value on the sidechain that corresponds 1:1 with the pegged-in funds.
+### Side chain
 
-Imported funds may subsequently be _exported_. Exported funds are permanently retired from the sidechain.
+The ZkVM chain where the [original asset](#original-asset) is represented by the [mapped asset](#mapped-asset) issued by [custodian](#custodian).
 
-Once funds have been exported from the sidechain,
-the corresponding funds on the main chain may be _pegged out_,
-or released from immobilization.
+### Original asset
 
-TBD: define user, custodian-node, custodian-signer.
+An asset originally issued on the [main chain](#main-chain).
 
-## Peg in
+### Mapped asset
+
+An asset issued on the [side chain](#side-chain) with an intent to represent a corresponding [original asset](#original-asset) implementing a [peg](#peg).
+
+### User
+
+A party that controls an [original asset](#original-asset) and wishes to [peg](#peg) it to the [side chain](#side-chain) in order to perform trades using it there. 
+
+### Custodian
+
+A party that is trusted to hold 1:1 balance between the [deposited](#deposit) assets on the [main chain](#main-chain)
+and the [imported](#import) assets on the [side chain](#side-chain).
+
+### Custodian-signer
+
+A component of the [custodian](#custodian) that performs a signing protocol for [import](#import) or [withdrawal](#withdrawal).
+
+### Custodian-node
+
+A component of the [custodian](#custodian) that performs service functions such as
+locating [deposits](#deposit) and [exports](#export), building transactions and
+routing data to the [custodian-signer](#custodian-signer).
+
+### Peg
+
+The property of an [original asset](#original-asset) to be immobilized on the [main chain](#main-chain) (with the support of [custodian](#custodian)),
+while being represented with a [mapped asset](#mapped-asset) on the [side chain](#side-chain).
+
+Assets can be [pegged in](#peg-in) an [pegged out](#peg-out).
+
+### Peg in
+
+A combination of [deposit](#deposit) and [import](#import) actions resulting in a [peg](#peg).
+
+### Peg out
+
+A combination of [export](#export) and [withdrawal](#withdrawal) actions that undo the [peg](#peg) for a given asset.
+
+### Deposit
+
+Transfer of an [original asset](#original-asset) by [user](#user) to the [custodian](#custodian) on the [main chain](#main-chain),
+which is followed by an [import](#import) action.
+
+### Withdrawal
+
+Transfer of an [original asset](#original-asset) from the [custodian](#custodian) to a [user](#user) on the [main chain](#main-chain),
+following an [export](#export) action.
+
+### Import
+
+Issuance of the [mapped asset](#mapped-asset) by the [custodian](#custodian) followed by the [deposit](#deposit).
+
+### Export
+
+Retirement of the [mapped asset](#mapped-asset) by the [user](#user) in order to perform [withdrawal](#withdrawal).
+
+
+## Peg in specification
 
 This is a multi-step process that requires actions from
 both the user and the custodian who secures the peg.
 
 #### Preparation step
 
-The user prepares an empty output on the ZkVM chain that would uniquely identify the import of assets from the Stellar chain.
+The user prepares an input on the ZkVM chain, the [contract ID](zkvm-spec.md#contract-id) of which
+will be a unique anchor for the [issuance contract](zkvm-spec.md#issue) for the imported funds.
 
 The output specifies the stellar asset, quantity and the destination predicate where the user wishes to receive the asset.
 
@@ -56,13 +117,23 @@ The latter is working better with utxo proofs, and makes less moves on the netwo
 However, user needs to create a token anyway, so these operations can all be turned around quickly within one session (also unconfirmed txs can be chained).
 
 
-## Peg out
 
-TBD:
 
-## Asset to flavor mapping
+## Peg out specification
 
-To map the stellar asset, we will use `metadata` argument that represents an XDR-encoded `Asset` structure
+TBD: 
+
+Sketch: 
+
+Prepare a unique account (starting seq num is the ledger's seqno), and pre-determined transaction that merges it back in,
+perform export/retire, ask signer to sign that tx that pays to a destination address and also merges that account.
+
+The signer has to check that tx they are signing has that one merge operation which guarantees replay prevention (simply sequence number won't do as it can be updated with other requests). It should be possible to batch concurrent withdrawals in one tx, that has multiple pairs of (pay-out, unique-acc-merge) operations corresponding to the respective exports in zkvm.
+
+
+## Flavor ID mapping
+
+To map the Stellar asset into ZkVM flavor, we will use `metadata` argument that represents an XDR-encoded `Asset` structure
 as specified in the `Stellar-ledger-entries.x` XDR file:
 
 ```
