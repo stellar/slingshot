@@ -1269,7 +1269,6 @@ Merges and splits `m` [wide values](#wide-value-type) into `n` [values](#value-t
 Immediate data `m` and `n` are encoded as two [LE32](#le32)s.
 
 
-
 ### Contract instructions
 
 
