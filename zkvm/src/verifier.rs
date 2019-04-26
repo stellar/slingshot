@@ -1,4 +1,5 @@
 use bulletproofs::r1cs;
+use bulletproofs::r1cs::ConstraintSystem;
 use bulletproofs::{BulletproofGens, PedersenGens};
 use curve25519_dalek::ristretto::CompressedRistretto;
 use merlin::Transcript;
@@ -106,6 +107,9 @@ impl<'t> Verifier<'t> {
         );
 
         let (txid, txlog) = vm.run()?;
+
+        // Commit txid so that the proof is bound to the entire transaction, not just the constraint system.
+        verifier.cs.transcript().commit_bytes(b"ZkVM.txid", &txid.0);
 
         // Verify the R1CS proof
         verifier
