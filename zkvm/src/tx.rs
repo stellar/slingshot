@@ -29,8 +29,6 @@ pub enum TxEntry {
     Input(ContractID),
     Output(Contract),
     Data(Vec<u8>),
-    Import, // TBD: parameters
-    Export, // TBD: parameters
 }
 
 /// Header metadata for the transaction
@@ -248,14 +246,6 @@ impl MerkleItem for TxEntry {
             }
             TxEntry::Data(data) => {
                 t.commit_bytes(b"data", data);
-            }
-            TxEntry::Import => {
-                // TBD: commit parameters
-                unimplemented!()
-            }
-            TxEntry::Export => {
-                // TBD: commit parameters
-                unimplemented!()
             }
         }
     }
