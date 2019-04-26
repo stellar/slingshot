@@ -37,8 +37,6 @@ pub enum Instruction {
     Borrow,
     Retire,
     Cloak(usize, usize), // M inputs, N outputs
-    Import,
-    Export,
     Input,
     Output(usize),   // payload count
     Contract(usize), // payload count
@@ -78,18 +76,16 @@ pub enum Opcode {
     Borrow = 0x15,
     Retire = 0x16,
     Cloak = 0x17,
-    Import = 0x18,
-    Export = 0x19,
-    Input = 0x1a,
-    Output = 0x1b,
-    Contract = 0x1c,
-    Log = 0x1d,
-    Signtx = 0x1e,
-    Call = 0x1f,
+    Input = 0x18,
+    Output = 0x19,
+    Contract = 0x1a,
+    Log = 0x1b,
+    Signtx = 0x1c,
+    Call = 0x1d,
     Delegate = MAX_OPCODE,
 }
 
-const MAX_OPCODE: u8 = 0x20;
+const MAX_OPCODE: u8 = 0x1e;
 
 impl Opcode {
     /// Converts the opcode to `u8`.
@@ -184,8 +180,6 @@ impl Instruction {
                 let n = program.read_size()?;
                 Ok(Instruction::Cloak(m, n))
             }
-            Opcode::Import => Ok(Instruction::Import),
-            Opcode::Export => Ok(Instruction::Export),
             Opcode::Input => Ok(Instruction::Input),
             Opcode::Output => {
                 let k = program.read_size()?;
@@ -249,8 +243,6 @@ impl Instruction {
                 encoding::write_u32(*m as u32, program);
                 encoding::write_u32(*n as u32, program);
             }
-            Instruction::Import => write(Opcode::Import),
-            Instruction::Export => write(Opcode::Export),
             Instruction::Input => write(Opcode::Input),
             Instruction::Output(k) => {
                 write(Opcode::Output);

@@ -166,8 +166,6 @@ where
                 Instruction::Borrow => self.borrow()?,
                 Instruction::Retire => self.retire()?,
                 Instruction::Cloak(m, n) => self.cloak(m, n)?,
-                Instruction::Import => unimplemented!(),
-                Instruction::Export => unimplemented!(),
                 Instruction::Input => self.input()?,
                 Instruction::Output(k) => self.output(k)?,
                 Instruction::Contract(k) => self.contract(k)?,
