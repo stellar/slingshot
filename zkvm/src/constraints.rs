@@ -23,7 +23,7 @@ pub struct Variable {
 
 /// Expression is a linear combination of high-level variables (`var`),
 /// low-level variables (`alloc`) and constants.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Expression {
     /// Represents a constant. Operations on constants produce constants.
     Constant(ScalarWitness),
@@ -474,46 +474,6 @@ impl Add for Expression {
                     left_assignment.and_then(|l| right_assignment.map(|r| l + r)),
                 )
             }
-        }
-    }
-}
-
-// TBD: Remove this once PartialEq is impl'd for r1cs::Variable and use #[derive(PartialEq)] instead.
-// See https://github.com/dalek-cryptography/bulletproofs/pull/271
-impl PartialEq for Expression {
-    fn eq(&self, other: &Expression) -> bool {
-        match (self, other) {
-            (Expression::Constant(a), Expression::Constant(b)) => a == b,
-            (Expression::LinearCombination(v1, a1), Expression::LinearCombination(v2, a2)) => {
-                (a1 == a2)
-                    && v1
-                        .iter()
-                        .zip(v2.iter())
-                        .fold(true, |flag, ((var1, x1), (var2, x2))| {
-                            flag && (x1 == x2)
-                                && match (var1, var2) {
-                                    (
-                                        r1cs::Variable::Committed(a),
-                                        r1cs::Variable::Committed(b),
-                                    ) => a == b,
-                                    (
-                                        r1cs::Variable::MultiplierLeft(a),
-                                        r1cs::Variable::MultiplierLeft(b),
-                                    ) => a == b,
-                                    (
-                                        r1cs::Variable::MultiplierRight(a),
-                                        r1cs::Variable::MultiplierRight(b),
-                                    ) => a == b,
-                                    (
-                                        r1cs::Variable::MultiplierOutput(a),
-                                        r1cs::Variable::MultiplierOutput(b),
-                                    ) => a == b,
-                                    (r1cs::Variable::One(), r1cs::Variable::One()) => true,
-                                    _ => false,
-                                }
-                        })
-            }
-            _ => false,
         }
     }
 }
