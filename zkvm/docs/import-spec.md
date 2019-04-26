@@ -4,11 +4,59 @@ This protocol defines the process of importing of assets originally issued on th
 
 The protocol uses _trusted custodian_ secured with multi-signatures and stateless validation (only the blockchain state is used).
 
-## Importing assets
+## Definitions
 
-TBD:
+Some funds exist on a _main chain_.
 
-## Exporting assets
+These may be _pegged in_.
+This means the funds are immobilized and may not be used in any way on the main chain until they are _pegged out_.
+
+Once funds are _pegged in_, they are _imported_ to the sidechain.
+Importing means issuing new value on the sidechain that corresponds 1:1 with the pegged-in funds.
+
+Imported funds may subsequently be _exported_. Exported funds are permanently retired from the sidechain.
+
+Once funds have been exported from the sidechain,
+the corresponding funds on the main chain may be _pegged out_,
+or released from immobilization.
+
+TBD: define user, custodian-node, custodian-signer.
+
+## Peg in
+
+This is a multi-step process that requires actions from
+both the user and the custodian who secures the peg.
+
+#### Preparation step
+
+The user prepares an empty output on the ZkVM chain that would uniquely identify the import of assets from the Stellar chain.
+
+The output specifies the stellar asset, quantity and the destination predicate where the user wishes to receive the asset.
+
+TBD: specify the contract
+
+This step requires no cooperation from the custodian.
+
+TBD: this can be extended to support multiple assets imported under one predicate for certain multi-asset contracts.
+
+#### Deposit step
+
+The user makes a Stellar transaction paying the specified quantity of the Stellar asset
+with a "memo" field containing the ZkVM output ID.
+
+
+#### Peg-in step
+
+The custodian-node notices the incoming payment and finds the identified output ID.
+
+Custodian-node forms a transaction that 
+
+TBD: should we automagically make tx on ZkVM, or simply return signed blob to the user to perform tx themselves?
+The latter is working better with utxo proofs, and makes less moves on the network, but requires extra actions from the user.
+However, user needs to create a token anyway, so these operations can all be turned around quickly within one session (also unconfirmed txs can be chained).
+
+
+## Peg out
 
 TBD:
 
