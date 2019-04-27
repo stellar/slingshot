@@ -82,6 +82,9 @@ Issuance of the [mapped asset](#mapped-asset) by the [custodian](#custodian) fol
 Retirement of the [mapped asset](#mapped-asset) by the [user](#user) in order to perform [withdrawal](#withdrawal).
 
 
+
+
+
 ## Peg in specification
 
 This is a multi-step process that requires actions from
@@ -92,25 +95,28 @@ both the user and the custodian who secures the peg.
 The user prepares an input on the ZkVM chain, the [contract ID](zkvm-spec.md#contract-id) of which
 will be a unique anchor for the [issuance contract](zkvm-spec.md#issue) for the imported funds.
 
-The output specifies the stellar asset, quantity and the destination predicate where the user wishes to receive the asset.
-
-TBD: specify the contract
-
 This step requires no cooperation from the custodian.
 
 TBD: this can be extended to support multiple assets imported under one predicate for certain multi-asset contracts.
 
 #### Deposit step
 
-The user makes a Stellar transaction paying the specified quantity of the Stellar asset
-with a "memo" field containing the ZkVM output ID.
+TBD: user makes a payment with a well-formed memo field to the custodian's address.
+
+#### Import step
+
+TBD. 
+
+Custodian-signer receives two pieces of data:
+
+1. A proof of a stellar deposit: a transaction, a proof of publication in the chain, and externalized SCP message trusted by the custodian.
+2. Components of the issuance to be signed on the ZkVM: check the anchor ID specified in the memo field, compose metadata based on [flavor id mapping rule](#flavor-id-mapping), form qty commitment.
+
+Signs the program from the memo field, and the computed contract ID for a given asset, and returns the signature.
+
+User receives the signature, uses it in their zkvm transaction, and satisfies the signed program with the user's signature. The asset is moved/split how the user wishes.
 
 
-#### Peg-in step
-
-The custodian-node notices the incoming payment and finds the identified output ID.
-
-Custodian-node forms a transaction that 
 
 TBD: should we automagically make tx on ZkVM, or simply return signed blob to the user to perform tx themselves?
 The latter is working better with utxo proofs, and makes less moves on the network, but requires extra actions from the user.
