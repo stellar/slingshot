@@ -95,6 +95,7 @@ impl Multikey {
 
 impl MusigContext for Multikey {
     fn commit(&self, transcript: &mut Transcript) {
+        transcript.schnorr_sig_domain_sep();
         transcript.commit_point(b"X", self.aggregated_key.as_compressed());
     }
 
@@ -132,7 +133,7 @@ impl<M: AsRef<[u8]>> Multimessage<M> {
 
 impl<M: AsRef<[u8]>> MusigContext for Multimessage<M> {
     fn commit(&self, transcript: &mut Transcript) {
-        transcript.commit_u64(b"Musig.Multimessage", self.pairs.len() as u64);
+        transcript.schnorr_multisig_domain_sep(self.pairs.len());
         for (key, msg) in &self.pairs {
             transcript.commit_point(b"X", key.as_compressed());
             transcript.commit_bytes(b"m", msg.as_ref());
