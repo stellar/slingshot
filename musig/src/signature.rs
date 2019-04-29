@@ -34,6 +34,7 @@ impl Signature {
         let R = (RISTRETTO_BASEPOINT_POINT * r).compress();
 
         let c = {
+            transcript.schnorr_sig_domain_sep();
             transcript.commit_point(b"X", X.as_compressed());
             transcript.commit_point(b"R", &R);
             transcript.challenge_scalar(b"c")
@@ -99,6 +100,7 @@ impl Signature {
         // Make c = H(X, R, m)
         // The message `m` has already been fed into the transcript
         let c = {
+            transcript.schnorr_sig_domain_sep();
             transcript.commit_point(b"X", X.as_compressed());
             transcript.commit_point(b"R", &self.R);
             transcript.challenge_scalar(b"c")

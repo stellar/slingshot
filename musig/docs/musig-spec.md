@@ -97,6 +97,7 @@ The protocol is the following:
 1. Prover and verifier obtain a [transcript](#transcript) `T` that is assumed to be already bound to the _message_ being signed.
 2. Prover and verifier both commit the verification key `X` (computed by the prover as `X = x·B`):
     ```
+    T.commit("dom-sep", "schnorr-signature v1")
     T.commit("X", X)
     ```
 3. Prover creates a _secret nonce_: a randomly sampled [scalar](#scalar) `r`.
@@ -134,7 +135,8 @@ only their individual submessages, ignoring other signers’ submessages.
 1. Prover and verifier obtain a [transcript](#transcript) `T` that is assumed to be already bound to the _message_ being signed.
 2. Prover and verifier both commit the set of `n` verification keys `X[i]` and submessages `m[i]`:
     ```
-    T.commit_bytes("Musig.Multimessage", LE64(n))
+    T.commit("dom-sep", "schnorr-multi-signature v1")
+    T.commit_bytes("n", LE64(n))
     T.commit_bytes("X", X[0])
     T.commit_bytes("m", m[0])
     ...
