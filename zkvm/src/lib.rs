@@ -10,6 +10,7 @@ mod constraints;
 mod contract;
 mod encoding;
 mod errors;
+mod key_witness;
 mod merkle;
 mod ops;
 mod point_ops;

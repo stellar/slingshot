@@ -25,7 +25,7 @@ pub enum Predicate {
 
     /// Signing key for the predicate-as-a-verification-key.
     /// Prover will provide secret signing key separately when
-    /// constructing aggregated signature.
+    /// constructing an aggregated signature.
     Key(VerificationKey),
 
     /// Taproot Merkle tree.
