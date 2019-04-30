@@ -236,7 +236,7 @@ Custodian:
 
 1. Checks that the export transaction is actually published (by following merkle path to a block signed via externalized SCP message with pre-arranged quorum slice configuration).
 2. Computes the memo hash with the raw data: account ID and sequence number, plaintext quantity and Asset structure.
-3. Verifies that this memo hash is embedded in the [log entry](zkvm-spec.md#log-entry) immediately after the [retire entry](zkvm-spec.md#retire-entry) in question.
+3. Verifies that this memo hash is embedded in the [log entry](zkvm-spec.md#data-entry) immediately after the [retire entry](zkvm-spec.md#retire-entry) in question.
 4. Verifies that the retired quantity is an unblinded commitment to the specified quantity: `Q == qty·B`.
 5. Verifies that the retired flavor is an unblinded commitment to the [mapped flavor](#flavor-id-mapping): `F == flv·B`.
 6. Verifies that the source of the withdrawal transaction is the specified temporary account.
