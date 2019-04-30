@@ -83,6 +83,9 @@ Retirement of the [mapped asset](#mapped-asset) by the [user](#user) in order to
 
 
 
+## Setup
+
+Custodian is initialized with a multi-signature account that [pegs](#peg) all the received funds.
 
 
 ## Peg in specification
@@ -92,38 +95,84 @@ both the user and the custodian who secures the peg.
 
 #### Preparation step
 
-The user prepares an input on the ZkVM chain, the [contract ID](zkvm-spec.md#contract-id) of which
+The user prepares an unspent output on the ZkVM chain, the [contract ID](zkvm-spec.md#contract-id) of which
 will be a unique anchor for the [issuance contract](zkvm-spec.md#issue) for the imported funds.
+This output can be specifically created for the purpose of this protocol,
+or simply locked within the user’s wallet to not be accidentally spent by other transaction.
 
-This step requires no cooperation from the custodian.
+User also prepares a program to be signed by the [custodian](#custodian) which allows user to authorize spending of the [mapped asset](#mapped-asset).
 
-TBD: this can be extended to support multiple assets imported under one predicate for certain multi-asset contracts.
+The program can be anything. The simplest option is to lock the [mapped asset](#mapped-asset) by the user’s public key,
+then the user can author any transaction spending this asset themselves.
+
+```
+push:<pubkey> contract:1
+```
 
 #### Deposit step
 
-TBD: user makes a payment with a well-formed memo field to the custodian's address.
+User forms a transaction paying to the custodian’s account N units of asset A, with a memo string of type `MEMO_HASH` the identifies the [import](#import) on the ZkVM chain.
+
+The memo is a 32-byte hash computed as follows:
+
+```
+T = Transcript::new("ZkVM.import")
+T.commit("program", program)  // user’s authorization program to be signed by the custodian
+T.commit("anchor", anchor)    // contract ID to be used as an anchor in the issuance contract
+memo = T.challenge_bytes()
+```
+
+User signs and publishes the [deposit](#deposit) transaction.
+
+#### Signing step
+
+Once the [deposit](#deposit) transaction is published, user and [custodian-signer](#custodian-signer) perform the following stateless protocol:
+
+First, user sends a reference to the deposit transaction, `program` and `anchor`.
+
+In response, custodian-signer:
+
+1. Takes the first payment, ignores the rest and reads `Asset` structure and the paid quantity.
+2. Verifies that the `MEMO_HASH` matches the `program` and `anchor` specified by the user (see above).
+3. Computes an unblinded `qty` commitment based on the quantity.
+4. Forms a metadata string for the `issue` instruction as XDR encoding of the `Asset` structure. See [Flavor ID mapping](#flavor-id-mapping).
+5. Computes the ZkVM [flavor ID](zkvm-spec.md#issue) using its ZkVM issuance predicate and the metadata string. This defines the flavor ID for the [mapped asset](#mapped-asset).
+6. Creates a contract with the `anchor`, issuance predicate and the Value object with unblinded quantity and flavor commitments.
+7. Computes the [contract ID](zkvm-spec.md#contract-id) of the resulting contract.
+8. Signs user’s `program` and the issuance contract ID for the [`delegate`](zkvm-spec.md#delegate) instruction.
+9. Returns the signature to the user.
+
+Note: this protocol can be safely replayed arbitrary number of times because both the Stellar payment
+is tied to the same unique anchor (embedded in a `MEMO_HASH`) as the ZkVM signature for the delegate instruction
+(which covers the issuance contract that uses the anchor).
+
+Future work: 
+
+1. this can be extended to support multiple assets imported under one predicate for certain multi-asset contracts.
+2. multiple payments to the custodian can also be supported and not be ignored.
 
 #### Import step
 
-TBD. 
+User forms a transaction that spends the previously allocated unspent output, followed by the following issuance snippet:
 
-Custodian-signer receives two pieces of data:
+```
+<utxo> input
+<Q> <F> <XDR(Asset)> <issuance_predicate> issue
+<user_prog> <signature> delegate
+...
+```
 
-1. A proof of a stellar deposit: a transaction, a proof of publication in the chain, and externalized SCP message trusted by the custodian.
-2. Components of the issuance to be signed on the ZkVM: check the anchor ID specified in the memo field, compose metadata based on [flavor id mapping rule](#flavor-id-mapping), form qty commitment.
+where:
 
-Signs the program from the memo field, and the computed contract ID for a given asset, and returns the signature.
+* `utxo` is the serialized UTXO that the user is spending, and which contract ID is used as an anchor in the issuance contract.
+* `Q` is an unblinded quantity commitment.
+* `F` is an unblinded flavor commitment.
+* `XDR(Asset)` is metadata string — XDR-serialized `Asset` structure describing the [original asset](#original-asset) type.
+* `issuance_predicate` is the custodian’s issuance predicate for which the `signature` is provided.
+* `user_prog` is the user-provided authorization program embedded into `MEMO_HASH` on the [main chain](#main-chain).
+* `signature` is the custodian-signer’s signature corresponding to the `issuance_predicate`.
 
-User receives the signature, uses it in their zkvm transaction, and satisfies the signed program with the user's signature. The asset is moved/split how the user wishes.
-
-
-
-TBD: should we automagically make tx on ZkVM, or simply return signed blob to the user to perform tx themselves?
-The latter is working better with utxo proofs, and makes less moves on the network, but requires extra actions from the user.
-However, user needs to create a token anyway, so these operations can all be turned around quickly within one session (also unconfirmed txs can be chained).
-
-
-
+TBD: a sketch of what user needs to do to allow non-interactive issuance.
 
 ## Peg out specification
 
