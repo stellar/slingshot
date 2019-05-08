@@ -1,14 +1,19 @@
 # ZkVM: fast, private, flexible blockchain contracts
 
 * [Introduction](#introduction)
-* [Architecture](#architecture)
-* [Consensus](#consensus)
+* [Transactions](#transactions)
+* [Program execution](#program-execution)
+* [Contracts](#contracts)
+* [Constraints](#constraints)
 * [Scalability](#scalability)
 * [Privacy](#privacy)
-* [Contracts](#contracts)
 * [Performance](#performance)
 * [Conclusion](#conclusion)
+* [Future work](#future-work)
+* [Authors](#authors)
 * [References](#references)
+
+
 
 ## Introduction
 
