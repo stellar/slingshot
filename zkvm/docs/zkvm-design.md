@@ -41,7 +41,7 @@ A transaction also contains data such as protocol version, time bounds, and cryp
 
 ![](zkvm-design-pics/zkvm-tx-chain.png)
 
-Assets are created via _issuance_: each asset is securely identified by its issuer’s predicate (public key), so only the issuer’s signature can authorize creation of additional units of the asset. Asset units cannot be destroyed by accident but must be formally _retired_ with a dedicated instruction.
+Assets are created via _issuance_: each asset is securely identified by its issuer’s predicate (public key), so only the issuer’s signature can authorize creation of additional units of the asset (see [`issue`](zkvm-spec.md#issue)). Asset units are removed from circulation with a dedicated [`retire`](zkvm-spec.md#retire) instruction.
 
 Assets are transferred by use of _inputs_ and _outputs_. Each output specifies a new destination for the funds, and each input identifies an output from a previous transaction and unlocks its value with a cryptographic signature. The input is said to _spend_ the earlier transaction’s output.
 
