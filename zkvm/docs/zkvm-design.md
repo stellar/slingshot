@@ -1,6 +1,6 @@
 # ZkVM: fast, private, flexible blockchain contracts
 
-[📄 ZkVM whitepaper](https://github.com/stellar/slingshot/files/3164078/zkvm.whitepaper.2019-05-09.pdf) (PDF)
+[📄 ZkVM whitepaper](https://github.com/stellar/slingshot/files/3164245/zkvm-whitepaper-2019-05-09.pdf) (PDF)
 
 ## Table of contents
 
