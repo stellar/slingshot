@@ -35,7 +35,7 @@ ZkVM is an evolution of the authors’ prior work on [TxVM](https://chain.com/as
 A ZkVM _transaction_ is a data structure around a _program_ that describes the issuance and transfer of _financial assets_.
 A transaction also contains data such as protocol version, time bounds, and cryptographic proofs necessary to verify the correctness of the transaction.
 
-TBD: tx pic
+![](zkvm-design-pics/zkvm-tx-chain.png)
 
 Assets are created via _issuance_: each asset is securely identified by its issuer’s predicate (public key), so only the issuer’s signature can authorize creation of additional units of the asset. Asset units cannot be destroyed by accident but must be formally _retired_ with a dedicated instruction.
 
@@ -50,7 +50,7 @@ A ZkVM blockchain can work with any consensus protocol, from proof-of-work to Fe
 
 ZkVM is a stack machine for verifying a transaction. The stack machine executes the transaction’s program in order to determine the validity of the transaction and to compute a list of updates to the blockchain state.
 
-TBD: vm pic
+![](zkvm-design-pics/zkvm-vm-workflow.png)
 
 A transaction’s program is a string of bytecode, which consists of instructions that allow spending, issuing and distributing asset values, composing arithmetic constraints, and interacting with contracts. The VM does not permit loops or unbounded recursion, which greatly simplifies the calculation of the costs of operating the network and eliminates entire classes of vulnerabilities.
 
@@ -67,7 +67,7 @@ In ZkVM, _values_ are protected by _contracts_. Each contract contains a _payloa
 
 Transaction outputs are nothing more or less than contracts persisted to the blockchain state. During validation, contracts exist on the VM stack. ZkVM requires the transaction program to _clear_ contracts from the stack, which can only be done by satisfying their predicates. Once the items are unlocked, they can be used to form new items to be locked in either a transient contract or a persistent output.
 
-TBD: contract pic
+![](zkvm-design-pics/zkvm-contract.png)
 
 The ZkVM instruction set is expressive enough to build a wide range of protocols using contracts: payment channels, order books, multi-factor/multi-party custody, collateralized loans, and even arbitrary state machines.
 
@@ -88,7 +88,7 @@ In order to preserve confidentiality, ZkVM instructions do not operate on ordina
 
 First, the arithmetic relations between secret and non-secret integers are expressed using [`neg`](zkvm-spec.md#neg), [`add`](zkvm-spec.md#add), and [`mul`](zkvm-spec.md#mul) operations that produce an _Expression_ object. Then, the [`eq`](zkvm-spec.md#eq) instruction creates a _Constraint_ object that asserts the equality of two _Expressions_. Multiple _Constraints_ are composed with logical operations such as [`and`](zkvm-spec.md#and), [`or`](zkvm-spec.md#or) and [`not`](zkvm-spec.md#not). Finally, the [`verify`](zkvm-spec.md#verify) instruction takes the resulting _Constraint_ object and adds it to the constraint system.
 
-TBD: constraint lifecycle pic
+![](zkvm-design-pics/zkvm-constraints-lifecycle.png)
 
 To implement verification of the constraints in zero-knowledge, ZkVM uses the [Bulletproofs proving system](https://crypto.stanford.edu/bulletproofs/). While the program runs, various instructions add constraints to the constraint system. After the VM finishes execution of a program, it uses the Bulletproofs protocol to verify the constraint system using a proof string stored within the transaction. If verification succeeds, the transaction is considered valid.
 
@@ -105,7 +105,7 @@ A ZkVM transaction contains single constraint system proof (around 1Kb) and a si
 
 ZkVM execution is decoupled from updates to the blockchain state: every transaction can be verified in isolation. The result of ZkVM execution is a _transaction log_, which contains a list of consumed and created _unspent outputs_ (_utxos_) that are applied to the blockchain state separately. Historical transactions are pruned, while the utxo set is compressed with [Utreexo scheme](https://www.youtube.com/watch?v=edRun-6ubCc) by Thaddeus Dryja [utreexo]. A billion unspent outputs use just 1 kilobyte of data (30 merkle roots). New nodes bootstrap instantly from a network-verified Utreexo snapshot.
 
-TBD: utreexo pic
+![](zkvm-design-pics/zkvm-utreexo.png)
 
 Nodes that track large amounts of unspent outputs for their clients still have favorable storage requirements: the utxo set grows much more slowly than the number of transactions and has a cache-friendly access pattern (older outputs are spent less frequently).
 
