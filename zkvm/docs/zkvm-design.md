@@ -14,7 +14,7 @@
 * [Performance](#performance)
 * [Conclusion](#conclusion)
 * [Future work](#future-work)
-* [Authors](#authors)
+* [Authors](#authors-a-z)
 * [References](#references)
 
 
@@ -156,7 +156,7 @@ To increase privacy, the [CoinJoin scheme](https://bitcointalk.org/?topic=279249
 Various higher-level protocols, such as _accounts_, _payment channels_ and _order books_, require dedicated APIs built on top of ZkVM. These are subject to the future work on ZkVM.
 
 
-## Authors
+## Authors (A-Z)
 
 * [Oleg Andreev](https://github.com/oleganza)
 * [Bob Glickstein](https://github.com/bobg)
