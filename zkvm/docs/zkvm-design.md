@@ -22,15 +22,15 @@
 
 In this paper, we present ZkVM, the _zero-knowledge virtual machine_: a transaction format for a shared, multi-asset, cryptographic ledger.
 
-ZkVM aims at lowering the costs of participating in a global network by making the transactions _customizable_, _confidential_, highly _efficient_ and _simple_.
+ZkVM aims at lowering the costs of participating in a global network by making transactions _customizable_, _confidential_, highly _efficient_ and _simple_.
 
-**Customizable:** ZkVM is a safe and efficient environment for custom contracts. Contracts support realistic use cases via programmable constraints over encrypted data and assets. The VM supports a powerful language to express a wide range of higher-level protocols without the need to change the VM and upgrade the entire network.
+**Customizable:** ZkVM permits custom contracts. Contracts support realistic use cases via programmable constraints over encrypted data and assets. The VM supports a powerful language to express a wide range of higher-level protocols without the need to change the VM and upgrade the entire network.
 
 **Confidential:** In ZkVM, quantities and types of assets are fully encrypted. The asset flow is hidden on the transaction level. Individuals and organizations can safely perform their transactions directly on the shared ledger, instead of keeping them in siloed databases.
 
 **Efficient:** The ZkVM blockchain uses a compact data model that fits in a few kilobytes. Verification of transactions is highly parallelizable and takes 1-2 ms per CPU core. Nodes can bootstrap instantly from a network-verified snapshot. Virtually any computing device can run a full node, without relying on intermediate infrastructure and trusted third parties. Devices with limited cellular data plans can save bandwidth by tracking relevant state updates only (e.g. watching their own payment channels), without having to verify all transactions.
 
-**Simple:** While being powerful, ZkVM requires no special compilers, debuggers, or optimizers. Abstractions map well onto real-world concepts, and the technology stack consists of a small number of inventions reviewed by a global community of cryptographers and engineers.
+**Simple:** ZkVM requires no special compilers, debuggers, or optimizers. Its abstractions map well onto real-world concepts, and the technology stack consists of a small number of inventions reviewed by a global community of cryptographers and engineers.
 ZkVM is an evolution of the authors’ prior work on [TxVM](https://chain.com/assets/txvm.pdf), which in turn was influenced by the design of [Bitcoin](https://bitcoin.org/bitcoin.pdf) and [Ethereum](https://ethereum.github.io/yellowpaper/paper.pdf). The motivation for such ledgers was originally expressed in the paper Secure Property Titles by [Nick Szabo](https://nakamotoinstitute.org/secure-property-titles/).
 
 
@@ -43,9 +43,9 @@ A transaction also contains data such as protocol version, time bounds, and cryp
 
 Assets are created via _issuance_: each asset is securely identified by its issuer’s predicate (public key), so only the issuer’s signature can authorize creation of additional units of the asset. Asset units cannot be destroyed by accident but must be formally _retired_ with a dedicated instruction.
 
-Assets are transferred by use of _inputs_ and _outputs_. Each output specifies a new destination for the funds, and each input identifies the output from a previous transaction and unlocks the value with a cryptographic signature. The input is said to _spend_ the earlier transaction’s output.
+Assets are transferred by use of _inputs_ and _outputs_. Each output specifies a new destination for the funds, and each input identifies an output from a previous transaction and unlocks its value with a cryptographic signature. The input is said to _spend_ the earlier transaction’s output.
 
-A payee can use the signatures to verify the chain of ownership, but also needs to make sure that the asset was not double-spent. This problem is solved by using an agreement protocol for a _blockchain state_: a set of unspent outputs. Each time a transaction declares an input, an item is removed from the set. If the item has been removed (or never existed), the transaction is rejected.
+A payee can use the signatures to verify the chain of ownership, but also needs to make sure that the asset was not double-spent. This problem is solved with the _blockchain state_: a set of unspent outputs. Each time a transaction declares an input, an item is removed from the set. If the item has been removed (or never existed), the transaction is rejected. A _consensus protocol_ can ensure that all participants in the network agree on the same blockchain state.
 
 A ZkVM blockchain can work with any consensus protocol, from proof-of-work to Federated Byzantine Consensus. It can even work as a private financial database with real-time auditability. The exact protocol depends on its concrete application, which is outside the scope of this document.
 
@@ -69,7 +69,7 @@ ZkVM executes a transaction’s program deterministically, in full isolation fro
 
 In ZkVM, _values_ are protected by _contracts_. Each contract contains a _payload_ and a _predicate_. The payload is an arbitrary number of items that could be _values_ or data parameters. The predicate is a condition that must be satisfied in order to unlock the items in the payload.
 
-Transaction outputs are nothing more or less than contracts persisted to the blockchain state. During validation, contracts exist on the VM stack. ZkVM requires the transaction program to _clear_ contracts from the stack, which can only be done by satisfying their predicates. Once the items are unlocked, they can be used to form new items to be locked in either a transient contract or a persistent output.
+Transaction outputs are nothing more or less than contracts persisted to the blockchain state. During validation, contracts exist on the VM stack. ZkVM requires the transaction program to _clear_ contracts from the stack, which can only be done by satisfying their predicates. Once the items are unlocked, they can be used to form new items to be locked in either a transient contract (to be unlocked again later in the same transaction) or a persistent output (to be added to the blockchain state).
 
 ![](zkvm-design-pics/zkvm-contract.png)
 
@@ -105,15 +105,15 @@ VM instructions directly interact with the constraint system, without using any 
 
 ZkVM is designed to scale to a wide range of applications and large volumes of transactions. The design focuses on low bandwidth requirements, fast and parallelizable transaction verification, and minimal storage overhead.
 
-A ZkVM transaction contains single constraint system proof (around 1Kb) and a single 64-byte Schnorr signature, aggregated via the multi-message [Musig protocol](https://eprint.iacr.org/2018/068.pdf) by Maxwell, Poelstra, Seurin and Wuille. The size of the proof scales logarithmically, lowering the marginal cost of an input-output pair to just 200 bytes that can be further optimized by caching most recent outputs.
+A ZkVM transaction contains a single constraint system proof (around 1Kb) and a single 64-byte Schnorr signature, aggregated via the multi-message [Musig protocol](https://eprint.iacr.org/2018/068.pdf) by Maxwell, Poelstra, Seurin and Wuille. The size of the proof scales logarithmically, lowering the marginal cost of an input-output pair to just 200 bytes that can be further optimized by caching most recent outputs.
 
-ZkVM execution is decoupled from updates to the blockchain state: every transaction can be verified in isolation. The result of ZkVM execution is a _transaction log_, which contains a list of consumed and created _unspent outputs_ (_utxos_) that are applied to the blockchain state separately. Historical transactions are pruned, while the utxo set is compressed with [Utreexo scheme](https://www.youtube.com/watch?v=edRun-6ubCc) by Thaddeus Dryja [utreexo]. A billion unspent outputs use just 1 kilobyte of data (30 merkle roots). New nodes bootstrap instantly from a network-verified Utreexo snapshot.
+ZkVM execution is decoupled from updates to the blockchain state: every transaction can be verified in isolation. The result of ZkVM execution is a _transaction log_, which contains a list of consumed and created _unspent outputs_ (_utxos_) that are applied to the blockchain state separately. Historical transactions are pruned, while the utxo set is compressed with [the Utreexo scheme](https://www.youtube.com/watch?v=edRun-6ubCc) by Thaddeus Dryja [utreexo]. A billion unspent outputs use just 1 kilobyte of data (30 merkle roots). New nodes bootstrap instantly from a network-verified Utreexo snapshot.
 
 ![](zkvm-design-pics/zkvm-utreexo.png)
 
 Nodes that track large amounts of unspent outputs for their clients still have favorable storage requirements: the utxo set grows much more slowly than the number of transactions and has a cache-friendly access pattern (older outputs are spent less frequently).
 
-Bandwidth-constrained nodes such as mobile devices with limited data plans can use [simplified payment verification](https://bitcoin.org/bitcoin.pdf) mode: instead of verifying all transactions they can track block headers only, to detect changes to their utxo proofs and the status of their [payment channels](https://lightning.network/lightning-network-paper.pdf), without the need for dedicated trusted services.
+Bandwidth-constrained nodes such as mobile devices with limited data plans can use [simplified payment verification](https://en.bitcoinwiki.org/wiki/Simplified_Payment_Verification) mode: instead of verifying all transactions they can track block headers only, to detect changes to their utxo proofs and the status of their [payment channels](https://lightning.network/lightning-network-paper.pdf), without the need for dedicated trusted services.
 
 
 ## Privacy
@@ -135,7 +135,7 @@ ZkVM does not permit loops or unbounded recursion. All immediately executed oper
 
 Verification of signatures, constraints, and Taproot commitments are relatively expensive because they involve the scalar multiplication of elliptic-curve points. For that reason, these operations are deferred and performed in a batch after the VM is finished executing the transaction’s program.
 
-Use of [Ristretto group](https://ristretto.group) and its state-of-the-art vectorized implementation in [Dalek Project](https://doc.dalek.rs/curve25519_dalek/) reduces the cost of one output verification to 1ms on a modern 3 GHz CPU, which implies a throughput of 1000 outputs per second per core. Verification is also highly parallelizable to optimize latency-critical deployments. Proving time is in the order of several milliseconds per output.
+Use of [the Ristretto group](https://ristretto.group) and its state-of-the-art vectorized implementation in [the Dalek project](https://doc.dalek.rs/curve25519_dalek/) reduces the cost of one output verification to 1ms on a modern 3 GHz CPU, which implies a throughput of 1000 outputs per second per core. Verification is also highly parallelizable to optimize latency-critical deployments. Proving time is in the order of several milliseconds per output.
 
 Custom constraints created by contracts typically have significantly less overhead than the `cloak` instruction that merges and splits the input values into the outputs.
 
@@ -146,7 +146,7 @@ ZkVM is a comprehensive solution that brings together the results of years of wo
 
 It strikes the right balance between various partially conflicting requirements, producing a robust technology stack for the global financial system of the future.
 
-ZkVM is part of the [Slingshot open source project](../../), distributed under the Apache License, version 2.0.
+ZkVM is part of the [Slingshot open source project](https://github.com/stellar/slingshot), distributed under the Apache License, version 2.0.
 
 
 ## Future work
