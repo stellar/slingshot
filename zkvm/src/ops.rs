@@ -4,6 +4,7 @@
 use crate::encoding;
 use crate::encoding::SliceReader;
 use crate::errors::VMError;
+use crate::program::ProgramItem;
 use crate::scalar_witness::ScalarWitness;
 use crate::types::Data;
 use core::mem;
@@ -13,7 +14,8 @@ use spacesuit::BitRange;
 #[derive(Clone, Debug)]
 #[allow(missing_docs)]
 pub enum Instruction {
-    Push(Data), // size of the string
+    Push(Data),
+    Program(ProgramItem),
     Drop,
     Dup(usize),  // index of the item
     Roll(usize), // index of the item
@@ -53,39 +55,40 @@ pub enum Instruction {
 #[allow(missing_docs)]
 pub enum Opcode {
     Push = 0x00,
-    Drop = 0x01,
-    Dup = 0x02,
-    Roll = 0x03,
-    Const = 0x04,
-    Var = 0x05,
-    Alloc = 0x06,
-    Mintime = 0x07,
-    Maxtime = 0x08,
-    Expr = 0x09,
-    Neg = 0x0a,
-    Add = 0x0b,
-    Mul = 0x0c,
-    Eq = 0x0d,
-    Range = 0x0e,
-    And = 0x0f,
-    Or = 0x10,
-    Not = 0x11,
-    Verify = 0x12,
-    Unblind = 0x13,
-    Issue = 0x14,
-    Borrow = 0x15,
-    Retire = 0x16,
-    Cloak = 0x17,
-    Input = 0x18,
-    Output = 0x19,
-    Contract = 0x1a,
-    Log = 0x1b,
-    Signtx = 0x1c,
-    Call = 0x1d,
+    Program = 0x01,
+    Drop = 0x02,
+    Dup = 0x03,
+    Roll = 0x04,
+    Const = 0x05,
+    Var = 0x06,
+    Alloc = 0x07,
+    Mintime = 0x08,
+    Maxtime = 0x09,
+    Expr = 0x0a,
+    Neg = 0x0b,
+    Add = 0x0c,
+    Mul = 0x0d,
+    Eq = 0x0e,
+    Range = 0x0f,
+    And = 0x10,
+    Or = 0x11,
+    Not = 0x12,
+    Verify = 0x13,
+    Unblind = 0x14,
+    Issue = 0x15,
+    Borrow = 0x16,
+    Retire = 0x17,
+    Cloak = 0x18,
+    Input = 0x19,
+    Output = 0x1a,
+    Contract = 0x1b,
+    Log = 0x1c,
+    Signtx = 0x1d,
+    Call = 0x1e,
     Delegate = MAX_OPCODE,
 }
 
-const MAX_OPCODE: u8 = 0x1e;
+const MAX_OPCODE: u8 = 0x1f;
 
 impl Opcode {
     /// Converts the opcode to `u8`.
@@ -109,6 +112,7 @@ impl Instruction {
     pub fn serialized_length(&self) -> usize {
         match self {
             Instruction::Push(data) => 1 + 4 + data.serialized_length(),
+            Instruction::Program(progitem) => 1 + 4 + progitem.serialized_length(),
             Instruction::Dup(_) => 1 + 4,
             Instruction::Roll(_) => 1 + 4,
             Instruction::Range(_) => 1 + 1,
@@ -142,6 +146,13 @@ impl Instruction {
                 let strlen = program.read_size()?;
                 let data_slice = program.read_bytes(strlen)?;
                 Ok(Instruction::Push(Data::Opaque(data_slice.to_vec())))
+            }
+            Opcode::Program => {
+                let strlen = program.read_size()?;
+                let data_slice = program.read_bytes(strlen)?;
+                Ok(Instruction::Program(ProgramItem::Bytecode(
+                    data_slice.to_vec(),
+                )))
             }
             Opcode::Drop => Ok(Instruction::Drop),
             Opcode::Dup => {
@@ -205,6 +216,11 @@ impl Instruction {
                 write(Opcode::Push);
                 encoding::write_u32(data.serialized_length() as u32, program);
                 data.encode(program);
+            }
+            Instruction::Program(subprog) => {
+                write(Opcode::Program);
+                encoding::write_u32(subprog.serialized_length() as u32, program);
+                subprog.encode(program);
             }
             Instruction::Drop => write(Opcode::Drop),
             Instruction::Dup(idx) => {

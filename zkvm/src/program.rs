@@ -122,9 +122,22 @@ impl Program {
         }
     }
 
+    /// Encodes the program item into a bytecode array.
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let mut buf = Vec::with_capacity(self.serialized_length());
+        self.encode(&mut buf);
+        buf
+    }
+
     /// Adds a `push` instruction with an immediate data type that can be converted into `Data`.
     pub fn push<T: Into<Data>>(&mut self, data: T) -> &mut Program {
         self.0.push(Instruction::Push(data.into()));
+        self
+    }
+
+    /// Adds a `program` instruction with an immediate data type that can be converted into `ProgramItem`.
+    pub fn program<T: Into<ProgramItem>>(&mut self, prog: T) -> &mut Program {
+        self.0.push(Instruction::Program(prog.into()));
         self
     }
 
@@ -137,7 +150,7 @@ impl Program {
     ) -> Result<&mut Program, VMError> {
         let (call_proof, program) = pred_tree.create_callproof(prog_index)?;
         self.push(Data::Opaque(call_proof.to_bytes()))
-            .push(Data::Program(program))
+            .program(program)
             .call();
         Ok(self)
     }
@@ -179,6 +192,19 @@ impl ProgramItem {
             ProgramItem::Bytecode(bytes) => Ok(bytes),
         }
     }
+
+    /// Encodes the program item into a bytecode array.
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let mut buf = Vec::with_capacity(self.serialized_length());
+        self.encode(&mut buf);
+        buf
+    }
+}
+
+impl From<Program> for ProgramItem {
+    fn from(x: Program) -> Self {
+        ProgramItem::Program(x)
+    }
 }
 
 impl MerkleItem for ProgramItem {
@@ -192,8 +218,6 @@ impl MerkleItem for ProgramItem {
 
 impl MerkleItem for Program {
     fn commit(&self, t: &mut Transcript) {
-        let mut buf = Vec::new();
-        self.encode(&mut buf);
-        t.commit_bytes(b"program", &buf);
+        t.commit_bytes(b"program", &self.to_bytes());
     }
 }

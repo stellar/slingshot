@@ -486,7 +486,7 @@ fn taproot_program_path() {
             .push(prev_output.clone())
             .input()
             .push(Data::Opaque(call_proof.to_bytes().clone()))
-            .push(Data::Program(call_prog.clone()))
+            .program(call_prog.clone())
             .call()
     });
     build_and_verify(prog, &vec![sk + factor]).unwrap();
@@ -496,7 +496,7 @@ fn taproot_program_path() {
             .push(prev_output.clone())
             .input()
             .push(Data::Opaque(call_proof.to_bytes().clone()))
-            .push(Data::Program(call_prog))
+            .program(call_prog)
             .call()
     });
     if build_and_verify(wrong_prog, &vec![sk + factor]).is_ok() {

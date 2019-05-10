@@ -142,7 +142,8 @@ where
             match instr {
                 // the data is just a slice, so the clone would copy the slice struct,
                 // not the actual buffer of bytes.
-                Instruction::Push(data) => self.pushdata(data)?,
+                Instruction::Push(data) => self.pushdata(data),
+                Instruction::Program(prog) => self.pushprogram(prog),
                 Instruction::Drop => self.drop()?,
                 Instruction::Dup(i) => self.dup(i)?,
                 Instruction::Roll(i) => self.roll(i)?,
@@ -182,9 +183,12 @@ where
         }
     }
 
-    fn pushdata(&mut self, data: Data) -> Result<(), VMError> {
+    fn pushdata(&mut self, data: Data) {
         self.push_item(data);
-        Ok(())
+    }
+
+    fn pushprogram(&mut self, prog: ProgramItem) {
+        self.push_item(prog);
     }
 
     fn drop(&mut self) -> Result<(), VMError> {
@@ -551,7 +555,7 @@ where
 
     fn call(&mut self) -> Result<(), VMError> {
         // Pop program, call proof, and contract
-        let program_item = self.pop_item()?.to_data()?.clone().to_program_item()?;
+        let program_item = self.pop_item()?.to_program()?;
         let call_proof_bytes = self.pop_item()?.to_data()?.to_bytes();
         let call_proof = SliceReader::parse(&call_proof_bytes, |r| CallProof::decode(r))?;
         let contract = self.pop_item()?.to_contract()?;
@@ -578,7 +582,7 @@ where
             .map_err(|_| VMError::FormatError)?;
 
         // Program
-        let prog = self.pop_item()?.to_data()?;
+        let prog = self.pop_item()?.to_program()?;
 
         // Place all items in payload onto the stack
         let contract = self.pop_item()?.to_contract()?;
@@ -594,12 +598,12 @@ where
         // Verify signature using Verification key, over the message `program`
         let mut t = Transcript::new(b"ZkVM.delegate");
         t.commit_bytes(b"contract", contract_id.as_ref());
-        t.commit_bytes(b"prog", &prog.clone().to_bytes());
+        t.commit_bytes(b"prog", &prog.to_bytes());
         self.delegate
             .verify_point_op(|| signature.verify(&mut t, verification_key).into())?;
 
         // Replace current program with new program
-        self.continue_with_program(prog.to_program_item()?)?;
+        self.continue_with_program(prog)?;
         Ok(())
     }
 

@@ -4,14 +4,18 @@ use crate::encoding::SliceReader;
 use crate::errors::VMError;
 use crate::merkle::MerkleItem;
 use crate::predicate::Predicate;
+use crate::program::ProgramItem;
 use crate::types::{Data, Value};
 use merlin::Transcript;
 
 /// Prefix for the data type in the Output Structure
 pub const DATA_TYPE: u8 = 0x00;
 
+/// Prefix for the program type in the Output Structure
+pub const PROG_TYPE: u8 = 0x01;
+
 /// Prefix for the value type in the Output Structure
-pub const VALUE_TYPE: u8 = 0x01;
+pub const VALUE_TYPE: u8 = 0x02;
 
 /// A unique identifier for an anchor
 #[derive(Copy, Clone, Debug)]
@@ -42,6 +46,9 @@ pub struct Contract {
 pub enum PortableItem {
     /// Plain data payload
     Data(Data),
+
+    /// Program payload
+    Program(ProgramItem),
 
     /// Value payload
     Value(Value),
@@ -181,6 +188,7 @@ impl PortableItem {
     fn serialized_length(&self) -> usize {
         match self {
             PortableItem::Data(d) => 1 + 4 + d.serialized_length(),
+            PortableItem::Program(p) => 1 + 4 + p.serialized_length(),
             PortableItem::Value(_) => 1 + 64,
         }
     }
@@ -193,7 +201,13 @@ impl PortableItem {
                 encoding::write_u32(d.serialized_length() as u32, buf);
                 d.encode(buf);
             }
-            // Value = 0x01 || <32 bytes> || <32 bytes>
+            // Program = 0x01 || LE32(len) || <bytes>
+            PortableItem::Program(p) => {
+                encoding::write_u8(PROG_TYPE, buf);
+                encoding::write_u32(p.serialized_length() as u32, buf);
+                p.encode(buf);
+            }
+            // Value = 0x02 || <32 bytes> || <32 bytes>
             PortableItem::Value(v) => {
                 encoding::write_u8(VALUE_TYPE, buf);
                 encoding::write_point(&v.qty.to_point(), buf);
@@ -208,6 +222,11 @@ impl PortableItem {
                 let len = output.read_size()?;
                 let bytes = output.read_bytes(len)?;
                 Ok(PortableItem::Data(Data::Opaque(bytes.to_vec())))
+            }
+            PROG_TYPE => {
+                let len = output.read_size()?;
+                let bytes = output.read_bytes(len)?;
+                Ok(PortableItem::Program(ProgramItem::Bytecode(bytes.to_vec())))
             }
             VALUE_TYPE => {
                 let qty = Commitment::Closed(output.read_point()?);
