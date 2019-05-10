@@ -187,3 +187,6 @@ This work was sponsored by [Interstellar](https://interstellar.com) and [Stellar
 * [CoinJoin: Bitcoin privacy for the real world](https://bitcointalk.org/?topic=279249) by Gregory Maxwell
 * [The Ristretto Group](https://ristretto.group) by Mike Hamburg, Henry de Valence, Isis Lovecruft, Tony Arcieri
 * [curve25519-dalek, pure-Rust implementation of Ristretto](https://doc.dalek.rs/curve25519_dalek/) by Isis Lovecruft, Henry de Valence
+
+
+![](https://user-images.githubusercontent.com/698/57546709-2d696c00-7312-11e9-8430-51ed9b51e6c8.png)
