@@ -1,18 +1,16 @@
 use super::hash::Hash;
 use super::proof::{Proof, ProofStep};
-use super::utreexo::Utreexo;
+use super::utreexo::{parent, Utreexo};
 
 use std::collections::HashMap;
 
 pub struct Update {
-    pub(crate) u: Utreexo,
-    pub(crate) updated: HashMap<Hash, ProofStep>,
+    pub(crate) updated: HashMap<Hash, ProofStep>
 }
 
 impl Update {
-    pub fn new(u: Utreexo) -> Update {
+    pub fn new() -> Update {
         return Update {
-            u: u,
             updated: HashMap::new(),
         };
     }
@@ -22,7 +20,7 @@ impl Update {
         self.updated.insert(r.clone(), ProofStep { h: l.clone(), left: true });
     }
 
-    pub fn proof(&self, leaf: &Hash) -> Proof {
+    pub fn proof(&self, utreexo: &Utreexo, leaf: &Hash) -> Proof {
         let mut item = leaf.clone();
         let mut result = Proof {
             leaf: item.clone(),
@@ -33,11 +31,7 @@ impl Update {
                 None => return result,
                 Some(step) => {
                     result.steps.push(step.clone());
-                    if step.left {
-                        item = (self.u.hasher)(&step.h, &item);
-                    } else {
-                        item = (self.u.hasher)(&item, &step.h);
-                    }
+                    item = parent(&item, &step);
                 }
             }
         }

@@ -3,148 +3,141 @@ use super::hash::Hash;
 use super::proof::{Proof, ProofStep};
 use super::update::Update;
 
-use std::collections::HashMap;
-
-pub type HashFn = fn(&Hash, &Hash) -> Hash;
+use merlin::Transcript;
 
 #[derive(Clone, PartialEq)]
 pub struct Utreexo {
     pub roots: Vec<Option<Hash>>,
-    pub hasher: HashFn,
-}
-
-struct Worktree {
-    heights: Vec<Vec<Hash>>,
-    roots: HashMap<Hash, usize>,
 }
 
 impl Utreexo {
-    pub fn new(hasher: HashFn) -> Utreexo {
+    pub fn new() -> Utreexo {
         return Utreexo {
             roots: Vec::new(),
-            hasher: hasher,
         };
     }
 
     pub fn update(&mut self, deletions: &[Proof], insertions: &[Hash]) -> Result<Update, UError> {
-        let mut w = Worktree {
-            heights: Vec::new(),
-            roots: HashMap::new(),
-        };
-        let mut update = Update::new(self.clone());
+        let mut new_roots: Vec<Vec<Hash>> = Vec::new();
+        for (i, opt) in self.roots.iter().enumerate() {
+            new_roots.push(Vec::new());
+            if let Some(root) = opt {
+                new_roots[i].push(root.clone());
+            }
+        }
+
+        let mut upd = Update::new();
 
         for d in deletions {
-            let i: usize;
-            let j: usize;
-            match self.del_helper(&w, &d.leaf, &d.steps, 0, None) {
-                Ok(pair) => {
-                    i = pair.0;
-                    j = pair.1
-                }
-                Err(e) => return Err(e),
-            }
-            w.roots.remove(&w.heights[i][j]);
-            w.heights[i].swap_remove(j);
-
-            for (k, s) in d.steps.iter().enumerate() {
-                w.heights[k].push(s.h.clone());
-            }
+            self.del_helper(d, &mut new_roots)?;
         }
 
-        if w.heights.is_empty() {
-            w.heights.push(Vec::new());
+        if new_roots.is_empty() {
+            new_roots.push(Vec::new());
         }
-        w.heights[0].extend_from_slice(insertions);
+        new_roots[0].extend_from_slice(insertions);
 
         let mut i = 0;
-        while i < w.heights.len() {
-            while w.heights[i].len() > 1 {
-                let b = w.heights[i].pop().unwrap();
-                let a = w.heights[i].pop().unwrap();
-                let h = (self.hasher)(&a, &b);
-
-                if w.heights.len() <= i + 1 {
-                    w.heights.push(Vec::new());
+        while i < new_roots.len() {
+            while new_roots[i].len() > 1 {
+                let b = new_roots[i].pop().unwrap();
+                let a = new_roots[i].pop().unwrap();
+                let h = parent_hash(&a, &b);
+                
+                if new_roots.len() <= i+1 {
+                    new_roots.push(Vec::new());
                 }
-                w.heights[i + 1].push(h);
-                update.add(&a, &b);
+                new_roots[i+1].push(h);
+                upd.add(&a, &b);
             }
             i += 1;
         }
 
-        i = w.heights.len();
+        i = new_roots.len();
         while i > 0 {
             i -= 1;
-            if !w.heights[i].is_empty() {
+            if !new_roots[i].is_empty() {
                 break;
             }
-            w.heights.pop();
+            new_roots.pop();
         }
 
-        for (i, h) in w.heights.iter().enumerate() {
+        for (i, h) in new_roots.iter().enumerate() {
             if self.roots.len() <= i {
-                self.roots.push(None);
-            }
-            self.roots[i] = if h.is_empty() {
-                None
+                self.roots.push(if h.is_empty() { None } else { Some(h[0].clone()) });
             } else {
-                Some(h[0].clone())
+                self.roots[i] = if h.is_empty() { None } else { Some(h[0].clone()) };
             }
         }
+        self.roots.truncate(new_roots.len());
 
-        self.roots.truncate(w.heights.len());
-
-        Ok(update)
+        Ok(upd)
     }
 
-    fn del_helper(
-        &self,
-        w: &Worktree,
-        item: &Hash,
-        steps: &[ProofStep],
-        height: usize,
-        j: Option<usize>,
-    ) -> Result<(usize, usize), UError> {
-        if steps.is_empty() {
-            if height >= self.roots.len() {
-                return Err(UError::Invalid);
-            }
-            match &self.roots[height] {
-                None => return Err(UError::Invalid),
-                Some(h) => {
-                    if item != h {
-                        return Err(UError::Invalid);
+    fn del_helper(&self, p: &Proof, new_roots: &mut Vec<Vec<Hash>>) -> Result<(), UError> {
+        if self.roots.len() <= p.steps.len() {
+            return Err(UError::Invalid);
+        }
+        if let None = self.roots[p.steps.len()] {
+            return Err(UError::Invalid);
+        }
+        
+        let mut height = 0;
+        let mut hash = p.leaf.clone();
+        loop {
+            if height < new_roots.len() {
+                if let Some(index) = find_root(&hash, &new_roots[height]) {
+                    // Remove hash from new_roots.
+                    new_roots[height].remove(index);
+
+                    // If height < p.steps.len(),
+		    // then an earlier deletion "opened up" self.roots[p.steps.len()]
+		    // and we just removed that subroot from new_roots.
+		    // Now verify the remainder of p.steps against the unmodified tree.
+                    loop {
+                        if height >= p.steps.len() {
+                            return if &hash == self.roots[height].as_ref().unwrap() {
+                                Ok(())
+                            } else {
+                                Err(UError::Invalid)
+                            }
+                        }
+                        hash = parent(&hash, &p.steps[height]);
+                        height += 1;
                     }
                 }
             }
-            if w.heights.is_empty() {
+
+
+            if height >= p.steps.len() {
                 return Err(UError::Invalid);
             }
-            match j {
-                None => match find_root(item, &w.heights[0][..]) {
-                    None => return Err(UError::Invalid),
-                    Some(jj) => return Ok((height, jj)),
-                },
-                Some(jj) => return Ok((height, jj)),
+            while height >= new_roots.len() {
+                new_roots.push(Vec::new());
             }
+            let s = &p.steps[height];
+            new_roots[height].push(s.h.clone());
+            hash = parent(&hash, s);
+            height += 1;
         }
-
-        let new_item = if steps[0].left {
-            (self.hasher)(&steps[0].h, item)
-        } else {
-            (self.hasher)(item, &steps[0].h)
-        };
-
-        let jj = match (j, w.roots.get(&new_item)) {
-            (None, Some(h)) => match find_root(&new_item, &w.heights[*h][..]) {
-                None => return Err(UError::Invalid),
-                Some(k) => Some(k),
-            },
-            _ => j,
-        };
-
-        self.del_helper(w, &new_item, &steps[1..], height + 1, jj)
     }
+}
+
+pub(crate) fn parent(h: &Hash, step: &ProofStep) -> Hash {
+    parent_hash(
+        if step.left { &step.h } else { &h },
+        if step.left { &h } else { &step.h }
+    )
+}
+
+fn parent_hash(left: &Hash, right: &Hash) -> Hash {
+    let mut t = Transcript::new(b"utreexo");
+    t.append_message(b"left", &left.0);
+    t.append_message(b"right", &right.0);
+    
+    let mut result = Hash([0u8; 32]);
+    t.challenge_bytes(b"parent", &mut result.0);
+    result
 }
 
 fn find_root(h: &Hash, hashes: &[Hash]) -> Option<usize> {
@@ -159,26 +152,15 @@ fn find_root(h: &Hash, hashes: &[Hash]) -> Option<usize> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use merlin::Transcript;
-
-    fn hashfn(a: &Hash, b: &Hash) -> Hash {
-        let mut t = Transcript::new(b"hash");
-        t.commit_bytes(b"a", &a.0);
-        t.commit_bytes(b"b", &b.0);
-
-        let mut h: Hash;
-        t.challenge_bytes(b"hash", &mut h.0);
-        h
-    }
 
     #[test]
     fn utreexo() {
-        let items: [Hash; 12];
+        let mut items = [Hash([0u8; 32]); 12];
         for i in 0..12 {
             items[0] = Hash([i; 32]);
         }
 
-        let mut u = Utreexo::new(hashfn);
+        let mut u = Utreexo::new();
 
         // Try to delete from an empty tree, should give an invalid-proof error.
         let p1 = Proof {
@@ -191,12 +173,12 @@ mod tests {
         }
 
         // Add 11 leaves.
-        let mut proofs: [Proof; 11];
+        let mut proofs: Vec<Proof> = Vec::new();
         match u.update(&[], &items[..11]) {
             Err(uerr) => panic!("error {} inserting items into empty tree", uerr),
             Ok(upd) => {
                 for i in 0..11 {
-                    proofs[i] = upd.proof(&items[i]);
+                    proofs.push(upd.proof(&u, &items[i]));
                 }
             }
         }
@@ -206,10 +188,10 @@ mod tests {
             Err(uerr) => panic!("error {} removing an item from the tree", uerr),
             Ok(upd) => {
                 for i in 0..10 {
-                    assert!(proofs[i].update(upd).is_ok());
+                    assert!(proofs[i].update(&u, &upd).is_ok());
                 }
-                let p10 = proofs[10].clone();
-                match p10.update(upd) {
+                let mut p10 = proofs[10].clone();
+                match p10.update(&u, &upd) {
                     Err(uerr) => assert_eq!(uerr, UError::Invalid),
                     _ => panic!("unexpected success updating proof of deleted value"),
                 }
@@ -217,7 +199,7 @@ mod tests {
         }
 
         let saved = u.clone();
-        match u.update(&[proofs[10]], &[]) {
+        match u.update(&[proofs[10].clone()], &[]) {
             Err(uerr) => assert_eq!(uerr, UError::Invalid),
             _ => panic!("unexpected success re-deleting deleted value"),
         }

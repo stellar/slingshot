@@ -1,6 +1,7 @@
 use super::error::UError;
 use super::hash::Hash;
 use super::update::Update;
+use super::utreexo::{parent, Utreexo};
 
 #[derive(Clone)]
 pub struct ProofStep {
@@ -15,12 +16,12 @@ pub struct Proof {
 }
 
 impl Proof {
-    pub fn update(&mut self, u: Update) -> Result<(), UError> {
+    pub fn update(&mut self, utreexo: &Utreexo, upd: &Update) -> Result<(), UError> {
         let mut h = self.leaf.clone();
         let mut i = 0;
         while i <= self.steps.len() {
-            if u.u.roots.len() > i {
-                if let Some(hh) = &u.u.roots[i] {
+            if utreexo.roots.len() > i {
+                if let Some(hh) = &utreexo.roots[i] {
                     if &h == hh {
                         self.steps.truncate(i);
                         return Ok(());
@@ -28,7 +29,7 @@ impl Proof {
                 }
             }
 
-            let step = match u.updated.get(&h) {
+            let step = match upd.updated.get(&h) {
                 Some(s) => {
                     self.steps.truncate(i);
                     self.steps.push(s.clone());
@@ -42,12 +43,7 @@ impl Proof {
                 }
             };
 
-            h = if step.left {
-                (u.u.hasher)(&step.h, &h)
-            } else {
-                (u.u.hasher)(&h, &step.h)
-            };
-
+            h = parent(&h, &step);
             i += 1;
         }
 
