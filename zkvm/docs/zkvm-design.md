@@ -189,4 +189,4 @@ This work was sponsored by [Interstellar](https://interstellar.com) and [Stellar
 * [curve25519-dalek, pure-Rust implementation of Ristretto](https://doc.dalek.rs/curve25519_dalek/) by Isis Lovecruft, Henry de Valence
 
 
-![](https://user-images.githubusercontent.com/698/57546520-c21f9a00-7311-11e9-8907-96751fd1b762.png)
+![](https://user-images.githubusercontent.com/698/57546709-2d696c00-7312-11e9-8430-51ed9b51e6c8.png)
