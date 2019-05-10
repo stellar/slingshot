@@ -503,9 +503,10 @@ Output is a serialized [contract](#contract-type):
       Output  =  Anchor || Predicate  ||  LE32(k)  ||  Item[0]  || ... ||  Item[k-1]
       Anchor  =  <32 bytes>
    Predicate  =  <32 bytes>
-        Item  =  enum { Data, Value }
+        Item  =  enum { Data, Program, Value }
         Data  =  0x00  ||  LE32(len)  ||  <bytes>
-       Value  =  0x01  ||  <32 bytes> ||  <32 bytes>
+     Program  =  0x01  ||  LE32(len)  ||  <bytes>
+       Value  =  0x02  ||  <32 bytes> ||  <32 bytes>
 ```
 
 ### UTXO
@@ -1315,14 +1316,16 @@ Fails if the `prevoutput` is not a [data type](#data-type) with exact encoding o
 _items... predicate_ **output:_k_** → ø
 
 1. Pops [`predicate`](#predicate) from the stack.
-2. Pops `k` items from the stack.
+2. Pops `k` [portable items](#portable-type) from the stack.
 3. Creates a contract with the `k` items as a payload, the predicate `pred`, and anchor set to the [VM’s last anchor](#vm-state).
 4. Adds an [output entry](#output-entry) to the [transaction log](#transaction-log).
 5. Updates the [VM’s last anchor](#vm-state) with the [contract ID](#contract-id) of the new contract.
 
 Immediate data `k` is encoded as [LE32](#le32).
 
-Fails if VM’s [last anchor](#vm-state) is not set.
+Fails if:
+* VM’s [last anchor](#vm-state) is not set,
+* payload items are not [portable](#portable-type).
 
 
 #### contract
@@ -1330,14 +1333,16 @@ Fails if VM’s [last anchor](#vm-state) is not set.
 _items... pred_ **contract:_k_** → _contract_
 
 1. Pops [predicate](#predicate) `pred` from the stack.
-2. Pops `k` items from the stack.
+2. Pops `k` [portable items](#portable-type) from the stack.
 3. Creates a contract with the `k` items as a payload, the predicate `pred`, and anchor set to the [VM’s last anchor](#vm-state).
 4. Pushes the contract onto the stack.
 5. Update the [VM’s last anchor](#vm-state) with the [contract ID](#contract-id) of the new contract.
 
 Immediate data `k` is encoded as [LE32](#le32).
 
-Fails if VM’s [last anchor](#vm-state) is missing.
+Fails if:
+* VM’s [last anchor](#vm-state) is not set,
+* payload items are not [portable](#portable-type).
 
 
 #### log
