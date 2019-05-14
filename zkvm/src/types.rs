@@ -50,9 +50,6 @@ pub enum CopyableItem {
 
     /// A variable type.
     Variable(Variable),
-
-    /// A constraint type.
-    Constraint(Constraint),
 }
 
 /// A data item.
@@ -173,7 +170,6 @@ impl Item {
         match self {
             Item::Data(x) => Ok(CopyableItem::Data(x)),
             Item::Variable(x) => Ok(CopyableItem::Variable(x)),
-            Item::Constraint(x) => Ok(CopyableItem::Constraint(x)),
             _ => Err(VMError::TypeNotCopyable),
         }
     }
@@ -183,7 +179,6 @@ impl Item {
         match self {
             Item::Data(x) => Ok(CopyableItem::Data(x.clone())),
             Item::Variable(x) => Ok(CopyableItem::Variable(x.clone())),
-            Item::Constraint(x) => Ok(CopyableItem::Constraint(x.clone())),
             _ => Err(VMError::TypeNotCopyable),
         }
     }
@@ -394,7 +389,6 @@ impl From<CopyableItem> for Item {
         match copyable {
             CopyableItem::Data(x) => Item::Data(x),
             CopyableItem::Variable(x) => Item::Variable(x),
-            CopyableItem::Constraint(x) => Item::Constraint(x),
         }
     }
 }
