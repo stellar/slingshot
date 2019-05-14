@@ -140,8 +140,6 @@ where
         if let Some(instr) = self.delegate.next_instruction(&mut self.current_run)? {
             // Attempt to read the next instruction and advance the program state
             match instr {
-                // the data is just a slice, so the clone would copy the slice struct,
-                // not the actual buffer of bytes.
                 Instruction::Push(data) => self.pushdata(data),
                 Instruction::Program(prog) => self.pushprogram(prog),
                 Instruction::Drop => self.drop()?,
