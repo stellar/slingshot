@@ -150,15 +150,14 @@ categories: [copyable types](#copyable-types) and [linear types](#linear-types).
 
 ### Copyable types
 
-Copyable types can be freely created, copied ([`dup`](#dup)), and destroyed ([`drop`](#drop)).
+Copyable types can be freely created, copied ([`dup`](#dup)), and destroyed ([`drop`](#drop)):
 
 * [Data](#data-type)
 * [Variable](#variable-type)
-* [Expression](#expression-type)
-* [Constraint](#constraint-type)
 
-Note: [program type](#program-type) is not copyable to avoid denial-of-service attacks
-via repeated execution of the same program.
+Note: the [program type](#program-type) is not copyable to avoid denial-of-service attacks
+via repeated execution of the same program that can be scaled exponentially while
+growing the transaction size only linearly.
 
 
 ### Linear types
@@ -167,6 +166,8 @@ Linear types are subject to special rules as to when and how they may be created
 and destroyed, and may never be copied.
 
 * [Program](#program-type)
+* [Expression](#expression-type)
+* [Constraint](#constraint-type)
 * [Contract](#contract-type)
 * [Wide value](#wide-value-type)
 * [Value](#value-type)
@@ -182,7 +183,7 @@ Notes:
 * [Contracts](#contract-type) are not portable because they must be satisfied within the current transaction
 or [output](#output-structure) their contents themselves.
 * [Variables](#variable-type), [expressions](#expression-type) and [constraints](#constraint-type) have no meaning outside the VM state
-and its constraint system and therefore cannot be meaningfully ported between transactions.
+and its constraint system, and therefore cannot be meaningfully ported between transactions.
 
 
 ### Data type
@@ -243,7 +244,6 @@ the result is a linear combination with one term with weight 1:
 
 Expressions can be [added](#add) and [multiplied](#mul), producing new expressions.
 
-Expressions can be copied and dropped at will, but cannot be ported across transactions via [outputs](#output-structure).
 
 ### Constant expression
 
@@ -267,8 +267,6 @@ There are three kinds of constraints:
 3. **Disjunction constraint** is created using the [`or`](#or) instruction over two constraints of any type.
 4. **Inversion constraint** is created using the [`not`](#not) instruction over a constraint of any type.
 5. **Cleartext constraint** is created as a result of _guaranteed optimization_ of the above instructions when executed with [constant expressions](#constant-expression). Cleartext constraint contains a cleartext boolean `true` or `false`.
-
-Constraints and can be copied and dropped at will.
 
 Constraints only have an effect if added to the constraint system using the [`verify`](#verify) instruction.
 
