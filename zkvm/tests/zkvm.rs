@@ -471,6 +471,7 @@ fn taproot_program_path() {
     let pk = VerificationKey::from_secret(&sk);
 
     let (qty, flavor) = (101u64, Scalar::from(1u64));
+
     let (output_pred, _) = generate_predicate();
     let secret_scalar = Scalar::from(101u64);
     let spend_prog = spend_with_secret_scalar(qty, flavor, output_pred.clone(), secret_scalar);
@@ -502,4 +503,27 @@ fn taproot_program_path() {
     if build_and_verify(wrong_prog, &vec![sk + factor]).is_ok() {
         panic!("Unlocking input with incorrect secret scalar should have failed but didn't");
     }
+}
+
+#[test]
+fn programs_cannot_be_copied_or_dropped() {
+    let prog = Program::build(|p| {
+        p.program(Program::build(|inner| inner.verify())) // some arbitrary program
+            .dup(0)
+    });
+
+    assert_eq!(
+        build_and_verify(prog, &vec![]),
+        Err(VMError::TypeNotCopyable)
+    );
+
+    let prog = Program::build(|p| {
+        p.program(Program::build(|inner| inner.verify())) // some arbitrary program
+            .drop()
+    });
+
+    assert_eq!(
+        build_and_verify(prog, &vec![]),
+        Err(VMError::TypeNotCopyable)
+    );
 }

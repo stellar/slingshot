@@ -42,6 +42,22 @@ pub enum Item {
     Constraint(Constraint),
 }
 
+/// An item on a VM stack that can be copied and dropped.
+#[derive(Clone, Debug)]
+pub enum CopyableItem {
+    /// A data item: a text string, a commitment or a scalar
+    Data(Data),
+
+    /// A variable type.
+    Variable(Variable),
+
+    /// An expression type.
+    Expression(Expression),
+
+    /// A constraint type.
+    Constraint(Constraint),
+}
+
 /// A data item.
 #[derive(Clone, Debug)]
 pub enum Data {
@@ -145,13 +161,35 @@ impl Item {
         }
     }
 
-    /// Downcasts item to a portable type (`Data` or `Value`).
+    /// Downcasts item to a portable type.
     pub fn to_portable(self) -> Result<PortableItem, VMError> {
         match self {
             Item::Data(x) => Ok(PortableItem::Data(x)),
             Item::Program(x) => Ok(PortableItem::Program(x)),
             Item::Value(x) => Ok(PortableItem::Value(x)),
             _ => Err(VMError::TypeNotPortable),
+        }
+    }
+
+    /// Downcasts item to a copyable type.
+    pub fn to_copyable(self) -> Result<CopyableItem, VMError> {
+        match self {
+            Item::Data(x) => Ok(CopyableItem::Data(x)),
+            Item::Variable(x) => Ok(CopyableItem::Variable(x)),
+            Item::Expression(x) => Ok(CopyableItem::Expression(x)),
+            Item::Constraint(x) => Ok(CopyableItem::Constraint(x)),
+            _ => Err(VMError::TypeNotCopyable),
+        }
+    }
+
+    /// Copies a copyable type when it's given as a reference.
+    pub fn dup_copyable(&self) -> Result<CopyableItem, VMError> {
+        match self {
+            Item::Data(x) => Ok(CopyableItem::Data(x.clone())),
+            Item::Variable(x) => Ok(CopyableItem::Variable(x.clone())),
+            Item::Expression(x) => Ok(CopyableItem::Expression(x.clone())),
+            Item::Constraint(x) => Ok(CopyableItem::Constraint(x.clone())),
+            _ => Err(VMError::TypeNotCopyable),
         }
     }
 }
@@ -351,6 +389,18 @@ impl From<PortableItem> for Item {
             PortableItem::Data(x) => Item::Data(x),
             PortableItem::Program(x) => Item::Program(x),
             PortableItem::Value(x) => Item::Value(x),
+        }
+    }
+}
+
+// Upcast a copyable item to any item
+impl From<CopyableItem> for Item {
+    fn from(copyable: CopyableItem) -> Self {
+        match copyable {
+            CopyableItem::Data(x) => Item::Data(x),
+            CopyableItem::Variable(x) => Item::Variable(x),
+            CopyableItem::Expression(x) => Item::Expression(x),
+            CopyableItem::Constraint(x) => Item::Constraint(x),
         }
     }
 }

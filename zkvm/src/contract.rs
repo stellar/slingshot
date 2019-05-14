@@ -105,7 +105,8 @@ impl Contract {
         // Predicate  =  <32 bytes>
         //      Item  =  enum { Data, Value }
         //      Data  =  0x00  ||  LE32(len)  ||  <bytes>
-        //     Value  =  0x01  ||  <32 bytes> ||  <32 bytes>
+        //    Program =  0x01  ||  LE32(len)  ||  <bytes>
+        //     Value  =  0x02  ||  <32 bytes> ||  <32 bytes>
         let (mut contract, serialized_contract) = reader.slice(|r| {
             let anchor = Anchor(r.read_u8x32()?);
             let predicate = Predicate::Opaque(r.read_point()?);

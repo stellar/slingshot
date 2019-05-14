@@ -192,13 +192,8 @@ where
     }
 
     fn drop(&mut self) -> Result<(), VMError> {
-        match self.pop_item()? {
-            Item::Data(_) => Ok(()),
-            Item::Variable(_) => Ok(()),
-            Item::Expression(_) => Ok(()),
-            Item::Constraint(_) => Ok(()),
-            _ => Err(VMError::TypeNotCopyable),
-        }
+        let _dropped = self.pop_item()?.to_copyable()?;
+        Ok(())
     }
 
     fn dup(&mut self, i: usize) -> Result<(), VMError> {
@@ -206,14 +201,8 @@ where
             return Err(VMError::StackUnderflow);
         }
         let item_idx = self.stack.len() - i - 1;
-        let item = match &self.stack[item_idx] {
-            Item::Data(x) => Item::Data(x.clone()),
-            Item::Variable(x) => Item::Variable(x.clone()),
-            Item::Expression(x) => Item::Expression(x.clone()),
-            Item::Constraint(x) => Item::Constraint(x.clone()),
-            _ => return Err(VMError::TypeNotCopyable),
-        };
-        self.push_item(item);
+        let copied = self.stack[item_idx].dup_copyable()?;
+        self.push_item(copied);
         Ok(())
     }
 
