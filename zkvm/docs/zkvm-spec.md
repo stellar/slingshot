@@ -150,7 +150,7 @@ categories: [copyable types](#copyable-types) and [linear types](#linear-types).
 
 ### Copyable types
 
-Copyable types can be freely created, copied ([`dup`](#dup)), and destroyed ([`drop`](#drop)):
+Copyable types can be freely created, copied (with [`dup`](#dup)), and destroyed (with [`drop`](#drop)):
 
 * [Data](#data-type)
 * [Variable](#variable-type)
@@ -950,7 +950,7 @@ followed by `x` encoded as a sequence of `n` bytes.
 
 Pushes a [program](#program-type) `x` containing `n` bytes.
 Immediate data `n` is encoded as [LE32](#le32)
-followed by `x` encoded as a sequence of `n` bytes.
+followed by `x`, as a sequence of `n` bytes.
 
 
 #### drop
@@ -1393,7 +1393,7 @@ Fails if:
 _contract(P) prog sig_ **delegate** → _results..._
 
 1. Pop [data](#data-type) `sig`, [program](#program-type) `prog` and the [contract](#contract-type) from the stack.
-2. Reads the [predicate](#predicate) `P` from the contract.
+2. Read the [predicate](#predicate) `P` from the contract.
 3. Place the [contract payload](#contract-payload) on the stack (last item on top), discarding the contract.
 4. Instantiate the [transcript](#transcript):
     ```
