@@ -21,9 +21,8 @@ Accumulator supports five operations:
 
 1. Insert: add a new item to the accumulator.
 2. Verify: check that an item exists using its merkle proof.
-3. Watch:  check that an item exists using its merkle proof, and also mark it as watched.
-4. Delete: check that an item exists using its merkle proof, and also mark it as deleted.
-5. Normalize: prune deleted items, and normalize the shape of the trees, reducing them to their merkle roots.
+3. Delete: check that an item exists using its merkle proof, and also mark it as deleted.
+4. Normalize: prune deleted items, and normalize the shape of the trees, reducing them to their merkle roots.
 
 New items are added to the end of the list.
 Deleted items are verified via the merkle proofs to exit, and marked as deleted without being removed.
@@ -38,17 +37,19 @@ and then the accumulator is normalized at once, which requires update to the exi
 Normalization consists of the following:
 
 1. All marked items and subtrees with only-deleted items are actually removed.
-2. Remaining intermediate nodes are re-organized to form new perfect binary trees.
-3. For each _watched item_, a new merkle proof is extracted from the trees.
+2. Remaining intermediate nodes are re-organized to form new perfect binary trees:
+	* From lowest to highest order `k`, the forest is scanned left-to-right.
+	* Each second `k`-tree is merged with the preceding `k`-tree, replacing it with a new `k+1`-tree.
+	* If there is only one `k`-tree left, it is left as-is.
+3. A _catch-up tree_ is extracted from the new forest.
 4. Each tree is pruned, leaving only the merkle roots in the accumulator.
 
-After normalization, every proof against the previous state of the accumulator becomes invalid and needs to be updated.
+After normalization, every proof against the previous state of the accumulator
+becomes invalid and needs to be updated via the _catch-up tree_.
 
-This can be done either by the original sender of the proof (by updating their proof by syncing up their state of the accumulator),
-or by the recipient, if they stored "catch-up data" (see [optimizations](#optimizations) section below).
-
-Catch-up from one step behind the current state is useful because it allows avoiding re-trying when the proof is very fresh,
-but created just before the client has synced up to a new state of the accumulator.
+_Catch up tree_ is stored till the next normalization, in order to auto-update proofs that were created
+against the previous state of the forest. It is also used to immediately update item proofs
+that belong to the user (that are "watched").
 
 
 ## Definitions
@@ -57,16 +58,20 @@ but created just before the client has synced up to a new state of the accumulat
 
 Entity that can be added and removed from the [state](#state) according to the Utreexo protocol. 
 
-### State
+### Forest
 
-The state is defined as an ordered list of [k-trees](#k-tree), from highest `k` to the lowest.
+The _forest_ is an ordered list of [k-trees](#k-tree), from highest `k` to the lowest.
 
-The collection of k-trees unambiguously encodes the total number of items as a sum of `2^k` for each `k`-tree present in the state.
-The state `{3-tree, 2-tree, 0-tree}` contains 13 items.
+The collection of k-trees unambiguously encodes the total number of items as a sum of `2^k` for each `k`-tree present in the forest.
+The forest `{3-tree, 2-tree, 0-tree}` contains 13 items.
+
+### Tree order
+
+The power of two describing the size of the binary tree. [K-tree](#k-tree) has order `k`.
 
 ### K-tree
 
-A binary tree of exactly `2^k` items. 0-tree contains a single [item](#item).
+A binary tree of [order](#tree-order) `k`, containing `2^k` items. 0-tree contains a single [item](#item).
 
 ### K-tree root
 
@@ -126,8 +131,9 @@ The position of the neighbor root is determined by a correposnding bit in a bina
 A structure with the following fields:
 
 * `root`: a merkle hash.
+* `order`: an order of the tree.
 * `count`: number of remaining items in the subtree.
-* `children`: pair of children, or nil, if this node is pruned.
+* `children`: either a pair of children [Nodes](#node), or _nil_, if the children nodes are pruned.
 
 
 
