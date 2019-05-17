@@ -10,15 +10,18 @@ use crate::contract::{Contract, PortableItem};
 use crate::encoding::SliceReader;
 use crate::errors::VMError;
 use crate::predicate::Predicate;
-use crate::program::{Program, ProgramItem};
+use crate::program::ProgramItem;
 use crate::scalar_witness::ScalarWitness;
 use crate::transcript::TranscriptProtocol;
 
 /// An item on a VM stack.
 #[derive(Debug)]
 pub enum Item {
-    /// A data item.
+    /// A data item: a text string, a commitment or a scalar
     Data(Data),
+
+    /// A program item: a bytecode string for `call`/`delegate` instructions
+    Program(ProgramItem),
 
     /// A contract.
     Contract(Contract),
@@ -39,14 +42,21 @@ pub enum Item {
     Constraint(Constraint),
 }
 
+/// An item on a VM stack that can be copied and dropped.
+#[derive(Clone, Debug)]
+pub enum CopyableItem {
+    /// A data item: a text string, a commitment or a scalar
+    Data(Data),
+
+    /// A variable type.
+    Variable(Variable),
+}
+
 /// A data item.
 #[derive(Clone, Debug)]
 pub enum Data {
     /// Opaque data item.
     Opaque(Vec<u8>),
-
-    /// A program.
-    Program(Program),
 
     /// A predicate.
     Predicate(Box<Predicate>),
@@ -86,6 +96,14 @@ impl Item {
         match self {
             Item::Data(x) => Ok(x),
             _ => Err(VMError::TypeNotData),
+        }
+    }
+
+    /// Downcasts item to `ProgramItem` type.
+    pub fn to_program(self) -> Result<ProgramItem, VMError> {
+        match self {
+            Item::Program(x) => Ok(x),
+            _ => Err(VMError::TypeNotProgramItem),
         }
     }
 
@@ -137,12 +155,31 @@ impl Item {
         }
     }
 
-    /// Downcasts item to a portable type (`Data` or `Value`).
+    /// Downcasts item to a portable type.
     pub fn to_portable(self) -> Result<PortableItem, VMError> {
         match self {
             Item::Data(x) => Ok(PortableItem::Data(x)),
+            Item::Program(x) => Ok(PortableItem::Program(x)),
             Item::Value(x) => Ok(PortableItem::Value(x)),
             _ => Err(VMError::TypeNotPortable),
+        }
+    }
+
+    /// Downcasts item to a copyable type.
+    pub fn to_copyable(self) -> Result<CopyableItem, VMError> {
+        match self {
+            Item::Data(x) => Ok(CopyableItem::Data(x)),
+            Item::Variable(x) => Ok(CopyableItem::Variable(x)),
+            _ => Err(VMError::TypeNotCopyable),
+        }
+    }
+
+    /// Copies a copyable type when it's given as a reference.
+    pub fn dup_copyable(&self) -> Result<CopyableItem, VMError> {
+        match self {
+            Item::Data(x) => Ok(CopyableItem::Data(x.clone())),
+            Item::Variable(x) => Ok(CopyableItem::Variable(x.clone())),
+            _ => Err(VMError::TypeNotCopyable),
         }
     }
 }
@@ -152,7 +189,6 @@ impl Data {
     pub fn serialized_length(&self) -> usize {
         match self {
             Data::Opaque(data) => data.len(),
-            Data::Program(program) => program.serialized_length(),
             Data::Predicate(predicate) => predicate.serialized_length(),
             Data::Commitment(commitment) => commitment.serialized_length(),
             Data::Scalar(scalar) => scalar.serialized_length(),
@@ -219,20 +255,10 @@ impl Data {
         }
     }
 
-    /// Downcast the data item to a `ProgramItem` type.
-    pub fn to_program_item(self) -> Result<ProgramItem, VMError> {
-        match self {
-            Data::Opaque(data) => Ok(ProgramItem::Bytecode(data)),
-            Data::Program(prog) => Ok(ProgramItem::Program(prog)),
-            _ => Err(VMError::TypeNotProgramItem),
-        }
-    }
-
     /// Encodes the data item to an opaque bytestring.
     pub fn encode(&self, buf: &mut Vec<u8>) {
         match self {
             Data::Opaque(x) => buf.extend_from_slice(x),
-            Data::Program(program) => program.encode(buf),
             Data::Predicate(predicate) => predicate.encode(buf),
             Data::Commitment(commitment) => commitment.encode(buf),
             Data::Scalar(scalar) => scalar.encode(buf),
@@ -278,12 +304,6 @@ where
     }
 }
 
-impl From<Program> for Data {
-    fn from(x: Program) -> Self {
-        Data::Program(x)
-    }
-}
-
 impl From<Predicate> for Data {
     fn from(x: Predicate) -> Self {
         Data::Predicate(Box::new(x))
@@ -307,6 +327,12 @@ impl From<Contract> for Data {
 impl From<Data> for Item {
     fn from(x: Data) -> Self {
         Item::Data(x)
+    }
+}
+
+impl From<ProgramItem> for Item {
+    fn from(x: ProgramItem) -> Self {
+        Item::Program(x)
     }
 }
 
@@ -351,7 +377,18 @@ impl From<PortableItem> for Item {
     fn from(portable: PortableItem) -> Self {
         match portable {
             PortableItem::Data(x) => Item::Data(x),
+            PortableItem::Program(x) => Item::Program(x),
             PortableItem::Value(x) => Item::Value(x),
+        }
+    }
+}
+
+// Upcast a copyable item to any item
+impl From<CopyableItem> for Item {
+    fn from(copyable: CopyableItem) -> Self {
+        match copyable {
+            CopyableItem::Data(x) => Item::Data(x),
+            CopyableItem::Variable(x) => Item::Variable(x),
         }
     }
 }

@@ -471,6 +471,7 @@ fn taproot_program_path() {
     let pk = VerificationKey::from_secret(&sk);
 
     let (qty, flavor) = (101u64, Scalar::from(1u64));
+
     let (output_pred, _) = generate_predicate();
     let secret_scalar = Scalar::from(101u64);
     let spend_prog = spend_with_secret_scalar(qty, flavor, output_pred.clone(), secret_scalar);
@@ -486,7 +487,7 @@ fn taproot_program_path() {
             .push(prev_output.clone())
             .input()
             .push(Data::Opaque(call_proof.to_bytes().clone()))
-            .push(Data::Program(call_prog.clone()))
+            .program(call_prog.clone())
             .call()
     });
     build_and_verify(prog, &vec![sk + factor]).unwrap();
@@ -496,10 +497,83 @@ fn taproot_program_path() {
             .push(prev_output.clone())
             .input()
             .push(Data::Opaque(call_proof.to_bytes().clone()))
-            .push(Data::Program(call_prog))
+            .program(call_prog)
             .call()
     });
     if build_and_verify(wrong_prog, &vec![sk + factor]).is_ok() {
         panic!("Unlocking input with incorrect secret scalar should have failed but didn't");
     }
+}
+
+#[test]
+fn programs_cannot_be_copied_or_dropped() {
+    let prog = Program::build(|p| {
+        p.program(Program::build(|inner| inner.verify())) // some arbitrary program
+            .dup(0)
+    });
+
+    assert_eq!(
+        build_and_verify(prog, &vec![]),
+        Err(VMError::TypeNotCopyable)
+    );
+
+    let prog = Program::build(|p| {
+        p.program(Program::build(|inner| inner.verify())) // some arbitrary program
+            .drop()
+    });
+
+    assert_eq!(
+        build_and_verify(prog, &vec![]),
+        Err(VMError::TypeNotCopyable)
+    );
+}
+
+#[test]
+fn expressions_cannot_be_copied_or_dropped() {
+    let prog = Program::build(|p| {
+        p.mintime() // some arbitrary expression
+            .dup(0)
+    });
+
+    assert_eq!(
+        build_and_verify(prog, &vec![]),
+        Err(VMError::TypeNotCopyable)
+    );
+
+    let prog = Program::build(|p| {
+        p.mintime() // some arbitrary expression
+            .drop()
+    });
+
+    assert_eq!(
+        build_and_verify(prog, &vec![]),
+        Err(VMError::TypeNotCopyable)
+    );
+}
+
+#[test]
+fn constraints_cannot_be_copied_or_dropped() {
+    let prog = Program::build(|p| {
+        p.mintime()
+            .mintime()
+            .eq() // some arbitrary constraint
+            .dup(0)
+    });
+
+    assert_eq!(
+        build_and_verify(prog, &vec![]),
+        Err(VMError::TypeNotCopyable)
+    );
+
+    let prog = Program::build(|p| {
+        p.mintime()
+            .mintime()
+            .eq() // some arbitrary constraint
+            .drop()
+    });
+
+    assert_eq!(
+        build_and_verify(prog, &vec![]),
+        Err(VMError::TypeNotCopyable)
+    );
 }

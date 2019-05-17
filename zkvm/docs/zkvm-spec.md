@@ -12,6 +12,7 @@ ZkVM defines a procedural representation for blockchain transactions and the rul
     * [Linear types](#linear-types)
     * [Portable types](#portable-types)
     * [Data](#data-type)
+    * [Program](#program-type)
     * [Contract](#contract-type)
     * [Variable](#variable-type)
     * [Expression](#expression-type)
@@ -32,7 +33,6 @@ ZkVM defines a procedural representation for blockchain transactions and the rul
     * [Transcript](#transcript)
     * [Predicate](#predicate)
     * [Program predicate](#program-predicate)
-    * [Program](#program)
     * [Contract payload](#contract-payload)
     * [Output structure](#output-structure)
     * [UTXO](#utxo)
@@ -101,7 +101,7 @@ ZkVM is the entirely new design that inherits most important insights from the T
 ### Concepts
 
 A transaction is represented by a [transaction](#transaction) object that
-contains a [program](#program) that runs in the context of a stack-based virtual machine.
+contains a [program](#program-type) that runs in the context of a stack-based virtual machine.
 
 When the virtual machine executes a program, it creates and manipulates data of various types:
 [**copyable types**](#copyable-types) and [**linear types**](#linear-types), such as [values](#value-type) and
@@ -147,14 +147,17 @@ transaction’s applicability to the blockchain.
 The items on the ZkVM stack are typed. The available types fall into two 
 categories: [copyable types](#copyable-types) and [linear types](#linear-types).
 
+
 ### Copyable types
 
-Copyable types can be freely created, copied ([`dup`](#dup)), and destroyed ([`drop`](#drop)).
+Copyable types can be freely created, copied (with [`dup`](#dup)), and destroyed (with [`drop`](#drop)):
 
 * [Data](#data-type)
 * [Variable](#variable-type)
-* [Expression](#expression-type)
-* [Constraint](#constraint-type)
+
+Note: the [program type](#program-type) is not copyable to avoid denial-of-service attacks
+via repeated execution of the same program that can be scaled exponentially while
+growing the transaction size only linearly.
 
 
 ### Linear types
@@ -162,6 +165,9 @@ Copyable types can be freely created, copied ([`dup`](#dup)), and destroyed ([`d
 Linear types are subject to special rules as to when and how they may be created
 and destroyed, and may never be copied.
 
+* [Program](#program-type)
+* [Expression](#expression-type)
+* [Constraint](#constraint-type)
 * [Contract](#contract-type)
 * [Wide value](#wide-value-type)
 * [Value](#value-type)
@@ -169,7 +175,7 @@ and destroyed, and may never be copied.
 
 ### Portable types
 
-Only the [data](#data-type) and [value](#value-type) types can be _ported_ across transactions via [outputs](#output-structure).
+Only the [data](#data-type), [program](#program-type) and [value](#value-type) types can be _ported_ across transactions via [outputs](#output-structure).
 
 Notes:
 
@@ -177,14 +183,21 @@ Notes:
 * [Contracts](#contract-type) are not portable because they must be satisfied within the current transaction
 or [output](#output-structure) their contents themselves.
 * [Variables](#variable-type), [expressions](#expression-type) and [constraints](#constraint-type) have no meaning outside the VM state
-and its constraint system and therefore cannot be meaningfully ported between transactions.
+and its constraint system, and therefore cannot be meaningfully ported between transactions.
 
 
 ### Data type
 
-A _data type_ is a variable-length byte array used to represent signatures, proofs and programs.
+A _data type_ is a variable-length byte array used to represent [commitments](#pedersen-commitment), [scalars](#scalar), signatures and proofs.
 
-Data cannot be larger than the entire transaction program and cannot be longer than `2^32-1` (see [LE32](#le32)).
+Data cannot be larger than the entire transaction program and cannot be longer than `2^32-1` bytes (see [LE32](#le32)).
+
+
+### Program type
+
+A _program type_ is a variable-length byte array representing a sequence of ZkVM [instructions](#instructions).
+
+Program cannot be larger than the entire transaction program and cannot be longer than `2^32-1` bytes (see [LE32](#le32)).
 
 
 ### Contract type
@@ -231,7 +244,6 @@ the result is a linear combination with one term with weight 1:
 
 Expressions can be [added](#add) and [multiplied](#mul), producing new expressions.
 
-Expressions can be copied and dropped at will, but cannot be ported across transactions via [outputs](#output-structure).
 
 ### Constant expression
 
@@ -255,8 +267,6 @@ There are three kinds of constraints:
 3. **Disjunction constraint** is created using the [`or`](#or) instruction over two constraints of any type.
 4. **Inversion constraint** is created using the [`not`](#not) instruction over a constraint of any type.
 5. **Cleartext constraint** is created as a result of _guaranteed optimization_ of the above instructions when executed with [constant expressions](#constant-expression). Cleartext constraint contains a cleartext boolean `true` or `false`.
-
-Constraints and can be copied and dropped at will.
 
 Constraints only have an effect if added to the constraint system using the [`verify`](#verify) instruction.
 
@@ -454,7 +464,7 @@ A _predicate_ is a representation of a condition that unlocks the [contract](#co
 
 ### Program predicate
 
-_Program predicate_ is a commitment to a [program](#program) made using
+_Program predicate_ is a commitment to a [program](#program-type) made using
 commitment scalar `h` on a [secondary base point](#base-points) `B2`:
 
 ```
@@ -474,10 +484,6 @@ PP(prog) = h·B2
 Program predicate can be satisfied only via the [`call`](#call) instruction that takes a cleartext program string, verifies the commitment and evaluates the program. Use of the [secondary base point](#base-points) `B2` prevents using the predicate as a [verification key](#verification-key) and signing with `h` without executing the program.
 
 
-### Program
-
-A program is of type [data](#data-type) containing a sequence of ZkVM [instructions](#instructions).
-
 
 ### Contract payload
 
@@ -495,9 +501,10 @@ Output is a serialized [contract](#contract-type):
       Output  =  Anchor || Predicate  ||  LE32(k)  ||  Item[0]  || ... ||  Item[k-1]
       Anchor  =  <32 bytes>
    Predicate  =  <32 bytes>
-        Item  =  enum { Data, Value }
+        Item  =  enum { Data, Program, Value }
         Data  =  0x00  ||  LE32(len)  ||  <bytes>
-       Value  =  0x01  ||  <32 bytes> ||  <32 bytes>
+     Program  =  0x01  ||  LE32(len)  ||  <bytes>
+       Value  =  0x02  ||  <32 bytes> ||  <32 bytes>
 ```
 
 ### UTXO
@@ -528,7 +535,7 @@ required to produce a unique [transaction ID](#transaction-id):
 
 * Version (uint64)
 * [Time bounds](#time-bounds) (pair of [LE64](#le64)s)
-* [Program](#program) (variable-length [data](#data-type))
+* [Program](#program-type)
 * [Transaction signature](#transaction-signature) (64 bytes)
 * [Constraint system proof](#constraint-system-proof) (variable-length array of points and scalars)
 
@@ -702,7 +709,7 @@ V == v·B + 0·B2
 
 Taproot provides efficient and privacy-preserving storage of smart contracts. It is based on [a proposal by Gregory Maxwell](https://lists.linuxfoundation.org/pipermail/bitcoin-dev/2018-January/015614.html). Multi-party blockchain contracts typically have a top-level "success clause" (all parties agree and sign) or "alternative clauses" to let a party exit the contract based on pre-determined constraints. This has three significant features.
 
-1. The alternative clauses `{C_i}`, each of which is a [program](#program), and their corresponding blinding factors are stored as [blinded programs](#blinded-program) and compressed in a [Merkle tree](#merkle-binary-tree) with root `M`.
+1. The alternative clauses `{C_i}`, each of which is a [program](#program-type), and their corresponding blinding factors are stored as [blinded programs](#blinded-program) and compressed in a [Merkle tree](#merkle-binary-tree) with root `M`.
 2. A signing key `X` and the Merkle root `M` (from 1) are committed to a single signing key `P` using a hash function `h1`, such that `P = X + h1(X, M)`. This makes signing for `P` possible if parties want to sign for `X` and avoids revealing the alternative clauses.
 3. Calling a program will check a [call proof](#call-proof) to verify the program's inclusion in the Taproot tree before executing the program.
 
@@ -735,7 +742,7 @@ This gives the neighbor list [`D`, `I`, `N`] and bit pattern `101`. The Merkle p
 
 ### Blinded program
 
-The blinded program is used to construct the [Taproot tree](#taproot). It is an enum that can either be a [program](#program) or its accompanying blinding factor. A leaf element in the Taproot tree is a hash of a blinded program. This lets us store the hash of the blinding factor in the tree: each odd leaf will be the hash of a program, and each even leaf a hash of the program's blinding factor.
+The blinded program is used to construct the [Taproot tree](#taproot). It is an enum that can either be a [program](#program-type) or its accompanying blinding factor. A leaf element in the Taproot tree is a hash of a blinded program. This lets us store the hash of the blinding factor in the tree: each odd leaf will be the hash of a program, and each even leaf a hash of the program's blinding factor.
 
 We commit them to the transcript as follows:
 
@@ -766,8 +773,8 @@ The ZkVM state consists of the static attributes and the state machine attribute
 2. Extension flag (boolean)
 3. Last [anchor](#anchor) or ∅ if unset
 4. Data stack (array of [items](#types))
-5. Program stack (array of [programs](#program) with their offsets)
-6. Current [program](#program) with its offset
+5. Program stack (array of [programs](#program-type) with their offsets)
+6. Current [program](#program-type) with its offset
 7. [Transaction log](#transaction-log) (array of logged items)
 8. Transaction signature verification keys (array of [points](#point))
 9. [Deferred point operations](#deferred-point-operations)
@@ -885,42 +892,43 @@ Code | Instruction                | Stack diagram                              |
 -----|----------------------------|--------------------------------------------|----------------------------------
  |     [**Stack**](#stack-instructions)               |                        |
 0x00 | [`push:n:x`](#push)        |                 ø → _data_                 |
-0x01 | [`drop`](#drop)            |               _x_ → ø                      |
-0x02 | [`dup:k`](#dup)            |     _x[k] … x[0]_ → _x[k] ... x[0] x[k]_   |
-0x03 | [`roll:k`](#roll)          |     _x[k] … x[0]_ → _x[k-1] ... x[0] x[k]_ |
+0x01 | [`program:n:x`](#program)  |                 ø → _program_              |
+0x02 | [`drop`](#drop)            |               _x_ → ø                      |
+0x03 | [`dup:k`](#dup)            |     _x[k] … x[0]_ → _x[k] ... x[0] x[k]_   |
+0x04 | [`roll:k`](#roll)          |     _x[k] … x[0]_ → _x[k-1] ... x[0] x[k]_ |
  |                                |                                            |
  |     [**Constraints**](#constraint-system-instructions)  |                   | 
-0x04 | [`const`](#var)            |          _scalar_ → _expr_                 | 
-0x05 | [`var`](#var)              |           _point_ → _var_                  | Adds an external variable to [CS](#constraint-system)
-0x06 | [`alloc`](#alloc)          |                 ø → _expr_                 | Allocates a low-level variable in [CS](#constraint-system)
-0x07 | [`mintime`](#mintime)      |                 ø → _expr_                 |
-0x08 | [`maxtime`](#maxtime)      |                 ø → _expr_                 |
-0x09 | [`expr`](#expr)            |             _var_ → _expr_                 | Allocates a variable in [CS](#constraint-system)
-0x0a | [`neg`](#neg)              |           _expr1_ → _expr2_                |
-0x0b | [`add`](#add)              |     _expr1 expr2_ → _expr3_                |
-0x0c | [`mul`](#mul)              |     _expr1 expr2_ → _expr3_                | Potentially adds multiplier in [CS](#constraint-system)
-0x0d | [`eq`](#eq)                |     _expr1 expr2_ → _constraint_           | 
-0x0e | [`range:n`](#range)        |            _expr_ → _expr_                 | Modifies [CS](#constraint-system)
-0x0f | [`and`](#and)              | _constr1 constr2_ → _constr3_              |
-0x10 | [`or`](#or)                | _constr1 constr2_ → _constr3_              |
-0x11 | [`not`](#not)              |         _constr1_ → _constr2_              | Modifies [CS](#constraint-system)
-0x12 | [`verify`](#verify)        |      _constraint_ → ø                      | Modifies [CS](#constraint-system) 
-0x13 | [`unblind`](#unblind)      |             _V v_ → _V_                    | [Defers point ops](#deferred-point-operations)
+0x05 | [`const`](#var)            |          _scalar_ → _expr_                 | 
+0x06 | [`var`](#var)              |           _point_ → _var_                  | Adds an external variable to [CS](#constraint-system)
+0x07 | [`alloc`](#alloc)          |                 ø → _expr_                 | Allocates a low-level variable in [CS](#constraint-system)
+0x08 | [`mintime`](#mintime)      |                 ø → _expr_                 |
+0x09 | [`maxtime`](#maxtime)      |                 ø → _expr_                 |
+0x0a | [`expr`](#expr)            |             _var_ → _expr_                 | Allocates a variable in [CS](#constraint-system)
+0x0b | [`neg`](#neg)              |           _expr1_ → _expr2_                |
+0x0c | [`add`](#add)              |     _expr1 expr2_ → _expr3_                |
+0x0d | [`mul`](#mul)              |     _expr1 expr2_ → _expr3_                | Potentially adds multiplier in [CS](#constraint-system)
+0x0e | [`eq`](#eq)                |     _expr1 expr2_ → _constraint_           | 
+0x0f | [`range:n`](#range)        |            _expr_ → _expr_                 | Modifies [CS](#constraint-system)
+0x10 | [`and`](#and)              | _constr1 constr2_ → _constr3_              |
+0x11 | [`or`](#or)                | _constr1 constr2_ → _constr3_              |
+0x12 | [`not`](#not)              |         _constr1_ → _constr2_              | Modifies [CS](#constraint-system)
+0x13 | [`verify`](#verify)        |      _constraint_ → ø                      | Modifies [CS](#constraint-system) 
+0x14 | [`unblind`](#unblind)      |             _V v_ → _V_                    | [Defers point ops](#deferred-point-operations)
  |                                |                                            |
  |     [**Values**](#value-instructions)              |                        |
-0x14 | [`issue`](#issue)          |    _qty flv data pred_ → _contract_        | Modifies [CS](#constraint-system), [tx log](#transaction-log), [defers point ops](#deferred-point-operations)
-0x15 | [`borrow`](#borrow)        |         _qty flv_ → _–V +V_                | Modifies [CS](#constraint-system)
-0x16 | [`retire`](#retire)        |           _value_ → ø                      | Modifies [CS](#constraint-system), [tx log](#transaction-log)
-0x17 | [`cloak:m:n`](#cloak)      | _widevalues commitments_ → _values_        | Modifies [CS](#constraint-system)
+0x15 | [`issue`](#issue)          |    _qty flv data pred_ → _contract_        | Modifies [CS](#constraint-system), [tx log](#transaction-log), [defers point ops](#deferred-point-operations)
+0x16 | [`borrow`](#borrow)        |         _qty flv_ → _–V +V_                | Modifies [CS](#constraint-system)
+0x17 | [`retire`](#retire)        |           _value_ → ø                      | Modifies [CS](#constraint-system), [tx log](#transaction-log)
+0x18 | [`cloak:m:n`](#cloak)      | _widevalues commitments_ → _values_        | Modifies [CS](#constraint-system)
  |                                |                                            |
  |     [**Contracts**](#contract-instructions)        |                        |
-0x18 | [`input`](#input)          |      _prevoutput_ → _contract_             | Modifies [tx log](#transaction-log)
-0x19 | [`output:k`](#output)      |   _items... pred_ → ø                      | Modifies [tx log](#transaction-log)
-0x1a | [`contract:k`](#contract)  |   _items... pred_ → _contract_             | 
-0x1b | [`log`](#log)              |            _data_ → ø                      | Modifies [tx log](#transaction-log)
-0x1c | [`signtx`](#signtx)        |        _contract_ → _results..._           | Modifies [deferred verification keys](#transaction-signature)
-0x1d | [`call`](#call)            |_contract(P) proof prog_ → _results..._     | [Defers point operations](#deferred-point-operations)
-0x1e | [`delegate`](#delegate)    |_contract prog sig_ → _results..._          | [Defers point operations](#deferred-point-operations)
+0x19 | [`input`](#input)          |      _prevoutput_ → _contract_             | Modifies [tx log](#transaction-log)
+0x1a | [`output:k`](#output)      |   _items... pred_ → ø                      | Modifies [tx log](#transaction-log)
+0x1b | [`contract:k`](#contract)  |   _items... pred_ → _contract_             | 
+0x1c | [`log`](#log)              |            _data_ → ø                      | Modifies [tx log](#transaction-log)
+0x1d | [`signtx`](#signtx)        |        _contract_ → _results..._           | Modifies [deferred verification keys](#transaction-signature)
+0x1e | [`call`](#call)            |_contract(P) proof prog_ → _results..._     | [Defers point operations](#deferred-point-operations)
+0x1f | [`delegate`](#delegate)    |_contract prog sig_ → _results..._          | [Defers point operations](#deferred-point-operations)
   —  | [`ext`](#ext)              |                 ø → ø                      | Fails if [extension flag](#vm-state) is not set.
 
 
@@ -936,6 +944,14 @@ Pushes a [data](#data-type) `x` containing `n` bytes.
 Immediate data `n` is encoded as [LE32](#le32)
 followed by `x` encoded as a sequence of `n` bytes.
 
+#### program
+
+**program:_n_:_x_** → _program_
+
+Pushes a [program](#program-type) `x` containing `n` bytes.
+Immediate data `n` is encoded as [LE32](#le32)
+followed by `x`, as a sequence of `n` bytes.
+
 
 #### drop
 
@@ -950,7 +966,7 @@ Fails if `x` is not a [copyable type](#copyable-types).
 
 _x[k] … x[0]_ **dup:_k_** → _x[k] ... x[0] x[k]_
 
-Copies k’th data item from the top of the stack.
+Copies k’th [data item](#data-type) from the top of the stack.
 Immediate data `k` is encoded as [LE32](#le32).
 
 Fails if `x[k]` is not a [copyable type](#copyable-types).
@@ -1298,14 +1314,16 @@ Fails if the `prevoutput` is not a [data type](#data-type) with exact encoding o
 _items... predicate_ **output:_k_** → ø
 
 1. Pops [`predicate`](#predicate) from the stack.
-2. Pops `k` items from the stack.
+2. Pops `k` [portable items](#portable-types) from the stack.
 3. Creates a contract with the `k` items as a payload, the predicate `pred`, and anchor set to the [VM’s last anchor](#vm-state).
 4. Adds an [output entry](#output-entry) to the [transaction log](#transaction-log).
 5. Updates the [VM’s last anchor](#vm-state) with the [contract ID](#contract-id) of the new contract.
 
 Immediate data `k` is encoded as [LE32](#le32).
 
-Fails if VM’s [last anchor](#vm-state) is not set.
+Fails if:
+* VM’s [last anchor](#vm-state) is not set,
+* payload items are not [portable](#portable-types).
 
 
 #### contract
@@ -1313,14 +1331,16 @@ Fails if VM’s [last anchor](#vm-state) is not set.
 _items... pred_ **contract:_k_** → _contract_
 
 1. Pops [predicate](#predicate) `pred` from the stack.
-2. Pops `k` items from the stack.
+2. Pops `k` [portable items](#portable-types) from the stack.
 3. Creates a contract with the `k` items as a payload, the predicate `pred`, and anchor set to the [VM’s last anchor](#vm-state).
 4. Pushes the contract onto the stack.
 5. Update the [VM’s last anchor](#vm-state) with the [contract ID](#contract-id) of the new contract.
 
 Immediate data `k` is encoded as [LE32](#le32).
 
-Fails if VM’s [last anchor](#vm-state) is missing.
+Fails if:
+* VM’s [last anchor](#vm-state) is not set,
+* payload items are not [portable](#portable-types).
 
 
 #### log
@@ -1350,10 +1370,10 @@ is deferred until the end of VM execution.
 #### call
 
 _contract(P) proof prog_ **call** → _results..._
-1. Pops program [data](#data-type) `prog`, the [call proof](#call-proof) `proof`, and a [contract](#contract-type) `contract`.
+1. Pops [program](#program-type) `prog`, the [call proof](#call-proof) `proof`, and a [contract](#contract-type) `contract`.
 2. Reads the [predicate](#predicate) `P` from the contract.
 3. Reads the signing key `X`, list of neighbors `neighbors`, and their positions `positions` from the [call proof](#call-proof) `proof`.
-4. Uses the [program](#program) `prog`, `neighbors`, and `positions` to compute the Merkle root `M`.
+4. Uses the [program](#program-type) `prog`, `neighbors`, and `positions` to compute the Merkle root `M`.
 5. Forms a statement to verify a relation between `P`, `M`, and `X`:
     ```
     0 == -P + X + h1(X, M)·G
@@ -1362,45 +1382,47 @@ _contract(P) proof prog_ **call** → _results..._
 7. Places the [payload](#contract-payload) on the stack (last item on top).
 8. Set the `prog` as current.
 
-Fails if the top two items are not [data](#data-type) or the third from top is not a [contract](#contract-type).
+Fails if:
+1. `prog` is not a [program type](#program-type),
+2. or `proof` is not a [data type](#data-type),
+3. or `contract` is not a [contract type](#contract-type).
 
 
 #### delegate
 
-_contract prog sig_ **delegate** → _results..._
+_contract(P) prog sig_ **delegate** → _results..._
 
-1. Pop [data](#data-type) `sig`, [data](#data-type) `prog` and the [contract](#contract-type) from the stack.
-
-2. Place the [contract payload](#contract-payload) on the stack (last item on top), discarding the contract.
-
-3. Instantiate the [transcript](#transcript):
+1. Pop [data](#data-type) `sig`, [program](#program-type) `prog` and the [contract](#contract-type) from the stack.
+2. Read the [predicate](#predicate) `P` from the contract.
+3. Place the [contract payload](#contract-payload) on the stack (last item on top), discarding the contract.
+4. Instantiate the [transcript](#transcript):
     ```
     T = Transcript("ZkVM.delegate")
     ```
-4. Commit the [contract ID](#contract-id) `contract.id` to the transcript:
+5. Commit the [contract ID](#contract-id) `contract.id` to the transcript:
     ```
     T.commit("contract", contract_id)
     ```
-5. Commit the program `prog` to the transcript:
+6. Commit the program `prog` to the transcript:
     ```
     T.commit("prog", prog)
     ```
-6. Extract nonce commitment `R` and scalar `s` from a 64-byte data `sig`:
+7. Extract nonce commitment `R` and scalar `s` from a 64-byte data `sig`:
     ```
     R = sig[ 0..32]
     s = sig[32..64]
     ```
-7. Perform the [signature protocol](../../musig/docs/musig-spec.md#single-message-signature) using the transcript `T`, public key `contract.predicate` and the values `R` and `s`:
+8. Perform the [signature protocol](../../musig/docs/musig-spec.md#single-message-signature) using the transcript `T`, public key `P` and the values `R` and `s`:
     ```
     (s = dlog(R) + e·dlog(P))
     s·B  ==  R + e·P
     ```
-8. Add the statement to the list of [deferred point operations](#deferred-point-operations).
-9. Set the `prog` as current.
+9. Add the statement to the list of [deferred point operations](#deferred-point-operations).
+10. Set the `prog` as current.
 
 Fails if:
-1. the `sig` is not a 64-byte long [data](#data-type),
-2. or `prog` is not a [data type](#data-type),
+1. `sig` is not a 64-byte long [data](#data-type),
+2. or `prog` is not a [program type](#program-type),
 3. or `contract` is not a [contract type](#contract-type).
 
 
