@@ -38,7 +38,7 @@ Normalization consists of the following:
 
 1. All marked items and subtrees with only-deleted items are actually removed.
 2. Remaining intermediate nodes are re-organized to form new perfect binary trees:
-	* From lowest to highest order `k`, the forest is scanned left-to-right.
+	* From lowest to highest level `k`, the forest is scanned left-to-right.
 	* Each second `k`-tree is merged with the preceding `k`-tree, replacing it with a new `k+1`-tree.
 	* If there is only one `k`-tree left, it is left as-is.
 3. A _catch-up tree_ is extracted from the new forest.
@@ -65,13 +65,13 @@ The _forest_ is an ordered list of [k-trees](#k-tree), from highest `k` to the l
 The collection of k-trees unambiguously encodes the total number of items as a sum of `2^k` for each `k`-tree present in the forest.
 The forest `{3-tree, 2-tree, 0-tree}` contains 13 items.
 
-### Tree order
+### Tree level
 
-The power of two describing the size of the binary tree. [K-tree](#k-tree) has order `k`.
+The power of two describing the size of the binary tree. [K-tree](#k-tree) has level `k`.
 
 ### K-tree
 
-A binary tree of [order](#tree-order) `k`, containing `2^k` items. 0-tree contains a single [item](#item).
+A binary tree of [level](#tree-level) `k`, containing `2^k` items. 0-tree contains a single [item](#item).
 
 ### K-tree root
 
@@ -131,7 +131,7 @@ The position of the neighbor root is determined by a correposnding bit in a bina
 A structure with the following fields:
 
 * `root`: a merkle hash.
-* `order`: an order of the tree.
+* `level`: an order of the tree.
 * `count`: number of remaining items in the subtree.
 * `children`: either a pair of children [Nodes](#node), or _nil_, if the children nodes are pruned.
 
