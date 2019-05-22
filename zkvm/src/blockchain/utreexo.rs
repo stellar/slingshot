@@ -2,14 +2,14 @@ use crate::merkle::MerkleItem;
 use merlin::Transcript;
 use std::collections::HashMap;
 
-const UTREEXO_NODE_LABEL: &'static [u8] = b"ZkVM.utreexo.node";
-const UTREEXO_ROOT_LABEL: &'static [u8] = b"ZkVM.utreexo.root";
-
 /// Merkle hash of a node
 type Hash = [u8; 32];
 
 /// Absolute position of an item in the tree.
 type Position = u64;
+
+/// Index of a `Node` within a forest's heap storage.
+type NodeIndex = u32;
 
 /// Merkle proof of inclusion of a node in a `Forest`.
 /// The exact tree is determined by the `position`, an absolute position of the item
@@ -38,12 +38,10 @@ pub enum UtreexoError {
     /// to which it should.
     #[fail(display = "Merkle proof is invalid")]
     InvalidMerkleProof,
-}
 
-/// Index of a `Node` within a forest's heap storage.
-#[derive(Copy, Clone, PartialEq, Debug)]
-struct NodeIndex {
-    index: u32,
+    /// This error occurs when the Utreexo state is found in inconsistent/unexpected shape.
+    #[fail(display = "Utreexo is inconsistent!")]
+    InternalInconsistency,
 }
 
 /// Node represents a leaf or an intermediate node in one of the trees.
@@ -61,18 +59,12 @@ struct Node {
 
 struct Forest {
     generation: u64,
-    trees: Vec<NodeIndex>,          // collection of existing nodes
-    inserted_trees: Vec<NodeIndex>, // collection of inserted items
+    trees: Vec<NodeIndex>,      // collection of existing nodes
+    insertions: Vec<NodeIndex>, // collection of inserted items
     heap: Vec<Node>,
+    // helper structure that allows auto-updating the outdated `Proofs`.
+    catchup: HashMap<Hash, (NodeIndex, Position)>, // node hash -> node index, new position offset for this node
     node_hasher: NodeHasher,
-}
-
-/// Helper structure that allows auto-updating the outdated `Proofs`.
-/// The proof's generation should be the catchup generation - 1.
-/// The node indices correspond to the forest of the same generation as the Catchup structure.
-struct Catchup {
-    generation: u64,
-    map: HashMap<Hash, (NodeIndex, Position)>, // node hash -> node index, new position offset for this node
 }
 
 /// Precomputed instance for hashing the nodes
@@ -86,8 +78,9 @@ impl Default for Forest {
         Forest {
             generation: 0,
             trees: Vec::new(),
-            inserted_trees: Vec::new(),
+            insertions: Vec::new(),
             heap: Vec::new(),
+            catchup: HashMap::new(),
             node_hasher: NodeHasher::new(),
         }
     }
@@ -103,9 +96,9 @@ impl Forest {
             parent: None,
             children: None,
         };
-        let node_index: NodeIndex = self.heap.len().into();
+        let node_index = self.heap.len() as NodeIndex;
         self.heap.push(node);
-        self.inserted_trees.push(node_index);
+        self.insertions.push(node_index);
     }
 
     /// Fills in the missing nodes in the tree, and marks the item as deleted.
@@ -114,7 +107,7 @@ impl Forest {
     ///
     /// Consider the following partially filled tree due to previous operations:
     ///
-    /// ```
+    /// ```ascii
     /// A         level 4
     /// | \
     /// B  C      level 3
@@ -124,7 +117,7 @@ impl Forest {
     ///
     /// Then, an item H is deleted at absolute position 10, with a merkle proof `J',F',E',B'`:
     ///
-    /// ```
+    /// ```ascii
     /// A         
     /// | \
     /// B  C   
@@ -142,7 +135,7 @@ impl Forest {
     ///
     /// Then, we walk the merkle proof up to node `D`:
     ///
-    /// ```
+    /// ```ascii
     /// hash(H',J') -> G'
     /// hash(F',G') -> D'
     /// ```
@@ -151,7 +144,7 @@ impl Forest {
     /// Otherwise, continue walking up the tree to the actual root (A),
     /// but instead of hashing, simply compare remaining steps in the proof with the stored nodes:
     ///
-    /// ```
+    /// ```ascii
     /// E' == E
     /// B' == B
     /// ```
@@ -161,14 +154,30 @@ impl Forest {
     /// inclusion into D already).
     ///
     pub fn delete<M: MerkleItem>(&mut self, item: &M, proof: &Proof) -> Result<(), UtreexoError> {
+        // TBD.
+        // if (proof.generation+1) == self.generation {
+        //     proof = self.catchup(proof)?;
+        // }
         if proof.generation != self.generation {
             return Err(UtreexoError::OutdatedProof);
         }
 
+        // 0. Fast check: if the proof relates to a newly added item, simply remove it,
+        //    so that transient items do not take up space until normalization.
+        let ins_offset = self.insertions_offset();
+        if proof.position >= ins_offset {
+            let i = proof.position - ins_offset;
+            if proof.neighbors.len() != 0 {
+                // proof must be empty
+                return Err(UtreexoError::InvalidMerkleProof);
+            }
+            self.insertions.remove(i as usize);
+            return Ok(());
+        }
+
         // 1. Locate the most nested node that we have under which the item.position is supposedly located.
-        let (top_index, tree_offset) = self.top_node_containing_position(proof.position)?;
-        let top_level = self.node_at(&top_index).level;
-        let local_position = proof.position - tree_offset;
+        let top_index = self.top_node_containing_position(proof.position)?;
+        let top_level = self.node_at(top_index).level;
 
         // 2. The proof should be of exact size from a leaf up to a tree root.
         if proof.neighbors.len() != top_level as usize {
@@ -177,11 +186,14 @@ impl Forest {
 
         // 3. Find the lowest-available node in a tree, up to which
         //    we have to fill in the missing nodes based on the merkle proof.
-        let lower_index = self.lowest_node_containing_position(top_index, local_position);
+        let lower_index = self.lowest_node_containing_position(top_index, proof.position);
 
         // 4. Now, walk the merkle proof starting with the leaf,
-        //    `creating the missing nodes until we hit the lower root.
-        let lower_node = self.node_at(&lower_index);
+        //    creating the missing nodes until we hit the lower root.
+        let lower_node = self.node_at(lower_index);
+        let lower_level = lower_node.level;
+        let mut new_nodes = Vec::<Node>::with_capacity(2 * lower_level as usize);
+
         let mut current = Node {
             root: Node::hash_leaf(self.node_hasher.clone(), item),
             level: 0,
@@ -189,55 +201,18 @@ impl Forest {
             parent: None,
             children: None,
         };
-        let mut new_nodes = Vec::<Node>::with_capacity(2 * lower_node.level as usize);
-        for i in 0..lower_node.level {
-            let sibling_hash = proof.neighbors[i as usize];
-            let mut sibling = Node {
-                root: sibling_hash,
-                level: current.level,
-                deletions: 0,
-                parent: None,
-                children: None,
-            };
+        for i in 0..lower_level {
+            let heap_offset = (self.heap.len() + new_nodes.len()) as NodeIndex;
 
-            // new nodes are appended to the heap, so we know what the indices would be
-            // even before we add new nodes to the heap.
-            let curr_i = NodeIndex {
-                index: (self.heap.len() + new_nodes.len()) as u32,
-            };
-            let sibl_i = NodeIndex {
-                index: curr_i.index + 1,
-            };
-            let prnt_i = NodeIndex {
-                index: curr_i.index + 2,
-            }; // this will be overwritten if parent == lower
+            let (parent, (current2, sibling)) =
+                self.build_tree_step(current, heap_offset, i, &proof);
 
-            current.parent = Some(prnt_i);
-            sibling.parent = Some(prnt_i);
-
-            // reordering of current/sibling is done only for hashing.
-            // we guarantee that the current node is always going before the sibling on the heap,
-            // to have stable parent index (parent is always stored before its sibling).
-            let (l, li, r, ri) = if ((proof.position >> i) & 1) == 0 {
-                (&current, curr_i, &sibling, sibl_i)
-            } else {
-                (&sibling, sibl_i, &current, curr_i)
-            };
-
-            let parent_node = Node {
-                root: Node::hash_intermediate(self.node_hasher.clone(), &l.root, &r.root),
-                level: i + 1,
-                deletions: 0,
-                parent: None,
-                children: Some((li, ri)),
-            };
-
-            new_nodes.push(current);
+            new_nodes.push(current2);
             new_nodes.push(sibling);
 
             // parent is either added with its sibling on the next iteration, or
             // replaced by a lower_node if it matches it
-            current = parent_node;
+            current = parent;
         }
 
         // 5. Check if we arrived at a correct lowest-available node.
@@ -247,56 +222,32 @@ impl Forest {
         }
 
         // 6. Check the rest of the merkle proof against all parents up to the top node.
-        let mut node_index = lower_index;
-        for i in lower_node.level..top_level {
-            // parent/children references for intermediate nodes
-            // MUST be present in a well-formed forest, so we can unwrap() them.
-            let parent_index = self.heap[node_index.index as usize].parent.unwrap();
-            let (li, ri) = self.node_at(&parent_index).children.unwrap();
-            let bit = (local_position >> i) & 1;
-            let neighbor_index = if bit == 0 { ri } else { li };
-            if proof.neighbors[i as usize] != self.node_at(&neighbor_index).root {
-                return Err(UtreexoError::InvalidMerkleProof);
-            }
-            node_index = parent_index
-        }
+        self.check_proof_against_tree(lower_index, &proof)?;
 
         // All checks succeeded: we can now attach new nodes and
         // update the deletions count up to the root.
 
-        // Children should point to the existing lower node
-        current.children.map(|(l, r)| {
-            (&mut self.heap[l.index as usize]).parent = Some(lower_index);
-            (&mut self.heap[r.index as usize]).parent = Some(lower_index);
-        });
-        // Existing node should point to new children (can be None if the lower node is a leaf)
-        let mut lower_node = self.mut_node_at(&lower_index);
-        lower_node.children = current.children;
+        // Connect children to the existing lower node, discarding the `current` node.
+        self.connect_children(lower_index, current.children);
 
         // Move newly created nodes into the main heap
-        let leaf_index: NodeIndex = if lower_node.level == 0 {
+        let leaf_index: NodeIndex = if lower_level == 0 {
             lower_index
         } else {
             // if the lower level was not the leaf, the first new node is the leaf node.
-            self.heap.len().into()
+            self.heap.len() as NodeIndex
         };
         self.heap.extend_from_slice(&new_nodes);
 
         // Update deletions count for all nodes, starting with the leaf.
-        let mut node_index = Some(leaf_index);
-        while let Some(i) = node_index {
-            let mut node = self.mut_node_at(&i);
-            node.deletions += 1;
-            node_index = node.parent;
-        }
+        self.mark_as_deleted(leaf_index);
 
         Ok(())
     }
 
     /// Normalizes the forest into minimal number of ordered perfect trees.
-    /// Returns a new instance of the forest, with defragmented heap, and a Catchup
-    /// structure that allows updating the stale proofs (made against the previous Forest generation).
-    pub fn normalize(self) -> (Forest, Catchup) {
+    /// Returns a new instance of the forest, with defragmented heap.
+    pub fn normalize(self) -> Forest {
         // 1. Relocate all perfect nodes (w/o deletions) nodes into a new forest.
         // 2. Scan levels from 0 to max level, connecting pairs of the closest same-level nodes.
         // 3. Traverse the entire tree creating Catchup entries with new offsets for all old leaves
@@ -309,17 +260,108 @@ impl Forest {
         unimplemented!()
     }
 
+    // /// Catches up the proof
+    // fn catchup(&self, ) -> (Proof, ) {
+
+    // }
+
+    /// Builds a new node
+    fn build_tree_step(
+        &self,
+        mut current: Node,
+        heap_offset: NodeIndex,
+        level: u8,
+        proof: &Proof,
+    ) -> (Node, (Node, Node)) {
+        // new nodes are appended to the heap, so we know what the indices would be
+        // even before we add new nodes to the heap.
+        let curr_i = heap_offset;
+        let sibl_i = heap_offset + 1;
+        let prnt_i = heap_offset + 2;
+
+        current.parent = Some(prnt_i);
+
+        let sibling = Node {
+            root: proof.neighbors[level as usize],
+            level,
+            deletions: 0,
+            parent: Some(prnt_i),
+            children: None,
+        };
+
+        // reordering of current/sibling is done only for hashing.
+        // we guarantee that the current node is always going before the sibling on the heap,
+        // to have stable parent index (parent is always stored before its sibling).
+        let (l, li, r, ri) = if ((proof.position >> level) & 1) == 0 {
+            (&current, curr_i, &sibling, sibl_i)
+        } else {
+            (&sibling, sibl_i, &current, curr_i)
+        };
+
+        let parent_node = Node {
+            root: Node::hash_intermediate(self.node_hasher.clone(), &l.root, &r.root),
+            level: level + 1,
+            deletions: 0,
+            parent: None,
+            children: Some((li, ri)),
+        };
+
+        (parent_node, (current, sibling))
+    }
+
+    /// Checks the relevant tail of the merkle proof against existing nodes
+    /// starting with a given node index. This uses precomputed hashes stored in the tree,
+    /// without hashing anything at all.
+    fn check_proof_against_tree(
+        &self,
+        mut node_index: NodeIndex,
+        proof: &Proof,
+    ) -> Result<(), UtreexoError> {
+        let lower_level = self.node_at(node_index).level;
+        let top_level = proof.neighbors.len() as u8; // the correctness of the proof length is checked by the caller
+        for i in lower_level..top_level {
+            // parent/children references for intermediate nodes
+            // MUST be present in a well-formed forest.
+            let parent_index = self
+                .node_at(node_index)
+                .parent
+                .ok_or(UtreexoError::InternalInconsistency)?;
+            let (li, ri) = self
+                .node_at(parent_index)
+                .children
+                .ok_or(UtreexoError::InternalInconsistency)?;
+            let bit = (proof.position >> i) & 1;
+            let neighbor_index = if bit == 0 { ri } else { li };
+            if proof.neighbors[i as usize] != self.node_at(neighbor_index).root {
+                return Err(UtreexoError::InvalidMerkleProof);
+            }
+            node_index = parent_index
+        }
+        Ok(())
+    }
+    /// Sets the parent/children references between the nodes at the given indices.
+    fn connect_children(
+        &mut self,
+        parent_index: NodeIndex,
+        children: Option<(NodeIndex, NodeIndex)>,
+    ) {
+        children.map(|(l, r)| {
+            self.mut_node_at(l).parent = Some(parent_index);
+            self.mut_node_at(r).parent = Some(parent_index);
+        });
+        // Existing node should point to new children (can be None if the lower node is a leaf)
+        let mut parent = self.mut_node_at(parent_index);
+        parent.children = children;
+    }
+
     /// Returns the index of the tree containing an item at a given position,
     /// and the offset of that tree within the set of all items.
     /// `position-offset` would be the position within that tree.
-    fn top_node_containing_position(
-        &self,
-        position: Position,
-    ) -> Result<(NodeIndex, Position), UtreexoError> {
+    fn top_node_containing_position(&self, position: Position) -> Result<NodeIndex, UtreexoError> {
         let mut offset: Position = 0;
         let mut root_index: Result<NodeIndex, _> = Err(UtreexoError::ItemOutOfBounds);
-        for node_index in self.trees.iter().chain(self.inserted_trees.iter()) {
-            let node = self.node_at(node_index);
+        for node_index in self.trees.iter() {
+            let node = self.node_at(*node_index);
             let tree_size = node.max_count();
             if position < (offset + tree_size) {
                 // this item should be under this top-level node
@@ -329,7 +371,17 @@ impl Forest {
                 offset += tree_size;
             }
         }
-        Ok((root_index?, offset))
+        root_index
+    }
+
+    /// Offset of all inserted items.
+    /// Same as the count of all items after normalization, without considering
+    /// deletions and insertions.
+    fn insertions_offset(&self) -> Position {
+        self.trees
+            .iter()
+            .map(|i| self.node_at(*i).max_count())
+            .sum()
     }
 
     /// Returns the index of a lowest available node that contains an item at a given position
@@ -339,22 +391,31 @@ impl Forest {
         top_index: NodeIndex,
         position: Position,
     ) -> NodeIndex {
-        let mut lower_index = top_index;
-        while let Some((left, right)) = self.node_at(&lower_index).children {
-            let bit = (position >> (self.node_at(&lower_index).level - 1)) & 1;
-            lower_index = if bit == 0 { left } else { right };
+        let mut i = top_index;
+        while let Some((left, right)) = self.node_at(i).children {
+            let level = self.node_at(i).level - 1;
+            let bit = (position >> level) & 1;
+            i = if bit == 0 { left } else { right };
         }
-        lower_index
+        i
     }
 
-    fn mut_node_at(&mut self, index: &NodeIndex) -> &mut Node {
-        let i = index.index as usize;
-        &mut self.heap[i]
+    /// Marks the node as deleted and updates deletions counters in all its parent nodes.
+    fn mark_as_deleted(&mut self, index: NodeIndex) {
+        let mut index = Some(index);
+        while let Some(i) = index {
+            let mut node = self.mut_node_at(i);
+            node.deletions += 1;
+            index = node.parent;
+        }
     }
 
-    fn node_at(&self, index: &NodeIndex) -> &Node {
-        let i = index.index as usize;
-        &self.heap[i]
+    fn mut_node_at(&mut self, i: NodeIndex) -> &mut Node {
+        &mut self.heap[i as usize]
+    }
+
+    fn node_at(&self, i: NodeIndex) -> &Node {
+        &self.heap[i as usize]
     }
 }
 
@@ -362,7 +423,7 @@ impl NodeHasher {
     /// Creates a hasher
     fn new() -> Self {
         Self {
-            transcript: Transcript::new(UTREEXO_NODE_LABEL),
+            transcript: Transcript::new(b"ZkVM.utreexo"),
         }
     }
 }
@@ -391,22 +452,6 @@ impl Node {
         let mut hash = [0; 32];
         h.transcript.challenge_bytes(b"merkle.node", &mut hash);
         hash
-    }
-}
-
-impl NodeIndex {
-    fn none() -> Self {
-        NodeIndex {
-            index: u32::max_value(),
-        }
-    }
-}
-
-impl From<usize> for NodeIndex {
-    fn from(index: usize) -> Self {
-        NodeIndex {
-            index: index as u32,
-        }
     }
 }
 

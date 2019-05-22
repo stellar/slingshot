@@ -153,13 +153,24 @@ TBD.
 
 TBD.
 
-### Watch
-
-TBD.
-
 ### Delete
 
-TBD.
+If we catch up the proof:
+
+1. Build new nodes until we find the node in the Catchup map.
+2. Adjust the local position within that node.
+
+If proof is up to date:
+
+1. Find the root and the lowest available node for the item.
+2. Build new nodes till we meet this item.
+
+Common part:
+
+3. Verify the rest of the proof up to the root.
+4. Attach the new nodes.
+
+
 
 ### Normalize
 
