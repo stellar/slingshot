@@ -77,8 +77,8 @@ struct PackedNode {
 #[derive(Clone)]
 struct Forest {
     generation: u64,
-    trees: Vec<NodeIndex>,      // collection of existing nodes
-    insertions: Vec<NodeIndex>, // collection of inserted items
+    trees: Vec<NodeIndex>, // collection of existing nodes
+    insertions: Vec<Hash>, // hashes of newly inserted items
     heap: Vec<PackedNode>,
     node_hasher: NodeHasher,
 }
@@ -110,9 +110,8 @@ impl Default for Forest {
 impl Forest {
     /// Adds a new item to the tree, appending a node to the end.
     pub fn insert<M: MerkleItem>(&mut self, item: &M) {
-        let node = self.make_leaf(item);
-        self.heap.push(node.pack());
-        self.insertions.push(node.index);
+        let hash = Node::hash_leaf(self.node_hasher.clone(), item);
+        self.insertions.push(hash);
     }
 
     /// Fills in the missing nodes in the tree, and marks the item as deleted.
@@ -179,13 +178,18 @@ impl Forest {
         //    so that transient items do not take up space until normalization.
         let ins_offset = self.insertions_offset();
         if proof.position >= ins_offset {
-            let i = proof.position - ins_offset;
+            let i = (proof.position - ins_offset) as usize;
             if proof.neighbors.len() != 0 {
                 // proof must be empty
                 return Err(UtreexoError::InvalidMerkleProof);
             }
-            self.insertions.remove(i as usize);
-            return Ok(());
+            // make sure the deleted item actually matches the stored hash
+            if self.insertions[i] == Node::hash_leaf(self.node_hasher.clone(), item) {
+                self.insertions.remove(i as usize);
+                return Ok(());
+            } else {
+                return Err(UtreexoError::InvalidMerkleProof);
+            }
         }
 
         // 1. Locate the most nested node that we have under which the item.position is supposedly located.
@@ -252,14 +256,28 @@ impl Forest {
     /// Normalizes the forest into minimal number of ordered perfect trees.
     /// Returns a new instance of the forest, with defragmented heap.
     pub fn normalize(self) -> (Forest, Catchup) {
-        // 1. Relocate all perfect nodes (w/o deletions) nodes into a new forest.
+        // 1. Relocate all perfect nodes (w/o deletions) into a new forest.
         // 2. Scan levels from 0 to max level, connecting pairs of the closest same-level nodes.
         // 3. Traverse the entire tree creating Catchup entries with new offsets for all old leaves
         //    without children (ignoring new leaves).
-        // 4. Return the resulting Forest and Catchup structure.
+        // 4. Extract a thinner Forest structure to return separately,
+        //    so it can be kept while Catchup can be optionally discarded.
         //
         // Note: the forest is not fully trimmed - for Catchup to work, it contains intermediate nodes
         // between the new roots and the old intermediate nodes.
+        fn collect_non_modified_nodes(buf: &mut Vec<PackedNode>, node_index: NodeIndex) {
+            let node = self.node_at(node_index);
+            if !node.modified {
+                buf.push
+            }
+        }
+
+        let mut new_trees = Vec::<PackedNode>::new();
+
+        for root in self.trees.iter() {
+            collect_non_modified_nodes(&mut new_trees)
+        }
+
 
         unimplemented!()
     }
