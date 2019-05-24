@@ -265,18 +265,79 @@ impl Forest {
         //
         // Note: the forest is not fully trimmed - for Catchup to work, it contains intermediate nodes
         // between the new roots and the old intermediate nodes.
-        fn collect_non_modified_nodes(buf: &mut Vec<PackedNode>, node_index: NodeIndex) {
-            let node = self.node_at(node_index);
+
+        // Collect all nodes that were not modified.
+        fn collect_non_modified_nodes(forest: &Forest, buf: &mut Vec<PackedNode>, node_index: NodeIndex) {
+            let node = forest.node_at(node_index);
             if !node.modified {
-                buf.push
+                buf.push(Node{
+                    root: node.root,
+                    index: buf.len() as NodeIndex,
+                    level: node.level,
+                    modified: false,
+                    parent: None, // forget parent - there will be a new one in the new forest
+                    children: None, // trim children
+                }.pack())
+            } else {
+                // node is modified - find the non-modified children
+                if let Some((l,r)) = node.children {
+                    collect_non_modified_nodes(forest, buf, l);
+                    collect_non_modified_nodes(forest, buf, r);
+                }
             }
         }
 
-        let mut new_trees = Vec::<PackedNode>::new();
+        let mut new_forest = Forest {
+            generation: self.generation + 1,
+            trees: Vec::new(),
+            insertions: Vec::new(), // will remain empty
+            heap: Vec::new(),
+            node_hasher: self.node_hasher,
+        };
 
+
+        // We will add new nodes into this buffer as we build new trees
         for root in self.trees.iter() {
-            collect_non_modified_nodes(&mut new_trees)
+            collect_non_modified_nodes(&self, &mut new_forest.heap, *root);
         }
+
+        /// We will replace these with higher-level trees as we construct a new forest.
+        new_forest.trees = (0..(relocated_nodes.len() as NodeIndex)).collect::<Vec<NodeIndex>>();
+
+        // Add all the newly created nodes.
+        // Problem: we need to avoid adding insertions to the Catchup table,
+        // and their new parent nodes (with purely new children).
+        // To do that, we'll have a separate buffer with children-trimmed nodes.
+        // Sometimes these will be relocated to the left with older nodes as siblings.
+        let mut new_nodes = self.insertions.iter().map(|hash| {
+            (*hash, 0)
+        }).collect::<Vec<(Hash,u8)>>(); // store (hash + level) only
+
+        // this will flip-flop from None to Some as we match pairs of nodes
+        let mut left: Option<(usize,Node)> = None;
+        for level in 0..64 {
+            // First, loop over the trees
+            let mut i = 0;
+            while i < new_forest.trees.len() {
+                let node = new_forest.node_at(new_forest.trees[i]);
+                if node.level == level {
+                    if let Some((j, l)) = left {
+                        // remove the node at i,
+                        // create new parent and replace the node at j.
+                    } else {
+                        // remember the first node in the pair
+                        left = Some((i,node));
+                    }
+                }
+                i+=1;
+            }
+
+            // Second, loop over the pending new nodes.
+
+        }
+
+        // TODO: reorder the trees so that higher-level trees go first.
+
 
 
         unimplemented!()
