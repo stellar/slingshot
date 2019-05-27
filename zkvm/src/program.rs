@@ -47,6 +47,42 @@ macro_rules! def_op {
     );
 }
 
+trait Encodable {
+   // Returns the serialized length of the trait.
+   fn encode(&self, buf: &mut Vec<u8>);
+   /// Encodes a trait into a buffer.
+   fn serialized_length(&self) -> usize;
+}
+
+
+impl Encodable for Program {
+    fn encode(&self, buf: &mut Vec<u8>) {
+        for i in self.0.iter() {
+            i.borrow().encode(buf);
+        }
+    }
+    fn serialized_length(&self) -> usize {
+        self.0.iter().map(|p| p.serialized_length()).sum()
+    }
+}
+
+impl Encodable for ProgramItem {
+    fn encode(&self, buf: &mut Vec<u8>) {
+        match self {
+            ProgramItem::Program(prog) => prog.encode(buf),
+            ProgramItem::Bytecode(bytes) => {
+                buf.extend_from_slice(&bytes);
+            }
+        }
+    }
+    fn serialized_length(&self) -> usize {
+        match self {
+            ProgramItem::Program(prog) => prog.serialized_length(),
+            ProgramItem::Bytecode(vec) => vec.len(),
+        }
+}
+
+
 impl Program {
     def_op!(add, Add);
     def_op!(alloc, Alloc, Option<ScalarWitness>);
@@ -110,18 +146,6 @@ impl Program {
         self.0
     }
 
-    /// Returns the serialized length of the program.
-    pub(crate) fn serialized_length(&self) -> usize {
-        self.0.iter().map(|p| p.serialized_length()).sum()
-    }
-
-    /// Encodes a program into a buffer.
-    pub(crate) fn encode(&self, buf: &mut Vec<u8>) {
-        for i in self.0.iter() {
-            i.borrow().encode(buf);
-        }
-    }
-
     /// Encodes the program item into a bytecode array.
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut buf = Vec::with_capacity(self.serialized_length());
@@ -157,23 +181,6 @@ impl Program {
 }
 
 impl ProgramItem {
-    /// Returns the number of bytes needed to serialize the ProgramItem.
-    pub fn serialized_length(&self) -> usize {
-        match self {
-            ProgramItem::Program(prog) => prog.serialized_length(),
-            ProgramItem::Bytecode(vec) => vec.len(),
-        }
-    }
-
-    /// Encodes a program item into a buffer.
-    pub fn encode(&self, buf: &mut Vec<u8>) {
-        match self {
-            ProgramItem::Program(prog) => prog.encode(buf),
-            ProgramItem::Bytecode(bytes) => {
-                buf.extend_from_slice(&bytes);
-            }
-        }
-    }
 
     /// Downcasts a program item into a program.
     pub fn to_program(self) -> Result<Program, VMError> {
