@@ -11,6 +11,7 @@ use crate::encoding::SliceReader;
 use crate::errors::VMError;
 use crate::merkle::{MerkleItem, MerkleTree};
 use crate::transcript::TranscriptProtocol;
+use crate::program::Encodable;
 
 /// Transaction log. `TxLog` is a type alias for `Vec<TxEntry>`.
 pub type TxLog = Vec<TxEntry>;
@@ -93,17 +94,17 @@ pub struct VerifiedTx {
     pub log: TxLog,
 }
 
-impl TxHeader {
-    fn serialized_size(&self) -> usize {
-        8 * 3
-    }
-
+impl Encodable for TxHeader {
     fn encode(&self, buf: &mut Vec<u8>) {
         encoding::write_u64(self.version, buf);
         encoding::write_u64(self.mintime_ms, buf);
         encoding::write_u64(self.maxtime_ms, buf);
     }
-
+    fn serialized_length(&self) -> usize {
+        8 * 3
+    }
+}
+impl TxHeader {
     fn decode<'a>(reader: &mut SliceReader<'a>) -> Result<Self, VMError> {
         Ok(TxHeader {
             version: reader.read_u64()?,
@@ -125,7 +126,7 @@ impl UnsignedTx {
     }
 }
 
-impl Tx {
+impl Encodable for Tx {
     fn encode(&self, buf: &mut Vec<u8>) {
         self.header.encode(buf);
         encoding::write_size(self.program.len(), buf);
@@ -133,8 +134,19 @@ impl Tx {
         buf.extend_from_slice(&self.signature.to_bytes());
         buf.extend_from_slice(&self.proof.to_bytes());
     }
-
-    fn decode<'a>(r: &mut SliceReader<'a>) -> Result<Tx, VMError> {
+    
+    /// Returns the size in bytes required to serialize the `Tx`.
+    fn serialized_length(&self) -> usize {
+        // header is 8 bytes * 3 fields = 24 bytes
+        // program length is 4 bytes
+        // program is self.program.len() bytes
+        // signature is 64 bytes
+        // proof is 14*32 + the ipp bytes
+        self.header.serialized_length() + 4 + self.program.len() + 64 + self.proof.serialized_size()
+    }
+}
+impl Tx {
+   fn decode<'a>(r: &mut SliceReader<'a>) -> Result<Tx, VMError> {
         let header = TxHeader::decode(r)?;
         let prog_len = r.read_size()?;
         let program = r.read_bytes(prog_len)?.to_vec();
@@ -152,19 +164,9 @@ impl Tx {
 
     /// Serializes the tx into a byte array.
     pub fn to_bytes(&self) -> Vec<u8> {
-        let mut buf = Vec::with_capacity(self.serialized_size());
+        let mut buf = Vec::with_capacity(self.serialized_length());
         self.encode(&mut buf);
         buf
-    }
-
-    /// Returns the size in bytes required to serialize the `Tx`.
-    pub fn serialized_size(&self) -> usize {
-        // header is 8 bytes * 3 fields = 24 bytes
-        // program length is 4 bytes
-        // program is self.program.len() bytes
-        // signature is 64 bytes
-        // proof is 14*32 + the ipp bytes
-        self.header.serialized_size() + 4 + self.program.len() + 64 + self.proof.serialized_size()
     }
 
     /// Deserializes the tx from a byte slice.

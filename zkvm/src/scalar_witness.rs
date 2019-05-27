@@ -5,6 +5,7 @@ use spacesuit::SignedInteger;
 
 use crate::encoding;
 use crate::errors::VMError;
+use crate::program::Encodable;
 use std::ops::{Add, Mul, Neg, Sub};
 use std::u64;
 
@@ -17,17 +18,17 @@ pub enum ScalarWitness {
     Scalar(Scalar),
 }
 
-impl ScalarWitness {
-    /// Returns the number of bytes needed to serialize the ScalarWitness.
-    pub fn serialized_length(&self) -> usize {
-        32
-    }
-
+impl Encodable for ScalarWitness {
     /// Converts to a scalar and encodes it to a vec of bytes.
-    pub(crate) fn encode(&self, buf: &mut Vec<u8>) {
+    fn encode(&self, buf: &mut Vec<u8>) {
         encoding::write_bytes(&self.to_scalar().to_bytes(), buf);
     }
-
+    /// Returns the number of bytes needed to serialize the ScalarWitness.
+    fn serialized_length(&self) -> usize {
+        32
+    }
+}
+impl ScalarWitness {
     /// Converts the witness to an integer if it is an integer
     pub fn to_integer(self) -> Result<SignedInteger, VMError> {
         match self {
