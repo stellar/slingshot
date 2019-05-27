@@ -15,6 +15,7 @@ use crate::errors::VMError;
 use crate::merkle::{MerkleItem, MerkleNeighbor, MerkleTree};
 use crate::point_ops::PointOp;
 use crate::program::{Program, ProgramItem};
+use crate::program::Encodable;
 use crate::transcript::TranscriptProtocol;
 
 /// Represents a ZkVM predicate with its optional witness data.
@@ -72,13 +73,18 @@ pub enum PredicateLeaf {
     Program(ProgramItem),
     Blinding([u8; 32]),
 }
-
-impl Predicate {
-    /// Returns the number of bytes needed to serialize the Predicate.
-    pub fn serialized_length(&self) -> usize {
+impl Encodable for Predicate {
+     /// Encodes the Predicate in program bytecode.
+    fn encode(&self, prog: &mut Vec<u8>) {
+        encoding::write_point(&self.to_point(), prog);
+    }
+     /// Returns the number of bytes needed to serialize the Predicate.
+    fn serialized_length(&self) -> usize {
         32
     }
-
+}
+impl Predicate {
+    
     /// Converts predicate to a compressed point
     pub fn to_point(&self) -> CompressedRistretto {
         match self {
@@ -86,11 +92,6 @@ impl Predicate {
             Predicate::Key(k) => k.into_compressed(),
             Predicate::Tree(d) => d.precomputed_key.into_compressed(),
         }
-    }
-
-    /// Encodes the Predicate in program bytecode.
-    pub fn encode(&self, prog: &mut Vec<u8>) {
-        encoding::write_point(&self.to_point(), prog);
     }
 
     /// Converts the predicate to a verification key
@@ -264,13 +265,37 @@ impl PredicateTree {
     }
 }
 
-impl CallProof {
-    pub fn serialized_length(&self) -> usize {
+impl Encodable for CallProof{
+    /// Serializes the call proof to a byte array.
+    fn encode(&self, buf: &mut Vec<u8>) {
+        encoding::write_point(self.verification_key.as_compressed(), buf);
+
+        let num_neighbors = self.neighbors.len();
+        let mut positions: u32 = 1 << num_neighbors;
+        for (i, n) in self.neighbors.iter().enumerate() {
+            match n {
+                MerkleNeighbor::Right(_) => {
+                    positions = positions | (1 << i);
+                }
+                _ => {}
+            }
+        }
+        encoding::write_u32(positions, buf);
+        for n in &self.neighbors {
+            match n {
+                MerkleNeighbor::Left(l) => encoding::write_bytes(l, buf),
+                MerkleNeighbor::Right(r) => encoding::write_bytes(r, buf),
+            }
+        }
+    }
+    fn serialized_length(&self) -> usize {
         // VerificationKey is a 32-byte array
         // MerkleNeighbor is a 32-byte array
         32 + 4 + self.neighbors.len() * 32
     }
-
+}
+impl CallProof {
+  
     /// Decodes the call proof from bytes.
     pub fn decode<'a>(reader: &mut SliceReader<'a>) -> Result<Self, VMError> {
         let verification_key =
@@ -294,29 +319,6 @@ impl CallProof {
             verification_key,
             neighbors,
         })
-    }
-
-    /// Serializes the call proof to a byte array.
-    pub fn encode(&self, buf: &mut Vec<u8>) {
-        encoding::write_point(self.verification_key.as_compressed(), buf);
-
-        let num_neighbors = self.neighbors.len();
-        let mut positions: u32 = 1 << num_neighbors;
-        for (i, n) in self.neighbors.iter().enumerate() {
-            match n {
-                MerkleNeighbor::Right(_) => {
-                    positions = positions | (1 << i);
-                }
-                _ => {}
-            }
-        }
-        encoding::write_u32(positions, buf);
-        for n in &self.neighbors {
-            match n {
-                MerkleNeighbor::Left(l) => encoding::write_bytes(l, buf),
-                MerkleNeighbor::Right(r) => encoding::write_bytes(r, buf),
-            }
-        }
     }
 
     pub fn to_bytes(&self) -> Vec<u8> {

@@ -66,22 +66,6 @@ impl Encodable for Program {
     }
 }
 
-impl Encodable for ProgramItem {
-    fn encode(&self, buf: &mut Vec<u8>) {
-        match self {
-            ProgramItem::Program(prog) => prog.encode(buf),
-            ProgramItem::Bytecode(bytes) => {
-                buf.extend_from_slice(&bytes);
-            }
-        }
-    }
-    fn serialized_length(&self) -> usize {
-        match self {
-            ProgramItem::Program(prog) => prog.serialized_length(),
-            ProgramItem::Bytecode(vec) => vec.len(),
-        }
-}
-
 
 impl Program {
     def_op!(add, Add);
@@ -180,6 +164,21 @@ impl Program {
     }
 }
 
+impl Encodable for ProgramItem {
+    fn encode(&self, buf: &mut Vec<u8>) {
+        match self {
+            ProgramItem::Program(prog) => prog.encode(buf),
+            ProgramItem::Bytecode(bytes) => {
+                buf.extend_from_slice(&bytes);
+            }
+        }
+    }
+    fn serialized_length(&self) -> usize {
+        match self {
+            ProgramItem::Program(prog) => prog.serialized_length(),
+            ProgramItem::Bytecode(vec) => vec.len(),
+        }
+}
 impl ProgramItem {
 
     /// Downcasts a program item into a program.
