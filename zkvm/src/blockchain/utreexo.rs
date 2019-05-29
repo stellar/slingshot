@@ -47,6 +47,7 @@ pub struct Forest {
     generation: u64,
     roots: [Option<NodeIndex>; 64], // roots of the trees for levels 0 to 63
     insertions: HashMap<Hash, ()>,  // new items
+    deletions: usize,
     heap: Heap,
     hasher: NodeHasher,
 }
@@ -56,6 +57,22 @@ pub struct Forest {
 pub struct Catchup {
     forest: Forest,               // forest that stores the nodes
     map: HashMap<Hash, Position>, // node hash -> new position offset for this node
+}
+
+/// Metrics of the Forest.
+#[derive(Copy, Clone, PartialEq, Debug)]
+pub struct Metrics {
+    /// Generation of the forest
+    pub generation: u64,
+
+    /// Total number of items
+    pub count: usize,
+
+    /// Number of deletions
+    pub deletions: usize,
+
+    /// Number of insertions
+    pub insertions: usize,
 }
 
 /// Index of a `Node` within a forest's heap storage.
@@ -129,8 +146,20 @@ impl Forest {
             generation: 0,
             roots: [None; 64],
             insertions: HashMap::new(),
+            deletions: 0,
             heap: Heap::new(),
             hasher: NodeHasher::new(),
+        }
+    }
+
+    /// Returns metrics data for this Forest
+    pub fn metrics(&self) -> Metrics {
+        let trees_sum: u64 = self.roots_iter().map(|r| r.capacity()).sum();
+        Metrics {
+            generation: self.generation,
+            count: (trees_sum as usize) + self.insertions.len() - self.deletions,
+            deletions: self.deletions,
+            insertions: self.insertions.len(),
         }
     }
 
@@ -342,6 +371,8 @@ impl Forest {
                 .map(|(l, r)| side.choose(l, r))
         });
 
+        self.deletions += 1;
+
         Ok(())
     }
 
@@ -456,6 +487,7 @@ impl Forest {
             generation: self.generation + 1,
             roots: new_roots,
             insertions: HashMap::new(), // will remain empty
+            deletions: 0,
             heap: new_heap,
             hasher: hasher.clone(),
         };
@@ -519,11 +551,13 @@ impl Forest {
     }
 
     /// Trims the forest leaving only the root nodes.
+    /// Assumes the forest is normalized.
     fn trim(&self) -> Forest {
         let mut trimmed_forest = Forest {
             generation: self.generation,
-            roots: [None; 64],             // filled in below
-            insertions: HashMap::new(),    // will remain empty
+            roots: [None; 64],          // filled in below
+            insertions: HashMap::new(), // will remain empty
+            deletions: 0,
             heap: Heap::with_capacity(64), // filled in below
             hasher: self.hasher.clone(),
         };
@@ -916,6 +950,7 @@ impl NodeHasher {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::merkle::*;
 
     impl MerkleItem for u64 {
         fn commit(&self, t: &mut Transcript) {
@@ -951,9 +986,51 @@ mod tests {
     }
 
     #[test]
-    fn test_utreexo() {
+    fn empty_utreexo() {
         let forest0 = Forest::new();
+        let metrics0 = forest0.metrics();
+        assert_eq!(metrics0.generation, 0);
+        assert_eq!(metrics0.count, 0);
+        assert_eq!(metrics0.insertions, 0);
+        assert_eq!(metrics0.deletions, 0);
 
-        //forest0.
+        let (root0, forest1, _catchup1) = forest0.normalize();
+        let metrics1 = forest1.metrics();
+        assert_eq!(root0, MerkleTree::root::<u64>(b"ZkVM.utreexo", &[]));
+        assert_eq!(metrics1.generation, 1);
+        assert_eq!(metrics1.count, 0);
+        assert_eq!(metrics1.insertions, 0);
+        assert_eq!(metrics1.deletions, 0);
+    }
+
+    #[test]
+    fn transient_items_utreexo() {
+        let mut forest0 = Forest::new();
+
+        let proof0 = forest0.insert(&0);
+        let proof1 = forest0.insert(&1);
+
+        assert_eq!(
+            forest0.metrics(),
+            Metrics {
+                generation: 0,
+                count: 2,
+                insertions: 2,
+                deletions: 0,
+            }
+        );
+
+        forest0.delete(&1, &proof1).unwrap();
+        forest0.delete(&0, &proof0).unwrap();
+
+        assert_eq!(
+            forest0.metrics(),
+            Metrics {
+                generation: 0,
+                count: 0,
+                insertions: 0,
+                deletions: 0,
+            }
+        );
     }
 }
