@@ -311,19 +311,6 @@ impl Forest {
             return Err(UtreexoError::InvalidMerkleProof);
         }
 
-        // Check the rest of the merkle proof against all parents up to the top node.
-        let _: Node = path
-            .iter()
-            .rev()
-            .take(top.level - existing.level)
-            .try_fold(top, |node, (side, neighbor)| {
-                let (li, ri) = node.children.ok_or(UtreexoError::InternalInconsistency)?;
-                if neighbor != &self.heap.hash_at(side.choose(ri, li)) {
-                    return Err(UtreexoError::InvalidMerkleProof);
-                }
-                Ok(self.heap.node_at(side.choose(li, ri)))
-            })?;
-
         // All checks succeeded: we can now attach new nodes and
         // update the deletions count up to the root.
 
