@@ -154,47 +154,7 @@ impl Forest {
     //         }
     //     };
 
-    //     // 1. Locate the most nested node that we have under which the item.position is supposedly located.
-    //     let top = self.root_containing_position(path.position)?;
-
-    //     // 2. The proof should be of exact size from a leaf up to a tree root.
-    //     if path.neighbors.len() != top.level {
-    //         return Err(UtreexoError::InvalidMerkleProof);
-    //     }
-
-    //     // 3. Find the lowest-available node in a tree, up to which
-    //     //    we have to fill in the missing nodes based on the merkle proof.
-    //     let existing = self.lowest_node_containing_position(top, path.position);
-
-    //     // 4. Now, walk the merkle proof starting with the leaf,
-    //     //    creating the missing nodes until we hit the bottom node.
-    //     let mut new_nodes = Vec::<Node>::with_capacity(2 * existing.level); // TBD: reuse preallocated scratch-space
-    //     let mut current = self.make_leaf(item);
-    //     for _ in 0..existing.level {
-    //         let heap_offset = self.heap.next_index() + (new_nodes.len() as NodeIndex);
-
-    //         let (parent, (current2, sibling)) =
-    //             self.build_tree_step(current, heap_offset, &path)?;
-
-    //         new_nodes.push(current2);
-    //         new_nodes.push(sibling);
-
-    //         // parent is either added with its sibling on the next iteration, or
-    //         // replaced by a lower_node if it matches it
-    //         current = parent;
-    //     }
-    //     let replacement = current;
-
-    //     // 5. Check if we arrived at a correct lowest-available node.
-    //     if replacement.hash != existing.hash {
-    //         // We haven't met the node we expected to meet, so the proof is invalid.
-    //         return Err(UtreexoError::InvalidMerkleProof);
-    //     }
-
-    //     // Check the rest of the merkle proof against all parents up to the top node.
-    //     self.check_path_against_tree(existing, &path)?;
-
-    //     Ok(())
+    // ...
     // }
 
     /// Adds a new item to the tree, appending a node to the end.
@@ -296,8 +256,30 @@ impl Forest {
 
         // 3. Find the lowest-available node in a tree, up to which
         //    we have to fill in the missing nodes based on the merkle proof.
-        // TBD: check the merkle path while searching for this node.
-        let existing = self.lowest_node_containing_position(top, path.position);
+        //    And also check the higher-level neighbors in the proof.
+        let existing: Node = path
+            .iter()
+            .rev()
+            .try_fold(
+                (top, true),
+                |(node, should_continue), (side, proof_neighbor)| {
+                    if should_continue {
+                        if let Some((li, ri)) = node.children {
+                            let actual_neighor = self.heap.hash_at(side.choose(ri, li));
+                            if proof_neighbor != &actual_neighor {
+                                return Err(UtreexoError::InvalidMerkleProof);
+                            }
+                            let next_node = self.heap.node_at(side.choose(li, ri));
+                            Ok((next_node, true))
+                        } else {
+                            Ok((node, false))
+                        }
+                    } else {
+                        Ok((node, should_continue))
+                    }
+                },
+            )?
+            .0;
 
         // 4. Now, walk the merkle proof starting with the leaf,
         //    creating the missing nodes until we hit the bottom node.
@@ -390,7 +372,7 @@ impl Forest {
         // Collect all nodes that were not modified.
         // 1) add pre-existing unmodified nodes...
         for root in self.roots_iter() {
-            self.heap.traverse(0, root, &mut|_, node: &Node| {
+            self.heap.traverse(0, root, &mut |_, node: &Node| {
                 if node.modified {
                     true // traverse into children until we find unmodified nodes
                 } else {
@@ -509,19 +491,6 @@ impl Forest {
         Err(UtreexoError::ItemOutOfBounds)
     }
 
-    /// Returns the index of a lowest available node that contains an item at a given position
-    /// within the tree at index `top_index`.
-    /// TBD: REMOVE THIS METHOD
-    fn lowest_node_containing_position(&self, mut node: Node, position: Position) -> Node {
-        while let Some((left, right)) = node.children {
-            let level2 = node.level - 1;
-            let bit = (position >> level2) & 1;
-            let i = if bit == 0 { left } else { right };
-            node = self.heap.node_at(i);
-        }
-        node
-    }
-
     /// Returns an iterator over roots of the forest,
     /// from the highest to the lowest level.
     fn roots_iter<'a>(&'a self) -> impl DoubleEndedIterator<Item = Node> + 'a {
@@ -560,12 +529,13 @@ impl Forest {
             top_offset += root.capacity();
 
             // collect nodes without children into the Catchup map
-            self.heap.traverse(top_offset, root, &mut|offset, node: &Node| {
-                if node.children == None {
-                    catchup_map.insert(node.hash, offset);
-                }
-                true
-            });
+            self.heap
+                .traverse(top_offset, root, &mut |offset, node: &Node| {
+                    if node.children == None {
+                        catchup_map.insert(node.hash, offset);
+                    }
+                    true
+                });
         }
         Catchup {
             forest: self,
@@ -678,7 +648,7 @@ enum Side {
 
 impl Side {
     /// Orders a node and its neighbor according to the node's side.
-    /// If self == Left, returns (node, neighbour) and the reverse otherwise.
+    /// If self == Left, returns (node, neighbor) and the reverse otherwise.
     fn order<T>(self, node: T, neighbor: T) -> (T, T) {
         match self {
             Side::Left => (node, neighbor),
