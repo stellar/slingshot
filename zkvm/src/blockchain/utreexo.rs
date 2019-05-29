@@ -134,28 +134,54 @@ impl Forest {
         }
     }
 
-    // /// Verifies the item's proof of inclusion.
-    // /// TBD: factor out the common pieces.
-    // pub fn verify<M: MerkleItem>(&self, item: &M, proof: &Proof) -> Result<(), UtreexoError> {
-    //     if proof.generation != self.generation {
-    //         return Err(UtreexoError::OutdatedProof);
-    //     }
+    /// Verifies the item's proof of inclusion.
+    pub fn verify<M: MerkleItem>(&self, item: &M, proof: &Proof) -> Result<(), UtreexoError> {
+        if proof.generation != self.generation {
+            return Err(UtreexoError::OutdatedProof);
+        }
 
-    //     // 0. Fast check: if the proof relates to a newly added item.
-    //     let path = match &proof.path {
-    //         Some(path) => path,
-    //         None => {
-    //             let hash = Node::hash_leaf(self.hasher.clone(), item);
-    //             return self
-    //                 .insertions
-    //                 .get(&hash)
-    //                 .map(|x| *x)
-    //                 .ok_or(UtreexoError::InvalidMerkleProof);
-    //         }
-    //     };
+        // 0. Fast check: if the proof relates to a newly added item.
+        let path = match &proof.path {
+            Some(path) => path,
+            None => {
+                let hash = Node::hash_leaf(self.hasher.clone(), item);
+                return self
+                    .insertions
+                    .get(&hash)
+                    .map(|x| *x)
+                    .ok_or(UtreexoError::InvalidMerkleProof);
+            }
+        };
 
-    // ...
-    // }
+        // 1. Locate the most nested node that we have under which the item.position is supposedly located.
+        let top = self.root_containing_position(path.position)?;
+
+        // 2. The proof should be of exact size from a leaf up to a tree root.
+        if path.neighbors.len() != top.level {
+            return Err(UtreexoError::InvalidMerkleProof);
+        }
+
+        // 3. Find the lowest-available node in a tree, up to which
+        //    we have to fill in the missing nodes based on the merkle proof.
+        //    And also check the higher-level neighbors in the proof.
+        let existing = self.existing_node_for_path(top, &path)?;
+
+        // 4. Now, walk the merkle proof starting with the leaf,
+        //    creating the missing nodes until we hit the bottom node.
+        let mut current_hash = Node::hash_leaf(self.hasher.clone(), item);
+        for (side, neighbor) in path.iter().take(existing.level) {
+            let (l, r) = side.order(&current_hash, neighbor);
+            current_hash = Node::hash_intermediate(self.hasher.clone(), l, r);
+        }
+
+        // 5. Check if we arrived at a correct lowest-available node.
+        if current_hash != existing.hash {
+            // We haven't met the node we expected to meet, so the proof is invalid.
+            return Err(UtreexoError::InvalidMerkleProof);
+        }
+
+        Ok(())
+    }
 
     /// Adds a new item to the tree, appending a node to the end.
     pub fn insert<M: MerkleItem>(&mut self, item: &M) -> Proof {
@@ -257,29 +283,7 @@ impl Forest {
         // 3. Find the lowest-available node in a tree, up to which
         //    we have to fill in the missing nodes based on the merkle proof.
         //    And also check the higher-level neighbors in the proof.
-        let existing: Node = path
-            .iter()
-            .rev()
-            .try_fold(
-                (top, true),
-                |(node, should_continue), (side, proof_neighbor)| {
-                    if should_continue {
-                        if let Some((li, ri)) = node.children {
-                            let actual_neighor = self.heap.hash_at(side.choose(ri, li));
-                            if proof_neighbor != &actual_neighor {
-                                return Err(UtreexoError::InvalidMerkleProof);
-                            }
-                            let next_node = self.heap.node_at(side.choose(li, ri));
-                            Ok((next_node, true))
-                        } else {
-                            Ok((node, false))
-                        }
-                    } else {
-                        Ok((node, should_continue))
-                    }
-                },
-            )?
-            .0;
+        let existing = self.existing_node_for_path(top, &path)?;
 
         // 4. Now, walk the merkle proof starting with the leaf,
         //    creating the missing nodes until we hit the bottom node.
@@ -476,6 +480,33 @@ impl Forest {
             }
         }
         Err(UtreexoError::ItemOutOfBounds)
+    }
+
+    /// Returns the lowest-available node for a given path and verifies the higher-level
+    /// neighbors in the path.
+    fn existing_node_for_path(&self, root: Node, path: &Path) -> Result<Node, UtreexoError> {
+        let existing: Node = path
+            .iter()
+            .rev()
+            .try_fold(
+                (root, root.children),
+                |(node, children), (side, proof_neighbor)| {
+                    if let Some((li, ri)) = children {
+                        let actual_neighor = self.heap.hash_at(side.choose(ri, li));
+                        if proof_neighbor != &actual_neighor {
+                            return Err(UtreexoError::InvalidMerkleProof);
+                        }
+                        let next_node = self.heap.node_at(side.choose(li, ri));
+                        Ok((next_node, next_node.children))
+                    } else {
+                        // keep the node we found till the end of the iteration
+                        Ok((node, None))
+                    }
+                },
+            )?
+            .0;
+
+        Ok(existing)
     }
 
     /// Returns an iterator over roots of the forest,
