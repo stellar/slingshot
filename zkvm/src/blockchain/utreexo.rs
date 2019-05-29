@@ -26,6 +26,7 @@ pub type Position = u64;
 /// (Lowest bit=1 means the first neighbor is to the left of the node.)
 /// `generation` points to the generation of the Forest to which the proof applies.
 /// `path` is None if this proof is for a newly added item that has no merkle path yet.
+#[derive(Clone, Debug)]
 pub struct Proof {
     /// Generation of the forest to which the proof applies.
     pub generation: u64,
@@ -35,6 +36,7 @@ pub struct Proof {
 }
 
 /// Merkle path to the item.
+#[derive(Clone, Debug)]
 pub struct Path {
     position: Position,
     neighbors: Vec<Hash>,
@@ -46,10 +48,10 @@ pub struct Path {
 pub struct Forest {
     generation: u64,
     roots: [Option<NodeIndex>; 64], // roots of the trees for levels 0 to 63
-    insertions: HashMap<Hash, ()>,  // new items
+    insertions: Vec<Hash>,  // new items (TBD: maybe use a fancy order-preserving HashSet later)
     deletions: usize,
     heap: Heap,
-    hasher: NodeHasher,
+    hasher: Transcript,
 }
 
 /// Structure that helps auto-updating the proofs created for a previous generation of a forest.
@@ -108,12 +110,6 @@ struct Heap {
     heap: Vec<PackedNode>,
 }
 
-/// Precomputed instance for hashing the nodes
-#[derive(Clone)]
-struct NodeHasher {
-    transcript: Transcript,
-}
-
 /// Represents an error in proof creation, verification, or parsing.
 #[derive(Fail, Clone, Debug, Eq, PartialEq)]
 pub enum UtreexoError {
@@ -145,10 +141,10 @@ impl Forest {
         Forest {
             generation: 0,
             roots: [None; 64],
-            insertions: HashMap::new(),
+            insertions: Vec::new(),
             deletions: 0,
             heap: Heap::new(),
-            hasher: NodeHasher::new(),
+            hasher: Transcript::new(b"ZkVM.utreexo"),
         }
     }
 
@@ -176,8 +172,8 @@ impl Forest {
                 let hash = Node::hash_leaf(self.hasher.clone(), item);
                 return self
                     .insertions
-                    .get(&hash)
-                    .map(|x| *x)
+                    .iter().find(|&h| h == &hash)
+                    .map(|_| ())
                     .ok_or(UtreexoError::InvalidMerkleProof);
             }
         };
@@ -214,13 +210,11 @@ impl Forest {
 
     /// Adds a new item to the tree, appending a node to the end.
     pub fn insert<M: MerkleItem>(&mut self, item: &M) -> Proof {
-        // Same position for new items since we look them up by hash.
-        // After check point, we'll still look them up by hash.
-        // At the same time, position after the pre-existing nodes indicates
-        // that this item is an insertion.
         let hash = Node::hash_leaf(self.hasher.clone(), item);
-        self.insertions.insert(hash, ());
-
+        // make sure we do not insert duplicate hashes
+        if self.insertions.iter().find(|&h| h == &hash) == None {
+            self.insertions.push(hash);
+        }
         Proof {
             generation: self.generation,
             path: None,
@@ -294,10 +288,13 @@ impl Forest {
             None => {
                 // The path is missing, meaning the item must exist among the recent inserions.
                 let hash = Node::hash_leaf(self.hasher.clone(), item);
-                return self
+                let index = self
                     .insertions
-                    .remove(&hash)
-                    .ok_or(UtreexoError::InvalidMerkleProof);
+                    .iter().enumerate().find(|&(_,h)| h == &hash)
+                    .map(|(i,_)| i)
+                    .ok_or(UtreexoError::InvalidMerkleProof)?;
+                self.insertions.remove(index);
+                return Ok(());
             }
         };
 
@@ -399,6 +396,7 @@ impl Forest {
                     true // traverse into children until we find unmodified nodes
                 } else {
                     // non-modified node - collect and ignore children
+                    dbg!(("collect non-modified", &node.level, &node.hash));
                     new_trees.push(
                         new_heap
                             .allocate_node(|n| {
@@ -413,7 +411,7 @@ impl Forest {
         }
 
         // 2) ...and newly inserted nodes.
-        for (hash, _) in self.insertions.into_iter() {
+        for hash in self.insertions.into_iter() {
             new_trees.push(
                 new_heap
                     .allocate_node(|n| {
@@ -455,6 +453,8 @@ impl Forest {
                             node.children = Some((l.index, r.index))
                         });
 
+                        dbg!(("joining", &l.level, &l.hash, r.hash, p.hash));
+
                         // Replace left child index with the new parent.
                         new_trees[prev_i] = p.index;
 
@@ -486,7 +486,7 @@ impl Forest {
         let new_forest = Forest {
             generation: self.generation + 1,
             roots: new_roots,
-            insertions: HashMap::new(), // will remain empty
+            insertions: Vec::new(), // will remain empty
             deletions: 0,
             heap: new_heap,
             hasher: hasher.clone(),
@@ -555,8 +555,8 @@ impl Forest {
     fn trim(&self) -> Forest {
         let mut trimmed_forest = Forest {
             generation: self.generation,
-            roots: [None; 64],          // filled in below
-            insertions: HashMap::new(), // will remain empty
+            roots: [None; 64],      // filled in below
+            insertions: Vec::new(), // will remain empty
             deletions: 0,
             heap: Heap::with_capacity(64), // filled in below
             hasher: self.hasher.clone(),
@@ -578,8 +578,6 @@ impl Forest {
         let mut catchup_map: HashMap<Hash, Position> = HashMap::new();
         let mut top_offset: Position = 0;
         for root in self.roots_iter() {
-            top_offset += root.capacity();
-
             // collect nodes without children into the Catchup map
             self.heap
                 .traverse(top_offset, root, &mut |offset, node: &Node| {
@@ -588,6 +586,7 @@ impl Forest {
                     }
                     true
                 });
+            top_offset += root.capacity();
         }
         Catchup {
             forest: self,
@@ -618,11 +617,12 @@ impl Forest {
 impl Catchup {
     /// Updates the proof if it's slightly out of date
     /// (made against the previous generation of the Utreexo).
-    pub fn update_proof<M: MerkleItem>(
+    pub fn update_proof<M: MerkleItem+std::fmt::Debug>(
         &self,
         item: &M,
         proof: Proof,
     ) -> Result<Proof, UtreexoError> {
+
         // If the proof is already up to date - return w/o changes
         if proof.generation == self.forest.generation {
             return Ok(proof);
@@ -873,24 +873,24 @@ impl Node {
         1 << self.level
     }
 
-    fn hash_leaf<M: MerkleItem>(mut h: NodeHasher, item: &M) -> Hash {
-        item.commit(&mut h.transcript);
+    fn hash_leaf<M: MerkleItem>(mut h: Transcript, item: &M) -> Hash {
+        item.commit(&mut h);
         let mut hash = [0; 32];
-        h.transcript.challenge_bytes(b"merkle.leaf", &mut hash);
+        h.challenge_bytes(b"merkle.leaf", &mut hash);
         hash
     }
 
-    fn hash_intermediate(mut h: NodeHasher, left: &Hash, right: &Hash) -> Hash {
-        h.transcript.commit_bytes(b"L", left);
-        h.transcript.commit_bytes(b"R", right);
+    fn hash_intermediate(mut h: Transcript, left: &Hash, right: &Hash) -> Hash {
+        h.commit_bytes(b"L", left);
+        h.commit_bytes(b"R", right);
         let mut hash = [0; 32];
-        h.transcript.challenge_bytes(b"merkle.node", &mut hash);
+        h.challenge_bytes(b"merkle.node", &mut hash);
         hash
     }
 
-    fn hash_empty(mut h: NodeHasher) -> Hash {
+    fn hash_empty(mut h: Transcript) -> Hash {
         let mut hash = [0; 32];
-        h.transcript.challenge_bytes(b"merkle.empty", &mut hash);
+        h.challenge_bytes(b"merkle.empty", &mut hash);
         hash
     }
 
@@ -938,15 +938,6 @@ impl PackedNode {
     }
 }
 
-impl NodeHasher {
-    /// Creates a hasher
-    fn new() -> Self {
-        Self {
-            transcript: Transcript::new(b"ZkVM.utreexo"),
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -958,13 +949,11 @@ mod tests {
         }
     }
 
+    struct H(Hash); // wrapper to overcome trait orphan rules
+
     impl Into<H> for u64 {
         fn into(self) -> H {
-            let mut t = Transcript::new(b"ZkVM.utreexo");
-            self.commit(&mut t);
-            let mut hash = [0; 32];
-            t.challenge_bytes(b"merkle.leaf", &mut hash);
-            H(hash)
+            H(hleaf(self))
         }
     }
 
@@ -973,9 +962,13 @@ mod tests {
             H(self)
         }
     }
-
-    struct H(Hash); // wrapper to overcome trait orphan rules
-
+    fn hleaf(i: u64) -> Hash {
+        let mut t = Transcript::new(b"ZkVM.utreexo");
+        i.commit(&mut t);
+        let mut hash = [0; 32];
+        t.challenge_bytes(b"merkle.leaf", &mut hash);
+        hash
+    }
     fn h<L: Into<H>, R: Into<H>>(l: L, r: R) -> Hash {
         let mut t = Transcript::new(b"ZkVM.utreexo");
         t.commit_bytes(b"L", &l.into().0);
@@ -1030,6 +1023,141 @@ mod tests {
                 count: 0,
                 insertions: 0,
                 deletions: 0,
+            }
+        );
+    }
+
+    #[test]
+    fn insert_to_utreexo() {
+        let mut forest0 = Forest::new();
+
+        let proofs0 = (0..6).map(|i| {
+            forest0.insert(&i)
+        }).collect::<Vec<_>>();
+
+        let (root, mut forest1, catchup1) = forest0.normalize();
+
+        assert_eq!(
+            forest1.metrics(),
+            Metrics {
+                generation: 1,
+                count: 6,
+                insertions: 0,
+                deletions: 0,
+            }
+        );
+
+        assert_eq!(
+            root,
+            MerkleTree::root::<u64>(b"ZkVM.utreexo", &(0..6).collect::<Vec<_>>())
+        );
+
+        for i in 0..6u64 {
+            let deletion = forest1.delete(&i, &proofs0[i as usize]);
+            assert_eq!(deletion, Err(UtreexoError::OutdatedProof));
+        }
+
+        // update the proofs
+        let proofs1 = proofs0.into_iter().enumerate().map(|(i, p)| {
+            catchup1.update_proof(&(i as u64), p).unwrap() 
+        }).collect::<Vec<_>>();
+
+        // after the proofs were updated, deletions should succeed
+        for i in 0..6u64 {
+            forest1.delete(&i, &proofs1[i as usize]).unwrap();
+        }
+
+        assert_eq!(
+            forest1.metrics(),
+            Metrics {
+                generation: 1,
+                count: 0,
+                insertions: 0,
+                deletions: 6,
+            }
+        );
+    }
+
+    #[test]
+    fn insert_and_delete_utreexo() {
+        let mut forest0 = Forest::new();
+        let n = 6u64;
+        let proofs0 = (0..n).map(|i| {
+            forest0.insert(&i)
+        }).collect::<Vec<_>>();
+
+        let (_, forest1, catchup1) = forest0.normalize();
+
+        assert_eq!(
+            forest1.metrics(),
+            Metrics {
+                generation: 1,
+                count: n as usize,
+                insertions: 0,
+                deletions: 0,
+            }
+        );
+
+        // update the proofs
+        let proofs1 = proofs0.into_iter().enumerate().map(|(i, p)| {
+            catchup1.update_proof(&(i as u64), p).unwrap() 
+        }).collect::<Vec<_>>();
+
+        // after the proofs were updated, deletions should succeed
+
+        dbg!("---------------------------------------------");
+        dbg!(hleaf(0));
+        dbg!(hleaf(1));
+        dbg!(hleaf(2));
+        dbg!(hleaf(3));
+        dbg!(hleaf(4));
+        dbg!(hleaf(5));
+        dbg!("---------------------------------------------");
+        dbg!(("a", h(0,1)));
+        dbg!(("b", h(2,3)));
+        dbg!(("c", h(4,5)));
+        dbg!(("d", h(h(0,1),h(2,3))));
+        dbg!(("e", h(h(2,3),h(4,5))));
+        dbg!(("r2", h( h(h(2,3),h(4,5)),1)));
+        dbg!(("catched up proofs", &proofs1));
+        dbg!("---------------------------------------------");
+        {
+            /*
+                d                                       e            
+                |\                                      | \              
+                a   b   c      ->        b   c      ->  b   c       
+                |\  |\  |\               |\  |\         |\  |\  
+                0 1 2 3 4 5          x 1 2 3 4 5        2 3 4 5 1
+            */
+            let mut forest = forest1.clone();
+            forest.delete(&0u64, &proofs1[0]).unwrap();
+
+            let (root, _, _) = forest.normalize();
+            assert_eq!(root, MerkleTree::root::<u64>(b"ZkVM.utreexo", &[2u64,3,4,5,1]))
+        }
+
+        // {
+        //     /*
+        //         d                                       e            
+        //         |\                                      | \              
+        //         a   b   c      ->        b   c      ->  b   c       
+        //         |\  |\  |\               |\  |\         |\  |\  
+        //         0 1 2 3 4 5          0 x 2 3 4 5        2 3 4 5 0
+        //     */
+        //     let mut forest = forest1.clone();
+        //     forest.delete(&1u64, &proofs1[1]).unwrap();
+
+        //     let (root, _, _) = forest.normalize();
+        //     assert_eq!(root, MerkleTree::root::<u64>(b"ZkVM.utreexo", &[2u64,3,4,5,0]))
+        // }
+        
+        assert_eq!(
+            forest1.metrics(),
+            Metrics {
+                generation: 1,
+                count: 0,
+                insertions: 0,
+                deletions: 6,
             }
         );
     }
