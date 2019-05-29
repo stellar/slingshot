@@ -390,7 +390,7 @@ impl Forest {
         // Collect all nodes that were not modified.
         // 1) add pre-existing unmodified nodes...
         for root in self.roots_iter() {
-            self.heap.traverse(0, root, |_, node: &Node| {
+            self.heap.traverse(0, root, &mut|_, node: &Node| {
                 if node.modified {
                     true // traverse into children until we find unmodified nodes
                 } else {
@@ -560,7 +560,7 @@ impl Forest {
             top_offset += root.capacity();
 
             // collect nodes without children into the Catchup map
-            self.heap.traverse(top_offset, root, |offset, node: &Node| {
+            self.heap.traverse(top_offset, root, &mut|offset, node: &Node| {
                 if node.children == None {
                     catchup_map.insert(node.hash, offset);
                 }
@@ -834,12 +834,12 @@ impl Heap {
     /// Traverses all nodes in a tree starting with a given node.
     /// If the callback `f` returns `false` for some node,
     /// does not recurse into the node's children.
-    fn traverse(&self, offset: Position, node: Node, mut f: impl FnMut(Position, &Node) -> bool) {
+    fn traverse(&self, offset: Position, node: Node, f: &mut impl FnMut(Position, &Node) -> bool) {
         if f(offset, &node) {
             if let Some((li, ri)) = node.children {
                 let (l, r) = (self.node_at(li), self.node_at(ri));
-                self.traverse(offset, l, &mut f);
-                self.traverse(offset + l.capacity(), r, &mut f);
+                self.traverse(offset, l, f);
+                self.traverse(offset + l.capacity(), r, f);
             }
         }
     }
