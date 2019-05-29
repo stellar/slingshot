@@ -1,4 +1,4 @@
 mod block;
 mod errors;
 mod state;
-mod utreexo;
+pub mod utreexo;

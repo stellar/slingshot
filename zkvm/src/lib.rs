@@ -37,4 +37,6 @@ pub use self::tx::{Tx, TxEntry, TxHeader, TxID, TxLog, UnsignedTx, VerifiedTx};
 pub use self::types::{Data, Item, Value, WideValue};
 pub use self::verifier::Verifier;
 
+pub use self::blockchain::*;
+
 pub use musig::{Multikey, Signature, VerificationKey};
