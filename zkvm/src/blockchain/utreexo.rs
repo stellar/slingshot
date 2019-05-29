@@ -45,7 +45,7 @@ pub struct Path {
 #[derive(Clone)]
 pub struct Forest {
     generation: u64,
-    trees: [Option<NodeIndex>; 64], // roots of the trees for levels 0 to 63
+    roots: [Option<NodeIndex>; 64], // roots of the trees for levels 0 to 63
     insertions: HashMap<Hash, ()>,  // new items
     heap: Heap,
     hasher: NodeHasher,
@@ -127,7 +127,7 @@ impl Forest {
     pub fn new() -> Forest {
         Forest {
             generation: 0,
-            trees: [None; 64],
+            roots: [None; 64],
             insertions: HashMap::new(),
             heap: Heap::new(),
             hasher: NodeHasher::new(),
@@ -454,7 +454,7 @@ impl Forest {
 
         let new_forest = Forest {
             generation: self.generation + 1,
-            trees: new_roots,
+            roots: new_roots,
             insertions: HashMap::new(), // will remain empty
             heap: new_heap,
             hasher: hasher.clone(),
@@ -512,7 +512,7 @@ impl Forest {
     /// Returns an iterator over roots of the forest,
     /// from the highest to the lowest level.
     fn roots_iter<'a>(&'a self) -> impl DoubleEndedIterator<Item = Node> + 'a {
-        self.trees
+        self.roots
             .iter()
             .rev()
             .filter_map(move |optional_index| optional_index.map(|index| self.heap.node_at(index)))
@@ -522,7 +522,7 @@ impl Forest {
     fn trim(&self) -> Forest {
         let mut trimmed_forest = Forest {
             generation: self.generation,
-            trees: [None; 64],             // filled in below
+            roots: [None; 64],             // filled in below
             insertions: HashMap::new(),    // will remain empty
             heap: Heap::with_capacity(64), // filled in below
             hasher: self.hasher.clone(),
@@ -533,7 +533,7 @@ impl Forest {
                 node.hash = root.hash;
                 node.level = root.level;
             });
-            trimmed_forest.trees[trimmed_root.level] = Some(trimmed_root.index);
+            trimmed_forest.roots[trimmed_root.level] = Some(trimmed_root.index);
         }
         trimmed_forest
     }
