@@ -283,6 +283,8 @@ impl Encodable for Commitment {
     fn serialized_length(&self) -> usize {
         32
     }
+    fn encode_to_vec(&self) -> Vec<u8> {}
+
 }
 impl Commitment {
   

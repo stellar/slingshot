@@ -122,6 +122,12 @@ impl Program {
         program
     }
 
+    pub fn to_bytes(&self) -> Vec<u8> {
+        self.encode_to_vec()
+    }
+      
+
+
     // /// Creates a program from parsing the Bytecode data slice of encoded instructions.
     // pub(crate) fn parse(data: &[u8]) -> Result<Self, VMError> {
     //     SliceReader::parse(data, |r| {
@@ -189,6 +195,10 @@ impl Encodable for ProgramItem {
 
 }
 impl ProgramItem {
+     /// Encodes the program item into a bytecode array.
+    pub fn to_bytes(&self) -> Vec<u8> {
+        self.encode_to_vec()
+    }
 
     /// Downcasts a program item into a program.
     pub fn to_program(self) -> Result<Program, VMError> {
@@ -227,6 +237,6 @@ impl MerkleItem for ProgramItem {
 
 impl MerkleItem for Program {
     fn commit(&self, t: &mut Transcript) {
-        t.commit_bytes(b"program", &self.encode_to_vec());
+        t.commit_bytes(b"program", &self.to_bytes());
     }
 }

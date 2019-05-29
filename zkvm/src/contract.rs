@@ -73,6 +73,11 @@ impl Encodable for Contract {
         }
         size
     }
+    fn encode_to_vec(&self) -> Vec<u8> {
+        let mut buf = Vec::with_capacity(self.serialized_length());
+        self.encode(&mut buf);
+        buf
+    }
 }
 impl Contract {
     /// Creates a contract from a given fields
@@ -83,8 +88,7 @@ impl Contract {
             payload,
             anchor,
         };
-        let mut buf = Vec::with_capacity(contract.serialized_length());
-        contract.encode(&mut buf);
+        let mut buf = contract.encode_to_vec();
         contract.id = ContractID::from_serialized_contract(&buf);
         contract
     }
@@ -216,6 +220,9 @@ impl Encodable for PortableItem {
             PortableItem::Value(_) => 1 + 64,
         }
     }
+
+    fn encode_to_vec(&self) -> Vec<u8> {}
+
 }
 
 impl PortableItem {

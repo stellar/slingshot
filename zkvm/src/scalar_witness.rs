@@ -27,6 +27,7 @@ impl Encodable for ScalarWitness {
     fn serialized_length(&self) -> usize {
         32
     }
+    fn encode_to_vec(&self) -> Vec<u8> {}
 }
 impl ScalarWitness {
     /// Converts the witness to an integer if it is an integer

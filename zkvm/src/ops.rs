@@ -193,6 +193,9 @@ impl Encodable for Instruction {
         }
     }
 
+    fn encode_to_vec(&self) -> Vec<u8> {}
+
+
 }
 
 impl Instruction {

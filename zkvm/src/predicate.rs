@@ -82,6 +82,8 @@ impl Encodable for Predicate {
     fn serialized_length(&self) -> usize {
         32
     }
+    fn encode_to_vec(&self) -> Vec<u8> {}
+
 }
 impl Predicate {
     
@@ -238,8 +240,7 @@ impl PredicateTree {
         t.commit_u64(b"n", n);
         t.commit_bytes(b"key", &blinding_key);
         for prog in progs.iter() {
-            let mut buf = Vec::with_capacity(prog.serialized_length());
-            prog.encode(&mut buf);
+            let mut buf = prog.encode_to_vec();
             t.commit_bytes(b"prog", &buf);
         }
 
@@ -293,7 +294,13 @@ impl Encodable for CallProof{
         // MerkleNeighbor is a 32-byte array
         32 + 4 + self.neighbors.len() * 32
     }
+    fn encode_to_vec(&self) -> Vec<u8> {
+        let mut buf = Vec::with_capacity(self.serialized_length());
+        self.encode(&mut buf);
+        buf
+    }
 }
+
 impl CallProof {
   
     /// Decodes the call proof from bytes.
@@ -322,10 +329,10 @@ impl CallProof {
     }
 
     pub fn to_bytes(&self) -> Vec<u8> {
-        let mut buf = Vec::with_capacity(self.serialized_length());
-        self.encode(&mut buf);
-        buf
+        self.encode_to_vec()
     }
+
+      
 }
 
 impl PredicateLeaf {
