@@ -83,7 +83,7 @@ impl Contract {
             payload,
             anchor,
         };
-        let mut buf = contract.encode_to_vec();
+        let buf = contract.encode_to_vec();
         contract.id = ContractID::from_serialized_contract(&buf);
         contract
     }

@@ -48,11 +48,11 @@ macro_rules! def_op {
 }
 
 pub(crate) trait Encodable {
-    // Returns the serialized length of a datatype who implement this trait.
+    ///Encodes receiver into bytes appending them to a provided buffer.
     fn encode(&self, buf: &mut Vec<u8>);
-    /// Encodes a datatype who im0lements this trait into a buffer.
+    ///Returns precise length in bytes for the serialized representation of the receiver.
     fn serialized_length(&self) -> usize;
-    /// Encodes a datatype who im0lements this trait into a bytecode array
+    /// Encodes the receiver into a newly allocated vector of bytes.
     fn encode_to_vec(&self) -> Vec<u8> {
         let mut buf = Vec::with_capacity(self.serialized_length());
         self.encode(&mut buf);
