@@ -282,11 +282,6 @@ impl Encodable for Commitment {
     fn serialized_length(&self) -> usize {
         32
     }
-    fn encode_to_vec(&self) -> Vec<u8> {
-        let mut buf = Vec::with_capacity(self.serialized_length());
-        self.encode(&mut buf);
-        buf
-    }
 }
 impl Commitment {
     /// Converts a Commitment to a compressed point.

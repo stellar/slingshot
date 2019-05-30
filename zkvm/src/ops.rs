@@ -192,12 +192,6 @@ impl Encodable for Instruction {
             _ => 1,
         }
     }
-
-    fn encode_to_vec(&self) -> Vec<u8> {
-        let mut buf = Vec::with_capacity(self.serialized_length());
-        self.encode(&mut buf);
-        buf
-    }
 }
 
 impl Instruction {

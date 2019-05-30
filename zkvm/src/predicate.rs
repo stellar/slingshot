@@ -82,11 +82,6 @@ impl Encodable for Predicate {
     fn serialized_length(&self) -> usize {
         32
     }
-    fn encode_to_vec(&self) -> Vec<u8> {
-        let mut buf = Vec::with_capacity(self.serialized_length());
-        self.encode(&mut buf);
-        buf
-    }
 }
 impl Predicate {
     /// Converts predicate to a compressed point
@@ -295,11 +290,6 @@ impl Encodable for CallProof {
         // VerificationKey is a 32-byte array
         // MerkleNeighbor is a 32-byte array
         32 + 4 + self.neighbors.len() * 32
-    }
-    fn encode_to_vec(&self) -> Vec<u8> {
-        let mut buf = Vec::with_capacity(self.serialized_length());
-        self.encode(&mut buf);
-        buf
     }
 }
 

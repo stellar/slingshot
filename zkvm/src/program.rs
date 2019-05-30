@@ -53,7 +53,11 @@ pub(crate) trait Encodable {
     /// Encodes a datatype who im0lements this trait into a buffer.
     fn serialized_length(&self) -> usize;
     /// Encodes a datatype who im0lements this trait into a bytecode array
-    fn encode_to_vec(&self) -> Vec<u8>;
+    fn encode_to_vec(&self) -> Vec<u8> {
+        let mut buf = Vec::with_capacity(self.serialized_length());
+        self.encode(&mut buf);
+        buf
+    }
 }
 
 impl Encodable for Program {
@@ -64,12 +68,6 @@ impl Encodable for Program {
     }
     fn serialized_length(&self) -> usize {
         self.0.iter().map(|p| p.serialized_length()).sum()
-    }
-
-    fn encode_to_vec(&self) -> Vec<u8> {
-        let mut buf = Vec::with_capacity(self.serialized_length());
-        self.encode(&mut buf);
-        buf
     }
 }
 
@@ -181,11 +179,6 @@ impl Encodable for ProgramItem {
             ProgramItem::Program(prog) => prog.serialized_length(),
             ProgramItem::Bytecode(vec) => vec.len(),
         }
-    }
-    fn encode_to_vec(&self) -> Vec<u8> {
-        let mut buf = Vec::with_capacity(self.serialized_length());
-        self.encode(&mut buf);
-        buf
     }
 }
 impl ProgramItem {

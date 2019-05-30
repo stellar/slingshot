@@ -103,11 +103,6 @@ impl Encodable for TxHeader {
     fn serialized_length(&self) -> usize {
         8 * 3
     }
-    fn encode_to_vec(&self) -> Vec<u8> {
-        let mut buf = Vec::with_capacity(self.serialized_length());
-        self.encode(&mut buf);
-        buf
-    }
 }
 impl TxHeader {
     fn decode<'a>(reader: &mut SliceReader<'a>) -> Result<Self, VMError> {
@@ -148,11 +143,6 @@ impl Encodable for Tx {
         // signature is 64 bytes
         // proof is 14*32 + the ipp bytes
         self.header.serialized_length() + 4 + self.program.len() + 64 + self.proof.serialized_size()
-    }
-    fn encode_to_vec(&self) -> Vec<u8> {
-        let mut buf = Vec::with_capacity(self.serialized_length());
-        self.encode(&mut buf);
-        buf
     }
 }
 impl Tx {
