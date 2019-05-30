@@ -101,6 +101,7 @@ struct Node {
 /// 32 bytes for hash, plus 13 bytes for metadata and parent and children indexes.
 /// Flags are: 6 bits for the level 0..63, 1 bit for "modified" and 1 bit for "has children".
 #[derive(Copy, Clone, PartialEq, Debug)]
+#[repr(packed)]
 struct PackedNode {
     hash: Hash,
     flags: u8,
@@ -1254,4 +1255,24 @@ mod tests {
             );
         }
     }
+
+
+    #[test]
+    fn large_utreexo() {
+        let mut forest0 = Forest::new();
+        let n = 10_000u64;
+        let proofs0 = (0..n).map(|i| forest0.insert(&i)).collect::<Vec<_>>();
+
+        let (_, forest1, catchup1) = forest0.normalize();
+
+        let _proofs1 = proofs0
+            .into_iter()
+            .enumerate()
+            .map(|(i, p)| catchup1.update_proof(&(i as u64), p).unwrap())
+            .collect::<Vec<_>>();
+
+        assert!(forest1.metrics().memory < 1600);
+
+        // TODO: perform 1000 changes, normalize again and measure the memory footprint of the Catchup struct.
+    }   
 }
