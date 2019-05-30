@@ -11,6 +11,7 @@
 use crate::merkle::MerkleItem;
 use merlin::Transcript;
 use std::collections::HashMap;
+use core::mem;
 
 /// Merkle hash of a node
 pub type Hash = [u8; 32];
@@ -75,6 +76,9 @@ pub struct Metrics {
 
     /// Number of insertions
     pub insertions: usize,
+
+    /// Lower-bound for amount of memory occupied in bytes.
+    pub memory: usize,
 }
 
 /// Index of a `Node` within a forest's heap storage.
@@ -156,6 +160,9 @@ impl Forest {
             count: (trees_sum as usize) + self.insertions.len() - self.deletions,
             deletions: self.deletions,
             insertions: self.insertions.len(),
+            memory: mem::size_of::<Self>() 
+                    + mem::size_of::<Hash>()*self.insertions.len()
+                    + mem::size_of::<Heap>() + self.heap.heap.len()*mem::size_of::<PackedNode>()
         }
     }
 
@@ -605,7 +612,7 @@ impl Forest {
 impl Catchup {
     /// Updates the proof if it's slightly out of date
     /// (made against the previous generation of the Utreexo).
-    pub fn update_proof<M: MerkleItem + std::fmt::Debug>(
+    pub fn update_proof<M: MerkleItem>(
         &self,
         item: &M,
         proof: Proof,
@@ -676,6 +683,14 @@ impl Catchup {
             generation: self.forest.generation,
             path: Some(path),
         })
+    }
+
+    /// Returns metrics data for this Catchup structure
+    pub fn metrics(&self) -> Metrics {
+        let mut metrics = self.forest.metrics();
+        metrics.memory += mem::size_of::<HashMap<Hash, Position>>() 
+                       + self.map.len()*(mem::size_of::<Hash>() + mem::size_of::<Position>());
+        metrics
     }
 }
 
@@ -968,6 +983,7 @@ mod tests {
                 count: 2,
                 insertions: 2,
                 deletions: 0,
+                memory: forest0.metrics().memory,
             }
         );
 
@@ -981,6 +997,7 @@ mod tests {
                 count: 0,
                 insertions: 0,
                 deletions: 0,
+                memory: forest0.metrics().memory,
             }
         );
     }
@@ -1000,6 +1017,7 @@ mod tests {
                 count: 6,
                 insertions: 0,
                 deletions: 0,
+                memory: forest1.metrics().memory,
             }
         );
 
@@ -1032,6 +1050,7 @@ mod tests {
                 count: 0,
                 insertions: 0,
                 deletions: 6,
+                memory: forest1.metrics().memory,
             }
         );
     }
@@ -1051,6 +1070,7 @@ mod tests {
                 count: n as usize,
                 insertions: 0,
                 deletions: 0,
+                memory: forest1.metrics().memory,
             }
         );
 
