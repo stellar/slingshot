@@ -4,8 +4,8 @@ use crate::encoding::SliceReader;
 use crate::errors::VMError;
 use crate::merkle::MerkleItem;
 use crate::predicate::Predicate;
-use crate::program::ProgramItem;
 use crate::program::Encodable;
+use crate::program::ProgramItem;
 use crate::types::{Data, Value};
 use merlin::Transcript;
 
@@ -56,7 +56,7 @@ pub enum PortableItem {
 }
 
 impl Encodable for Contract {
-      /// Serializes the contract to a byte array
+    /// Serializes the contract to a byte array
     fn encode(&self, buf: &mut Vec<u8>) {
         encoding::write_bytes(&self.anchor.0, buf);
         encoding::write_point(&self.predicate.to_point(), buf);
@@ -65,7 +65,7 @@ impl Encodable for Contract {
             item.encode(buf);
         }
     }
-     /// Precise length of a serialized output
+    /// Precise length of a serialized output
     fn serialized_length(&self) -> usize {
         let mut size = 32 + 32 + 4;
         for item in self.payload.iter() {
@@ -103,7 +103,7 @@ impl Contract {
         (self.id, self.predicate, self.payload, self.anchor)
     }
 
-   /// Parses a contract from an output object
+    /// Parses a contract from an output object
     pub fn decode<'a>(reader: &mut SliceReader<'a>) -> Result<Self, VMError> {
         //    Output  =  Anchor  ||  Predicate  ||  LE32(k)  ||  Item[0]  || ... ||  Item[k-1]
         //    Anchor  =  <32 bytes>
@@ -221,8 +221,11 @@ impl Encodable for PortableItem {
         }
     }
 
-    fn encode_to_vec(&self) -> Vec<u8> {}
-
+    fn encode_to_vec(&self) -> Vec<u8> {
+        let mut buf = Vec::with_capacity(self.serialized_length());
+        self.encode(&mut buf);
+        buf
+    }
 }
 
 impl PortableItem {

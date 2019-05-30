@@ -14,8 +14,8 @@ use crate::encoding::SliceReader;
 use crate::errors::VMError;
 use crate::merkle::{MerkleItem, MerkleNeighbor, MerkleTree};
 use crate::point_ops::PointOp;
-use crate::program::{Program, ProgramItem};
 use crate::program::Encodable;
+use crate::program::{Program, ProgramItem};
 use crate::transcript::TranscriptProtocol;
 
 /// Represents a ZkVM predicate with its optional witness data.
@@ -74,19 +74,21 @@ pub enum PredicateLeaf {
     Blinding([u8; 32]),
 }
 impl Encodable for Predicate {
-     /// Encodes the Predicate in program bytecode.
+    /// Encodes the Predicate in program bytecode.
     fn encode(&self, prog: &mut Vec<u8>) {
         encoding::write_point(&self.to_point(), prog);
     }
-     /// Returns the number of bytes needed to serialize the Predicate.
+    /// Returns the number of bytes needed to serialize the Predicate.
     fn serialized_length(&self) -> usize {
         32
     }
-    fn encode_to_vec(&self) -> Vec<u8> {}
-
+    fn encode_to_vec(&self) -> Vec<u8> {
+        let mut buf = Vec::with_capacity(self.serialized_length());
+        self.encode(&mut buf);
+        buf
+    }
 }
 impl Predicate {
-    
     /// Converts predicate to a compressed point
     pub fn to_point(&self) -> CompressedRistretto {
         match self {
@@ -266,7 +268,7 @@ impl PredicateTree {
     }
 }
 
-impl Encodable for CallProof{
+impl Encodable for CallProof {
     /// Serializes the call proof to a byte array.
     fn encode(&self, buf: &mut Vec<u8>) {
         encoding::write_point(self.verification_key.as_compressed(), buf);
@@ -302,7 +304,6 @@ impl Encodable for CallProof{
 }
 
 impl CallProof {
-  
     /// Decodes the call proof from bytes.
     pub fn decode<'a>(reader: &mut SliceReader<'a>) -> Result<Self, VMError> {
         let verification_key =
@@ -331,8 +332,6 @@ impl CallProof {
     pub fn to_bytes(&self) -> Vec<u8> {
         self.encode_to_vec()
     }
-
-      
 }
 
 impl PredicateLeaf {

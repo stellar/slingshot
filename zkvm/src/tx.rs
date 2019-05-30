@@ -10,8 +10,8 @@ use crate::encoding;
 use crate::encoding::SliceReader;
 use crate::errors::VMError;
 use crate::merkle::{MerkleItem, MerkleTree};
-use crate::transcript::TranscriptProtocol;
 use crate::program::Encodable;
+use crate::transcript::TranscriptProtocol;
 
 /// Transaction log. `TxLog` is a type alias for `Vec<TxEntry>`.
 pub type TxLog = Vec<TxEntry>;
@@ -103,8 +103,11 @@ impl Encodable for TxHeader {
     fn serialized_length(&self) -> usize {
         8 * 3
     }
-    fn encode_to_vec(&self) -> Vec<u8> {}
-
+    fn encode_to_vec(&self) -> Vec<u8> {
+        let mut buf = Vec::with_capacity(self.serialized_length());
+        self.encode(&mut buf);
+        buf
+    }
 }
 impl TxHeader {
     fn decode<'a>(reader: &mut SliceReader<'a>) -> Result<Self, VMError> {
@@ -136,7 +139,7 @@ impl Encodable for Tx {
         buf.extend_from_slice(&self.signature.to_bytes());
         buf.extend_from_slice(&self.proof.to_bytes());
     }
-    
+
     /// Returns the size in bytes required to serialize the `Tx`.
     fn serialized_length(&self) -> usize {
         // header is 8 bytes * 3 fields = 24 bytes
@@ -153,7 +156,7 @@ impl Encodable for Tx {
     }
 }
 impl Tx {
-   fn decode<'a>(r: &mut SliceReader<'a>) -> Result<Tx, VMError> {
+    fn decode<'a>(r: &mut SliceReader<'a>) -> Result<Tx, VMError> {
         let header = TxHeader::decode(r)?;
         let prog_len = r.read_size()?;
         let program = r.read_bytes(prog_len)?.to_vec();
@@ -173,7 +176,6 @@ impl Tx {
     pub fn to_bytes(&self) -> Vec<u8> {
         self.encode_to_vec()
     }
-
 
     /// Deserializes the tx from a byte slice.
     ///

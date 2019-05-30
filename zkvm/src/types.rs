@@ -10,8 +10,8 @@ use crate::contract::{Contract, PortableItem};
 use crate::encoding::SliceReader;
 use crate::errors::VMError;
 use crate::predicate::Predicate;
-use crate::program::ProgramItem;
 use crate::program::Encodable;
+use crate::program::ProgramItem;
 use crate::scalar_witness::ScalarWitness;
 use crate::transcript::TranscriptProtocol;
 
@@ -211,7 +211,6 @@ impl Encodable for Data {
         self.encode(&mut buf);
         buf
     }
-    
 }
 
 impl Data {
@@ -221,9 +220,7 @@ impl Data {
     pub fn to_bytes(self) -> Vec<u8> {
         match self {
             Data::Opaque(d) => d,
-            _ => {
-                self.encode_to_vec()
-            }
+            _ => self.encode_to_vec(),
         }
     }
 
@@ -271,7 +268,6 @@ impl Data {
             _ => Err(VMError::TypeNotScalar),
         }
     }
-
 }
 
 impl Default for Data {

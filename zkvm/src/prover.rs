@@ -12,8 +12,8 @@ use crate::errors::VMError;
 use crate::ops::Instruction;
 use crate::point_ops::PointOp;
 use crate::predicate::Predicate;
-use crate::program::{Program, ProgramItem};
 use crate::program::Encodable;
+use crate::program::{Program, ProgramItem};
 use crate::tx::{TxHeader, UnsignedTx};
 use crate::vm::{Delegate, VM};
 /// This is the entry point API for creating a transaction.

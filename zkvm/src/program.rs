@@ -48,14 +48,13 @@ macro_rules! def_op {
 }
 
 pub(crate) trait Encodable {
-   // Returns the serialized length of a datatype who implement this trait.
-   fn encode(&self, buf: &mut Vec<u8>);
-   /// Encodes a datatype who im0lements this trait into a buffer.
-   fn serialized_length(&self) -> usize;
-   /// Encodes a datatype who im0lements this trait into a bytecode array
-   fn encode_to_vec(&self) -> Vec<u8>; 
+    // Returns the serialized length of a datatype who implement this trait.
+    fn encode(&self, buf: &mut Vec<u8>);
+    /// Encodes a datatype who im0lements this trait into a buffer.
+    fn serialized_length(&self) -> usize;
+    /// Encodes a datatype who im0lements this trait into a bytecode array
+    fn encode_to_vec(&self) -> Vec<u8>;
 }
-
 
 impl Encodable for Program {
     fn encode(&self, buf: &mut Vec<u8>) {
@@ -66,14 +65,13 @@ impl Encodable for Program {
     fn serialized_length(&self) -> usize {
         self.0.iter().map(|p| p.serialized_length()).sum()
     }
-    
+
     fn encode_to_vec(&self) -> Vec<u8> {
         let mut buf = Vec::with_capacity(self.serialized_length());
         self.encode(&mut buf);
         buf
     }
 }
-
 
 impl Program {
     def_op!(add, Add);
@@ -121,12 +119,10 @@ impl Program {
         builder(&mut program);
         program
     }
-
+    /// Serializes a Program into a byte array.
     pub fn to_bytes(&self) -> Vec<u8> {
         self.encode_to_vec()
     }
-      
-
 
     // /// Creates a program from parsing the Bytecode data slice of encoded instructions.
     // pub(crate) fn parse(data: &[u8]) -> Result<Self, VMError> {
@@ -143,7 +139,6 @@ impl Program {
     pub fn to_vec(self) -> Vec<Instruction> {
         self.0
     }
-
 
     /// Adds a `push` instruction with an immediate data type that can be converted into `Data`.
     pub fn push<T: Into<Data>>(&mut self, data: T) -> &mut Program {
@@ -185,17 +180,16 @@ impl Encodable for ProgramItem {
         match self {
             ProgramItem::Program(prog) => prog.serialized_length(),
             ProgramItem::Bytecode(vec) => vec.len(),
-    }
+        }
     }
     fn encode_to_vec(&self) -> Vec<u8> {
         let mut buf = Vec::with_capacity(self.serialized_length());
         self.encode(&mut buf);
         buf
     }
-
 }
 impl ProgramItem {
-     /// Encodes the program item into a bytecode array.
+    /// Encodes the program item into a bytecode array.
     pub fn to_bytes(&self) -> Vec<u8> {
         self.encode_to_vec()
     }
@@ -217,7 +211,6 @@ impl ProgramItem {
             ProgramItem::Bytecode(bytes) => Ok(bytes),
         }
     }
-
 }
 
 impl From<Program> for ProgramItem {

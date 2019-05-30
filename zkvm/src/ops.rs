@@ -4,8 +4,8 @@
 use crate::encoding;
 use crate::encoding::SliceReader;
 use crate::errors::VMError;
-use crate::program::ProgramItem;
 use crate::program::Encodable;
+use crate::program::ProgramItem;
 use crate::scalar_witness::ScalarWitness;
 use crate::types::Data;
 use core::mem;
@@ -109,7 +109,7 @@ impl Opcode {
 }
 
 impl Encodable for Instruction {
-     /// Appends the bytecode representation of an Instruction
+    /// Appends the bytecode representation of an Instruction
     /// to the program.
     fn encode(&self, program: &mut Vec<u8>) {
         let mut write = |op: Opcode| program.push(op.to_u8());
@@ -193,9 +193,11 @@ impl Encodable for Instruction {
         }
     }
 
-    fn encode_to_vec(&self) -> Vec<u8> {}
-
-
+    fn encode_to_vec(&self) -> Vec<u8> {
+        let mut buf = Vec::with_capacity(self.serialized_length());
+        self.encode(&mut buf);
+        buf
+    }
 }
 
 impl Instruction {
@@ -282,5 +284,4 @@ impl Instruction {
             Opcode::Delegate => Ok(Instruction::Delegate),
         }
     }
-
 }

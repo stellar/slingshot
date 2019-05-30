@@ -10,8 +10,8 @@ use subtle::{ConditionallySelectable, ConstantTimeEq};
 
 use crate::encoding;
 use crate::errors::VMError;
-use crate::scalar_witness::ScalarWitness;
 use crate::program::Encodable;
+use crate::scalar_witness::ScalarWitness;
 
 /// Variable represents a high-level R1CS variable specified by its
 /// Pedersen commitment. In ZkVM variables are actually indices to a list
@@ -86,7 +86,6 @@ pub struct CommitmentWitness {
     value: ScalarWitness,
     blinding: Scalar,
 }
-
 
 impl Constraint {
     /// Generates and adds to R1CS constraints that enforce that the self evaluates to true.
@@ -283,11 +282,13 @@ impl Encodable for Commitment {
     fn serialized_length(&self) -> usize {
         32
     }
-    fn encode_to_vec(&self) -> Vec<u8> {}
-
+    fn encode_to_vec(&self) -> Vec<u8> {
+        let mut buf = Vec::with_capacity(self.serialized_length());
+        self.encode(&mut buf);
+        buf
+    }
 }
 impl Commitment {
-  
     /// Converts a Commitment to a compressed point.
     pub fn to_point(&self) -> CompressedRistretto {
         match self {
