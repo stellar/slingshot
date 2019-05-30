@@ -223,7 +223,7 @@ impl Forest {
     ///
     /// The algorithm minimizes amount of computation by taking advantage of the already available data.
     ///
-    /// Consider the following partially filled tree due to previous operations:
+    /// Consider the following partially filled tree due to previous updates:
     ///
     /// ```ascii
     /// A         level 4
@@ -233,7 +233,7 @@ impl Forest {
     ///    D  E   level 2
     /// ```
     ///
-    /// Then, an item H is deleted at absolute position 10, with a merkle proof `J',F',E',B'`:
+    /// Then, an item (H) is deleted at absolute position 10, with a merkle proof `J',F',E',B'`:
     ///
     /// ```ascii
     /// A         
@@ -250,8 +250,10 @@ impl Forest {
     /// First, we walk the existing tree down to the smallest
     /// available subtree that supposedly contains our item:
     /// in this case it's the node `D`.
+    /// As we do that, we verify the corresponding neighbors in the merkle proof
+    /// by simple equality check (these must match the nodes already present in the tree). 
     ///
-    /// Then, we walk the merkle proof up to node `D`:
+    /// Then, we walk the merkle proof up to node `D` computing the missing hashes:
     ///
     /// ```ascii
     /// hash(H',J') -> G'
@@ -259,18 +261,9 @@ impl Forest {
     /// ```
     ///
     /// If D' is not equal to D, reject the proof.
-    /// Otherwise, continue walking up the tree to the actual root (A),
-    /// but instead of hashing, simply compare remaining steps in the proof with the stored nodes:
     ///
-    /// ```ascii
-    /// E' == E
-    /// B' == B
-    /// ```
-    ///
-    /// Note: the remaining equality checks are necessary to make sure the proof is fully valid for relay
-    /// to other nodes, but not necessary to verify the inclusion of the item H (which is proven by
-    /// inclusion into D already).
-    ///
+    /// If the proof is valid, connect the newly created nodes (D',F,G,H,J) to the tree
+    /// and mark all intermediate nodes on the path from (H) to the root A as modified.
     pub fn delete<M: MerkleItem>(&mut self, item: &M, proof: &Proof) -> Result<(), UtreexoError> {
         if proof.generation != self.generation {
             return Err(UtreexoError::OutdatedProof);
@@ -941,35 +934,6 @@ mod tests {
         fn commit(&self, t: &mut Transcript) {
             t.commit_u64(b"test_item", *self);
         }
-    }
-
-    struct H(Hash); // wrapper to overcome trait orphan rules
-
-    impl Into<H> for u64 {
-        fn into(self) -> H {
-            H(hleaf(self))
-        }
-    }
-
-    impl Into<H> for Hash {
-        fn into(self) -> H {
-            H(self)
-        }
-    }
-    fn hleaf(i: u64) -> Hash {
-        let mut t = Transcript::new(b"ZkVM.utreexo");
-        i.commit(&mut t);
-        let mut hash = [0; 32];
-        t.challenge_bytes(b"merkle.leaf", &mut hash);
-        hash
-    }
-    fn h<L: Into<H>, R: Into<H>>(l: L, r: R) -> Hash {
-        let mut t = Transcript::new(b"ZkVM.utreexo");
-        t.commit_bytes(b"L", &l.into().0);
-        t.commit_bytes(b"R", &r.into().0);
-        let mut hash = [0; 32];
-        t.challenge_bytes(b"merkle.node", &mut hash);
-        hash
     }
 
     #[test]
