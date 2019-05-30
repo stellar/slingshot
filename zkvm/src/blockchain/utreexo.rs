@@ -48,7 +48,7 @@ pub struct Path {
 pub struct Forest {
     generation: u64,
     roots: [Option<NodeIndex>; 64], // roots of the trees for levels 0 to 63
-    insertions: Vec<Hash>,  // new items (TBD: maybe use a fancy order-preserving HashSet later)
+    insertions: Vec<Hash>, // new items (TBD: maybe use a fancy order-preserving HashSet later)
     deletions: usize,
     heap: Heap,
     hasher: Transcript,
@@ -172,7 +172,8 @@ impl Forest {
                 let hash = Node::hash_leaf(self.hasher.clone(), item);
                 return self
                     .insertions
-                    .iter().find(|&h| h == &hash)
+                    .iter()
+                    .find(|&h| h == &hash)
                     .map(|_| ())
                     .ok_or(UtreexoError::InvalidMerkleProof);
             }
@@ -211,10 +212,7 @@ impl Forest {
     /// Adds a new item to the tree, appending a node to the end.
     pub fn insert<M: MerkleItem>(&mut self, item: &M) -> Proof {
         let hash = Node::hash_leaf(self.hasher.clone(), item);
-        // make sure we do not insert duplicate hashes
-        if self.insertions.iter().find(|&h| h == &hash) == None {
-            self.insertions.push(hash);
-        }
+        self.insertions.push(hash);
         Proof {
             generation: self.generation,
             path: None,
@@ -290,8 +288,10 @@ impl Forest {
                 let hash = Node::hash_leaf(self.hasher.clone(), item);
                 let index = self
                     .insertions
-                    .iter().enumerate().find(|&(_,h)| h == &hash)
-                    .map(|(i,_)| i)
+                    .iter()
+                    .enumerate()
+                    .find(|&(_, h)| h == &hash)
+                    .map(|(i, _)| i)
                     .ok_or(UtreexoError::InvalidMerkleProof)?;
                 self.insertions.remove(index);
                 return Ok(());
@@ -311,10 +311,6 @@ impl Forest {
         //    And also check the higher-level neighbors in the proof.
         let existing = self.existing_node_for_path(top, &path)?;
 
-        dbg!(path);
-        dbg!((top.level, top.hash));
-        dbg!((existing.level, existing.hash));
-
         // 4. Now, walk the merkle proof starting with the leaf,
         //    creating the missing nodes until we hit the bottom node.
         // TBD: reuse preallocated scratch-space?
@@ -331,8 +327,6 @@ impl Forest {
                 node.hash = *neighbor;
                 node.level = i;
             });
-            
-            dbg!((current.level, current.hash, sibling.hash, current.children));
 
             // reordering of current/sibling is done only for hashing.
             // we guarantee that the current node is always going before the sibling on the heap,
@@ -341,8 +335,6 @@ impl Forest {
 
             current_hash = Node::hash_intermediate(self.hasher.clone(), &l.hash, &r.hash);
             current_children = Some((l.index, r.index));
-
-            dbg!((&current_hash, &current_children));
         }
 
         // 5. Check if we arrived at a correct lowest-available node.
@@ -360,17 +352,16 @@ impl Forest {
         // Connect children to the existing lower node.
         let _ = self
             .heap
-            .update_node_at(existing.index, |node| {
-                dbg!((&node.index, &node.hash, &node.children, current_children));
-                node.children = current_children
-            });
+            .update_node_at(existing.index, |node| node.children = current_children);
 
         // Update modification flag for all parents of the deleted leaf.
-        let top = self.heap.update_node_at(top.index, |node| node.modified = true );
+        let top = self
+            .heap
+            .update_node_at(top.index, |node| node.modified = true);
         let _ = path.iter().rev().try_fold(top, |node, (side, _)| {
             node.children.map(|(l, r)| {
                 self.heap.update_node_at(side.choose(l, r), |node| {
-                    node.modified = true; dbg!(("mark-modified", node.hash, &node.children));
+                    node.modified = true;
                 })
             })
         });
@@ -403,7 +394,6 @@ impl Forest {
                     true // traverse into children until we find unmodified nodes
                 } else {
                     // non-modified node - collect and ignore children
-                    dbg!(("collect non-modified", &node.level, &node.hash));
                     new_trees.push(
                         new_heap
                             .allocate_node(|n| {
@@ -459,8 +449,6 @@ impl Forest {
                             node.level = level + 1;
                             node.children = Some((l.index, r.index))
                         });
-
-                        dbg!(("joining", &l.level, &l.hash, r.hash, p.hash));
 
                         // Replace left child index with the new parent.
                         new_trees[prev_i] = p.index;
@@ -624,12 +612,11 @@ impl Forest {
 impl Catchup {
     /// Updates the proof if it's slightly out of date
     /// (made against the previous generation of the Utreexo).
-    pub fn update_proof<M: MerkleItem+std::fmt::Debug>(
+    pub fn update_proof<M: MerkleItem + std::fmt::Debug>(
         &self,
         item: &M,
         proof: Proof,
     ) -> Result<Proof, UtreexoError> {
-
         // If the proof is already up to date - return w/o changes
         if proof.generation == self.forest.generation {
             return Ok(proof);
@@ -1038,9 +1025,7 @@ mod tests {
     fn insert_to_utreexo() {
         let mut forest0 = Forest::new();
 
-        let proofs0 = (0..6).map(|i| {
-            forest0.insert(&i)
-        }).collect::<Vec<_>>();
+        let proofs0 = (0..6).map(|i| forest0.insert(&i)).collect::<Vec<_>>();
 
         let (root, mut forest1, catchup1) = forest0.normalize();
 
@@ -1065,9 +1050,11 @@ mod tests {
         }
 
         // update the proofs
-        let proofs1 = proofs0.into_iter().enumerate().map(|(i, p)| {
-            catchup1.update_proof(&(i as u64), p).unwrap() 
-        }).collect::<Vec<_>>();
+        let proofs1 = proofs0
+            .into_iter()
+            .enumerate()
+            .map(|(i, p)| catchup1.update_proof(&(i as u64), p).unwrap())
+            .collect::<Vec<_>>();
 
         // after the proofs were updated, deletions should succeed
         for i in 0..6u64 {
@@ -1089,9 +1076,7 @@ mod tests {
     fn insert_and_delete_utreexo() {
         let mut forest0 = Forest::new();
         let n = 6u64;
-        let proofs0 = (0..n).map(|i| {
-            forest0.insert(&i)
-        }).collect::<Vec<_>>();
+        let proofs0 = (0..n).map(|i| forest0.insert(&i)).collect::<Vec<_>>();
 
         let (_, forest1, catchup1) = forest0.normalize();
 
@@ -1106,99 +1091,92 @@ mod tests {
         );
 
         // update the proofs
-        let proofs1 = proofs0.into_iter().enumerate().map(|(i, p)| {
-            catchup1.update_proof(&(i as u64), p).unwrap() 
-        }).collect::<Vec<_>>();
+        let proofs1 = proofs0
+            .into_iter()
+            .enumerate()
+            .map(|(i, p)| catchup1.update_proof(&(i as u64), p).unwrap())
+            .collect::<Vec<_>>();
 
         // after the proofs were updated, deletions should succeed
 
-        dbg!("---------------------------------------------");
-        dbg!(hleaf(0));
-        dbg!(hleaf(1));
-        dbg!(hleaf(2));
-        dbg!(hleaf(3));
-        dbg!(hleaf(4));
-        dbg!(hleaf(5));
-        dbg!("---------------------------------------------");
-        dbg!(("a", h(0,1)));
-        dbg!(("b", h(2,3)));
-        dbg!(("c", h(4,5)));
-        dbg!(("d", h(h(0,1),h(2,3))));
-        dbg!(("e", h(h(2,3),h(4,5))));
-        dbg!(("r2", h( h(h(2,3),h(4,5)),1)));
-        dbg!(("catched up proofs", &proofs1));
-        dbg!("---------------------------------------------");
         {
             /* delete 0:
-                d                                       e            
-                |\                                      | \              
-                a   b   c      ->        b   c      ->  b   c       
-                |\  |\  |\               |\  |\         |\  |\  
+                d                                       e
+                |\                                      | \
+                a   b   c      ->        b   c      ->  b   c
+                |\  |\  |\               |\  |\         |\  |\
                 0 1 2 3 4 5          x 1 2 3 4 5        2 3 4 5 1
             */
             let mut forest = forest1.clone();
-
-            dbg!("-------- deletion of [0] -----------");
-
             forest.delete(&0u64, &proofs1[0]).unwrap();
 
-            dbg!("-------- normalizing after deletion -----------");
-
             let (root, _, _) = forest.normalize();
-            assert_eq!(root, MerkleTree::root::<u64>(b"ZkVM.utreexo", &[2u64,3,4,5,1]))
+            assert_eq!(
+                root,
+                MerkleTree::root::<u64>(b"ZkVM.utreexo", &[2u64, 3, 4, 5, 1])
+            )
         }
 
         {
             /* delete 1:
-                d                                       e            
-                |\                                      | \              
-                a   b   c      ->        b   c      ->  b   c       
-                |\  |\  |\               |\  |\         |\  |\  
+                d                                       e
+                |\                                      | \
+                a   b   c      ->        b   c      ->  b   c
+                |\  |\  |\               |\  |\         |\  |\
                 0 1 2 3 4 5          0 x 2 3 4 5        2 3 4 5 0
             */
             let mut forest = forest1.clone();
             forest.delete(&1u64, &proofs1[1]).unwrap();
 
             let (root, _, _) = forest.normalize();
-            assert_eq!(root, MerkleTree::root::<u64>(b"ZkVM.utreexo", &[2u64,3,4,5,0]))
+            assert_eq!(
+                root,
+                MerkleTree::root::<u64>(b"ZkVM.utreexo", &[2u64, 3, 4, 5, 0])
+            )
         }
-        
+
         {
             /* delete 2:
-                d                                       e            
-                |\                                      | \              
-                a   b   c      ->    a       c      ->  a   c       
-                |\  |\  |\           |\      |\         |\  |\  
+                d                                       e
+                |\                                      | \
+                a   b   c      ->    a       c      ->  a   c
+                |\  |\  |\           |\      |\         |\  |\
                 0 1 2 3 4 5          0 1 x 3 4 5        0 1 4 5 3
             */
             let mut forest = forest1.clone();
             forest.delete(&2u64, &proofs1[2]).unwrap();
 
             let (root, _, _) = forest.normalize();
-            assert_eq!(root, MerkleTree::root::<u64>(b"ZkVM.utreexo", &[0u64,1,4,5,3]))
+            assert_eq!(
+                root,
+                MerkleTree::root::<u64>(b"ZkVM.utreexo", &[0u64, 1, 4, 5, 3])
+            )
         }
 
         {
             /* delete 5:
-                d                                       e            
-                |\                                      | \              
-                a   b   c      ->    a   b          ->  a   b       
-                |\  |\  |\           |\  |\             |\  |\  
+                d                                       e
+                |\                                      | \
+                a   b   c      ->    a   b          ->  a   b
+                |\  |\  |\           |\  |\             |\  |\
                 0 1 2 3 4 5          0 1 2 3 4 x        0 1 2 3 4
             */
             let mut forest = forest1.clone();
             forest.delete(&5u64, &proofs1[5]).unwrap();
 
             let (root, _, _) = forest.normalize();
-            assert_eq!(root, MerkleTree::root::<u64>(b"ZkVM.utreexo", &[0u64,1,2,3,4]))
+            assert_eq!(
+                root,
+                MerkleTree::root::<u64>(b"ZkVM.utreexo", &[0u64, 1, 2, 3, 4])
+            )
         }
 
         {
             /* delete 2,3:
-                d                                       e            
-                |\                                      | \              
-                a   b   c      ->    a       c      ->  a   c       
-                |\  |\  |\           |\      |\         |\  |\  
+                d                                       e
+                |\                                      | \
+                a   b   c      ->    a       c      ->  a   c
+                |\  |\  |\           |\      |\         |\  |\
                 0 1 2 3 4 5          0 1 x x 4 5        0 1 4 5
             */
             let mut forest = forest1.clone();
@@ -1206,30 +1184,90 @@ mod tests {
             forest.delete(&3u64, &proofs1[3]).unwrap();
 
             let (root, _, _) = forest.normalize();
-            assert_eq!(root, MerkleTree::root::<u64>(b"ZkVM.utreexo", &[0u64,1,4,5]));
+            assert_eq!(
+                root,
+                MerkleTree::root::<u64>(b"ZkVM.utreexo", &[0u64, 1, 4, 5])
+            );
 
             let mut forest_b = forest1.clone(); // try deletion in another order
             forest_b.delete(&3u64, &proofs1[3]).unwrap();
             forest_b.delete(&2u64, &proofs1[2]).unwrap();
 
             let (root, _, _) = forest_b.normalize();
-            assert_eq!(root, MerkleTree::root::<u64>(b"ZkVM.utreexo", &[0u64,1,4,5]));
+            assert_eq!(
+                root,
+                MerkleTree::root::<u64>(b"ZkVM.utreexo", &[0u64, 1, 4, 5])
+            );
         }
 
         {
             /* delete 0,3:
-                d                                       f            
-                |\                                      | \              
-                a   b   c      ->            c      ->  c   e       
-                |\  |\  |\                   |\         |\  |\  
-                0 1 2 3 4 5          x 1 2 x 4 5        4 5 1 2
+                d                                       f
+                |\                                      | \
+                a   b   c      ->            c      ->  e   c
+                |\  |\  |\                   |\         |\  |\
+                0 1 2 3 4 5          x 1 2 x 4 5        1 2 4 5
             */
             let mut forest = forest1.clone();
             forest.delete(&0u64, &proofs1[0]).unwrap();
             forest.delete(&3u64, &proofs1[3]).unwrap();
 
             let (root, _, _) = forest.normalize();
-            assert_eq!(root, MerkleTree::root::<u64>(b"ZkVM.utreexo", &[4u64,5,1,2]));
+            assert_eq!(
+                root,
+                MerkleTree::root::<u64>(b"ZkVM.utreexo", &[1u64, 2, 4, 5])
+            );
+        }
+
+        {
+            /* delete 0, insert 6, 7:
+                d                                          f
+                |\                                         | \
+                a   b   c      ->        b   c       ->    e   b   c
+                |\  |\  |\               |\  |\            |\  |\  |\
+                0 1 2 3 4 5          x 1 2 3 4 5 6 7       1 6 2 3 4 5 7
+            */
+            let mut forest = forest1.clone();
+            forest.delete(&0u64, &proofs1[0]).unwrap();
+            let proof6 = forest.insert(&6u64);
+            let proof7 = forest.insert(&7u64);
+
+            let (root, mut forest2, catchup) = forest.normalize();
+
+            assert_eq!(
+                root,
+                MerkleTree::root::<u64>(b"ZkVM.utreexo", &[1u64, 6, 2, 3, 4, 5, 7])
+            );
+
+            let proof6 = catchup.update_proof(&6u64, proof6).unwrap();
+            let proof7 = catchup.update_proof(&7u64, proof7).unwrap();
+            let proof1 = catchup.update_proof(&1u64, proofs1[1].clone()).unwrap();
+
+            /* delete 1, 7, insert :
+                 f                                        g
+                 | \                                      | \
+                 e   b   c        ->      b   c     ->    b   c
+                 |\  |\  |\               |\  |\          |\  |\
+                 1 6 2 3 4 5 7        x 6 2 3 4 5 x       2 3 4 5 6
+            */
+
+            forest2.delete(&1u64, &proof1).unwrap();
+            forest2.delete(&7u64, &proof7).unwrap();
+
+            let (root, mut forest3, catchup) = forest2.normalize();
+
+            assert_eq!(
+                root,
+                MerkleTree::root::<u64>(b"ZkVM.utreexo", &[2u64, 3, 4, 5, 6])
+            );
+
+            let proof6 = catchup.update_proof(&6u64, proof6).unwrap();
+            forest3.delete(&6u64, &proof6).unwrap();
+            let (root, _, _) = forest3.normalize();
+            assert_eq!(
+                root,
+                MerkleTree::root::<u64>(b"ZkVM.utreexo", &[2u64, 3, 4, 5])
+            );
         }
     }
 }
