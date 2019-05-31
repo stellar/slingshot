@@ -146,9 +146,7 @@ impl Forest {
             None => {
                 let hash = Node::hash_leaf(self.hasher.clone(), item);
                 return self
-                    .insertions
-                    .iter()
-                    .find(|&h| h == &hash)
+                    .find_insertion(&hash)
                     .map(|_| ())
                     .ok_or(UtreexoError::InvalidMerkleProof);
             }
@@ -255,11 +253,7 @@ impl Forest {
                 // The path is missing, meaning the item must exist among the recent inserions.
                 let hash = Node::hash_leaf(self.hasher.clone(), item);
                 let index = self
-                    .insertions
-                    .iter()
-                    .enumerate()
-                    .find(|&(_, h)| h == &hash)
-                    .map(|(i, _)| i)
+                    .find_insertion(&hash)
                     .ok_or(UtreexoError::InvalidMerkleProof)?;
                 self.insertions.remove(index);
                 return Ok(());
@@ -345,56 +339,52 @@ impl Forest {
 
         // TBD: what's the best way to estimate the vector capacity from self.heap.len()?
         let estimated_cap = self.heap.len() / 2 + self.insertions.len();
-        let mut new_heap = Heap::with_capacity(estimated_cap);
-        let mut new_trees = Vec::<NodeIndex>::with_capacity(estimated_cap);
 
         // Collect all nodes that were not modified.
-        // 1) add pre-existing unmodified nodes...
-        for root in self.roots_iter() {
-            self.heap.traverse(0, root, &mut |_, node: &Node| {
-                if node.modified {
-                    true // traverse into children until we find unmodified nodes
+        // We delay allocation of the nodes so we don't have to mutably borrow `new_heap`
+        // in two iterators, and instead yield pairs `(hash, level)`.
+        let non_modified_nodes = self
+            .heap
+            .traverse(self.roots_iter(), |n| n.modified)
+            // 1) add pre-existing unmodified nodes...
+            .filter_map(|(_, node)| {
+                if !node.modified {
+                    Some((node.hash, node.level))
                 } else {
-                    // non-modified node - collect and ignore children
-                    let new_node = new_heap.allocate(node.hash, node.level, None);
-                    new_trees.push(new_node.index);
-                    false
+                    None
                 }
             })
-        }
-
-        // 2) ...and newly inserted nodes.
-        for hash in self.insertions.into_iter() {
-            let new_node = new_heap.allocate(hash, 0, None);
-            new_trees.push(new_node.index);
-        }
+            // 2) ...and newly inserted nodes.
+            .chain(self.insertions.into_iter().map(|hash| (hash, 0)));
 
         // we just consumed `self.insertions`, so let's also move out the hasher.
         let hasher = self.hasher;
 
         // Compute perfect roots for the new tree,
         // joining together same-level nodes into higher-level nodes.
-        let new_roots = new_trees.into_iter()
-            .fold(
+        let (new_heap, new_roots) = non_modified_nodes.fold(
+            (
+                Heap::with_capacity(estimated_cap),
                 [None as Option<NodeIndex>; 64],
-                |mut roots, ni| {
-                    let mut node = new_heap.node_at(ni);
-                    // If we have a left node at the same level already,
-                    // merge it with the current node.
-                    // Do the same with the new parent, until it lands on a unoccupied slot.
-                    while let Some(i) = roots[node.level] {
-                        let left = new_heap.node_at(i);
-                        node = new_heap.allocate(
-                            Node::hash_intermediate(hasher.clone(), &left.hash, &node.hash),
-                            left.level + 1,
-                            Some((left.index, node.index)),
-                        );
-                        roots[left.level] = None;
-                    }
-                    // Place the node in the unoccupied slot.
-                    roots[node.level] = Some(node.index);
-                    roots
+            ),
+            |(mut new_heap, mut roots), (hash, level)| {
+                let mut node = new_heap.allocate(hash, level, None);
+                // If we have a left node at the same level already,
+                // merge it with the current node.
+                // Do the same with the new parent, until it lands on a unoccupied slot.
+                while let Some(i) = roots[node.level] {
+                    let left = new_heap.node_at(i);
+                    node = new_heap.allocate(
+                        Node::hash_intermediate(hasher.clone(), &left.hash, &node.hash),
+                        left.level + 1,
+                        Some((left.index, node.index)),
+                    );
+                    roots[left.level] = None;
                 }
+                // Place the node in the unoccupied slot.
+                roots[node.level] = Some(node.index);
+                (new_heap, roots)
+            },
         );
 
         let new_forest = Forest {
@@ -534,6 +524,15 @@ impl Forest {
             .filter_map(move |optional_index| optional_index.map(|index| self.heap.node_at(index)))
     }
 
+    /// Finds an index of the hash in the list of freshly inserted items.
+    fn find_insertion(&self, hash: &Hash) -> Option<usize> {
+        self.insertions
+            .iter()
+            .enumerate()
+            .find(|&(_, ref h)| h == &hash)
+            .map(|(i, _)| i)
+    }
+
     /// Trims the forest leaving only the root nodes.
     /// Assumes the forest is normalized.
     fn trim(&self) -> Forest {
@@ -556,19 +555,15 @@ impl Forest {
     /// Wraps the forest into a Catchup structure
     fn into_catchup(self) -> Catchup {
         // Traverse the tree to collect the catchup entries
-        let mut catchup_map: HashMap<Hash, Position> = HashMap::new();
-        let mut top_offset: Position = 0;
-        for root in self.roots_iter() {
-            // collect nodes without children into the Catchup map
-            self.heap
-                .traverse(top_offset, root, &mut |offset, node: &Node| {
-                    if node.children == None {
-                        catchup_map.insert(node.hash, offset);
-                    }
-                    true
-                });
-            top_offset += root.capacity();
-        }
+        let catchup_map = self.heap.traverse(self.roots_iter(), |_| true).fold(
+            HashMap::<Hash, Position>::new(),
+            |mut map, (offset, node)| {
+                if node.children == None {
+                    map.insert(node.hash, offset);
+                }
+                map
+            },
+        );
         Catchup {
             forest: self,
             map: catchup_map,
@@ -735,49 +730,63 @@ impl DoubleEndedIterator for Directions {
     }
 }
 
-struct TreeTraversal<'h, F> where F: for<'n> Fn(&'n Node)->bool {
+/// Iterator implementing traversal of the binary tree.
+struct TreeTraversal<'h, F>
+where
+    F: for<'n> Fn(&'n Node) -> bool,
+{
+    /// reference to the heap of nodes
     heap: &'h Heap,
+    /// drill-down predicate - if it returns true, iterator traverses to the children.
+    /// if it returns false, the node is yielded, but its children are ignored.
     predicate: F,
+    /// nodes in the queue - next node to be yielded is in the end of the list
     nodes: Vec<(Position, NodeIndex)>,
 }
 
-impl<'h,F> TreeTraversal<'h,F> where F: for<'n> Fn(&'n Node)->bool {
-    fn new(heap: &'h Heap, predicate: F, roots: impl Iterator<Item=Node>) -> Self {
-        let mut roots = roots.peekable();
-        let cap = roots.size_hint().0 + 2*roots.peek().map(|r|r.level).unwrap_or(0);
+impl<'h, F> TreeTraversal<'h, F>
+where
+    F: for<'n> Fn(&'n Node) -> bool,
+{
+    fn new(heap: &'h Heap, roots: impl IntoIterator<Item = Node>, predicate: F) -> Self {
+        let mut roots = roots.into_iter().peekable();
+        let cap = roots.size_hint().0 + 2 * roots.peek().map(|r| r.level).unwrap_or(0);
         let mut t = TreeTraversal {
             heap,
             predicate,
-            nodes: Vec::with_capacity(cap)
+            nodes: Vec::with_capacity(cap),
         };
         let mut offset = 0;
         for r in roots {
-            // insert in reverse order because the frontier of the iteration 
+            // insert in reverse order because the frontier of the iteration
             // will be in the end of the list.
-            t.nodes.insert(0,(offset, r.index));
+            t.nodes.insert(0, (offset, r.index));
             offset += r.capacity();
         }
         t
     }
 }
 
-impl<'h,F> Iterator for TreeTraversal<'h,F> where F: for<'n> Fn(&'n Node)->bool {
+impl<'h, F> Iterator for TreeTraversal<'h, F>
+where
+    F: for<'n> Fn(&'n Node) -> bool,
+{
     type Item = (Position, Node);
     fn next(&mut self) -> Option<Self::Item> {
         if let Some((offset, ni)) = self.nodes.pop() {
             let node = self.heap.node_at(ni);
-            if let Some((li,ri)) = node.children {
-                self.nodes.push((offset + node.capacity()/2, ri));
-                self.nodes.push((offset, li));
+            if (self.predicate)(&node) {
+                if let Some((li, ri)) = node.children {
+                    self.nodes.push((offset + node.capacity() / 2, ri));
+                    self.nodes.push((offset, li));
+                }
             }
-            return Some((offset, node));
+            Some((offset, node))
         } else {
-            return None;
+            None
         }
     }
 }
-
-
 
 /// Storage of all the nodes with methods to access them.
 #[derive(Clone)]
@@ -865,17 +874,15 @@ impl Heap {
         node
     }
 
-    /// Traverses all nodes in a tree starting with a given node.
-    /// If the callback `f` returns `false` for some node,
-    /// does not recurse into the node's children.
-    fn traverse(&self, offset: Position, node: Node, f: &mut impl FnMut(Position, &Node) -> bool) {
-        if f(offset, &node) {
-            if let Some((li, ri)) = node.children {
-                let (l, r) = (self.node_at(li), self.node_at(ri));
-                self.traverse(offset, l, f);
-                self.traverse(offset + l.capacity(), r, f);
-            }
-        }
+    fn traverse<'h, F>(
+        &'h self,
+        roots: impl IntoIterator<Item = Node>,
+        predicate: F,
+    ) -> TreeTraversal<'h, F>
+    where
+        F: for<'n> Fn(&'n Node) -> bool,
+    {
+        TreeTraversal::new(self, roots, predicate)
     }
 
     /// Returns an iterator that walks the given path (from root down)
@@ -886,15 +893,17 @@ impl Heap {
     fn walk_down<'a, 'b: 'a>(
         &'a self,
         root: Node,
-        directions: impl Iterator<Item = Side> + 'b,
+        directions: impl IntoIterator<Item = Side> + 'b,
     ) -> impl Iterator<Item = (Node, Node)> + '_ {
-        directions.scan(root.children, move |children, side| {
-            children.map(|(li, ri)| {
-                let (main, neighbor) = side.from_left_right(self.node_at(li), self.node_at(ri));
-                *children = main.children;
-                (main, neighbor)
+        directions
+            .into_iter()
+            .scan(root.children, move |children, side| {
+                children.map(|(li, ri)| {
+                    let (main, neighbor) = side.from_left_right(self.node_at(li), self.node_at(ri));
+                    *children = main.children;
+                    (main, neighbor)
+                })
             })
-        })
     }
 }
 
