@@ -169,11 +169,11 @@ impl Forest {
 
         // 4. Now, walk the merkle proof starting with the leaf,
         //    creating the missing nodes until we hit the bottom node.
-        let mut current_hash = Node::hash_leaf(self.hasher.clone(), item);
-        for (side, neighbor) in path.iter().take(existing.level) {
-            let (l, r) = side.to_left_right(&current_hash, neighbor);
-            current_hash = Node::hash_intermediate(self.hasher.clone(), l, r);
-        }
+        let current_hash = Node::hash_leaf(self.hasher.clone(), item);
+        let current_hash = path
+            .walk_up(current_hash, &self.hasher)
+            .take(existing.level)
+            .fold(current_hash, |_, (parent, _)| parent);
 
         // 5. Check if we arrived at a correct lowest-available node.
         if current_hash != existing.hash {
@@ -281,31 +281,34 @@ impl Forest {
 
         // 4. Now, walk the merkle proof starting with the leaf,
         //    creating the missing nodes until we hit the bottom node.
-        // TBD: reuse preallocated scratch-space?
         let hasher = self.hasher.clone();
         let new_children = self.heap.transaction(|mut heap| {
-            let mut current_hash = Node::hash_leaf(hasher.clone(), item);
-            let mut current_children = None;
-            for (i, (side, neighbor)) in path.iter().enumerate().take(existing.level) {
-                let current = heap.allocate(current_hash, i, current_children);
-                let sibling = heap.allocate(*neighbor, i, None);
+            let item_hash = Node::hash_leaf(hasher.clone(), item);
 
-                // reordering of current/sibling is done only for hashing.
-                // we guarantee that the current node is always going before the sibling on the heap,
-                // to have stable parent index (parent is always stored before _its_ sibling).
-                let (l, r) = side.to_left_right(&current, &sibling);
-
-                current_hash = Node::hash_intermediate(hasher.clone(), &l.hash, &r.hash);
-                current_children = Some((l.index, r.index));
-            }
+            let (hash, children) = path
+                .directions()
+                .zip(path.walk_up(item_hash, &hasher))
+                .enumerate()
+                .take(existing.level)
+                .fold(
+                    (item_hash, None),
+                    |(_, children), (i, (side, (parent_hash, (left_hash, right_hash))))| {
+                        let (left_children, right_children) = side.to_left_right(children, None);
+                        let (l, r) = (
+                            heap.allocate(left_hash, i, left_children),
+                            heap.allocate(right_hash, i, right_children),
+                        );
+                        (parent_hash, Some((l.index, r.index)))
+                    },
+                );
 
             // 5. Check if we arrived at a correct lowest-available node.
-            if current_hash != existing.hash {
+            if hash != existing.hash {
                 // We haven't met the node we expected to meet, so the proof is invalid.
                 return Err(UtreexoError::InvalidMerkleProof);
             }
 
-            Ok(current_children)
+            Ok(children)
         })?;
 
         // Connect children to the existing lower node.
@@ -467,18 +470,14 @@ impl Catchup {
             neighbors: Vec::new(),
         });
 
-        let hash = Node::hash_leaf(self.forest.hasher.clone(), item);
-
         // Climb up the merkle path until we find an existing node or nothing.
-        let (shared_level, catchup_result, _) = path.iter().fold(
-            (0, self.map.get(&hash), hash),
-            |(level, catchup_result, hash), (side, neighbor)| match catchup_result {
-                Some(r) => (level, Some(r), hash),
-                None => {
-                    let (l, r) = side.to_left_right(&hash, neighbor);
-                    let hash = Node::hash_intermediate(self.forest.hasher.clone(), &l, &r);
-                    let catchup_result = self.map.get(&hash);
-                    (level + 1, catchup_result, hash)
+        let hash = Node::hash_leaf(self.forest.hasher.clone(), item);
+        let (midlevel, catchup_result) = path.walk_up(hash, &self.forest.hasher).fold(
+            (0, self.map.get(&hash)),
+            |(level, catchup_result), (p, _)| {
+                match catchup_result {
+                    Some(r) => (level, Some(r)),           // keep the found result
+                    None => (level + 1, self.map.get(&p)), // try a higher parent
                 }
             },
         );
@@ -488,11 +487,11 @@ impl Catchup {
 
         // Adjust the absolute position:
         // keep the lowest (level+1) bits and add the stored position offset for the stored subtree
-        let mask: Position = (1 << shared_level) - 1; // L=0 -> ...00, L=1 -> ...01, L=2 -> ...11
+        let mask: Position = (1 << midlevel) - 1; // L=0 -> ...00, L=1 -> ...01, L=2 -> ...11
         path.position = position_offset + (path.position & mask);
 
         // Remove all outdated neighbors
-        path.neighbors.truncate(shared_level);
+        path.neighbors.truncate(midlevel);
 
         // Find the root to which the updated position belongs
         let root = self.forest.root_containing_position(path.position)?;
@@ -501,13 +500,14 @@ impl Catchup {
             position: path.position,
             depth: root.level,
         };
-        path.neighbors = self.forest.heap
-            .walk(root, directions.rev())
-            .fold(path.neighbors, |mut list, (_, new_neighbor)| {
+        path.neighbors = self.forest.heap.walk_down(root, directions.rev()).fold(
+            path.neighbors,
+            |mut list, (_, new_neighbor)| {
                 // TODO: this is not the fastest way to insert missing neighbors
-                list.insert(shared_level, new_neighbor.hash);
+                list.insert(midlevel, new_neighbor.hash);
                 list
-            });
+            },
+        );
 
         Ok(Proof {
             generation: self.forest.generation,
@@ -545,7 +545,7 @@ impl Forest {
     /// neighbors in the path.
     fn existing_node_for_path(&self, root: Node, path: &Path) -> Result<Node, UtreexoError> {
         self.heap
-            .walk(root, path.directions().rev())
+            .walk_down(root, path.directions().rev())
             .zip(path.neighbors.iter().rev())
             .try_fold(root, |_, ((node, actual_neighbor), proof_neighbor)| {
                 if proof_neighbor != &actual_neighbor.hash {
@@ -713,6 +713,21 @@ impl Path {
             depth: self.neighbors.len(),
         }
     }
+    /// Returns an iterator that walks up the path
+    /// and yields parent hash and children hashes at each step.
+    fn walk_up<'a, 'b: 'a>(
+        &'a self,
+        item_hash: Hash,
+        hasher: &'b Transcript,
+    ) -> impl Iterator<Item = (Hash, (Hash, Hash))> + 'a {
+        self.iter()
+            .scan(item_hash, move |item_hash, (side, neighbor)| {
+                let (l, r) = side.to_left_right(*item_hash, *neighbor);
+                let p = Node::hash_intermediate(hasher.clone(), &l, &r);
+                *item_hash = p;
+                Some((p, (l, r)))
+            })
+    }
 }
 
 impl ExactSizeIterator for Directions {
@@ -855,7 +870,7 @@ impl Heap {
     /// * Root node is NOT included.
     /// * The last node yielded by the iterator is the node without children.
     /// * If the root has no children, iterator yields None on the first iteration.
-    fn walk<'a, 'b: 'a>(
+    fn walk_down<'a, 'b: 'a>(
         &'a self,
         root: Node,
         directions: impl Iterator<Item = Side> + 'b,
@@ -1087,6 +1102,7 @@ mod tests {
                 0 1 2 3 4 5          x 1 2 3 4 5        2 3 4 5 1
             */
             let mut forest = forest1.clone();
+            forest.verify(&0u64, &proofs1[0]).unwrap();
             forest.delete(&0u64, &proofs1[0]).unwrap();
 
             let (root, _, _) = forest.normalize();
@@ -1105,6 +1121,7 @@ mod tests {
                 0 1 2 3 4 5          0 x 2 3 4 5        2 3 4 5 0
             */
             let mut forest = forest1.clone();
+            forest.verify(&1u64, &proofs1[1]).unwrap();
             forest.delete(&1u64, &proofs1[1]).unwrap();
 
             let (root, _, _) = forest.normalize();
@@ -1188,6 +1205,8 @@ mod tests {
                 0 1 2 3 4 5          x 1 2 x 4 5        1 2 4 5
             */
             let mut forest = forest1.clone();
+            forest.verify(&0u64, &proofs1[0]).unwrap();
+            forest.verify(&3u64, &proofs1[3]).unwrap();
             forest.delete(&0u64, &proofs1[0]).unwrap();
             forest.delete(&3u64, &proofs1[3]).unwrap();
 
@@ -1207,6 +1226,7 @@ mod tests {
                 0 1 2 3 4 5          x 1 2 3 4 5 6 7       1 6 2 3 4 5 7
             */
             let mut forest = forest1.clone();
+            forest.verify(&0u64, &proofs1[0]).unwrap();
             forest.delete(&0u64, &proofs1[0]).unwrap();
             let proof6 = forest.insert(&6u64);
             let proof7 = forest.insert(&7u64);
@@ -1230,6 +1250,8 @@ mod tests {
                  1 6 2 3 4 5 7        x 6 2 3 4 5 x       2 3 4 5 6
             */
 
+            forest2.verify(&1u64, &proof1).unwrap();
+            forest2.verify(&7u64, &proof7).unwrap();
             forest2.delete(&1u64, &proof1).unwrap();
             forest2.delete(&7u64, &proof7).unwrap();
 
