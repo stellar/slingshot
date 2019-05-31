@@ -286,7 +286,7 @@ impl Forest {
                 .take(existing.level)
                 .fold(
                     (item_hash, None),
-                    |(_, children), (i, (side, (parent_hash, (left_hash, right_hash))))| {
+                    |(_hash, children), (i, (side, (parent_hash, (left_hash, right_hash))))| {
                         let (left_children, right_children) = side.to_left_right(children, None);
                         let (l, r) = (
                             heap.allocate(left_hash, i, left_children),
@@ -347,7 +347,7 @@ impl Forest {
             .heap
             .traverse(self.roots_iter(), |n| n.modified)
             // 1) add pre-existing unmodified nodes...
-            .filter_map(|(_, node)| {
+            .filter_map(|(_offset, node)| {
                 if !node.modified {
                     Some((node.hash, node.level))
                 } else {
@@ -461,7 +461,7 @@ impl Catchup {
         };
         path.neighbors = self.forest.heap.walk_down(root, directions.rev()).fold(
             path.neighbors,
-            |mut list, (_, new_neighbor)| {
+            |mut list, (_node, new_neighbor)| {
                 // TODO: this is not the fastest way to insert missing neighbors
                 list.insert(midlevel, new_neighbor.hash);
                 list
@@ -506,13 +506,16 @@ impl Forest {
         self.heap
             .walk_down(root, path.directions().rev())
             .zip(path.neighbors.iter().rev())
-            .try_fold(root, |_, ((node, actual_neighbor), proof_neighbor)| {
-                if proof_neighbor != &actual_neighbor.hash {
-                    Err(UtreexoError::InvalidMerkleProof)
-                } else {
-                    Ok(node)
-                }
-            })
+            .try_fold(
+                root,
+                |_parent, ((node, actual_neighbor), proof_neighbor)| {
+                    if proof_neighbor != &actual_neighbor.hash {
+                        Err(UtreexoError::InvalidMerkleProof)
+                    } else {
+                        Ok(node)
+                    }
+                },
+            )
     }
 
     /// Returns an iterator over roots of the forest,
@@ -529,8 +532,8 @@ impl Forest {
         self.insertions
             .iter()
             .enumerate()
-            .find(|&(_, ref h)| h == &hash)
-            .map(|(i, _)| i)
+            .find(|&(_i, ref h)| h == &hash)
+            .map(|(i, _h)| i)
     }
 
     /// Trims the forest leaving only the root nodes.
