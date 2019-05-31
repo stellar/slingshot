@@ -374,7 +374,6 @@ impl Forest {
 
         // Compute perfect roots for the new tree,
         // joining together same-level nodes into higher-level nodes.
-        // (placing the new parent in the position of the left node)
         let new_roots = new_trees.into_iter()
             .fold(
                 [None as Option<NodeIndex>; 64],
@@ -735,6 +734,50 @@ impl DoubleEndedIterator for Directions {
         Some(side)
     }
 }
+
+struct TreeTraversal<'h, F> where F: for<'n> Fn(&'n Node)->bool {
+    heap: &'h Heap,
+    predicate: F,
+    nodes: Vec<(Position, NodeIndex)>,
+}
+
+impl<'h,F> TreeTraversal<'h,F> where F: for<'n> Fn(&'n Node)->bool {
+    fn new(heap: &'h Heap, predicate: F, roots: impl Iterator<Item=Node>) -> Self {
+        let mut roots = roots.peekable();
+        let cap = roots.size_hint().0 + 2*roots.peek().map(|r|r.level).unwrap_or(0);
+        let mut t = TreeTraversal {
+            heap,
+            predicate,
+            nodes: Vec::with_capacity(cap)
+        };
+        let mut offset = 0;
+        for r in roots {
+            // insert in reverse order because the frontier of the iteration 
+            // will be in the end of the list.
+            t.nodes.insert(0,(offset, r.index));
+            offset += r.capacity();
+        }
+        t
+    }
+}
+
+impl<'h,F> Iterator for TreeTraversal<'h,F> where F: for<'n> Fn(&'n Node)->bool {
+    type Item = (Position, Node);
+    fn next(&mut self) -> Option<Self::Item> {
+        if let Some((offset, ni)) = self.nodes.pop() {
+            let node = self.heap.node_at(ni);
+            if let Some((li,ri)) = node.children {
+                self.nodes.push((offset + node.capacity()/2, ri));
+                self.nodes.push((offset, li));
+            }
+            return Some((offset, node));
+        } else {
+            return None;
+        }
+    }
+}
+
+
 
 /// Storage of all the nodes with methods to access them.
 #[derive(Clone)]
