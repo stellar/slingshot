@@ -52,7 +52,7 @@ pub struct Forest {
     insertions: Vec<Hash>, // new items (TBD: maybe use a fancy order-preserving HashSet later)
     deletions: usize,
     heap: Heap,
-    hasher: Transcript,
+    hasher: NodeHasher,
 }
 
 /// Structure that helps auto-updating the proofs created for a previous generation of a forest.
@@ -115,7 +115,7 @@ impl Forest {
             insertions: Vec::new(),
             deletions: 0,
             heap: Heap::new(),
-            hasher: Transcript::new(b"ZkVM.utreexo"),
+            hasher: NodeHasher::new(),
         }
     }
 
@@ -144,7 +144,7 @@ impl Forest {
         let path = match &proof.path {
             Some(path) => path,
             None => {
-                let hash = Node::hash_leaf(self.hasher.clone(), item);
+                let hash = self.hasher.leaf(item);
                 return self
                     .find_insertion(&hash)
                     .map(|_| ())
@@ -167,7 +167,7 @@ impl Forest {
 
         // 4. Now, walk the merkle proof starting with the leaf,
         //    creating the missing nodes until we hit the bottom node.
-        let current_hash = Node::hash_leaf(self.hasher.clone(), item);
+        let current_hash = self.hasher.leaf(item);
         let current_hash = path
             .walk_up(current_hash, &self.hasher)
             .take(existing.level)
@@ -184,8 +184,7 @@ impl Forest {
 
     /// Adds a new item to the tree, appending a node to the end.
     pub fn insert<M: MerkleItem>(&mut self, item: &M) -> Proof {
-        let hash = Node::hash_leaf(self.hasher.clone(), item);
-        self.insertions.push(hash);
+        self.insertions.push(self.hasher.leaf(item));
         Proof {
             generation: self.generation,
             path: None,
@@ -251,7 +250,7 @@ impl Forest {
             Some(path) => path,
             None => {
                 // The path is missing, meaning the item must exist among the recent inserions.
-                let hash = Node::hash_leaf(self.hasher.clone(), item);
+                let hash = self.hasher.leaf(item);
                 let index = self
                     .find_insertion(&hash)
                     .ok_or(UtreexoError::InvalidMerkleProof)?;
@@ -275,13 +274,13 @@ impl Forest {
 
         // 4. Now, walk the merkle proof starting with the leaf,
         //    creating the missing nodes until we hit the bottom node.
-        let hasher = self.hasher.clone();
+        let hasher = &self.hasher;
         let new_children = self.heap.transaction(|mut heap| {
-            let item_hash = Node::hash_leaf(hasher.clone(), item);
+            let item_hash = hasher.leaf(item);
 
             let (hash, children) = path
                 .directions()
-                .zip(path.walk_up(item_hash, &hasher))
+                .zip(path.walk_up(item_hash, hasher))
                 .enumerate()
                 .take(existing.level)
                 .fold(
@@ -375,7 +374,7 @@ impl Forest {
                 while let Some(i) = roots[node.level] {
                     let left = new_heap.node_at(i);
                     node = new_heap.allocate(
-                        Node::hash_intermediate(hasher.clone(), &left.hash, &node.hash),
+                        hasher.intermediate(&left.hash, &node.hash),
                         left.level + 1,
                         Some((left.index, node.index)),
                     );
@@ -430,7 +429,7 @@ impl Catchup {
         });
 
         // Climb up the merkle path until we find an existing node or nothing.
-        let hash = Node::hash_leaf(self.forest.hasher.clone(), item);
+        let hash = self.forest.hasher.leaf(item);
         let (midlevel, catchup_result) = path.walk_up(hash, &self.forest.hasher).fold(
             (0, self.map.get(&hash)),
             |(level, catchup_result), (p, _)| {
@@ -583,18 +582,23 @@ impl Forest {
             .fold(None, |optional_hash, node| {
                 if let Some(h) = optional_hash {
                     // previous hash is of lower level, so it goes to the right
-                    Some(Node::hash_intermediate(self.hasher.clone(), &node.hash, &h))
+                    Some(self.hasher.intermediate(&node.hash, &h))
                 } else {
                     // this is the first iteration - use node's hash as-is
                     Some(node.hash)
                 }
             })
-            .unwrap_or(Node::hash_empty(self.hasher.clone()))
+            .unwrap_or(self.hasher.empty())
     }
 }
 
 /// Index of a `Node` within a forest's heap storage.
 type NodeIndex = usize;
+
+#[derive(Clone)]
+struct NodeHasher {
+    t: Transcript,
+}
 
 /// Node represents a leaf or an intermediate node in one of the trees.
 /// Leaves are indicated by `level=0`.
@@ -685,12 +689,12 @@ impl Path {
     fn walk_up<'a, 'b: 'a>(
         &'a self,
         item_hash: Hash,
-        hasher: &'b Transcript,
+        hasher: &'b NodeHasher,
     ) -> impl Iterator<Item = (Hash, (Hash, Hash))> + 'a {
         self.iter()
             .scan(item_hash, move |item_hash, (side, neighbor)| {
                 let (l, r) = side.to_left_right(*item_hash, *neighbor);
-                let p = Node::hash_intermediate(hasher.clone(), &l, &r);
+                let p = hasher.intermediate(&l, &r);
                 *item_hash = p;
                 Some((p, (l, r)))
             })
@@ -910,31 +914,42 @@ impl Heap {
     }
 }
 
+impl NodeHasher {
+    fn new() -> Self {
+        NodeHasher {
+            t: Transcript::new(b"ZkVM.utreexo"),
+        }
+    }
+
+    fn leaf<M: MerkleItem>(&self, item: &M) -> Hash {
+        let mut t = self.t.clone();
+        item.commit(&mut t);
+        let mut hash = [0; 32];
+        t.challenge_bytes(b"merkle.leaf", &mut hash);
+        hash
+    }
+
+    fn intermediate(&self, left: &Hash, right: &Hash) -> Hash {
+        let mut t = self.t.clone();
+        t.commit_bytes(b"L", left);
+        t.commit_bytes(b"R", right);
+        let mut hash = [0; 32];
+        t.challenge_bytes(b"merkle.node", &mut hash);
+        hash
+    }
+
+    fn empty(&self) -> Hash {
+        let mut t = self.t.clone();
+        let mut hash = [0; 32];
+        t.challenge_bytes(b"merkle.empty", &mut hash);
+        hash
+    }
+}
+
 impl Node {
     /// maximum number of items in this subtree, ignoring deletions
     fn capacity(&self) -> u64 {
         1 << self.level
-    }
-
-    fn hash_leaf<M: MerkleItem>(mut h: Transcript, item: &M) -> Hash {
-        item.commit(&mut h);
-        let mut hash = [0; 32];
-        h.challenge_bytes(b"merkle.leaf", &mut hash);
-        hash
-    }
-
-    fn hash_intermediate(mut h: Transcript, left: &Hash, right: &Hash) -> Hash {
-        h.commit_bytes(b"L", left);
-        h.commit_bytes(b"R", right);
-        let mut hash = [0; 32];
-        h.challenge_bytes(b"merkle.node", &mut hash);
-        hash
-    }
-
-    fn hash_empty(mut h: Transcript) -> Hash {
-        let mut hash = [0; 32];
-        h.challenge_bytes(b"merkle.empty", &mut hash);
-        hash
     }
 
     fn pack(&self) -> PackedNode {
