@@ -396,7 +396,7 @@ impl<M: MerkleItem> Forest<M> {
             insertions: Vec::new(), // will remain empty
             deletions: 0,
             heap: new_heap,
-            hasher: hasher.clone(),
+            hasher,
             phantom: self.phantom,
         };
 
