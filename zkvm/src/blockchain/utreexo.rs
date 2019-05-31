@@ -374,59 +374,29 @@ impl Forest {
 
         // Compute perfect roots for the new tree,
         // joining together same-level nodes into higher-level nodes.
-        let new_roots = {
-            let mut new_roots = [None as Option<NodeIndex>; 64];
-
-            // The `left` variable will flip-flop between None and Some as we match pairs of nodes.
-            let mut left: Option<(usize, Node)> = None;
-
-            // Scan each level, from low to high, and match up available pairs of nodes, moving
-            // the right node closer to the left node.
-            for level in 0..64 {
-                let mut i = 0;
-                while i < new_trees.len() {
-                    let node = new_heap.node_at(new_trees[i]);
-                    if node.level != level {
-                        // skip nodes at other levels
-                        i += 1;
-                        continue;
-                    }
-                    if let Some((prev_i, l)) = left {
-                        // Remove the right node
-                        let r = new_heap.node_at(new_trees.remove(i));
-                        let p = new_heap.allocate(
-                            Node::hash_intermediate(hasher.clone(), &l.hash, &r.hash),
-                            level + 1,
-                            Some((l.index, r.index)),
+        // (placing the new parent in the position of the left node)
+        let new_roots = new_trees.into_iter()
+            .fold(
+                [None as Option<NodeIndex>; 64],
+                |mut roots, ni| {
+                    let mut node = new_heap.node_at(ni);
+                    // If we have a left node at the same level already,
+                    // merge it with the current node.
+                    // Do the same with the new parent, until it lands on a unoccupied slot.
+                    while let Some(i) = roots[node.level] {
+                        let left = new_heap.node_at(i);
+                        node = new_heap.allocate(
+                            Node::hash_intermediate(hasher.clone(), &left.hash, &node.hash),
+                            left.level + 1,
+                            Some((left.index, node.index)),
                         );
-
-                        // Replace left child index with the new parent.
-                        new_trees[prev_i] = p.index;
-
-                        // Forget the left item as we have successfully matched it up with the right node.
-                        left = None;
-
-                        // Clear the remembered level for the left item that we just consumed.
-                        // The parent will be remembered in the loop for the level+1.
-                        new_roots[level] = None;
-
-                    // Do not increment `i` since we just removed that item from the list
-                    // and the current value of `i` now points to the next item (or the end).
-                    } else {
-                        // Remember the first node in the pair
-                        left = Some((i, node));
-
-                        // Remember this node's index for this level.
-                        new_roots[level] = Some(node.index);
-                        i += 1;
+                        roots[left.level] = None;
                     }
+                    // Place the node in the unoccupied slot.
+                    roots[node.level] = Some(node.index);
+                    roots
                 }
-                // if there was no matching right node, leave the left one in the tree,
-                // forgetting it before we go to the higher level.
-                left = None;
-            }
-            new_roots
-        };
+        );
 
         let new_forest = Forest {
             generation: self.generation + 1,
@@ -1108,7 +1078,7 @@ mod tests {
             let (root, _, _) = forest.normalize();
             assert_eq!(
                 root,
-                MerkleTree::root::<u64>(b"ZkVM.utreexo", &[2u64, 3, 4, 5, 1])
+                MerkleTree::root::<u64>(b"ZkVM.utreexo", &[2, 3, 4, 5, 1])
             )
         }
 
@@ -1127,7 +1097,7 @@ mod tests {
             let (root, _, _) = forest.normalize();
             assert_eq!(
                 root,
-                MerkleTree::root::<u64>(b"ZkVM.utreexo", &[2u64, 3, 4, 5, 0])
+                MerkleTree::root::<u64>(b"ZkVM.utreexo", &[2, 3, 4, 5, 0])
             )
         }
 
@@ -1145,7 +1115,7 @@ mod tests {
             let (root, _, _) = forest.normalize();
             assert_eq!(
                 root,
-                MerkleTree::root::<u64>(b"ZkVM.utreexo", &[0u64, 1, 4, 5, 3])
+                MerkleTree::root::<u64>(b"ZkVM.utreexo", &[0, 1, 4, 5, 3])
             )
         }
 
@@ -1163,7 +1133,7 @@ mod tests {
             let (root, _, _) = forest.normalize();
             assert_eq!(
                 root,
-                MerkleTree::root::<u64>(b"ZkVM.utreexo", &[0u64, 1, 2, 3, 4])
+                MerkleTree::root::<u64>(b"ZkVM.utreexo", &[0, 1, 2, 3, 4])
             )
         }
 
@@ -1182,7 +1152,7 @@ mod tests {
             let (root, _, _) = forest.normalize();
             assert_eq!(
                 root,
-                MerkleTree::root::<u64>(b"ZkVM.utreexo", &[0u64, 1, 4, 5])
+                MerkleTree::root::<u64>(b"ZkVM.utreexo", &[0, 1, 4, 5])
             );
 
             let mut forest_b = forest1.clone(); // try deletion in another order
@@ -1192,7 +1162,7 @@ mod tests {
             let (root, _, _) = forest_b.normalize();
             assert_eq!(
                 root,
-                MerkleTree::root::<u64>(b"ZkVM.utreexo", &[0u64, 1, 4, 5])
+                MerkleTree::root::<u64>(b"ZkVM.utreexo", &[0, 1, 4, 5])
             );
         }
 
@@ -1213,7 +1183,7 @@ mod tests {
             let (root, _, _) = forest.normalize();
             assert_eq!(
                 root,
-                MerkleTree::root::<u64>(b"ZkVM.utreexo", &[1u64, 2, 4, 5])
+                MerkleTree::root::<u64>(b"ZkVM.utreexo", &[1, 2, 4, 5])
             );
         }
 
@@ -1224,6 +1194,12 @@ mod tests {
                 a   b   c      ->        b   c       ->    e   b   c
                 |\  |\  |\               |\  |\            |\  |\  |\
                 0 1 2 3 4 5          x 1 2 3 4 5 6 7       1 6 2 3 4 5 7
+
+                d                                          f
+                |\                                         | \
+                a   b   c      ->        b   c       ->    b   c   h
+                |\  |\  |\               |\  |\            |\  |\  |\
+                0 1 2 3 4 5          x 1 2 3 4 5 6 7       2 3 4 5 1 6 7
             */
             let mut forest = forest1.clone();
             forest.verify(&0u64, &proofs1[0]).unwrap();
@@ -1235,7 +1211,8 @@ mod tests {
 
             assert_eq!(
                 root,
-                MerkleTree::root::<u64>(b"ZkVM.utreexo", &[1u64, 6, 2, 3, 4, 5, 7])
+                //MerkleTree::root::<u64>(b"ZkVM.utreexo", &[1, 6, 2, 3, 4, 5, 7])
+                MerkleTree::root::<u64>(b"ZkVM.utreexo", &[2, 3, 4, 5, 1, 6, 7])
             );
 
             let proof6 = catchup.update_proof(&6u64, proof6).unwrap();
@@ -1259,7 +1236,7 @@ mod tests {
 
             assert_eq!(
                 root,
-                MerkleTree::root::<u64>(b"ZkVM.utreexo", &[2u64, 3, 4, 5, 6])
+                MerkleTree::root::<u64>(b"ZkVM.utreexo", &[2, 3, 4, 5, 6])
             );
 
             let proof6 = catchup.update_proof(&6u64, proof6).unwrap();
@@ -1267,7 +1244,7 @@ mod tests {
             let (root, _, _) = forest3.normalize();
             assert_eq!(
                 root,
-                MerkleTree::root::<u64>(b"ZkVM.utreexo", &[2u64, 3, 4, 5])
+                MerkleTree::root::<u64>(b"ZkVM.utreexo", &[2, 3, 4, 5])
             );
         }
     }
