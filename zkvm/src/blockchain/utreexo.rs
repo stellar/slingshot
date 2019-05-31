@@ -397,7 +397,7 @@ impl<M: MerkleItem> Forest<M> {
             deletions: 0,
             heap: new_heap,
             hasher: hasher.clone(),
-            phantom: self.phantom
+            phantom: self.phantom,
         };
 
         // Create a new, trimmed forest.
@@ -607,7 +607,7 @@ impl<M: MerkleItem> Clone for NodeHasher<M> {
     fn clone(&self) -> Self {
         Self {
             t: self.t.clone(),
-            phantom: self.phantom
+            phantom: self.phantom,
         }
     }
 }
