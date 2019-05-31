@@ -9,6 +9,7 @@
 //! 5. Automatically catch up proofs created against the previous state of the accumulator.
 
 use crate::merkle::MerkleItem;
+use core::marker::PhantomData;
 use core::mem;
 use merlin::Transcript;
 use std::collections::HashMap;
@@ -46,20 +47,22 @@ pub struct Path {
 /// Forest contains some number of perfect merkle binary trees
 /// and a list of newly added items.
 #[derive(Clone)]
-pub struct Forest {
+pub struct Forest<M: MerkleItem> {
     generation: u64,
     roots: [Option<NodeIndex>; 64], // roots of the trees for levels 0 to 63
     insertions: Vec<Hash>, // new items (TBD: maybe use a fancy order-preserving HashSet later)
     deletions: usize,
     heap: Heap,
-    hasher: NodeHasher,
+    hasher: NodeHasher<M>,
+    phantom: PhantomData<M>,
 }
 
 /// Structure that helps auto-updating the proofs created for a previous generation of a forest.
 #[derive(Clone)]
-pub struct Catchup {
-    forest: Forest,               // forest that stores the nodes
+pub struct Catchup<M: MerkleItem> {
+    forest: Forest<M>,            // forest that stores the nodes
     map: HashMap<Hash, Position>, // node hash -> new position offset for this node
+    phantom: PhantomData<M>,
 }
 
 /// Metrics of the Forest.
@@ -106,9 +109,9 @@ pub enum UtreexoError {
     ExceedingCapacity,
 }
 
-impl Forest {
+impl<M: MerkleItem> Forest<M> {
     /// Creates a new empty Forest.
-    pub fn new() -> Forest {
+    pub fn new() -> Forest<M> {
         Forest {
             generation: 0,
             roots: [None; 64],
@@ -116,6 +119,7 @@ impl Forest {
             deletions: 0,
             heap: Heap::new(),
             hasher: NodeHasher::new(),
+            phantom: PhantomData,
         }
     }
 
@@ -135,7 +139,7 @@ impl Forest {
     }
 
     /// Verifies the item's proof of inclusion.
-    pub fn verify<M: MerkleItem>(&self, item: &M, proof: &Proof) -> Result<(), UtreexoError> {
+    pub fn verify(&self, item: &M, proof: &Proof) -> Result<(), UtreexoError> {
         if proof.generation != self.generation {
             return Err(UtreexoError::OutdatedProof);
         }
@@ -171,7 +175,7 @@ impl Forest {
         let current_hash = path
             .walk_up(current_hash, &self.hasher)
             .take(existing.level)
-            .fold(current_hash, |_, (parent, _)| parent);
+            .fold(current_hash, |_, (parent, _children)| parent);
 
         // 5. Check if we arrived at a correct lowest-available node.
         if current_hash != existing.hash {
@@ -183,7 +187,7 @@ impl Forest {
     }
 
     /// Adds a new item to the tree, appending a node to the end.
-    pub fn insert<M: MerkleItem>(&mut self, item: &M) -> Proof {
+    pub fn insert(&mut self, item: &M) -> Proof {
         self.insertions.push(self.hasher.leaf(item));
         Proof {
             generation: self.generation,
@@ -236,7 +240,7 @@ impl Forest {
     ///
     /// If the proof is valid, connect the newly created nodes (D',F,G,H,J) to the tree
     /// and mark all intermediate nodes on the path from (H) to the root A as modified.
-    pub fn delete<M: MerkleItem>(&mut self, item: &M, proof: &Proof) -> Result<(), UtreexoError> {
+    pub fn delete(&mut self, item: &M, proof: &Proof) -> Result<(), UtreexoError> {
         if proof.generation != self.generation {
             return Err(UtreexoError::OutdatedProof);
         }
@@ -328,7 +332,7 @@ impl Forest {
 
     /// Normalizes the forest into minimal number of ordered perfect trees.
     /// Returns a root of the new forst, the forest and a catchup structure.
-    pub fn normalize(self) -> (Hash, Forest, Catchup) {
+    pub fn normalize(self) -> (Hash, Forest<M>, Catchup<M>) {
         // 1. Relocate all perfect subtrees (w/o deletions) into a new forest.
         // 2. Scan levels from 0 to max level, connecting pairs of the closest same-level nodes.
         // 3. Reorder trees into canonical order, from high to low level.
@@ -393,6 +397,7 @@ impl Forest {
             deletions: 0,
             heap: new_heap,
             hasher: hasher.clone(),
+            phantom: self.phantom
         };
 
         // Create a new, trimmed forest.
@@ -404,14 +409,10 @@ impl Forest {
     }
 }
 
-impl Catchup {
+impl<M: MerkleItem> Catchup<M> {
     /// Updates the proof if it's slightly out of date
     /// (made against the previous generation of the Utreexo).
-    pub fn update_proof<M: MerkleItem>(
-        &self,
-        item: &M,
-        proof: Proof,
-    ) -> Result<Proof, UtreexoError> {
+    pub fn update_proof(&self, item: &M, proof: Proof) -> Result<Proof, UtreexoError> {
         // If the proof is already up to date - return w/o changes
         if proof.generation == self.forest.generation {
             return Ok(proof);
@@ -484,7 +485,7 @@ impl Catchup {
 
 // Private implementation
 
-impl Forest {
+impl<M: MerkleItem> Forest<M> {
     /// Returns the index of the tree containing an item at a given position,
     /// and the offset of that tree within the set of all items.
     /// `position-offset` would be the position within that tree.
@@ -537,7 +538,7 @@ impl Forest {
 
     /// Trims the forest leaving only the root nodes.
     /// Assumes the forest is normalized.
-    fn trim(&self) -> Forest {
+    fn trim(&self) -> Forest<M> {
         let mut trimmed_forest = Forest {
             generation: self.generation,
             roots: [None; 64],      // filled in below
@@ -545,6 +546,7 @@ impl Forest {
             deletions: 0,
             heap: Heap::with_capacity(64), // filled in below
             hasher: self.hasher.clone(),
+            phantom: self.phantom,
         };
         // copy the roots from the new forest to the trimmed forest
         for root in self.roots_iter() {
@@ -555,7 +557,7 @@ impl Forest {
     }
 
     /// Wraps the forest into a Catchup structure
-    fn into_catchup(self) -> Catchup {
+    fn into_catchup(self) -> Catchup<M> {
         // Traverse the tree to collect the catchup entries
         let catchup_map = self.heap.traverse(self.roots_iter(), |_| true).fold(
             HashMap::<Hash, Position>::new(),
@@ -569,6 +571,7 @@ impl Forest {
         Catchup {
             forest: self,
             map: catchup_map,
+            phantom: PhantomData,
         }
     }
 
@@ -595,9 +598,18 @@ impl Forest {
 /// Index of a `Node` within a forest's heap storage.
 type NodeIndex = usize;
 
-#[derive(Clone)]
-struct NodeHasher {
+struct NodeHasher<M: MerkleItem> {
     t: Transcript,
+    phantom: PhantomData<M>,
+}
+
+impl<M: MerkleItem> Clone for NodeHasher<M> {
+    fn clone(&self) -> Self {
+        Self {
+            t: self.t.clone(),
+            phantom: self.phantom
+        }
+    }
 }
 
 /// Node represents a leaf or an intermediate node in one of the trees.
@@ -686,10 +698,10 @@ impl Path {
     }
     /// Returns an iterator that walks up the path
     /// and yields parent hash and children hashes at each step.
-    fn walk_up<'a, 'b: 'a>(
+    fn walk_up<'a, 'b: 'a, M: MerkleItem>(
         &'a self,
         item_hash: Hash,
-        hasher: &'b NodeHasher,
+        hasher: &'b NodeHasher<M>,
     ) -> impl Iterator<Item = (Hash, (Hash, Hash))> + 'a {
         self.iter()
             .scan(item_hash, move |item_hash, (side, neighbor)| {
@@ -914,14 +926,15 @@ impl Heap {
     }
 }
 
-impl NodeHasher {
+impl<M: MerkleItem> NodeHasher<M> {
     fn new() -> Self {
         NodeHasher {
             t: Transcript::new(b"ZkVM.utreexo"),
+            phantom: PhantomData,
         }
     }
 
-    fn leaf<M: MerkleItem>(&self, item: &M) -> Hash {
+    fn leaf(&self, item: &M) -> Hash {
         let mut t = self.t.clone();
         item.commit(&mut t);
         let mut hash = [0; 32];
@@ -1003,7 +1016,7 @@ mod tests {
 
     #[test]
     fn empty_utreexo() {
-        let forest0 = Forest::new();
+        let forest0 = Forest::<u64>::new();
         let metrics0 = forest0.metrics();
         assert_eq!(metrics0.generation, 0);
         assert_eq!(metrics0.count, 0);

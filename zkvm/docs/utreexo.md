@@ -14,7 +14,7 @@ This is a specification of a dynamic accumulator for _unspent transaction output
 that supports inserts and deletions, costs `O(log(n))` in storage and proof bandwidth,
 with efficient update of the accumulator and the membership proofs.
 
-The accumulator consists of a number of perfect merkle binary trees, up to `log(n+1)`,
+The accumulator consists of a number of perfect merkle binary trees, up to `log(n)`,
 that can be fully or partially pruned, leaving only their merkle roots.
 
 Accumulator supports five operations:
