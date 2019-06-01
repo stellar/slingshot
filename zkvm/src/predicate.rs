@@ -10,11 +10,11 @@ use merlin::Transcript;
 use musig::VerificationKey;
 
 use crate::encoding;
+use crate::encoding::Encodable;
 use crate::encoding::SliceReader;
 use crate::errors::VMError;
 use crate::merkle::{MerkleItem, MerkleNeighbor, MerkleTree};
 use crate::point_ops::PointOp;
-use crate::program::Encodable;
 use crate::program::{Program, ProgramItem};
 use crate::transcript::TranscriptProtocol;
 

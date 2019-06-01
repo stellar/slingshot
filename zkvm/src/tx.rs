@@ -7,10 +7,10 @@ use serde::{self, Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::contract::{Contract, ContractID};
 use crate::encoding;
+use crate::encoding::Encodable;
 use crate::encoding::SliceReader;
 use crate::errors::VMError;
 use crate::merkle::{MerkleItem, MerkleTree};
-use crate::program::Encodable;
 use crate::transcript::TranscriptProtocol;
 
 /// Transaction log. `TxLog` is a type alias for `Vec<TxEntry>`.

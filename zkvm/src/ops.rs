@@ -2,9 +2,9 @@
 //! their codes and decoding/encoding utility functions.
 
 use crate::encoding;
+use crate::encoding::Encodable;
 use crate::encoding::SliceReader;
 use crate::errors::VMError;
-use crate::program::Encodable;
 use crate::program::ProgramItem;
 use crate::scalar_witness::ScalarWitness;
 use crate::types::Data;

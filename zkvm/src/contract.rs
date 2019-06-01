@@ -1,10 +1,10 @@
 use crate::constraints::Commitment;
 use crate::encoding;
+use crate::encoding::Encodable;
 use crate::encoding::SliceReader;
 use crate::errors::VMError;
 use crate::merkle::MerkleItem;
 use crate::predicate::Predicate;
-use crate::program::Encodable;
 use crate::program::ProgramItem;
 use crate::types::{Data, Value};
 use merlin::Transcript;

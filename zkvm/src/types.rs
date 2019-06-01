@@ -7,10 +7,10 @@ use spacesuit::SignedInteger;
 
 use crate::constraints::{Commitment, Constraint, Expression, Variable};
 use crate::contract::{Contract, PortableItem};
+use crate::encoding::Encodable;
 use crate::encoding::SliceReader;
 use crate::errors::VMError;
 use crate::predicate::Predicate;
-use crate::program::Encodable;
 use crate::program::ProgramItem;
 use crate::scalar_witness::ScalarWitness;
 use crate::transcript::TranscriptProtocol;

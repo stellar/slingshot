@@ -9,8 +9,8 @@ use std::ops::{Add, Neg};
 use subtle::{ConditionallySelectable, ConstantTimeEq};
 
 use crate::encoding;
+use crate::encoding::Encodable;
 use crate::errors::VMError;
-use crate::program::Encodable;
 use crate::scalar_witness::ScalarWitness;
 
 /// Variable represents a high-level R1CS variable specified by its

@@ -4,8 +4,8 @@ use curve25519_dalek::scalar::Scalar;
 use spacesuit::SignedInteger;
 
 use crate::encoding;
+use crate::encoding::Encodable;
 use crate::errors::VMError;
-use crate::program::Encodable;
 use std::ops::{Add, Mul, Neg, Sub};
 use std::u64;
 
