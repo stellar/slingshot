@@ -1,10 +1,10 @@
+use crate::encoding::Encodable;
 use crate::errors::VMError;
 use crate::merkle::MerkleItem;
 use crate::ops::Instruction;
 use crate::predicate::PredicateTree;
 use crate::scalar_witness::ScalarWitness;
 use crate::types::Data;
-use crate::encoding::Encodable;
 
 use core::borrow::Borrow;
 use merlin::Transcript;
