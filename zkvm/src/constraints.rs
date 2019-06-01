@@ -9,6 +9,7 @@ use std::ops::{Add, Neg};
 use subtle::{ConditionallySelectable, ConstantTimeEq};
 
 use crate::encoding;
+use crate::encoding::Encodable;
 use crate::errors::VMError;
 use crate::scalar_witness::ScalarWitness;
 
@@ -272,23 +273,23 @@ impl SecretConstraint {
     }
 }
 
-impl Commitment {
+impl Encodable for Commitment {
+    /// Encodes the commitment as a point.
+    fn encode(&self, buf: &mut Vec<u8>) {
+        encoding::write_point(&self.to_point(), buf);
+    }
     /// Returns the number of bytes needed to serialize the Commitment.
-    pub fn serialized_length(&self) -> usize {
+    fn serialized_length(&self) -> usize {
         32
     }
-
+}
+impl Commitment {
     /// Converts a Commitment to a compressed point.
     pub fn to_point(&self) -> CompressedRistretto {
         match self {
             Commitment::Closed(x) => *x,
             Commitment::Open(w) => w.to_point(),
         }
-    }
-
-    /// Encodes the commitment as a point.
-    pub(crate) fn encode(&self, buf: &mut Vec<u8>) {
-        encoding::write_point(&self.to_point(), buf);
     }
 
     /// Creates an open commitment with a zero blinding factor.

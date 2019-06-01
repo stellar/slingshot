@@ -1,5 +1,6 @@
 use crate::constraints::Commitment;
 use crate::encoding;
+use crate::encoding::Encodable;
 use crate::encoding::SliceReader;
 use crate::errors::VMError;
 use crate::merkle::MerkleItem;
@@ -54,6 +55,25 @@ pub enum PortableItem {
     Value(Value),
 }
 
+impl Encodable for Contract {
+    /// Serializes the contract to a byte array
+    fn encode(&self, buf: &mut Vec<u8>) {
+        encoding::write_bytes(&self.anchor.0, buf);
+        encoding::write_point(&self.predicate.to_point(), buf);
+        encoding::write_u32(self.payload.len() as u32, buf);
+        for item in self.payload.iter() {
+            item.encode(buf);
+        }
+    }
+    /// Precise length of a serialized output
+    fn serialized_length(&self) -> usize {
+        let mut size = 32 + 32 + 4;
+        for item in self.payload.iter() {
+            size += item.serialized_length();
+        }
+        size
+    }
+}
 impl Contract {
     /// Creates a contract from a given fields
     pub fn new(predicate: Predicate, payload: Vec<PortableItem>, anchor: Anchor) -> Self {
@@ -63,8 +83,7 @@ impl Contract {
             payload,
             anchor,
         };
-        let mut buf = Vec::with_capacity(contract.serialized_length());
-        contract.encode(&mut buf);
+        let buf = contract.encode_to_vec();
         contract.id = ContractID::from_serialized_contract(&buf);
         contract
     }
@@ -77,25 +96,6 @@ impl Contract {
     /// Breaks up the contract into individual fields
     pub fn into_tuple(self) -> (ContractID, Predicate, Vec<PortableItem>, Anchor) {
         (self.id, self.predicate, self.payload, self.anchor)
-    }
-
-    /// Precise length of a serialized output
-    pub fn serialized_length(&self) -> usize {
-        let mut size = 32 + 32 + 4;
-        for item in self.payload.iter() {
-            size += item.serialized_length();
-        }
-        size
-    }
-
-    /// Serializes the contract to a byte array
-    pub fn encode(&self, buf: &mut Vec<u8>) {
-        encoding::write_bytes(&self.anchor.0, buf);
-        encoding::write_point(&self.predicate.to_point(), buf);
-        encoding::write_u32(self.payload.len() as u32, buf);
-        for item in self.payload.iter() {
-            item.encode(buf);
-        }
     }
 
     /// Parses a contract from an output object
@@ -184,16 +184,7 @@ impl ContractID {
     }
 }
 
-impl PortableItem {
-    /// Precise length of a serialized payload item
-    fn serialized_length(&self) -> usize {
-        match self {
-            PortableItem::Data(d) => 1 + 4 + d.serialized_length(),
-            PortableItem::Program(p) => 1 + 4 + p.serialized_length(),
-            PortableItem::Value(_) => 1 + 64,
-        }
-    }
-
+impl Encodable for PortableItem {
     fn encode(&self, buf: &mut Vec<u8>) {
         match self {
             // Data = 0x00 || LE32(len) || <bytes>
@@ -216,7 +207,17 @@ impl PortableItem {
             }
         }
     }
+    /// Precise length of a serialized payload item
+    fn serialized_length(&self) -> usize {
+        match self {
+            PortableItem::Data(d) => 1 + 4 + d.serialized_length(),
+            PortableItem::Program(p) => 1 + 4 + p.serialized_length(),
+            PortableItem::Value(_) => 1 + 64,
+        }
+    }
+}
 
+impl PortableItem {
     fn decode<'a>(output: &mut SliceReader<'a>) -> Result<Self, VMError> {
         match output.read_u8()? {
             DATA_TYPE => {

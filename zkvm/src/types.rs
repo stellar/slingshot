@@ -7,6 +7,7 @@ use spacesuit::SignedInteger;
 
 use crate::constraints::{Commitment, Constraint, Expression, Variable};
 use crate::contract::{Contract, PortableItem};
+use crate::encoding::Encodable;
 use crate::encoding::SliceReader;
 use crate::errors::VMError;
 use crate::predicate::Predicate;
@@ -184,9 +185,9 @@ impl Item {
     }
 }
 
-impl Data {
+impl Encodable for Data {
     /// Returns the number of bytes needed to serialize the Data.
-    pub fn serialized_length(&self) -> usize {
+    fn serialized_length(&self) -> usize {
         match self {
             Data::Opaque(data) => data.len(),
             Data::Predicate(predicate) => predicate.serialized_length(),
@@ -195,18 +196,26 @@ impl Data {
             Data::Output(output) => output.serialized_length(),
         }
     }
+    /// Encodes the data item to an opaque bytestring.
+    fn encode(&self, buf: &mut Vec<u8>) {
+        match self {
+            Data::Opaque(x) => buf.extend_from_slice(x),
+            Data::Predicate(predicate) => predicate.encode(buf),
+            Data::Commitment(commitment) => commitment.encode(buf),
+            Data::Scalar(scalar) => scalar.encode(buf),
+            Data::Output(contract) => contract.encode(buf),
+        };
+    }
+}
 
+impl Data {
     /// Converts the Data item into a vector of bytes.
     /// Opaque item is converted without extra allocations,
     /// non-opaque item is encoded to a newly allocated buffer.
     pub fn to_bytes(self) -> Vec<u8> {
         match self {
             Data::Opaque(d) => d,
-            _ => {
-                let mut buf = Vec::with_capacity(self.serialized_length());
-                self.encode(&mut buf);
-                buf
-            }
+            _ => self.encode_to_vec(),
         }
     }
 
@@ -253,17 +262,6 @@ impl Data {
             Data::Scalar(scalar_witness) => Ok(*scalar_witness),
             _ => Err(VMError::TypeNotScalar),
         }
-    }
-
-    /// Encodes the data item to an opaque bytestring.
-    pub fn encode(&self, buf: &mut Vec<u8>) {
-        match self {
-            Data::Opaque(x) => buf.extend_from_slice(x),
-            Data::Predicate(predicate) => predicate.encode(buf),
-            Data::Commitment(commitment) => commitment.encode(buf),
-            Data::Scalar(scalar) => scalar.encode(buf),
-            Data::Output(contract) => contract.encode(buf),
-        };
     }
 }
 

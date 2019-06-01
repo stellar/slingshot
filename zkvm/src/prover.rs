@@ -8,6 +8,7 @@ use std::collections::VecDeque;
 
 use crate::constraints::Commitment;
 use crate::contract::ContractID;
+use crate::encoding::Encodable;
 use crate::errors::VMError;
 use crate::ops::Instruction;
 use crate::point_ops::PointOp;

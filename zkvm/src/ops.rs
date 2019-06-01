@@ -2,6 +2,7 @@
 //! their codes and decoding/encoding utility functions.
 
 use crate::encoding;
+use crate::encoding::Encodable;
 use crate::encoding::SliceReader;
 use crate::errors::VMError;
 use crate::program::ProgramItem;
@@ -107,9 +108,78 @@ impl Opcode {
     }
 }
 
-impl Instruction {
+impl Encodable for Instruction {
+    /// Appends the bytecode representation of an Instruction
+    /// to the program.
+    fn encode(&self, program: &mut Vec<u8>) {
+        let mut write = |op: Opcode| program.push(op.to_u8());
+        match self {
+            Instruction::Push(data) => {
+                write(Opcode::Push);
+                encoding::write_u32(data.serialized_length() as u32, program);
+                data.encode(program);
+            }
+            Instruction::Program(subprog) => {
+                write(Opcode::Program);
+                encoding::write_u32(subprog.serialized_length() as u32, program);
+                subprog.encode(program);
+            }
+            Instruction::Drop => write(Opcode::Drop),
+            Instruction::Dup(idx) => {
+                write(Opcode::Dup);
+                encoding::write_u32(*idx as u32, program);
+            }
+            Instruction::Roll(idx) => {
+                write(Opcode::Roll);
+                encoding::write_u32(*idx as u32, program);
+            }
+            Instruction::Const => write(Opcode::Const),
+            Instruction::Var => write(Opcode::Var),
+            Instruction::Alloc(_) => write(Opcode::Alloc),
+            Instruction::Mintime => write(Opcode::Mintime),
+            Instruction::Maxtime => write(Opcode::Maxtime),
+            Instruction::Expr => write(Opcode::Expr),
+            Instruction::Neg => write(Opcode::Neg),
+            Instruction::Add => write(Opcode::Add),
+            Instruction::Mul => write(Opcode::Mul),
+            Instruction::Eq => write(Opcode::Eq),
+            Instruction::Range(n) => {
+                write(Opcode::Range);
+                let bit_width: BitRange = *n;
+                program.push(bit_width.into());
+            }
+            Instruction::And => write(Opcode::And),
+            Instruction::Or => write(Opcode::Or),
+            Instruction::Not => write(Opcode::Not),
+            Instruction::Verify => write(Opcode::Verify),
+            Instruction::Unblind => write(Opcode::Unblind),
+            Instruction::Issue => write(Opcode::Issue),
+            Instruction::Borrow => write(Opcode::Borrow),
+            Instruction::Retire => write(Opcode::Retire),
+            Instruction::Cloak(m, n) => {
+                write(Opcode::Cloak);
+                encoding::write_u32(*m as u32, program);
+                encoding::write_u32(*n as u32, program);
+            }
+            Instruction::Input => write(Opcode::Input),
+            Instruction::Output(k) => {
+                write(Opcode::Output);
+                encoding::write_u32(*k as u32, program);
+            }
+            Instruction::Contract(k) => {
+                write(Opcode::Contract);
+                encoding::write_u32(*k as u32, program);
+            }
+            Instruction::Log => write(Opcode::Log),
+            Instruction::Signtx => write(Opcode::Signtx),
+            Instruction::Call => write(Opcode::Call),
+            Instruction::Delegate => write(Opcode::Delegate),
+            Instruction::Ext(x) => program.push(*x),
+        };
+    }
+
     /// Returns the number of bytes required to serialize this instruction.
-    pub fn serialized_length(&self) -> usize {
+    fn serialized_length(&self) -> usize {
         match self {
             Instruction::Push(data) => 1 + 4 + data.serialized_length(),
             Instruction::Program(progitem) => 1 + 4 + progitem.serialized_length(),
@@ -122,7 +192,9 @@ impl Instruction {
             _ => 1,
         }
     }
+}
 
+impl Instruction {
     /// Returns a parsed instruction from a subslice of the program string, modifying
     /// the subslice according to the bytes the instruction occupies
     /// E.g. a push instruction with 5-byte string occupies 1+4+5=10 bytes,
@@ -205,74 +277,5 @@ impl Instruction {
             Opcode::Call => Ok(Instruction::Call),
             Opcode::Delegate => Ok(Instruction::Delegate),
         }
-    }
-
-    /// Appends the bytecode representation of an Instruction
-    /// to the program.
-    pub fn encode(&self, program: &mut Vec<u8>) {
-        let mut write = |op: Opcode| program.push(op.to_u8());
-        match self {
-            Instruction::Push(data) => {
-                write(Opcode::Push);
-                encoding::write_u32(data.serialized_length() as u32, program);
-                data.encode(program);
-            }
-            Instruction::Program(subprog) => {
-                write(Opcode::Program);
-                encoding::write_u32(subprog.serialized_length() as u32, program);
-                subprog.encode(program);
-            }
-            Instruction::Drop => write(Opcode::Drop),
-            Instruction::Dup(idx) => {
-                write(Opcode::Dup);
-                encoding::write_u32(*idx as u32, program);
-            }
-            Instruction::Roll(idx) => {
-                write(Opcode::Roll);
-                encoding::write_u32(*idx as u32, program);
-            }
-            Instruction::Const => write(Opcode::Const),
-            Instruction::Var => write(Opcode::Var),
-            Instruction::Alloc(_) => write(Opcode::Alloc),
-            Instruction::Mintime => write(Opcode::Mintime),
-            Instruction::Maxtime => write(Opcode::Maxtime),
-            Instruction::Expr => write(Opcode::Expr),
-            Instruction::Neg => write(Opcode::Neg),
-            Instruction::Add => write(Opcode::Add),
-            Instruction::Mul => write(Opcode::Mul),
-            Instruction::Eq => write(Opcode::Eq),
-            Instruction::Range(n) => {
-                write(Opcode::Range);
-                let bit_width: BitRange = *n;
-                program.push(bit_width.into());
-            }
-            Instruction::And => write(Opcode::And),
-            Instruction::Or => write(Opcode::Or),
-            Instruction::Not => write(Opcode::Not),
-            Instruction::Verify => write(Opcode::Verify),
-            Instruction::Unblind => write(Opcode::Unblind),
-            Instruction::Issue => write(Opcode::Issue),
-            Instruction::Borrow => write(Opcode::Borrow),
-            Instruction::Retire => write(Opcode::Retire),
-            Instruction::Cloak(m, n) => {
-                write(Opcode::Cloak);
-                encoding::write_u32(*m as u32, program);
-                encoding::write_u32(*n as u32, program);
-            }
-            Instruction::Input => write(Opcode::Input),
-            Instruction::Output(k) => {
-                write(Opcode::Output);
-                encoding::write_u32(*k as u32, program);
-            }
-            Instruction::Contract(k) => {
-                write(Opcode::Contract);
-                encoding::write_u32(*k as u32, program);
-            }
-            Instruction::Log => write(Opcode::Log),
-            Instruction::Signtx => write(Opcode::Signtx),
-            Instruction::Call => write(Opcode::Call),
-            Instruction::Delegate => write(Opcode::Delegate),
-            Instruction::Ext(x) => program.push(*x),
-        };
     }
 }
