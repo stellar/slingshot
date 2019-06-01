@@ -68,18 +68,14 @@ pub struct Catchup<M: MerkleItem> {
 /// Metrics of the Forest.
 #[derive(Copy, Clone, PartialEq, Debug)]
 pub struct Metrics {
-    /// Generation of the forest
+    /// Generation of the forest.
     pub generation: u64,
-
-    /// Total number of items
-    pub count: usize,
-
-    /// Number of deletions
+    /// Sum of capacities of all roots.
+    pub capacity: usize,
+    /// Number of deletions.
     pub deletions: usize,
-
-    /// Number of insertions
+    /// Number of insertions.
     pub insertions: usize,
-
     /// Lower-bound for amount of memory occupied in bytes.
     pub memory: usize,
 }
@@ -91,22 +87,10 @@ pub enum UtreexoError {
     #[fail(display = "Item proof is outdated and must be re-created against the new state")]
     OutdatedProof,
 
-    /// This error occurs when we the item in the proof is out of bounds
-    #[fail(display = "Item proof contains position that is out of bounds")]
-    ItemOutOfBounds,
-
     /// This error occurs when the merkle proof is too short or too long, or does not lead to a node
     /// to which it should.
     #[fail(display = "Merkle proof is invalid")]
-    InvalidMerkleProof,
-
-    /// This error occurs when the Utreexo state is found in inconsistent/unexpected shape.
-    #[fail(display = "Utreexo is inconsistent!")]
-    InternalInconsistency,
-
-    /// This error occurs when too many changes are stored for internal representation to handle.
-    #[fail(display = "Utreexo is out of capacity")]
-    ExceedingCapacity,
+    InvalidProof,
 }
 
 impl<M: MerkleItem> Forest<M> {
@@ -117,7 +101,7 @@ impl<M: MerkleItem> Forest<M> {
             roots: [None; 64],
             insertions: Vec::new(),
             deletions: 0,
-            heap: Heap::new(),
+            heap: Heap::with_capacity(0),
             hasher: NodeHasher::new(),
             phantom: PhantomData,
         }
@@ -125,10 +109,9 @@ impl<M: MerkleItem> Forest<M> {
 
     /// Returns metrics data for this Forest
     pub fn metrics(&self) -> Metrics {
-        let trees_sum: u64 = self.roots_iter().map(|r| r.capacity()).sum();
         Metrics {
             generation: self.generation,
-            count: (trees_sum as usize) + self.insertions.len() - self.deletions,
+            capacity: self.capacity() as usize,
             deletions: self.deletions,
             insertions: self.insertions.len(),
             memory: mem::size_of::<Self>()
@@ -152,7 +135,7 @@ impl<M: MerkleItem> Forest<M> {
                 return self
                     .find_insertion(&hash)
                     .map(|_| ())
-                    .ok_or(UtreexoError::InvalidMerkleProof);
+                    .ok_or(UtreexoError::InvalidProof);
             }
         };
 
@@ -161,7 +144,7 @@ impl<M: MerkleItem> Forest<M> {
 
         // 2. The proof should be of exact size from a leaf up to a tree root.
         if path.neighbors.len() != top.level {
-            return Err(UtreexoError::InvalidMerkleProof);
+            return Err(UtreexoError::InvalidProof);
         }
 
         // 3. Find the lowest-available node in a tree, up to which
@@ -180,7 +163,7 @@ impl<M: MerkleItem> Forest<M> {
         // 5. Check if we arrived at a correct lowest-available node.
         if current_hash != existing.hash {
             // We haven't met the node we expected to meet, so the proof is invalid.
-            return Err(UtreexoError::InvalidMerkleProof);
+            return Err(UtreexoError::InvalidProof);
         }
 
         Ok(())
@@ -196,50 +179,7 @@ impl<M: MerkleItem> Forest<M> {
     }
 
     /// Fills in the missing nodes in the tree, and marks the item as deleted.
-    ///
     /// The algorithm minimizes amount of computation by taking advantage of the already available data.
-    ///
-    /// Consider the following partially filled tree due to previous updates:
-    ///
-    /// ```ascii
-    /// A         level 4
-    /// | \
-    /// B  C      level 3
-    ///    | \
-    ///    D  E   level 2
-    /// ```
-    ///
-    /// Then, an item (H) is deleted at absolute position 10, with a merkle proof `J',F',E',B'`:
-    ///
-    /// ```ascii
-    /// A         
-    /// | \
-    /// B  C   
-    ///    | \
-    ///    D  E   
-    ///    | \
-    ///    F  G
-    ///       | \
-    ///      (H) J
-    /// ```
-    ///
-    /// First, we walk the existing tree down to the smallest
-    /// available subtree that supposedly contains our item:
-    /// in this case it's the node `D`.
-    /// As we do that, we verify the corresponding neighbors in the merkle proof
-    /// by simple equality check (these must match the nodes already present in the tree).
-    ///
-    /// Then, we walk the merkle proof up to node `D` computing the missing hashes:
-    ///
-    /// ```ascii
-    /// hash(H',J') -> G'
-    /// hash(F',G') -> D'
-    /// ```
-    ///
-    /// If D' is not equal to D, reject the proof.
-    ///
-    /// If the proof is valid, connect the newly created nodes (D',F,G,H,J) to the tree
-    /// and mark all intermediate nodes on the path from (H) to the root A as modified.
     pub fn delete(&mut self, item: &M, proof: &Proof) -> Result<(), UtreexoError> {
         if proof.generation != self.generation {
             return Err(UtreexoError::OutdatedProof);
@@ -257,7 +197,7 @@ impl<M: MerkleItem> Forest<M> {
                 let hash = self.hasher.leaf(item);
                 let index = self
                     .find_insertion(&hash)
-                    .ok_or(UtreexoError::InvalidMerkleProof)?;
+                    .ok_or(UtreexoError::InvalidProof)?;
                 self.insertions.remove(index);
                 return Ok(());
             }
@@ -268,7 +208,7 @@ impl<M: MerkleItem> Forest<M> {
 
         // 2. The proof should be of exact size from a leaf up to a tree root.
         if path.neighbors.len() != top.level {
-            return Err(UtreexoError::InvalidMerkleProof);
+            return Err(UtreexoError::InvalidProof);
         }
 
         // 3. Find the lowest-available node in a tree, up to which
@@ -290,7 +230,7 @@ impl<M: MerkleItem> Forest<M> {
                 .fold(
                     (item_hash, None),
                     |(_hash, children), (i, (side, (parent_hash, (left_hash, right_hash))))| {
-                        let (left_children, right_children) = side.to_left_right(children, None);
+                        let (left_children, right_children) = side.order(children, None);
                         let (l, r) = (
                             heap.allocate(left_hash, i, left_children),
                             heap.allocate(right_hash, i, right_children),
@@ -302,7 +242,7 @@ impl<M: MerkleItem> Forest<M> {
             // 5. Check if we arrived at a correct lowest-available node.
             if hash != existing.hash {
                 // We haven't met the node we expected to meet, so the proof is invalid.
-                return Err(UtreexoError::InvalidMerkleProof);
+                return Err(UtreexoError::InvalidProof);
             }
 
             Ok(children)
@@ -319,7 +259,7 @@ impl<M: MerkleItem> Forest<M> {
         let top = self.heap.update(top.index, |node| node.modified = true);
         let _ = path.iter().rev().try_fold(top, |node, (side, _)| {
             node.children.map(|(l, r)| {
-                self.heap.update(side.choose(l, r), |node| {
+                self.heap.update(side.choose(l, r).0, |node| {
                     node.modified = true;
                 })
             })
@@ -333,13 +273,6 @@ impl<M: MerkleItem> Forest<M> {
     /// Normalizes the forest into minimal number of ordered perfect trees.
     /// Returns a root of the new forst, the forest and a catchup structure.
     pub fn normalize(self) -> (Hash, Forest<M>, Catchup<M>) {
-        // 1. Relocate all perfect subtrees (w/o deletions) into a new forest.
-        // 2. Scan levels from 0 to max level, connecting pairs of the closest same-level nodes.
-        // 3. Reorder trees into canonical order, from high to low level.
-        // 4. Traverse the entire tree creating Catchup entries for the nodes w/o children.
-        // 5. Extract a thinner Forest structure to return separately,
-        //    so it can be kept while Catchup can be optionally discarded.
-
         // TBD: what's the best way to estimate the vector capacity from self.heap.len()?
         let estimated_cap = self.heap.len() / 2 + self.insertions.len();
 
@@ -442,7 +375,7 @@ impl<M: MerkleItem> Catchup<M> {
         );
 
         // Fail early if we did not find any catchup point.
-        let position_offset = catchup_result.ok_or(UtreexoError::InvalidMerkleProof)?;
+        let position_offset = catchup_result.ok_or(UtreexoError::InvalidProof)?;
 
         // Adjust the absolute position:
         // keep the lowest (level+1) bits and add the stored position offset for the stored subtree
@@ -483,7 +416,7 @@ impl<M: MerkleItem> Catchup<M> {
     }
 }
 
-// Private implementation
+// Internals
 
 impl<M: MerkleItem> Forest<M> {
     /// Returns the index of the tree containing an item at a given position,
@@ -497,7 +430,7 @@ impl<M: MerkleItem> Forest<M> {
                 return Ok(node);
             }
         }
-        Err(UtreexoError::ItemOutOfBounds)
+        Err(UtreexoError::InvalidProof)
     }
 
     /// Returns the lowest-available node for a given path and verifies the higher-level
@@ -510,12 +443,17 @@ impl<M: MerkleItem> Forest<M> {
                 root,
                 |_parent, ((node, actual_neighbor), proof_neighbor)| {
                     if proof_neighbor != &actual_neighbor.hash {
-                        Err(UtreexoError::InvalidMerkleProof)
+                        Err(UtreexoError::InvalidProof)
                     } else {
                         Ok(node)
                     }
                 },
             )
+    }
+
+    /// Capacity of the entire forest as defined by the top-level roots, excluding deletions and insertions.
+    fn capacity(&self) -> u64 {
+        self.roots_iter().map(|r| r.capacity()).sum()
     }
 
     /// Returns an iterator over roots of the forest,
@@ -651,37 +589,26 @@ enum Side {
 }
 
 impl Side {
-    /// Orders a node and its neighbor according to the node's side.
-    /// If self == Left, returns (node, neighbor) and the reverse otherwise.
-    fn to_left_right<T>(self, node: T, neighbor: T) -> (T, T) {
+    /// Orders (current, neighbor) pair of nodes as (left, right) per `current`'s side.
+    fn order<T>(self, node: T, neighbor: T) -> (T, T) {
         match self {
             Side::Left => (node, neighbor),
             Side::Right => (neighbor, node),
         }
     }
 
-    /// Returns pair of ("current" node, "neighbor" node) based on the side.
-    /// This is the reverse of `to_left_right`.
-    fn from_left_right<T>(self, left: T, right: T) -> (T, T) {
+    /// Returns (current, neighbor) pair, reversing effects of `order`.
+    fn choose<T>(self, left: T, right: T) -> (T, T) {
         match self {
             Side::Left => (left, right),
             Side::Right => (right, left),
         }
     }
 
-    /// Chooses between left or right, according to the side.
-    fn choose<T>(self, left: T, right: T) -> T {
-        match self {
-            Side::Left => left,
-            Side::Right => right,
-        }
-    }
-
     fn from_bit(bit: u8) -> Self {
-        if bit == 0 {
-            Side::Left
-        } else {
-            Side::Right
+        match bit {
+            0 => Side::Left,
+            _ => Side::Right,
         }
     }
 }
@@ -705,7 +632,7 @@ impl Path {
     ) -> impl Iterator<Item = (Hash, (Hash, Hash))> + 'a {
         self.iter()
             .scan(item_hash, move |item_hash, (side, neighbor)| {
-                let (l, r) = side.to_left_right(*item_hash, *neighbor);
+                let (l, r) = side.order(*item_hash, *neighbor);
                 let p = hasher.intermediate(&l, &r);
                 *item_hash = p;
                 Some((p, (l, r)))
@@ -829,12 +756,6 @@ impl<'a> HeapAllocOnly<'a> {
 }
 
 impl Heap {
-    fn new() -> Heap {
-        Heap {
-            storage: Vec::new(),
-        }
-    }
-
     fn with_capacity(cap: usize) -> Self {
         Heap {
             storage: Vec::with_capacity(cap),
@@ -918,7 +839,7 @@ impl Heap {
             .into_iter()
             .scan(root.children, move |children, side| {
                 children.map(|(li, ri)| {
-                    let (main, neighbor) = side.from_left_right(self.node_at(li), self.node_at(ri));
+                    let (main, neighbor) = side.choose(self.node_at(li), self.node_at(ri));
                     *children = main.children;
                     (main, neighbor)
                 })
@@ -972,11 +893,7 @@ impl Node {
 
         let (chflag, (l, r)) = self
             .children
-            .map(|(l, r)| {
-                let l = l as u32;
-                let r = r as u32;
-                (128, (l, r))
-            })
+            .map(|(l, r)| (128, (l as u32, r as u32)))
             .unwrap_or((0, (0xffffffff, 0xffffffff)));
 
         PackedNode {
@@ -1019,7 +936,7 @@ mod tests {
         let forest0 = Forest::<u64>::new();
         let metrics0 = forest0.metrics();
         assert_eq!(metrics0.generation, 0);
-        assert_eq!(metrics0.count, 0);
+        assert_eq!(metrics0.capacity, 0);
         assert_eq!(metrics0.insertions, 0);
         assert_eq!(metrics0.deletions, 0);
 
@@ -1027,7 +944,7 @@ mod tests {
         let metrics1 = forest1.metrics();
         assert_eq!(root0, MerkleTree::root::<u64>(b"ZkVM.utreexo", &[]));
         assert_eq!(metrics1.generation, 1);
-        assert_eq!(metrics1.count, 0);
+        assert_eq!(metrics1.capacity, 0);
         assert_eq!(metrics1.insertions, 0);
         assert_eq!(metrics1.deletions, 0);
     }
@@ -1043,7 +960,7 @@ mod tests {
             forest0.metrics(),
             Metrics {
                 generation: 0,
-                count: 2,
+                capacity: 0,
                 insertions: 2,
                 deletions: 0,
                 memory: forest0.metrics().memory,
@@ -1057,7 +974,7 @@ mod tests {
             forest0.metrics(),
             Metrics {
                 generation: 0,
-                count: 0,
+                capacity: 0,
                 insertions: 0,
                 deletions: 0,
                 memory: forest0.metrics().memory,
@@ -1077,7 +994,7 @@ mod tests {
             forest1.metrics(),
             Metrics {
                 generation: 1,
-                count: 6,
+                capacity: 6,
                 insertions: 0,
                 deletions: 0,
                 memory: forest1.metrics().memory,
@@ -1110,7 +1027,7 @@ mod tests {
             forest1.metrics(),
             Metrics {
                 generation: 1,
-                count: 0,
+                capacity: 6,
                 insertions: 0,
                 deletions: 6,
                 memory: forest1.metrics().memory,
@@ -1130,7 +1047,7 @@ mod tests {
             forest1.metrics(),
             Metrics {
                 generation: 1,
-                count: n as usize,
+                capacity: n as usize,
                 insertions: 0,
                 deletions: 0,
                 memory: forest1.metrics().memory,
