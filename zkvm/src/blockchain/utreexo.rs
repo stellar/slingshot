@@ -152,6 +152,11 @@ impl<M: MerkleItem> Forest<M> {
         //    And also check the higher-level neighbors in the proof.
         let existing = self.existing_node_for_path(top, &path)?;
 
+        // If the existing node is the leaf, and it's marked as deleted - reject the proof
+        if existing.level == 0 && existing.modified {
+            return Err(UtreexoError::InvalidProof);
+        }
+
         // 4. Now, walk the merkle proof starting with the leaf,
         //    creating the missing nodes until we hit the bottom node.
         let current_hash = self.hasher.leaf(item);
@@ -215,6 +220,11 @@ impl<M: MerkleItem> Forest<M> {
         //    we have to fill in the missing nodes based on the merkle proof.
         //    And also check the higher-level neighbors in the proof.
         let existing = self.existing_node_for_path(top, &path)?;
+
+        // If the existing node is the leaf, and it's marked as deleted - reject the proof
+        if existing.level == 0 && existing.modified {
+            return Err(UtreexoError::InvalidProof);
+        }
 
         // 4. Now, walk the merkle proof starting with the leaf,
         //    creating the missing nodes until we hit the bottom node.
@@ -970,6 +980,10 @@ mod tests {
         forest0.delete(&1, &proof1).unwrap();
         forest0.delete(&0, &proof0).unwrap();
 
+        // double spends are not allowed
+        assert_eq!(forest0.delete(&1, &proof1), Err(UtreexoError::InvalidProof));
+        assert_eq!(forest0.delete(&0, &proof0), Err(UtreexoError::InvalidProof));
+
         assert_eq!(
             forest0.metrics(),
             Metrics {
@@ -1075,6 +1089,12 @@ mod tests {
             forest.verify(&0u64, &proofs1[0]).unwrap();
             forest.delete(&0u64, &proofs1[0]).unwrap();
 
+            // double spends are not allowed
+            assert_eq!(
+                forest.delete(&0, &proofs1[0]),
+                Err(UtreexoError::InvalidProof)
+            );
+
             let (root, _, _) = forest.normalize();
             assert_eq!(
                 root,
@@ -1093,6 +1113,12 @@ mod tests {
             let mut forest = forest1.clone();
             forest.verify(&1u64, &proofs1[1]).unwrap();
             forest.delete(&1u64, &proofs1[1]).unwrap();
+
+            // double spends are not allowed
+            assert_eq!(
+                forest.delete(&1, &proofs1[1]),
+                Err(UtreexoError::InvalidProof)
+            );
 
             let (root, _, _) = forest.normalize();
             assert_eq!(
@@ -1179,6 +1205,15 @@ mod tests {
             forest.verify(&3u64, &proofs1[3]).unwrap();
             forest.delete(&0u64, &proofs1[0]).unwrap();
             forest.delete(&3u64, &proofs1[3]).unwrap();
+
+            assert_eq!(
+                forest.delete(&3, &proofs1[3]),
+                Err(UtreexoError::InvalidProof)
+            );
+            assert_eq!(
+                forest.delete(&0, &proofs1[0]),
+                Err(UtreexoError::InvalidProof)
+            );
 
             let (root, _, _) = forest.normalize();
             assert_eq!(

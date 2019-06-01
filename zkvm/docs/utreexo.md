@@ -181,9 +181,10 @@ Returns `true` or `false`.
 4. Verify that the number of neighbors in the proof is equal to the `r.level`.
 5. Find the lowest-level available [node](#node) `b` in the `r`’s subtree that contains the item’s position (`b` is equal to `r` if `r` has pruned children or has level 0).
    Verify that the corresponding neighbors in the proof are equal to the actual higher-level neighbors (from `r.level-1` to `b.level`) along the way toward the `b`.
-6. Compute the intermediate hashes using the item and its lower-level neighbors from `0` to `b.level-1`.
-7. Verify that the resulting hash is equal to the hash of node `b`.
-8. Return `true` if all checks succeeded.
+6. If `b.level` is 0 and it's marked as modified, return `false`.
+7. Compute the intermediate hashes using the item and its lower-level neighbors from `0` to `b.level-1`.
+8. Verify that the resulting hash is equal to the hash of node `b`.
+9. Return `true` if all checks succeeded.
 
 
 ### Delete
@@ -199,13 +200,14 @@ Returns `true` or `false`.
 4. Verify that the number of neighbors in the proof is equal to the `r.level`.
 5. Find the lowest-level available [node](#node) `b` in the `r`’s subtree that contains the item’s position (`b` is equal to `r` if `r` has pruned children or has level 0).
    Verify that the corresponding neighbors in the proof are equal to the actual higher-level neighbors (from `r.level-1` to `b.level`) along the way toward the `b`.
-6. Compute the intermediate hashes using the item and its lower-level neighbors from `0` to `b.level-1`.
-7. Verify that the resulting hash is equal to the hash of node `b`.
-8. If all checks succeeded:
+6. If `b.level` is 0 and it's marked as modified, return `false`.
+7. Compute the intermediate hashes using the item and its lower-level neighbors from `0` to `b.level-1`.
+8. Verify that the resulting hash is equal to the hash of node `b`.
+9. If all checks succeeded:
 	1. Add newly created nodes on the way from the item to `b` at step 6, including the neighbors and the node for the item itself to the tree `r`.
 	2. Mark all the nodes containing the item as `modified`, from the item’s node to the root `r`.
 	3. Return `true`.
-9. If any check failed, return `false`.
+10. If any check failed, return `false`.
 
 
 ### Normalize
