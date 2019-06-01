@@ -230,6 +230,37 @@ Returns [forest root](#merkle-root), [new forest](#forest), [catchup structure](
 7. Compute the complete [merkle root](#merkle-root) of the entire new forest by hashing pairs of roots from end to the beginning. This is equivalent to computing the [merkle root](#merkle-root) over the entire set of items, if they were all stored.
 8. Return the root of the new forest, the pruned forest and the catchup structure.
 
+Illustrations:
+
+```
+delete 0:
+
+d                                       e
+| \                                     | \
+a   b   c      ->        b   c      ->  b   c
+|\  |\  |\               |\  |\         |\  |\
+0 1 2 3 4 5          x 1 2 3 4 5        2 3 4 5 1
+```
+
+```
+delete 2:
+
+d                                       e
+| \                                     | \
+a   b   c      ->    a       c      ->  a   c
+|\  |\  |\           |\      |\         |\  |\
+0 1 2 3 4 5          0 1 x 3 4 5        0 1 4 5 3
+```
+
+```
+delete 0, insert 6, 7:
+
+d                                       f
+| \                                     | \
+a   b   c      ->      b   c        ->  b   c   h
+|\  |\  |\             |\  |\           |\  |\  |\
+0 1 2 3 4 5        x 1 2 3 4 5 6 7      2 3 4 5 1 6 7
+```
 
 
 ### Update proof
