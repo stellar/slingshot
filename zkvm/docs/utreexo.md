@@ -19,11 +19,11 @@ that can be fully or partially pruned, leaving only their merkle roots.
 
 Accumulator supports the following operations:
 
-1. **Insert:** add a new item to the accumulator and create a proof for it.
-2. **Verify:** check that an item exists using its merkle proof.
-3. **Delete:** check that an item exists using its merkle proof, and also mark it as deleted.
-4. **Normalize:** prune deleted items, and normalize the shape of the trees, reducing them to their merkle roots.
-5. **Update proof:** update the merkle proof created against the previous state of the accumulator (before most recent normalization).
+1. [Insert](#insert): add a new item to the accumulator and create a proof for it.
+2. [Verify](#verify): check that an item exists using its merkle proof.
+3. [Delete](#delete): check that an item exists using its merkle proof, and also mark it as deleted.
+4. [Normalize](#normalize): prune deleted items, and normalize the shape of the trees, reducing them to their merkle roots.
+5. [Update proof](#update-proof): update the merkle proof created against the previous state of the accumulator (before most recent normalization).
 
 Normalization is required to reduce the space occupied by the accumulator.
 Users must update their proofs upon every normalization.
@@ -62,6 +62,39 @@ Forest is a structure with the following fields:
 
 The list of roots unambiguously encodes the total number of items as a sum of `2^k` for each `k`-tree present in the forest.
 The forest with `{3-tree, 2-tree, 0-tree}` roots and no insertions contains 13 items.
+
+### Utreexo root
+
+The [merkle root](#merkle-root) of the entire [forest](#forest). It can be computed using the `n` ordered roots of [k-trees](#k-tree) as follows:
+
+```
+H(
+	roots[0],
+	H(
+		roots[1],
+		H(...
+			H(
+				roots[n-2],
+				roots[n-1]
+			)
+		)
+	)
+)
+```
+
+where `H` is the merkle hash function over the left and right nodes.
+
+If the forest contains a single [k-tree](#k-tree), its root is also the Utreexo root.
+
+The Utreexo root is computed only when the forest is [normalized](#normalize).
+
+### Updates count
+
+Sum of all [insertions](#insert) and [deletions](#delete) to the [forest](#forest), ignoring
+deletions of items from the `forest.insertions` list.
+
+This count indicates how much storage the accumulator requires and helps determine when to [normalize](#normalize) it.
+Transient items that were inserted and then deleted before normalization do not affect the count.
 
 ### Generation
 
@@ -214,7 +247,7 @@ Returns `true` or `false`.
 
 Input: [forest](#forest).
 
-Returns [forest root](#merkle-root), [new forest](#forest), [catchup structure](#catchup).
+Returns [utreexo root](#utreexo-root), [new forest](#forest), [catchup structure](#catchup).
 
 1. Traverse forest [trees](#k-tree), from left to right, collecting the unmodified [nodes](#node) in a list.
    * Note: the unmodified nodes must not have children.
