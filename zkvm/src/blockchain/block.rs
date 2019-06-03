@@ -19,9 +19,6 @@ pub struct BlockHeader {
     pub ext: Vec<u8>,
 }
 
-#[derive(Clone, PartialEq)]
-pub struct Root(pub [u8; 32]);
-
 impl BlockHeader {
     pub fn id(&self) -> BlockID {
         let mut t = Transcript::new(b"ZkVM.blockheader");
@@ -38,14 +35,14 @@ impl BlockHeader {
         BlockID(result)
     }
 
-    pub fn make_initial(timestamp_ms: u64, utxos: &Vec<ContractID>) -> BlockHeader {
+    pub fn make_initial(timestamp_ms: u64, utxoroot: [u8; 32]) -> BlockHeader {
         BlockHeader {
             version: 1,
             height: 1,
             prev: BlockID([0; 32]),
             timestamp_ms: timestamp_ms,
-            txroot: Root::tx(&[]).0,
-            utxoroot: Root::utxo(utxos).0,
+            txroot: MerkleTree::root(b"ZkVM.txroot", &[]),
+            utxoroot: utxoroot,
             ext: Vec::new(),
         }
     }
@@ -150,23 +147,11 @@ impl Block {
                 height: state.tip.height + 1,
                 prev: state.tip.id(),
                 timestamp_ms: timestamp_ms,
-                txroot: Root::tx(&txids).0,
+                txroot: MerkleTree::root(b"ZkVM.txroot", &txids),
                 utxoroot: Root::utxo(&new_state.utxos).0,
                 ext: ext,
             },
             txs: txs,
         })
-    }
-}
-
-impl Root {
-    /// Computes the Merkle txroot
-    pub fn tx(txids: &[TxID]) -> Root {
-        Root(MerkleTree::root(b"ZkVM.txroot", txids))
-    }
-
-    /// Computes the Merkle utxoroot
-    pub fn utxo(utxos: &[ContractID]) -> Root {
-        Root(MerkleTree::root(b"ZkVM.utxoroot", utxos))
     }
 }

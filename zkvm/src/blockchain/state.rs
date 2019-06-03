@@ -2,40 +2,53 @@ use bulletproofs::BulletproofGens;
 
 use super::block::{Block, BlockHeader, BlockID};
 use super::errors::BlockchainError;
+use super::utreexo;
 use crate::{ContractID, Tx, TxEntry, TxID, TxLog, VMError, Verifier};
 
 #[derive(Clone)]
 pub struct BlockchainState {
-    pub initial: BlockHeader,
-    pub tip: BlockHeader,
-    pub utxos: Vec<ContractID>,
-
     pub initial_id: BlockID,
+    pub tip: BlockHeader,
+    pub utreexo: utreexo::Forest<ContractID>,
 }
 
 impl BlockchainState {
-    pub fn make_initial(timestamp_ms: u64, utxos: Vec<ContractID>) -> BlockchainState {
-        let initialHeader = BlockHeader::make_initial(timestamp_ms, &utxos);
-        BlockchainState {
-            initial: initialHeader.clone(),
-            initial_id: initialHeader.id(),
-            tip: initialHeader,
-            utxos: utxos,
-        }
+    /// Creates an initial block with a given starting set of utxos.
+    pub fn make_initial(timestamp_ms: u64, utxos: &[ContractID]) -> (BlockchainState, Vec<utreexo::Proof>) {
+        let mut utreexo = utreexo::Forest::<ContractID>::new();
+        let proofs = utxos.iter().map(|utxo| {
+            utreexo.insert(&utxo)
+        }).collect::<Vec<_>>();
+
+        let (utxoroot, utreexo, catchup) = utreexo.normalize();
+        
+        let proofs = utxos.iter().zip(proofs.into_iter()).map(|(utxo, proof)| {
+            catchup.update_proof(utxo, proof).unwrap()
+        }).collect::<Vec<_>>();
+
+        let tip = BlockHeader::make_initial(timestamp_ms, utxoroot);
+        let state = BlockchainState {
+            initial_id: tip.id(),
+            tip,
+            utreexo,
+        };
+
+        (state, proofs)
     }
 
+    /// Applies the block to the state
     pub fn apply_block<F>(
         &self,
-        b: &Block,
+        block: &Block,
         bp_gens: &BulletproofGens,
     ) -> Result<BlockchainState, BlockchainError> {
-        let txlogs = b.validate(&self.tip, bp_gens)?;
+        let txlogs = block.validate(&self.tip, bp_gens)?;
         let mut new_state = self.clone();
 
         for txlog in txlogs.iter() {
-            if let Err(err) = new_state.apply_txlog(&txlog) {
-                return Err(BlockchainError::TxValidation(err));
-            }
+            new_state.apply_txlog(&txlog).map_err(|e| {
+                BlockchainError::TxValidation(e)
+            })?;
         }
 
         Ok(new_state)

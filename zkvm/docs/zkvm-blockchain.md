@@ -82,6 +82,13 @@ T.commit("ext", ext)
 blockid = T.challenge_bytes("id")
 ```
 
+## Contract ID merkle leaf
+
+[Contract ID](zkvm-spec.md#contract-id) is hashed as a [merkle leaf hash](utreexo.md#merkle-root) for the Utreexo as follows:
+
+```
+T.commit("contract", contract_id)
+```
 
 # Procedures
 

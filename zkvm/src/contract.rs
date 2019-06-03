@@ -242,6 +242,6 @@ impl PortableItem {
 
 impl MerkleItem for ContractID {
     fn commit(&self, t: &mut Transcript) {
-        t.commit_bytes(b"utxo", self.as_bytes());
+        t.commit_bytes(b"contract", self.as_bytes());
     }
 }
