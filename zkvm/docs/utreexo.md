@@ -272,7 +272,7 @@ Input: [catchup structure](#catchup), [item](#item) and [item proof](#item-proof
 Returns new [item proof](#item-proof) or failure.
 
 1. If the generation of the proof is equal to the generation of the `catchup.forest`, return the proof unchanged.
-2. If the generation of the proof is not equal to the previous generation of the `catchup.forest`, fail.
+2. If the generation of the proof is not equal to the _preceding_ generation of the `catchup.forest`, fail.
 3. Compute intermediate hashes using the proof’s neighbors until meeting a hash present in the catchup map.
 4. If reached the end of the proof, but no matching hash is found in the map, fail.
 5. Let `k` be the level of the remembered node (`k` can be zero, if the item’s leaf node was remembered).
@@ -294,7 +294,16 @@ Larger normalization interval permits saving bandwidth for recently added nodes,
 but requires more storage.
 
 
+### Memory efficiency
+
+The implementation represents the sparse binary tree in memory, allocating nodes on the fly.
+Internally, the allocations happen inside a small memory arena maintained in-between tree normalizations,
+so the individual insertions/deletions can be performed without any system calls.
+
+
 ### Caching top levels
+
+(In development)
 
 Caching the top 16 levels of nodes requires only ≈4Mb of data to store,
 but removes 512 bytes of data from each proof.
@@ -320,20 +329,6 @@ Levels cached | Required RAM | 1M utxos | 10M  | 100M | 1B
 Notice that as network grows in size, user can have a trade-off between
 optimizing bandwidth or optimizing storage. In any case, bandwidth costs grow only linearly
 with the exponential growth of the network.
-
-TBD: how the cached hashes are actually maintained during normalization.
-
-### Allocation and lookup
-
-TBD: How to allocate tree nodes and speed up the look up w/o wasting too much RAM.
-
-
-### Catch-up tree
-
-TBD: retaining unmodified nodes from i-1 tree to fixup outdated proofs. 
-Can be used for arbitrary steps back, but only one level is actually useful to
-provide ergonomic overlay around the point in time where a new commitment is done,
-so fresh, but missed-the-mark proofs are not dropped, causing spikes in bandwidth.
 
 
 ### Relaying proofs with different caching options
