@@ -55,19 +55,20 @@ impl BlockchainState {
     }
 
     pub fn apply_txlog(&mut self, txlog: &TxLog) -> Result<(), VMError> {
+        unimplemented!();
         for entry in txlog.iter() {
             match entry {
                 // Remove input from UTXO set
                 TxEntry::Input(input) => {
-                    match self.utxos.iter().position(|x| x == input) {
-                        Some(pos) => self.utxos.remove(pos),
-                        None => return Err(VMError::InvalidInput),
-                    };
+                    // match self.utxos.iter().position(|x| x == input) {
+                    //     Some(pos) => self.utxos.remove(pos),
+                    //     None => return Err(VMError::InvalidInput),
+                    // };
                 }
 
                 // Add output entry to UTXO set
                 TxEntry::Output(output) => {
-                    self.utxos.push(output.id());
+                    // self.utxos.push(output.id());
                 }
                 _ => {}
             }
@@ -127,8 +128,10 @@ mod tests {
 
     #[test]
     fn test_apply_txlog() {
-        let mut state = BlockchainState::make_initial(0u64, Vec::new());
+        unimplemented!();
+        let mut state = BlockchainState::make_initial(0u64, &[]);
 
+        /*
         // Add two outputs
         let (output0, output1) = (rand_contract(), rand_contract());
         state
@@ -155,5 +158,6 @@ mod tests {
         assert!(state
             .apply_txlog(&vec![TxEntry::Input(output1.id())])
             .is_err());
+            */
     }
 }

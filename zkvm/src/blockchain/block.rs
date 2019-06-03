@@ -41,7 +41,7 @@ impl BlockHeader {
             height: 1,
             prev: BlockID([0; 32]),
             timestamp_ms: timestamp_ms,
-            txroot: MerkleTree::root(b"ZkVM.txroot", &[]),
+            txroot: MerkleTree::root::<TxID>(b"ZkVM.txroot", &[]),
             utxoroot: utxoroot,
             ext: Vec::new(),
         }
@@ -148,7 +148,7 @@ impl Block {
                 prev: state.tip.id(),
                 timestamp_ms: timestamp_ms,
                 txroot: MerkleTree::root(b"ZkVM.txroot", &txids),
-                utxoroot: Root::utxo(&new_state.utxos).0,
+                utxoroot: unimplemented!(), //Root::utxo(&new_state.utxos).0,
                 ext: ext,
             },
             txs: txs,
