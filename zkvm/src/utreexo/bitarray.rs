@@ -1,23 +1,41 @@
+use core::mem;
 
-#[derive(Clone)]
+#[derive(Clone,Default)]
 pub(super) struct Bitarray {
     words: Vec<u64>
 }
 
 impl Bitarray {
+    /// Capacity is in bits
     pub(super) fn with_capacity(cap: usize) -> Self {
         Self {
             words: Vec::with_capacity((cap+64-1)/64)
         }   
     }
-    pub(super) fn bit_at(&self,index: usize) -> bool {
-        let word_idx = index / 64;
-        let bit_idx = index % 64;
+
+    pub(super) fn count_ones(&self) -> usize {
+        // FIXME: use appropriate method on u64.
+        self.iter().map(|x| if x { 1usize } else { 0 } ).sum()
+    }
+
+    pub(super) fn memory(&self) -> usize {
+        self.words.capacity() * mem::size_of::<u64>()
+    }
+
+    /// Returns the boolean value of the bit at a given offset.
+    pub(super) fn bit_at(&self,offset: usize) -> bool {
+        let word_idx = offset / 64;
+        let bit_idx = offset % 64;
+        if word_idx >= self.words.len() {
+            return false;
+        }
         ((self.words[word_idx] >> bit_idx) & 1) == 1
     }
-    pub(super) fn set_bit_at(&mut self, index: usize, bit: bool) {
-        let word_idx = index / 64;
-        let bit_idx = index % 64;
+
+    /// Sets bit at bit offset, extending the array as needed. 
+    pub(super) fn set_bit_at(&mut self, offset: usize, bit: bool) {
+        let word_idx = offset / 64;
+        let bit_idx = offset % 64;
         if word_idx >= self.words.len() {
             self.words.resize(word_idx+1, 0u64);
         }
@@ -41,10 +59,18 @@ impl Bitarray {
         }
     }
     
+    /// Iterates all the bits as booleans
     pub(super) fn iter(&self) -> impl Iterator<Item=bool> + '_ {
         self.words.iter().flat_map(|word| {
             (0..64).map(|bit| (word >> bit) & 1u64 == 1u64 )
         })
+    }
+
+    /// Clears all the bits
+    pub(super) fn clear(&mut self) {
+        for word in self.words.iter_mut() {
+            *word = 0;
+        }
     }
 
     // /// Iterates over 1 bits, returning a position for each bit = 1.

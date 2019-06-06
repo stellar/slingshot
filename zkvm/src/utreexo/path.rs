@@ -1,7 +1,4 @@
 use crate::merkle::MerkleItem;
-use core::marker::PhantomData;
-use core::mem;
-use merlin::Transcript;
 
 use super::nodes::{Hash,NodeHasher};
 
@@ -28,8 +25,8 @@ pub struct Proof {
 /// Merkle path to the item.
 #[derive(Clone, Debug)]
 pub struct Path {
-    position: Position,
-    neighbors: Vec<Hash>,
+    pub(super) position: Position,
+    pub(super) neighbors: Vec<Hash>,
 }
 
 
@@ -41,7 +38,7 @@ pub(super) enum Side {
 
 impl Side {
     /// Orders (current, neighbor) pair of nodes as (left, right) per `current`'s side.
-    fn order<T>(self, node: T, neighbor: T) -> (T, T) {
+    pub(super) fn order<T>(self, node: T, neighbor: T) -> (T, T) {
         match self {
             Side::Left => (node, neighbor),
             Side::Right => (neighbor, node),
@@ -49,7 +46,7 @@ impl Side {
     }
 
     /// Returns (current, neighbor) pair, reversing effects of `order`.
-    fn choose<T>(self, left: T, right: T) -> (T, T) {
+    pub(super) fn choose<T>(self, left: T, right: T) -> (T, T) {
         match self {
             Side::Left => (left, right),
             Side::Right => (right, left),
@@ -65,10 +62,10 @@ impl Side {
 }
 
 impl Path {
-    fn iter(&self) -> impl DoubleEndedIterator<Item = (Side, &Hash)> + ExactSizeIterator {
+    pub(super) fn iter(&self) -> impl DoubleEndedIterator<Item = (Side, &Hash)> + ExactSizeIterator {
         self.directions().zip(self.neighbors.iter())
     }
-    fn directions(&self) -> Directions {
+    pub(super) fn directions(&self) -> Directions {
         Directions {
             position: self.position,
             depth: self.neighbors.len(),
@@ -76,7 +73,7 @@ impl Path {
     }
     /// Returns an iterator that walks up the path
     /// and yields parent hash and children hashes at each step.
-    fn walk_up<'a, 'b: 'a, M: MerkleItem>(
+    pub(super) fn walk_up<'a, 'b: 'a, M: MerkleItem>(
         &'a self,
         item_hash: Hash,
         hasher: &'b NodeHasher<M>,

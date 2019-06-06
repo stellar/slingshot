@@ -1,24 +1,32 @@
 use crate::merkle::MerkleItem;
-use core::marker::PhantomData;
 use core::mem;
 use std::collections::HashMap;
 
 use super::bitarray::Bitarray;
 use super::path::{Position,Proof,Path,Directions};
 use super::nodes::{Hash,NodeHasher,NodeIndex,Node,Heap};
+use super::insertions::Insertions;
 
-/// Forest contains some number of perfect merkle binary trees
+/// Utreexo contains some number of perfect merkle binary trees
 /// and a list of newly added items.
 #[derive(Clone)]
 pub struct Forest<M: MerkleItem> {
     generation: u64,
     roots: [Option<NodeIndex>; 64], // roots of the trees for levels 0 to 63
-    insertions: Vec<Hash>, // new items (TBD: maybe use a fancy order-preserving HashSet later)
+    heap: Heap,
+    hasher: NodeHasher<M>,
+}
+
+#[derive(Clone)]
+pub struct ModifiedForest<M: MerkleItem> {
+    generation: u64,
+    roots: [Option<NodeIndex>; 64], // roots of the trees for levels 0 to 63
+    insertions: Insertions, // new items
     deletions: usize,
     heap: Heap,
     hasher: NodeHasher<M>,
-    phantom: PhantomData<M>,
 }
+
 
 /// An interface to the forest that makes all insertions/deletions atomic:
 /// all changes are rolled back if any deletion is invalid.
@@ -32,7 +40,6 @@ pub struct Update<'f, M: MerkleItem> {
 pub struct Catchup<M: MerkleItem> {
     forest: Forest<M>,            // forest that stores the nodes
     map: HashMap<Hash, Position>, // node hash -> new position offset for this node
-    phantom: PhantomData<M>,
 }
 
 /// Metrics of the Forest.
@@ -70,11 +77,10 @@ impl<M: MerkleItem> Forest<M> {
         Forest {
             generation: 0,
             roots: [None; 64],
-            insertions: Vec::new(),
+            insertions: Insertions::default(),
             deletions: 0,
             heap: Heap::with_capacity(0),
             hasher: NodeHasher::new(),
-            phantom: PhantomData,
         }
     }
 
@@ -84,10 +90,9 @@ impl<M: MerkleItem> Forest<M> {
             generation: self.generation,
             capacity: self.capacity() as usize,
             deletions: self.deletions,
-            insertions: self.insertions.len(),
+            insertions: self.insertions.count(),
             memory: mem::size_of::<Self>()
                 + mem::size_of::<Hash>() * self.insertions.len()
-                + mem::size_of::<Heap>()
                 + self.heap.memory(),
         }
     }
@@ -103,10 +108,11 @@ impl<M: MerkleItem> Forest<M> {
             Some(path) => path,
             None => {
                 let hash = self.hasher.leaf(item);
-                return self
-                    .find_insertion(&hash)
-                    .map(|_| ())
-                    .ok_or(UtreexoError::InvalidProof);
+                if self.insertions.verify(&hash) {
+                    return Ok(());
+                } else {
+                    return Err(UtreexoError::InvalidProof);
+                }
             }
         };
 
@@ -147,56 +153,25 @@ impl<M: MerkleItem> Forest<M> {
 
     /// An interface to insertions and deletions.
     /// Rolls back all changes if encountered an error.
-    pub fn update<F,T,E>(&mut self, closure: F) -> Result<T,E>
-    where F: FnOnce(&mut Update<M>) -> Result<T,E> {
+    pub fn update<'f, F,T,E>(&'f mut self, closure: F) -> Result<T,E>
+    where F: FnOnce(&mut ForestUpdate<'f, M>) -> Result<T,E> {
 
-        let prev_insertions_len = self.insertions.len();
-
-        let mut update = Update {
-            forest: self,
-            deleted_insertions: Bitarray::with_capacity(prev_insertions_len)
-        };
-
-        match closure(&mut update) {
-            Ok(result) => {
-
-                // updated nodes on the heap: keep
-                // appended nodes to the heap: keep
-                // appended insertions: keep
-                // insertions marked as deleted: actually delete
-
-                let mut adjustment = 0usize;
-                for (i, did_remove) in update.deleted_insertions.iter().enumerate() {
-                    if did_remove {
-                        update.forest.insertions.remove(i - adjustment);
-                        adjustment+=1;
-                    }
-                }
-
-                Ok(result)
-            },
-            Err(err) => {
-
-                // updated nodes on the heap: those that became modified - unmark, remove children
-                // appended nodes to the heap: truncate
-                // appended insertions: truncate
-                // insertions marked as deleted: forget the markers
-
-                update.forest.heap.truncate(prev_heap_len);
-                update.forest.insertions.truncate(prev_insertions_len);
-
-                update.forest.heap.undo_modifications()
-                /// 
-                //for (i, ()) in prev_modifications.iter().zip()
-                // for index in prev_modifications.xor_iter(&update.forest.modifications).take(prev_heap_len) {
-                //     update.forest.heap.update
-                // }
-
-                
-                Err(err)
-            }
-        }
-        
+        self.insertions.update(|insertions| {
+            self.heap.transaction(|heap| {
+                let mut update = ForestUpdate {
+                    generation: self.generation,
+                    roots: &self.roots,
+                    insertions: insertions,
+                    deletions: self.deletions,
+                    heap,
+                    hasher: &self.hasher,
+                };
+                closure(&mut update).map(|x| {
+                    self.deletions = update.deletions;
+                    x
+                })
+            })
+        })
     }
 
     /// Adds a new item to the tree, appending a node to the end.
@@ -365,7 +340,6 @@ impl<M: MerkleItem> Forest<M> {
             deletions: 0,
             heap: new_heap,
             hasher,
-            phantom: self.phantom,
         };
 
         // Create a new, trimmed forest.
@@ -519,7 +493,6 @@ impl<M: MerkleItem> Forest<M> {
             deletions: 0,
             heap: Heap::with_capacity(64), // filled in below
             hasher: self.hasher.clone(),
-            phantom: self.phantom,
         };
         // copy the roots from the new forest to the trimmed forest
         for root in self.roots_iter() {
@@ -544,7 +517,6 @@ impl<M: MerkleItem> Forest<M> {
         Catchup {
             forest: self,
             map: catchup_map,
-            phantom: PhantomData,
         }
     }
 

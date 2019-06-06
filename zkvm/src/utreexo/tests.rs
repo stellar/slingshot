@@ -1,3 +1,5 @@
+use merlin::Transcript;
+
 use super::*;
 use crate::merkle::*;
 

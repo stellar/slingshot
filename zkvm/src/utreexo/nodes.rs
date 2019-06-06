@@ -2,10 +2,9 @@ use crate::merkle::MerkleItem;
 use core::marker::PhantomData;
 use core::mem;
 use merlin::Transcript;
-use std::collections::HashMap;
 
 use super::bitarray::Bitarray;
-use super::path::{Position,Path,Directions,Side};
+use super::path::{Position,Side};
 
 /// Merkle hash of a node
 pub type Hash = [u8; 32];
@@ -29,11 +28,11 @@ impl<M: MerkleItem> Clone for NodeHasher<M> {
 /// Root nodes have `parent=None`.
 #[derive(Copy, Clone, PartialEq, Debug)]
 pub(super) struct Node {
-    hash: Hash,
-    index: NodeIndex,
-    level: usize,
-    modified: bool,
-    children: Option<(NodeIndex, NodeIndex)>,
+    pub(super) hash: Hash,
+    pub(super) index: NodeIndex,
+    pub(super) level: usize,
+    pub(super) modified: bool,
+    pub(super) children: Option<(NodeIndex, NodeIndex)>,
 }
 
 impl Node {
@@ -80,14 +79,14 @@ pub(super) struct NodeHasher<M: MerkleItem> {
 }
 
 impl<M: MerkleItem> NodeHasher<M> {
-    fn new() -> Self {
+    pub(super) fn new() -> Self {
         NodeHasher {
             t: Transcript::new(b"ZkVM.utreexo"),
             phantom: PhantomData,
         }
     }
 
-    fn leaf(&self, item: &M) -> Hash {
+    pub(super) fn leaf(&self, item: &M) -> Hash {
         let mut t = self.t.clone();
         item.commit(&mut t);
         let mut hash = [0; 32];
@@ -95,7 +94,7 @@ impl<M: MerkleItem> NodeHasher<M> {
         hash
     }
 
-    fn intermediate(&self, left: &Hash, right: &Hash) -> Hash {
+    pub(super) fn intermediate(&self, left: &Hash, right: &Hash) -> Hash {
         let mut t = self.t.clone();
         t.commit_bytes(b"L", left);
         t.commit_bytes(b"R", right);
@@ -104,7 +103,7 @@ impl<M: MerkleItem> NodeHasher<M> {
         hash
     }
 
-    fn empty(&self) -> Hash {
+    pub(super) fn empty(&self) -> Hash {
         let mut t = self.t.clone();
         let mut hash = [0; 32];
         t.challenge_bytes(b"merkle.empty", &mut hash);
@@ -242,7 +241,9 @@ impl Heap {
     }
 
     pub(super) fn memory(&self) -> usize {
-    	self.storage.len() * mem::size_of::<PackedNode>()
+        mem::size_of::<Self>() + 
+        self.storage.capacity() * mem::size_of::<PackedNode>() + 
+        self.modification_flags.memory()
     }
 }
 
