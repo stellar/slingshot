@@ -5,7 +5,8 @@
 extern crate failure;
 extern crate serde;
 
-mod blockchain;
+pub mod blockchain;
+pub mod utreexo;
 mod constraints;
 mod contract;
 mod encoding;
