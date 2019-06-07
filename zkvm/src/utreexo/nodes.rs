@@ -1,9 +1,7 @@
 use crate::merkle::MerkleItem;
 use core::marker::PhantomData;
-use core::mem;
 use merlin::Transcript;
 
-use super::bitarray::Bitarray;
 use super::path::{Position,Side};
 
 /// Merkle hash of a node
@@ -56,6 +54,21 @@ impl Node {
             flags: (self.level as u8) + modflag + chflag,
             children: (l, r),
         }
+    }
+
+    /// Returns the index in the iterator of hashes where the position must be located.
+    pub(crate) fn find_root<I,F>(roots: I, level: F, position: Position) -> Option<I::Item>
+    where I: IntoIterator,
+          F: Fn(&I::Item)->usize
+     {
+        let mut offset: Position = 0;
+        for item in roots.into_iter() {
+            offset += 1u64<<level(&item);
+            if position < offset {
+                return Some(item);
+            }
+        }
+        None
     }
 }
 
@@ -113,13 +126,13 @@ impl<M: MerkleItem> NodeHasher<M> {
 
 
 impl PackedNode {
-    fn unpack(&self, index: NodeIndex, modified: bool) -> Node {
+    fn unpack(&self, index: NodeIndex) -> Node {
         let level = (self.flags & 63) as usize;
         Node {
             hash: self.hash,
             index,
             level,
-            modified,
+            modified: self.flags & 64 == 64,
             children: if self.flags & 128 == 0 {
                 None
             } else {
@@ -133,51 +146,21 @@ impl PackedNode {
 #[derive(Clone)]
 pub(super) struct Heap {
     storage: Vec<PackedNode>,
-    modification_flags: Bitarray,
 }
 
 impl Heap {
     pub(super) fn with_capacity(cap: usize) -> Self {
         Heap {
             storage: Vec::with_capacity(cap),
-            modification_flags: Bitarray::with_capacity(cap)
         }
     }
 
     pub(super) fn node_at(&self, i: NodeIndex) -> Node {
-        self.storage[i].unpack(i, self.modification_flags.bit_at(i))
+        self.storage[i].unpack(i)
     }
 
     pub(super) fn len(&self) -> usize {
         self.storage.len()
-    }
-
-    /// Perform allocations in a transaction block: all allocations are removed
-    /// if the block fails.
-    pub(super) fn transaction<T, E>(
-        &mut self,
-        closure: impl FnOnce(&mut Self) -> Result<T, E>,
-    ) -> Result<T, E> {
-        let pre_transaction_size = self.storage.len();
-        let pre_transaction_modflags = self.modification_flags.clone();
-
-        match closure(&mut self) {
-            Ok(x) => Ok(x),
-            Err(e) => {
-                // undo all newly allocated items, but keep the allocated capacity for future use
-                self.storage.truncate(pre_transaction_size);
-                // disconnect all the children if the node was previously unmodified
-                for (i, (before, after)) in pre_transaction_modflags.iter().zip(self.modification_flags.iter()).enumerate().take(pre_transaction_size) {
-                    if !before && after {
-                        let node = self.storage[i].unpack(i, before);
-                        node.children = None;
-                        self.storage[i] = node.pack();
-                    }
-                }
-                self.modification_flags = pre_transaction_modflags;
-                Err(e)
-            }
-        }
     }
 
     /// Allocates a node in the heap.
@@ -204,7 +187,6 @@ impl Heap {
         let mut node = self.node_at(i);
         closure(&mut node);
         self.storage[i] = node.pack();
-        self.modification_flags.set_bit_at(i, node.modified);
         node
     }
 
@@ -238,12 +220,6 @@ impl Heap {
                     (main, neighbor)
                 })
             })
-    }
-
-    pub(super) fn memory(&self) -> usize {
-        mem::size_of::<Self>() + 
-        self.storage.capacity() * mem::size_of::<PackedNode>() + 
-        self.modification_flags.memory()
     }
 }
 
