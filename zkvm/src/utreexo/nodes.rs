@@ -2,14 +2,13 @@ use crate::merkle::MerkleItem;
 use core::marker::PhantomData;
 use merlin::Transcript;
 
-use super::path::{Position,Side};
+use super::path::{Position, Side};
 
 /// Merkle hash of a node
 pub type Hash = [u8; 32];
 
 /// Index of a `Node` within a forest's heap storage.
 pub(super) type NodeIndex = usize;
-
 
 impl<M: MerkleItem> Clone for NodeHasher<M> {
     fn clone(&self) -> Self {
@@ -39,7 +38,23 @@ impl Node {
         1 << self.level
     }
 
-    pub(super) fn pack(&self) -> PackedNode {
+    /// Returns the index in the iterator of hashes where the position must be located.
+    pub(crate) fn find_root<I, F>(roots: I, level: F, position: Position) -> Option<I::Item>
+    where
+        I: IntoIterator,
+        F: Fn(&I::Item) -> usize,
+    {
+        let mut offset: Position = 0;
+        for item in roots.into_iter() {
+            offset += 1u64 << level(&item);
+            if position < offset {
+                return Some(item);
+            }
+        }
+        None
+    }
+
+    fn pack(&self) -> PackedNode {
         debug_assert!(self.level < 64);
 
         let modflag = if self.modified { 64 } else { 0 };
@@ -55,21 +70,6 @@ impl Node {
             children: (l, r),
         }
     }
-
-    /// Returns the index in the iterator of hashes where the position must be located.
-    pub(crate) fn find_root<I,F>(roots: I, level: F, position: Position) -> Option<I::Item>
-    where I: IntoIterator,
-          F: Fn(&I::Item)->usize
-     {
-        let mut offset: Position = 0;
-        for item in roots.into_iter() {
-            offset += 1u64<<level(&item);
-            if position < offset {
-                return Some(item);
-            }
-        }
-        None
-    }
 }
 
 /// Packed node as stored in memory.
@@ -82,9 +82,6 @@ struct PackedNode {
     flags: u8,
     children: (u32, u32),
 }
-
-
-
 
 pub(super) struct NodeHasher<M: MerkleItem> {
     t: Transcript,
@@ -123,7 +120,6 @@ impl<M: MerkleItem> NodeHasher<M> {
         hash
     }
 }
-
 
 impl PackedNode {
     fn unpack(&self, index: NodeIndex) -> Node {
@@ -223,7 +219,6 @@ impl Heap {
     }
 }
 
-
 /// Iterator implementing traversal of the binary tree.
 pub(super) struct TreeTraversal<'h, F>
 where
@@ -281,4 +276,3 @@ where
         }
     }
 }
-

@@ -2,23 +2,26 @@ use bulletproofs::BulletproofGens;
 
 use super::block::{Block, BlockHeader, BlockID};
 use super::errors::BlockchainError;
-use super::utreexo;
+use crate::utreexo::{self,Utreexo};
 use crate::{ContractID, Tx, TxEntry, TxID, TxLog, VMError, Verifier};
 
 #[derive(Clone)]
 pub struct BlockchainState {
     pub initial_id: BlockID,
     pub tip: BlockHeader,
-    pub utreexo: utreexo::Forest<ContractID>,
+    pub utreexo: Utreexo<ContractID>,
 }
 
 impl BlockchainState {
     /// Creates an initial block with a given starting set of utxos.
     pub fn make_initial(timestamp_ms: u64, utxos: &[ContractID]) -> (BlockchainState, Vec<utreexo::Proof>) {
-        let mut utreexo = utreexo::Forest::<ContractID>::new();
-        let proofs = utxos.iter().map(|utxo| {
-            utreexo.insert(&utxo)
-        }).collect::<Vec<_>>();
+        let (proofs, utreexo, catchup) = Utreexo::<ContractID>::new().update(|forest| {
+            let proofs = utxos.iter().map(|utxo| {
+                forest.insert(&utxo)
+            }).collect::<Vec<_>>();
+            Ok(proofs)
+        });
+        
 
         let (utxoroot, utreexo, catchup) = utreexo.normalize();
         

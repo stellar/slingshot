@@ -1,6 +1,6 @@
 use crate::merkle::MerkleItem;
 
-use super::nodes::{Hash,NodeHasher};
+use super::nodes::{Hash, NodeHasher};
 
 /// Absolute position of an item in the tree.
 pub type Position = u64;
@@ -28,7 +28,6 @@ pub struct Path {
     pub(super) position: Position,
     pub(super) neighbors: Vec<Hash>,
 }
-
 
 #[derive(Copy, Clone, PartialEq, Debug)]
 pub(super) enum Side {
@@ -62,7 +61,9 @@ impl Side {
 }
 
 impl Path {
-    pub(super) fn iter(&self) -> impl DoubleEndedIterator<Item = (Side, &Hash)> + ExactSizeIterator {
+    pub(super) fn iter(
+        &self,
+    ) -> impl DoubleEndedIterator<Item = (Side, &Hash)> + ExactSizeIterator {
         self.directions().zip(self.neighbors.iter())
     }
     pub(super) fn directions(&self) -> Directions {
@@ -92,8 +93,8 @@ impl Path {
 /// as indicated by the bits in the `position`.
 #[derive(Copy, Clone, PartialEq, Debug)]
 pub(super) struct Directions {
-    position: Position,
-    depth: usize,
+    pub(super) position: Position,
+    pub(super) depth: usize,
 }
 
 impl ExactSizeIterator for Directions {

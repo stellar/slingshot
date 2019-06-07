@@ -1,8 +1,8 @@
 use crate::merkle::MerkleItem;
 use std::collections::HashMap;
 
-use super::path::{Position,Proof,Path,Directions};
-use super::nodes::{Hash,NodeHasher,NodeIndex,Node,Heap};
+use super::nodes::{Hash, Heap, Node, NodeHasher, NodeIndex};
+use super::path::{Directions, Path, Position, Proof};
 
 /// Utreexo contains some number of perfect merkle binary trees
 /// and a list of newly added items.
@@ -13,7 +13,7 @@ pub struct Utreexo<M: MerkleItem> {
     hasher: NodeHasher<M>,
 }
 
-/// State of the Utreexo during update
+/// State of the Utreexo forest during update
 #[derive(Clone)]
 pub struct WorkForest<M: MerkleItem> {
     generation: u64,
@@ -21,7 +21,6 @@ pub struct WorkForest<M: MerkleItem> {
     heap: Heap,
     hasher: NodeHasher<M>,
 }
-
 
 /// Structure that helps auto-updating the proofs created for a previous generation of a forest.
 #[derive(Clone)]
@@ -43,11 +42,7 @@ pub enum UtreexoError {
     InvalidProof,
 }
 
-
-
-
 impl<M: MerkleItem> Utreexo<M> {
-
     /// Creates a new instance of Utreexo.
     pub fn new() -> Self {
         Utreexo {
@@ -64,10 +59,15 @@ impl<M: MerkleItem> Utreexo<M> {
         }
 
         // path must be present when verifying against a normalized forest.
-        let path = &proof.path.ok_or(UtreexoError::InvalidProof)?;
+        let path = match &proof.path {
+            Some(path) => path,
+            None => return Err(UtreexoError::InvalidProof),
+        };
 
-        // 1. Locate the most nested node that we have under which the item.position is supposedly located.
-        let (root_level, _) = Node::find_root(self.roots_iter(), |&(level,_)| level, path.position).ok_or(UtreexoError::InvalidProof)?;
+        // 1. Locate the root under which the item.position is located.
+        let (root_level, _) =
+            Node::find_root(self.roots_iter(), |&(level, _)| level, path.position)
+                .ok_or(UtreexoError::InvalidProof)?;
 
         // 2. The proof should be of exact size from a leaf up to a tree root.
         if path.neighbors.len() != root_level {
@@ -82,7 +82,7 @@ impl<M: MerkleItem> Utreexo<M> {
             .take(root_level)
             .fold(current_hash, |_, (parent, _children)| parent);
 
-        // 4. Check if we arrived at a correct lowest-available node.
+        // 4. Check if the computed root matches the stored root.
         if Some(current_hash) != self.roots[root_level] {
             // We haven't met the node we expected to meet, so the proof is invalid.
             return Err(UtreexoError::InvalidProof);
@@ -93,28 +93,32 @@ impl<M: MerkleItem> Utreexo<M> {
 
     /// Lets use modify the utreexo and yields a new state of the utreexo,
     /// along with a catchup structure.
-    pub fn update<F, E>(&self, closure: F) -> Result<(Self, Catchup<M>),E>
-    where F: FnOnce(&mut WorkForest<M>) -> Result<(),E> 
+    pub fn update<F, T, E>(&self, closure: F) -> Result<(T, Self, Catchup<M>), E>
+    where
+        F: FnOnce(&mut WorkForest<M>) -> Result<T, E>,
     {
         let mut heap = Heap::with_capacity(64);
 
         // Convert the root hashes into the nodes
-        let roots = self.roots_iter().map(|(level,hash)| {
-            heap.allocate(hash, level, None).index
-        }).collect();
+        let roots = self
+            .roots_iter()
+            .map(|(level, hash)| heap.allocate(hash, level, None).index)
+            .collect();
 
         let mut forest = WorkForest {
             generation: self.generation,
             roots,
             heap,
-            hasher: self.hasher.clone()
+            hasher: self.hasher.clone(),
         };
 
         // Let the user specify the changes to the accumulator
-        closure(&mut forest)?;
+        let result = closure(&mut forest)?;
 
         // Normalize the forest and produce a new state and a Catchup
-        Ok(forest.normalize())
+        let (next_utreexo, catchup) = forest.normalize();
+
+        Ok((result, next_utreexo, catchup))
     }
 
     /// Hashes the top root of the entire forest, assuming it's normalized.
@@ -124,7 +128,7 @@ impl<M: MerkleItem> Utreexo<M> {
     pub fn root(&self) -> Hash {
         self.roots_iter()
             .rev()
-            .fold(None, |optional_hash, (level, hash2)| {
+            .fold(None, |optional_hash, (_level, hash2)| {
                 if let Some(hash1) = optional_hash {
                     // previous hash is of lower level, so it goes to the right
                     Some(self.hasher.intermediate(&hash2, &hash1))
@@ -136,27 +140,18 @@ impl<M: MerkleItem> Utreexo<M> {
             .unwrap_or(self.hasher.empty())
     }
 
-    /// Capacity of the entire forest as defined by the top-level roots, excluding deletions and insertions.
-    fn capacity(&self) -> u64 {
-        self.roots_iter().map(|(level,_)| 1u64<<level ).sum()
-    }
-
     /// Returns an iterator over roots of the forest,
     /// from the highest to the lowest level.
-    fn roots_iter<'a>(&'a self) -> impl DoubleEndedIterator<Item = (usize,Hash)> + 'a {
+    fn roots_iter<'a>(&'a self) -> impl DoubleEndedIterator<Item = (usize, Hash)> + 'a {
         self.roots
             .iter()
             .enumerate()
             .rev()
-            .filter_map(|(level,optional_hash)| optional_hash.map(|hash| (level, hash) ))
+            .filter_map(|(level, optional_hash)| optional_hash.map(|hash| (level, hash)))
     }
 }
 
-
-
 impl<M: MerkleItem> WorkForest<M> {
-    
-    
     /// Adds a new item to the tree, appending a node to the end.
     pub fn insert(&mut self, item: &M) -> Proof {
         let hash = self.hasher.leaf(item);
@@ -179,24 +174,35 @@ impl<M: MerkleItem> WorkForest<M> {
 
         // 0. Fast check: if the proof relates to a newly added item, simply remove it,
         //    so that transient items do not take up space until normalization.
+        //    Transient items are identified by path=None in their proof.
+        //
+        //    If the item is not transient, but user strips off the path,
+        //    it will get deleted instead of being marked
+        //    as modified, but that's not breaking anything: that node would be removed anyway.
         let path = match &proof.path {
             Some(path) => path,
             None => {
-                // The path is missing, meaning the item must exist among the recent inserions.
-                let hash = self.hasher.leaf(item);
-                let index = self.roots
-                    .iter()
+                // The path is missing, meaning the item must exist among the recent insertions
+                // since the last checkpoint.
+                let item_hash = self.hasher.leaf(item);
+                let (index, node) = self
+                    .roots_iter()
                     .enumerate()
-                    .find(|&(_i, ni)| self.heap.node_at(*ni).hash == hash)
-                    .map(|(i, _h)| i)
+                    .find(|&(_i, node)| node.level == 0 && node.hash == item_hash)
                     .ok_or(UtreexoError::InvalidProof)?;
+
+                // If the node was already marked as modified - fail.
+                if node.modified {
+                    return Err(UtreexoError::InvalidProof);
+                }
                 self.roots.remove(index);
                 return Ok(());
             }
         };
 
-        // 1. Locate the most nested node that we have under which the item.position is supposedly located.
-        let top = Node::find_root(self.roots_iter(), |&node| node.level, path.position).ok_or(UtreexoError::InvalidProof)?;
+        // 1. Locate the root under which the item.position is located.
+        let top = Node::find_root(self.roots_iter(), |&node| node.level, path.position)
+            .ok_or(UtreexoError::InvalidProof)?;
 
         // 2. The proof should be of exact size from a leaf up to a tree root.
         if path.neighbors.len() != top.level {
@@ -217,13 +223,13 @@ impl<M: MerkleItem> WorkForest<M> {
         //    creating the missing nodes until we hit the bottom node.
         //    Note, it is fine if we fail mid-way updating the state -
         //    it will be completely discarded by `Utreexo::update`.
-        let hasher = &self.hasher;
-    
+        let hasher = self.hasher.clone();
+
         let item_hash = hasher.leaf(item);
 
         let (hash, new_children) = path
             .directions()
-            .zip(path.walk_up(item_hash, hasher))
+            .zip(path.walk_up(item_hash, &hasher))
             .enumerate()
             .take(existing.level)
             .fold(
@@ -264,8 +270,6 @@ impl<M: MerkleItem> WorkForest<M> {
         Ok(())
     }
 
-
-
     /// Normalizes the forest into minimal number of ordered perfect trees.
     /// Returns a root of the new forst, the forest and a catchup structure.
     fn normalize(self) -> (Utreexo<M>, Catchup<M>) {
@@ -278,16 +282,13 @@ impl<M: MerkleItem> WorkForest<M> {
         let non_modified_nodes = self
             .heap
             .traverse(self.roots_iter(), |n| n.modified)
-            // 1) add pre-existing unmodified nodes...
             .filter_map(|(_offset, node)| {
                 if !node.modified {
                     Some((node.hash, node.level))
                 } else {
                     None
                 }
-            })
-            // 2) ...and newly inserted nodes.
-            .chain(self.insertions.into_iter().map(|hash| (hash, 0)));
+            });
 
         // we just consumed `self.insertions`, so let's also move out the hasher.
         let hasher = self.hasher;
@@ -321,41 +322,43 @@ impl<M: MerkleItem> WorkForest<M> {
 
         let new_forest = WorkForest {
             generation: self.generation + 1,
-            roots: new_roots.iter().rev().filter_map(|r| r).collect(),
+            roots: new_roots.iter().rev().filter_map(|r| *r).collect(),
             heap: new_heap,
-            hasher,
+            hasher: hasher.clone(),
         };
 
         let utreexo_roots = new_roots.iter().fold([None; 64], |mut roots, ni| {
             if let Some(ni) = ni {
-                let node = new_forest.heap.node_at(ni);
-                roots[node.level] = node.hash;
+                let node = new_forest.heap.node_at(*ni);
+                roots[node.level] = Some(node.hash);
             }
             roots
         });
         let utreexo = Utreexo {
-            generation: self.generation,
+            generation: self.generation + 1,
             roots: utreexo_roots,
-            hasher: self.hasher.clone(),
+            hasher,
         };
 
-        let catchup_map = new_forest.heap.traverse(new_forest.roots_iter(), |_| true).fold(
-            HashMap::<Hash, Position>::new(),
-            |mut map, (offset, node)| {
-                if node.children == None {
-                    map.insert(node.hash, offset);
-                }
-                map
-            },
-        );
+        let catchup_map = new_forest
+            .heap
+            .traverse(new_forest.roots_iter(), |_| true)
+            .fold(
+                HashMap::<Hash, Position>::new(),
+                |mut map, (offset, node)| {
+                    if node.children == None {
+                        map.insert(node.hash, offset);
+                    }
+                    map
+                },
+            );
         let catchup = Catchup {
-            forest: self,
+            forest: new_forest,
             map: catchup_map,
         };
 
         (utreexo, catchup)
     }
-    
 
     /// Returns the lowest-available node for a given path and verifies the higher-level
     /// neighbors in the path.
@@ -428,7 +431,8 @@ impl<M: MerkleItem> Catchup<M> {
         path.neighbors.truncate(midlevel);
 
         // Find the root to which the updated position belongs
-        let root = self.forest.root_containing_position(path.position)?;
+        let root = Node::find_root(self.forest.roots_iter(), |&node| node.level, path.position)
+            .ok_or(UtreexoError::InvalidProof)?;
 
         let directions = Directions {
             position: path.position,
@@ -448,6 +452,4 @@ impl<M: MerkleItem> Catchup<M> {
             path: Some(path),
         })
     }
-
 }
-
