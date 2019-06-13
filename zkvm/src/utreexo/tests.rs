@@ -11,13 +11,13 @@ impl MerkleItem for u64 {
 
 #[test]
 fn empty_utreexo() {
-    let utreexo0 = Utreexo::<u64>::new();
+    let utreexo0 = Forest::<u64>::new();
     assert_eq!(utreexo0.root(), MerkleTree::root::<u64>(b"ZkVM.utreexo", &[]));
 }
 
 #[test]
 fn transient_items_utreexo() {
-    let utreexo0 = Utreexo::new();
+    let utreexo0 = Forest::new();
 
     let (_, _utreexo1, _catchup) = utreexo0.update::<_,_,()>(|forest| {
 
@@ -37,7 +37,7 @@ fn transient_items_utreexo() {
 
 #[test]
 fn insert_to_utreexo() {
-    let utreexo0 = Utreexo::new();
+    let utreexo0 = Forest::new();
     let (proofs0, utreexo1, catchup1) = utreexo0.update::<_,_,()>(|forest|{
         Ok((0..6).map(|i| {
             forest.insert(&i)
@@ -77,7 +77,7 @@ fn insert_to_utreexo() {
 fn insert_and_delete_utreexo() {
     let n = 6u64;
 
-    let utreexo0 = Utreexo::new();
+    let utreexo0 = Forest::new();
     let (proofs0, utreexo1, catchup1) = utreexo0.update::<_,_,()>(|forest|{
         Ok((0..n).map(|i| {
             forest.insert(&i)

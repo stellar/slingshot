@@ -8,6 +8,6 @@ mod path;
 mod tests;
 
 // Public API
-pub use self::forest::{Catchup, Utreexo, UtreexoError, WorkForest};
+pub use self::forest::{Catchup, Forest, UtreexoError, WorkForest};
 pub use self::nodes::Hash;
 pub use self::path::{Path, Position, Proof};

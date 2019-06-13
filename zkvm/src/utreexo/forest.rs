@@ -4,10 +4,10 @@ use std::collections::HashMap;
 use super::nodes::{Hash, Heap, Node, NodeHasher, NodeIndex};
 use super::path::{Directions, Path, Position, Proof};
 
-/// Utreexo contains some number of perfect merkle binary trees
-/// and a list of newly added items.
+/// Forest consists of a number of roots of merkle binary trees.
+/// Each forest is identified by a generation.
 #[derive(Clone)]
-pub struct Utreexo<M: MerkleItem> {
+pub struct Forest<M: MerkleItem> {
     generation: u64,
     roots: [Option<Hash>; 64], // roots of the trees for levels 0 to 63
     hasher: NodeHasher<M>,
@@ -42,10 +42,10 @@ pub enum UtreexoError {
     InvalidProof,
 }
 
-impl<M: MerkleItem> Utreexo<M> {
-    /// Creates a new instance of Utreexo.
+impl<M: MerkleItem> Forest<M> {
+    /// Creates a new instance of Forest.
     pub fn new() -> Self {
-        Utreexo {
+        Forest {
             generation: 0,
             roots: [None; 64],
             hasher: NodeHasher::new(),
@@ -272,7 +272,7 @@ impl<M: MerkleItem> WorkForest<M> {
 
     /// Normalizes the forest into minimal number of ordered perfect trees.
     /// Returns a root of the new forst, the forest and a catchup structure.
-    fn normalize(self) -> (Utreexo<M>, Catchup<M>) {
+    fn normalize(self) -> (Forest<M>, Catchup<M>) {
         // TBD: what's the best way to estimate the vector capacity from self.heap.len()?
         let estimated_cap = self.heap.len() / 2;
 
@@ -334,7 +334,7 @@ impl<M: MerkleItem> WorkForest<M> {
             }
             roots
         });
-        let utreexo = Utreexo {
+        let utreexo = Forest {
             generation: self.generation + 1,
             roots: utreexo_roots,
             hasher,
