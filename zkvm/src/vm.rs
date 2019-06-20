@@ -8,6 +8,7 @@ use spacesuit::BitRange;
 use std::iter::FromIterator;
 use std::mem;
 
+
 use crate::constraints::{Commitment, Constraint, Expression, Variable};
 use crate::contract::{Anchor, Contract, ContractID, PortableItem};
 use crate::encoding::SliceReader;
@@ -19,6 +20,7 @@ use crate::program::ProgramItem;
 use crate::scalar_witness::ScalarWitness;
 use crate::tx::{TxEntry, TxHeader, TxID, TxLog};
 use crate::types::*;
+use crate::encoding::Encodable;
 
 /// Current tx version determines which extension opcodes are treated as noops (see VM.extension flag).
 pub const CURRENT_VERSION: u64 = 1;
@@ -674,7 +676,23 @@ where
 
     fn add_range_proof(&mut self, bitrange: BitRange, expr: Expression) -> Result<(), VMError> {
         let (lc, assignment) = match expr {
-            Expression::Constant(x) => (r1cs::LinearCombination::from(x), Some(x)),
+            Expression::Constant(x) => {
+            
+            //convert to 32 bytes scalar in little endina notation
+            let mut buf : Vec<u8>;
+            x.encode(&mut buf);
+
+
+
+
+
+
+
+
+            
+            
+            (r1cs::LinearCombination::from(x), Some(x)),
+            }
             Expression::LinearCombination(terms, assignment) => {
                 (r1cs::LinearCombination::from_iter(terms), assignment)
             }

@@ -8,7 +8,7 @@ _Cloak_ is a protocol for confidential assets based on the [Bulletproofs](https:
     * [Scalar](#scalar)
     * [Signed integer](#signed-integer)
     * [Value](#value)
-    * [Quantity](#quantity)
+    * [Quantity](#quantity) 
     * [Flavor](#flavor)
     * [Gadget](#gadget)
     * [Transaction](#transaction)
