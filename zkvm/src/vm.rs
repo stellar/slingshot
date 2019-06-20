@@ -679,17 +679,10 @@ where
             Expression::Constant(x) => {
             
             //convert to 32 bytes scalar in little endina notation
-            let mut buf : Vec<u8>;
-            x.encode(&mut buf);
 
-
-
-
-
-
-
-
-            
+            // i can use Encodable.encode instead
+             let scalar_bytes: [u8; 32] = x.to_scalar().to_bytes();
+            // check if all bits scalar_bytes[0..24] are zero 
             
             (r1cs::LinearCombination::from(x), Some(x)),
             }
