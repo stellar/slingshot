@@ -674,16 +674,17 @@ where
         Ok(())
     }
 
+
     fn add_range_proof(&mut self, bitrange: BitRange, expr: Expression) -> Result<(), VMError> {
         let (lc, assignment) = match expr {
             Expression::Constant(x) => {
-            
-            //convert to 32 bytes scalar in little endina notation
-
-            // i can use Encodable.encode instead
-             let scalar_bytes: [u8; 32] = x.to_scalar().to_bytes();
-            // check if all bits scalar_bytes[0..24] are zero 
-            
+            let scalar_bytes = x.to_scalar().to_bytes();
+            if (&scalar_bytes[0..24]).iter().all(|v| v == &0) {
+                // all digits are zeroes ,x within u64 range
+            } else {
+                //not all digits are zeroes, x is out of u64 range
+            }
+           
             (r1cs::LinearCombination::from(x), Some(x)),
             }
             Expression::LinearCombination(terms, assignment) => {
