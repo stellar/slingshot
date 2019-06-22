@@ -93,9 +93,9 @@ impl<M: MerkleItem> Forest<M> {
 
     /// Lets use modify the utreexo and yields a new state of the utreexo,
     /// along with a catchup structure.
-    pub fn update<F, T, E>(&self, closure: F) -> Result<(T, Self, Catchup<M>), E>
+    pub fn update<F, T>(&self, closure: F) -> Result<(T, Self, Catchup<M>), UtreexoError>
     where
-        F: FnOnce(&mut WorkForest<M>) -> Result<T, E>,
+        F: FnOnce(&mut WorkForest<M>) -> Result<T, UtreexoError>,
     {
         let mut heap = Heap::with_capacity(64);
 
