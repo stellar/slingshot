@@ -679,7 +679,7 @@ where
         let (lc, assignment) = match expr {
             Expression::Constant(x) => {
             let scalar_bytes = x.to_scalar().to_bytes();
-            if (&scalar_bytes[0..24]).iter().all(|v| v == &0) {
+            if (&scalar_bytes[8..32]).iter().all(|v| v == &0) {
                 // all digits are zeroes ,x within u64 range
             } else {
                 //not all digits are zeroes, x is out of u64 range
