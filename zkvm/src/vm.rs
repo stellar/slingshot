@@ -676,28 +676,25 @@ where
 
 
     fn add_range_proof(&mut self, bitrange: BitRange, expr: Expression) -> Result<(), VMError> {
-        let (lc, assignment) = match expr {
+        match expr {
             Expression::Constant(x) => {
-            let scalar_bytes = x.to_scalar().to_bytes();
-            if (&scalar_bytes[8..32]).iter().all(|v| v == &0) {
-                // all digits are zeroes ,x within u64 range
-            } else {
-                //not all digits are zeroes, x is out of u64 range
-            }
-           
-            (r1cs::LinearCombination::from(x), Some(x)),
-            }
+                let scalar_bytes = x.to_scalar().to_bytes();
+                if (scalar_bytes[8..32]).iter().all(|v| v == &0) {
+                     Ok(())
+                } else {
+                    Err(VMError::InvalidBitrange))
+                }
+            },
             Expression::LinearCombination(terms, assignment) => {
-                (r1cs::LinearCombination::from_iter(terms), assignment)
+                 spacesuit::range_proof(
+                    self.delegate.cs(),
+                    r1cs::LinearCombination::from_iter(terms),
+                    ScalarWitness::option_to_integer(assignment)?,
+                    bitrange,
+                 )
+                .map_err(|_| VMError::R1CSInconsistency)
             }
         };
-        spacesuit::range_proof(
-            self.delegate.cs(),
-            lc,
-            ScalarWitness::option_to_integer(assignment)?,
-            bitrange,
-        )
-        .map_err(|_| VMError::R1CSInconsistency)
     }
 
     /// Creates and anchors the contract
