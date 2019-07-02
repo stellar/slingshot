@@ -54,7 +54,16 @@ impl ScalarWitness {
             Some(ScalarWitness::Scalar(_)) => Err(VMError::TypeNotSignedInteger),
         }
     }
+
+
+    pub fn in_range(self) -> bool {
+        let scalar_bits: [i8; 256]  = self.to_scalar().bits();
+        (&scalar_bits[64..256].iter().all(|v| v == &0)) 
+    }
 }
+
+
+
 
 // Implementing arithmetic operatons for ScalarWitness
 
