@@ -8,7 +8,6 @@ use spacesuit::BitRange;
 use std::iter::FromIterator;
 use std::mem;
 
-
 use crate::constraints::{Commitment, Constraint, Expression, Variable};
 use crate::contract::{Anchor, Contract, ContractID, PortableItem};
 use crate::encoding::SliceReader;
@@ -678,15 +677,14 @@ where
     fn add_range_proof(&mut self, bitrange: BitRange, expr: Expression) -> Result<(), VMError> {
         match expr {
             Expression::Constant(x) => {
-                let scalar_bytes = x.to_scalar().to_bytes();
-                if (scalar_bytes[8..32]).iter().all(|v| v == &0) {
-                     Ok(())
+                if x.in_range() {
+                    Ok(())
                 } else {
                     Err(VMError::InvalidBitrange))
                 }
             },
             Expression::LinearCombination(terms, assignment) => {
-                 spacesuit::range_proof(
+                spacesuit::range_proof(
                     self.delegate.cs(),
                     r1cs::LinearCombination::from_iter(terms),
                     ScalarWitness::option_to_integer(assignment)?,
