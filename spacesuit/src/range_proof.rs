@@ -8,11 +8,10 @@ use crate::signed_integer::SignedInteger;
 pub fn range_proof<CS: ConstraintSystem>(
     cs: &mut CS,
     mut v: LinearCombination,
-    v_assignment: Option<SignedInteger>,
-    n: BitRange,
-) -> Result<(), R1CSError> {
+    v_assignment: Option<SignedInteger>) 
+    -> Result<(), R1CSError> {
     let mut exp_2 = Scalar::one();
-    let n_usize: usize = n.into();
+    let n_usize: usize = BitRange::max().into();
     for i in 0..n_usize {
         // Create low-level variables and add them to constraints
         let (a, b, o) = cs.allocate_multiplier(v_assignment.and_then(|q| {
@@ -104,3 +103,9 @@ mod tests {
         Ok(verifier.verify(&proof, &pc_gens, &bp_gens)?)
     }
 }
+
+
+
+
+
+

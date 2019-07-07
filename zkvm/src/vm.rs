@@ -251,9 +251,9 @@ where
         Ok(())
     }
 
-    fn range(&mut self, i: BitRange) -> Result<(), VMError> {
+    fn range(&mut self) -> Result<(), VMError> {
         let expr = self.pop_item()?.to_expression()?;
-        self.add_range_proof(i, expr.clone())?;
+        self.add_range_proof(expr.clone())?;
         self.push_item(expr);
         Ok(())
     }
@@ -372,7 +372,7 @@ where
         };
 
         let qty_expr = self.variable_to_expression(qty)?;
-        self.add_range_proof(BitRange::max(), qty_expr)?;
+        self.add_range_proof(qty_expr)?;
 
         self.txlog.push(TxEntry::Issue(qty_point, flv_point));
 
@@ -395,8 +395,7 @@ where
         spacesuit::range_proof(
             self.delegate.cs(),
             qty_var.into(),
-            qty_assignment,
-            BitRange::max(),
+            qty_assignment
         )
         .map_err(|_| VMError::R1CSInconsistency)?;
 
@@ -674,7 +673,7 @@ where
     }
 
 
-    fn add_range_proof(&mut self, bitrange: BitRange, expr: Expression) -> Result<(), VMError> {
+    fn add_range_proof(&mut self, expr: Expression) -> Result<(), VMError> {
         match expr {
             Expression::Constant(x) => {
                 if x.in_range() {
@@ -687,8 +686,7 @@ where
                 spacesuit::range_proof(
                     self.delegate.cs(),
                     r1cs::LinearCombination::from_iter(terms),
-                    ScalarWitness::option_to_integer(assignment)?,
-                    bitrange,
+                    ScalarWitness::option_to_integer(assignment)?
                  )
                 .map_err(|_| VMError::R1CSInconsistency)
             }

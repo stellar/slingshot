@@ -1,5 +1,4 @@
 use crate::{mix::k_mix, range_proof};
-use bit_range::BitRange;
 use bulletproofs::r1cs::{R1CSError, RandomizableConstraintSystem};
 use shuffle::{padded_shuffle, value_shuffle};
 use value::AllocatedValue;
@@ -38,8 +37,7 @@ pub fn cloak<CS: RandomizableConstraintSystem>(
         range_proof(
             cs,
             output.q.into(),
-            output.assignment.map(|v| v.q),
-            BitRange::max(),
+            output.assignment.map(|v| v.q)
         )?;
     }
 
