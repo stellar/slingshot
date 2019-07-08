@@ -93,10 +93,7 @@ impl<M: MerkleItem> Forest<M> {
 
     /// Lets use modify the utreexo and yields a new state of the utreexo,
     /// along with a catchup structure.
-    pub fn update<F, T>(&self, closure: F) -> Result<(T, Self, Catchup<M>), UtreexoError>
-    where
-        F: FnOnce(&mut WorkForest<M>) -> Result<T, UtreexoError>,
-    {
+    pub fn work_forest(&self) -> WorkForest<M> {
         let mut heap = Heap::with_capacity(64);
 
         // Convert the root hashes into the nodes
@@ -105,24 +102,26 @@ impl<M: MerkleItem> Forest<M> {
             .map(|(level, hash)| heap.allocate(hash, level, None).index)
             .collect();
 
-        let mut forest = WorkForest {
+        WorkForest {
             generation: self.generation,
             roots,
             heap,
             hasher: self.hasher.clone(),
-        };
+        }
+    }
 
-        // Let the user specify the changes to the accumulator
+    /// Lets user to modify the utreexo.
+    /// Returns a new state, along with a catchup structure.
+    pub fn update<F, T>(&self, closure: F) -> Result<(T, Self, Catchup<M>), UtreexoError>
+    where
+        F: FnOnce(&mut WorkForest<M>) -> Result<T, UtreexoError>,
+    {
+        let mut forest = self.work_forest();
         let result = closure(&mut forest)?;
-
-        // Normalize the forest and produce a new state and a Catchup
         let (next_utreexo, catchup) = forest.normalize();
-
         Ok((result, next_utreexo, catchup))
     }
 
-    /// Hashes the top root of the entire forest, assuming it's normalized.
-    /// For that reason, DO NOT expose this method through the API.
     /// Since each root is balanced, the top root is composed of n-1 pairs:
     /// `hash(R3, hash(R2, hash(R1, R0)))`
     pub fn root(&self) -> Hash {
@@ -272,7 +271,7 @@ impl<M: MerkleItem> WorkForest<M> {
 
     /// Normalizes the forest into minimal number of ordered perfect trees.
     /// Returns a root of the new forst, the forest and a catchup structure.
-    fn normalize(self) -> (Forest<M>, Catchup<M>) {
+    pub fn normalize(self) -> (Forest<M>, Catchup<M>) {
         // TBD: what's the best way to estimate the vector capacity from self.heap.len()?
         let estimated_cap = self.heap.len() / 2;
 

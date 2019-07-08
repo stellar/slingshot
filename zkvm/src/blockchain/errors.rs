@@ -26,6 +26,15 @@ pub enum BlockchainError {
     #[fail(display = "txroot mismatch")]
     TxrootMismatch,
 
+    #[fail(display = "UTXO root mismatch")]
+    UtxorootMismatch,
+
     #[fail(display = "tx validation")]
     TxValidation(VMError),
+
+    #[fail(display = "Utreexo proof is missing")]
+    UtreexoProofMissing,
+
+    #[fail(display = "Utreexo operation failed")]
+    UtreexoError(UtreexoError)
 }

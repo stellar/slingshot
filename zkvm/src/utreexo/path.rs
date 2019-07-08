@@ -1,6 +1,7 @@
 use crate::merkle::MerkleItem;
 
 use super::nodes::{Hash, NodeHasher};
+use super::super::encoding::{self,Encodable};
 
 /// Absolute position of an item in the tree.
 pub type Position = u64;
@@ -86,6 +87,40 @@ impl Path {
                 *item_hash = p;
                 Some((p, (l, r)))
             })
+    }
+}
+
+impl Encodable for Proof {
+    fn encode(&self, buf: &mut Vec<u8>) {
+        encoding::write_u64(self.generation, buf);
+        match &self.path {
+            None => encoding::write_u8(0, buf),
+            Some(path) => {
+                encoding::write_u8(1, buf);
+                path.encode(buf)
+            }
+        }
+    }
+
+    fn serialized_length(&self) -> usize {
+        return 8 + 1 + match &self.path {
+            None => 0,
+            Some(path) => path.serialized_length()
+        }
+    }
+}
+
+impl Encodable for Path {
+    fn encode(&self, buf: &mut Vec<u8>) {
+        encoding::write_u64(self.position, buf);
+        encoding::write_size(self.neighbors.len(), buf);
+        for hash in self.neighbors.iter() {
+            encoding::write_bytes(&hash[..], buf);
+        }
+    }
+
+    fn serialized_length(&self) -> usize {
+        return 8 + 4 + 32*self.neighbors.len()
     }
 }
 
