@@ -60,42 +60,6 @@ impl BlockHeader {
 
 impl Block {
 
-    /// Constructs a block from a list of transactions
-    pub fn make(
-        state: BlockchainState,
-        txs: Vec<Tx>,
-        block_version: u64,
-        timestamp_ms: u64,
-        ext: Vec<u8>,
-    ) -> Result<Self, BlockchainError> {
-        let bp_gens = BulletproofGens::new(1, 256);
-        let mut new_state = state.clone();
-        let txids = txs
-            .iter()
-            .map(|tx| {
-                let (txid, txlog) =
-                    BlockchainState::execute_tx(&tx, &bp_gens, block_version, timestamp_ms)?;
-                new_state
-                    .apply_txlog(&txlog)
-                    .map_err(|e| BlockchainError::TxValidation(e))?;
-                Ok(txid)
-            })
-            .collect::<Result<Vec<_>, _>>()?;
-
-        Ok(Self {
-            header: BlockHeader {
-                version: block_version,
-                height: state.tip.height + 1,
-                prev: state.tip.id(),
-                timestamp_ms: timestamp_ms,
-                txroot: MerkleTree::root(b"ZkVM.txroot", &txids),
-                utxoroot: unimplemented!(), //Root::utxo(&new_state.utxos).0,
-                ext: ext,
-            },
-            txs: txs,
-        })
-    }
-
     /// Returns an interator of all utxo proofs for all transactions in a block.
     /// This interface allows us to optimize the representation of utxo proofs,
     /// while not affecting the validation logic.
@@ -103,11 +67,3 @@ impl Block {
         unimplemented!()
     }
 }
-
-fn check(cond: bool, err: BlockchainError) -> Result<(), BlockchainError> {
-    if !cond {
-        return Err(err);
-    }
-    Ok(())
-}
-

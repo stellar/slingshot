@@ -106,13 +106,15 @@ impl BlockchainState {
     }
 
     /// Creates a new block with a set of verified transactions.
+    /// Also returns a new blockchain state.
     pub fn make_block(
+        &self,
         block_version: u64,
         timestamp_ms: u64,
         ext: Vec<u8>,
-        txs: impl IntoIterator<Item=Tx>,
+        txs: Vec<Tx>,
         utxo_proofs: impl IntoIterator<Item=utreexo::Proof>,
-    ) -> Result<Block, BlockchainError> {
+    ) -> Result<(Block, BlockchainState), BlockchainError> {
 
         check(
             block_version >= self.tip.version,
@@ -128,8 +130,8 @@ impl BlockchainState {
         // TBD: change to a more compact (log(n)) merkle root hasher.
         let mut txids: Vec<TxID> = Vec::with_capacity(self.txs.len());
 
-        let mut utxo_proofs = block.utxo_proofs();    
-        for tx in block.txs.iter() {
+        let mut utxo_proofs = utxo_proofs.into_iter();
+        for tx in txs.iter() {
             check_tx_header(&tx.header, &block.header)?;
             
             let verified_tx = Verifier::verify_tx(tx, bp_gens).map_err(|e| BlockchainError::TxValidation(e) )?;
@@ -155,35 +157,32 @@ impl BlockchainState {
         }
 
         let txroot = MerkleTree::root(b"ZkVM.txroot", &txids);
-        if &block.header.txroot != txroot {
-            return Err(BlockchainError::TxrootMismatch);
-        }
 
         let (new_forest, new_catchup) = work_forest.normalize();
 
-        if &block.header.utxoroot != new_forest.root() {
-            return Err(BlockchainError::UtxorootMismatch);
-        }
+        let utxoroot = new_forest.root();
 
-        Ok(BlockchainState {
-            initial_id: self.initial_id,
-            tip: block.header.clone(),
-            utreexo: new_forest,
-            catchup: new_catchup,
-        })
-
-        Ok(Self {
+        let new_block = Self {
             header: BlockHeader {
                 version: block_version,
-                height: state.tip.height + 1,
-                prev: state.tip.id(),
-                timestamp_ms: timestamp_ms,
-                txroot: MerkleTree::root(b"ZkVM.txroot", &txids),
-                utxoroot: unimplemented!(), //Root::utxo(&new_state.utxos).0,
-                ext: ext,
+                height: self.tip.height + 1,
+                prev: self.tip.id(),
+                timestamp_ms,
+                txroot,
+                utxoroot,
+                ext,
             },
-            txs: txs,
-        })
+            txs,
+        };
+
+        let new_state = BlockchainState {
+            initial_id: self.initial_id,
+            tip: new_block.header.clone(),
+            utreexo: new_forest,
+            catchup: new_catchup,
+        };
+
+        Ok((new_block, new_state))
     }
 }
 
