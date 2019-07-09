@@ -13,8 +13,10 @@ A blockchain transaction format that is an evolution of [TxVM](https://github.co
 with **cloaked assets** and **zero-knowledge smart contracts**.
 
 * [README](zkvm/README.md)
-* [Specification](zkvm/docs/zkvm-spec.md)
-* [API guide](zkvm/docs/zkvm-api.md)
+* [ZkVM whitepaper](zkvm/docs/zkvm-design.md)
+* [ZkVM specification](zkvm/docs/zkvm-spec.md)
+* [Blockchain specification](zkvm/docs/zkvm-blockchain.md)
+* [ZkVM API guide](zkvm/docs/zkvm-api.md)
 
 ### [Spacesuit](spacesuit)
 
@@ -28,7 +30,8 @@ based on the [Bulletproofs](https://doc.dalek.rs/bulletproofs/index.html) zero-k
 
 A pure Rust implementation of the [Simple Schnorr Multi-Signatures](https://eprint.iacr.org/2018/068) by Maxwell, Poelstra, Seurin and Wuille.
 
-* [Musig README](musig/README.md)
+* [README](musig/README.md)
+* [Musig specification](musig/docs/musig-spec.md)
 
 ### [Keytree](keytree)
 

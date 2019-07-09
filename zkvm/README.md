@@ -2,7 +2,9 @@
 
 An evolution of TxVM with **cloaked assets** and **zero-knowledge smart contracts**.
 
+* [ZkVM whitepaper](docs/zkvm-design.md) — technology overview.
 * [ZkVM specification](docs/zkvm-spec.md) — transaction validation rules.
+* [Blockchain specification](docs/zkvm-blockchain.md) — blockchain state machine specification.
 * [ZkVM API](docs/zkvm-api.md) — how to create transactions with ZkVM.
 
 ## Overview
