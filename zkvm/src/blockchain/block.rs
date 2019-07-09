@@ -1,29 +1,39 @@
-use bulletproofs::BulletproofGens;
 use merlin::Transcript;
 
 use super::super::utreexo;
-use super::errors::BlockchainError;
-use super::state::BlockchainState;
-use crate::{ContractID, MerkleTree, Tx, TxID, TxLog, Verifier};
+use crate::{MerkleTree, Tx, TxID};
 
-
-#[derive(Clone, PartialEq)]
+/// Identifier of the block, computed as a hash of the `BlockHeader`.
+#[derive(Clone, Copy, PartialEq)]
 pub struct BlockID(pub [u8; 32]);
 
-#[derive(Clone)]
+/// BlockHeader contains the metadata for the block of transactions,
+/// committing to them, but not containing the actual transactions.
+#[derive(Clone, PartialEq)]
 pub struct BlockHeader {
+    /// Network version.
     pub version: u64,
+    /// Serial number of the block, starting with 1.
     pub height: u64,
+    /// ID of the previous block. Initial block uses the all-zero string.
     pub prev: BlockID,
+    /// Integer timestamp of the block in milliseconds since the Unix epoch:
+    /// 00:00:00 UTC Jan 1, 1970.
     pub timestamp_ms: u64,
+    /// 32-byte Merkle root of the transactions in the block.
     pub txroot: [u8; 32],
+    /// 32-byte Merkle root of the Utreexo state.
     pub utxoroot: [u8; 32],
+    /// Extra data for the future extensions.
     pub ext: Vec<u8>,
 }
 
+/// Block is a collection of transactions.
 #[derive(Clone)]
 pub struct Block {
+    /// Block header.
     pub header: BlockHeader,
+    /// List of transactions.
     pub txs: Vec<Tx>,
 }
 
@@ -59,11 +69,10 @@ impl BlockHeader {
 }
 
 impl Block {
-
     /// Returns an interator of all utxo proofs for all transactions in a block.
     /// This interface allows us to optimize the representation of utxo proofs,
     /// while not affecting the validation logic.
-    pub fn utxo_proofs(&self) -> impl Iterator<Item=utreexo::Proof> {
-        unimplemented!()
+    pub fn utxo_proofs(&self) -> impl IntoIterator<Item = utreexo::Proof> {
+        Vec::new()
     }
 }

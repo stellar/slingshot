@@ -5,7 +5,7 @@
 extern crate failure;
 extern crate serde;
 
-//pub mod blockchain;
+pub mod blockchain;
 mod constraints;
 mod contract;
 mod encoding;
@@ -38,6 +38,6 @@ pub use self::tx::{Tx, TxEntry, TxHeader, TxID, TxLog, UnsignedTx, VerifiedTx};
 pub use self::types::{Data, Item, Value, WideValue};
 pub use self::verifier::Verifier;
 
-//pub use self::blockchain::*;
+pub use self::blockchain::*;
 
 pub use musig::{Multikey, Signature, VerificationKey};

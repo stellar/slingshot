@@ -1,40 +1,34 @@
 use crate::errors::VMError;
+use crate::utreexo::UtreexoError;
 
+/// Blockchain state machine error conditions.
 #[derive(Debug, Fail)]
 pub enum BlockchainError {
-    #[fail(display = "version reversion")]
-    VersionReversion,
+    /// Occurs when the header contains inconsistent data.
+    #[fail(display = "Inconsistent data in the block header.")]
+    InconsistentHeader,
 
-    #[fail(display = "illegal extension")]
+    /// Occurs when extension field is non-empty in v1 blocks.
+    #[fail(display = "Extension field must be empty in v1 blocks.")]
     IllegalExtension,
 
-    #[fail(display = "bad height")]
-    BadHeight,
-
-    #[fail(display = "mismatched previous-block ID")]
-    MismatchedPrev,
-
-    #[fail(display = "bad block timestamp")]
-    BadBlockTimestamp,
-
-    #[fail(display = "bad tx timestamp")]
+    /// Occurs when block timestamp is outside the tx time bounds.
+    #[fail(display = "Block timestamp is outside the transaction time bounds.")]
     BadTxTimestamp,
 
-    #[fail(display = "bad tx version")]
+    /// Occurs when tx version is not consistent with the block version.
+    #[fail(display = "Transaction version must be 1 for block version 1.")]
     BadTxVersion,
 
-    #[fail(display = "txroot mismatch")]
-    TxrootMismatch,
-
-    #[fail(display = "UTXO root mismatch")]
-    UtxorootMismatch,
-
-    #[fail(display = "tx validation")]
+    /// Occurs when ZkVM failed executing the transaction.
+    #[fail(display = "Transaction validation failed in ZkVM.")]
     TxValidation(VMError),
 
-    #[fail(display = "Utreexo proof is missing")]
+    /// Occurs when utreexo proof is missing.
+    #[fail(display = "Utreexo proof is missing.")]
     UtreexoProofMissing,
 
-    #[fail(display = "Utreexo operation failed")]
-    UtreexoError(UtreexoError)
+    /// Occurs when utreexo operation failed.
+    #[fail(display = "Utreexo operation failed.")]
+    UtreexoError(UtreexoError),
 }

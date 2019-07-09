@@ -1,7 +1,7 @@
 use crate::merkle::MerkleItem;
 
+use super::super::encoding::{self, Encodable};
 use super::nodes::{Hash, NodeHasher};
-use super::super::encoding::{self,Encodable};
 
 /// Absolute position of an item in the tree.
 pub type Position = u64;
@@ -103,10 +103,12 @@ impl Encodable for Proof {
     }
 
     fn serialized_length(&self) -> usize {
-        return 8 + 1 + match &self.path {
-            None => 0,
-            Some(path) => path.serialized_length()
-        }
+        return 8
+            + 1
+            + match &self.path {
+                None => 0,
+                Some(path) => path.serialized_length(),
+            };
     }
 }
 
@@ -120,7 +122,7 @@ impl Encodable for Path {
     }
 
     fn serialized_length(&self) -> usize {
-        return 8 + 4 + 32*self.neighbors.len()
+        return 8 + 4 + 32 * self.neighbors.len();
     }
 }
 

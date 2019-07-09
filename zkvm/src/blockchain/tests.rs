@@ -23,8 +23,8 @@ fn rand_contract() -> Contract {
 
 #[test]
 fn test_apply_txlog() {
-    unimplemented!();
-    let mut state = BlockchainState::make_initial(0u64, &[]);
+    // unimplemented!();
+    // let mut state = BlockchainState::make_initial(0u64, &[]);
 
     /*
     // Add two outputs

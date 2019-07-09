@@ -46,6 +46,7 @@ pub struct TxHeader {
 }
 
 /// Instance of a transaction that is not signed yet.
+#[derive(Clone)]
 pub struct UnsignedTx {
     /// Header metadata
     pub header: TxHeader,
@@ -68,6 +69,7 @@ pub struct UnsignedTx {
 }
 
 /// Instance of a transaction that contains all necessary data to validate it.
+#[derive(Clone)]
 pub struct Tx {
     /// Header metadata
     pub header: TxHeader,
@@ -83,6 +85,7 @@ pub struct Tx {
 }
 
 /// Represents a verified transaction: a txid and a list of state updates.
+#[derive(Clone)]
 pub struct VerifiedTx {
     /// Transaction header
     pub header: TxHeader,
