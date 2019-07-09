@@ -395,7 +395,8 @@ where
         spacesuit::range_proof(
             self.delegate.cs(),
             qty_var.into(),
-            qty_assignment
+            qty_assignment,
+            BitRange::max()
         )
         .map_err(|_| VMError::R1CSInconsistency)?;
 
@@ -679,18 +680,19 @@ where
                 if x.in_range() {
                     Ok(())
                 } else {
-                    Err(VMError::InvalidBitrange))
+                    Err(VMError::InvalidBitrange)
                 }
             },
             Expression::LinearCombination(terms, assignment) => {
                 spacesuit::range_proof(
                     self.delegate.cs(),
                     r1cs::LinearCombination::from_iter(terms),
-                    ScalarWitness::option_to_integer(assignment)?
+                    ScalarWitness::option_to_integer(assignment)?,
+                    BitRange::max()
                  )
                 .map_err(|_| VMError::R1CSInconsistency)
             }
-        };
+        }
     }
 
     /// Creates and anchors the contract
