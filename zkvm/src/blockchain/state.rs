@@ -17,15 +17,17 @@ pub struct BlockchainState {
     pub utreexo: Forest<ContractID>,
     /// The catchup structure to auto-update the proofs made against the previous state.
     pub catchup: Catchup<ContractID>,
+    // TODO: add mempool and prune transactions with descendants from it as new blocks appear.
 }
 
-/// Mempool is a temporary storage that lets collecting and verifying unconfirmed transactions
-/// before including them in a block.
-pub struct Mempool {
-    state: BlockchainState,
-    txs: Vec<Tx>, // TBD: track dependencies to prune tx with all its children
-    work_forest: WorkForest<ContractID>,
-}
+// /// Mempool is a temporary storage that lets collecting and verifying unconfirmed transactions
+// /// before including them in a block.
+// pub struct Mempool {
+//     timestamp: u64,
+//     state: BlockchainState,
+//     txs: Vec<Tx>, // TBD: track dependencies to prune tx with all its children
+//     work_forest: WorkForest<ContractID>,
+// }
 
 impl BlockchainState {
     /// Creates an initial block with a given starting set of utxos.
@@ -153,26 +155,6 @@ impl BlockchainState {
         };
 
         Ok((new_block, new_state))
-    }
-}
-
-impl Mempool {
-    // TBD: store the list of txs, and a utreexo forest.
-    // If a tx needs to be pruned, recompute the forest a-novo.
-
-    /// Adds a transaction to the pool if it's valid w.r.t. all previously added transactions.
-    pub fn append(
-        &mut self,
-        tx: Tx,
-        utxo_proofs: impl IntoIterator<Item = utreexo::Proof>,
-        bp_gens: &BulletproofGens,
-    ) -> Result<TxID, BlockchainError> {
-        unimplemented!()
-    }
-
-    /// Returns a list of transactions in the pool.
-    pub fn transactions(&self) -> impl Iterator<Item = &Tx> {
-        self.txs.iter()
     }
 }
 
