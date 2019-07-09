@@ -156,7 +156,7 @@ where
                 Instruction::Add => self.add()?,
                 Instruction::Mul => self.mul()?,
                 Instruction::Eq => self.eq()?,
-                Instruction::Range(i) => self.range(i)?,
+                Instruction::Range => self.range()?,
                 Instruction::And => self.and()?,
                 Instruction::Or => self.or()?,
                 Instruction::Not => self.not()?,

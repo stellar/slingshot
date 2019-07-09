@@ -143,11 +143,7 @@ impl Encodable for Instruction {
             Instruction::Add => write(Opcode::Add),
             Instruction::Mul => write(Opcode::Mul),
             Instruction::Eq => write(Opcode::Eq),
-            Instruction::Range(n) => {
-                write(Opcode::Range);
-                let bit_width: BitRange = *n;
-                program.push(bit_width.into());
-            }
+            Instruction::Range => write(Opcode::Range),
             Instruction::And => write(Opcode::And),
             Instruction::Or => write(Opcode::Or),
             Instruction::Not => write(Opcode::Not),
@@ -185,7 +181,7 @@ impl Encodable for Instruction {
             Instruction::Program(progitem) => 1 + 4 + progitem.serialized_length(),
             Instruction::Dup(_) => 1 + 4,
             Instruction::Roll(_) => 1 + 4,
-            Instruction::Range(_) => 1 + 1,
+            Instruction::Range => 1 + 1,
             Instruction::Cloak(_, _) => 1 + 4 + 4,
             Instruction::Output(_) => 1 + 4,
             Instruction::Contract(_) => 1 + 4,
@@ -245,11 +241,7 @@ impl Instruction {
             Opcode::Add => Ok(Instruction::Add),
             Opcode::Mul => Ok(Instruction::Mul),
             Opcode::Eq => Ok(Instruction::Eq),
-            Opcode::Range => {
-                let bit_width =
-                    BitRange::new(program.read_u8()? as usize).ok_or(VMError::FormatError)?;
-                Ok(Instruction::Range(bit_width))
-            }
+            Opcode::Range => Ok(Instruction::Range),
             Opcode::And => Ok(Instruction::And),
             Opcode::Or => Ok(Instruction::Or),
             Opcode::Not => Ok(Instruction::Not),
