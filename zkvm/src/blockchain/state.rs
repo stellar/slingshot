@@ -4,7 +4,7 @@ use core::borrow::Borrow;
 use super::block::{Block, BlockHeader, BlockID};
 use super::errors::BlockchainError;
 use crate::utreexo::{self, Catchup, Forest, WorkForest};
-use crate::{ContractID, MerkleTree, Tx, TxEntry, TxHeader, TxID, VerifiedTx, Verifier};
+use crate::{ContractID, MerkleTree, Tx, TxEntry, TxHeader, VerifiedTx, Verifier};
 
 /// State of the blockchain node.
 #[derive(Clone)]
@@ -107,7 +107,7 @@ impl BlockchainState {
         timestamp_ms: u64,
         ext: Vec<u8>,
         txs: Vec<Tx>,
-        utxo_proofs: impl IntoIterator<Item = utreexo::Proof>,
+        utxo_proofs: Vec<utreexo::Proof>,
         bp_gens: &BulletproofGens,
     ) -> Result<(Block, BlockchainState), BlockchainError> {
         check(
@@ -125,7 +125,7 @@ impl BlockchainState {
             block_version,
             timestamp_ms,
             txs.iter(),
-            utxo_proofs,
+            utxo_proofs.iter(),
             &mut work_forest,
             bp_gens,
         )?;
@@ -145,6 +145,7 @@ impl BlockchainState {
                 ext,
             },
             txs,
+            all_utxo_proofs: utxo_proofs,
         };
 
         let new_state = BlockchainState {
@@ -159,11 +160,11 @@ impl BlockchainState {
 }
 
 /// Applies a single transaction to the state.
-fn apply_tx(
+fn apply_tx<P: Borrow<utreexo::Proof>>(
     block_version: u64,
     timestamp_ms: u64,
     tx: &Tx,
-    utxo_proofs: impl IntoIterator<Item = utreexo::Proof>,
+    utxo_proofs: impl IntoIterator<Item = P>,
     work_forest: &mut WorkForest<ContractID>,
     bp_gens: &BulletproofGens,
 ) -> Result<VerifiedTx, BlockchainError> {
@@ -182,7 +183,7 @@ fn apply_tx(
                     .next()
                     .ok_or(BlockchainError::UtreexoProofMissing)?;
                 work_forest
-                    .delete(&contract_id, &proof)
+                    .delete(&contract_id, proof.borrow())
                     .map_err(|e| BlockchainError::UtreexoError(e))?;
             }
             // Add item to the UTXO set
@@ -197,11 +198,11 @@ fn apply_tx(
 }
 
 /// Applies a list of transactions to the state and returns the txroot.
-fn apply_txs<T: Borrow<Tx>>(
+fn apply_txs<T: Borrow<Tx>, P: Borrow<utreexo::Proof>>(
     block_version: u64,
     timestamp_ms: u64,
     txs: impl IntoIterator<Item = T>,
-    utxo_proofs: impl IntoIterator<Item = utreexo::Proof>,
+    utxo_proofs: impl IntoIterator<Item = P>,
     mut work_forest: &mut WorkForest<ContractID>,
     bp_gens: &BulletproofGens,
 ) -> Result<[u8; 32], BlockchainError> {

@@ -1,3 +1,4 @@
+use core::borrow::Borrow;
 use merlin::Transcript;
 
 use super::super::utreexo;
@@ -35,6 +36,8 @@ pub struct Block {
     pub header: BlockHeader,
     /// List of transactions.
     pub txs: Vec<Tx>,
+    /// UTXO proofs
+    pub all_utxo_proofs: Vec<utreexo::Proof>,
 }
 
 impl BlockHeader {
@@ -69,10 +72,10 @@ impl BlockHeader {
 }
 
 impl Block {
-    /// Returns an interator of all utxo proofs for all transactions in a block.
+    /// Returns an iterator of all utxo proofs for all transactions in a block.
     /// This interface allows us to optimize the representation of utxo proofs,
     /// while not affecting the validation logic.
-    pub fn utxo_proofs(&self) -> impl IntoIterator<Item = utreexo::Proof> {
-        Vec::new()
+    pub fn utxo_proofs(&self) -> impl IntoIterator<Item = &utreexo::Proof> {
+        self.all_utxo_proofs.iter()
     }
 }
