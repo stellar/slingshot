@@ -1,8 +1,11 @@
-use curve25519_dalek::scalar::Scalar;
 use rand::RngCore;
+use curve25519_dalek::scalar::Scalar;
+use merlin::Transcript;
+use bulletproofs::{BulletproofGens,PedersenGens};
+use musig::Signature;
 
 use super::*;
-use crate::{Anchor, Contract, Data, PortableItem, Predicate, VerificationKey};
+use crate::{Anchor, Contract, Data, PortableItem, Predicate, VerificationKey, Value, Commitment, TxHeader, Program, Prover};
 
 fn rand_item() -> PortableItem {
     let mut bytes = [0u8; 4];
@@ -10,48 +13,79 @@ fn rand_item() -> PortableItem {
     PortableItem::Data(Data::Opaque(bytes.to_vec()))
 }
 
-fn rand_contract() -> Contract {
-    let mut bytes = [0u8; 32];
-    rand::thread_rng().fill_bytes(&mut bytes);
-    let privkey = &Scalar::random(&mut rand::thread_rng());
+fn make_predicate(privkey: u64) -> Predicate {
+    Predicate::Key(VerificationKey::from_secret(&Scalar::from(privkey)))
+}
+
+fn nonce_flavor() -> Scalar {
+    Value::issue_flavor(
+        &make_predicate(0u64),
+        Data::default()
+    )
+}
+
+fn make_nonce_contract(privkey: u64, qty: u64) -> Contract {
+    let mut anchor_bytes = [0u8; 32];
+    rand::thread_rng().fill_bytes(&mut anchor_bytes);
+
     Contract::new(
-        Predicate::Key(VerificationKey::from_secret(privkey)),
-        vec![rand_item(), rand_item(), rand_item()],
-        Anchor::from_raw_bytes(bytes),
+        make_predicate(privkey),
+        vec![
+            PortableItem::Value(Value {
+                qty: Commitment::unblinded(qty),
+                flv: Commitment::unblinded(nonce_flavor())
+            })
+        ],
+        Anchor::from_raw_bytes(anchor_bytes),
     )
 }
 
 #[test]
-fn test_apply_txlog() {
-    // unimplemented!();
-    // let mut state = BlockchainState::make_initial(0u64, &[]);
+fn test_state_machine() {
+    let bp_gens = BulletproofGens::new(256, 1);
+    let privkey = Scalar::from(1u64);
+    let initial_contract = make_nonce_contract(1,100);
+    let (mut state, proofs) = BlockchainState::make_initial(0u64, &[initial_contract.id()][..]);
 
-    /*
-    // Add two outputs
-    let (output0, output1) = (rand_contract(), rand_contract());
-    state
-        .apply_txlog(&vec![
-            TxEntry::Output(output0.clone()),
-            TxEntry::Output(output1.clone()),
-        ])
+    let tx = {
+        let program = Program::build(|p| {
+            p.push(initial_contract.clone())
+            .input()
+            .sign_tx()
+            .push(make_predicate(2u64))
+            .output(1)
+        });
+        let header = TxHeader {
+            version: 1u64,
+            mintime_ms: 0u64,
+            maxtime_ms: u64::max_value(),
+        };
+        let utx = Prover::build_tx(program, header, &bp_gens).unwrap();
+
+        let mut signtx_transcript = Transcript::new(b"ZkVM.signtx");
+        signtx_transcript.commit_bytes(b"txid", &utx.txid.0);
+
+        let sig = Signature::sign_multi(
+            &[privkey],
+            utx.signing_instructions.clone(),
+            &mut signtx_transcript,
+        )
         .unwrap();
-    state
-        .apply_txlog(&vec![TxEntry::Input(output0.id())])
-        .unwrap();
 
-    // Check that output0 was consumed
-    assert!(!state.utxos.contains(&output0.id()));
-    assert!(state.utxos.contains(&output1.id()));
+        utx.sign(sig)
+    };
 
-    // Consume output1
-    state
-        .apply_txlog(&vec![TxEntry::Input(output1.id())])
-        .unwrap();
-    assert_eq!(state.utxos.is_empty(), true);
+    let (block, future_state) = state.make_block(
+        1,
+        1,
+        Vec::new(),
+        vec![tx],
+        proofs,
+        &bp_gens,
+    ).unwrap();
 
-    // Check error on consuming already-consumed UTXO
-    assert!(state
-        .apply_txlog(&vec![TxEntry::Input(output1.id())])
-        .is_err());
-        */
+    // Apply the block to the state
+    let new_state = state.apply_block(&block, &bp_gens).unwrap();
+
+    assert_eq!(new_state.utreexo.root(), future_state.utreexo.root());
 }

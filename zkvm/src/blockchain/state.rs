@@ -63,7 +63,7 @@ impl BlockchainState {
     }
 
     /// Applies the block to the current state and returns a new one.
-    pub fn apply_block<F>(
+    pub fn apply_block(
         &mut self,
         block: &Block,
         bp_gens: &BulletproofGens,
