@@ -11,6 +11,7 @@ mod contract;
 mod encoding;
 mod errors;
 mod merkle;
+mod nits;
 mod ops;
 mod point_ops;
 mod predicate;
