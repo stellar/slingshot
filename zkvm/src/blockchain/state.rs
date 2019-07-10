@@ -20,15 +20,6 @@ pub struct BlockchainState {
     // TODO: add mempool and prune transactions with descendants from it as new blocks appear.
 }
 
-// /// Mempool is a temporary storage that lets collecting and verifying unconfirmed transactions
-// /// before including them in a block.
-// pub struct Mempool {
-//     timestamp: u64,
-//     state: BlockchainState,
-//     txs: Vec<Tx>, // TBD: track dependencies to prune tx with all its children
-//     work_forest: WorkForest<ContractID>,
-// }
-
 impl BlockchainState {
     /// Creates an initial block with a given starting set of utxos.
     pub fn make_initial(

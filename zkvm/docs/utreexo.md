@@ -156,12 +156,23 @@ Item proof is a structure with three fields:
 
 * `generation`: a 64-bit unsigned integer indicating the generation of the [forest](#forest).
 * `position`: a 64-bit unsigned integer indicating absolute index in the set of all items in the [forest](#forest),
-* `neighbors`: a list of neighboring [merkle roots](#merkle-root) at each level up to (but not including) the [k-tree root](#k-tree-root)
+* `neighbors`: a list of neighboring hashes at each level up to (but not including) the [k-tree root](#k-tree-root)
 of the [k-tree](#k-tree) that contains this item.
 
 The position of the neighbor root is determined by a correposnding bit in a binary little-endian representation of `position`:
 `i`-th bit set to zero means the `i`-th neighbor is to the right of the item.
 
+Illustration:
+
+```
+c
+| \
+a   b
+|\  |\
+0 1 2 3
+```
+
+The proof for the item 2 contains neighbors `(3, a)`, with the positions indicated by the little-endian binary encoding of the index 2: `01` (right, left).
 
 ### Node
 
@@ -169,7 +180,7 @@ A structure with the following fields:
 
 * `root`: a merkle hash.
 * `level`: an order of the tree.
-* `modified`: a boolean indicating
+* `modified`: a boolean indicating whether the node is modified (the modified leaf node stands for deleted item).
 * `children`: either a pair of [nodes](#node), or _nil_, if the children are pruned or this node has level 0.
 
 
@@ -178,7 +189,7 @@ A structure with the following fields:
 A structure with the following fields:
 
 * `forest`: the non-pruned forest of the next [generation](#generation) to which the proofs are updated.
-* `map` linking a [hash](#merkle-root) of a [node](#node) to its absolute position in the new [forest](#forest).
+* `map` linking a [hash](#merkle-root) of a [node](#node) to its absolute position in the new [forest](#forest), across all binary trees.
 
 
 
@@ -309,10 +320,11 @@ Returns new [item proof](#item-proof) or failure.
 3. Compute intermediate hashes using the proof’s neighbors until meeting a hash present in the catchup map.
 4. If reached the end of the proof, but no matching hash is found in the map, fail.
 5. Let `k` be the level of the remembered node (`k` can be zero, if the item’s leaf node was remembered).
-6. Erase all but first `k` bits of the item’s position in the proof, and increase it by the offset in stored in the catchup map with the matching hash.
-7. Erase all the neighbors in the proof past the `k` hashes.
-8. Walk the new forest from the catch up node to the root, appending all the neighbors to the proof.
-9. Return the updated proof.
+6. Erase all but first `k` bits of the item’s position in the proof.
+7. Add to the updated position an offset stored in the catchup map with the matching hash.
+8. Erase all the neighbors in the proof past the `k` hashes.
+9. Walk the new forest from the catch up node to the root, appending all the neighbors to the proof.
+10. Return the updated proof.
 
 
 

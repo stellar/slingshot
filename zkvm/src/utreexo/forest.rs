@@ -289,9 +289,6 @@ impl<M: MerkleItem> WorkForest<M> {
                 }
             });
 
-        // we just consumed `self.insertions`, so let's also move out the hasher.
-        let hasher = self.hasher;
-
         // Compute perfect roots for the new tree,
         // joining together same-level nodes into higher-level nodes.
         let (new_heap, new_roots) = non_modified_nodes.fold(
@@ -307,7 +304,7 @@ impl<M: MerkleItem> WorkForest<M> {
                 while let Some(i) = roots[node.level] {
                     let left = new_heap.node_at(i);
                     node = new_heap.allocate(
-                        hasher.intermediate(&left.hash, &node.hash),
+                        self.hasher.intermediate(&left.hash, &node.hash),
                         left.level + 1,
                         Some((left.index, node.index)),
                     );
@@ -323,7 +320,7 @@ impl<M: MerkleItem> WorkForest<M> {
             generation: self.generation + 1,
             roots: new_roots.iter().rev().filter_map(|r| *r).collect(),
             heap: new_heap,
-            hasher: hasher.clone(),
+            hasher: self.hasher.clone(),
         };
 
         let utreexo_roots = new_roots.iter().fold([None; 64], |mut roots, ni| {
@@ -336,7 +333,7 @@ impl<M: MerkleItem> WorkForest<M> {
         let utreexo = Forest {
             generation: self.generation + 1,
             roots: utreexo_roots,
-            hasher,
+            hasher: self.hasher,
         };
 
         let catchup_map = new_forest
