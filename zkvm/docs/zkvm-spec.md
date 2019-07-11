@@ -9,6 +9,7 @@ ZkVM defines a procedural representation for blockchain transactions and the rul
     * [Concepts](#concepts)
 * [Types](#types)
     * [Copyable types](#copyable-types)
+    * [Droppable types](#droppable-types)
     * [Linear types](#linear-types)
     * [Portable types](#portable-types)
     * [String](#string-type)
@@ -19,6 +20,7 @@ ZkVM defines a procedural representation for blockchain transactions and the rul
     * [Constraint](#constraint-type)
     * [Value](#value-type)
     * [Wide value](#wide-value-type)
+    * [Pin](#pin-type)
 * [Definitions](#definitions)
     * [LE32](#le32)
     * [LE64](#le64)
@@ -150,7 +152,7 @@ categories: [copyable types](#copyable-types) and [linear types](#linear-types).
 
 ### Copyable types
 
-Copyable types can be freely created, copied (with [`dup`](#dup)), and destroyed (with [`drop`](#drop)):
+Copyable types can be freely copied with [`dup`](#dup) or destroyed with [`drop`](#drop):
 
 * [String](#string-type)
 * [Variable](#variable-type)
@@ -304,7 +306,6 @@ and the wide value is only used as an output of [`borrow`](#borrow) and as an in
 
 
 
-
 ## Definitions
 
 ### LE32
@@ -406,7 +407,7 @@ Uniqueness is provided via the [anchor](#anchor).
 
 ### Anchor
 
-_Anchor_ is a 32-byte unique string that provides uniqueness to the [contract ID](#contract-id).
+_Anchor_ is a 32-byte string that provides uniqueness to the [contract ID](#contract-id).
 Anchors are generated from unique contract IDs used earlier in the same transaction. These are tracked by the VM via [last anchor](#vm-state):
 
 1. Claimed UTXO ([`input`](#input)) sets the VM’s [last anchor](#vm-state) to its _ratcheted_ [contract ID](#contract-id) (see [`input`](#input)).
@@ -804,7 +805,7 @@ Then, the VM executes the current program till completion:
 1. Each instruction is read at the current program offset, including its immediate data (if any).
 2. Program offset is advanced immediately after reading the instruction to the next instruction.
 3. The instruction is executed per [specification below](#instructions). If the instruction fails, VM exits early with an error result.
-4. If VM encounters [`call`](#call) or [`delegate`](#delegate) instruction, the new program with offset zero is set as the current program. The next iteration of the vm will start from the beginning of the new program.
+4. If VM encounters [`call`](#call), [`signid`](#signid) or [`signtag`](#signtag) instruction, the new program with offset zero is set as the current program. The next iteration of the vm will start from the beginning of the new program.
 5. If the offset is less than the current program’s length, a new instruction is read (go back to step 1).
 6. Otherwise (reached the end of the current program):
    1. If the program stack is not empty, pop top item from the program stack and set it to the current program. Go to step 5.
@@ -926,9 +927,10 @@ Code | Instruction                | Stack diagram                              |
 0x1a | [`output:k`](#output)      |   _items... pred_ → ø                      | Modifies [tx log](#transaction-log)
 0x1b | [`contract:k`](#contract)  |   _items... pred_ → _contract_             | 
 0x1c | [`log`](#log)              |            _data_ → ø                      | Modifies [tx log](#transaction-log)
-0x1d | [`signtx`](#signtx)        |        _contract_ → _results..._           | Modifies [deferred verification keys](#transaction-signature)
-0x1e | [`call`](#call)            |_contract(P) proof prog_ → _results..._     | [Defers point operations](#deferred-point-operations)
-0x1f | [`delegate`](#delegate)    |_contract prog sig_ → _results..._          | [Defers point operations](#deferred-point-operations)
+0x1d | [`call`](#call)            |_contract(P) proof prog_ → _results..._     | [Defers point operations](#deferred-point-operations)
+0x1e | [`signtx`](#signtx)        |        _contract_ → _results..._           | Modifies [deferred verification keys](#transaction-signature)
+0x1f | [`signid`](#signid)        |_contract prog sig_ → _results..._          | [Defers point operations](#deferred-point-operations)
+0x20 | [`signtag`](#signtag)      |_contract prog sig_ → _results..._          | [Defers point operations](#deferred-point-operations)
   —  | [`ext`](#ext)              |                 ø → ø                      | Fails if [extension flag](#vm-state) is not set.
 
 
@@ -1240,7 +1242,7 @@ _qty flv metadata pred_ **issue** → _contract_
    and replacing it with this contract’s [ID](#contract-id).
 
 The value is now issued into the contract that must be unlocked
-using one of the contract instructions: [`signtx`](#signtx), [`delegate`](#delegate) or [`call`](#call).
+using one of the contract instructions: [`signtx`](#signtx), [`signid`](#signid), [`signtag`](#signtag) or [`call`](#call).
 
 Fails if:
 * `pred` is not a valid [point](#point),
@@ -1353,23 +1355,10 @@ _data_ **log** → ø
 Fails if `data` is not a [string](#string-type).
 
 
-#### signtx
-
-_contract_ **signtx** → _results..._
-
-1. Pops the [contract](#contract-type) from the stack.
-2. Adds the contract’s [predicate](#predicate) as a [verification key](#verification-key)
-   to the list of deferred keys for [transaction signature](#transaction-signature)
-   check at the end of the VM execution.
-3. Places the [payload](#contract-payload) on the stack (last item on top), discarding the contract.
-
-Note: the instruction never fails as the only check (signature verification)
-is deferred until the end of VM execution.
-
-
 #### call
 
 _contract(P) proof prog_ **call** → _results..._
+
 1. Pops [program](#program-type) `prog`, the [call proof](#call-proof) `proof`, and a [contract](#contract-type) `contract`.
 2. Reads the [predicate](#predicate) `P` from the contract.
 3. Reads the signing key `X`, list of neighbors `neighbors`, and their positions `positions` from the [call proof](#call-proof) `proof`.
@@ -1388,16 +1377,31 @@ Fails if:
 3. or `contract` is not a [contract type](#contract-type).
 
 
-#### delegate
+#### signtx
 
-_contract(P) prog sig_ **delegate** → _results..._
+_contract_ **signtx** → _results..._
+
+1. Pops the [contract](#contract-type) from the stack.
+2. Adds the contract’s [predicate](#predicate) as a [verification key](#verification-key)
+   to the list of deferred keys for [transaction signature](#transaction-signature)
+   check at the end of the VM execution.
+3. Places the [payload](#contract-payload) on the stack (last item on top), discarding the contract.
+
+Note: the instruction never fails as the only check (signature verification)
+is deferred until the end of VM execution.
+
+
+
+#### signid
+
+_contract(P) prog sig_ **signid** → _results..._
 
 1. Pop [string](#string-type) `sig`, [program](#program-type) `prog` and the [contract](#contract-type) from the stack.
 2. Read the [predicate](#predicate) `P` from the contract.
 3. Place the [contract payload](#contract-payload) on the stack (last item on top), discarding the contract.
 4. Instantiate the [transcript](#transcript):
     ```
-    T = Transcript("ZkVM.delegate")
+    T = Transcript("ZkVM.signid")
     ```
 5. Commit the [contract ID](#contract-id) `contract.id` to the transcript:
     ```
@@ -1424,6 +1428,47 @@ Fails if:
 1. `sig` is not a 64-byte long [string](#string-type),
 2. or `prog` is not a [program type](#program-type),
 3. or `contract` is not a [contract type](#contract-type).
+
+
+
+#### signtag
+
+_contract(P) prog sig_ **signtag** → _results..._
+
+1. Pop [data](#data-type) `sig`, [program](#program-type) `prog` and the [contract](#contract-type) from the stack.
+2. Read the [predicate](#predicate) `P` from the contract.
+3. Place the [contract payload](#contract-payload) on the stack (last item on top), discarding the contract.
+4. Verifies that the top item is a [string](#data-type), and reads it as a `tag`.
+5. Instantiate the [transcript](#transcript):
+    ```
+    T = Transcript("ZkVM.signtag")
+    ```
+6. Commit the `tag` to the transcript:
+    ```
+    T.commit("tag", tag)
+    ```
+7. Commit the program `prog` to the transcript:
+    ```
+    T.commit("prog", prog)
+    ```
+8. Extract nonce commitment `R` and scalar `s` from a 64-byte data `sig`:
+    ```
+    R = sig[ 0..32]
+    s = sig[32..64]
+    ```
+9. Perform the [signature protocol](../../musig/docs/musig-spec.md#single-message-signature) using the transcript `T`, public key `P` and the values `R` and `s`:
+    ```
+    (s = dlog(R) + e·dlog(P))
+    s·B  ==  R + e·P
+    ```
+10. Add the statement to the list of [deferred point operations](#deferred-point-operations).
+11. Set the `prog` as current.
+
+Fails if:
+1. `sig` is not a 64-byte long [data](#data-type),
+2. or `prog` is not a [program type](#program-type),
+3. or `contract` is not a [contract type](#contract-type),
+4. or last item in the payload is not a [string](#data-type).
 
 
 #### ext
@@ -1582,7 +1627,7 @@ Overview:
     3. Users watch the blockchain updates for attempts to use a stale authorization, and counter-act them with the latest version.
 6. If the channel was force-closed and not (anymore) contested, after a "contest period" is passed, the "holding" contract can be opened by either party, which sends the funds to the pre-determined outputs.
 
-In ZkVM such predicate is implemented with a _signed program_ ([`delegate`](#delegate)) that plays dual role:
+In ZkVM such predicate is implemented with a _signed program_ ([`signtag`](#signtag)) that plays dual role:
 
 1. It allows any party to _initiate_ a force-close.
 2. It allows any party to _dispute_ a stale force-close (overriding it with a more fresh force-close).
@@ -1683,7 +1728,7 @@ This allows for a simpler type system (no integers, only scalars),
 while limiting programs to have pre-determined structure.
 
 In general, there are no jumps or cleartext conditionals.
-Note, however, that with the use of [delegation](#delegate),
+Note, however, that with the use of delegated signatures ([`signid`](#signid), [`signtag`](#signtag)),
 program structure can be determined right before the use.
 
 
