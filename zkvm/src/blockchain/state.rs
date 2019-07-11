@@ -130,7 +130,11 @@ impl BlockchainState {
 
         let mut work_forest = self.utreexo.work_forest();
 
-        let nit_proofs = apply_nits(self.tip.id(), nits.iter().map(|(qty, pred)| (*qty, pred.clone())), &mut work_forest);
+        let nit_proofs = apply_nits(
+            self.tip.id(),
+            nits.iter().map(|(qty, pred)| (*qty, pred.clone())),
+            &mut work_forest,
+        );
 
         let txroot = apply_txs(
             block_version,
