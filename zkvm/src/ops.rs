@@ -9,7 +9,6 @@ use crate::program::ProgramItem;
 use crate::scalar_witness::ScalarWitness;
 use crate::types::Data;
 use core::mem;
-use spacesuit::BitRange;
 
 /// A decoded instruction.
 #[derive(Clone, Debug)]
@@ -30,7 +29,7 @@ pub enum Instruction {
     Add,
     Mul,
     Eq,
-    Range(BitRange), // bitwidth (0...64)
+    Range,
     And,
     Or,
     Not,
@@ -181,7 +180,7 @@ impl Encodable for Instruction {
             Instruction::Program(progitem) => 1 + 4 + progitem.serialized_length(),
             Instruction::Dup(_) => 1 + 4,
             Instruction::Roll(_) => 1 + 4,
-            Instruction::Range => 1 + 1,
+            Instruction::Range => 1,
             Instruction::Cloak(_, _) => 1 + 4 + 4,
             Instruction::Output(_) => 1 + 4,
             Instruction::Contract(_) => 1 + 4,

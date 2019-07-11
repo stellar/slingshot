@@ -10,6 +10,7 @@ use std::mem;
 
 use crate::constraints::{Commitment, Constraint, Expression, Variable};
 use crate::contract::{Anchor, Contract, ContractID, PortableItem};
+use crate::encoding::Encodable;
 use crate::encoding::SliceReader;
 use crate::errors::VMError;
 use crate::ops::Instruction;
@@ -19,7 +20,6 @@ use crate::program::ProgramItem;
 use crate::scalar_witness::ScalarWitness;
 use crate::tx::{TxEntry, TxHeader, TxID, TxLog};
 use crate::types::*;
-use crate::encoding::Encodable;
 
 /// Current tx version determines which extension opcodes are treated as noops (see VM.extension flag).
 pub const CURRENT_VERSION: u64 = 1;
@@ -396,7 +396,7 @@ where
             self.delegate.cs(),
             qty_var.into(),
             qty_assignment,
-            BitRange::max()
+            BitRange::max(),
         )
         .map_err(|_| VMError::R1CSInconsistency)?;
 
@@ -673,7 +673,6 @@ where
         Ok(())
     }
 
-
     fn add_range_proof(&mut self, expr: Expression) -> Result<(), VMError> {
         match expr {
             Expression::Constant(x) => {
@@ -682,16 +681,14 @@ where
                 } else {
                     Err(VMError::InvalidBitrange)
                 }
-            },
-            Expression::LinearCombination(terms, assignment) => {
-                spacesuit::range_proof(
-                    self.delegate.cs(),
-                    r1cs::LinearCombination::from_iter(terms),
-                    ScalarWitness::option_to_integer(assignment)?,
-                    BitRange::max()
-                 )
-                .map_err(|_| VMError::R1CSInconsistency)
             }
+            Expression::LinearCombination(terms, assignment) => spacesuit::range_proof(
+                self.delegate.cs(),
+                r1cs::LinearCombination::from_iter(terms),
+                ScalarWitness::option_to_integer(assignment)?,
+                BitRange::max(),
+            )
+            .map_err(|_| VMError::R1CSInconsistency),
         }
     }
 
