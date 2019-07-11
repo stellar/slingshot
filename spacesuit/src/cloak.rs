@@ -39,7 +39,7 @@ pub fn cloak<CS: RandomizableConstraintSystem>(
             cs,
             output.q.into(),
             output.assignment.map(|v| v.q),
-            BitRange::max()
+            BitRange::max(),
         )?;
     }
 
