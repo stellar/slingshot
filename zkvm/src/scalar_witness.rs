@@ -54,6 +54,12 @@ impl ScalarWitness {
             Some(ScalarWitness::Scalar(_)) => Err(VMError::TypeNotSignedInteger),
         }
     }
+
+    /// Returns true if the scalar fits in u64.
+    pub fn in_range(self) -> bool {
+        let scalar_bytes = self.to_scalar().to_bytes();
+        (&scalar_bytes[8..32]).iter().all(|v| v == &0)
+    }
 }
 
 // Implementing arithmetic operatons for ScalarWitness

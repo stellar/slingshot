@@ -8,7 +8,6 @@ use crate::types::Data;
 
 use core::borrow::Borrow;
 use merlin::Transcript;
-use spacesuit::BitRange;
 
 /// A builder type for assembling a sequence of `Instruction`s with chained method calls.
 /// E.g. `let prog = Program::new().push(...).input().push(...).output(1).to_vec()`.
@@ -82,7 +81,7 @@ impl Program {
     def_op!(neg, Neg);
     def_op!(or, Or);
     def_op!(output, Output, usize);
-    def_op!(range, Range, BitRange);
+    def_op!(range, Range);
     def_op!(retire, Retire);
     def_op!(roll, Roll, usize);
     def_op!(sign_tx, Signtx);

@@ -10,6 +10,7 @@ use std::mem;
 
 use crate::constraints::{Commitment, Constraint, Expression, Variable};
 use crate::contract::{Anchor, Contract, ContractID, PortableItem};
+use crate::encoding::Encodable;
 use crate::encoding::SliceReader;
 use crate::errors::VMError;
 use crate::ops::Instruction;
@@ -155,7 +156,7 @@ where
                 Instruction::Add => self.add()?,
                 Instruction::Mul => self.mul()?,
                 Instruction::Eq => self.eq()?,
-                Instruction::Range(i) => self.range(i)?,
+                Instruction::Range => self.range()?,
                 Instruction::And => self.and()?,
                 Instruction::Or => self.or()?,
                 Instruction::Not => self.not()?,
@@ -250,9 +251,9 @@ where
         Ok(())
     }
 
-    fn range(&mut self, i: BitRange) -> Result<(), VMError> {
+    fn range(&mut self) -> Result<(), VMError> {
         let expr = self.pop_item()?.to_expression()?;
-        self.add_range_proof(i, expr.clone())?;
+        self.add_range_proof(expr.clone())?;
         self.push_item(expr);
         Ok(())
     }
@@ -371,7 +372,7 @@ where
         };
 
         let qty_expr = self.variable_to_expression(qty)?;
-        self.add_range_proof(BitRange::max(), qty_expr)?;
+        self.add_range_proof(qty_expr)?;
 
         self.txlog.push(TxEntry::Issue(qty_point, flv_point));
 
@@ -672,20 +673,23 @@ where
         Ok(())
     }
 
-    fn add_range_proof(&mut self, bitrange: BitRange, expr: Expression) -> Result<(), VMError> {
-        let (lc, assignment) = match expr {
-            Expression::Constant(x) => (r1cs::LinearCombination::from(x), Some(x)),
-            Expression::LinearCombination(terms, assignment) => {
-                (r1cs::LinearCombination::from_iter(terms), assignment)
+    fn add_range_proof(&mut self, expr: Expression) -> Result<(), VMError> {
+        match expr {
+            Expression::Constant(x) => {
+                if x.in_range() {
+                    Ok(())
+                } else {
+                    Err(VMError::InvalidBitrange)
+                }
             }
-        };
-        spacesuit::range_proof(
-            self.delegate.cs(),
-            lc,
-            ScalarWitness::option_to_integer(assignment)?,
-            bitrange,
-        )
-        .map_err(|_| VMError::R1CSInconsistency)
+            Expression::LinearCombination(terms, assignment) => spacesuit::range_proof(
+                self.delegate.cs(),
+                r1cs::LinearCombination::from_iter(terms),
+                ScalarWitness::option_to_integer(assignment)?,
+                BitRange::max(),
+            )
+            .map_err(|_| VMError::R1CSInconsistency),
+        }
     }
 
     /// Creates and anchors the contract
