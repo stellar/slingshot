@@ -3,14 +3,17 @@ use core::borrow::Borrow;
 
 use super::block::{Block, BlockHeader, BlockID};
 use super::errors::BlockchainError;
+use super::nits;
 use crate::utreexo::{self, Catchup, Forest, WorkForest};
-use crate::{ContractID, MerkleTree, Tx, TxEntry, TxHeader, VerifiedTx, Verifier};
+use crate::{
+    Anchor, ContractID, MerkleTree, Predicate, Tx, TxEntry, TxHeader, VerifiedTx, Verifier,
+};
 
 /// State of the blockchain node.
 #[derive(Clone)]
 pub struct BlockchainState {
-    /// Initial block of the given network.
-    pub initial_id: BlockID,
+    /// Initial block header of the given network.
+    pub initial: BlockHeader,
     /// Latest block header in the chain.
     pub tip: BlockHeader,
     /// The utreexo state.
@@ -44,7 +47,7 @@ impl BlockchainState {
 
         let tip = BlockHeader::make_initial(timestamp_ms, utreexo.root());
         let state = BlockchainState {
-            initial_id: tip.id(),
+            initial: tip.clone(),
             tip,
             utreexo,
             catchup,
@@ -55,13 +58,26 @@ impl BlockchainState {
 
     /// Applies the block to the current state and returns a new one.
     pub fn apply_block(
-        &mut self,
+        &self,
         block: &Block,
         bp_gens: &BulletproofGens,
     ) -> Result<BlockchainState, BlockchainError> {
         check_block_header(&block.header, &self.tip)?;
 
+        check_nit_allocation(
+            self,
+            block.header.timestamp_ms,
+            block.nits.iter().map(|(q, _)| *q),
+        )?;
+
         let mut work_forest = self.utreexo.work_forest();
+
+        // Apply nit contracts to the utreexo
+        let nit_proofs = apply_nits(
+            block.header.prev,
+            block.nits.iter().map(|(qty, pred)| (*qty, pred.clone())),
+            &mut work_forest,
+        );
 
         let txroot = apply_txs(
             block.header.version,
@@ -83,7 +99,7 @@ impl BlockchainState {
         }
 
         Ok(BlockchainState {
-            initial_id: self.initial_id,
+            initial: self.initial.clone(),
             tip: block.header.clone(),
             utreexo: new_forest,
             catchup: new_catchup,
@@ -97,6 +113,7 @@ impl BlockchainState {
         block_version: u64,
         timestamp_ms: u64,
         ext: Vec<u8>,
+        nits: Vec<(u64, Predicate)>,
         txs: Vec<Tx>,
         utxo_proofs: Vec<utreexo::Proof>,
         bp_gens: &BulletproofGens,
@@ -109,8 +126,11 @@ impl BlockchainState {
             timestamp_ms > self.tip.timestamp_ms,
             BlockchainError::InconsistentHeader,
         )?;
+        check_nit_allocation(self, timestamp_ms, nits.iter().map(|(q, _)| *q))?;
 
         let mut work_forest = self.utreexo.work_forest();
+
+        let nit_proofs = apply_nits(self.tip.id(), nits.iter().map(|(qty, pred)| (*qty, pred.clone())), &mut work_forest);
 
         let txroot = apply_txs(
             block_version,
@@ -122,6 +142,12 @@ impl BlockchainState {
         )?;
 
         let (new_forest, new_catchup) = work_forest.normalize();
+
+        // TBD: update nit proofs with new_catchup
+        // Need to keep around contract ids
+        // let nit_proofs = nit_proofs.into_iter().map(|proof| {
+        //     new_catchup.update_proof()
+        // })
 
         let utxoroot = new_forest.root();
 
@@ -135,12 +161,13 @@ impl BlockchainState {
                 utxoroot,
                 ext,
             },
+            nits,
             txs,
             all_utxo_proofs: utxo_proofs,
         };
 
         let new_state = BlockchainState {
-            initial_id: self.initial_id,
+            initial: self.initial.clone(),
             tip: new_block.header.clone(),
             utreexo: new_forest,
             catchup: new_catchup,
@@ -188,6 +215,23 @@ fn apply_tx<P: Borrow<utreexo::Proof>>(
     Ok(verified_tx)
 }
 
+/// Applies a list of new nit allocations to the state and
+/// returns an iterator of the corresponding utxo proofs.
+fn apply_nits(
+    prev_id: BlockID,
+    nits: impl IntoIterator<Item = (u64, Predicate)>,
+    mut work_forest: &mut WorkForest<ContractID>,
+) -> Vec<utreexo::Proof> {
+    let mut transcript = Anchor::create_nit_anchoring_transcript(prev_id.0);
+
+    nits.into_iter()
+        .map(|(qty, pred)| {
+            let contract = nits::make_nit_contract(qty, pred, &mut transcript);
+            work_forest.insert(&contract.id())
+        })
+        .collect::<Vec<_>>()
+}
+
 /// Applies a list of transactions to the state and returns the txroot.
 fn apply_txs<T: Borrow<Tx>, P: Borrow<utreexo::Proof>>(
     block_version: u64,
@@ -215,6 +259,28 @@ fn apply_txs<T: Borrow<Tx>, P: Borrow<utreexo::Proof>>(
         .collect::<Result<Vec<_>, _>>()?;
 
     Ok(MerkleTree::root(b"ZkVM.txroot", &txids))
+}
+
+/// Checks that nits allocation is not exceeding the limit for the current blockchain state.
+fn check_nit_allocation(
+    state: &BlockchainState,
+    new_timestamp_ms: u64,
+    allocations: impl Iterator<Item = u64>,
+) -> Result<(), BlockchainError> {
+    let allowance = nits::block_allowance(
+        state.initial.timestamp_ms,
+        state.tip.timestamp_ms,
+        new_timestamp_ms,
+    );
+    // Note: we are checking each individual value before adding them up to prevent overflow.
+    let total = allocations.fold(Ok(0u64), |total, qty| {
+        total.and_then(|total| {
+            check(qty <= allowance, BlockchainError::InvalidNitAllocation)?;
+            Ok(total + qty)
+        })
+    })?;
+    check(total <= allowance, BlockchainError::InvalidNitAllocation)?;
+    Ok(())
 }
 
 /// Verifies consistency of the block header with respect to the previous block header.

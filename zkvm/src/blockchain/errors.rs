@@ -8,6 +8,10 @@ pub enum BlockchainError {
     #[fail(display = "Inconsistent data in the block header.")]
     InconsistentHeader,
 
+    /// Occurs when the block allocates incorrect amount of nits.
+    #[fail(display = "Invalid allocation of nits in the block.")]
+    InvalidNitAllocation,
+
     /// Occurs when extension field is non-empty in v1 blocks.
     #[fail(display = "Extension field must be empty in v1 blocks.")]
     IllegalExtension,

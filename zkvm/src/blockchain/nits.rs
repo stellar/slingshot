@@ -15,7 +15,8 @@ use crate::{Anchor, Commitment, Contract, PortableItem, Predicate, Value};
 /// Interval of halving the amount of issued nits, in ms.
 pub const HALVING_INTERVAL: u64 = 4 * 365 * 24 * 3600 * 1000;
 
-/// Number of units issued per ms, before halving.
+/// Number of units issued per millisecond, before halvings.
+/// This translates to 1 nit per second.
 pub const UNITS_PER_MS: u64 = 1000;
 
 /// Returns amount eligible for circulation between

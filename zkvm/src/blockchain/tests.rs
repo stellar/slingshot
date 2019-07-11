@@ -68,7 +68,7 @@ fn test_state_machine() {
     };
 
     let (block, future_state) = state
-        .make_block(1, 1, Vec::new(), vec![tx], proofs, &bp_gens)
+        .make_block(1, 1, Vec::new(), Vec::new(), vec![tx], proofs, &bp_gens)
         .unwrap();
 
     // Apply the block to the state
