@@ -320,7 +320,7 @@ contract states. Pin allows grouping multiple instances of a [contract](#contrac
 For instance, a payment channel protocol can use a pin to contest any force-close state with a single signature,
 instead of creating a signature for each previous state or preparing a separate "punishment"
 
-Pin can be [dropped](#droppable-types), but cannot be [copied](#copyable-type).
+Pin can be [dropped](#droppable-types), but cannot be [copied](#copyable-types).
 
 Instruction [`pin`](#pin) creates a new Pin at will, using the VM’s [last anchor](#vm-state).
 Pinned signatures can be verified using the [`signpin`](#signpin) instruction.
