@@ -7,9 +7,10 @@
 //! in order to cap the total amount to fit under u64.
 //! 1 millionth of a nit is simply called "micro nit" or "unit".
 
-use crate::{Anchor, Commitment, Contract, PortableItem, Predicate, Value};
 use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
+
+use crate::{Anchor, Commitment, Contract, PortableItem, Predicate, Value};
 
 /// Interval of halving the amount of issued nits, in ms.
 pub const HALVING_INTERVAL: u64 = 4 * 365 * 24 * 3600 * 1000;
