@@ -1,28 +1,47 @@
-use bulletproofs::BulletproofGens;
+use core::borrow::Borrow;
 use merlin::Transcript;
 
-use super::errors::BlockchainError;
-use super::state::BlockchainState;
-use crate::{ContractID, MerkleTree, Tx, TxID, TxLog, Verifier};
+use super::super::utreexo;
+use crate::{MerkleTree, Tx, TxID};
 
-#[derive(Clone, PartialEq)]
+/// Identifier of the block, computed as a hash of the `BlockHeader`.
+#[derive(Clone, Copy, PartialEq)]
 pub struct BlockID(pub [u8; 32]);
 
-#[derive(Clone)]
+/// BlockHeader contains the metadata for the block of transactions,
+/// committing to them, but not containing the actual transactions.
+#[derive(Clone, PartialEq)]
 pub struct BlockHeader {
+    /// Network version.
     pub version: u64,
+    /// Serial number of the block, starting with 1.
     pub height: u64,
+    /// ID of the previous block. Initial block uses the all-zero string.
     pub prev: BlockID,
+    /// Integer timestamp of the block in milliseconds since the Unix epoch:
+    /// 00:00:00 UTC Jan 1, 1970.
     pub timestamp_ms: u64,
+    /// 32-byte Merkle root of the transactions in the block.
     pub txroot: [u8; 32],
+    /// 32-byte Merkle root of the Utreexo state.
     pub utxoroot: [u8; 32],
+    /// Extra data for the future extensions.
     pub ext: Vec<u8>,
 }
 
-#[derive(Clone, PartialEq)]
-pub struct Root(pub [u8; 32]);
+/// Block is a collection of transactions.
+#[derive(Clone)]
+pub struct Block {
+    /// Block header.
+    pub header: BlockHeader,
+    /// List of transactions.
+    pub txs: Vec<Tx>,
+    /// UTXO proofs
+    pub all_utxo_proofs: Vec<utreexo::Proof>,
+}
 
 impl BlockHeader {
+    /// Computes the ID of the block header.
     pub fn id(&self) -> BlockID {
         let mut t = Transcript::new(b"ZkVM.blockheader");
         t.commit_u64(b"version", self.version);
@@ -38,135 +57,25 @@ impl BlockHeader {
         BlockID(result)
     }
 
-    pub fn make_initial(timestamp_ms: u64, utxos: &Vec<ContractID>) -> BlockHeader {
+    /// Creates an initial block header.
+    pub fn make_initial(timestamp_ms: u64, utxoroot: [u8; 32]) -> BlockHeader {
         BlockHeader {
             version: 1,
             height: 1,
             prev: BlockID([0; 32]),
-            timestamp_ms: timestamp_ms,
-            txroot: Root::tx(&[]).0,
-            utxoroot: Root::utxo(utxos).0,
+            timestamp_ms,
+            txroot: MerkleTree::root::<TxID>(b"ZkVM.txroot", &[]),
+            utxoroot,
             ext: Vec::new(),
         }
     }
-
-    pub fn validate(&self, prev: &Self) -> Result<(), BlockchainError> {
-        check(
-            self.version >= prev.version,
-            BlockchainError::VersionReversion,
-        )?;
-        check(
-            self.version > 1 || self.ext.len() == 0,
-            BlockchainError::IllegalExtension,
-        )?;
-        check(self.height == prev.height + 1, BlockchainError::BadHeight)?;
-        check(self.prev == prev.id(), BlockchainError::MismatchedPrev)?;
-        check(
-            self.timestamp_ms > prev.timestamp_ms,
-            BlockchainError::BadBlockTimestamp,
-        )?;
-        // TODO: execute transaction list and verify txroot
-        Ok(())
-    }
-}
-
-fn check(cond: bool, err: BlockchainError) -> Result<(), BlockchainError> {
-    if !cond {
-        return Err(err);
-    }
-    Ok(())
-}
-
-pub struct Block {
-    pub header: BlockHeader,
-    pub txs: Vec<Tx>,
 }
 
 impl Block {
-    pub fn validate(
-        &self,
-        prev: &BlockHeader,
-        bp_gens: &BulletproofGens,
-    ) -> Result<Vec<TxLog>, BlockchainError> {
-        self.header.validate(prev)?;
-
-        let mut txlogs: Vec<TxLog> = Vec::with_capacity(self.txs.len());
-        let mut txids: Vec<TxID> = Vec::with_capacity(self.txs.len());
-
-        for tx in self.txs.iter() {
-            if tx.header.mintime_ms > self.header.timestamp_ms
-                || self.header.timestamp_ms > tx.header.maxtime_ms
-            {
-                return Err(BlockchainError::BadTxTimestamp);
-            }
-            if self.header.version == 1 && tx.header.version != 1 {
-                return Err(BlockchainError::BadTxVersion);
-            }
-
-            match Verifier::verify_tx(tx, bp_gens) {
-                Ok(verified) => {
-                    let txid = TxID::from_log(&verified.log);
-                    txids.push(txid);
-                    txlogs.push(verified.log);
-                }
-                Err(err) => return Err(BlockchainError::TxValidation(err)),
-            }
-        }
-
-        let merkle_tree = MerkleTree::build(b"transaction_ids", &txids[..]);
-        let txroot = merkle_tree.hash();
-        if &self.header.txroot != txroot {
-            return Err(BlockchainError::TxrootMismatch);
-        }
-
-        Ok(txlogs)
-    }
-
-    /// Constructs a block from a list of transactions
-    pub fn make(
-        state: BlockchainState,
-        txs: Vec<Tx>,
-        block_version: u64,
-        timestamp_ms: u64,
-        ext: Vec<u8>,
-    ) -> Result<Self, BlockchainError> {
-        let bp_gens = BulletproofGens::new(1, 256);
-        let mut new_state = state.clone();
-        let txids = txs
-            .iter()
-            .map(|tx| {
-                let (txid, txlog) =
-                    BlockchainState::execute_tx(&tx, &bp_gens, block_version, timestamp_ms)?;
-                new_state
-                    .apply_txlog(&txlog)
-                    .map_err(|e| BlockchainError::TxValidation(e))?;
-                Ok(txid)
-            })
-            .collect::<Result<Vec<_>, _>>()?;
-
-        Ok(Self {
-            header: BlockHeader {
-                version: block_version,
-                height: state.tip.height + 1,
-                prev: state.tip.id(),
-                timestamp_ms: timestamp_ms,
-                txroot: Root::tx(&txids).0,
-                utxoroot: Root::utxo(&new_state.utxos).0,
-                ext: ext,
-            },
-            txs: txs,
-        })
-    }
-}
-
-impl Root {
-    /// Computes the Merkle txroot
-    pub fn tx(txids: &[TxID]) -> Root {
-        Root(MerkleTree::root(b"ZkVM.txroot", txids))
-    }
-
-    /// Computes the Merkle utxoroot
-    pub fn utxo(utxos: &[ContractID]) -> Root {
-        Root(MerkleTree::root(b"ZkVM.utxoroot", utxos))
+    /// Returns an iterator of all utxo proofs for all transactions in a block.
+    /// This interface allows us to optimize the representation of utxo proofs,
+    /// while not affecting the validation logic.
+    pub fn utxo_proofs(&self) -> impl IntoIterator<Item = &utreexo::Proof> {
+        self.all_utxo_proofs.iter()
     }
 }

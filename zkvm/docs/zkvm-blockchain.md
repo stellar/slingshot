@@ -16,8 +16,6 @@ This document does not describe the mechanism for producing blocks from pending 
 nor for choosing among competing blocks to include in the authoritative chain
 (a.k.a. consensus).
 
-_TBD: add a consensus spec._
-
 # Data types
 
 ## Blockchain state
@@ -34,7 +32,7 @@ The blockchain state contains:
   (the header with height 1).
   This never changes.
 - `tipheader`: The latest block header.
-- `utxos`: The list of current [utxo IDs](zkvm-spec.md#utxo).
+- `utreexo`: The [Utreexo forest](utreexo.md).
 
 ## Block
 
@@ -64,7 +62,7 @@ A block header contains:
   00:00:00 UTC Jan 1, 1970.
   Each new block must have a time strictly later than the block before it.
 - `txroot`: 32-byte [Merkle root hash](zkvm-spec.md#merkle-binary-tree) of the transactions in the block.
-- `utxoroot`: 32-byte [Merkle root hash](zkvm-spec.md#merkle-binary-tree) of the utxo set after applying all transactions in the block.
+- `utxoroot`: 32-byte [Utreexo forest root](zkvm-spec.md#merkle-binary-tree) of the utxo set after applying all transactions in the block, or all-zero string if the root has not changed since the previous block.
 - `ext`: Variable-length byte string to contain future extensions.
   Empty in version 1.
 
@@ -84,6 +82,13 @@ T.commit("ext", ext)
 blockid = T.challenge_bytes("id")
 ```
 
+## Contract ID merkle leaf
+
+[Contract ID](zkvm-spec.md#contract-id) is hashed as a [merkle leaf hash](utreexo.md#merkle-root) for the Utreexo as follows:
+
+```
+T.commit("contract", contract_id)
+```
 
 # Procedures
 
@@ -127,7 +132,7 @@ Output:
 
 Procedure:
 1. [Compute txroot](#compute-txroot) from an empty list of transaction ids.
-2. [Compute utxoroot](#compute-utxoroot) from `utxos`.
+2. Create a new [Utreexo](utreexo.md) from `utxos`, [normalize](utreexo.md#normalize) and compute the [Utreexo root](utreexo.md#utreexo-root) `utxoroot`.
 3. Return a [block header](#block-header) with its fields set as follows:
    - `version`: 1
    - `height`: 1
@@ -148,7 +153,7 @@ It must either:
   (e.g., another node that has already validated the full history of the blockchain)
   and begin applying blocks beginning at `state.tipheader.height+1`.
 
-An obtained (as opposed to computed) blockchain state `state` may be partially validated by [computing the utxoroot](#compute-utxoroot) from `state.utxos` and verifying that it equals `state.header.utxoroot`.
+An obtained (as opposed to computed) blockchain state `state` may be partially validated by [computing the Utreexo root](utreexo.md#utreexo-root) from `state.utxos` and verifying that it equals `state.header.utxoroot`. Note the Utreexo state can be validated only at the points when it was normalized, which may not happen at every block.
 
 
 ## Validate block
@@ -213,17 +218,21 @@ Procedure:
 4. Let `txids` be the list of [transaction IDs](zkvm-spec.md#transaction-id) of the transactions in `txs`,
    computed from each transaction’s [header entry](zkvm-spec.md#header-entry) and the corresponding item from `txlogs`.
 5. [Compute txroot](#compute-txroot) from `txids` to produce `txroot`.
-6. [Compute utxoroot](#compute-utxoroot) from `state′.utxos` to produce `utxoroot`.
+6. If `state´.utreexo` has [updates count](utreexo.md#updates-count) higher than 65536 (`2^16`),
+   [normalize](utreexo.md#normalize) the Utreexo and compute the [Utreexo root](utreexo.md#utreexo-root) `uroot`.
+   Otherwise, set `uroot` to all-zero hash.
 7. Let `h` be a [block header](#block-header) with its fields set as follows:
    - `version`: `version`
    - `height`: `state.tipheader.height+1`
    - `previd`: `previd`
    - `timestamp_ms`: `timestamp_ms`
    - `txroot`: `txroot`
-   - `utxoroot`: `utxoroot`
+   - `utxoroot`: `uroot`
    - `ext`: `ext`
 8. Return a block with header `h` and transactions `txs`.
 
+Note: the threshold of [updates count](utreexo.md#updates-count) is not enforced by the verifiers
+and can be adjusted by the network.
 
 ## Execute transaction list
 
@@ -270,10 +279,12 @@ Procedure:
 2. Let `state′` be `state`.
 3. Let `state′′` be the result of [applying txlogs](#apply-transaction-list) to `state′`.
 4. Set `state′ <- state′′`.
-5. [Compute utxoroot](#compute-utxoroot) from `state′.utxos`.
-6. Verify `block.header.utxoroot == utxoroot`.
-7. Set `state′.tipheader <- block.header`.
-8. Return `state′`.
+5. If `block.header.utxoroot` is not all-zero:
+   1. [Normalize](utreexo.md#normalize) the Utreexo and compute the [Utreexo root](utreexo.md#utreexo-root).
+   2. Verify `block.header.utxoroot == utxoroot`.
+   3. Update the `state′` with the new normalized Utreexo instance.
+6. Set `state′.tipheader <- block.header`.
+7. Return `state′`.
 
 
 ## Apply transaction list
@@ -285,14 +296,14 @@ Inputs:
   a list of [transaction logs](zkvm-spec.md#transaction-log).
 
 Output:
-- Updated blockchain state.
+- Updated blockchain state or failure.
 
 Procedure:
 1. Let `state′` be `state`.
 2. For each `txlog` in `txlogs`,
    in order:
    1. Let `state′′` be the result of [applying the txlog](#apply-transaction-log) to `state′` to produce `state′′`.
-   2. Set `state′` <- `state′′`.
+   2. Set `state′` <- `state′′` if transaction log is not rejected.
 3. Return `state′`.
 
 
@@ -306,17 +317,14 @@ Inputs:
   a [blockchain state](#blockchain-state).
 
 Output:
-- New blockchain state `state′`.
+- New blockchain state `state′` or failure.
 
 Procedure:
 1. Let `state′` be `state`.
 2. For each [input entry](zkvm-spec.md#input-entry) or [output entry](zkvm-spec.md#output-entry) in `txlog`:
-   1. If an input entry,
-      verify its ID is in `state′.utxos`,
-      then remove it.
-   2. If an output entry,
-      append its utxo ID to `state′.utxos`.
-3. Return `state′`.
+   1. If an input entry, perform the [Utreexo delete operation](utreexo.md#delete) with [UTXO ID](zkvm-spec.md#contract-id). If it fails, reject the entire transaction log.
+   2. If an output entry, perform the [Utreexo insert operation](utreexo.md#insert) with [UTXO ID](zkvm-spec.md#contract-id).
+3. Return `state′` if the updates did not fail.
 
 ## Compute txroot
 
@@ -329,16 +337,3 @@ Output:
 Procedure:
 1. Create a [transcript](zkvm-spec.md#transcript) `T` with label `transaction_ids`.
 2. Return `MerkleHash(T, txids)` using the label `txid` for each transaction ID in the list.
-
-## Compute utxoroot
-
-Input:
-- Ordered list `utxos` of [utxo IDs](zkvm-spec.md#utxo).
-
-Output:
-- [Merkle root hash](zkvm-spec.md#merkle-binary-tree) of the given utxos.
-
-Procedure:
-1. Create a [transcript](zkvm-spec.md#transcript) `T` with label `utxos`.
-2. Return `MerkleHash(T, utxos)`.
-
