@@ -43,9 +43,9 @@ pub enum Instruction {
     Output(usize),   // payload count
     Contract(usize), // payload count
     Log,
-    Signtx,
     Call,
-    Delegate,
+    Signtx,
+    Signid,
     Ext(u8),
 }
 
@@ -83,9 +83,9 @@ pub enum Opcode {
     Output = 0x1a,
     Contract = 0x1b,
     Log = 0x1c,
-    Signtx = 0x1d,
-    Call = 0x1e,
-    Delegate = MAX_OPCODE,
+    Call = 0x1d,
+    Signtx = 0x1e,
+    Signid = MAX_OPCODE,
 }
 
 const MAX_OPCODE: u8 = 0x1f;
@@ -166,9 +166,9 @@ impl Encodable for Instruction {
                 encoding::write_u32(*k as u32, program);
             }
             Instruction::Log => write(Opcode::Log),
-            Instruction::Signtx => write(Opcode::Signtx),
             Instruction::Call => write(Opcode::Call),
-            Instruction::Delegate => write(Opcode::Delegate),
+            Instruction::Signtx => write(Opcode::Signtx),
+            Instruction::Signid => write(Opcode::Signid),
             Instruction::Ext(x) => program.push(*x),
         };
     }
@@ -264,9 +264,9 @@ impl Instruction {
                 Ok(Instruction::Contract(k))
             }
             Opcode::Log => Ok(Instruction::Log),
-            Opcode::Signtx => Ok(Instruction::Signtx),
             Opcode::Call => Ok(Instruction::Call),
-            Opcode::Delegate => Ok(Instruction::Delegate),
+            Opcode::Signtx => Ok(Instruction::Signtx),
+            Opcode::Signid => Ok(Instruction::Signid),
         }
     }
 }

@@ -169,9 +169,9 @@ where
                 Instruction::Output(k) => self.output(k)?,
                 Instruction::Contract(k) => self.contract(k)?,
                 Instruction::Log => self.log()?,
-                Instruction::Signtx => self.signtx()?,
                 Instruction::Call => self.call()?,
-                Instruction::Delegate => self.delegate()?,
+                Instruction::Signtx => self.signtx()?,
+                Instruction::Signid => self.signid()?,
                 Instruction::Ext(opcode) => self.ext(opcode)?,
             }
             return Ok(true);
@@ -562,7 +562,7 @@ where
         Ok(())
     }
 
-    fn delegate(&mut self) -> Result<(), VMError> {
+    fn signid(&mut self) -> Result<(), VMError> {
         // Signature
         let sig = self.pop_item()?.to_data()?.to_bytes();
         let signature = Signature::from_bytes(SliceReader::parse(&sig, |r| r.read_u8x64())?)
@@ -583,9 +583,9 @@ where
         let verification_key = predicate.to_verification_key()?;
 
         // Verify signature using Verification key, over the message `program`
-        let mut t = Transcript::new(b"ZkVM.delegate");
-        t.append_message(b"contract", contract_id.as_ref());
-        t.append_message(b"prog", &prog.to_bytes());
+        let mut t = Transcript::new(b"ZkVM.signid");
+        t.commit_bytes(b"contract", contract_id.as_ref());
+        t.commit_bytes(b"prog", &prog.to_bytes());
         self.delegate
             .verify_point_op(|| signature.verify(&mut t, verification_key).into())?;
 

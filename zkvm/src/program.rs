@@ -67,7 +67,7 @@ impl Program {
     def_op!(cloak, Cloak, usize, usize);
     def_op!(r#const, Const);
     def_op!(contract, Contract, usize);
-    def_op!(delegate, Delegate);
+    def_op!(signid, Signid);
     def_op!(drop, Drop);
     def_op!(dup, Dup, usize);
     def_op!(eq, Eq);
