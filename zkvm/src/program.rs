@@ -67,7 +67,6 @@ impl Program {
     def_op!(cloak, Cloak, usize, usize);
     def_op!(r#const, Const);
     def_op!(contract, Contract, usize);
-    def_op!(signid, Signid);
     def_op!(drop, Drop);
     def_op!(dup, Dup, usize);
     def_op!(eq, Eq);
@@ -85,6 +84,8 @@ impl Program {
     def_op!(retire, Retire);
     def_op!(roll, Roll, usize);
     def_op!(sign_tx, Signtx);
+    def_op!(signid, Signid);
+    def_op!(signtag, Signtag);
     def_op!(unblind, Unblind);
     def_op!(var, Var);
     def_op!(verify, Verify);

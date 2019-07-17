@@ -1377,7 +1377,7 @@ Fails if:
 
 #### signtx
 
-_contract_ **signtx** → _results..._
+_contract_ **signtx** → _items..._
 
 1. Pops the [contract](#contract-type) from the stack.
 2. Adds the contract’s [predicate](#predicate) as a [verification key](#verification-key)
@@ -1392,7 +1392,7 @@ is deferred until the end of VM execution.
 
 #### signid
 
-_contract(P) prog sig_ **signid** → _results..._
+_contract(P) prog sig_ **signid** → _items..._
 
 1. Pop [string](#string-type) `sig`, [program](#program-type) `prog` and the [contract](#contract-type) from the stack.
 2. Read the [predicate](#predicate) `P` from the contract.
@@ -1431,12 +1431,12 @@ Fails if:
 
 #### signtag
 
-_contract(P) prog sig_ **signtag** → _results..._
+_contract(P) prog sig_ **signtag** → _items... tag_
 
 1. Pop [data](#data-type) `sig`, [program](#program-type) `prog` and the [contract](#contract-type) from the stack.
 2. Read the [predicate](#predicate) `P` from the contract.
 3. Place the [contract payload](#contract-payload) on the stack (last item on top), discarding the contract.
-4. Verifies that the top item is a [string](#data-type), and reads it as a `tag`.
+4. Verifies that the top item is a [string](#data-type), and reads it as a `tag`. The item remains on the stack.
 5. Instantiate the [transcript](#transcript):
     ```
     T = Transcript("ZkVM.signtag")
@@ -1466,7 +1466,7 @@ Fails if:
 1. `sig` is not a 64-byte long [data](#data-type),
 2. or `prog` is not a [program type](#program-type),
 3. or `contract` is not a [contract type](#contract-type),
-4. or last item in the payload is not a [string](#data-type).
+4. or last item in the payload (`tag`) is not a [string](#data-type).
 
 
 #### ext

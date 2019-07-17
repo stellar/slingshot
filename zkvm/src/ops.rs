@@ -46,6 +46,7 @@ pub enum Instruction {
     Call,
     Signtx,
     Signid,
+    Signtag,
     Ext(u8),
 }
 
@@ -85,10 +86,11 @@ pub enum Opcode {
     Log = 0x1c,
     Call = 0x1d,
     Signtx = 0x1e,
-    Signid = MAX_OPCODE,
+    Signid = 0x1f,
+    Signtag = MAX_OPCODE,
 }
 
-const MAX_OPCODE: u8 = 0x1f;
+const MAX_OPCODE: u8 = 0x20;
 
 impl Opcode {
     /// Converts the opcode to `u8`.
@@ -169,6 +171,7 @@ impl Encodable for Instruction {
             Instruction::Call => write(Opcode::Call),
             Instruction::Signtx => write(Opcode::Signtx),
             Instruction::Signid => write(Opcode::Signid),
+            Instruction::Signtag => write(Opcode::Signtag),
             Instruction::Ext(x) => program.push(*x),
         };
     }
@@ -267,6 +270,7 @@ impl Instruction {
             Opcode::Call => Ok(Instruction::Call),
             Opcode::Signtx => Ok(Instruction::Signtx),
             Opcode::Signid => Ok(Instruction::Signid),
+            Opcode::Signtag => Ok(Instruction::Signtag),
         }
     }
 }
