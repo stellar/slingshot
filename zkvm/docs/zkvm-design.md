@@ -107,7 +107,7 @@ ZkVM is designed to scale to a wide range of applications and large volumes of t
 
 A ZkVM transaction contains a single constraint system proof (around 1Kb) and a single 64-byte Schnorr signature, aggregated via the multi-message [Musig protocol](https://eprint.iacr.org/2018/068.pdf) by Maxwell, Poelstra, Seurin and Wuille. The size of the proof scales logarithmically, lowering the marginal cost of an input-output pair to just 200 bytes that can be further optimized by caching most recent outputs.
 
-ZkVM execution is decoupled from updates to the blockchain state: every transaction can be verified in isolation. The result of ZkVM execution is a _transaction log_, which contains a list of consumed and created _unspent outputs_ (_utxos_) that are applied to the blockchain state separately. Historical transactions are pruned, while the utxo set is compressed with [the Utreexo scheme](https://www.youtube.com/watch?v=edRun-6ubCc) by Thaddeus Dryja [utreexo]. A billion unspent outputs use just 1 kilobyte of data (30 merkle roots). New nodes bootstrap instantly from a network-verified Utreexo snapshot.
+ZkVM execution is decoupled from updates to the blockchain state: every transaction can be verified in isolation. The result of ZkVM execution is a _transaction log_, which contains a list of consumed and created _unspent outputs_ (_utxos_) that are applied to the blockchain state separately. Historical transactions are pruned, while the utxo set is compressed with [the Utreexo scheme](https://dci.mit.edu/utreexo) by Thaddeus Dryja [utreexo]. A billion unspent outputs use just 1 kilobyte of data (30 merkle roots). New nodes bootstrap instantly from a network-verified Utreexo snapshot.
 
 ![](zkvm-design-pics/zkvm-utreexo.png)
 
@@ -180,9 +180,9 @@ This work was sponsored by [Interstellar](https://interstellar.com) and [Stellar
 * [Secure Property Titles with Owner Authority](https://nakamotoinstitute.org/secure-property-titles/) by Nick Szabo
 * [Taproot: Privacy preserving switchable scripting](https://lists.linuxfoundation.org/pipermail/bitcoin-dev/2018-January/015614.html) by Gregory Maxwell
 * [Bulletproofs: Short Proofs for Confidential Transactions and More](https://crypto.stanford.edu/bulletproofs/) by Benedikt Bünz, Jonathan Bootle, Dan Boneh, Andrew Poelstra, Pieter Wuille, Greg Maxwell
-* [Bulletproofs implementation with Ristretto](http://github.com/dalek-cryptography/bulletproofs/) by Henry de Valence, Cathie Yun, Oleg Andreev
+* [Bulletproofs implementation with Ristretto](https://github.com/dalek-cryptography/bulletproofs/) by Henry de Valence, Cathie Yun, Oleg Andreev
 * [Simple Schnorr Multi-Signatures with Applications to Bitcoin](https://eprint.iacr.org/2018/068.pdf) by Gregory Maxwell, Andrew Poelstra, Yannick Seurin, Pieter Wuille
-* [Utreexo: Reducing Bitcoin Nodes to 1 Kilobyte](https://www.youtube.com/watch?v=edRun-6ubCc) ([transcript](https://diyhpl.us/wiki/transcripts/bitcoin-core-dev-tech/2018-10-08-utxo-accumulators-and-utreexo/)) by Thaddeus Dryja
+* [Utreexo: Reducing Bitcoin Nodes to 1 Kilobyte](https://dci.mit.edu/utreexo) ([transcript](https://diyhpl.us/wiki/transcripts/bitcoin-core-dev-tech/2018-10-08-utxo-accumulators-and-utreexo/)) by Thaddeus Dryja
 * [The Bitcoin Lightning Network: Scalable Off-Chain Instant Payments](https://lightning.network/lightning-network-paper.pdf) by Joseph Poon, Thaddeus Dryja
 * [CoinJoin: Bitcoin privacy for the real world](https://bitcointalk.org/?topic=279249) by Gregory Maxwell
 * [The Ristretto Group](https://ristretto.group) by Mike Hamburg, Henry de Valence, Isis Lovecruft, Tony Arcieri
