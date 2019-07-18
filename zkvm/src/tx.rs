@@ -214,7 +214,7 @@ impl<'de> Deserialize<'de> for Tx {
 
 impl MerkleItem for TxID {
     fn commit(&self, t: &mut Transcript) {
-        t.commit_bytes(b"txid", &self.0)
+        t.append_message(b"txid", &self.0)
     }
 }
 
@@ -229,9 +229,9 @@ impl MerkleItem for TxEntry {
     fn commit(&self, t: &mut Transcript) {
         match self {
             TxEntry::Header(h) => {
-                t.commit_u64(b"tx.version", h.version);
-                t.commit_u64(b"tx.mintime", h.mintime_ms);
-                t.commit_u64(b"tx.maxtime", h.maxtime_ms);
+                t.append_u64(b"tx.version", h.version);
+                t.append_u64(b"tx.mintime", h.mintime_ms);
+                t.append_u64(b"tx.maxtime", h.maxtime_ms);
             }
             TxEntry::Issue(q, f) => {
                 t.commit_point(b"issue.q", q);
@@ -242,13 +242,13 @@ impl MerkleItem for TxEntry {
                 t.commit_point(b"retire.f", f);
             }
             TxEntry::Input(contract) => {
-                t.commit_bytes(b"input", contract.as_bytes());
+                t.append_message(b"input", contract.as_bytes());
             }
             TxEntry::Output(contract) => {
-                t.commit_bytes(b"output", contract.id().as_bytes());
+                t.append_message(b"output", contract.id().as_bytes());
             }
             TxEntry::Data(data) => {
-                t.commit_bytes(b"data", data);
+                t.append_message(b"data", data);
             }
         }
     }

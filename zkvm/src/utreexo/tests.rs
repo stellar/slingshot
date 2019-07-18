@@ -5,7 +5,7 @@ use crate::merkle::*;
 
 impl MerkleItem for u64 {
     fn commit(&self, t: &mut Transcript) {
-        t.commit_u64(b"test_item", *self);
+        t.append_u64(b"test_item", *self);
     }
 }
 

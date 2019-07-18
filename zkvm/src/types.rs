@@ -275,8 +275,8 @@ impl Value {
     /// Computes a flavor as defined by the `issue` instruction from a predicate.
     pub fn issue_flavor(predicate: &Predicate, metadata: Data) -> Scalar {
         let mut t = Transcript::new(b"ZkVM.issue");
-        t.commit_bytes(b"predicate", predicate.to_point().as_bytes());
-        t.commit_bytes(b"metadata", &metadata.to_bytes());
+        t.append_message(b"predicate", predicate.to_point().as_bytes());
+        t.append_message(b"metadata", &metadata.to_bytes());
         t.challenge_scalar(b"flavor")
     }
 

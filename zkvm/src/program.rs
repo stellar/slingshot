@@ -203,13 +203,13 @@ impl MerkleItem for ProgramItem {
     fn commit(&self, t: &mut Transcript) {
         match self {
             ProgramItem::Program(prog) => prog.commit(t),
-            ProgramItem::Bytecode(bytes) => t.commit_bytes(b"program", &bytes),
+            ProgramItem::Bytecode(bytes) => t.append_message(b"program", &bytes),
         }
     }
 }
 
 impl MerkleItem for Program {
     fn commit(&self, t: &mut Transcript) {
-        t.commit_bytes(b"program", &self.to_bytes());
+        t.append_message(b"program", &self.to_bytes());
     }
 }

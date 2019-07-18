@@ -1,4 +1,3 @@
-use core::borrow::Borrow;
 use merlin::Transcript;
 
 use super::super::utreexo;
@@ -44,13 +43,13 @@ impl BlockHeader {
     /// Computes the ID of the block header.
     pub fn id(&self) -> BlockID {
         let mut t = Transcript::new(b"ZkVM.blockheader");
-        t.commit_u64(b"version", self.version);
-        t.commit_u64(b"height", self.height);
-        t.commit_bytes(b"previd", &self.prev.0);
-        t.commit_u64(b"timestamp_ms", self.timestamp_ms);
-        t.commit_bytes(b"txroot", &self.txroot);
-        t.commit_bytes(b"utxoroot", &self.utxoroot);
-        t.commit_bytes(b"ext", &self.ext);
+        t.append_u64(b"version", self.version);
+        t.append_u64(b"height", self.height);
+        t.append_message(b"previd", &self.prev.0);
+        t.append_u64(b"timestamp_ms", self.timestamp_ms);
+        t.append_message(b"txroot", &self.txroot);
+        t.append_message(b"utxoroot", &self.utxoroot);
+        t.append_message(b"ext", &self.ext);
 
         let mut result = [0u8; 32];
         t.challenge_bytes(b"id", &mut result);

@@ -106,8 +106,8 @@ impl<M: MerkleItem> NodeHasher<M> {
 
     pub(super) fn intermediate(&self, left: &Hash, right: &Hash) -> Hash {
         let mut t = self.t.clone();
-        t.commit_bytes(b"L", left);
-        t.commit_bytes(b"R", right);
+        t.append_message(b"L", left);
+        t.append_message(b"R", right);
         let mut hash = [0; 32];
         t.challenge_bytes(b"merkle.node", &mut hash);
         hash

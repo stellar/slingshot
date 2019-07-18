@@ -141,7 +141,7 @@ fn build_and_verify(program: Program, keys: &Vec<Scalar>) -> Result<TxID, VMErro
                 .collect();
 
             let mut signtx_transcript = Transcript::new(b"ZkVM.signtx");
-            signtx_transcript.commit_bytes(b"txid", &utx.txid.0);
+            signtx_transcript.append_message(b"txid", &utx.txid.0);
             Signature::sign_multi(
                 privkeys,
                 utx.signing_instructions.clone(),

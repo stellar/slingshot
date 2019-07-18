@@ -158,7 +158,7 @@ impl Anchor {
     /// Ratchet the anchor into a new anchor
     pub fn ratchet(mut self) -> Self {
         let mut t = Transcript::new(b"ZkVM.ratchet-anchor");
-        t.commit_bytes(b"old", &self.0);
+        t.append_message(b"old", &self.0);
         t.challenge_bytes(b"new", &mut self.0);
         self
     }
@@ -172,7 +172,7 @@ impl ContractID {
 
     fn from_serialized_contract(bytes: &[u8]) -> Self {
         let mut t = Transcript::new(b"ZkVM.contractid");
-        t.commit_bytes(b"contract", bytes);
+        t.append_message(b"contract", bytes);
         let mut id = [0u8; 32];
         t.challenge_bytes(b"id", &mut id);
         Self(id)
@@ -242,6 +242,6 @@ impl PortableItem {
 
 impl MerkleItem for ContractID {
     fn commit(&self, t: &mut Transcript) {
-        t.commit_bytes(b"contract", self.as_bytes());
+        t.append_message(b"contract", self.as_bytes());
     }
 }
