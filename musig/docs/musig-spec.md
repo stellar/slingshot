@@ -89,7 +89,7 @@ Transcripts have the following operations, each taking a label for domain separa
 
 ## Single-message signature
 
-Single-message signature is a Schnorr proof of knowledge of a secret [scalar](#scalar)
+Single-message signature is a Schnorr proof of knowledge of a secret [scalar](#scalar) `x`
 corresponding to some [verification key](#verification-key) in a context of some _message_.
 
 The protocol is the following:
@@ -110,7 +110,7 @@ The protocol is the following:
     ```
     T.commit("R", R)
     ```
-7. Prover and verifier compute a Fiat-Shamir challenge scalar `e` using the transcript:
+7. Prover and verifier compute a Fiat-Shamir challenge scalar `c` using the transcript:
     ```
     c = T.challenge_scalar("c")
     ```
