@@ -10,7 +10,6 @@ use std::mem;
 
 use crate::constraints::{Commitment, Constraint, Expression, Variable};
 use crate::contract::{Anchor, Contract, ContractID, PortableItem};
-use crate::encoding::Encodable;
 use crate::encoding::SliceReader;
 use crate::errors::VMError;
 use crate::ops::Instruction;
@@ -585,8 +584,8 @@ where
 
         // Verify signature using Verification key, over the message `program`
         let mut t = Transcript::new(b"ZkVM.delegate");
-        t.commit_bytes(b"contract", contract_id.as_ref());
-        t.commit_bytes(b"prog", &prog.to_bytes());
+        t.append_message(b"contract", contract_id.as_ref());
+        t.append_message(b"prog", &prog.to_bytes());
         self.delegate
             .verify_point_op(|| signature.verify(&mut t, verification_key).into())?;
 

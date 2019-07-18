@@ -73,13 +73,13 @@ impl MerkleTree {
             let mut t = transcript.clone();
             match node {
                 MerkleNeighbor::Left(l) => {
-                    t.commit_bytes(b"L", l);
-                    t.commit_bytes(b"R", &result);
+                    t.append_message(b"L", l);
+                    t.append_message(b"R", &result);
                     t.challenge_bytes(b"merkle.node", &mut result);
                 }
                 MerkleNeighbor::Right(r) => {
-                    t.commit_bytes(b"L", &result);
-                    t.commit_bytes(b"R", r);
+                    t.append_message(b"L", &result);
+                    t.append_message(b"R", r);
                     t.challenge_bytes(b"merkle.node", &mut result);
                 }
             }
@@ -125,8 +125,8 @@ impl MerkleTree {
                 let mut node = [0u8; 32];
                 let left = Self::build_tree(t.clone(), &list[..k]);
                 let right = Self::build_tree(t.clone(), &list[k..]);
-                t.commit_bytes(b"L", left.hash());
-                t.commit_bytes(b"R", right.hash());
+                t.append_message(b"L", left.hash());
+                t.append_message(b"R", right.hash());
                 t.challenge_bytes(b"merkle.node", &mut node);
                 MerkleNode::Node(node, Box::new(left), Box::new(right))
             }
@@ -186,7 +186,7 @@ mod tests {
 
     impl MerkleItem for TestItem {
         fn commit(&self, t: &mut Transcript) {
-            t.commit_u64(b"item", self.0)
+            t.append_u64(b"item", self.0)
         }
     }
 

@@ -109,7 +109,10 @@ impl<'t> Verifier<'t> {
         let (txid, txlog) = vm.run()?;
 
         // Commit txid so that the proof is bound to the entire transaction, not just the constraint system.
-        verifier.cs.transcript().commit_bytes(b"ZkVM.txid", &txid.0);
+        verifier
+            .cs
+            .transcript()
+            .append_message(b"ZkVM.txid", &txid.0);
 
         // Verify the R1CS proof
         verifier
@@ -119,7 +122,7 @@ impl<'t> Verifier<'t> {
 
         // Verify the signatures over txid
         let mut signtx_transcript = Transcript::new(b"ZkVM.signtx");
-        signtx_transcript.commit_bytes(b"txid", &txid.0);
+        signtx_transcript.append_message(b"txid", &txid.0);
 
         if verifier.signtx_items.len() != 0 {
             verifier.deferred_operations.push(

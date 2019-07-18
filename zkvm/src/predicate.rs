@@ -129,8 +129,8 @@ impl Predicate {
 
     fn commit_taproot(key: &VerificationKey, root: &[u8; 32]) -> Scalar {
         let mut t = Transcript::new(b"ZkVM.taproot");
-        t.commit_bytes(b"key", &key.as_compressed().to_bytes());
-        t.commit_bytes(b"merkle", root);
+        t.append_message(b"key", &key.as_compressed().to_bytes());
+        t.append_message(b"merkle", root);
         t.challenge_scalar(b"h")
     }
 
@@ -234,11 +234,11 @@ impl PredicateTree {
     fn create_merkle_leaves(progs: &Vec<Program>, blinding_key: [u8; 32]) -> Vec<PredicateLeaf> {
         let mut t = Transcript::new(b"ZkVM.taproot-derive-blinding");
         let n: u64 = progs.len() as u64;
-        t.commit_u64(b"n", n);
-        t.commit_bytes(b"key", &blinding_key);
+        t.append_u64(b"n", n);
+        t.append_message(b"key", &blinding_key);
         for prog in progs.iter() {
-            let mut buf = prog.encode_to_vec();
-            t.commit_bytes(b"prog", &buf);
+            let buf = prog.encode_to_vec();
+            t.append_message(b"prog", &buf);
         }
 
         let mut leaves = Vec::new();
@@ -338,7 +338,7 @@ impl MerkleItem for PredicateLeaf {
     fn commit(&self, t: &mut Transcript) {
         match self {
             PredicateLeaf::Program(prog) => prog.commit(t),
-            PredicateLeaf::Blinding(bytes) => t.commit_bytes(b"blinding", &bytes.clone()),
+            PredicateLeaf::Blinding(bytes) => t.append_message(b"blinding", &bytes.clone()),
         }
     }
 }
