@@ -109,7 +109,10 @@ impl<'t> Verifier<'t> {
         let (txid, txlog) = vm.run()?;
 
         // Commit txid so that the proof is bound to the entire transaction, not just the constraint system.
-        verifier.cs.transcript().append_message(b"ZkVM.txid", &txid.0);
+        verifier
+            .cs
+            .transcript()
+            .append_message(b"ZkVM.txid", &txid.0);
 
         // Verify the R1CS proof
         verifier
