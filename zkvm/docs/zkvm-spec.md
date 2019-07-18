@@ -11,7 +11,7 @@ ZkVM defines a procedural representation for blockchain transactions and the rul
     * [Copyable types](#copyable-types)
     * [Linear types](#linear-types)
     * [Portable types](#portable-types)
-    * [Data](#data-type)
+    * [String](#string-type)
     * [Program](#program-type)
     * [Contract](#contract-type)
     * [Variable](#variable-type)
@@ -152,7 +152,7 @@ categories: [copyable types](#copyable-types) and [linear types](#linear-types).
 
 Copyable types can be freely created, copied (with [`dup`](#dup)), and destroyed (with [`drop`](#drop)):
 
-* [Data](#data-type)
+* [String](#string-type)
 * [Variable](#variable-type)
 
 Note: the [program type](#program-type) is not copyable to avoid denial-of-service attacks
@@ -175,7 +175,7 @@ and destroyed, and may never be copied.
 
 ### Portable types
 
-Only the [data](#data-type), [program](#program-type) and [value](#value-type) types can be _ported_ across transactions via [outputs](#output-structure).
+Only the [string](#string-type), [program](#program-type) and [value](#value-type) types can be _ported_ across transactions via [outputs](#output-structure).
 
 Notes:
 
@@ -186,11 +186,11 @@ or [output](#output-structure) their contents themselves.
 and its constraint system, and therefore cannot be meaningfully ported between transactions.
 
 
-### Data type
+### String type
 
-A _data type_ is a variable-length byte array used to represent [commitments](#pedersen-commitment), [scalars](#scalar), signatures and proofs.
+A _string_ is a variable-length byte array used to represent [commitments](#pedersen-commitment), [scalars](#scalar), signatures, and proofs.
 
-Data cannot be larger than the entire transaction program and cannot be longer than `2^32-1` bytes (see [LE32](#le32)).
+A string cannot be larger than the entire transaction program and cannot be longer than `2^32-1` bytes (see [LE32](#le32)).
 
 
 ### Program type
@@ -310,7 +310,7 @@ and the wide value is only used as an output of [`borrow`](#borrow) and as an in
 ### LE32
 
 A non-negative 32-bit integer encoded using little-endian convention.
-Used to encode lengths of [data types](#data-type), sizes of [contract payloads](#contract-payload) and stack indices.
+Used to encode lengths of [strings](#string-type), sizes of [contract payloads](#contract-payload) and stack indices.
 
 ### LE64
 
@@ -322,7 +322,7 @@ Used to encode [value quantities](#value-type) and [timestamps](#time-bounds).
 
 A _scalar_ is an integer modulo [Ristretto group](https://ristretto.group) order `|G| = 2^252 + 27742317777372353535851937790883648493`.
 
-Scalars are encoded as 32-byte [data types](#data-type) using little-endian convention.
+Scalars are encoded as 32-byte [strings](#string-type) using little-endian convention.
 
 Every scalar in the VM is guaranteed to be in a canonical (reduced) form: an instruction that operates on a scalar
 checks if the scalar is canonical.
@@ -332,7 +332,7 @@ checks if the scalar is canonical.
 
 A _point_ is an element in the [Ristretto group](https://ristretto.group).
 
-Points are encoded as 32-byte [data types](#data-type) in _compressed Ristretto form_.
+Points are encoded as 32-byte [strings](#string-type) in _compressed Ristretto form_.
 
 Each point in the VM is guaranteed to be a valid Ristretto point.
 
@@ -472,7 +472,7 @@ PP(prog) = h(prog)·B2
 ```
 
 Commitment scheme is defined using the [transcript](#transcript) protocol
-by committing the program data and squeezing a scalar that is bound to it:
+by committing the program string and squeezing a scalar that is bound to it:
 
 ```
 T = Transcript("ZkVM.predicate")
@@ -489,7 +489,7 @@ Program predicate can be satisfied only via the [`call`](#call) instruction that
 
 The contract payload is a list of [items](#types) stored in the [contract](#contract-type) or [output](#output-structure).
 
-Payload of a [contract](#contract-type) may contain arbitrary [types](#types),
+Payload of a [contract](#contract-type) may contain data of arbitrary [types](#types),
 but in the [output](#output-structure) only the [portable types](#portable-types) are allowed.
 
 
@@ -501,8 +501,8 @@ Output is a serialized [contract](#contract-type):
       Output  =  Anchor || Predicate  ||  LE32(k)  ||  Item[0]  || ... ||  Item[k-1]
       Anchor  =  <32 bytes>
    Predicate  =  <32 bytes>
-        Item  =  enum { Data, Program, Value }
-        Data  =  0x00  ||  LE32(len)  ||  <bytes>
+        Item  =  enum { String, Program, Value }
+      String  =  0x00  ||  LE32(len)  ||  <bytes>
      Program  =  0x01  ||  LE32(len)  ||  <bytes>
        Value  =  0x02  ||  <32 bytes> ||  <32 bytes>
 ```
@@ -940,7 +940,7 @@ Code | Instruction                | Stack diagram                              |
 
 **push:_n_:_x_** → _data_
 
-Pushes a [data](#data-type) `x` containing `n` bytes. 
+Pushes a [string](#string-type) `x` containing `n` bytes. 
 Immediate data `n` is encoded as [LE32](#le32)
 followed by `x` encoded as a sequence of `n` bytes.
 
@@ -966,7 +966,7 @@ Fails if `x` is not a [copyable type](#copyable-types).
 
 _x[k] … x[0]_ **dup:_k_** → _x[k] ... x[0] x[k]_
 
-Copies k’th [data item](#data-type) from the top of the stack.
+Copies k’th item from the top of the stack.
 Immediate data `k` is encoded as [LE32](#le32).
 
 Fails if `x[k]` is not a [copyable type](#copyable-types).
@@ -1216,7 +1216,7 @@ Fails if:
 _qty flv metadata pred_ **issue** → _contract_
 
 1. Pops [point](#point) `pred`.
-2. Pops [data](#data-type) `metadata`.
+2. Pops [string](#string-type) `metadata`.
 3. Pops [variable](#variable-type) `flv` and commits it to the constraint system.
 4. Pops [variable](#variable-type) `qty` and commits it to the constraint system.
 5. Creates a [value](#value-type) with variables `qty` and `flv` for quantity and flavor, respectively. 
@@ -1296,8 +1296,8 @@ Immediate data `m` and `n` are encoded as two [LE32](#le32)s.
 
 _prevoutput_ **input** → _contract_
 
-1. Pops a [data](#data-type) `prevoutput` representing the [unspent output structure](#output-structure) from the stack.
-2. Constructs a [contract](#contract-type) based on the `prevoutput` data and pushes it to the stack.
+1. Pops a [string](#string-type) `prevoutput` representing the [unspent output structure](#output-structure) from the stack.
+2. Constructs a [contract](#contract-type) based on `prevoutput` and pushes it to the stack.
 3. Adds [input entry](#input-entry) to the [transaction log](#transaction-log).
 4. Sets the [VM’s last anchor](#vm-state) to the ratcheted [contract ID](#contract-id):
     ```
@@ -1306,7 +1306,7 @@ _prevoutput_ **input** → _contract_
     new_anchor = T.challenge_bytes("new")
     ```
 
-Fails if the `prevoutput` is not a [data type](#data-type) with exact encoding of an [output structure](#output-structure).
+Fails if the `prevoutput` is not a [string](#string-type) with exact encoding of an [output structure](#output-structure).
 
 
 #### output
@@ -1350,7 +1350,7 @@ _data_ **log** → ø
 1. Pops `data` from the stack.
 2. Adds [data entry](#data-entry) with it to the [transaction log](#transaction-log).
 
-Fails if the item is not a [data type](#data-type).
+Fails if `data` is not a [string](#string-type).
 
 
 #### signtx
@@ -1384,7 +1384,7 @@ _contract(P) proof prog_ **call** → _results..._
 
 Fails if:
 1. `prog` is not a [program type](#program-type),
-2. or `proof` is not a [data type](#data-type),
+2. or `proof` is not a [string](#string-type),
 3. or `contract` is not a [contract type](#contract-type).
 
 
@@ -1392,7 +1392,7 @@ Fails if:
 
 _contract(P) prog sig_ **delegate** → _results..._
 
-1. Pop [data](#data-type) `sig`, [program](#program-type) `prog` and the [contract](#contract-type) from the stack.
+1. Pop [string](#string-type) `sig`, [program](#program-type) `prog` and the [contract](#contract-type) from the stack.
 2. Read the [predicate](#predicate) `P` from the contract.
 3. Place the [contract payload](#contract-payload) on the stack (last item on top), discarding the contract.
 4. Instantiate the [transcript](#transcript):
@@ -1407,7 +1407,7 @@ _contract(P) prog sig_ **delegate** → _results..._
     ```
     T.commit("prog", prog)
     ```
-7. Extract nonce commitment `R` and scalar `s` from a 64-byte data `sig`:
+7. Extract nonce commitment `R` and scalar `s` from a 64-byte string `sig`:
     ```
     R = sig[ 0..32]
     s = sig[32..64]
@@ -1421,7 +1421,7 @@ _contract(P) prog sig_ **delegate** → _results..._
 10. Set the `prog` as current.
 
 Fails if:
-1. `sig` is not a 64-byte long [data](#data-type),
+1. `sig` is not a 64-byte long [string](#string-type),
 2. or `prog` is not a [program type](#program-type),
 3. or `contract` is not a [contract type](#contract-type).
 
