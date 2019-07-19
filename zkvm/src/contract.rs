@@ -162,6 +162,20 @@ impl Anchor {
         t.challenge_bytes(b"new", &mut self.0);
         self
     }
+
+    /// Create a transcript for creating anchors for nit-containing contracts.
+    pub fn create_nit_anchoring_transcript(seed: [u8; 32]) -> Transcript {
+        let mut t = Transcript::new(b"ZkVM.nits-anchoring");
+        t.commit_bytes(b"seed", &seed);
+        t
+    }
+
+    /// Create another anchor
+    pub fn nit_anchor(transcript: &mut Transcript) -> Self {
+        let mut buf = [0u8; 32];
+        transcript.challenge_bytes(b"nit-anchor", &mut buf);
+        Self(buf)
+    }
 }
 
 impl ContractID {

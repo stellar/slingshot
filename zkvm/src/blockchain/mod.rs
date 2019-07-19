@@ -2,6 +2,7 @@
 
 mod block;
 mod errors;
+pub mod nits;
 mod state;
 
 #[cfg(test)]

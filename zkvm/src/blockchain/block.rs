@@ -1,7 +1,6 @@
 use merlin::Transcript;
 
-use super::super::utreexo;
-use crate::{MerkleTree, Tx, TxID};
+use crate::{utreexo, MerkleTree, Predicate, Tx, TxID};
 
 /// Identifier of the block, computed as a hash of the `BlockHeader`.
 #[derive(Clone, Copy, PartialEq)]
@@ -33,6 +32,8 @@ pub struct BlockHeader {
 pub struct Block {
     /// Block header.
     pub header: BlockHeader,
+    /// List of nit allocations
+    pub nits: Vec<(u64, Predicate)>,
     /// List of transactions.
     pub txs: Vec<Tx>,
     /// UTXO proofs
