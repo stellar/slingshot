@@ -1,0 +1,28 @@
+[package]
+name = "accounts"
+version = "0.1.0"
+authors = ["Oleg Andreev <oleganza@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+failure = "0.1"
+byteorder = "1"
+merlin = "1.0.1"
+postgres = "0.15"
+rand = "0.6"
+subtle = "2"
+curve25519-dalek = { version = "1.0.1", features = ["serde"] }
+
+[dependencies.bulletproofs]
+git = "https://github.com/dalek-cryptography/bulletproofs"
+branch = "develop"
+features = ["yoloproofs"]
+
+[dependencies.keytree]
+path = "../keytree"
+
+[dependencies.musig]
+path = "../musig"
+
+[dependencies.zkvm]
+path = "../zkvm"

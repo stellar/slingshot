@@ -24,7 +24,7 @@ pub mod utreexo;
 mod verifier;
 mod vm;
 
-pub use self::constraints::{Commitment, Constraint, Expression, Variable};
+pub use self::constraints::{Commitment, CommitmentWitness, Constraint, Expression, Variable};
 pub use self::contract::{Anchor, Contract, ContractID, PortableItem};
 pub use self::errors::VMError;
 pub use self::merkle::{MerkleItem, MerkleNeighbor, MerkleTree};
