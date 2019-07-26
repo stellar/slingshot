@@ -93,6 +93,11 @@ impl Contract {
         self.id
     }
 
+    /// Returns the contract's anchor
+    pub fn anchor(&self) -> Anchor {
+        self.anchor
+    }
+
     /// Breaks up the contract into individual fields
     pub fn into_tuple(self) -> (ContractID, Predicate, Vec<PortableItem>, Anchor) {
         (self.id, self.predicate, self.payload, self.anchor)

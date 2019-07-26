@@ -21,16 +21,16 @@ and then be able to obtain a utxo proof in order to be able to spend the funds.
     Confirms payment details.
     Selects utxos to cover the payment amount
     Forms a transaction with maxtime=min(sender's exptime, receiver exptime).
-    Send back the ContractInfo that allows constructing a contract ID.
+    Send back the ReceiverReply that allows constructing a contract ID.
 
-                              ContractInfo ------->
+                              ReceiverReply ------->
 
-                                   Reconstruct contract ID from ContractInfo.
-                           Store the ContractInfo together with the receiver.
+                                   Reconstruct contract ID from ReceiverReply.
+                           Store the ReceiverReply together with the receiver.
 
                         <--------- ACK
 
-    Store the ContractInfo for the change output.
+    Store the ReceiverReply for the change output.
     Publish the transaction.
                                    ...
 
@@ -65,7 +65,7 @@ Questions:
 */
 
 use curve25519_dalek::scalar::Scalar;
-use keytree::{Xpub,Xprv};
+use keytree::{Xprv, Xpub};
 use merlin::Transcript;
 use zkvm::{
     Anchor, ClearValue, Commitment, Contract, PortableItem, Predicate, TranscriptProtocol, Value,
@@ -80,23 +80,42 @@ pub struct ReceiverID([u8; 32]);
 /// State of the account
 #[derive(Clone, Debug)]
 pub struct Account {
+    /// Account's root extended public key.
     pub xpub: Xpub,
+
+    /// Account's current sequence number.
     pub sequence: u64,
 }
 
 /// Receiver describes the destination for the payment.
 #[derive(Clone, Debug)]
 pub struct Receiver {
+    /// Address to which the payment must be sent.
     pub predicate: Predicate,
-    pub qty: u64,
-    pub flv: Scalar,
+
+    /// Cleartext amount of payment: qty and flavor.
+    pub value: ClearValue,
+
+    /// Blinding factor for the quantity commitment.
     pub qty_blinding: Scalar,
+
+    /// Blinding factor for the flavor commitment.
     pub flv_blinding: Scalar,
+}
+
+/// Private annotation to the receiver that describes derivation path
+#[derive(Clone, Debug)]
+pub struct ReceiverWitness {
+    /// Account's sequence number at which this receiver was generated.
+    pub sequence: u64,
+
+    /// Receiver that can be shared with the payer.
+    pub receiver: Receiver,
 }
 
 /// Contains the anchor for the contract that allows computing the ContractID.
 #[derive(Clone, Debug)]
-pub struct ContractInfo {
+pub struct ReceiverReply {
     /// ID of the receiver to which this info applies
     pub receiver_id: ReceiverID,
 
@@ -109,8 +128,8 @@ impl Receiver {
     pub fn id(&self) -> ReceiverID {
         let mut t = Transcript::new(b"ZkVM.accounts.receiver");
         t.append_message(b"predicate", self.predicate.to_point().as_bytes());
-        t.append_u64(b"qty", self.qty);
-        t.append_message(b"flv", self.flv.as_bytes());
+        t.append_u64(b"qty", self.value.qty);
+        t.append_message(b"flv", self.value.flv.as_bytes());
         t.append_message(b"qty_blinding", self.qty_blinding.as_bytes());
         t.append_message(b"flv_blinding", self.flv_blinding.as_bytes());
         let mut receiver = ReceiverID([0u8; 32]);
@@ -119,10 +138,10 @@ impl Receiver {
     }
 
     /// Constructs a value object from the qty, flavor and blinding factors.
-    pub fn value(&self) -> Value {
+    pub fn blinded_value(&self) -> Value {
         Value {
-            qty: Commitment::blinded_with_factor(self.qty, self.qty_blinding),
-            flv: Commitment::blinded_with_factor(self.flv, self.flv_blinding),
+            qty: Commitment::blinded_with_factor(self.value.qty, self.qty_blinding),
+            flv: Commitment::blinded_with_factor(self.value.flv, self.flv_blinding),
         }
     }
 
@@ -130,38 +149,9 @@ impl Receiver {
     pub fn contract(&self, anchor: Anchor) -> Contract {
         Contract::new(
             self.predicate.clone(),
-            vec![PortableItem::Value(self.value())],
+            vec![PortableItem::Value(self.blinded_value())],
             anchor,
         )
-    }
-
-    /// Selects UTXOs to match the given receiver's qty and flavor.
-    /// Returns the list of selected UTXOs and an amount of _change_ quantity
-    /// that needs to balance the spent utxos.
-    pub fn select_utxos<I, T>(&self, utxos: I) -> (Vec<T>, ClearValue)
-    where
-        I: IntoIterator<Item = T>,
-        T: AsRef<ClearValue>,
-    {
-        let (collected_utxos, total_spent) = utxos
-            .into_iter()
-            .filter(|utxo| utxo.as_ref().flv == self.flv)
-            .fold(
-                (Vec::new(), 0u64),
-                |(mut collected_utxos, mut total_spent), utxo| {
-                    if total_spent < self.qty {
-                        total_spent += utxo.as_ref().qty;
-                        collected_utxos.push(utxo);
-                    }
-                    (collected_utxos, total_spent)
-                },
-            );
-
-        let change = ClearValue {
-            qty: total_spent - self.qty,
-            flv: self.flv,
-        };
-        (collected_utxos, change)
     }
 }
 
@@ -175,46 +165,90 @@ impl Account {
     pub fn at_sequence(&self, seq: u64) -> Self {
         Self {
             xpub: self.xpub,
-            sequence: seq
+            sequence: seq,
         }
     }
 
-    /// Creates a new receiver and increments the sequence number
-    pub fn generate_receiver(&mut self, qty: u64, flv: Scalar) -> Receiver {
-        let key = self
-            .xpub
-            .derive_key(|t| t.append_u64(b"sequence", self.sequence));
-        let (qty_blinding, flv_blinding) = self.derive_blinding_factors(qty, &flv);
-        let receiver = Receiver {
-            predicate: Predicate::Key(key),
-            qty,
-            flv,
-            qty_blinding,
-            flv_blinding,
-        };
+    /// Creates a new receiver and increments the sequence number.
+    pub fn generate_receiver(&mut self, value: ClearValue) -> ReceiverWitness {
+        let seq = self.sequence;
         self.sequence += 1;
-        receiver
+
+        let key = self.xpub.derive_key(|t| t.append_u64(b"sequence", seq));
+        let (qty_blinding, flv_blinding) = self.derive_blinding_factors(&value);
+
+        ReceiverWitness {
+            sequence: seq,
+            receiver: Receiver {
+                predicate: Predicate::Key(key),
+                value,
+                qty_blinding,
+                flv_blinding,
+            },
+        }
+    }
+
+    /// Derives signing key for the current sequence number.
+    pub fn derive_signing_key(sequence: u64, xprv: &Xprv) -> Scalar {
+        xprv.derive_key(|t| t.append_u64(b"sequence", sequence))
+    }
+
+    /// Derives a private key for an Xprv and a given sequence number.
+    pub fn derive_privkey(&self, xprv: Xprv) -> Scalar {
+        xprv.derive_key(|t| t.append_u64(b"sequence", self.sequence))
+    }
+
+    /// Selects UTXOs to match the given receiver's qty and flavor.
+    /// Returns the list of selected UTXOs and an amount of _change_ quantity
+    /// that needs to balance the spent utxos.
+    pub fn select_utxos<I, T>(value: &ClearValue, utxos: I) -> Option<(Vec<T>, ClearValue)>
+    where
+        I: IntoIterator<Item = T>,
+        T: AsRef<ClearValue>,
+    {
+        let (collected_utxos, total_spent) = utxos
+            .into_iter()
+            .filter(|utxo| utxo.as_ref().flv == value.flv)
+            .fold(
+                (Vec::new(), 0u64),
+                |(mut collected_utxos, mut total_spent), utxo| {
+                    if total_spent < value.qty {
+                        total_spent += utxo.as_ref().qty;
+                        collected_utxos.push(utxo);
+                    }
+                    (collected_utxos, total_spent)
+                },
+            );
+
+        // Check if have sufficient funds.
+        // TBD: change to return an appropriate Err()
+        if total_spent < value.qty {
+            return None;
+        }
+
+        let change = ClearValue {
+            qty: total_spent - value.qty,
+            flv: value.flv,
+        };
+        Some((collected_utxos, change))
     }
 
     /// Derives blinding factors for the quantity and flavor.
-    /// Question: since we have to store other metadata anyway,
-    /// should these simply be random?
-    fn derive_blinding_factors(&self, qty: u64, flv: &Scalar) -> (Scalar, Scalar) {
+    /// Q: Why deterministic derivation?
+    /// A: Blinding factors are high-entropy, so loss of such data is fatal.
+    ///    While loss of low-entropy metadata such as qty and flavor is recoverable
+    ///    from multiple other systems (analytics, counter-parties), or even by bruteforce search.
+    fn derive_blinding_factors(&self, value: &ClearValue) -> (Scalar, Scalar) {
         // Blinding factors are deterministically derived in order to avoid
         // having to backup secret material.
         // It can be always re-created from the single root xpub.
         let mut t = Transcript::new(b"ZkVM.accounts.blinding");
         t.append_message(b"xpub", &self.xpub.to_bytes());
         t.append_u64(b"sequence", self.sequence);
-        t.append_u64(b"qty", qty);
-        t.append_message(b"flv", flv.as_bytes());
+        t.append_u64(b"qty", value.qty);
+        t.append_message(b"flv", value.flv.as_bytes());
         let q = t.challenge_scalar(b"qty_blinding");
         let f = t.challenge_scalar(b"flv_blinding");
         (q, f)
-    }
-
-    /// Derives a private key for an Xprv and a given sequence number.
-    pub fn derive_privkey(&self, xprv: Xprv) -> Scalar {
-        xprv.derive_key(|t| t.append_u64(b"sequence", self.sequence))
     }
 }

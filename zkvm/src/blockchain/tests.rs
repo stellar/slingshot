@@ -37,7 +37,7 @@ fn test_state_machine() {
     let bp_gens = BulletproofGens::new(256, 1);
     let privkey = Scalar::from(1u64);
     let initial_contract = make_nonce_contract(1, 100);
-    let (mut state, proofs) = BlockchainState::make_initial(0u64, &[initial_contract.id()][..]);
+    let (mut state, proofs) = BlockchainState::make_initial(0u64, vec![initial_contract.id()]);
 
     let tx = {
         let program = Program::build(|p| {
@@ -67,12 +67,12 @@ fn test_state_machine() {
         utx.sign(sig)
     };
 
-    let (block, future_state) = state
+    let (block, _verified_block, future_state) = state
         .make_block(1, 1, Vec::new(), vec![tx], proofs, &bp_gens)
         .unwrap();
 
     // Apply the block to the state
-    let new_state = state.apply_block(&block, &bp_gens).unwrap();
+    let (_verified_block, new_state) = state.apply_block(&block, &bp_gens).unwrap();
 
     assert_eq!(new_state.utreexo.root(), future_state.utreexo.root());
 }

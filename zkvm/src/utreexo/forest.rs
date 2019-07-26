@@ -52,6 +52,11 @@ impl<M: MerkleItem> Forest<M> {
         }
     }
 
+    /// Generation of this forest.
+    pub fn generation(&self) -> u64 {
+        self.generation
+    }
+
     /// Verifies the item's proof of inclusion.
     pub fn verify(&self, item: &M, proof: &Proof) -> Result<(), UtreexoError> {
         if proof.generation != self.generation {
