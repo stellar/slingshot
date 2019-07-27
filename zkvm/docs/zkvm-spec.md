@@ -1377,13 +1377,13 @@ Fails if:
 
 #### signtx
 
-_contract_ **signtx** → _items..._
+_contract(predicate, payload)_ **signtx** → _items..._
 
 1. Pops the [contract](#contract-type) from the stack.
-2. Adds the contract’s [predicate](#predicate) as a [verification key](#verification-key)
+2. Adds the contract’s [`predicate`](#predicate) as a [verification key](#verification-key)
    to the list of deferred keys for [transaction signature](#transaction-signature)
    check at the end of the VM execution.
-3. Places the [payload](#contract-payload) on the stack (last item on top), discarding the contract.
+3. Places the [`payload`](#contract-payload) on the stack (last item on top), discarding the contract.
 
 Note: the instruction never fails as the only check (signature verification)
 is deferred until the end of VM execution.
@@ -1392,11 +1392,11 @@ is deferred until the end of VM execution.
 
 #### signid
 
-_contract(P) prog sig_ **signid** → _items..._
+_contract(predicate, payload) prog sig_ **signid** → _items..._
 
 1. Pop [string](#string-type) `sig`, [program](#program-type) `prog` and the [contract](#contract-type) from the stack.
-2. Read the [predicate](#predicate) `P` from the contract.
-3. Place the [contract payload](#contract-payload) on the stack (last item on top), discarding the contract.
+2. Read the [`predicate`](#predicate) from the contract.
+3. Place the [`payload`](#contract-payload) on the stack (last item on top), discarding the contract.
 4. Instantiate the [transcript](#transcript):
     ```
     T = Transcript("ZkVM.signid")
@@ -1414,10 +1414,10 @@ _contract(P) prog sig_ **signid** → _items..._
     R = sig[ 0..32]
     s = sig[32..64]
     ```
-8. Perform the [signature protocol](../../musig/docs/musig-spec.md#single-message-signature) using the transcript `T`, public key `P` and the values `R` and `s`:
+8. Perform the [signature protocol](../../musig/docs/musig-spec.md#single-message-signature) using the transcript `T`, public key `P = predicate` and the values `R` and `s`:
     ```
     (s = dlog(R) + e·dlog(P))
-    s·B  ==  R + e·P
+    s·B  ==  R + c·P
     ```
 9. Add the statement to the list of [deferred point operations](#deferred-point-operations).
 10. Set the `prog` as current.
@@ -1431,12 +1431,12 @@ Fails if:
 
 #### signtag
 
-_contract(P) prog sig_ **signtag** → _items... tag_
+_contract(predicate, payload) prog sig_ **signtag** → _items... tag_
 
-1. Pop [data](#data-type) `sig`, [program](#program-type) `prog` and the [contract](#contract-type) from the stack.
-2. Read the [predicate](#predicate) `P` from the contract.
-3. Place the [contract payload](#contract-payload) on the stack (last item on top), discarding the contract.
-4. Verifies that the top item is a [string](#data-type), and reads it as a `tag`. The item remains on the stack.
+1. Pop [string](#string-type) `sig`, [program](#program-type) `prog` and the [contract](#contract-type) from the stack.
+2. Read the [`predicate`](#predicate) from the contract.
+3. Place the [`payload`](#contract-payload) on the stack (last item on top), discarding the contract.
+4. Verifies that the top item is a [string](#string-type), and reads it as a `tag`. The item remains on the stack.
 5. Instantiate the [transcript](#transcript):
     ```
     T = Transcript("ZkVM.signtag")
@@ -1454,19 +1454,19 @@ _contract(P) prog sig_ **signtag** → _items... tag_
     R = sig[ 0..32]
     s = sig[32..64]
     ```
-9. Perform the [signature protocol](../../musig/docs/musig-spec.md#single-message-signature) using the transcript `T`, public key `P` and the values `R` and `s`:
+9. Perform the [signature protocol](../../musig/docs/musig-spec.md#single-message-signature) using the transcript `T`, public key `P = predicate` and the values `R` and `s`:
     ```
     (s = dlog(R) + e·dlog(P))
-    s·B  ==  R + e·P
+    s·B  ==  R + c·P
     ```
 10. Add the statement to the list of [deferred point operations](#deferred-point-operations).
 11. Set the `prog` as current.
 
 Fails if:
-1. `sig` is not a 64-byte long [data](#data-type),
+1. `sig` is not a 64-byte long [string](#string-type),
 2. or `prog` is not a [program type](#program-type),
 3. or `contract` is not a [contract type](#contract-type),
-4. or last item in the payload (`tag`) is not a [string](#data-type).
+4. or last item in the `payload` (`tag`) is not a [string](#string-type).
 
 
 #### ext
