@@ -1,6 +1,6 @@
 # Utreexo specification
 
-Inspired by the original [Utreexo proposal by Tadge Dryja](https://www.youtube.com/watch?v=edRun-6ubCc).
+Inspired by the original [Utreexo proposal by Tadge Dryja](https://dci.mit.edu/utreexo).
 
 * [Overview](#overview)
 * [Definitions](#definitions)

@@ -169,9 +169,10 @@ where
                 Instruction::Output(k) => self.output(k)?,
                 Instruction::Contract(k) => self.contract(k)?,
                 Instruction::Log => self.log()?,
-                Instruction::Signtx => self.signtx()?,
                 Instruction::Call => self.call()?,
-                Instruction::Delegate => self.delegate()?,
+                Instruction::Signtx => self.signtx()?,
+                Instruction::Signid => self.signid()?,
+                Instruction::Signtag => self.signtag()?,
                 Instruction::Ext(opcode) => self.ext(opcode)?,
             }
             return Ok(true);
@@ -562,7 +563,7 @@ where
         Ok(())
     }
 
-    fn delegate(&mut self) -> Result<(), VMError> {
+    fn signid(&mut self) -> Result<(), VMError> {
         // Signature
         let sig = self.pop_item()?.to_data()?.to_bytes();
         let signature = Signature::from_bytes(SliceReader::parse(&sig, |r| r.read_u8x64())?)
@@ -583,9 +584,46 @@ where
         let verification_key = predicate.to_verification_key()?;
 
         // Verify signature using Verification key, over the message `program`
-        let mut t = Transcript::new(b"ZkVM.delegate");
-        t.append_message(b"contract", contract_id.as_ref());
-        t.append_message(b"prog", &prog.to_bytes());
+        let mut t = Transcript::new(b"ZkVM.signid");
+        t.commit_bytes(b"contract", contract_id.as_ref());
+        t.commit_bytes(b"prog", &prog.to_bytes());
+        self.delegate
+            .verify_point_op(|| signature.verify(&mut t, verification_key).into())?;
+
+        // Replace current program with new program
+        self.continue_with_program(prog)?;
+        Ok(())
+    }
+
+    fn signtag(&mut self) -> Result<(), VMError> {
+        // Signature
+        let sig = self.pop_item()?.to_data()?.to_bytes();
+        let signature = Signature::from_bytes(SliceReader::parse(&sig, |r| r.read_u8x64())?)
+            .map_err(|_| VMError::FormatError)?;
+
+        // Program
+        let prog = self.pop_item()?.to_program()?;
+
+        // Place all items in payload onto the stack
+        let contract = self.pop_item()?.to_contract()?;
+        let (_contract_id, predicate, payload, _anchor) = contract.into_tuple();
+
+        for item in payload.into_iter() {
+            self.push_item(item);
+        }
+
+        // Get the tag from the top of the stack (which was the top of the payload)
+        // Keep the tag on the stack, so the contract could use it.
+        let tag = self.pop_item()?.to_data()?;
+        self.push_item(tag.clone());
+
+        // Verification key from predicate
+        let verification_key = predicate.to_verification_key()?;
+
+        // Verify signature using Verification key, over the message `program`
+        let mut t = Transcript::new(b"ZkVM.signtag");
+        t.commit_bytes(b"tag", &tag.to_bytes());
+        t.commit_bytes(b"prog", &prog.to_bytes());
         self.delegate
             .verify_point_op(|| signature.verify(&mut t, verification_key).into())?;
 
