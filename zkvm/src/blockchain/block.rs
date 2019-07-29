@@ -90,7 +90,7 @@ impl Block {
 
 impl VerifiedBlock {
     /// Returns an iterator over all transaction log entries for all transactions in the block.
-    pub fn entries(&self) -> impl Iterator<Item=&TxEntry> {
+    pub fn entries(&self) -> impl Iterator<Item = &TxEntry> {
         self.txs.iter().flat_map(|tx| tx.log.iter())
     }
 }
