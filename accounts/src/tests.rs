@@ -257,44 +257,42 @@ fn process_block(node: &mut Node, block: &Block, bp_gens: &BulletproofGens) {
     let (verified_block, new_state) = node.blockchain.apply_block(&block, &bp_gens).unwrap();
 
     // In a real node utxos will be indexed by ContractID, so lookup will be much faster.
-    for verified_tx in verified_block.txs.iter() {
-        for entry in verified_tx.log.iter() {
-            match entry {
-                TxEntry::Input(contract_id) => {
-                    // Delete confirmed utxos
-                    if let Some(i) = node
-                        .wallet
-                        .utxos
-                        .iter()
-                        .position(|utxo| utxo.contract_id() == *contract_id)
-                    {
-                        node.wallet.utxos.remove(i);
-                    }
+    for entry in verified_block.entries() {
+        match entry {
+            TxEntry::Input(contract_id) => {
+                // Delete confirmed utxos
+                if let Some(i) = node
+                    .wallet
+                    .utxos
+                    .iter()
+                    .position(|utxo| utxo.contract_id() == *contract_id)
+                {
+                    node.wallet.utxos.remove(i);
                 }
-                TxEntry::Output(contract) => {
-                    // Make pending utxos confirmed
-                    if let Some(i) = node
-                        .wallet
-                        .pending_utxos
-                        .iter()
-                        .position(|utxo| utxo.contract_id() == contract.id())
-                    {
-                        let pending_utxo = node.wallet.pending_utxos.remove(i);
-                        let proof = new_state
-                            .catchup
-                            .update_proof(
-                                &pending_utxo.contract_id(),
-                                utreexo::Proof {
-                                    generation: new_state.utreexo.generation() - 1,
-                                    path: None,
-                                },
-                            )
-                            .unwrap();
-                        node.wallet.utxos.push(pending_utxo.to_confirmed(proof));
-                    }
-                }
-                _ => {}
             }
+            TxEntry::Output(contract) => {
+                // Make pending utxos confirmed
+                if let Some(i) = node
+                    .wallet
+                    .pending_utxos
+                    .iter()
+                    .position(|utxo| utxo.contract_id() == contract.id())
+                {
+                    let pending_utxo = node.wallet.pending_utxos.remove(i);
+                    let proof = new_state
+                        .catchup
+                        .update_proof(
+                            &pending_utxo.contract_id(),
+                            utreexo::Proof {
+                                generation: new_state.utreexo.generation() - 1,
+                                path: None,
+                            },
+                        )
+                        .unwrap();
+                    node.wallet.utxos.push(pending_utxo.to_confirmed(proof));
+                }
+            }
+            _ => {}
         }
     }
 

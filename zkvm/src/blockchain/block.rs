@@ -1,7 +1,7 @@
 use merlin::Transcript;
 
 use super::super::utreexo;
-use crate::{MerkleTree, Tx, TxID, VerifiedTx};
+use crate::{MerkleTree, Tx, TxEntry, TxID, VerifiedTx};
 
 /// Identifier of the block, computed as a hash of the `BlockHeader`.
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -85,5 +85,12 @@ impl Block {
     /// while not affecting the validation logic.
     pub fn utxo_proofs(&self) -> impl IntoIterator<Item = &utreexo::Proof> {
         self.all_utxo_proofs.iter()
+    }
+}
+
+impl VerifiedBlock {
+    /// Returns an iterator over all transaction log entries for all transactions in the block.
+    pub fn entries(&self) -> impl Iterator<Item=&TxEntry> {
+        self.txs.iter().flat_map(|tx| tx.log.iter())
     }
 }
