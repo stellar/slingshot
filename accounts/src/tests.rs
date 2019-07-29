@@ -256,7 +256,7 @@ fn process_block(node: &mut Node, block: &Block, bp_gens: &BulletproofGens) {
     //        2. Alice/Bob verify+apply changes, producing a catchup struct.
     let (verified_block, new_state) = node.blockchain.apply_block(&block, &bp_gens).unwrap();
 
-    // In a real node utxos will be indexed by ContractID, so lookup will be much faster.
+    // In a real node utxos will be indexed by ContractID, so lookup will be more efficient.
     for entry in verified_block.entries() {
         match entry {
             TxEntry::Input(contract_id) => {
