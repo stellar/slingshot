@@ -193,11 +193,6 @@ impl Account {
         xprv.derive_key(|t| t.append_u64(b"sequence", sequence))
     }
 
-    /// Derives a private key for an Xprv and a given sequence number.
-    pub fn derive_privkey(&self, xprv: Xprv) -> Scalar {
-        xprv.derive_key(|t| t.append_u64(b"sequence", self.sequence))
-    }
-
     /// Selects UTXOs to match the given receiver's qty and flavor.
     /// Returns the list of selected UTXOs and an amount of _change_ quantity
     /// that needs to balance the spent utxos.
