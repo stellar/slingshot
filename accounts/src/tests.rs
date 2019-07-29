@@ -281,13 +281,7 @@ fn process_block(node: &mut Node, block: &Block, bp_gens: &BulletproofGens) {
                     let pending_utxo = node.wallet.pending_utxos.remove(i);
                     let proof = new_state
                         .catchup
-                        .update_proof(
-                            &pending_utxo.contract_id(),
-                            utreexo::Proof {
-                                generation: new_state.utreexo.generation() - 1,
-                                path: None,
-                            },
-                        )
+                        .update_proof(&pending_utxo.contract_id(), None)
                         .unwrap();
                     node.wallet.utxos.push(pending_utxo.to_confirmed(proof));
                 }
@@ -304,7 +298,7 @@ fn process_block(node: &mut Node, block: &Block, bp_gens: &BulletproofGens) {
         .map(|utxo| {
             new_state
                 .catchup
-                .update_proof(&utxo.contract_id(), utxo.proof.clone())
+                .update_proof(&utxo.contract_id(), Some(utxo.proof.clone()))
         })
         .collect::<Result<Vec<_>, _>>()
         .unwrap();

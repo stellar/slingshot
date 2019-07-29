@@ -63,11 +63,7 @@ impl<M: MerkleItem> Forest<M> {
             return Err(UtreexoError::OutdatedProof);
         }
 
-        // path must be present when verifying against a normalized forest.
-        let path = match &proof.path {
-            Some(path) => path,
-            None => return Err(UtreexoError::InvalidProof),
-        };
+        let path = &proof.path;
 
         // 1. Locate the root under which the item.position is located.
         let (root_level, _) =
@@ -157,52 +153,42 @@ impl<M: MerkleItem> Forest<M> {
 
 impl<M: MerkleItem> WorkForest<M> {
     /// Adds a new item to the tree, appending a node to the end.
-    pub fn insert(&mut self, item: &M) -> Proof {
+    pub fn insert(&mut self, item: &M) {
         let hash = self.hasher.leaf(item);
         self.roots.push(self.heap.allocate(hash, 0, None).index);
-        Proof {
-            generation: self.generation,
-            path: None,
+    }
+
+    /// Deletes the transient item that does not have a proof
+    pub fn delete_transient(&mut self, item: &M) -> Result<(), UtreexoError> {
+        let item_hash = self.hasher.leaf(item);
+        let (index, node) = self
+            .roots_iter()
+            .enumerate()
+            .find(|&(_i, node)| node.level == 0 && node.hash == item_hash)
+            .ok_or(UtreexoError::InvalidProof)?;
+
+        // If the node was already marked as modified - fail.
+        // This may happen if it was a previously stored node with a proof, but part of a 1-node tree;
+        // when such node is deleted via `delete`, it is simply marked as modified.
+        // To prevent double-spending, we need to check that flag here.
+        if node.modified {
+            return Err(UtreexoError::InvalidProof);
         }
+        self.roots.remove(index);
+        return Ok(());
     }
 
     /// Fills in the missing nodes in the tree, and marks the item as deleted.
     /// The algorithm minimizes amount of computation by taking advantage of the already available data.
     pub fn delete(&mut self, item: &M, proof: &Proof) -> Result<(), UtreexoError> {
+        // Determine the existing node which matches the proof, then verify the rest of the proof,
+        // and mark the relevant nodes as modified.
+
         if proof.generation != self.generation {
             return Err(UtreexoError::OutdatedProof);
         }
 
-        // Determine the existing node which matches the proof, then verify the rest of the proof,
-        // and mark the relevant nodes as modified.
-
-        // 0. Fast check: if the proof relates to a newly added item, simply remove it,
-        //    so that transient items do not take up space until normalization.
-        //    Transient items are identified by path=None in their proof.
-        //
-        //    If the item is not transient, but user strips off the path,
-        //    it will get deleted instead of being marked
-        //    as modified, but that's not breaking anything: that node would be removed anyway.
-        let path = match &proof.path {
-            Some(path) => path,
-            None => {
-                // The path is missing, meaning the item must exist among the recent insertions
-                // since the last checkpoint.
-                let item_hash = self.hasher.leaf(item);
-                let (index, node) = self
-                    .roots_iter()
-                    .enumerate()
-                    .find(|&(_i, node)| node.level == 0 && node.hash == item_hash)
-                    .ok_or(UtreexoError::InvalidProof)?;
-
-                // If the node was already marked as modified - fail.
-                if node.modified {
-                    return Err(UtreexoError::InvalidProof);
-                }
-                self.roots.remove(index);
-                return Ok(());
-            }
-        };
+        let path = &proof.path;
 
         // 1. Locate the root under which the item.position is located.
         let top = Node::find_root(self.roots_iter(), |&node| node.level, path.position)
@@ -391,7 +377,15 @@ impl<M: MerkleItem> WorkForest<M> {
 impl<M: MerkleItem> Catchup<M> {
     /// Updates the proof if it's slightly out of date
     /// (made against the previous generation of the Utreexo).
-    pub fn update_proof(&self, item: &M, proof: Proof) -> Result<Proof, UtreexoError> {
+    pub fn update_proof(&self, item: &M, proof: Option<Proof>) -> Result<Proof, UtreexoError> {
+        let proof = proof.unwrap_or(Proof {
+            generation: self.forest.generation - 1, // no overflow risk since Catchup can't be created for gen=0 forest.
+            path: Path {
+                position: 0,
+                neighbors: Vec::new(),
+            },
+        });
+
         // If the proof is already up to date - return w/o changes
         if proof.generation == self.forest.generation {
             return Ok(proof);
@@ -403,10 +397,7 @@ impl<M: MerkleItem> Catchup<M> {
         }
 
         // For the newly added items `position` is irrelevant, so we create a dummy placeholder.
-        let mut path = proof.path.unwrap_or(Path {
-            position: 0,
-            neighbors: Vec::new(),
-        });
+        let mut path = proof.path;
 
         // Climb up the merkle path until we find an existing node or nothing.
         let hash = self.forest.hasher.leaf(item);
@@ -450,7 +441,7 @@ impl<M: MerkleItem> Catchup<M> {
 
         Ok(Proof {
             generation: self.forest.generation,
-            path: Some(path),
+            path,
         })
     }
 }

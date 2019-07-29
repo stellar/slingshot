@@ -20,7 +20,7 @@ pub struct Proof {
     pub generation: u64,
 
     /// Merkle path to the item. If missing, the proof applies to a yet-to-be-normalized forest.
-    pub path: Option<Path>,
+    pub path: Path,
 }
 
 /// Merkle path to the item.
@@ -93,22 +93,11 @@ impl Path {
 impl Encodable for Proof {
     fn encode(&self, buf: &mut Vec<u8>) {
         encoding::write_u64(self.generation, buf);
-        match &self.path {
-            None => encoding::write_u8(0, buf),
-            Some(path) => {
-                encoding::write_u8(1, buf);
-                path.encode(buf)
-            }
-        }
+        self.path.encode(buf);
     }
 
     fn serialized_length(&self) -> usize {
-        return 8
-            + 1
-            + match &self.path {
-                None => 0,
-                Some(path) => path.serialized_length(),
-            };
+        8 + self.path.serialized_length()
     }
 }
 

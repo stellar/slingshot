@@ -31,8 +31,8 @@ impl BlockchainState {
                 let utxos_and_proofs = utxos
                     .into_iter()
                     .map(|utxo| {
-                        let proof = forest.insert(&utxo);
-                        (utxo, proof)
+                        forest.insert(&utxo);
+                        utxo
                     })
                     .collect::<Vec<_>>();
                 Ok(utxos_and_proofs)
@@ -41,7 +41,7 @@ impl BlockchainState {
 
         let proofs = utxos_and_proofs
             .into_iter()
-            .map(|(utxo, proof)| catchup.update_proof(&utxo, proof).unwrap())
+            .map(|utxo| catchup.update_proof(&utxo, None).unwrap())
             .collect::<Vec<_>>();
 
         let tip = BlockHeader::make_initial(timestamp_ms, utreexo.root());
