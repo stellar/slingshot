@@ -6,7 +6,7 @@ use musig::{Signature, VerificationKey};
 use rand::Rng;
 
 use zkvm::{
-    Anchor, Commitment, Contract, Data, PortableItem, Predicate, PredicateTree, Program, Prover,
+    Anchor, Commitment, Contract, PortableItem, Predicate, PredicateTree, Program, Prover, String,
     TxHeader, TxID, VMError, Value, Verifier,
 };
 
@@ -28,7 +28,7 @@ impl ProgramHelper for Program {
             .var() // stack: qty-var
             .push(Commitment::unblinded(flv)) // stack: qty-var, flv
             .var() // stack: qty-var, flv-var
-            .push(Data::default()) // stack: qty-var, flv-var, data
+            .push(String::default()) // stack: qty-var, flv-var, data
             .push(issuance_pred) // stack: qty-var, flv-var, data, pred
             .issue() // stack: issue-contract
             .sign_tx(); // stack: issued-value
@@ -92,7 +92,7 @@ fn generate_predicates(pred_num: usize) -> (Vec<Predicate>, Vec<Scalar>) {
 fn make_flavor() -> (Scalar, Predicate, Scalar) {
     let scalar = Scalar::from(100u64);
     let predicate = Predicate::Key(VerificationKey::from_secret(&scalar));
-    let flavor = Value::issue_flavor(&predicate, Data::default());
+    let flavor = Value::issue_flavor(&predicate, String::default());
     (scalar, predicate, flavor)
 }
 
@@ -486,7 +486,7 @@ fn taproot_program_path() {
         p.push(secret_scalar)
             .push(prev_output.clone())
             .input()
-            .push(Data::Opaque(call_proof.to_bytes().clone()))
+            .push(String::Opaque(call_proof.to_bytes().clone()))
             .program(call_prog.clone())
             .call()
     });
@@ -496,7 +496,7 @@ fn taproot_program_path() {
         p.push(secret_scalar + Scalar::one())
             .push(prev_output.clone())
             .input()
-            .push(Data::Opaque(call_proof.to_bytes().clone()))
+            .push(String::Opaque(call_proof.to_bytes().clone()))
             .program(call_prog)
             .call()
     });

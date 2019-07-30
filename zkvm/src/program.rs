@@ -4,7 +4,7 @@ use crate::merkle::MerkleItem;
 use crate::ops::Instruction;
 use crate::predicate::PredicateTree;
 use crate::scalar_witness::ScalarWitness;
-use crate::types::Data;
+use crate::types::String;
 
 use core::borrow::Borrow;
 use merlin::Transcript;
@@ -126,13 +126,13 @@ impl Program {
         self.0
     }
 
-    /// Adds a `push` instruction with an immediate data type that can be converted into `Data`.
-    pub fn push<T: Into<Data>>(&mut self, data: T) -> &mut Program {
+    /// Adds a `push` instruction with an immediate data that can be converted into `String`.
+    pub fn push<T: Into<String>>(&mut self, data: T) -> &mut Program {
         self.0.push(Instruction::Push(data.into()));
         self
     }
 
-    /// Adds a `program` instruction with an immediate data type that can be converted into `ProgramItem`.
+    /// Adds a `program` instruction with an immediate data that can be converted into `ProgramItem`.
     pub fn program<T: Into<ProgramItem>>(&mut self, prog: T) -> &mut Program {
         self.0.push(Instruction::Program(prog.into()));
         self
@@ -146,7 +146,7 @@ impl Program {
         prog_index: usize,
     ) -> Result<&mut Program, VMError> {
         let (call_proof, program) = pred_tree.create_callproof(prog_index)?;
-        self.push(Data::Opaque(call_proof.to_bytes()))
+        self.push(String::Opaque(call_proof.to_bytes()))
             .program(program)
             .call();
         Ok(self)

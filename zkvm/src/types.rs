@@ -19,7 +19,7 @@ use crate::transcript::TranscriptProtocol;
 #[derive(Debug)]
 pub enum Item {
     /// A data item: a text string, a commitment or a scalar
-    Data(Data),
+    String(String),
 
     /// A program item: a bytecode string for `call`/`delegate` instructions
     Program(ProgramItem),
@@ -47,7 +47,7 @@ pub enum Item {
 #[derive(Clone, Debug)]
 pub enum CopyableItem {
     /// A data item: a text string, a commitment or a scalar
-    Data(Data),
+    String(String),
 
     /// A variable type.
     Variable(Variable),
@@ -55,7 +55,7 @@ pub enum CopyableItem {
 
 /// A data item.
 #[derive(Clone, Debug)]
-pub enum Data {
+pub enum String {
     /// Opaque data item.
     Opaque(Vec<u8>),
 
@@ -103,11 +103,11 @@ pub struct WideValue {
 }
 
 impl Item {
-    /// Downcasts item to `Data` type.
-    pub fn to_data(self) -> Result<Data, VMError> {
+    /// Downcasts item to `String` type.
+    pub fn to_string(self) -> Result<String, VMError> {
         match self {
-            Item::Data(x) => Ok(x),
-            _ => Err(VMError::TypeNotData),
+            Item::String(x) => Ok(x),
+            _ => Err(VMError::TypeNotString),
         }
     }
 
@@ -170,7 +170,7 @@ impl Item {
     /// Downcasts item to a portable type.
     pub fn to_portable(self) -> Result<PortableItem, VMError> {
         match self {
-            Item::Data(x) => Ok(PortableItem::Data(x)),
+            Item::String(x) => Ok(PortableItem::String(x)),
             Item::Program(x) => Ok(PortableItem::Program(x)),
             Item::Value(x) => Ok(PortableItem::Value(x)),
             _ => Err(VMError::TypeNotPortable),
@@ -180,7 +180,7 @@ impl Item {
     /// Downcasts item to a copyable type.
     pub fn to_copyable(self) -> Result<CopyableItem, VMError> {
         match self {
-            Item::Data(x) => Ok(CopyableItem::Data(x)),
+            Item::String(x) => Ok(CopyableItem::String(x)),
             Item::Variable(x) => Ok(CopyableItem::Variable(x)),
             _ => Err(VMError::TypeNotCopyable),
         }
@@ -189,43 +189,43 @@ impl Item {
     /// Copies a copyable type when it's given as a reference.
     pub fn dup_copyable(&self) -> Result<CopyableItem, VMError> {
         match self {
-            Item::Data(x) => Ok(CopyableItem::Data(x.clone())),
+            Item::String(x) => Ok(CopyableItem::String(x.clone())),
             Item::Variable(x) => Ok(CopyableItem::Variable(x.clone())),
             _ => Err(VMError::TypeNotCopyable),
         }
     }
 }
 
-impl Encodable for Data {
-    /// Returns the number of bytes needed to serialize the Data.
+impl Encodable for String {
+    /// Returns the number of bytes needed to serialize the String.
     fn serialized_length(&self) -> usize {
         match self {
-            Data::Opaque(data) => data.len(),
-            Data::Predicate(predicate) => predicate.serialized_length(),
-            Data::Commitment(commitment) => commitment.serialized_length(),
-            Data::Scalar(scalar) => scalar.serialized_length(),
-            Data::Output(output) => output.serialized_length(),
+            String::Opaque(data) => data.len(),
+            String::Predicate(predicate) => predicate.serialized_length(),
+            String::Commitment(commitment) => commitment.serialized_length(),
+            String::Scalar(scalar) => scalar.serialized_length(),
+            String::Output(output) => output.serialized_length(),
         }
     }
     /// Encodes the data item to an opaque bytestring.
     fn encode(&self, buf: &mut Vec<u8>) {
         match self {
-            Data::Opaque(x) => buf.extend_from_slice(x),
-            Data::Predicate(predicate) => predicate.encode(buf),
-            Data::Commitment(commitment) => commitment.encode(buf),
-            Data::Scalar(scalar) => scalar.encode(buf),
-            Data::Output(contract) => contract.encode(buf),
+            String::Opaque(x) => buf.extend_from_slice(x),
+            String::Predicate(predicate) => predicate.encode(buf),
+            String::Commitment(commitment) => commitment.encode(buf),
+            String::Scalar(scalar) => scalar.encode(buf),
+            String::Output(contract) => contract.encode(buf),
         };
     }
 }
 
-impl Data {
-    /// Converts the Data item into a vector of bytes.
+impl String {
+    /// Converts the String item into a vector of bytes.
     /// Opaque item is converted without extra allocations,
     /// non-opaque item is encoded to a newly allocated buffer.
     pub fn to_bytes(self) -> Vec<u8> {
         match self {
-            Data::Opaque(d) => d,
+            String::Opaque(d) => d,
             _ => self.encode_to_vec(),
         }
     }
@@ -233,11 +233,11 @@ impl Data {
     /// Downcast the data item to a `Predicate` type.
     pub fn to_predicate(self) -> Result<Predicate, VMError> {
         match self {
-            Data::Opaque(data) => {
+            String::Opaque(data) => {
                 let point = SliceReader::parse(&data, |r| r.read_point())?;
                 Ok(Predicate::Opaque(point))
             }
-            Data::Predicate(p) => Ok(*p),
+            String::Predicate(p) => Ok(*p),
             _ => Err(VMError::TypeNotPredicate),
         }
     }
@@ -245,11 +245,11 @@ impl Data {
     /// Downcast the data item to a `Commitment` type.
     pub fn to_commitment(self) -> Result<Commitment, VMError> {
         match self {
-            Data::Opaque(data) => {
+            String::Opaque(data) => {
                 let point = SliceReader::parse(&data, |r| r.read_point())?;
                 Ok(Commitment::Closed(point))
             }
-            Data::Commitment(c) => Ok(*c),
+            String::Commitment(c) => Ok(*c),
             _ => Err(VMError::TypeNotCommitment),
         }
     }
@@ -257,8 +257,8 @@ impl Data {
     /// Downcast the data item to an `Contract` type.
     pub fn to_output(self) -> Result<Contract, VMError> {
         match self {
-            Data::Opaque(data) => SliceReader::parse(&data, |r| Contract::decode(r)),
-            Data::Output(i) => Ok(*i),
+            String::Opaque(data) => SliceReader::parse(&data, |r| Contract::decode(r)),
+            String::Output(i) => Ok(*i),
             _ => Err(VMError::TypeNotOutput),
         }
     }
@@ -266,25 +266,25 @@ impl Data {
     /// Downcast the data item to an `ScalarWitness` type.
     pub fn to_scalar(self) -> Result<ScalarWitness, VMError> {
         match self {
-            Data::Opaque(data) => {
+            String::Opaque(data) => {
                 let scalar = SliceReader::parse(&data, |r| r.read_scalar())?;
                 Ok(ScalarWitness::Scalar(scalar))
             }
-            Data::Scalar(scalar_witness) => Ok(*scalar_witness),
+            String::Scalar(scalar_witness) => Ok(*scalar_witness),
             _ => Err(VMError::TypeNotScalar),
         }
     }
 }
 
-impl Default for Data {
+impl Default for String {
     fn default() -> Self {
-        Data::Opaque(Vec::new())
+        String::Opaque(Vec::new())
     }
 }
 
 impl Value {
     /// Computes a flavor as defined by the `issue` instruction from a predicate.
-    pub fn issue_flavor(predicate: &Predicate, metadata: Data) -> Scalar {
+    pub fn issue_flavor(predicate: &Predicate, metadata: String) -> Scalar {
         let mut t = Transcript::new(b"ZkVM.issue");
         t.append_message(b"predicate", predicate.to_point().as_bytes());
         t.append_message(b"metadata", &metadata.to_bytes());
@@ -302,40 +302,40 @@ impl Value {
     }
 }
 
-// Upcasting all witness data types to Data
+// Upcasting all witness data types to String
 
-impl<T> From<T> for Data
+impl<T> From<T> for String
 where
     T: Into<ScalarWitness>,
 {
     fn from(x: T) -> Self {
-        Data::Scalar(Box::new(x.into()))
+        String::Scalar(Box::new(x.into()))
     }
 }
 
-impl From<Predicate> for Data {
+impl From<Predicate> for String {
     fn from(x: Predicate) -> Self {
-        Data::Predicate(Box::new(x))
+        String::Predicate(Box::new(x))
     }
 }
 
-impl From<Commitment> for Data {
+impl From<Commitment> for String {
     fn from(x: Commitment) -> Self {
-        Data::Commitment(Box::new(x))
+        String::Commitment(Box::new(x))
     }
 }
 
-impl From<Contract> for Data {
+impl From<Contract> for String {
     fn from(x: Contract) -> Self {
-        Data::Output(Box::new(x))
+        String::Output(Box::new(x))
     }
 }
 
 // Upcasting all types to Item
 
-impl From<Data> for Item {
-    fn from(x: Data) -> Self {
-        Item::Data(x)
+impl From<String> for Item {
+    fn from(x: String) -> Self {
+        Item::String(x)
     }
 }
 
@@ -385,7 +385,7 @@ impl From<Constraint> for Item {
 impl From<PortableItem> for Item {
     fn from(portable: PortableItem) -> Self {
         match portable {
-            PortableItem::Data(x) => Item::Data(x),
+            PortableItem::String(x) => Item::String(x),
             PortableItem::Program(x) => Item::Program(x),
             PortableItem::Value(x) => Item::Value(x),
         }
@@ -396,7 +396,7 @@ impl From<PortableItem> for Item {
 impl From<CopyableItem> for Item {
     fn from(copyable: CopyableItem) -> Self {
         match copyable {
-            CopyableItem::Data(x) => Item::Data(x),
+            CopyableItem::String(x) => Item::String(x),
             CopyableItem::Variable(x) => Item::Variable(x),
         }
     }

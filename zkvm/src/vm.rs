@@ -182,8 +182,8 @@ where
         }
     }
 
-    fn pushdata(&mut self, data: Data) {
-        self.push_item(data);
+    fn pushdata(&mut self, str: String) {
+        self.push_item(str);
     }
 
     fn pushprogram(&mut self, prog: ProgramItem) {
@@ -289,8 +289,8 @@ where
 
     fn unblind(&mut self) -> Result<(), VMError> {
         // Pop scalar `v` and commitment `V`
-        let v_scalar = self.pop_item()?.to_data()?.to_scalar()?.to_scalar();
-        let v_point = self.pop_item()?.to_data()?.to_commitment()?.to_point();
+        let v_scalar = self.pop_item()?.to_string()?.to_scalar()?.to_scalar();
+        let v_point = self.pop_item()?.to_string()?.to_commitment()?.to_point();
 
         self.delegate.verify_point_op(|| {
             // Check V = vB => V-vB = 0
@@ -302,18 +302,18 @@ where
         })?;
 
         // Push commitment item
-        self.push_item(Data::Opaque(v_point.as_bytes().to_vec()));
+        self.push_item(String::Opaque(v_point.as_bytes().to_vec()));
         Ok(())
     }
 
     fn r#const(&mut self) -> Result<(), VMError> {
-        let scalar_witness = self.pop_item()?.to_data()?.to_scalar()?;
+        let scalar_witness = self.pop_item()?.to_string()?.to_scalar()?;
         self.push_item(Expression::constant(scalar_witness));
         Ok(())
     }
 
     fn var(&mut self) -> Result<(), VMError> {
-        let commitment = self.pop_item()?.to_data()?.to_commitment()?;
+        let commitment = self.pop_item()?.to_string()?.to_commitment()?;
         let v = Variable { commitment };
         self.push_item(v);
         Ok(())
@@ -341,15 +341,15 @@ where
     }
 
     fn log(&mut self) -> Result<(), VMError> {
-        let data = self.pop_item()?.to_data()?;
+        let data = self.pop_item()?.to_string()?;
         self.txlog.push(TxEntry::Data(data.to_bytes()));
         Ok(())
     }
 
     /// _qty flv data pred_ **issue** → _contract_
     fn issue(&mut self) -> Result<(), VMError> {
-        let predicate = self.pop_item()?.to_data()?.to_predicate()?;
-        let metadata = self.pop_item()?.to_data()?;
+        let predicate = self.pop_item()?.to_string()?.to_predicate()?;
+        let metadata = self.pop_item()?.to_string()?;
         let flv = self.pop_item()?.to_variable()?;
         let qty = self.pop_item()?.to_variable()?;
 
@@ -432,7 +432,7 @@ where
 
     /// _input_ **input** → _contract_
     fn input(&mut self) -> Result<(), VMError> {
-        let contract = self.pop_item()?.to_data()?.to_output()?;
+        let contract = self.pop_item()?.to_string()?.to_output()?;
         let contract_id = contract.id();
         self.txlog.push(TxEntry::Input(contract_id));
         self.push_item(contract);
@@ -454,7 +454,7 @@ where
     }
 
     fn pop_contract(&mut self, k: usize) -> Result<Contract, VMError> {
-        let predicate = self.pop_item()?.to_data()?.to_predicate()?;
+        let predicate = self.pop_item()?.to_string()?.to_predicate()?;
 
         if k > self.stack.len() {
             return Err(VMError::StackUnderflow);
@@ -491,8 +491,8 @@ where
 
         // Make cloak outputs and output values using (qty,flv) commitments
         for _ in 0..n {
-            let flv = self.pop_item()?.to_data()?.to_commitment()?;
-            let qty = self.pop_item()?.to_data()?.to_commitment()?;
+            let flv = self.pop_item()?.to_string()?.to_commitment()?;
+            let qty = self.pop_item()?.to_string()?.to_commitment()?;
 
             let value = Value { qty, flv };
 
@@ -544,7 +544,7 @@ where
     fn call(&mut self) -> Result<(), VMError> {
         // Pop program, call proof, and contract
         let program_item = self.pop_item()?.to_program()?;
-        let call_proof_bytes = self.pop_item()?.to_data()?.to_bytes();
+        let call_proof_bytes = self.pop_item()?.to_string()?.to_bytes();
         let call_proof = SliceReader::parse(&call_proof_bytes, |r| CallProof::decode(r))?;
         let contract = self.pop_item()?.to_contract()?;
         let (_contract_id, predicate, payload, _anchor) = contract.into_tuple();
@@ -565,7 +565,7 @@ where
 
     fn signid(&mut self) -> Result<(), VMError> {
         // Signature
-        let sig = self.pop_item()?.to_data()?.to_bytes();
+        let sig = self.pop_item()?.to_string()?.to_bytes();
         let signature = Signature::from_bytes(SliceReader::parse(&sig, |r| r.read_u8x64())?)
             .map_err(|_| VMError::FormatError)?;
 
@@ -597,7 +597,7 @@ where
 
     fn signtag(&mut self) -> Result<(), VMError> {
         // Signature
-        let sig = self.pop_item()?.to_data()?.to_bytes();
+        let sig = self.pop_item()?.to_string()?.to_bytes();
         let signature = Signature::from_bytes(SliceReader::parse(&sig, |r| r.read_u8x64())?)
             .map_err(|_| VMError::FormatError)?;
 
@@ -614,7 +614,7 @@ where
 
         // Get the tag from the top of the stack (which was the top of the payload)
         // Keep the tag on the stack, so the contract could use it.
-        let tag = self.pop_item()?.to_data()?;
+        let tag = self.pop_item()?.to_string()?;
         self.push_item(tag.clone());
 
         // Verification key from predicate

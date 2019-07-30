@@ -35,7 +35,7 @@ pub use self::prover::Prover;
 pub use self::scalar_witness::ScalarWitness;
 pub use self::transcript::TranscriptProtocol;
 pub use self::tx::{Tx, TxEntry, TxHeader, TxID, TxLog, UnsignedTx, VerifiedTx};
-pub use self::types::{ClearValue, Data, Item, Value, WideValue};
+pub use self::types::{ClearValue, Item, String, Value, WideValue};
 pub use self::verifier::Verifier;
 
 pub use self::blockchain::*;

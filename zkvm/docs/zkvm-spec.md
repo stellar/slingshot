@@ -155,7 +155,7 @@ Copyable types can be freely copied with [`dup`](#dup) or destroyed with [`drop`
 * [String](#string-type)
 * [Variable](#variable-type)
 
-Note: the [program type](#program-type) is not copyable to avoid denial-of-service attacks
+Note: the [program](#program-type) is not copyable to avoid denial-of-service attacks
 via repeated execution of the same program that can be scaled exponentially while
 growing the transaction size only linearly.
 
@@ -1370,9 +1370,9 @@ _contract(P) proof prog_ **call** → _results..._
 8. Set the `prog` as current.
 
 Fails if:
-1. `prog` is not a [program type](#program-type),
+1. `prog` is not a [program](#program-type),
 2. or `proof` is not a [string](#string-type),
-3. or `contract` is not a [contract type](#contract-type).
+3. or `contract` is not a [contract](#contract-type).
 
 
 #### signtx
@@ -1424,8 +1424,8 @@ _contract(predicate, payload) prog sig_ **signid** → _items..._
 
 Fails if:
 1. `sig` is not a 64-byte long [string](#string-type),
-2. or `prog` is not a [program type](#program-type),
-3. or `contract` is not a [contract type](#contract-type).
+2. or `prog` is not a [program](#program-type),
+3. or `contract` is not a [contract](#contract-type).
 
 
 
@@ -1464,8 +1464,8 @@ _contract(predicate, payload) prog sig_ **signtag** → _items... tag_
 
 Fails if:
 1. `sig` is not a 64-byte long [string](#string-type),
-2. or `prog` is not a [program type](#program-type),
-3. or `contract` is not a [contract type](#contract-type),
+2. or `prog` is not a [program](#program-type),
+3. or `contract` is not a [contract](#contract-type),
 4. or last item in the `payload` (`tag`) is not a [string](#string-type).
 
 
