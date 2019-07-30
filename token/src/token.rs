@@ -1,5 +1,5 @@
 use curve25519_dalek::scalar::Scalar;
-use zkvm::{Commitment, Contract, Data, Predicate, Program, Value};
+use zkvm::{Commitment, Contract, Predicate, Program, String, Value};
 
 /// Represents a ZkVM Token with unique flavor and embedded
 /// metadata protected by a user-supplied Predicate.
@@ -22,7 +22,7 @@ impl Token {
     pub fn flavor(&self) -> Scalar {
         Value::issue_flavor(
             &self.issuance_predicate,
-            Data::Opaque(self.metadata.clone()),
+            String::Opaque(self.metadata.clone()),
         )
     }
 
@@ -34,7 +34,7 @@ impl Token {
             .var() // stack: qty-var
             .push(Commitment::unblinded(self.flavor())) // stack: qty-var, flv
             .var() // stack: qty-var, flv-var
-            .push(Data::Opaque(self.metadata.clone())) // stack: qty-var, flv-var, data
+            .push(String::Opaque(self.metadata.clone())) // stack: qty-var, flv-var, data
             .push(self.issuance_predicate.clone()) // stack: qty-var, flv-var, data, flv-pred
             .issue() // stack: issue-contract
             .sign_tx() // stack: issued-value
