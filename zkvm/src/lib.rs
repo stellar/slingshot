@@ -24,7 +24,7 @@ pub mod utreexo;
 mod verifier;
 mod vm;
 
-pub use self::constraints::{Commitment, Constraint, Expression, Variable};
+pub use self::constraints::{Commitment, CommitmentWitness, Constraint, Expression, Variable};
 pub use self::contract::{Anchor, Contract, ContractID, PortableItem};
 pub use self::errors::VMError;
 pub use self::merkle::{MerkleItem, MerkleNeighbor, MerkleTree};
@@ -35,7 +35,7 @@ pub use self::prover::Prover;
 pub use self::scalar_witness::ScalarWitness;
 pub use self::transcript::TranscriptProtocol;
 pub use self::tx::{Tx, TxEntry, TxHeader, TxID, TxLog, UnsignedTx, VerifiedTx};
-pub use self::types::{Data, Item, Value, WideValue};
+pub use self::types::{ClearValue, Data, Item, Value, WideValue};
 pub use self::verifier::Verifier;
 
 pub use self::blockchain::*;

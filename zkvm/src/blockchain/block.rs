@@ -1,15 +1,15 @@
 use merlin::Transcript;
 
 use super::super::utreexo;
-use crate::{MerkleTree, Tx, TxID};
+use crate::{MerkleTree, Tx, TxEntry, TxID, VerifiedTx};
 
 /// Identifier of the block, computed as a hash of the `BlockHeader`.
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, PartialEq, Debug)]
 pub struct BlockID(pub [u8; 32]);
 
 /// BlockHeader contains the metadata for the block of transactions,
 /// committing to them, but not containing the actual transactions.
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct BlockHeader {
     /// Network version.
     pub version: u64,
@@ -34,9 +34,18 @@ pub struct Block {
     /// Block header.
     pub header: BlockHeader,
     /// List of transactions.
-    pub txs: Vec<Tx>,
+    pub txs: Vec<Tx>, // no Debug impl for R1CSProof yet
     /// UTXO proofs
     pub all_utxo_proofs: Vec<utreexo::Proof>,
+}
+
+/// VerifiedBlock contains a list of VerifiedTx.
+#[derive(Clone)]
+pub struct VerifiedBlock {
+    /// Block header.
+    pub header: BlockHeader,
+    /// List of transactions.
+    pub txs: Vec<VerifiedTx>,
 }
 
 impl BlockHeader {
@@ -76,5 +85,12 @@ impl Block {
     /// while not affecting the validation logic.
     pub fn utxo_proofs(&self) -> impl IntoIterator<Item = &utreexo::Proof> {
         self.all_utxo_proofs.iter()
+    }
+}
+
+impl VerifiedBlock {
+    /// Returns an iterator over all transaction log entries for all transactions in the block.
+    pub fn entries(&self) -> impl Iterator<Item = &TxEntry> {
+        self.txs.iter().flat_map(|tx| tx.log.iter())
     }
 }

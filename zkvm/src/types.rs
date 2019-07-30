@@ -83,6 +83,17 @@ pub struct Value {
     pub flv: Commitment,
 }
 
+/// Represents a cleartext value of an issued asset in the VM.
+/// This is not the same as `spacesuit::Value` since it is guaranteed to be in-range
+/// (negative quantity is not representable with this type).
+#[derive(Copy, Clone, Debug)]
+pub struct ClearValue {
+    /// Cleartext quantity integer
+    pub qty: u64,
+    /// Cleartext flavor scalar
+    pub flv: Scalar,
+}
+
 /// A wide value type (for negative values created by `borrow`).
 #[derive(Debug)]
 pub struct WideValue {

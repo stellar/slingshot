@@ -717,8 +717,8 @@ The commitment scheme is defined using the [transcript](#transcript) protocol by
 ```
 // given Merkle root M and signing key X
 t = Transcript("ZkVM.taproot")
-t.commit_bytes(b"key", X); // Compressed Ristretto
-t.commit_bytes(b"merkle", M); // [u8; 32]
+t.append_message(b"key", X); // Compressed Ristretto
+t.append_message(b"merkle", M); // [u8; 32]
 t.challenge_scalar(b"h")
 ```
 

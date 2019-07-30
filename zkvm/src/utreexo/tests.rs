@@ -24,19 +24,19 @@ fn transient_items_utreexo() {
 
     let (_, _forest1, _catchup) = forest0
         .update(|forest| {
-            let proof0 = forest.insert(&0);
-            let proof1 = forest.insert(&1);
+            forest.insert(&0);
+            forest.insert(&1);
 
             forest
-                .delete(&1, &proof1)
+                .delete_transient(&1)
                 .expect("just received proof should not fail");
             forest
-                .delete(&0, &proof0)
+                .delete_transient(&0)
                 .expect("just received proof should not fail");
 
             // double spends are not allowed
-            assert_eq!(forest.delete(&1, &proof1), Err(UtreexoError::InvalidProof));
-            assert_eq!(forest.delete(&0, &proof0), Err(UtreexoError::InvalidProof));
+            assert_eq!(forest.delete_transient(&1), Err(UtreexoError::InvalidProof));
+            assert_eq!(forest.delete_transient(&0), Err(UtreexoError::InvalidProof));
 
             Ok(())
         })
@@ -46,8 +46,13 @@ fn transient_items_utreexo() {
 #[test]
 fn insert_to_utreexo() {
     let forest0 = Forest::new();
-    let (proofs0, forest1, catchup1) = forest0
-        .update(|forest| Ok((0..6).map(|i| forest.insert(&i)).collect::<Vec<_>>()))
+    let (_, forest1, catchup1) = forest0
+        .update(|forest| {
+            for i in 0..6 {
+                forest.insert(&i);
+            }
+            Ok(())
+        })
         .expect("cannot fail");
 
     assert_eq!(
@@ -55,19 +60,9 @@ fn insert_to_utreexo() {
         MerkleTree::root::<u64>(b"ZkVM.utreexo", &(0..6).collect::<Vec<_>>())
     );
 
-    for i in 0..6u64 {
-        let result = forest1
-            .update(|forest| forest.delete(&i, &proofs0[i as usize]))
-            .map(|_| ())
-            .unwrap_err();
-        assert_eq!(result, UtreexoError::OutdatedProof);
-    }
-
     // update the proofs
-    let proofs1 = proofs0
-        .into_iter()
-        .enumerate()
-        .map(|(i, p)| catchup1.update_proof(&(i as u64), p).unwrap())
+    let proofs1 = (0..6)
+        .map(|i| catchup1.update_proof(&(i as u64), None).unwrap())
         .collect::<Vec<_>>();
 
     // after the proofs were updated, deletions should succeed
@@ -86,22 +81,18 @@ fn insert_and_delete_utreexo() {
     let n = 6u64;
 
     let forest0 = Forest::new();
-    let (proofs0, forest1, catchup1) = forest0
-        .update(|forest| Ok((0..n).map(|i| forest.insert(&i)).collect::<Vec<_>>()))
+    let (_, forest1, catchup1) = forest0
+        .update(|forest| {
+            for i in 0..n {
+                forest.insert(&i);
+            }
+            Ok(())
+        })
         .expect("cannot fail");
 
-    forest1
-        .verify(&0u64, &proofs0[0])
-        .expect_err("proof should not be valid");
-    forest1
-        .verify(&5u64, &proofs0[5])
-        .expect_err("proof should not be valid");
-
     // update the proofs
-    let proofs1 = proofs0
-        .into_iter()
-        .enumerate()
-        .map(|(i, p)| catchup1.update_proof(&(i as u64), p).unwrap())
+    let proofs1 = (0..n)
+        .map(|i| catchup1.update_proof(&(i as u64), None).unwrap())
         .collect::<Vec<_>>();
 
     // after the proofs were updated, deletions should succeed
@@ -206,22 +197,16 @@ fn insert_and_delete_utreexo() {
     //  a   b   c      ->        b   c       ->    b   c   h
     //  |\  |\  |\               |\  |\            |\  |\  |\
     //  0 1 2 3 4 5          x 1 2 3 4 5 6 7       2 3 4 5 1 6 7
-    let mut proof6 = Proof {
-        generation: 0,
-        path: None,
-    };
-    let mut proof7 = Proof {
-        generation: 0,
-        path: None,
-    };
     let (forest2, catchup) = verify_update(&forest1, &[2, 3, 4, 5, 1, 6, 7], |forest| {
         forest.delete(&0u64, &proofs1[0]).unwrap();
-        proof6 = forest.insert(&6u64);
-        proof7 = forest.insert(&7u64);
+        forest.insert(&6u64);
+        forest.insert(&7u64);
     });
 
-    proof7 = catchup.update_proof(&7u64, proof7).unwrap();
-    let proof2 = catchup.update_proof(&2u64, proofs1[2].clone()).unwrap();
+    let proof7 = catchup.update_proof(&7u64, None).unwrap();
+    let proof2 = catchup
+        .update_proof(&2u64, Some(proofs1[2].clone()))
+        .unwrap();
 
     // delete 2, 7:
     //   f                    f                   g
