@@ -6,8 +6,8 @@ use rand::RngCore;
 
 use super::*;
 use crate::{
-    Anchor, Commitment, Contract, Data, PortableItem, Predicate, Program, Prover, TxHeader, Value,
-    VerificationKey,
+    Anchor, Commitment, Contract, PortableItem, Predicate, Program, Prover, String, TxHeader,
+    Value, VerificationKey,
 };
 
 fn make_predicate(privkey: u64) -> Predicate {
@@ -15,7 +15,7 @@ fn make_predicate(privkey: u64) -> Predicate {
 }
 
 fn nonce_flavor() -> Scalar {
-    Value::issue_flavor(&make_predicate(0u64), Data::default())
+    Value::issue_flavor(&make_predicate(0u64), String::default())
 }
 
 fn make_nonce_contract(privkey: u64, qty: u64) -> Contract {

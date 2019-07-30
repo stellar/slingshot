@@ -32,9 +32,9 @@ pub enum VMError {
     #[fail(display = "Item is not a portable type.")]
     TypeNotPortable,
 
-    /// This error occurs when an instruction requires a data type.
-    #[fail(display = "Item is not a data string.")]
-    TypeNotData,
+    /// This error occurs when an instruction requires a string.
+    #[fail(display = "Item is not a string.")]
+    TypeNotString,
 
     /// This error occurs when an instruction requires a contract type.
     #[fail(display = "Item is not a contract.")]
@@ -48,19 +48,19 @@ pub enum VMError {
     #[fail(display = "Item is not an expression.")]
     TypeNotExpression,
 
-    /// This error occurs when an instruction requires a predicate data type.
+    /// This error occurs when an instruction requires a predicate string.
     #[fail(display = "Item is not a predicate.")]
     TypeNotPredicate,
 
-    /// This error occurs when an instruction requires a commitment data type.
+    /// This error occurs when an instruction requires a commitment string.
     #[fail(display = "Item is not a commitment.")]
     TypeNotCommitment,
 
-    /// This error occurs when an instruction requires an output data type.
+    /// This error occurs when an instruction requires an output string.
     #[fail(display = "Item is not an output.")]
     TypeNotOutput,
 
-    /// This error occurs whn an instruction requires a call proof data type.
+    /// This error occurs whn an instruction requires a call proof string.
     #[fail(display = "Item is not a call proof.")]
     TypeNotCallProof,
 
@@ -68,7 +68,7 @@ pub enum VMError {
     #[fail(display = "Item is not a constraint.")]
     TypeNotConstraint,
 
-    /// This error occurs when an instruction requires a scalar data type.
+    /// This error occurs when an instruction requires a scalar string.
     #[fail(display = "Item is not a scalar.")]
     TypeNotScalar,
 

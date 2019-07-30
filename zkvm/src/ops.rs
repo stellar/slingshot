@@ -7,14 +7,14 @@ use crate::encoding::SliceReader;
 use crate::errors::VMError;
 use crate::program::ProgramItem;
 use crate::scalar_witness::ScalarWitness;
-use crate::types::Data;
+use crate::types::String;
 use core::mem;
 
 /// A decoded instruction.
 #[derive(Clone, Debug)]
 #[allow(missing_docs)]
 pub enum Instruction {
-    Push(Data),
+    Push(String),
     Program(ProgramItem),
     Drop,
     Dup(usize),  // index of the item
@@ -215,7 +215,7 @@ impl Instruction {
             Opcode::Push => {
                 let strlen = program.read_size()?;
                 let data_slice = program.read_bytes(strlen)?;
-                Ok(Instruction::Push(Data::Opaque(data_slice.to_vec())))
+                Ok(Instruction::Push(String::Opaque(data_slice.to_vec())))
             }
             Opcode::Program => {
                 let strlen = program.read_size()?;

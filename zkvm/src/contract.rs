@@ -6,11 +6,11 @@ use crate::errors::VMError;
 use crate::merkle::MerkleItem;
 use crate::predicate::Predicate;
 use crate::program::ProgramItem;
-use crate::types::{Data, Value};
+use crate::types::{String, Value};
 use merlin::Transcript;
 
-/// Prefix for the data type in the Output Structure
-pub const DATA_TYPE: u8 = 0x00;
+/// Prefix for the string type in the Output Structure
+pub const STRING_TYPE: u8 = 0x00;
 
 /// Prefix for the program type in the Output Structure
 pub const PROG_TYPE: u8 = 0x01;
@@ -46,7 +46,7 @@ pub struct Contract {
 #[derive(Clone, Debug)]
 pub enum PortableItem {
     /// Plain data payload
-    Data(Data),
+    String(String),
 
     /// Program payload
     Program(ProgramItem),
@@ -108,8 +108,8 @@ impl Contract {
         //    Output  =  Anchor  ||  Predicate  ||  LE32(k)  ||  Item[0]  || ... ||  Item[k-1]
         //    Anchor  =  <32 bytes>
         // Predicate  =  <32 bytes>
-        //      Item  =  enum { Data, Value }
-        //      Data  =  0x00  ||  LE32(len)  ||  <bytes>
+        //      Item  =  enum { String, Value }
+        //    String  =  0x00  ||  LE32(len)  ||  <bytes>
         //    Program =  0x01  ||  LE32(len)  ||  <bytes>
         //     Value  =  0x02  ||  <32 bytes> ||  <32 bytes>
         let (mut contract, serialized_contract) = reader.slice(|r| {
@@ -192,9 +192,9 @@ impl ContractID {
 impl Encodable for PortableItem {
     fn encode(&self, buf: &mut Vec<u8>) {
         match self {
-            // Data = 0x00 || LE32(len) || <bytes>
-            PortableItem::Data(d) => {
-                encoding::write_u8(DATA_TYPE, buf);
+            // String = 0x00 || LE32(len) || <bytes>
+            PortableItem::String(d) => {
+                encoding::write_u8(STRING_TYPE, buf);
                 encoding::write_u32(d.serialized_length() as u32, buf);
                 d.encode(buf);
             }
@@ -215,7 +215,7 @@ impl Encodable for PortableItem {
     /// Precise length of a serialized payload item
     fn serialized_length(&self) -> usize {
         match self {
-            PortableItem::Data(d) => 1 + 4 + d.serialized_length(),
+            PortableItem::String(d) => 1 + 4 + d.serialized_length(),
             PortableItem::Program(p) => 1 + 4 + p.serialized_length(),
             PortableItem::Value(_) => 1 + 64,
         }
@@ -225,10 +225,10 @@ impl Encodable for PortableItem {
 impl PortableItem {
     fn decode<'a>(output: &mut SliceReader<'a>) -> Result<Self, VMError> {
         match output.read_u8()? {
-            DATA_TYPE => {
+            STRING_TYPE => {
                 let len = output.read_size()?;
                 let bytes = output.read_bytes(len)?;
-                Ok(PortableItem::Data(Data::Opaque(bytes.to_vec())))
+                Ok(PortableItem::String(String::Opaque(bytes.to_vec())))
             }
             PROG_TYPE => {
                 let len = output.read_size()?;
