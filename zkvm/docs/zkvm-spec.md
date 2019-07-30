@@ -486,10 +486,7 @@ Program predicate can be satisfied only via the [`call`](#call) instruction that
 
 ### Contract payload
 
-The contract payload is a list of [items](#types) stored in the [contract](#contract-type) or [output](#output-structure).
-
-Payload of a [contract](#contract-type) may contain data of arbitrary [types](#types),
-but in the [output](#output-structure) only the [portable types](#portable-types) are allowed.
+The contract payload is a list of [portable items](#portable-types) stored in the [contract](#contract-type) or [output](#output-structure).
 
 
 ### Output structure
