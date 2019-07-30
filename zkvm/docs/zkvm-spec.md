@@ -393,7 +393,7 @@ _Contract ID_ is a 32-byte unique identifier of the [contract](#contract-type) a
 
 ```
 T = Transcript("ZkVM.contractid")
-T.commit("contract", output_structure)
+T.append("contract", output_structure)
 id = T.challenge_bytes("id")
 ```
 
@@ -437,9 +437,9 @@ Transcripts have the following operations, each taking a label for domain separa
     ```
     T := Transcript(label)
     ```
-2. **Commit bytes** of arbitrary length:
+2. **Append bytes** of arbitrary length prefixed with a label:
     ```
-    T.commit(label, bytes)
+    T.append(label, bytes)
     ```
 3. **Challenge bytes**
     ```    
@@ -475,7 +475,7 @@ by committing the program string and squeezing a scalar that is bound to it:
 
 ```
 T = Transcript("ZkVM.predicate")
-T.commit("prog", prog)
+T.append("prog", prog)
 h = T.challenge_scalar("h")
 PP(prog) = h·B2
 ```
@@ -576,9 +576,9 @@ Entries are committed to the [transcript](#transcript) using the following schem
 Header commits the transaction version and [time bounds](#time-bounds) using the [LE64](#le64) encoding.
 
 ```
-T.commit("tx.version", LE64(version))
-T.commit("tx.mintime", LE64(mintime))
-T.commit("tx.maxtime", LE64(maxtime))
+T.append("tx.version", LE64(version))
+T.append("tx.mintime", LE64(mintime))
+T.append("tx.maxtime", LE64(maxtime))
 ```
 
 #### Input entry
@@ -586,7 +586,7 @@ T.commit("tx.maxtime", LE64(maxtime))
 Input entry is added using [`input`](#input) instruction.
 
 ```
-T.commit("input", contract_id)
+T.append("input", contract_id)
 ```
 
 where `contract_id` is the [contract ID](#contract-id) of the claimed [UTXO](#utxo).
@@ -596,7 +596,7 @@ where `contract_id` is the [contract ID](#contract-id) of the claimed [UTXO](#ut
 Output entry is added using [`output`](#output) instruction.
 
 ```
-T.commit("output", contract_id)
+T.append("output", contract_id)
 ```
 
 where `contract_id` is the [contract ID](#contract-id) of the newly created [UTXO](#utxo).
@@ -606,8 +606,8 @@ where `contract_id` is the [contract ID](#contract-id) of the newly created [UTX
 Issue entry is added using [`issue`](#issue) instruction.
 
 ```
-T.commit("issue.q", qty_commitment)
-T.commit("issue.f", flavor_commitment)
+T.append("issue.q", qty_commitment)
+T.append("issue.f", flavor_commitment)
 ```
 
 #### Retire entry
@@ -615,8 +615,8 @@ T.commit("issue.f", flavor_commitment)
 Retire entry is added using [`retire`](#retire) instruction.
 
 ```
-T.commit("retire.q", qty_commitment)
-T.commit("retire.f", flavor_commitment)
+T.append("retire.q", qty_commitment)
+T.append("retire.f", flavor_commitment)
 ```
 
 #### Data entry
@@ -624,7 +624,7 @@ T.commit("retire.f", flavor_commitment)
 Data entry is added using [`log`](#log) instruction.
 
 ```
-T.commit("data", data)
+T.append("data", data)
 ```
 
 
@@ -651,8 +651,8 @@ and then generating 32-byte challenge string the label `merkle.leaf`:
 
 ```
 MerkleHash(T, {item}) = {
-    T.commit(<field1 name>, item.field1)
-    T.commit(<field2 name>, item.field2)
+    T.append(<field1 name>, item.field1)
+    T.append(<field2 name>, item.field2)
     ...
     T.challenge_bytes("merkle.leaf")
 }
@@ -662,8 +662,8 @@ For n > 1, let k be the largest power of two smaller than n (i.e., k < n ≤ 2k)
 
 ```
 MerkleHash(T, list) = {
-    T.commit("L", MerkleHash(list[0..k]))
-    T.commit("R", MerkleHash(list[k..n]))
+    T.append("L", MerkleHash(list[0..k]))
+    T.append("R", MerkleHash(list[k..n]))
     T.challenge_bytes("merkle.node")
 }
 ```
@@ -686,7 +686,7 @@ are later used in a [multi-message signature](../../musig/docs/musig-spec.md#mul
     ```
 2. Commit the [transaction ID](#transaction-id):
     ```
-    T.commit("txid", txid)
+    T.append("txid", txid)
     ```
 3. Perform the [multi-message signature protocol](../../musig/docs/musig-spec.md#multi-message-signature) using the transcript `T` and the pairs of verification keys and contract IDs as submessages.
 4. Add the verifier's statement to the list of [deferred point operations](#deferred-point-operations).
@@ -748,8 +748,8 @@ We commit them to the transcript as follows:
 ```
 // given program prog and key blinding_key
 t = Transcript("ZkVM.taproot-blinding")
-t.commit("program", prog)
-t.commit("key", blinding_key)
+t.append("program", prog)
+t.append("key", blinding_key)
 t.challenge_scalar(b"blinding")
 ```
 
@@ -815,7 +815,7 @@ If the execution finishes successfully, VM performs the finishing tasks:
 3. Computes [transaction ID](#transaction-id).
 4. Commits the [transaction ID](#transaction-id) into the R1CS proof transcript before committing low-level variables:
     ```
-    r1cs_transcript.commit("ZkVM.txid", txid)
+    r1cs_transcript.append("ZkVM.txid", txid)
     ```
 5. Computes a verification statement for [transaction signature](#transaction-signature).
 6. Computes a verification statement for [constraint system proof](#constraint-system-proof).
@@ -1223,8 +1223,8 @@ _qty flv metadata pred_ **issue** → _contract_
 6. Computes the _flavor_ scalar defined by the [predicate](#predicate) `pred` using the following [transcript-based](#transcript) protocol:
     ```
     T = Transcript("ZkVM.issue")
-    T.commit("predicate", pred)
-    T.commit("metadata", metadata)
+    T.append("predicate", pred)
+    T.append("metadata", metadata)
     flavor = T.challenge_scalar("flavor")
     ```
 6. Checks that the `flv` has unblinded commitment to `flavor`
@@ -1302,7 +1302,7 @@ _prevoutput_ **input** → _contract_
 4. Sets the [VM’s last anchor](#vm-state) to the ratcheted [contract ID](#contract-id):
     ```
     T = Transcript("ZkVM.ratchet-anchor")
-    T.commit("old", contract_id)
+    T.append("old", contract_id)
     new_anchor = T.challenge_bytes("new")
     ```
 
@@ -1403,11 +1403,11 @@ _contract(predicate, payload) prog sig_ **signid** → _items..._
     ```
 5. Commit the [contract ID](#contract-id) `contract.id` to the transcript:
     ```
-    T.commit("contract", contract_id)
+    T.append("contract", contract_id)
     ```
 6. Commit the program `prog` to the transcript:
     ```
-    T.commit("prog", prog)
+    T.append("prog", prog)
     ```
 7. Extract nonce commitment `R` and scalar `s` from a 64-byte string `sig`:
     ```
@@ -1443,11 +1443,11 @@ _contract(predicate, payload) prog sig_ **signtag** → _items... tag_
     ```
 6. Commit the `tag` to the transcript:
     ```
-    T.commit("tag", tag)
+    T.append("tag", tag)
     ```
 7. Commit the program `prog` to the transcript:
     ```
-    T.commit("prog", prog)
+    T.append("prog", prog)
     ```
 8. Extract nonce commitment `R` and scalar `s` from a 64-byte data `sig`:
     ```

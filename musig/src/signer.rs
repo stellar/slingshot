@@ -52,7 +52,7 @@ impl Signer {
     ) -> (SignerAwaitingPrecommitments<'t, C>, NoncePrecommitment) {
         let mut rng = transcript
             .build_rng()
-            .commit_witness_bytes(b"x_i", &x_i.to_bytes())
+            .rekey_with_witness_bytes(b"x_i", &x_i.to_bytes())
             .finalize(&mut rand::thread_rng());
 
         // Generate ephemeral keypair (r_i, R_i). r_i is a random nonce.

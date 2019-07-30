@@ -133,8 +133,8 @@ and then generating 32-byte challenge string the label `merkle.leaf`:
 
 ```
 MerkleHash(T, {item}) = {
-    T.commit(<field1 name>, item.field1)
-    T.commit(<field2 name>, item.field2)
+    T.append(<field1 name>, item.field1)
+    T.append(<field2 name>, item.field2)
     ...
     T.challenge_bytes("merkle.leaf")
 }
@@ -144,8 +144,8 @@ For `n > 1`, let `k` be the largest power of two smaller than `n` (i.e., `k < n 
 
 ```
 MerkleHash(T, list) = {
-    T.commit("L", MerkleHash(list[0..k]))
-    T.commit("R", MerkleHash(list[k..n]))
+    T.append("L", MerkleHash(list[0..k]))
+    T.append("R", MerkleHash(list[k..n]))
     T.challenge_bytes("merkle.node")
 }
 ```

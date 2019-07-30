@@ -21,18 +21,18 @@ pub trait TranscriptProtocol {
 
 impl TranscriptProtocol for Transcript {
     fn schnorr_sig_domain_sep(&mut self) {
-        self.commit_bytes(b"dom-sep", b"schnorr-signature v1");
+        self.append_message(b"dom-sep", b"schnorr-signature v1");
     }
     fn schnorr_multisig_domain_sep(&mut self, n: usize) {
-        self.commit_bytes(b"dom-sep", b"schnorr-multi-signature v1");
-        self.commit_u64(b"n", n as u64);
+        self.append_message(b"dom-sep", b"schnorr-multi-signature v1");
+        self.append_u64(b"n", n as u64);
     }
     fn commit_scalar(&mut self, label: &'static [u8], scalar: &Scalar) {
-        self.commit_bytes(label, scalar.as_bytes());
+        self.append_message(label, scalar.as_bytes());
     }
 
     fn commit_point(&mut self, label: &'static [u8], point: &CompressedRistretto) {
-        self.commit_bytes(label, point.as_bytes());
+        self.append_message(label, point.as_bytes());
     }
 
     fn challenge_scalar(&mut self, label: &'static [u8]) -> Scalar {

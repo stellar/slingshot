@@ -72,9 +72,9 @@ Transcripts have the following operations, each taking a label for domain separa
     ```
     T := Transcript(label)
     ```
-2. **Commit bytes** of arbitrary length:
+2. **Append bytes** of arbitrary length prefixed with a label:
     ```
-    T.commit(label, bytes)
+    T.append(label, bytes)
     ```
 3. **Challenge bytes**
     ```    
@@ -97,8 +97,8 @@ The protocol is the following:
 1. Prover and verifier obtain a [transcript](#transcript) `T` that is assumed to be already bound to the _message_ being signed.
 2. Prover and verifier both commit the verification key `X` (computed by the prover as `X = x·B`):
     ```
-    T.commit("dom-sep", "schnorr-signature v1")
-    T.commit("X", X)
+    T.append("dom-sep", "schnorr-signature v1")
+    T.append("X", X)
     ```
 3. Prover creates a _secret nonce_: a randomly sampled [scalar](#scalar) `r`.
 4. Prover commits to its nonce:
@@ -108,7 +108,7 @@ The protocol is the following:
 5. Prover sends `R` to the verifier.
 6. Prover and verifier write the nonce commitment `R` to the transcript:
     ```
-    T.commit("R", R)
+    T.append("R", R)
     ```
 7. Prover and verifier compute a Fiat-Shamir challenge scalar `c` using the transcript:
     ```
@@ -135,13 +135,13 @@ only their individual submessages, ignoring other signers’ submessages.
 1. Prover and verifier obtain a [transcript](#transcript) `T` that is assumed to be already bound to the _message_ being signed.
 2. Prover and verifier both commit the set of `n` verification keys `X[i]` and submessages `m[i]`:
     ```
-    T.commit("dom-sep", "schnorr-multi-signature v1")
-    T.commit_bytes("n", LE64(n))
-    T.commit_bytes("X", X[0])
-    T.commit_bytes("m", m[0])
+    T.append("dom-sep", "schnorr-multi-signature v1")
+    T.append("n", LE64(n))
+    T.append("X", X[0])
+    T.append("m", m[0])
     ...
-    T.commit_bytes("X", X[n-1])
-    T.commit_bytes("m", m[n-1])
+    T.append("X", X[n-1])
+    T.append("m", m[n-1])
     ```
 3. Prover creates a _secret nonce_: a randomly sampled [scalar](#scalar) `r`.
 4. Prover commits to its nonce:
@@ -151,12 +151,12 @@ only their individual submessages, ignoring other signers’ submessages.
 5. Prover sends `R` to the verifier.
 6. Prover and verifier write the nonce commitment `R` to the transcript:
     ```
-    T.commit("R", R)
+    T.append("R", R)
     ```
 7. Prover and verifier compute a Fiat-Shamir challenge scalar `e[i]` for each `i`th key, using the _copy_ of transcript `T`:
     ```
     T’ = copy(T)
-    T’.commit_bytes("i", LE64(i))
+    T’.append("i", LE64(i))
     c[i] = T’.challenge_scalar("c")
     ```
 8. Prover blinds the secret scalars `x[i]` using the nonce and the challenges `c[i]`:
