@@ -160,7 +160,7 @@ mod tests {
             .collect();
 
         let mut signtx_transcript = Transcript::new(b"ZkVM.signtx");
-        signtx_transcript.commit_bytes(b"txid", &utx.txid.0);
+        signtx_transcript.append_message(b"txid", &utx.txid.0);
         let sig = Signature::sign_multi(
             privkeys,
             utx.signing_instructions.clone(),

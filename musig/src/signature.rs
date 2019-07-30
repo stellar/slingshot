@@ -25,7 +25,7 @@ impl Signature {
 
         let mut rng = transcript
             .build_rng()
-            .commit_witness_bytes(b"x", &privkey.to_bytes())
+            .rekey_with_witness_bytes(b"x", &privkey.to_bytes())
             .finalize(&mut rand::thread_rng());
 
         // Generate ephemeral keypair (r, R). r is a random nonce.
@@ -72,7 +72,7 @@ impl Signature {
             .build_rng()
             // Use one key that has enough entropy to seed the RNG.
             // We can call unwrap because we know that the privkeys length is > 0.
-            .commit_witness_bytes(b"x_i", privkeys.peek().unwrap().borrow().as_bytes())
+            .rekey_with_witness_bytes(b"x_i", privkeys.peek().unwrap().borrow().as_bytes())
             .finalize(&mut rand::thread_rng());
 
         // Generate ephemeral keypair (r, R). r is a random nonce.

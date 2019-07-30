@@ -72,13 +72,13 @@ A block ID is computed from a [block header](#block-header) using the [transcrip
 
 ```
 T = Transcript("ZkVM.blockheader")
-T.commit("version", LE64(version))
-T.commit("height", LE64(height))
-T.commit("previd", previd)
-T.commit("timestamp_ms", LE64(timestamp_ms))
-T.commit("txroot", txroot)
-T.commit("utxoroot", utxoroot)
-T.commit("ext", ext)
+T.append("version", LE64(version))
+T.append("height", LE64(height))
+T.append("previd", previd)
+T.append("timestamp_ms", LE64(timestamp_ms))
+T.append("txroot", txroot)
+T.append("utxoroot", utxoroot)
+T.append("ext", ext)
 blockid = T.challenge_bytes("id")
 ```
 
@@ -87,7 +87,7 @@ blockid = T.challenge_bytes("id")
 [Contract ID](zkvm-spec.md#contract-id) is hashed as a [merkle leaf hash](utreexo.md#merkle-root) for the Utreexo as follows:
 
 ```
-T.commit("contract", contract_id)
+T.append("contract", contract_id)
 ```
 
 # Procedures

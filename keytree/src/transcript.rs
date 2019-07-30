@@ -15,7 +15,7 @@ pub trait TranscriptProtocol {
 
 impl TranscriptProtocol for Transcript {
     fn commit_point(&mut self, label: &'static [u8], point: &CompressedRistretto) {
-        self.commit_bytes(label, point.as_bytes());
+        self.append_message(label, point.as_bytes());
     }
 
     fn challenge_scalar(&mut self, label: &'static [u8]) -> Scalar {

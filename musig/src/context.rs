@@ -56,7 +56,7 @@ impl Multikey {
 
         // Create transcript for Multikey
         let mut prf = Transcript::new(b"Musig.aggregated-key");
-        prf.commit_u64(b"n", pubkeys.len() as u64);
+        prf.append_u64(b"n", pubkeys.len() as u64);
 
         // Commit pubkeys into the transcript
         // <L> = H(X_1 || X_2 || ... || X_n)
@@ -83,7 +83,7 @@ impl Multikey {
     /// a_i = H(<L>, X_i). The list of pubkeys, <L>, has already been committed to the transcript.
     fn compute_factor(prf: &Transcript, i: usize) -> Scalar {
         let mut a_i_prf = prf.clone();
-        a_i_prf.commit_u64(b"i", i as u64);
+        a_i_prf.append_u64(b"i", i as u64);
         a_i_prf.challenge_scalar(b"a_i")
     }
 
@@ -136,13 +136,13 @@ impl<M: AsRef<[u8]>> MusigContext for Multimessage<M> {
         transcript.schnorr_multisig_domain_sep(self.pairs.len());
         for (key, msg) in &self.pairs {
             transcript.commit_point(b"X", key.as_compressed());
-            transcript.commit_bytes(b"m", msg.as_ref());
+            transcript.append_message(b"m", msg.as_ref());
         }
     }
 
     fn challenge(&self, i: usize, transcript: &mut Transcript) -> Scalar {
         let mut transcript_i = transcript.clone();
-        transcript_i.commit_u64(b"i", i as u64);
+        transcript_i.append_u64(b"i", i as u64);
         transcript_i.challenge_scalar(b"c")
 
         // TBD: Do we want to add a domain separator to the transcript?

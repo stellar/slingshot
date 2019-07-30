@@ -16,8 +16,8 @@ fn test_vectors() {
         "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
     );
 
-    let child_prv = root_prv.derive_intermediate_key(|prf| prf.commit_u64(b"index", 1));
-    let child_pub = root_pub.derive_intermediate_key(|prf| prf.commit_u64(b"index", 1));
+    let child_prv = root_prv.derive_intermediate_key(|prf| prf.append_u64(b"index", 1));
+    let child_pub = root_pub.derive_intermediate_key(|prf| prf.append_u64(b"index", 1));
     assert_eq!(
         to_hex_64(child_prv.to_bytes()),
         "ba9bead5df738767ca184900a4a09ce8afe9f7696e8d3ac1fd99f607a785bf005237586d5b496618a49a876e9a7e077b1715f8635b41b48edcaf2934ebe62683"
@@ -32,8 +32,8 @@ fn test_vectors() {
     );
 
     // Note: the leaf keys must be domain-separated from the intermediate keys, even if using the same PRF customization
-    let child2_prv = child_prv.derive_intermediate_key(|prf| prf.commit_u64(b"index", 1));
-    let child2_pub = child_pub.derive_intermediate_key(|prf| prf.commit_u64(b"index", 1));
+    let child2_prv = child_prv.derive_intermediate_key(|prf| prf.append_u64(b"index", 1));
+    let child2_pub = child_pub.derive_intermediate_key(|prf| prf.append_u64(b"index", 1));
     assert_eq!(
         to_hex_64(child2_prv.to_bytes()),
         "d4719a691dc4e97b27abfc50764d0369a197b3d03b049f0654d4872dd5f01f02f334cb814294776de8551a4e6382c14d05ad2eb6d6391e87069a3fbe2e6ecf77"
@@ -47,8 +47,8 @@ fn test_vectors() {
         "1210a34624dfddb312da90ad5e2d3d4649d7eb50d44dad00972d1e1f422a4f29f334cb814294776de8551a4e6382c14d05ad2eb6d6391e87069a3fbe2e6ecf77"
     );
 
-    let leaf_prv = child_prv.derive_key(|prf| prf.commit_u64(b"index", 1));
-    let leaf_pub = child_pub.derive_key(|prf| prf.commit_u64(b"index", 1));
+    let leaf_prv = child_prv.derive_key(|prf| prf.append_u64(b"index", 1));
+    let leaf_pub = child_pub.derive_key(|prf| prf.append_u64(b"index", 1));
     assert_eq!(
         hex::encode(leaf_prv.to_bytes()),
         "a7a8928dfeae1479a7bf908bfa929b714a62fe334b68e4557105414113ffca04"
@@ -114,7 +114,7 @@ fn random_xprv_derivation_test() {
     let seed = [0u8; 32];
     let mut rng = ChaChaRng::from_seed(seed);
     let xprv = Xprv::random(&mut rng).derive_intermediate_key(|prf| {
-        prf.commit_u64(b"account_id", 34);
+        prf.append_u64(b"account_id", 34);
     });
 
     assert_eq!(
@@ -136,7 +136,7 @@ fn random_xprv_leaf_test() {
     let seed = [0u8; 32];
     let mut rng = ChaChaRng::from_seed(seed);
     let xprv = Xprv::random(&mut rng).derive_key(|prf| {
-        prf.commit_u64(b"invoice_id", 10034);
+        prf.append_u64(b"invoice_id", 10034);
     });
 
     assert_eq!(
@@ -226,7 +226,7 @@ fn random_xpub_derivation_test() {
     let mut rng = ChaChaRng::from_seed(seed);
     let xprv = Xprv::random(&mut rng);
     let xpub = xprv.to_xpub().derive_intermediate_key(|prf| {
-        prf.commit_u64(b"account_id", 34);
+        prf.append_u64(b"account_id", 34);
     });
 
     assert_eq!(
@@ -245,7 +245,7 @@ fn random_xpub_leaf_test() {
     let mut rng = ChaChaRng::from_seed(seed);
     let xprv = Xprv::random(&mut rng);
     let pubkey = xprv.to_xpub().derive_key(|prf| {
-        prf.commit_u64(b"invoice_id", 10034);
+        prf.append_u64(b"invoice_id", 10034);
     });
 
     assert_eq!(

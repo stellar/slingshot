@@ -155,7 +155,7 @@ impl Xpub {
     fn prepare_prf(&self) -> Transcript {
         let mut t = Transcript::new(b"Keytree.derivation");
         t.commit_point(b"pt", self.pubkey.as_compressed());
-        t.commit_bytes(b"dk", &self.dk);
+        t.append_message(b"dk", &self.dk);
         t
     }
 
