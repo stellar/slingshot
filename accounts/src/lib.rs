@@ -161,14 +161,6 @@ impl Account {
         Self { xpub, sequence: 0 }
     }
 
-    /// Returns a version of the account at a given sequence number.
-    pub fn at_sequence(&self, seq: u64) -> Self {
-        Self {
-            xpub: self.xpub,
-            sequence: seq,
-        }
-    }
-
     /// Creates a new receiver and increments the sequence number.
     pub fn generate_receiver(&mut self, value: ClearValue) -> ReceiverWitness {
         let seq = self.sequence;

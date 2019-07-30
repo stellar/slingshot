@@ -272,17 +272,15 @@ fn process_block(node: &mut Node, block: &Block, bp_gens: &BulletproofGens) {
             }
             TxEntry::Output(contract) => {
                 // Make pending utxos confirmed
+                let cid = contract.id();
                 if let Some(i) = node
                     .wallet
                     .pending_utxos
                     .iter()
-                    .position(|utxo| utxo.contract_id() == contract.id())
+                    .position(|utxo| utxo.contract_id() == cid)
                 {
                     let pending_utxo = node.wallet.pending_utxos.remove(i);
-                    let proof = new_state
-                        .catchup
-                        .update_proof(&pending_utxo.contract_id(), None)
-                        .unwrap();
+                    let proof = new_state.catchup.update_proof(&cid, None).unwrap();
                     node.wallet.utxos.push(pending_utxo.to_confirmed(proof));
                 }
             }
