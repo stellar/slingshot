@@ -1,0 +1,19 @@
+{% extends "base" %}
+
+{% block title %}Status{% endblock title %}
+
+{% block main %}
+  <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3">
+    <h1 class="h2">Network status</h1>
+  </div>
+
+  <table class="table xtable-bordered block-header">
+    <tbody>
+      <tr><th>Block height</th><td>511</td></tr>
+      <tr><th>Block ID</th><td>c8ca34d438e9c47d487042ebc78498586e277bf1b69f13464db2124d4246f924</td></tr>
+      <tr><th>Timestamp</th><td>Tue Jul 30 11:47:20 2019 +0300</td></tr>
+      <tr><th>Utreexo root</th><td>08886f9b817bdcd92aa639a2537eabe86c4be04514cc5b4ed7ba9b7881439f44</td></tr>
+      <tr><th>Contract count</th><td>573 012</td></tr>
+    </tbody>
+  </table>
+{% endblock main %}

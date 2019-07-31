@@ -1,0 +1,13 @@
+[package]
+name = "hello-rocket"
+version = "0.1.0"
+authors = ["Oleg Andreev <oleganza@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+rocket = "0.4.2"
+
+[dependencies.rocket_contrib]
+version = "0.4.2"
+default-features = false
+features = ["handlebars_templates", "tera_templates", "serve"]
