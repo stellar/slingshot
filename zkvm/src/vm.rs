@@ -400,12 +400,16 @@ where
         )
         .map_err(|_| VMError::R1CSInconsistency)?;
 
+        let neg_qty_assignment = qty_assignment.map(|q| -q);
+
         let neg_qty_var = self
             .delegate
             .cs()
-            .allocate(qty_assignment.map(|q| -q.to_scalar()))
+            .allocate(neg_qty_assignment.map(|q| q.to_scalar()))
             .map_err(|e| VMError::R1CSError(e))?;
+
         self.delegate.cs().constrain(qty_var + neg_qty_var);
+
         let value = Value {
             qty: qty.commitment.clone(),
             flv: flv.commitment,
@@ -413,7 +417,7 @@ where
         let wide_value = WideValue {
             r1cs_qty: neg_qty_var,
             r1cs_flv: flv_var,
-            witness: match (qty_assignment, flv_assignment) {
+            witness: match (neg_qty_assignment, flv_assignment) {
                 (Some(q), Some(f)) => Some((q, f)),
                 _ => None,
             },

@@ -577,3 +577,22 @@ fn constraints_cannot_be_copied_or_dropped() {
         Err(VMError::TypeNotCopyable)
     );
 }
+
+#[test]
+fn borrow_output() {
+    //inputs 10 units, borrows 5 units, outputs two (5 units)
+    let flv = Scalar::from(1u64);
+    let (preds, scalars) = generate_predicates(3);
+    let borrow_prog = Program::build(|p| {
+        p.input_helper(10, flv, preds[1].clone()) // stack: Value(10,1)
+            .push(Commitment::blinded(5u64)) // stack: Value(10,1), qty(5)
+            .var() // stack: Value(10,1), qty-var(5)
+            .push(Commitment::blinded(flv)) // stack: Value(10,1), qty-var(5),   flv(1)
+            .var() // stack: Value(10,1), qty-var(5),   flv-var(1)
+            .borrow() // stack: Value(10,1), Value(-5, 1), Value(5,1)
+            .output_helper(preds[0].clone()) // stack: Value(10,1), Value(-5, 1); outputs (5,1)
+            .cloak_helper(2, vec![(5u64, flv)]) // stack:  Value(5,1)
+            .output_helper(preds[2].clone()) // outputs (5,1)
+    });
+    build_and_verify(borrow_prog, &vec![scalars[1].clone()]).unwrap();
+}
