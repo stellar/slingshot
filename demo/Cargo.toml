@@ -1,13 +1,33 @@
 [package]
-name = "hello-rocket"
+name = "zkvm-demo"
 version = "0.1.0"
 authors = ["Oleg Andreev <oleganza@gmail.com>"]
 edition = "2018"
 
 [dependencies]
 rocket = "0.4.2"
+diesel = { version = "1.0.0", features = ["postgres"] }
+dotenv = "0.9.0"
+curve25519-dalek = { version = "1.0.1", features = ["serde"] }
+
+[dependencies.bulletproofs]
+git = "https://github.com/dalek-cryptography/bulletproofs"
+branch = "develop"
+features = ["yoloproofs"]
+
+[dependencies.keytree]
+path = "../keytree"
+
+[dependencies.musig]
+path = "../musig"
+
+[dependencies.zkvm]
+path = "../zkvm"
+
+[dependencies.accounts]
+path = "../accounts"
 
 [dependencies.rocket_contrib]
 version = "0.4.2"
 default-features = false
-features = ["handlebars_templates", "tera_templates", "serve"]
+features = ["handlebars_templates", "tera_templates", "serve", "diesel_sqlite_pool"]

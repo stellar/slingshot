@@ -1,15 +1,21 @@
 #![feature(proc_macro_hygiene, decl_macro)]
 
 #[macro_use] extern crate rocket;
-extern crate rocket_contrib;
+#[macro_use] extern crate rocket_contrib;
+
+mod models;
 
 use rocket::Request;
 use rocket_contrib::templates::Template;
 use rocket_contrib::serve::StaticFiles;
+use rocket_contrib::databases::diesel;
 use std::collections::HashMap;
 
+#[database("demodb")]
+struct DBConnection(diesel::SqliteConnection);
+
 #[get("/")]
-fn network_status() -> Template {
+fn network_status(dbconn: DBConnection) -> Template {
     let mut context = HashMap::<&str, String>::new();
     context.insert("test", "here is test".into());
     Template::render("network/status", &context)
@@ -53,6 +59,7 @@ fn not_found(req: &Request<'_>) -> Template {
 
 fn main() {
     rocket::ignite()
+    .attach(DBConnection::fairing())
     .attach(Template::fairing())
     .mount("/static", StaticFiles::from("static"))
     .mount("/", routes![
