@@ -27,16 +27,6 @@ impl<'a> SliceReader<'a> {
         self.end - self.start
     }
 
-    pub fn slice<F, T>(&mut self, slice_fn: F) -> Result<(T, &[u8]), VMError>
-    where
-        F: FnOnce(&mut Self) -> Result<T, VMError>,
-    {
-        let start = self.start;
-        let result = slice_fn(self)?;
-        let end = self.start;
-        Ok((result, &self.whole[start..end]))
-    }
-
     pub fn parse<F, T>(data: &'a [u8], parse_fn: F) -> Result<T, VMError>
     where
         F: FnOnce(&mut Self) -> Result<T, VMError>,

@@ -98,14 +98,14 @@ fn make_flavor() -> (Scalar, Predicate, Scalar) {
 
 /// Creates an Output contract with given quantity, flavor, and predicate.
 fn make_output(qty: u64, flv: Scalar, predicate: Predicate) -> Contract {
-    Contract::new(
+    Contract {
         predicate,
-        vec![PortableItem::Value(Value {
+        payload: vec![PortableItem::Value(Value {
             qty: Commitment::blinded(qty),
             flv: Commitment::blinded(flv),
         })],
-        Anchor::from_raw_bytes([0u8; 32]),
-    )
+        anchor: Anchor::from_raw_bytes([0u8; 32]),
+    }
 }
 
 fn build_and_verify(program: Program, keys: &Vec<Scalar>) -> Result<TxID, VMError> {
