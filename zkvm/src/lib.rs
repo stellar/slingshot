@@ -23,7 +23,6 @@ mod types;
 pub mod utreexo;
 mod verifier;
 mod vm;
-mod serialization;
 
 pub use self::constraints::{Commitment, CommitmentWitness, Constraint, Expression, Variable};
 pub use self::contract::{Anchor, Contract, ContractID, PortableItem};
