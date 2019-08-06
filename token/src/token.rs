@@ -69,11 +69,11 @@ mod tests {
     };
 
     fn add_dummy_input(p: &mut Program, dummy_key: &Scalar) {
-        let contract = Contract::new(
-            Predicate::Key(VerificationKey::from_secret(dummy_key)),
-            vec![],
-            Anchor::from_raw_bytes([0u8; 32]),
-        );
+        let contract = Contract {
+            predicate: Predicate::Key(VerificationKey::from_secret(dummy_key)),
+            payload: vec![],
+            anchor: Anchor::from_raw_bytes([0u8; 32]),
+        };
         p.push(contract).input().sign_tx();
     }
 
