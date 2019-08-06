@@ -2,8 +2,7 @@ use bulletproofs::r1cs::R1CSProof;
 use curve25519_dalek::ristretto::CompressedRistretto;
 use merlin::Transcript;
 use musig::{Signature, VerificationKey};
-use serde::de::Visitor;
-use serde::{self, Deserialize, Deserializer, Serialize, Serializer};
+use serde::{self, Deserialize, Serialize};
 
 use crate::contract::{Contract, ContractID};
 use crate::encoding;
@@ -17,12 +16,12 @@ use crate::transcript::TranscriptProtocol;
 pub type TxLog = Vec<TxEntry>;
 
 /// Transaction ID is a unique 32-byte identifier of a transaction
-#[derive(Copy, Clone, PartialEq, Debug)]
+#[derive(Copy, Clone, PartialEq, Debug, Serialize, Deserialize)]
 pub struct TxID(pub [u8; 32]);
 
 /// Entry in a transaction log
-#[derive(Clone, Debug)]
 #[allow(missing_docs)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum TxEntry {
     Header(TxHeader),
     Issue(CompressedRistretto, CompressedRistretto),
@@ -33,7 +32,7 @@ pub enum TxEntry {
 }
 
 /// Header metadata for the transaction
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Deserialize, Serialize)]
 pub struct TxHeader {
     /// Version of the transaction
     pub version: u64,
@@ -69,7 +68,7 @@ pub struct UnsignedTx {
 }
 
 /// Instance of a transaction that contains all necessary data to validate it.
-#[derive(Clone)]
+#[derive(Clone,Serialize,Deserialize)]
 pub struct Tx {
     /// Header metadata
     pub header: TxHeader,
@@ -175,40 +174,6 @@ impl Tx {
     /// Returns an error if the byte slice cannot be parsed into a `Tx`.
     pub fn from_bytes(slice: &[u8]) -> Result<Tx, VMError> {
         SliceReader::parse(slice, |r| Self::decode(r))
-    }
-}
-
-impl Serialize for Tx {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        serializer.serialize_bytes(&self.to_bytes()[..])
-    }
-}
-impl<'de> Deserialize<'de> for Tx {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        struct TxVisitor;
-
-        impl<'de> Visitor<'de> for TxVisitor {
-            type Value = Tx;
-
-            fn expecting(&self, formatter: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
-                formatter.write_str("a valid Tx")
-            }
-
-            fn visit_bytes<E>(self, v: &[u8]) -> Result<Tx, E>
-            where
-                E: serde::de::Error,
-            {
-                Tx::from_bytes(v).map_err(serde::de::Error::custom)
-            }
-        }
-
-        deserializer.deserialize_bytes(TxVisitor)
     }
 }
 

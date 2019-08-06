@@ -1,7 +1,7 @@
+use serde::{self, Deserialize, Serialize};
+
 use crate::constraints::Commitment;
-use crate::encoding;
-use crate::encoding::Encodable;
-use crate::encoding::SliceReader;
+use crate::encoding::{self, Encodable, SliceReader};
 use crate::errors::VMError;
 use crate::merkle::MerkleItem;
 use crate::predicate::Predicate;
@@ -19,11 +19,11 @@ pub const PROG_TYPE: u8 = 0x01;
 pub const VALUE_TYPE: u8 = 0x02;
 
 /// A unique identifier for an anchor
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, Serialize, Deserialize)]
 pub struct Anchor([u8; 32]);
 
 /// A unique identifier for a contract.
-#[derive(Copy, Clone, Eq, Hash, Debug, PartialEq, Default)]
+#[derive(Copy, Clone, Eq, Hash, Debug, PartialEq, Default, Serialize, Deserialize)]
 pub struct ContractID([u8; 32]);
 
 /// A ZkVM contract that holds a _payload_ (a list of portable items) protected by a _predicate_.
