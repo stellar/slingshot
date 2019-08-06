@@ -22,14 +22,14 @@ fn make_nonce_contract(privkey: u64, qty: u64) -> Contract {
     let mut anchor_bytes = [0u8; 32];
     rand::thread_rng().fill_bytes(&mut anchor_bytes);
 
-    Contract::new(
-        make_predicate(privkey),
-        vec![PortableItem::Value(Value {
+    Contract {
+        predicate: make_predicate(privkey),
+        payload: vec![PortableItem::Value(Value {
             qty: Commitment::unblinded(qty),
             flv: Commitment::unblinded(nonce_flavor()),
         })],
-        Anchor::from_raw_bytes(anchor_bytes),
-    )
+        anchor: Anchor::from_raw_bytes(anchor_bytes),
+    }
 }
 
 #[test]

@@ -29,17 +29,14 @@ pub struct ContractID([u8; 32]);
 /// A ZkVM contract that holds a _payload_ (a list of portable items) protected by a _predicate_.
 #[derive(Clone, Debug)]
 pub struct Contract {
-    /// ID of the contract
-    id: ContractID,
-
     /// Predicate that guards access to the contract’s payload.
-    predicate: Predicate,
+    pub predicate: Predicate,
 
     /// List of payload items.
-    payload: Vec<PortableItem>,
+    pub payload: Vec<PortableItem>,
 
     /// Anchor string which makes the contract unique.
-    anchor: Anchor,
+    pub anchor: Anchor,
 }
 
 /// Representation of items that can be stored within outputs and contracts.
@@ -75,32 +72,14 @@ impl Encodable for Contract {
     }
 }
 impl Contract {
-    /// Creates a contract from a given fields
-    pub fn new(predicate: Predicate, payload: Vec<PortableItem>, anchor: Anchor) -> Self {
-        let mut contract = Self {
-            id: ContractID::default(), // will be updated below
-            predicate,
-            payload,
-            anchor,
-        };
-        let buf = contract.encode_to_vec();
-        contract.id = ContractID::from_serialized_contract(&buf);
-        contract
-    }
-
     /// Returns the contract's ID
     pub fn id(&self) -> ContractID {
-        self.id
-    }
-
-    /// Returns the contract's anchor
-    pub fn anchor(&self) -> Anchor {
-        self.anchor
-    }
-
-    /// Breaks up the contract into individual fields
-    pub fn into_tuple(self) -> (ContractID, Predicate, Vec<PortableItem>, Anchor) {
-        (self.id, self.predicate, self.payload, self.anchor)
+        let buf = self.encode_to_vec();
+        let mut t = Transcript::new(b"ZkVM.contractid");
+        t.append_message(b"contract", &buf);
+        let mut id = [0u8; 32];
+        t.challenge_bytes(b"id", &mut id);
+        ContractID(id)
     }
 
     /// Parses a contract from an output object
@@ -112,29 +91,25 @@ impl Contract {
         //    String  =  0x00  ||  LE32(len)  ||  <bytes>
         //    Program =  0x01  ||  LE32(len)  ||  <bytes>
         //     Value  =  0x02  ||  <32 bytes> ||  <32 bytes>
-        let (mut contract, serialized_contract) = reader.slice(|r| {
-            let anchor = Anchor(r.read_u8x32()?);
-            let predicate = Predicate::Opaque(r.read_point()?);
-            let k = r.read_size()?;
 
-            // sanity check: avoid allocating unreasonably more memory
-            // just because an untrusted length prefix says so.
-            if k > r.len() {
-                return Err(VMError::FormatError);
-            }
-            let mut payload: Vec<PortableItem> = Vec::with_capacity(k);
-            for _ in 0..k {
-                payload.push(PortableItem::decode(r)?);
-            }
-            Ok(Contract {
-                id: ContractID::default(), // will be updated below
-                anchor,
-                predicate,
-                payload,
-            })
-        })?;
-        contract.id = ContractID::from_serialized_contract(serialized_contract);
-        Ok(contract)
+        let anchor = Anchor(reader.read_u8x32()?);
+        let predicate = Predicate::Opaque(reader.read_point()?);
+        let k = reader.read_size()?;
+
+        // sanity check: avoid allocating unreasonably more memory
+        // just because an untrusted length prefix says so.
+        if k > reader.len() {
+            return Err(VMError::FormatError);
+        }
+        let mut payload: Vec<PortableItem> = Vec::with_capacity(k);
+        for _ in 0..k {
+            payload.push(PortableItem::decode(reader)?);
+        }
+        Ok(Contract {
+            anchor,
+            predicate,
+            payload,
+        })
     }
 }
 
@@ -173,14 +148,6 @@ impl ContractID {
     /// Provides a view into the contract ID's bytes.
     pub fn as_bytes(&self) -> &[u8] {
         &self.0
-    }
-
-    fn from_serialized_contract(bytes: &[u8]) -> Self {
-        let mut t = Transcript::new(b"ZkVM.contractid");
-        t.append_message(b"contract", bytes);
-        let mut id = [0u8; 32];
-        t.challenge_bytes(b"id", &mut id);
-        Self(id)
     }
 
     /// Re-wraps contract ID bytes into Anchor

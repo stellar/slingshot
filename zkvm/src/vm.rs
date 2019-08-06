@@ -537,9 +537,11 @@ where
     // _contract_ **signtx** → _results..._
     fn signtx(&mut self) -> Result<(), VMError> {
         let contract = self.pop_item()?.to_contract()?;
-        let (contract_id, predicate, payload, _anchor) = contract.into_tuple();
-        self.delegate.process_tx_signature(predicate, contract_id)?;
-        for item in payload.into_iter() {
+        let contract_id = contract.id();
+
+        self.delegate
+            .process_tx_signature(contract.predicate, contract_id)?;
+        for item in contract.payload.into_iter() {
             self.push_item(item);
         }
         Ok(())
@@ -551,14 +553,13 @@ where
         let call_proof_bytes = self.pop_item()?.to_string()?.to_bytes();
         let call_proof = SliceReader::parse(&call_proof_bytes, |r| CallProof::decode(r))?;
         let contract = self.pop_item()?.to_contract()?;
-        let (_contract_id, predicate, payload, _anchor) = contract.into_tuple();
 
         // 0 == -P + X + h1(X, M)*B
         self.delegate
-            .verify_point_op(|| predicate.prove_taproot(&program_item, &call_proof))?;
+            .verify_point_op(|| contract.predicate.prove_taproot(&program_item, &call_proof))?;
 
         // Place contract payload on the stack
-        for item in payload.into_iter() {
+        for item in contract.payload.into_iter() {
             self.push_item(item);
         }
 
@@ -578,14 +579,14 @@ where
 
         // Place all items in payload onto the stack
         let contract = self.pop_item()?.to_contract()?;
-        let (contract_id, predicate, payload, _anchor) = contract.into_tuple();
+        let contract_id = contract.id();
 
-        for item in payload.into_iter() {
+        for item in contract.payload.into_iter() {
             self.push_item(item);
         }
 
         // Verification key from predicate
-        let verification_key = predicate.to_verification_key()?;
+        let verification_key = contract.predicate.to_verification_key()?;
 
         // Verify signature using Verification key, over the message `program`
         let mut t = Transcript::new(b"ZkVM.signid");
@@ -610,9 +611,8 @@ where
 
         // Place all items in payload onto the stack
         let contract = self.pop_item()?.to_contract()?;
-        let (_contract_id, predicate, payload, _anchor) = contract.into_tuple();
 
-        for item in payload.into_iter() {
+        for item in contract.payload.into_iter() {
             self.push_item(item);
         }
 
@@ -622,7 +622,7 @@ where
         self.push_item(tag.clone());
 
         // Verification key from predicate
-        let verification_key = predicate.to_verification_key()?;
+        let verification_key = contract.predicate.to_verification_key()?;
 
         // Verify signature using Verification key, over the message `program`
         let mut t = Transcript::new(b"ZkVM.signtag");
@@ -740,7 +740,11 @@ where
         payload: Vec<PortableItem>,
     ) -> Result<Contract, VMError> {
         let anchor = mem::replace(&mut self.last_anchor, None).ok_or(VMError::AnchorMissing)?;
-        let contract = Contract::new(predicate, payload, anchor);
+        let contract = Contract {
+            predicate,
+            payload,
+            anchor,
+        };
         self.last_anchor = Some(contract.id().to_anchor());
         Ok(contract)
     }
