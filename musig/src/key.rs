@@ -1,7 +1,7 @@
-use serde::{Serialize, Deserialize};
 use curve25519_dalek::constants::RISTRETTO_BASEPOINT_POINT;
 use curve25519_dalek::ristretto::{CompressedRistretto, RistrettoPoint};
 use curve25519_dalek::scalar::Scalar;
+use serde::{Deserialize, Serialize};
 
 /// Verification key (aka "pubkey") is a wrapper type around a Ristretto point
 /// that lets the verifier to check the signature.

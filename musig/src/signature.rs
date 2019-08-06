@@ -1,4 +1,3 @@
-use serde::{Serialize, Deserialize};
 use super::context::{Multimessage, MusigContext};
 use super::deferred_verification::DeferredVerification;
 use super::errors::MusigError;
@@ -9,6 +8,7 @@ use curve25519_dalek::constants::RISTRETTO_BASEPOINT_POINT;
 use curve25519_dalek::ristretto::CompressedRistretto;
 use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
+use serde::{Deserialize, Serialize};
 
 /// A Schnorr signature.
 #[derive(Debug, Clone, Serialize, Deserialize)]

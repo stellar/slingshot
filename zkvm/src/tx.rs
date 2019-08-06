@@ -68,7 +68,7 @@ pub struct UnsignedTx {
 }
 
 /// Instance of a transaction that contains all necessary data to validate it.
-#[derive(Clone,Serialize,Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Tx {
     /// Header metadata
     pub header: TxHeader,
