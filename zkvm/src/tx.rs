@@ -21,7 +21,7 @@ pub struct TxID(pub [u8; 32]);
 
 /// Entry in a transaction log
 #[allow(missing_docs)]
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug)]
 pub enum TxEntry {
     Header(TxHeader),
     Issue(CompressedRistretto, CompressedRistretto),
