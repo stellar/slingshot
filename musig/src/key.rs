@@ -1,10 +1,12 @@
 use curve25519_dalek::constants::RISTRETTO_BASEPOINT_POINT;
 use curve25519_dalek::ristretto::{CompressedRistretto, RistrettoPoint};
 use curve25519_dalek::scalar::Scalar;
+use serde::{Deserialize, Serialize};
 
 /// Verification key (aka "pubkey") is a wrapper type around a Ristretto point
 /// that lets the verifier to check the signature.
-#[derive(Copy, Clone, PartialEq, Eq, Default, Debug)]
+#[derive(Copy, Clone, PartialEq, Eq, Default, Debug, Serialize, Deserialize)]
+#[serde(from=RistrettoPoint, into=RistrettoPoint)]
 pub struct VerificationKey {
     point: RistrettoPoint,
     precompressed: CompressedRistretto,
@@ -61,5 +63,11 @@ impl From<RistrettoPoint> for VerificationKey {
             point: p,
             precompressed: p.compress(),
         }
+    }
+}
+
+impl Into<RistrettoPoint> for VerificationKey {
+    fn into(self) -> RistrettoPoint {
+        self.into_point()
     }
 }

@@ -18,6 +18,7 @@ rand = "0.6"
 subtle = "2"
 curve25519-dalek = { version = "1.0.1", features = ["serde"] }
 serde = { version = "1.0", features=["derive"] }
+subtle-encoding = "0.3"
 
 [dependencies.bulletproofs]
 git = "https://github.com/dalek-cryptography/bulletproofs"
@@ -33,3 +34,4 @@ path = "../musig"
 [dev-dependencies]
 criterion = "0.2"
 hex = "^0.3"
+serde_json = "1.0"

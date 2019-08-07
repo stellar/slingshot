@@ -8,9 +8,10 @@ use curve25519_dalek::constants::RISTRETTO_BASEPOINT_POINT;
 use curve25519_dalek::ristretto::CompressedRistretto;
 use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
+use serde::{Deserialize, Serialize};
 
 /// A Schnorr signature.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Signature {
     /// Signature using nonce, message, and private key
     pub s: Scalar,
