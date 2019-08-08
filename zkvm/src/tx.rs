@@ -2,7 +2,7 @@ use bulletproofs::r1cs::R1CSProof;
 use curve25519_dalek::ristretto::CompressedRistretto;
 use merlin::Transcript;
 use musig::{Signature, VerificationKey};
-use serde::{self, Deserialize, Serialize};
+use serde::{Deserialize, Serialize};
 
 use crate::contract::{Contract, ContractID};
 use crate::encoding;

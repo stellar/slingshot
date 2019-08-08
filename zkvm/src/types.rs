@@ -3,6 +3,7 @@
 use bulletproofs::r1cs;
 use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
+use serde::{Deserialize, Serialize};
 use spacesuit::SignedInteger;
 
 use crate::constraints::{Commitment, Constraint, Expression, Variable};
@@ -86,7 +87,7 @@ pub struct Value {
 /// Represents a cleartext value of an issued asset in the VM.
 /// This is not the same as `spacesuit::Value` since it is guaranteed to be in-range
 /// (negative quantity is not representable with this type).
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, Serialize, Deserialize)]
 pub struct ClearValue {
     /// Cleartext quantity integer
     pub qty: u64,

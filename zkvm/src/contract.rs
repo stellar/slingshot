@@ -20,11 +20,12 @@ pub const VALUE_TYPE: u8 = 0x02;
 
 /// A unique identifier for an anchor
 #[derive(Copy, Clone, Debug, Serialize, Deserialize)]
+#[serde(transparent)]
 pub struct Anchor(pub [u8; 32]);
 
 /// A unique identifier for a contract.
 #[derive(Copy, Clone, Eq, Hash, Debug, PartialEq, Default, Serialize, Deserialize)]
-#[serde(from=)]
+#[serde(transparent)]
 pub struct ContractID(pub [u8; 32]);
 
 /// A ZkVM contract that holds a _payload_ (a list of portable items) protected by a _predicate_.
