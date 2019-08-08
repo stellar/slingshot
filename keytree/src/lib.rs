@@ -1,13 +1,15 @@
 #![deny(missing_docs)]
 //! Implementation of the key tree protocol, a key blinding scheme for deriving hierarchies of public keys.
 
-use crate::transcript::TranscriptProtocol;
 use curve25519_dalek::constants;
 use curve25519_dalek::ristretto::CompressedRistretto;
 use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
 use musig::VerificationKey;
 use rand::{CryptoRng, RngCore};
+use serde::{Deserialize, Serialize};
+
+use crate::transcript::TranscriptProtocol;
 
 mod transcript;
 
@@ -15,14 +17,16 @@ mod transcript;
 mod tests;
 
 /// Xprv represents an extended private key.
-#[derive(Copy, Clone, PartialEq, Eq, Default, Debug)]
+/// TBD: change serialization to encode a single 64-byte blob, with hex for human-readable formats
+#[derive(Copy, Clone, PartialEq, Eq, Default, Debug, Serialize, Deserialize)]
 pub struct Xprv {
     scalar: Scalar,
     xpub: Xpub,
 }
 
 /// Xpub represents an extended public key.
-#[derive(Copy, Clone, PartialEq, Eq, Default, Debug)]
+/// TBD: change serialization to encode a single 64-byte blob, with hex for human-readable formats
+#[derive(Copy, Clone, PartialEq, Eq, Default, Debug, Serialize, Deserialize)]
 pub struct Xpub {
     pubkey: VerificationKey,
     dk: [u8; 32],

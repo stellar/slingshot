@@ -1,15 +1,17 @@
 use merlin::Transcript;
+use serde::{Deserialize, Serialize};
 
 use super::super::utreexo;
 use crate::{MerkleTree, Tx, TxEntry, TxID, VerifiedTx};
 
 /// Identifier of the block, computed as a hash of the `BlockHeader`.
-#[derive(Clone, Copy, PartialEq, Debug)]
+#[derive(Clone, Copy, PartialEq, Debug, Serialize, Deserialize)]
+#[serde(transparent)]
 pub struct BlockID(pub [u8; 32]);
 
 /// BlockHeader contains the metadata for the block of transactions,
 /// committing to them, but not containing the actual transactions.
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
 pub struct BlockHeader {
     /// Network version.
     pub version: u64,
@@ -29,7 +31,7 @@ pub struct BlockHeader {
 }
 
 /// Block is a collection of transactions.
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Block {
     /// Block header.
     pub header: BlockHeader,

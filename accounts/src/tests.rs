@@ -55,7 +55,7 @@ struct ConfirmedUtxo {
 }
 
 #[test]
-fn simple_tx() {
+fn basic_accounts_test() {
     let bp_gens = BulletproofGens::new(256, 1);
 
     // Overview:
@@ -149,10 +149,10 @@ fn simple_tx() {
 
             // Now the payment and the change are in the same order on the stack:
             // change is on top.
-            p.push(change_receiver_witness.receiver.predicate.clone());
+            p.push(change_receiver_witness.receiver.predicate());
             p.output(1);
 
-            p.push(payment_receiver.predicate.clone());
+            p.push(payment_receiver.predicate());
             p.output(1);
 
             // TBD: change the API to not require return of the `&mut program` from the closure.
@@ -173,7 +173,7 @@ fn simple_tx() {
 
     // Collect all anchors for outputs.
     let mut iterator = utx.txlog.iter().filter_map(|e| match e {
-        TxEntry::Output(contract) => Some(contract.anchor()),
+        TxEntry::Output(contract) => Some(contract.anchor),
         _ => None,
     });
     let change_anchor = iterator.next().unwrap();
@@ -361,7 +361,7 @@ impl AsRef<ClearValue> for ConfirmedUtxo {
 impl PendingUtxo {
     /// Convert utxo to a Contract instance
     fn contract(&self) -> Contract {
-        self.receiver_witness.receiver.contract(self.anchor)
+        self.receiver_witness.contract(self.anchor)
     }
 
     /// Returns the UTXO ID
@@ -382,7 +382,7 @@ impl PendingUtxo {
 impl ConfirmedUtxo {
     /// Convert utxo to a Contract instance
     fn contract(&self) -> Contract {
-        self.receiver_witness.receiver.contract(self.anchor)
+        self.receiver_witness.contract(self.anchor)
     }
 
     /// Returns the UTXO ID

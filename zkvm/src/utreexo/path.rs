@@ -1,4 +1,5 @@
 use crate::merkle::MerkleItem;
+use serde::{Deserialize, Serialize};
 
 use super::super::encoding::{self, Encodable};
 use super::nodes::{Hash, NodeHasher};
@@ -14,7 +15,7 @@ pub type Position = u64;
 /// (Lowest bit=1 means the first neighbor is to the left of the node.)
 /// `generation` points to the generation of the Forest to which the proof applies.
 /// `path` is None if this proof is for a newly added item that has no merkle path yet.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Proof {
     /// Generation of the forest to which the proof applies.
     pub generation: u64,
@@ -24,7 +25,7 @@ pub struct Proof {
 }
 
 /// Merkle path to the item.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Path {
     pub(super) position: Position,
     pub(super) neighbors: Vec<Hash>,

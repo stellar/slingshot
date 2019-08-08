@@ -1,8 +1,9 @@
-use crate::merkle::MerkleItem;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 use super::nodes::{Hash, Heap, Node, NodeHasher, NodeIndex};
 use super::path::{Directions, Path, Position, Proof};
+use crate::merkle::MerkleItem;
 
 /// Forest consists of a number of roots of merkle binary trees.
 /// Each forest is identified by a generation.
