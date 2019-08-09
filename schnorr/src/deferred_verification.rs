@@ -1,8 +1,8 @@
 use crate::errors::SchnorrError;
 use curve25519_dalek::constants::RISTRETTO_BASEPOINT_POINT;
-use curve25519_dalek::ristretto::{CompressedRistretto, RistrettoPoint};
+use curve25519_dalek::ristretto::{RistrettoPoint};
 use curve25519_dalek::scalar::Scalar;
-use curve25519_dalek::traits::{Identity, IsIdentity, VartimeMultiscalarMul};
+use curve25519_dalek::traits::{IsIdentity, VartimeMultiscalarMul};
 
 /// Deferred signature verification
 #[derive(Clone, Debug)]
@@ -12,7 +12,7 @@ pub struct DeferredVerification {
     pub static_point_weight: Scalar,
 
     /// Weights for arbitrary points.
-    pub dynamic_point_weights: Vec<(Scalar, CompressedRistretto)>,
+    pub dynamic_point_weights: Vec<(Scalar, Option<RistrettoPoint>)>,
 }
 
 impl DeferredVerification {
@@ -27,14 +27,10 @@ impl DeferredVerification {
     fn compute(self) -> Result<RistrettoPoint, SchnorrError> {
         let (mut weights, points): (Vec<_>, Vec<_>) =
             self.dynamic_point_weights.into_iter().unzip();
-        let mut points: Vec<_> = points.into_iter().map(|p| p.decompress()).collect();
+        let mut points: Vec<_> = points.into_iter().collect();
 
         weights.push(self.static_point_weight);
         points.push(Some(RISTRETTO_BASEPOINT_POINT));
-
-        if points.len() == 0 {
-            return Ok(RistrettoPoint::identity());
-        }
 
         RistrettoPoint::optional_multiscalar_mul(weights, points)
             .ok_or(SchnorrError::InvalidSignature)
@@ -65,7 +61,7 @@ impl DeferredVerification {
 
             // Add weights and points for arbitrary points
             let arbitrary_scalars = p.dynamic_point_weights.iter().map(|p| p.0 * e);
-            let arbitrary_points = p.dynamic_point_weights.iter().map(|p| p.1.decompress());
+            let arbitrary_points = p.dynamic_point_weights.iter().map(|p| p.1);
             weights.extend(arbitrary_scalars);
             points.extend(arbitrary_points);
         }
@@ -83,7 +79,7 @@ impl DeferredVerification {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use curve25519_dalek::constants::RISTRETTO_BASEPOINT_COMPRESSED;
+    use curve25519_dalek::constants::RISTRETTO_BASEPOINT_POINT as B;
 
     #[test]
     fn empty() {
@@ -98,7 +94,7 @@ mod tests {
     fn primary_generator() {
         let v = DeferredVerification {
             static_point_weight: Scalar::one(),
-            dynamic_point_weights: vec![(-Scalar::one(), RISTRETTO_BASEPOINT_COMPRESSED)],
+            dynamic_point_weights: vec![(-Scalar::one(), Some(B))],
         };
         assert!(v.verify().is_ok());
 
@@ -106,14 +102,14 @@ mod tests {
             static_point_weight: Scalar::one(),
             dynamic_point_weights: vec![(
                 -Scalar::one(),
-                (RISTRETTO_BASEPOINT_POINT * Scalar::from(4u8)).compress(),
+                Some(B * Scalar::from(4u8)),
             )],
         };
         assert!(v.verify().is_err());
 
         let v = DeferredVerification {
             static_point_weight: Scalar::one(),
-            dynamic_point_weights: vec![(Scalar::one(), RISTRETTO_BASEPOINT_COMPRESSED)],
+            dynamic_point_weights: vec![(Scalar::one(), Some(B))],
         };
         assert!(v.verify().is_err());
     }
@@ -123,8 +119,8 @@ mod tests {
         let v = DeferredVerification {
             static_point_weight: Scalar::zero(),
             dynamic_point_weights: vec![
-                (-Scalar::one(), RISTRETTO_BASEPOINT_COMPRESSED),
-                (Scalar::one(), RISTRETTO_BASEPOINT_COMPRESSED),
+                (-Scalar::one(), Some(B)),
+                (Scalar::one(), Some(B)),
             ],
         };
         assert!(v.verify().is_ok());
