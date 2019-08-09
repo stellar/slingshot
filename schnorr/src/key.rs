@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 /// that lets the verifier to check the signature.
 /// `VerificationKey` stores both compressed and decompressed point, so that
 /// (1) compression is not performed again when key is appended to the Transcript;
-/// (2) decompression failures are handled during decoding and allow key derivation without errors. 
+/// (2) decompression failures are handled during decoding and allow key derivation without errors.
 #[derive(Copy, Clone, PartialEq, Eq, Default, Debug, Serialize, Deserialize)]
 #[serde(from=RistrettoPoint, into=RistrettoPoint)]
 pub struct VerificationKey {

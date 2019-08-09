@@ -1,14 +1,17 @@
-use super::deferred_verification::DeferredVerification;
-use super::errors::SchnorrError;
-use super::key::VerificationKey;
-use super::transcript::TranscriptProtocol;
+use core::iter;
 use curve25519_dalek::constants::RISTRETTO_BASEPOINT_POINT;
-use curve25519_dalek::ristretto::CompressedRistretto;
+use curve25519_dalek::ristretto::{CompressedRistretto, RistrettoPoint};
 use curve25519_dalek::scalar::Scalar;
+use curve25519_dalek::traits::{IsIdentity, VartimeMultiscalarMul};
 use merlin::Transcript;
 use serde::{Deserialize, Serialize};
 
+use super::errors::SchnorrError;
+use super::key::VerificationKey;
+use super::transcript::TranscriptProtocol;
+
 /// A Schnorr signature.
+/// TBD: implement Serialize/Deserialize via opaque [u8;64].
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Signature {
     /// Signature using nonce, message, and private key
@@ -47,15 +50,13 @@ impl Signature {
     /// Verifies the signature against a given verification key.
     /// Transcript should be in the same state as it was during the `sign` call
     /// that created the signature.
-    pub fn verify(&self, transcript: &mut Transcript, X: VerificationKey) -> Result<(),SchnorrError> {
-        self.verify_deferred(transcript, X).verify()
-    }
-
-    /// Computes a `DeferredVerification` object for verifying this signature in a batch.
-    /// To verify immediately, use `verify`.
-    pub fn verify_deferred(&self, transcript: &mut Transcript, X: VerificationKey) -> DeferredVerification {
+    pub fn verify(
+        &self,
+        transcript: &mut Transcript,
+        X: VerificationKey,
+    ) -> Result<(), SchnorrError> {
         // Make c = H(X, R, m)
-        // The message `m` has already been fed into the transcript
+        // The message has already been fed into the transcript
         let c = {
             transcript.schnorr_sig_domain_sep();
             transcript.commit_point(b"X", X.as_compressed());
@@ -67,9 +68,18 @@ impl Signature {
         // `s * G = R + c * X`
         //      ->
         // `0 == (-s * G) + (1 * R) + (c * X)`
-        DeferredVerification {
-            static_point_weight: -self.s,
-            dynamic_point_weights: vec![(Scalar::one(), self.R.decompress()), (c, Some(X.into_point()))],
+        let result = RistrettoPoint::optional_multiscalar_mul(
+            &[-self.s, Scalar::one(), c],
+            iter::once(Some(RISTRETTO_BASEPOINT_POINT))
+                .chain(iter::once(self.R.decompress()))
+                .chain(iter::once(Some(X.into_point()))),
+        )
+        .ok_or(SchnorrError::InvalidSignature)?;
+
+        if result.is_identity() {
+            Ok(())
+        } else {
+            Err(SchnorrError::InvalidSignature)
         }
     }
 

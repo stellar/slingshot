@@ -5,13 +5,11 @@
 #[macro_use]
 extern crate failure;
 
-mod deferred_verification;
+mod errors;
 mod key;
 mod signature;
-mod errors;
 mod transcript;
 
-pub use self::deferred_verification::DeferredVerification;
 pub use self::errors::SchnorrError;
 pub use self::key::VerificationKey;
 pub use self::signature::Signature;
