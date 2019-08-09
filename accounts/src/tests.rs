@@ -257,6 +257,7 @@ fn process_block(node: &mut Node, block: &Block, bp_gens: &BulletproofGens) {
     let (verified_block, new_state) = node.blockchain.apply_block(&block, &bp_gens).unwrap();
 
     // In a real node utxos will be indexed by ContractID, so lookup will be more efficient.
+    let hasher = utreexo::NodeHasher::new();
     for entry in verified_block.entries() {
         match entry {
             TxEntry::Input(contract_id) => {
@@ -280,7 +281,7 @@ fn process_block(node: &mut Node, block: &Block, bp_gens: &BulletproofGens) {
                     .position(|utxo| utxo.contract_id() == cid)
                 {
                     let pending_utxo = node.wallet.pending_utxos.remove(i);
-                    let proof = new_state.catchup.update_proof(&cid, None).unwrap();
+                    let proof = new_state.catchup.update_proof(&cid, None, &hasher).unwrap();
                     node.wallet.utxos.push(pending_utxo.to_confirmed(proof));
                 }
             }
@@ -296,7 +297,7 @@ fn process_block(node: &mut Node, block: &Block, bp_gens: &BulletproofGens) {
         .map(|utxo| {
             new_state
                 .catchup
-                .update_proof(&utxo.contract_id(), Some(utxo.proof.clone()))
+                .update_proof(&utxo.contract_id(), Some(utxo.proof.clone()), &hasher)
         })
         .collect::<Result<Vec<_>, _>>()
         .unwrap();
