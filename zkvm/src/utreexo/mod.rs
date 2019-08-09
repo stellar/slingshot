@@ -10,4 +10,5 @@ mod tests;
 // Public API
 pub use self::forest::{Catchup, Forest, UtreexoError, WorkForest};
 pub use self::nodes::Hash;
+pub use self::nodes::NodeHasher;
 pub use self::path::{Path, Position, Proof};

@@ -8,25 +8,23 @@ use crate::merkle::MerkleItem;
 /// Forest consists of a number of roots of merkle binary trees.
 /// Each forest is identified by a generation.
 #[derive(Clone)]
-pub struct Forest<M: MerkleItem> {
+pub struct Forest {
     generation: u64,
     roots: [Option<Hash>; 64], // roots of the trees for levels 0 to 63
-    hasher: NodeHasher<M>,
 }
 
 /// State of the Utreexo forest during update
 #[derive(Clone)]
-pub struct WorkForest<M: MerkleItem> {
+pub struct WorkForest {
     generation: u64,
     roots: Vec<NodeIndex>, // roots of all the trees including the newly inserted nodes
     heap: Heap,
-    hasher: NodeHasher<M>,
 }
 
 /// Structure that helps auto-updating the proofs created for a previous generation of a forest.
 #[derive(Clone)]
-pub struct Catchup<M: MerkleItem> {
-    forest: WorkForest<M>,        // forest that stores the inner nodes
+pub struct Catchup {
+    forest: WorkForest,           // forest that stores the inner nodes
     map: HashMap<Hash, Position>, // node hash -> new position offset for this node
 }
 
@@ -43,13 +41,12 @@ pub enum UtreexoError {
     InvalidProof,
 }
 
-impl<M: MerkleItem> Forest<M> {
+impl Forest {
     /// Creates a new instance of Forest.
     pub fn new() -> Self {
         Forest {
             generation: 0,
             roots: [None; 64],
-            hasher: NodeHasher::new(),
         }
     }
 
@@ -59,7 +56,12 @@ impl<M: MerkleItem> Forest<M> {
     }
 
     /// Verifies the item's proof of inclusion.
-    pub fn verify(&self, item: &M, proof: &Proof) -> Result<(), UtreexoError> {
+    pub fn verify<M: MerkleItem>(
+        &self,
+        item: &M,
+        proof: &Proof,
+        hasher: &NodeHasher<M>,
+    ) -> Result<(), UtreexoError> {
         if proof.generation != self.generation {
             return Err(UtreexoError::OutdatedProof);
         }
@@ -78,9 +80,9 @@ impl<M: MerkleItem> Forest<M> {
 
         // 3. Now, walk the merkle proof starting with the leaf,
         //    creating the missing nodes until we hit the root.
-        let current_hash = self.hasher.leaf(item);
+        let current_hash = hasher.leaf(item);
         let current_hash = path
-            .walk_up(current_hash, &self.hasher)
+            .walk_up(current_hash, &hasher)
             .take(root_level)
             .fold(current_hash, |_, (parent, _children)| parent);
 
@@ -95,7 +97,7 @@ impl<M: MerkleItem> Forest<M> {
 
     /// Lets use modify the utreexo and yields a new state of the utreexo,
     /// along with a catchup structure.
-    pub fn work_forest(&self) -> WorkForest<M> {
+    pub fn work_forest(&self) -> WorkForest {
         let mut heap = Heap::with_capacity(64);
 
         // Convert the root hashes into the nodes
@@ -108,37 +110,41 @@ impl<M: MerkleItem> Forest<M> {
             generation: self.generation,
             roots,
             heap,
-            hasher: self.hasher.clone(),
         }
     }
 
     /// Lets user to modify the utreexo.
     /// Returns a new state, along with a catchup structure.
-    pub fn update<F, T>(&self, closure: F) -> Result<(T, Self, Catchup<M>), UtreexoError>
+    pub fn update<F, T, M>(
+        &self,
+        hasher: &NodeHasher<M>,
+        closure: F,
+    ) -> Result<(T, Self, Catchup), UtreexoError>
     where
-        F: FnOnce(&mut WorkForest<M>) -> Result<T, UtreexoError>,
+        F: FnOnce(&mut WorkForest) -> Result<T, UtreexoError>,
+        M: MerkleItem,
     {
         let mut forest = self.work_forest();
         let result = closure(&mut forest)?;
-        let (next_utreexo, catchup) = forest.normalize();
+        let (next_utreexo, catchup) = forest.normalize(&hasher);
         Ok((result, next_utreexo, catchup))
     }
 
     /// Since each root is balanced, the top root is composed of n-1 pairs:
     /// `hash(R3, hash(R2, hash(R1, R0)))`
-    pub fn root(&self) -> Hash {
+    pub fn root<M: MerkleItem>(&self, hasher: &NodeHasher<M>) -> Hash {
         self.roots_iter()
             .rev()
             .fold(None, |optional_hash, (_level, hash2)| {
                 if let Some(hash1) = optional_hash {
                     // previous hash is of lower level, so it goes to the right
-                    Some(self.hasher.intermediate(&hash2, &hash1))
+                    Some(hasher.intermediate(&hash2, &hash1))
                 } else {
                     // this is the first iteration - use node's hash as-is
                     Some(hash2)
                 }
             })
-            .unwrap_or(self.hasher.empty())
+            .unwrap_or(hasher.empty())
     }
 
     /// Returns an iterator over roots of the forest,
@@ -152,16 +158,20 @@ impl<M: MerkleItem> Forest<M> {
     }
 }
 
-impl<M: MerkleItem> WorkForest<M> {
+impl WorkForest {
     /// Adds a new item to the tree, appending a node to the end.
-    pub fn insert(&mut self, item: &M) {
-        let hash = self.hasher.leaf(item);
+    pub fn insert<M: MerkleItem>(&mut self, item: &M, hasher: &NodeHasher<M>) {
+        let hash = hasher.leaf(item);
         self.roots.push(self.heap.allocate(hash, 0, None).index);
     }
 
     /// Deletes the transient item that does not have a proof
-    pub fn delete_transient(&mut self, item: &M) -> Result<(), UtreexoError> {
-        let item_hash = self.hasher.leaf(item);
+    pub fn delete_transient<M: MerkleItem>(
+        &mut self,
+        item: &M,
+        hasher: &NodeHasher<M>,
+    ) -> Result<(), UtreexoError> {
+        let item_hash = hasher.leaf(item);
         let (index, node) = self
             .roots_iter()
             .enumerate()
@@ -181,7 +191,12 @@ impl<M: MerkleItem> WorkForest<M> {
 
     /// Fills in the missing nodes in the tree, and marks the item as deleted.
     /// The algorithm minimizes amount of computation by taking advantage of the already available data.
-    pub fn delete(&mut self, item: &M, proof: &Proof) -> Result<(), UtreexoError> {
+    pub fn delete<M: MerkleItem>(
+        &mut self,
+        item: &M,
+        proof: &Proof,
+        hasher: &NodeHasher<M>,
+    ) -> Result<(), UtreexoError> {
         // Determine the existing node which matches the proof, then verify the rest of the proof,
         // and mark the relevant nodes as modified.
 
@@ -214,8 +229,6 @@ impl<M: MerkleItem> WorkForest<M> {
         //    creating the missing nodes until we hit the bottom node.
         //    Note, it is fine if we fail mid-way updating the state -
         //    it will be completely discarded by `Utreexo::update`.
-        let hasher = self.hasher.clone();
-
         let item_hash = hasher.leaf(item);
 
         let (hash, new_children) = path
@@ -263,7 +276,7 @@ impl<M: MerkleItem> WorkForest<M> {
 
     /// Normalizes the forest into minimal number of ordered perfect trees.
     /// Returns a root of the new forst, the forest and a catchup structure.
-    pub fn normalize(self) -> (Forest<M>, Catchup<M>) {
+    pub fn normalize<M: MerkleItem>(self, hasher: &NodeHasher<M>) -> (Forest, Catchup) {
         // TBD: what's the best way to estimate the vector capacity from self.heap.len()?
         let estimated_cap = self.heap.len() / 2;
 
@@ -296,7 +309,7 @@ impl<M: MerkleItem> WorkForest<M> {
                 while let Some(i) = roots[node.level] {
                     let left = new_heap.node_at(i);
                     node = new_heap.allocate(
-                        self.hasher.intermediate(&left.hash, &node.hash),
+                        hasher.intermediate(&left.hash, &node.hash),
                         left.level + 1,
                         Some((left.index, node.index)),
                     );
@@ -312,7 +325,6 @@ impl<M: MerkleItem> WorkForest<M> {
             generation: self.generation + 1,
             roots: new_roots.iter().rev().filter_map(|r| *r).collect(),
             heap: new_heap,
-            hasher: self.hasher.clone(),
         };
 
         let utreexo_roots = new_roots.iter().fold([None; 64], |mut roots, ni| {
@@ -325,7 +337,6 @@ impl<M: MerkleItem> WorkForest<M> {
         let utreexo = Forest {
             generation: self.generation + 1,
             roots: utreexo_roots,
-            hasher: self.hasher,
         };
 
         let catchup_map = new_forest
@@ -375,10 +386,15 @@ impl<M: MerkleItem> WorkForest<M> {
     }
 }
 
-impl<M: MerkleItem> Catchup<M> {
+impl Catchup {
     /// Updates the proof if it's slightly out of date
     /// (made against the previous generation of the Utreexo).
-    pub fn update_proof(&self, item: &M, proof: Option<Proof>) -> Result<Proof, UtreexoError> {
+    pub fn update_proof<M: MerkleItem>(
+        &self,
+        item: &M,
+        proof: Option<Proof>,
+        hasher: &NodeHasher<M>,
+    ) -> Result<Proof, UtreexoError> {
         let proof = proof.unwrap_or(Proof {
             generation: self.forest.generation - 1, // no overflow risk since Catchup can't be created for gen=0 forest.
             path: Path {
@@ -401,8 +417,8 @@ impl<M: MerkleItem> Catchup<M> {
         let mut path = proof.path;
 
         // Climb up the merkle path until we find an existing node or nothing.
-        let hash = self.forest.hasher.leaf(item);
-        let (midlevel, catchup_result) = path.walk_up(hash, &self.forest.hasher).fold(
+        let hash = hasher.leaf(item);
+        let (midlevel, catchup_result) = path.walk_up(hash, &hasher).fold(
             (0, self.map.get(&hash)),
             |(level, catchup_result), (p, _)| {
                 match catchup_result {

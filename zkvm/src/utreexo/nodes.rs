@@ -10,6 +10,12 @@ pub type Hash = [u8; 32];
 /// Index of a `Node` within a forest's heap storage.
 pub(super) type NodeIndex = usize;
 
+/// Precomputed hash instance for computing Utreexo trees.
+pub struct NodeHasher<M: MerkleItem> {
+    t: Transcript,
+    phantom: PhantomData<M>,
+}
+
 impl<M: MerkleItem> Clone for NodeHasher<M> {
     fn clone(&self) -> Self {
         Self {
@@ -83,13 +89,9 @@ struct PackedNode {
     children: (u32, u32),
 }
 
-pub(super) struct NodeHasher<M: MerkleItem> {
-    t: Transcript,
-    phantom: PhantomData<M>,
-}
-
 impl<M: MerkleItem> NodeHasher<M> {
-    pub(super) fn new() -> Self {
+    /// Creates a new hasher instance.
+    pub fn new() -> Self {
         NodeHasher {
             t: Transcript::new(b"ZkVM.utreexo"),
             phantom: PhantomData,

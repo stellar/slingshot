@@ -6,8 +6,8 @@ use rand::RngCore;
 
 use super::*;
 use crate::{
-    Anchor, Commitment, Contract, PortableItem, Predicate, Program, Prover, String, TxHeader,
-    Value, VerificationKey,
+    utreexo, Anchor, Commitment, Contract, ContractID, PortableItem, Predicate, Program, Prover,
+    String, TxHeader, Value, VerificationKey,
 };
 
 fn make_predicate(privkey: u64) -> Predicate {
@@ -74,5 +74,9 @@ fn test_state_machine() {
     // Apply the block to the state
     let (_verified_block, new_state) = state.apply_block(&block, &bp_gens).unwrap();
 
-    assert_eq!(new_state.utreexo.root(), future_state.utreexo.root());
+    let hasher = utreexo::NodeHasher::<ContractID>::new();
+    assert_eq!(
+        new_state.utreexo.root(&hasher),
+        future_state.utreexo.root(&hasher)
+    );
 }

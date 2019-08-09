@@ -3,7 +3,7 @@ use core::borrow::Borrow;
 
 use super::block::{Block, BlockHeader, BlockID, VerifiedBlock};
 use super::errors::BlockchainError;
-use crate::utreexo::{self, Catchup, Forest, WorkForest};
+use crate::utreexo::{self, Catchup, Forest, NodeHasher, WorkForest};
 use crate::{ContractID, MerkleTree, Tx, TxEntry, TxHeader, VerifiedTx, Verifier};
 
 /// State of the blockchain node.
@@ -14,37 +14,34 @@ pub struct BlockchainState {
     /// Latest block header in the chain.
     pub tip: BlockHeader,
     /// The utreexo state.
-    pub utreexo: Forest<ContractID>,
+    pub utreexo: Forest,
     /// The catchup structure to auto-update the proofs made against the previous state.
-    pub catchup: Catchup<ContractID>,
+    pub catchup: Catchup,
 }
 
 impl BlockchainState {
     /// Creates an initial block with a given starting set of utxos.
-    pub fn make_initial(
-        timestamp_ms: u64,
-        utxos: impl IntoIterator<Item = ContractID>,
-    ) -> (BlockchainState, Vec<utreexo::Proof>) {
+    pub fn make_initial<I>(timestamp_ms: u64, utxos: I) -> (BlockchainState, Vec<utreexo::Proof>)
+    where
+        I: IntoIterator<Item = ContractID> + Clone,
+    {
         // Q: why do we need to re-use an ?
-        let (utxos_and_proofs, utreexo, catchup) = Forest::<ContractID>::new()
-            .update(|forest| {
-                let utxos_and_proofs = utxos
-                    .into_iter()
-                    .map(|utxo| {
-                        forest.insert(&utxo);
-                        utxo
-                    })
-                    .collect::<Vec<_>>();
-                Ok(utxos_and_proofs)
+        let hasher = NodeHasher::new();
+        let (_, utreexo, catchup) = Forest::new()
+            .update(&hasher, |forest| {
+                for utxo in utxos.clone() {
+                    forest.insert(&utxo, &hasher);
+                }
+                Ok(())
             })
             .unwrap(); // safe to unwrap because we only insert which never fails.
 
-        let proofs = utxos_and_proofs
+        let proofs = utxos
             .into_iter()
-            .map(|utxo| catchup.update_proof(&utxo, None).unwrap())
+            .map(|utxo| catchup.update_proof(&utxo, None, &hasher).unwrap())
             .collect::<Vec<_>>();
 
-        let tip = BlockHeader::make_initial(timestamp_ms, utreexo.root());
+        let tip = BlockHeader::make_initial(timestamp_ms, utreexo.root(&hasher));
         let state = BlockchainState {
             initial_id: tip.id(),
             tip,
@@ -63,6 +60,7 @@ impl BlockchainState {
     ) -> Result<(VerifiedBlock, BlockchainState), BlockchainError> {
         check_block_header(&block.header, &self.tip)?;
 
+        let hasher = NodeHasher::new();
         let mut work_forest = self.utreexo.work_forest();
 
         let (txroot, verified_txs) = apply_txs(
@@ -71,6 +69,7 @@ impl BlockchainState {
             block.txs.iter(),
             block.utxo_proofs(),
             &mut work_forest,
+            &hasher,
             bp_gens,
         )?;
 
@@ -78,9 +77,9 @@ impl BlockchainState {
             return Err(BlockchainError::InconsistentHeader);
         }
 
-        let (new_forest, new_catchup) = work_forest.normalize();
+        let (new_forest, new_catchup) = work_forest.normalize(&hasher);
 
-        if block.header.utxoroot != new_forest.root() {
+        if block.header.utxoroot != new_forest.root(&hasher) {
             return Err(BlockchainError::InconsistentHeader);
         }
 
@@ -119,6 +118,7 @@ impl BlockchainState {
             BlockchainError::InconsistentHeader,
         )?;
 
+        let hasher = NodeHasher::new();
         let mut work_forest = self.utreexo.work_forest();
 
         let (txroot, verified_txs) = apply_txs(
@@ -127,12 +127,13 @@ impl BlockchainState {
             txs.iter(),
             utxo_proofs.iter(),
             &mut work_forest,
+            &hasher,
             bp_gens,
         )?;
 
-        let (new_forest, new_catchup) = work_forest.normalize();
+        let (new_forest, new_catchup) = work_forest.normalize(&hasher);
 
-        let utxoroot = new_forest.root();
+        let utxoroot = new_forest.root(&hasher);
 
         let header = BlockHeader {
             version: block_version,
@@ -172,7 +173,8 @@ fn apply_tx<P: Borrow<utreexo::Proof>>(
     timestamp_ms: u64,
     tx: &Tx,
     utxo_proofs: impl IntoIterator<Item = P>,
-    work_forest: &mut WorkForest<ContractID>,
+    work_forest: &mut WorkForest,
+    hasher: &NodeHasher<ContractID>,
     bp_gens: &BulletproofGens,
 ) -> Result<VerifiedTx, BlockchainError> {
     let mut utxo_proofs = utxo_proofs.into_iter();
@@ -190,14 +192,12 @@ fn apply_tx<P: Borrow<utreexo::Proof>>(
                     .next()
                     .ok_or(BlockchainError::UtreexoProofMissing)?;
                 work_forest
-                    .delete(&contract_id, proof.borrow())
+                    .delete(contract_id, proof.borrow(), &hasher)
                     .map_err(|e| BlockchainError::UtreexoError(e))?;
             }
             // Add item to the UTXO set
             TxEntry::Output(contract) => {
-                // TBD: this proof is useless, but we need it for deleting transient
-                // utxos inserted in the same block - how this will be resolved?
-                let _new_item_proof = work_forest.insert(&contract.id());
+                work_forest.insert(&contract.id(), &hasher);
             }
             _ => {}
         }
@@ -212,7 +212,8 @@ fn apply_txs<T: Borrow<Tx>, P: Borrow<utreexo::Proof>>(
     timestamp_ms: u64,
     txs: impl IntoIterator<Item = T>,
     utxo_proofs: impl IntoIterator<Item = P>,
-    mut work_forest: &mut WorkForest<ContractID>,
+    mut work_forest: &mut WorkForest,
+    hasher: &NodeHasher<ContractID>,
     bp_gens: &BulletproofGens,
 ) -> Result<([u8; 32], Vec<VerifiedTx>), BlockchainError> {
     let mut utxo_proofs = utxo_proofs.into_iter();
@@ -225,6 +226,7 @@ fn apply_txs<T: Borrow<Tx>, P: Borrow<utreexo::Proof>>(
                 tx.borrow(),
                 &mut utxo_proofs,
                 &mut work_forest,
+                &hasher,
                 bp_gens,
             )
         })
