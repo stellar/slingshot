@@ -1,8 +1,9 @@
-use crate::merkle::MerkleItem;
 use core::marker::PhantomData;
 use merlin::Transcript;
+use serde::{Deserialize, Serialize};
 
 use super::path::{Position, Side};
+use crate::merkle::MerkleItem;
 
 /// Merkle hash of a node
 pub type Hash = [u8; 32];
@@ -29,7 +30,7 @@ impl<M: MerkleItem> Clone for NodeHasher<M> {
 /// Leaves are indicated by `level=0`.
 /// Leaves and trimmed nodes have `children=None`.
 /// Root nodes have `parent=None`.
-#[derive(Copy, Clone, PartialEq, Debug)]
+#[derive(Copy, Clone, PartialEq, Debug, Serialize, Deserialize)]
 pub(super) struct Node {
     pub(super) hash: Hash,
     pub(super) index: NodeIndex,
@@ -81,8 +82,8 @@ impl Node {
 /// Packed node as stored in memory.
 /// 32 bytes for hash, plus 13 bytes for metadata and parent and children indexes.
 /// Flags are: 6 bits for the level 0..63, 1 bit for "modified" and 1 bit for "has children".
-#[derive(Copy, Clone, PartialEq, Debug)]
-#[repr(packed)]
+/// TBD: serialize as a packed binary string.
+#[derive(Copy, Clone, PartialEq, Debug, Serialize, Deserialize)]
 struct PackedNode {
     hash: Hash,
     flags: u8,
@@ -141,7 +142,7 @@ impl PackedNode {
 }
 
 /// Storage of all the nodes with methods to access them.
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub(super) struct Heap {
     storage: Vec<PackedNode>,
 }

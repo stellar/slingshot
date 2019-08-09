@@ -7,14 +7,15 @@ use crate::merkle::MerkleItem;
 
 /// Forest consists of a number of roots of merkle binary trees.
 /// Each forest is identified by a generation.
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(from = "ForestSerde", into = "ForestSerde")]
 pub struct Forest {
     generation: u64,
     roots: [Option<Hash>; 64], // roots of the trees for levels 0 to 63
 }
 
 /// State of the Utreexo forest during update
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct WorkForest {
     generation: u64,
     roots: Vec<NodeIndex>, // roots of all the trees including the newly inserted nodes
@@ -22,7 +23,7 @@ pub struct WorkForest {
 }
 
 /// Structure that helps auto-updating the proofs created for a previous generation of a forest.
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Catchup {
     forest: WorkForest,           // forest that stores the inner nodes
     map: HashMap<Hash, Position>, // node hash -> new position offset for this node
@@ -460,5 +461,40 @@ impl Catchup {
             generation: self.forest.generation,
             path,
         })
+    }
+}
+
+/// Serde-serializable representation of the Forest.
+/// This exists only because serde defines serialization for arrays up to 32 elements.
+/// TBD: replace this workaround with a custom Serialize/Deserialize impl w/o adapter struct.
+#[derive(Serialize, Deserialize)]
+struct ForestSerde {
+    generation: u64,
+    roots1: [Option<Hash>; 32],
+    roots2: [Option<Hash>; 32],
+}
+
+impl From<Forest> for ForestSerde {
+    fn from(forest: Forest) -> Self {
+        let mut result = ForestSerde {
+            generation: forest.generation,
+            roots1: [None; 32],
+            roots2: [None; 32],
+        };
+        result.roots1[..].copy_from_slice(&forest.roots[..32]);
+        result.roots2[..].copy_from_slice(&forest.roots[32..]);
+        result
+    }
+}
+
+impl From<ForestSerde> for Forest {
+    fn from(forest: ForestSerde) -> Self {
+        let mut result = Forest {
+            generation: forest.generation,
+            roots: [None; 64],
+        };
+        result.roots[..32].copy_from_slice(&forest.roots1[..]);
+        result.roots[32..].copy_from_slice(&forest.roots2[..]);
+        result
     }
 }

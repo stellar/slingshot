@@ -1,5 +1,6 @@
 use bulletproofs::BulletproofGens;
 use core::borrow::Borrow;
+use serde::{Deserialize, Serialize};
 
 use super::block::{Block, BlockHeader, BlockID, VerifiedBlock};
 use super::errors::BlockchainError;
@@ -7,7 +8,7 @@ use crate::utreexo::{self, Catchup, Forest, NodeHasher, WorkForest};
 use crate::{ContractID, MerkleTree, Tx, TxEntry, TxHeader, VerifiedTx, Verifier};
 
 /// State of the blockchain node.
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct BlockchainState {
     /// Initial block of the given network.
     pub initial_id: BlockID,
