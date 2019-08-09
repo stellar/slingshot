@@ -4,7 +4,7 @@ use curve25519_dalek::ristretto::{CompressedRistretto, RistrettoPoint};
 use curve25519_dalek::scalar::Scalar;
 use curve25519_dalek::traits::{IsIdentity, VartimeMultiscalarMul};
 use merlin::Transcript;
-use serde::{Deserialize, Serialize};
+use serde::{de::Deserializer, de::Visitor, ser::Serializer, Deserialize, Serialize};
 
 use super::errors::SchnorrError;
 use super::key::VerificationKey;
@@ -12,7 +12,7 @@ use super::transcript::TranscriptProtocol;
 
 /// A Schnorr signature.
 /// TBD: implement Serialize/Deserialize via opaque [u8;64].
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct Signature {
     /// Signature using nonce, message, and private key
     pub s: Scalar,
@@ -83,8 +83,11 @@ impl Signature {
         }
     }
 
-    /// Decodes a signature from 64-byte array.
-    pub fn from_bytes(sig: [u8; 64]) -> Result<Self, SchnorrError> {
+    /// Decodes a signature from a 64-byte slice.
+    pub fn from_bytes(sig: &[u8]) -> Result<Self, SchnorrError> {
+        if sig.len() != 64 {
+            return Err(SchnorrError::InvalidSignature);
+        }
         let mut Rbuf = [0u8; 32];
         let mut sbuf = [0u8; 32];
         Rbuf[..].copy_from_slice(&sig[..32]);
@@ -101,6 +104,40 @@ impl Signature {
         buf[..32].copy_from_slice(self.R.as_bytes());
         buf[32..].copy_from_slice(self.s.as_bytes());
         buf
+    }
+}
+
+impl Serialize for Signature {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_bytes(&self.to_bytes()[..])
+    }
+}
+impl<'de> Deserialize<'de> for Signature {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct SigVisitor;
+
+        impl<'de> Visitor<'de> for SigVisitor {
+            type Value = Signature;
+
+            fn expecting(&self, formatter: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
+                formatter.write_str("a valid schnorr signature")
+            }
+
+            fn visit_bytes<E>(self, v: &[u8]) -> Result<Signature, E>
+            where
+                E: serde::de::Error,
+            {
+                Signature::from_bytes(v).map_err(serde::de::Error::custom)
+            }
+        }
+
+        deserializer.deserialize_bytes(SigVisitor)
     }
 }
 
