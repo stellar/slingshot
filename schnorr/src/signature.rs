@@ -1,3 +1,4 @@
+use core::borrow::Borrow;
 use core::iter;
 use curve25519_dalek::constants::RISTRETTO_BASEPOINT_POINT;
 use curve25519_dalek::ristretto::{CompressedRistretto, RistrettoPoint};
@@ -11,13 +12,24 @@ use super::key::VerificationKey;
 use super::transcript::TranscriptProtocol;
 
 /// A Schnorr signature.
-/// TBD: implement Serialize/Deserialize via opaque [u8;64].
 #[derive(Debug, Clone)]
 pub struct Signature {
     /// Signature using nonce, message, and private key
     pub s: Scalar,
     /// Nonce commitment
     pub R: CompressedRistretto,
+}
+
+/// Trait for a batch verification of signatures.
+pub trait BatchVerification {
+    /// Adds scalar for multiplying by a base point and pairs of dynamic scalars/points.
+    /// The API admits variable-length iterators of scalars/points
+    /// for compatibility with multi-key signatures (see Musig).
+    fn append<I, J>(&mut self, basepoint_scalar: I::Item, dynamic_factors: I, dynamic_points: J)
+    where
+        I: IntoIterator<Item = Scalar>,
+        I::Item: Borrow<Scalar>,
+        J: IntoIterator<Item = Option<RistrettoPoint>>;
 }
 
 impl Signature {
@@ -55,6 +67,52 @@ impl Signature {
         transcript: &mut Transcript,
         X: VerificationKey,
     ) -> Result<(), SchnorrError> {
+        struct VerifyOne {
+            result: Result<(), SchnorrError>,
+        }
+
+        impl BatchVerification for VerifyOne {
+            fn append<I, J>(
+                &mut self,
+                basepoint_scalar: I::Item,
+                dynamic_factors: I,
+                dynamic_points: J,
+            ) where
+                I: IntoIterator,
+                I::Item: Borrow<Scalar>,
+                J: IntoIterator<Item = Option<RistrettoPoint>>,
+            {
+                self.result = RistrettoPoint::optional_multiscalar_mul(
+                    iter::once(basepoint_scalar).chain(dynamic_factors),
+                    iter::once(Some(RISTRETTO_BASEPOINT_POINT)).chain(dynamic_points),
+                )
+                .ok_or(SchnorrError::InvalidSignature)
+                .and_then(|result| {
+                    if result.is_identity() {
+                        Ok(())
+                    } else {
+                        Err(SchnorrError::InvalidSignature)
+                    }
+                })
+            }
+        }
+
+        let mut verifier = VerifyOne {
+            result: Err(SchnorrError::InvalidSignature),
+        };
+        self.verify_batched(transcript, X, &mut verifier);
+        return verifier.result;
+    }
+
+    /// Verifies the signature against a given verification key in a batch.
+    /// Transcript should be in the same state as it was during the `sign` call
+    /// that created the signature.
+    pub fn verify_batched(
+        &self,
+        transcript: &mut Transcript,
+        X: VerificationKey,
+        batch: &mut impl BatchVerification,
+    ) {
         // Make c = H(X, R, m)
         // The message has already been fed into the transcript
         let c = {
@@ -68,19 +126,11 @@ impl Signature {
         // `s * G = R + c * X`
         //      ->
         // `0 == (-s * G) + (1 * R) + (c * X)`
-        let result = RistrettoPoint::optional_multiscalar_mul(
-            &[-self.s, Scalar::one(), c],
-            iter::once(Some(RISTRETTO_BASEPOINT_POINT))
-                .chain(iter::once(self.R.decompress()))
-                .chain(iter::once(Some(X.into_point()))),
-        )
-        .ok_or(SchnorrError::InvalidSignature)?;
-
-        if result.is_identity() {
-            Ok(())
-        } else {
-            Err(SchnorrError::InvalidSignature)
-        }
+        batch.append(
+            -self.s,
+            iter::once(Scalar::one()).chain(iter::once(c)),
+            iter::once(self.R.decompress()).chain(iter::once(Some(X.into_point()))),
+        );
     }
 
     /// Decodes a signature from a 64-byte slice.
@@ -107,6 +157,7 @@ impl Signature {
     }
 }
 
+// TBD: serialize in hex in case of a human-readable serializer
 impl Serialize for Signature {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
