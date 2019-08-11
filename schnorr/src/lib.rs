@@ -5,11 +5,17 @@
 #[macro_use]
 extern crate failure;
 
+mod batch;
 mod errors;
 mod key;
+mod serialization;
 mod signature;
 mod transcript;
 
+#[cfg(test)]
+mod tests;
+
+pub use self::batch::{BatchVerification, BatchVerifier};
 pub use self::errors::SchnorrError;
 pub use self::key::VerificationKey;
 pub use self::signature::Signature;
