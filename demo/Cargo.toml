@@ -5,10 +5,16 @@ authors = ["Oleg Andreev <oleganza@gmail.com>"]
 edition = "2018"
 
 [dependencies]
+rand = "0.6"
 rocket = "0.4.2"
 diesel = { version = "1.0.0", features = ["postgres"] }
 dotenv = "0.9.0"
+merlin = "1.0.1"
 curve25519-dalek = { version = "1.0.1", features = ["serde"] }
+serde = { version = "1.0", features=["derive"] }
+serde_json = "1.0"
+rand_chacha = "0.1"
+hex = "^0.3"
 
 [dependencies.bulletproofs]
 git = "https://github.com/dalek-cryptography/bulletproofs"
