@@ -24,6 +24,7 @@ pub struct WorkForest {
 
 /// Structure that helps auto-updating the proofs created for a previous generation of a forest.
 #[derive(Clone, Serialize, Deserialize)]
+#[serde(try_from = "CatchupSerde", into = "CatchupSerde")]
 pub struct Catchup {
     forest: WorkForest,           // forest that stores the inner nodes
     map: HashMap<Hash, Position>, // node hash -> new position offset for this node
@@ -496,5 +497,47 @@ impl From<ForestSerde> for Forest {
         result.roots[..32].copy_from_slice(&forest.roots1[..]);
         result.roots[32..].copy_from_slice(&forest.roots2[..]);
         result
+    }
+}
+
+/// Serde-serializable representation of the Forest.
+/// This exists only because serde-json does not serialize byte buffers into hex or base64 strings,
+/// and hashmap keys must be serialized as strings in JSON.
+/// TBD: change this to custom serialization impl where hex encoding is used only for human-readable serializers like JSON,
+/// but not for the binary serializers.
+#[derive(Serialize, Deserialize)]
+struct CatchupSerde {
+    forest: WorkForest,             // forest that stores the inner nodes
+    map: HashMap<String, Position>, // node hash -> new position offset for this node
+}
+
+impl From<Catchup> for CatchupSerde {
+    fn from(c: Catchup) -> Self {
+        Self {
+            forest: c.forest,
+            map: c
+                .map
+                .into_iter()
+                .map(|(k, v)| (hex::encode(&k), v))
+                .collect(),
+        }
+    }
+}
+
+use core::convert::TryFrom;
+use hex::FromHex;
+
+impl TryFrom<CatchupSerde> for Catchup {
+    type Error = hex::FromHexError;
+
+    fn try_from(c: CatchupSerde) -> Result<Self, Self::Error> {
+        Ok(Self {
+            forest: c.forest,
+            map: c
+                .map
+                .into_iter()
+                .map(|(k, v)| Hash::from_hex(k).map(|k| (k, v)))
+                .collect::<Result<HashMap<_, _>, _>>()?,
+        })
     }
 }
