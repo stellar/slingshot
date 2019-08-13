@@ -13,68 +13,47 @@ use zkvm::{Anchor, ClearValue, Contract, ContractID, Program, Prover, TxEntry, T
 
 use accounts::{Account, ReceiverReply, ReceiverWitness};
 
-use super::schema::*;
-
-// Stored data
-
-#[derive(Debug,Queryable,Insertable)]
-pub struct BlockRecord {
-    pub height: i32, // FIXME: diesel doesn't allow u64 here...
-    pub block_json: String,
-    pub state_json: String, // latest state will be used for *the* network state
-}
-
-#[derive(Debug,Queryable,Insertable)]
-pub struct AssetRecord {
-    pub alias: String,
-    pub xprv_json: String,
-}
-
-#[derive(Debug,Queryable,Insertable)]
-pub struct NodeRecord {
-    pub alias: String,
-    pub state_json: String,
-}
-
-
-
+use super::util;
 
 /// The complete state of the user node: their wallet and their blockchain state.
 #[derive(Clone, Serialize, Deserialize)]
-struct Node {
+pub struct Node {
     /// Current blockchain state of the node
-    blockchain: BlockchainState,
+    pub blockchain: BlockchainState,
     /// User's wallet data
-    wallet: Wallet,
+    pub wallet: Wallet,
 }
 
 /// User's wallet account data
 #[derive(Clone, Serialize, Deserialize)]
-struct Wallet {
+pub struct Wallet {
+    /// Name of the account
+    pub alias: String,
+
     /// User's root wallet key
-    xprv: Xprv,
+    pub xprv: Xprv,
 
     /// User's account metadata
-    account: Account,
+    pub account: Account,
 
     /// User's balances
-    utxos: Vec<ConfirmedUtxo>,
+    pub utxos: Vec<ConfirmedUtxo>,
 
     /// User's pending incoming payments
-    pending_utxos: Vec<PendingUtxo>,
+    pub pending_utxos: Vec<PendingUtxo>,
 }
 
 /// UTXO that has not been confirmed yet. It is formed from Receiver and ReceiverReply.
 /// Users convert pending utxos into ConfirmedUtxo when they detect the output in the blockchain.
 #[derive(Clone, Serialize, Deserialize)]
-struct PendingUtxo {
+pub struct PendingUtxo {
     receiver_witness: ReceiverWitness,
     anchor: Anchor,
 }
 
 /// Stored utxo with underlying quantities, blinding factors and a utxo proof.
 #[derive(Clone, Serialize, Deserialize)]
-struct ConfirmedUtxo {
+pub struct ConfirmedUtxo {
     receiver_witness: ReceiverWitness,
     anchor: Anchor,
     proof: utreexo::Proof,
@@ -150,43 +129,36 @@ fn process_block(node: &mut Node, block: &Block, bp_gens: &BulletproofGens) {
 
 impl Wallet {
     /// Creates a new user account with a privkey and pre-seeded collection of utxos
-    pub fn new(seed: [u8; 32]) -> Self {
-        let xprv = Xprv::random(&mut ChaChaRng::from_seed(seed));
+    pub fn new(alias: impl Into<String>) -> Self {
+        let alias = alias.into();
+        let xprv = util::xprv_from_string(&alias);
 
         Self {
+            alias,
             xprv,
             account: Account::new(xprv.to_xpub()),
             utxos: Vec::new(),
             pending_utxos: Vec::new(),
         }
-    }
+    } 
 
-    /// Generates a bunch of mock utxos
-    fn generate_pending_utxos(&mut self, anchor_seed: [u8; 32]) -> Vec<PendingUtxo> {
-        // Create some utxos
+    /// Generates a bunch of initial utxos
+    pub fn mint_utxos(&mut self, mut anchor: Anchor, flv: Scalar, qtys: impl IntoIterator<Item=u64>) -> (Vec<PendingUtxo>, Anchor) {
         let mut results = Vec::new();
+        for q in qtys {
+            // 1, 2, 4, 8, 16, 32
+            let qty = 1u64 << q;
+            // anchors are not unique, but it's irrelevant for this test
+            anchor = anchor.ratchet();
 
-        let mut anchor = Anchor::from_raw_bytes(anchor_seed);
+            let receiver_witness = self.account.generate_receiver(ClearValue { qty, flv });
 
-        // Create a few contracts with values of different quantities and flavors {0, 1}.
-        for flv_i in 0..2u64 {
-            let flv = Scalar::from(flv_i);
-            for q in 0..6u64 {
-                // 1, 2, 4, 8, 16, 32
-                let qty = 1u64 << q;
-                // anchors are not unique, but it's irrelevant for this test
-                anchor = anchor.ratchet();
-
-                let receiver_witness = self.account.generate_receiver(ClearValue { qty, flv });
-
-                results.push(PendingUtxo {
-                    receiver_witness,
-                    anchor,
-                });
-            }
+            results.push(PendingUtxo {
+                receiver_witness,
+                anchor,
+            });
         }
-
-        results
+        (results, anchor)
     }
 }
 
@@ -198,17 +170,17 @@ impl AsRef<ClearValue> for ConfirmedUtxo {
 
 impl PendingUtxo {
     /// Convert utxo to a Contract instance
-    fn contract(&self) -> Contract {
+    pub fn contract(&self) -> Contract {
         self.receiver_witness.contract(self.anchor)
     }
 
     /// Returns the UTXO ID
-    fn contract_id(&self) -> ContractID {
+    pub fn contract_id(&self) -> ContractID {
         self.contract().id()
     }
 
     /// Converts pending utxo into stored utxo
-    fn to_confirmed(self, proof: utreexo::Proof) -> ConfirmedUtxo {
+    pub fn to_confirmed(self, proof: utreexo::Proof) -> ConfirmedUtxo {
         ConfirmedUtxo {
             receiver_witness: self.receiver_witness,
             anchor: self.anchor,
@@ -219,12 +191,12 @@ impl PendingUtxo {
 
 impl ConfirmedUtxo {
     /// Convert utxo to a Contract instance
-    fn contract(&self) -> Contract {
+    pub fn contract(&self) -> Contract {
         self.receiver_witness.contract(self.anchor)
     }
 
     /// Returns the UTXO ID
-    fn contract_id(&self) -> ContractID {
+    pub fn contract_id(&self) -> ContractID {
         self.contract().id()
     }
 }

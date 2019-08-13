@@ -1,7 +1,7 @@
 table! {
     asset_records (alias) {
         alias -> Text,
-        xprv_json -> Text,
+        key_json -> Text,
     }
 }
 

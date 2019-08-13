@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS block_records (
 
 CREATE TABLE IF NOT EXISTS asset_records (
   alias varchar PRIMARY KEY NOT NULL,
-  xprv_json text NOT NULL
+  key_json text NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS node_records (
