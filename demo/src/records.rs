@@ -45,15 +45,25 @@ impl AssetRecord {
     pub fn new(alias: impl Into<String>) -> Self {
         let alias = alias.into();
         let key = util::scalar_from_string(&alias);
+        dbg!(&key);
+
+        let keyjson = serde_json::to_string(&key).expect("Key should be encoded well");
+        dbg!(&keyjson);
+
+        let key2:serde_json::Value = serde_json::from_str(&keyjson).expect("json String->json::Value fail");
+        dbg!(&key2);
+        
+        let key2:Scalar = serde_json::from_str(&keyjson).expect("json string->Scalar fail");
+        dbg!(&key2);
 
         AssetRecord {
             alias,
-            key_json: serde_json::to_string(&key).unwrap()
+            key_json: serde_json::to_string(&key).expect("Issuance key should be encoded well")
         }
     }
 
     pub fn issuance_key(&self) -> Scalar {
-        serde_json::from_str(&self.key_json).unwrap()
+        serde_json::from_str(&self.key_json).expect("Should decode issuance key well from json")
     }
     
     pub fn issuance_predicate(&self) -> zkvm::Predicate {

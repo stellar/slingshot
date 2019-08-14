@@ -110,7 +110,7 @@ fn prepare_db_if_needed() {
             utxos.append(&mut list);
             let (mut list, anchor) = treasury_wallet.mint_utxos(anchor, usd_record.flavor(), vec![1000, 5000]);
             utxos.append(&mut list);
-            let (mut list, anchor) = treasury_wallet.mint_utxos(anchor, eur_record.flavor(), vec![80, 99, 7000]);
+            let (mut list, _) = treasury_wallet.mint_utxos(anchor, eur_record.flavor(), vec![80, 99, 7000]);
             utxos.append(&mut list);
 
             utxos
@@ -135,9 +135,9 @@ fn prepare_db_if_needed() {
             state_json: serde_json::to_string_pretty(&network_state).expect("JSON encoding should work for chain state")
         };
 
-        diesel::insert_into(block_records)
-            .values(&initial_block_record)
-            .execute(&db_connection).expect("Inserting a record should work");
+        // diesel::insert_into(block_records)
+        //     .values(&initial_block_record)
+        //     .execute(&db_connection).expect("Inserting a record should work");
 
         let treasury = Node {
             blockchain: network_state.clone(),

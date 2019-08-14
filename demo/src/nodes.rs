@@ -1,17 +1,13 @@
-use merlin::Transcript;
-use rand::SeedableRng;
-use rand_chacha::ChaChaRng;
 use serde::{Deserialize, Serialize};
 use bulletproofs::BulletproofGens;
 use curve25519_dalek::scalar::Scalar;
 use keytree::Xprv;
-use musig::Signature;
 
 use zkvm::blockchain::{Block, BlockchainState};
 use zkvm::utreexo;
-use zkvm::{Anchor, ClearValue, Contract, ContractID, Program, Prover, TxEntry, TxHeader};
+use zkvm::{Anchor, ClearValue, Contract, ContractID, TxEntry};
 
-use accounts::{Account, ReceiverReply, ReceiverWitness};
+use accounts::{Account, ReceiverWitness};
 
 use super::util;
 
