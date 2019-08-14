@@ -1,0 +1,16 @@
+[package]
+name = "schnorr"
+version = "0.1.0"
+authors = ["Oleg Andreev <oleganza@gmail.com>", "Cathie Yun <cathieyun@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+failure = "0.1"
+merlin = "1.0.1"
+rand_core = { version = "0.3.0", default-features = false }
+rand = "0.6"
+curve25519-dalek = { version = "1.0.1", features = ["serde"] }
+serde = { version = "1.0", features=["derive"] }
+
+[dev-dependencies]
+
