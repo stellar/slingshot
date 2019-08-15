@@ -8,9 +8,10 @@ use crate::merkle::MerkleItem;
 /// Forest consists of a number of roots of merkle binary trees.
 /// Each forest is identified by a generation.
 #[derive(Clone, Serialize, Deserialize)]
-#[serde(from = "ForestSerde", into = "ForestSerde")]
+//#[serde(from = "ForestSerde", into = "ForestSerde")]
 pub struct Forest {
     generation: u64,
+    #[serde(with = "crate::serialization::array64")]
     roots: [Option<Hash>; 64], // roots of the trees for levels 0 to 63
 }
 
@@ -465,6 +466,7 @@ impl Catchup {
     }
 }
 
+/*
 /// Serde-serializable representation of the Forest.
 /// This exists only because serde defines serialization for arrays up to 32 elements.
 /// TBD: replace this workaround with a custom Serialize/Deserialize impl w/o adapter struct.
@@ -499,6 +501,7 @@ impl From<ForestSerde> for Forest {
         result
     }
 }
+*/
 
 /// Serde-serializable representation of the Forest.
 /// This exists only because serde-json does not serialize byte buffers into hex or base64 strings,
