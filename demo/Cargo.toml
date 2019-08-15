@@ -12,7 +12,6 @@ dotenv = "0.9.0"
 merlin = "1.0.1"
 curve25519-dalek = { version = "1.0.1", features = ["serde"] }
 serde = { version = "1.0", features=["derive"] }
-serde_json = "1.0"
 rand_chacha = "0.1"
 hex = "^0.3"
 
@@ -37,3 +36,8 @@ path = "../accounts"
 version = "0.4.2"
 default-features = false
 features = ["handlebars_templates", "tera_templates", "serve", "diesel_sqlite_pool"]
+
+[dependencies.serde_json]
+git = "https://github.com/oleganza/json"
+branch = "binary-support"
+features = ["binary_hex"]

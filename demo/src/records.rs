@@ -30,12 +30,12 @@ impl NodeRecord {
     pub fn new(node: Node) -> Self {
         Self {
             alias: node.wallet.alias.clone(),
-            state_json: serde_json::to_string_pretty(&node).expect("JSON serialization should work for Node")
+            state_json: util::to_json(&node)
         }
     }
 
     pub fn node(&self) -> Node {
-        serde_json::from_str(&self.state_json).expect("JSON decoding should work for NodeRecord")
+        util::from_valid_json(&self.state_json)
     }
 }
 
@@ -47,23 +47,23 @@ impl AssetRecord {
         let key = util::scalar_from_string(&alias);
         dbg!(&key);
 
-        let keyjson = serde_json::to_string(&key).expect("Key should be encoded well");
+        let keyjson = util::to_json(&key);
         dbg!(&keyjson);
 
-        let key2:serde_json::Value = serde_json::from_str(&keyjson).expect("json String->json::Value fail");
+        let key2:serde_json::Value = util::from_valid_json(&keyjson);
         dbg!(&key2);
         
-        let key2:Scalar = serde_json::from_str(&keyjson).expect("json string->Scalar fail");
+        let key2:Scalar = util::from_valid_json(&keyjson);
         dbg!(&key2);
 
         AssetRecord {
             alias,
-            key_json: serde_json::to_string(&key).expect("Issuance key should be encoded well")
+            key_json: util::to_json(&key)
         }
     }
 
     pub fn issuance_key(&self) -> Scalar {
-        serde_json::from_str(&self.key_json).expect("Should decode issuance key well from json")
+        util::from_valid_json(&self.key_json)
     }
     
     pub fn issuance_predicate(&self) -> zkvm::Predicate {
