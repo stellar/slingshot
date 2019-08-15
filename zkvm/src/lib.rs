@@ -5,8 +5,7 @@
 extern crate failure;
 extern crate serde;
 
-#[macro_use]
-mod serialization;
+#[macro_use] mod serialization;
 pub mod blockchain;
 mod constraints;
 mod contract;
