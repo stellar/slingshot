@@ -2,7 +2,7 @@ use merlin::Transcript;
 use serde::{Deserialize, Serialize};
 
 use super::super::utreexo;
-use crate::{MerkleTree, Tx, TxEntry, TxID, VerifiedTx};
+use crate::{Hash, MerkleTree, Tx, TxEntry, TxID, VerifiedTx};
 
 /// Identifier of the block, computed as a hash of the `BlockHeader`.
 #[derive(Clone, Copy, PartialEq, Default, Debug)]
@@ -23,9 +23,9 @@ pub struct BlockHeader {
     /// 00:00:00 UTC Jan 1, 1970.
     pub timestamp_ms: u64,
     /// 32-byte Merkle root of the transactions in the block.
-    pub txroot: [u8; 32],
+    pub txroot: Hash,
     /// 32-byte Merkle root of the Utreexo state.
-    pub utxoroot: [u8; 32],
+    pub utxoroot: Hash,
     /// Extra data for the future extensions.
     pub ext: Vec<u8>,
 }
@@ -58,8 +58,8 @@ impl BlockHeader {
         t.append_u64(b"height", self.height);
         t.append_message(b"previd", &self.prev.0);
         t.append_u64(b"timestamp_ms", self.timestamp_ms);
-        t.append_message(b"txroot", &self.txroot);
-        t.append_message(b"utxoroot", &self.utxoroot);
+        t.append_message(b"txroot", &self.txroot.0);
+        t.append_message(b"utxoroot", &self.utxoroot.0);
         t.append_message(b"ext", &self.ext);
 
         let mut result = [0u8; 32];
@@ -68,7 +68,7 @@ impl BlockHeader {
     }
 
     /// Creates an initial block header.
-    pub fn make_initial(timestamp_ms: u64, utxoroot: [u8; 32]) -> BlockHeader {
+    pub fn make_initial(timestamp_ms: u64, utxoroot: Hash) -> BlockHeader {
         BlockHeader {
             version: 1,
             height: 1,

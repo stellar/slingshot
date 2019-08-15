@@ -9,7 +9,7 @@ use crate::encoding;
 use crate::encoding::Encodable;
 use crate::encoding::SliceReader;
 use crate::errors::VMError;
-use crate::merkle::{MerkleItem, MerkleTree};
+use crate::merkle::{Hash, MerkleItem, MerkleTree};
 use crate::transcript::TranscriptProtocol;
 
 /// Transaction log. `TxLog` is a type alias for `Vec<TxEntry>`.
@@ -17,7 +17,8 @@ pub type TxLog = Vec<TxEntry>;
 
 /// Transaction ID is a unique 32-byte identifier of a transaction
 #[derive(Copy, Clone, PartialEq, Debug, Serialize, Deserialize)]
-pub struct TxID(pub [u8; 32]);
+#[serde(transparent)]
+pub struct TxID(pub Hash);
 
 /// Entry in a transaction log
 #[allow(missing_docs)]

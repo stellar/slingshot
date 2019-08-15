@@ -1,9 +1,9 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-use super::nodes::{Hash, Heap, Node, NodeHasher, NodeIndex};
+use super::nodes::{Heap, Node, NodeHasher, NodeIndex};
 use super::path::{Directions, Path, Position, Proof};
-use crate::merkle::MerkleItem;
+use crate::merkle::{Hash, MerkleItem};
 
 /// Forest consists of a number of roots of merkle binary trees.
 /// Each forest is identified by a generation.
@@ -25,7 +25,6 @@ pub struct WorkForest {
 
 /// Structure that helps auto-updating the proofs created for a previous generation of a forest.
 #[derive(Clone, Serialize, Deserialize)]
-#[serde(try_from = "CatchupSerde", into = "CatchupSerde")]
 pub struct Catchup {
     forest: WorkForest,           // forest that stores the inner nodes
     map: HashMap<Hash, Position>, // node hash -> new position offset for this node
@@ -502,7 +501,7 @@ impl From<ForestSerde> for Forest {
     }
 }
 */
-
+/*
 /// Serde-serializable representation of the Forest.
 /// This exists only because serde-json does not serialize byte buffers into hex or base64 strings,
 /// and hashmap keys must be serialized as strings in JSON.
@@ -544,3 +543,4 @@ impl TryFrom<CatchupSerde> for Catchup {
         })
     }
 }
+*/
