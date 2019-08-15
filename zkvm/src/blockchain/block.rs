@@ -5,9 +5,9 @@ use super::super::utreexo;
 use crate::{MerkleTree, Tx, TxEntry, TxID, VerifiedTx};
 
 /// Identifier of the block, computed as a hash of the `BlockHeader`.
-#[derive(Clone, Copy, PartialEq, Debug, Serialize, Deserialize)]
-#[serde(transparent)]
+#[derive(Clone, Copy, PartialEq, Default, Debug)]
 pub struct BlockID(pub [u8; 32]);
+serialize_bytes32!(BlockID);
 
 /// BlockHeader contains the metadata for the block of transactions,
 /// committing to them, but not containing the actual transactions.
