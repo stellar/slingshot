@@ -8,7 +8,6 @@ use crate::merkle::{Hash, MerkleItem};
 /// Forest consists of a number of roots of merkle binary trees.
 /// Each forest is identified by a generation.
 #[derive(Clone, Serialize, Deserialize)]
-//#[serde(from = "ForestSerde", into = "ForestSerde")]
 pub struct Forest {
     generation: u64,
     #[serde(with = "crate::serialization::array64")]
