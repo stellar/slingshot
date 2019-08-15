@@ -141,9 +141,7 @@ impl Wallet {
     /// Generates a bunch of initial utxos
     pub fn mint_utxos(&mut self, mut anchor: Anchor, flv: Scalar, qtys: impl IntoIterator<Item=u64>) -> (Vec<PendingUtxo>, Anchor) {
         let mut results = Vec::new();
-        for q in qtys {
-            // 1, 2, 4, 8, 16, 32
-            let qty = 1u64 << q;
+        for qty in qtys {
             // anchors are not unique, but it's irrelevant for this test
             anchor = anchor.ratchet();
 
