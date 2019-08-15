@@ -45,17 +45,6 @@ impl AssetRecord {
     pub fn new(alias: impl Into<String>) -> Self {
         let alias = alias.into();
         let key = util::scalar_from_string(&alias);
-        dbg!(&key);
-
-        let keyjson = util::to_json(&key);
-        dbg!(&keyjson);
-
-        let key2:serde_json::Value = util::from_valid_json(&keyjson);
-        dbg!(&key2);
-        
-        let key2:Scalar = util::from_valid_json(&keyjson);
-        dbg!(&key2);
-
         AssetRecord {
             alias,
             key_json: util::to_json(&key)

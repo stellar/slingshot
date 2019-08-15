@@ -97,7 +97,7 @@ fn prepare_db_if_needed() {
 
         diesel::insert_into(asset_records)
             .values(vec![&token_record,&usd_record,&eur_record])
-            .execute(&db_connection).expect("Inserting a record should work");
+            .execute(&db_connection).expect("Inserting an asset record should work");
 
         // Create a treasury node that will issue various tokens to anyone.
         let mut treasury_wallet = Wallet::new("Issuer");
@@ -135,14 +135,19 @@ fn prepare_db_if_needed() {
             state_json: serde_json::to_string_pretty(&network_state).expect("JSON encoding should work for chain state")
         };
 
-        // diesel::insert_into(block_records)
-        //     .values(&initial_block_record)
-        //     .execute(&db_connection).expect("Inserting a record should work");
+        diesel::insert_into(block_records)
+            .values(&initial_block_record)
+            .execute(&db_connection).expect("Inserting a block record should work");
 
         let treasury = Node {
             blockchain: network_state.clone(),
             wallet: treasury_wallet,
         };
+
+        let treasury_record = records::NodeRecord::new(treasury);
+        diesel::insert_into(node_records)
+            .values(&treasury_record)
+            .execute(&db_connection).expect("Inserting a node record should work");
 
         // TBD: add more accounts
 
