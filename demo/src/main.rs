@@ -127,12 +127,12 @@ fn prepare_db_if_needed() {
 
         let initial_block_record = records::BlockRecord {
             height: 1,
-            block_json: serde_json::to_string_pretty(&Block{
+            block_json: util::to_json(&Block{
                 header: network_state.tip.clone(),
                 txs: Vec::new(),
                 all_utxo_proofs: Vec::new(),
-            }).expect("JSON encoding should work for initial block"),
-            state_json: serde_json::to_string_pretty(&network_state).expect("JSON encoding should work for chain state")
+            }),
+            state_json: util::to_json(&network_state)
         };
 
         diesel::insert_into(block_records)

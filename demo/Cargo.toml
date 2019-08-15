@@ -39,5 +39,6 @@ features = ["handlebars_templates", "tera_templates", "serve", "diesel_sqlite_po
 
 [dependencies.serde_json]
 git = "https://github.com/oleganza/json"
+#path = "../../../rust/serde-json"
 branch = "binary-support"
 features = ["binary_hex"]
