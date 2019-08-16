@@ -1,8 +1,8 @@
-use crate::merkle::MerkleItem;
+use crate::merkle::{Hash, MerkleItem};
 use serde::{Deserialize, Serialize};
 
 use super::super::encoding::{self, Encodable};
-use super::nodes::{Hash, NodeHasher};
+use super::nodes::NodeHasher;
 
 /// Absolute position of an item in the tree.
 pub type Position = u64;

@@ -5,6 +5,8 @@
 extern crate failure;
 extern crate serde;
 
+#[macro_use]
+mod serialization;
 pub mod blockchain;
 mod constraints;
 mod contract;
@@ -27,7 +29,7 @@ mod vm;
 pub use self::constraints::{Commitment, CommitmentWitness, Constraint, Expression, Variable};
 pub use self::contract::{Anchor, Contract, ContractID, PortableItem};
 pub use self::errors::VMError;
-pub use self::merkle::{MerkleItem, MerkleNeighbor, MerkleTree};
+pub use self::merkle::{Hash, MerkleItem, MerkleNeighbor, MerkleTree};
 pub use self::ops::{Instruction, Opcode};
 pub use self::predicate::{Predicate, PredicateTree};
 pub use self::program::{Program, ProgramItem};

@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use super::block::{Block, BlockHeader, BlockID, VerifiedBlock};
 use super::errors::BlockchainError;
 use crate::utreexo::{self, Catchup, Forest, NodeHasher, WorkForest};
-use crate::{ContractID, MerkleTree, Tx, TxEntry, TxHeader, VerifiedTx, Verifier};
+use crate::{ContractID, Hash, MerkleTree, Tx, TxEntry, TxHeader, VerifiedTx, Verifier};
 
 /// State of the blockchain node.
 #[derive(Clone, Serialize, Deserialize)]
@@ -216,7 +216,7 @@ fn apply_txs<T: Borrow<Tx>, P: Borrow<utreexo::Proof>>(
     mut work_forest: &mut WorkForest,
     hasher: &NodeHasher<ContractID>,
     bp_gens: &BulletproofGens,
-) -> Result<([u8; 32], Vec<VerifiedTx>), BlockchainError> {
+) -> Result<(Hash, Vec<VerifiedTx>), BlockchainError> {
     let mut utxo_proofs = utxo_proofs.into_iter();
     let verified_txs = txs
         .into_iter()

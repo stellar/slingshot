@@ -3,6 +3,11 @@ use subtle::ConstantTimeEq;
 
 use crate::errors::VMError;
 
+/// Merkle hash of a node.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Default, Debug)]
+pub struct Hash(pub [u8; 32]);
+serialize_bytes32!(Hash);
+
 /// MerkleItem defines an item in the Merkle tree.
 pub trait MerkleItem: Sized {
     /// Commits the hash of the item to Transcript.
@@ -13,9 +18,9 @@ pub trait MerkleItem: Sized {
 #[derive(Copy, Clone, PartialEq, Debug)]
 pub enum MerkleNeighbor {
     /// Hash of left subtree
-    Left([u8; 32]),
+    Left(Hash),
     /// Hash of right subtree
-    Right([u8; 32]),
+    Right(Hash),
 }
 
 /// Merkle tree of hashes with a given size.
@@ -26,9 +31,9 @@ pub struct MerkleTree {
 }
 
 enum MerkleNode {
-    Empty([u8; 32]),
-    Leaf([u8; 32]),
-    Node([u8; 32], Box<MerkleNode>, Box<MerkleNode>),
+    Empty(Hash),
+    Leaf(Hash),
+    Node(Hash, Box<MerkleNode>, Box<MerkleNode>),
 }
 
 impl MerkleTree {
@@ -44,8 +49,8 @@ impl MerkleTree {
     }
 
     /// Returns the root hash of the Merkle tree.
-    pub fn hash(&self) -> &[u8; 32] {
-        return self.root.hash();
+    pub fn hash(&self) -> &Hash {
+        self.root.hash()
     }
 
     /// Builds the Merkle path of inclusion for the entry at the given index in the
@@ -65,9 +70,9 @@ impl MerkleTree {
         label: &'static [u8],
         entry: &M,
         proof: &Vec<MerkleNeighbor>,
-    ) -> [u8; 32] {
+    ) -> Hash {
         let transcript = Transcript::new(label);
-        let mut result = [0u8; 32];
+        let mut result = Hash::default();
         Self::leaf(transcript.clone(), entry, &mut result);
         for node in proof.iter() {
             let mut t = transcript.clone();
@@ -92,7 +97,7 @@ impl MerkleTree {
         label: &'static [u8],
         entry: &M,
         proof: Vec<MerkleNeighbor>,
-        root: &[u8; 32],
+        root: &Hash,
     ) -> Result<(), VMError> {
         let result = Self::compute_root_from_path(label, entry, &proof);
         if result.ct_eq(root).unwrap_u8() == 1 {
@@ -104,13 +109,13 @@ impl MerkleTree {
 
     /// Builds and returns the root hash of a Merkle tree constructed from
     /// the supplied list.
-    pub fn root<M: MerkleItem>(label: &'static [u8], list: &[M]) -> [u8; 32] {
+    pub fn root<M: MerkleItem>(label: &'static [u8], list: &[M]) -> Hash {
         let tree = Self::build(label, list);
         tree.root.hash().clone()
     }
 
     fn build_tree<M: MerkleItem>(mut t: Transcript, list: &[M]) -> MerkleNode {
-        let mut h = [0u8; 32];
+        let mut h = Hash::default();
         match list.len() {
             0 => {
                 Self::empty(t, &mut h);
@@ -122,7 +127,7 @@ impl MerkleTree {
             }
             n => {
                 let k = n.next_power_of_two() / 2;
-                let mut node = [0u8; 32];
+                let mut node = Hash::default();
                 let left = Self::build_tree(t.clone(), &list[..k]);
                 let right = Self::build_tree(t.clone(), &list[k..]);
                 t.append_message(b"L", left.hash());
@@ -133,11 +138,11 @@ impl MerkleTree {
         }
     }
 
-    fn empty(mut t: Transcript, result: &mut [u8; 32]) {
+    fn empty(mut t: Transcript, result: &mut Hash) {
         t.challenge_bytes(b"merkle.empty", result);
     }
 
-    fn leaf<M: MerkleItem>(mut t: Transcript, entry: &M, result: &mut [u8; 32]) {
+    fn leaf<M: MerkleItem>(mut t: Transcript, entry: &M, result: &mut Hash) {
         entry.commit(&mut t);
         t.challenge_bytes(b"merkle.leaf", result);
     }
@@ -168,12 +173,25 @@ impl MerkleNode {
     }
 
     /// Returns the hash of a Merkle tree.
-    fn hash(&self) -> &[u8; 32] {
+    fn hash(&self) -> &Hash {
         match self {
             MerkleNode::Empty(h) => &h,
             MerkleNode::Leaf(h) => &h,
             MerkleNode::Node(h, _, _) => &h,
         }
+    }
+}
+
+impl core::ops::Deref for Hash {
+    type Target = [u8];
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl core::ops::DerefMut for Hash {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
     }
 }
 

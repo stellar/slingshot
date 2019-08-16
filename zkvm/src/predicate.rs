@@ -13,7 +13,7 @@ use crate::encoding;
 use crate::encoding::Encodable;
 use crate::encoding::SliceReader;
 use crate::errors::VMError;
-use crate::merkle::{MerkleItem, MerkleNeighbor, MerkleTree};
+use crate::merkle::{Hash, MerkleItem, MerkleNeighbor, MerkleTree};
 use crate::point_ops::PointOp;
 use crate::program::{Program, ProgramItem};
 use crate::transcript::TranscriptProtocol;
@@ -127,7 +127,7 @@ impl Predicate {
         Predicate::Opaque(self.to_point())
     }
 
-    fn commit_taproot(key: &VerificationKey, root: &[u8; 32]) -> Scalar {
+    fn commit_taproot(key: &VerificationKey, root: &Hash) -> Scalar {
         let mut t = Transcript::new(b"ZkVM.taproot");
         t.append_message(b"key", &key.as_compressed().to_bytes());
         t.append_message(b"merkle", root);
@@ -306,7 +306,7 @@ impl CallProof {
         let num_neighbors = (31 - positions.leading_zeros()) as usize;
         let mut neighbors = Vec::with_capacity(num_neighbors);
         for i in 0..num_neighbors {
-            let bytes = reader.read_u8x32()?;
+            let bytes = Hash(reader.read_u8x32()?);
             neighbors.push(if positions & (1 << i) == 0 {
                 MerkleNeighbor::Left(bytes)
             } else {

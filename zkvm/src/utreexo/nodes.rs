@@ -3,10 +3,7 @@ use merlin::Transcript;
 use serde::{Deserialize, Serialize};
 
 use super::path::{Position, Side};
-use crate::merkle::MerkleItem;
-
-/// Merkle hash of a node
-pub type Hash = [u8; 32];
+use crate::merkle::{Hash, MerkleItem};
 
 /// Index of a `Node` within a forest's heap storage.
 pub(super) type NodeIndex = usize;
@@ -102,23 +99,23 @@ impl<M: MerkleItem> NodeHasher<M> {
     pub(super) fn leaf(&self, item: &M) -> Hash {
         let mut t = self.t.clone();
         item.commit(&mut t);
-        let mut hash = [0; 32];
+        let mut hash = Hash::default();
         t.challenge_bytes(b"merkle.leaf", &mut hash);
         hash
     }
 
     pub(super) fn intermediate(&self, left: &Hash, right: &Hash) -> Hash {
         let mut t = self.t.clone();
-        t.append_message(b"L", left);
-        t.append_message(b"R", right);
-        let mut hash = [0; 32];
+        t.append_message(b"L", &left);
+        t.append_message(b"R", &right);
+        let mut hash = Hash::default();
         t.challenge_bytes(b"merkle.node", &mut hash);
         hash
     }
 
     pub(super) fn empty(&self) -> Hash {
         let mut t = self.t.clone();
-        let mut hash = [0; 32];
+        let mut hash = Hash::default();
         t.challenge_bytes(b"merkle.empty", &mut hash);
         hash
     }
