@@ -7,10 +7,10 @@ use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
 use musig::VerificationKey;
 use rand::{CryptoRng, RngCore};
-use serde::{Deserialize, Serialize};
 
 use crate::transcript::TranscriptProtocol;
 
+mod serialization;
 mod transcript;
 
 #[cfg(test)]
@@ -18,7 +18,7 @@ mod tests;
 
 /// Xprv represents an extended private key.
 /// TBD: change serialization to encode a single 64-byte blob, with hex for human-readable formats
-#[derive(Copy, Clone, PartialEq, Eq, Default, Debug, Serialize, Deserialize)]
+#[derive(Copy, Clone, PartialEq, Eq, Default, Debug)]
 pub struct Xprv {
     scalar: Scalar,
     xpub: Xpub,
@@ -26,7 +26,7 @@ pub struct Xprv {
 
 /// Xpub represents an extended public key.
 /// TBD: change serialization to encode a single 64-byte blob, with hex for human-readable formats
-#[derive(Copy, Clone, PartialEq, Eq, Default, Debug, Serialize, Deserialize)]
+#[derive(Copy, Clone, PartialEq, Eq, Default, Debug)]
 pub struct Xpub {
     pubkey: VerificationKey,
     dk: [u8; 32],
