@@ -17,6 +17,7 @@ mod transcript;
 mod tests;
 
 // Convenience re-exports from `schnorr` crate.
+pub use schnorr::TranscriptProtocol as SchnorrTranscriptProtocol;
 pub use schnorr::{BatchVerification, BatchVerifier, SchnorrError, Signature, VerificationKey};
 
 pub use self::context::{Multikey, Multimessage, MusigContext};
