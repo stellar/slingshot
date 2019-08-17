@@ -5,8 +5,8 @@ use curve25519_dalek::constants;
 use curve25519_dalek::ristretto::CompressedRistretto;
 use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
-use musig::VerificationKey;
 use rand::{CryptoRng, RngCore};
+use schnorr::VerificationKey;
 
 use crate::transcript::TranscriptProtocol;
 
