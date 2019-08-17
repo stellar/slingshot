@@ -156,33 +156,6 @@ fn prepare_db_if_needed() {
         //Err(diesel::result::Error::RollbackTransaction)
     }).expect("Initial DB transaction should succeed.");
 
-
-    // let mut alice_wallet = Wallet::new([0; 32]);
-    // let bob_wallet = Wallet::new([1; 32]);
-
-    // // 1. Instantiate a blockchain with some utxos allocated to Alice.
-    // let utxos = alice_wallet.generate_pending_utxos([0; 32]);
-
-    // let (network_state, proofs) =
-    //     BlockchainState::make_initial(0u64, utxos.iter().map(|utxo| utxo.contract().id()));
-
-    // alice_wallet.utxos = utxos
-    //     .into_iter()
-    //     .zip(proofs.into_iter())
-    //     .map(|(pending_utxo, proof)| pending_utxo.to_confirmed(proof))
-    //     .collect();
-
-    // let mut alice = Node {
-    //     blockchain: network_state.clone(),
-    //     wallet: alice_wallet,
-    // };
-
-    // // 2. Bob is instantiated with no utxos.
-    // let mut bob = Node {
-    //     blockchain: network_state.clone(),
-    //     wallet: bob_wallet,
-    // };
-
 }
 
 fn launch_rocket_app() {
