@@ -115,20 +115,15 @@ impl Multisignature for Signature {
         // `s * G = R + sum{c_i * X_i}`
         //      ->
         // `0 == (-s * G) + (1 * R) + sum{c_i * X_i}`
+        let n = context.len();
         batch.append(
             -self.s,
-            iter::once(Scalar::one()),
-            iter::once(self.R.decompress()),
+            iter::once(Scalar::one()).chain(
+                (0..n).map(|i| context.challenge(i, &mut transcript.clone())),
+            ),
+            iter::once(self.R.decompress()).chain(
+                (0..n).map(|i| Some(context.key(i).into_point()))
+            ),
         );
-        
-        for i in 0..context.len() {
-            let c_i = context.challenge(i, transcript);
-            batch.append(
-                Scalar::zero(), // TBD: change to Option<Item>
-                iter::once(c_i),
-                iter::once(Some(context.key(i).into_point())) // TBD: change to single point, not iterator
-            )
-        }
     }
-
 }
