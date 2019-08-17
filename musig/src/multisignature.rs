@@ -76,7 +76,7 @@ impl Multisignature for Signature {
 
         // Commit the context, and commit the nonce sum with label "R"
         context.commit(transcript);
-        transcript.commit_point(b"R", &R);
+        transcript.append_point(b"R", &R);
 
         // Generate signature: s = r + sum{c_i * x_i}
         let mut s = r;
@@ -106,7 +106,7 @@ impl Multisignature for Signature {
     ) {
         let context = Multimessage::new(messages);
         context.commit(transcript);
-        transcript.commit_point(b"R", &self.R);
+        transcript.append_point(b"R", &self.R);
 
         // Form the final linear combination:
         // `s * G = R + sum{c_i * X_i}`

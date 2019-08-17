@@ -20,7 +20,7 @@ impl NonceCommitment {
 
     pub(super) fn precommit(&self) -> NoncePrecommitment {
         let mut h = Transcript::new(b"Musig.nonce-precommit");
-        h.commit_point(b"R", &self.0.compress());
+        h.append_point(b"R", &self.0.compress());
         let mut precommitment = [0u8; 32];
         h.challenge_bytes(b"precommitment", &mut precommitment);
         NoncePrecommitment(precommitment)

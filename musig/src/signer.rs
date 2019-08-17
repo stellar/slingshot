@@ -128,7 +128,7 @@ impl<'t, C: MusigContext> SignerAwaitingCommitments<'t, C> {
 
         // Commit the context with label "X", and commit the nonce sum with label "R"
         self.context.commit(&mut self.transcript);
-        self.transcript.commit_point(b"R", &R.compress());
+        self.transcript.append_point(b"R", &R.compress());
 
         // Make a copy of the transcript for extracting the challenge c_i.
         // This way, we can pass self.transcript to the next state so the next state
