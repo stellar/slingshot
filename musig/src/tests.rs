@@ -2,10 +2,9 @@ use curve25519_dalek::ristretto::CompressedRistretto;
 use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
 
-use schnorr::{VerificationKey,Signature, TranscriptProtocol};
+use schnorr::{Signature, TranscriptProtocol, VerificationKey};
 
-use crate::{Signer, Multikey, Multimessage, MusigContext, Multisignature, MusigError};
-
+use crate::{Multikey, Multimessage, Multisignature, MusigContext, MusigError, Signer};
 
 #[test]
 fn sign_verify_single_multikey() {
@@ -67,9 +66,7 @@ fn sign_multikey() {
     ];
     let multikey = multikey_helper(&priv_keys);
 
-    assert!(
-        sign_with_mpc(&priv_keys, multikey, Transcript::new(b"example transcript")).is_ok()
-    );
+    assert!(sign_with_mpc(&priv_keys, multikey, Transcript::new(b"example transcript")).is_ok());
 }
 
 fn sign_with_mpc<C: MusigContext + Clone>(

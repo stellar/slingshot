@@ -1,13 +1,13 @@
-use rand;
 use curve25519_dalek::constants::RISTRETTO_BASEPOINT_POINT;
 use curve25519_dalek::ristretto::RistrettoPoint;
 use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
+use rand;
 
-use schnorr::{Signature,TranscriptProtocol};
+use schnorr::{Signature, TranscriptProtocol};
 
 use super::counterparty::*;
-use super::{MusigError,MusigContext};
+use super::{MusigContext, MusigError};
 
 /// Entry point to multi-party signing protocol.
 pub struct Signer {}

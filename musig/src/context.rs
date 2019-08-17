@@ -1,9 +1,9 @@
 use curve25519_dalek::ristretto::RistrettoPoint;
 use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
-use schnorr::{VerificationKey,TranscriptProtocol as SchnorrTranscriptProtocol};
+use schnorr::{TranscriptProtocol as SchnorrTranscriptProtocol, VerificationKey};
 
-use super::{MusigError,TranscriptProtocol};
+use super::{MusigError, TranscriptProtocol};
 
 /// The context for signing - can either be a Multikey or Multimessage context.
 pub trait MusigContext {

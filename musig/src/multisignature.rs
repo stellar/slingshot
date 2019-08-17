@@ -1,15 +1,16 @@
-use core::iter;
 use core::borrow::Borrow;
+use core::iter;
 use curve25519_dalek::constants::RISTRETTO_BASEPOINT_POINT;
 use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
-use schnorr::{VerificationKey,Signature,SchnorrError,BatchVerification,SingleVerifier,TranscriptProtocol};
+use schnorr::{
+    BatchVerification, SchnorrError, Signature, SingleVerifier, TranscriptProtocol, VerificationKey,
+};
 
-use super::{Multimessage, MusigContext,MusigError};
+use super::{Multimessage, MusigContext, MusigError};
 
 /// Extension trait for `schnorr::Signature`.
 pub trait Multisignature {
-
     /// Creates a multi-message signature.
     fn sign_multi<P, M>(
         privkeys: P,
@@ -27,7 +28,7 @@ pub trait Multisignature {
         &self,
         transcript: &mut Transcript,
         messages: Vec<(VerificationKey, M)>,
-    ) -> Result<(),SchnorrError>;
+    ) -> Result<(), SchnorrError>;
 
     /// Verifies a multi-message signature in a batch.
     fn verify_multi_batched<M: AsRef<[u8]>>(
@@ -39,7 +40,6 @@ pub trait Multisignature {
 }
 
 impl Multisignature for Signature {
-
     fn sign_multi<P, M>(
         privkeys: P,
         messages: Vec<(VerificationKey, M)>,
@@ -89,16 +89,13 @@ impl Multisignature for Signature {
         Ok(Signature { s, R })
     }
 
-
     /// Verifies a signature for a multimessage context
     fn verify_multi<M: AsRef<[u8]>>(
         &self,
         transcript: &mut Transcript,
         messages: Vec<(VerificationKey, M)>,
-    ) -> Result<(),SchnorrError> {
-        SingleVerifier::verify(|verifier| {
-            self.verify_multi_batched(transcript, messages, verifier)
-        })
+    ) -> Result<(), SchnorrError> {
+        SingleVerifier::verify(|verifier| self.verify_multi_batched(transcript, messages, verifier))
     }
 
     fn verify_multi_batched<M: AsRef<[u8]>>(
@@ -118,12 +115,10 @@ impl Multisignature for Signature {
         let n = context.len();
         batch.append(
             -self.s,
-            iter::once(Scalar::one()).chain(
-                (0..n).map(|i| context.challenge(i, &mut transcript.clone())),
-            ),
-            iter::once(self.R.decompress()).chain(
-                (0..n).map(|i| Some(context.key(i).into_point()))
-            ),
+            iter::once(Scalar::one())
+                .chain((0..n).map(|i| context.challenge(i, &mut transcript.clone()))),
+            iter::once(self.R.decompress())
+                .chain((0..n).map(|i| Some(context.key(i).into_point()))),
         );
     }
 }

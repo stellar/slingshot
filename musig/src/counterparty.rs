@@ -2,10 +2,10 @@ use curve25519_dalek::constants::RISTRETTO_BASEPOINT_POINT;
 use curve25519_dalek::ristretto::RistrettoPoint;
 use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
+use schnorr::{TranscriptProtocol, VerificationKey};
 use subtle::ConstantTimeEq;
-use schnorr::{VerificationKey, TranscriptProtocol};
 
-use super::{MusigContext,MusigError};
+use super::{MusigContext, MusigError};
 
 #[derive(Copy, Clone)]
 pub struct NoncePrecommitment([u8; 32]);
