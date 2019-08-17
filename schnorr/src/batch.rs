@@ -24,8 +24,7 @@ pub trait BatchVerification {
 }
 
 /// Single signature verifier that implements batching interface.
-/// This is just a helper for `Signature::verify` and therefore not exported.
-pub(crate) struct SingleVerifier {
+pub struct SingleVerifier {
     result: Result<(), SchnorrError>,
 }
 

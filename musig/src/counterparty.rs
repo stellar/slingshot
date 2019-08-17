@@ -1,12 +1,11 @@
-use super::context::MusigContext;
-use super::errors::MusigError;
-use super::key::VerificationKey;
-use crate::transcript::TranscriptProtocol;
 use curve25519_dalek::constants::RISTRETTO_BASEPOINT_POINT;
 use curve25519_dalek::ristretto::RistrettoPoint;
 use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
 use subtle::ConstantTimeEq;
+use schnorr::{VerificationKey, TranscriptProtocol};
+
+use super::{MusigContext,MusigError};
 
 #[derive(Copy, Clone)]
 pub struct NoncePrecommitment([u8; 32]);

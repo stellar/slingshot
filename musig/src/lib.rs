@@ -7,19 +7,22 @@ extern crate failure;
 
 mod context;
 mod counterparty;
-mod deferred_verification;
-mod key;
-mod signature;
+mod multisignature;
 mod signer;
 
 mod errors;
 mod transcript;
 
+#[cfg(test)]
+mod tests;
+
+// Convenience re-exports from `schnorr` crate.
+pub use schnorr::{VerificationKey,Signature,BatchVerification,BatchVerifier,SchnorrError};
+
 pub use self::context::{Multikey, Multimessage, MusigContext};
-pub use self::deferred_verification::DeferredVerification;
 pub use self::errors::MusigError;
-pub use self::key::VerificationKey;
-pub use self::signature::Signature;
+pub use self::multisignature::Multisignature;
 pub use self::signer::{
     Signer, SignerAwaitingCommitments, SignerAwaitingPrecommitments, SignerAwaitingShares,
 };
+pub use self::transcript::TranscriptProtocol;
