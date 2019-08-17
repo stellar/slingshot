@@ -7,7 +7,8 @@ use super::Signature;
 
 impl Signature {
     /// Decodes a signature from a 64-byte slice.
-    pub fn from_bytes(sig: &[u8]) -> Result<Self, SchnorrError> {
+    pub fn from_bytes(sig: impl AsRef<[u8]>) -> Result<Self, SchnorrError> {
+        let sig = sig.as_ref();
         if sig.len() != 64 {
             return Err(SchnorrError::InvalidSignature);
         }
@@ -30,7 +31,6 @@ impl Signature {
     }
 }
 
-// TBD: serialize in hex in case of a human-readable serializer
 impl Serialize for Signature {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
