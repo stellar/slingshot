@@ -3,14 +3,13 @@ use bulletproofs::r1cs::ConstraintSystem;
 use bulletproofs::{BulletproofGens, PedersenGens};
 use curve25519_dalek::ristretto::CompressedRistretto;
 use merlin::Transcript;
-use musig::VerificationKey;
+use musig::{Multisignature, VerificationKey};
 
 use crate::constraints::Commitment;
 use crate::contract::ContractID;
 use crate::encoding::*;
 use crate::errors::VMError;
 use crate::ops::Instruction;
-use crate::point_ops::PointOp;
 use crate::predicate::Predicate;
 use crate::program::ProgramItem;
 use crate::tx::{Tx, VerifiedTx};
@@ -23,8 +22,8 @@ use crate::vm::{Delegate, VM};
 /// to be applied to the blockchain state.
 pub struct Verifier<'t> {
     signtx_items: Vec<(VerificationKey, ContractID)>,
-    deferred_operations: Vec<PointOp>,
     cs: r1cs::Verifier<'t>,
+    batch: musig::BatchVerifier<rand::rngs::ThreadRng>,
 }
 
 pub struct VerifierRun {
@@ -34,6 +33,7 @@ pub struct VerifierRun {
 
 impl<'t> Delegate<r1cs::Verifier<'t>> for Verifier<'t> {
     type RunType = VerifierRun;
+    type BatchVerifier = musig::BatchVerifier<rand::rngs::ThreadRng>;
 
     fn commit_variable(
         &mut self,
@@ -42,14 +42,6 @@ impl<'t> Delegate<r1cs::Verifier<'t>> for Verifier<'t> {
         let point = com.to_point();
         let var = self.cs.commit(point);
         Ok((point, var))
-    }
-
-    fn verify_point_op<F>(&mut self, point_op_fn: F) -> Result<(), VMError>
-    where
-        F: FnOnce() -> PointOp,
-    {
-        self.deferred_operations.push(point_op_fn());
-        Ok(())
     }
 
     fn process_tx_signature(
@@ -82,6 +74,10 @@ impl<'t> Delegate<r1cs::Verifier<'t>> for Verifier<'t> {
     fn cs(&mut self) -> &mut r1cs::Verifier<'t> {
         &mut self.cs
     }
+
+    fn batch_verifier(&mut self) -> &mut Self::BatchVerifier {
+        &mut self.batch
+    }
 }
 
 impl<'t> Verifier<'t> {
@@ -96,8 +92,8 @@ impl<'t> Verifier<'t> {
 
         let mut verifier = Verifier {
             signtx_items: Vec::new(),
-            deferred_operations: Vec::new(),
-            cs,
+            cs: cs,
+            batch: musig::BatchVerifier::new(rand::thread_rng()),
         };
 
         let vm = VM::new(
@@ -125,15 +121,18 @@ impl<'t> Verifier<'t> {
         signtx_transcript.append_message(b"txid", &txid.0);
 
         if verifier.signtx_items.len() != 0 {
-            verifier.deferred_operations.push(
-                tx.signature
-                    .verify_multi(&mut signtx_transcript, verifier.signtx_items)
-                    .into(),
+            tx.signature.verify_multi_batched(
+                &mut signtx_transcript,
+                verifier.signtx_items,
+                &mut verifier.batch,
             );
         }
 
         // Verify all deferred crypto operations.
-        PointOp::verify_batch(&verifier.deferred_operations[..])?;
+        verifier
+            .batch
+            .verify()
+            .map_err(|_| VMError::BatchSignatureVerificationFailed)?;
 
         Ok(VerifiedTx {
             header: tx.header,

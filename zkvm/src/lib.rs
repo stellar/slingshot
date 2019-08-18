@@ -14,7 +14,6 @@ mod encoding;
 mod errors;
 mod merkle;
 mod ops;
-mod point_ops;
 mod predicate;
 mod program;
 mod prover;

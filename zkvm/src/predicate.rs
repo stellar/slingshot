@@ -3,18 +3,19 @@
 //! Operations:
 //! - taproot key: P = X + h(X, M)*B
 //! - program_commitment: P = h(prog)*B2
+
 use bulletproofs::PedersenGens;
+use core::iter;
 use curve25519_dalek::ristretto::CompressedRistretto;
 use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
-use musig::VerificationKey;
+use musig::{BatchVerification, SingleVerifier, VerificationKey};
 
 use crate::encoding;
 use crate::encoding::Encodable;
 use crate::encoding::SliceReader;
 use crate::errors::VMError;
 use crate::merkle::{Hash, MerkleItem, MerkleNeighbor, MerkleTree};
-use crate::point_ops::PointOp;
 use crate::program::{Program, ProgramItem};
 use crate::transcript::TranscriptProtocol;
 
@@ -134,23 +135,35 @@ impl Predicate {
         t.challenge_scalar(b"h")
     }
 
-    /// Verifies whether the current predicate is a commitment to a signing key `key` and Merkle root `root`.
-    /// Returns a `PointOp` instance that can be verified in a batch with other operations.
-    pub fn prove_taproot(&self, program_item: &ProgramItem, call_proof: &CallProof) -> PointOp {
+    /// Verifies whether the current predicate is a commitment to a signing key `key` and Merkle root `root`,
+    /// defers operation to `batch`.
+    pub fn verify_taproot_batched(
+        &self,
+        program_item: &ProgramItem,
+        call_proof: &CallProof,
+        batch: &mut impl BatchVerification,
+    ) {
         let key = &call_proof.verification_key;
         let neighbors = &call_proof.neighbors;
         let root = MerkleTree::compute_root_from_path(b"ZkVM.taproot", program_item, neighbors);
         let h = Self::commit_taproot(key, &root);
 
         // P == X + h1(X, M)*B -> 0 == -P + X + h1(X, M)*B
-        PointOp {
-            primary: Some(h),
-            secondary: None,
-            arbitrary: vec![
-                (-Scalar::one(), self.to_point()),
-                (Scalar::one(), key.into_compressed()),
-            ],
-        }
+        batch.append(
+            h,
+            iter::once(-Scalar::one()).chain(iter::once(Scalar::one())),
+            iter::once(self.to_point().decompress()).chain(iter::once(Some(key.into_point()))),
+        )
+    }
+
+    /// Verifies whether the current predicate is a commitment to a signing key `key` and Merkle root `root`.
+    pub fn verify_taproot(
+        &self,
+        program_item: &ProgramItem,
+        call_proof: &CallProof,
+    ) -> Result<(), VMError> {
+        SingleVerifier::verify(|v| self.verify_taproot_batched(program_item, call_proof, v))
+            .map_err(|_| VMError::InvalidPredicateTree)
     }
 
     /// Helper to create an unsignable key
@@ -357,8 +370,8 @@ mod tests {
         let tree = PredicateTree::new(None, progs, blinding_key).unwrap();
         let tree_pred = Predicate::Tree(tree.clone());
         let (call_proof, prog) = tree.create_callproof(0).unwrap();
-        let op = tree_pred.prove_taproot(&ProgramItem::Program(prog), &call_proof);
-        assert!(op.verify().is_ok());
+        let result = tree_pred.verify_taproot(&ProgramItem::Program(prog), &call_proof);
+        assert!(result.is_ok());
     }
 
     #[test]
@@ -371,7 +384,7 @@ mod tests {
         let tree = PredicateTree::new(None, progs, blinding_key).unwrap();
         let tree_pred = Predicate::Tree(tree.clone());
         let (call_proof, _) = tree.create_callproof(0).unwrap();
-        let op = tree_pred.prove_taproot(&ProgramItem::Program(prog3), &call_proof);
-        assert!(op.verify().is_err())
+        let result = tree_pred.verify_taproot(&ProgramItem::Program(prog3), &call_proof);
+        assert!(result.is_err())
     }
 }
