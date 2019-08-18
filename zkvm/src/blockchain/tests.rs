@@ -1,7 +1,7 @@
 use bulletproofs::BulletproofGens;
 use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
-use musig::Signature;
+use musig::{Signature,Multisignature};
 use rand::RngCore;
 
 use super::*;
