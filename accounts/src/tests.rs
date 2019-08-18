@@ -5,7 +5,7 @@ use rand_chacha::ChaChaRng;
 use bulletproofs::BulletproofGens;
 use curve25519_dalek::scalar::Scalar;
 use keytree::Xprv;
-use musig::Signature;
+use musig::{Multisignature, Signature};
 
 use zkvm::blockchain::{Block, BlockchainState};
 use zkvm::utreexo;

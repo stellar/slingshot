@@ -2,7 +2,7 @@ use bulletproofs::{BulletproofGens, PedersenGens};
 use curve25519_dalek::constants::RISTRETTO_BASEPOINT_COMPRESSED;
 use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
-use musig::{Signature, VerificationKey, Multisignature};
+use musig::{Multisignature, Signature, VerificationKey};
 use rand::Rng;
 
 use zkvm::{
