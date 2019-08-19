@@ -11,7 +11,6 @@ use crate::contract::ContractID;
 use crate::encoding::Encodable;
 use crate::errors::VMError;
 use crate::ops::Instruction;
-use crate::point_ops::PointOp;
 use crate::predicate::Predicate;
 use crate::program::{Program, ProgramItem};
 use crate::tx::{TxHeader, UnsignedTx};
@@ -24,6 +23,7 @@ pub struct Prover<'t, 'g> {
     // TBD: use Multikey as a witness thing
     signtx_items: Vec<(VerificationKey, ContractID)>,
     cs: r1cs::Prover<'t, 'g>,
+    batch: musig::BatchVerifier<rand::rngs::ThreadRng>,
 }
 
 pub(crate) struct ProverRun {
@@ -32,6 +32,7 @@ pub(crate) struct ProverRun {
 
 impl<'t, 'g> Delegate<r1cs::Prover<'t, 'g>> for Prover<'t, 'g> {
     type RunType = ProverRun;
+    type BatchVerifier = musig::BatchVerifier<rand::rngs::ThreadRng>;
 
     fn commit_variable(
         &mut self,
@@ -39,13 +40,6 @@ impl<'t, 'g> Delegate<r1cs::Prover<'t, 'g>> for Prover<'t, 'g> {
     ) -> Result<(CompressedRistretto, r1cs::Variable), VMError> {
         let (v, v_blinding) = com.witness().ok_or(VMError::WitnessMissing)?;
         Ok(self.cs.commit(v.into(), v_blinding))
-    }
-
-    fn verify_point_op<F>(&mut self, _point_op_fn: F) -> Result<(), VMError>
-    where
-        F: FnOnce() -> PointOp,
-    {
-        Ok(())
     }
 
     fn process_tx_signature(
@@ -74,6 +68,10 @@ impl<'t, 'g> Delegate<r1cs::Prover<'t, 'g>> for Prover<'t, 'g> {
     fn cs(&mut self) -> &mut r1cs::Prover<'t, 'g> {
         &mut self.cs
     }
+
+    fn batch_verifier(&mut self) -> &mut Self::BatchVerifier {
+        &mut self.batch
+    }
 }
 
 impl<'t, 'g> Prover<'t, 'g> {
@@ -96,7 +94,8 @@ impl<'t, 'g> Prover<'t, 'g> {
 
         let mut prover = Prover {
             signtx_items: Vec::new(),
-            cs,
+            cs: cs,
+            batch: musig::BatchVerifier::new(rand::thread_rng()),
         };
 
         let vm = VM::new(

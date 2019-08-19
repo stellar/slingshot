@@ -1,7 +1,7 @@
 [package]
 name = "keytree"
-version = "0.1.0"
-authors = ["Tess Rinearson <tess.rinearson@gmail.com>"]
+version = "0.2.0"
+authors = ["Tess Rinearson <tess.rinearson@gmail.com>", "Oleg Andreev <oleganza@gmail.com>"]
 edition = "2018"
 
 [dependencies]
@@ -10,8 +10,8 @@ serde = { version = "1.0", features=["derive"] }
 merlin = "1.0.1"
 rand = "0.6"
 
-[dependencies.musig]
-path = "../musig"
+[dependencies.schnorr]
+path = "../schnorr"
 
 [dev-dependencies]
 rand_chacha = "0.1"

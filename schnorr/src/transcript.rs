@@ -8,9 +8,9 @@ pub trait TranscriptProtocol {
     /// Commit a domain separator for a single-message signature protocol.
     fn schnorr_sig_domain_sep(&mut self);
     /// Commit a `scalar` with the given `label`.
-    fn commit_scalar(&mut self, label: &'static [u8], scalar: &Scalar);
+    fn append_scalar(&mut self, label: &'static [u8], scalar: &Scalar);
     /// Commit a `point` with the given `label`.
-    fn commit_point(&mut self, label: &'static [u8], point: &CompressedRistretto);
+    fn append_point(&mut self, label: &'static [u8], point: &CompressedRistretto);
     /// Compute a `label`ed challenge variable.
     fn challenge_scalar(&mut self, label: &'static [u8]) -> Scalar;
 }
@@ -20,11 +20,11 @@ impl TranscriptProtocol for Transcript {
         self.append_message(b"dom-sep", b"schnorr-signature v1");
     }
 
-    fn commit_scalar(&mut self, label: &'static [u8], scalar: &Scalar) {
+    fn append_scalar(&mut self, label: &'static [u8], scalar: &Scalar) {
         self.append_message(label, scalar.as_bytes());
     }
 
-    fn commit_point(&mut self, label: &'static [u8], point: &CompressedRistretto) {
+    fn append_point(&mut self, label: &'static [u8], point: &CompressedRistretto) {
         self.append_message(label, point.as_bytes());
     }
 

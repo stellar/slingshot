@@ -117,8 +117,8 @@ pub enum VMError {
     AnchorMissing,
 
     /// This error occurs when VM's deferred schnorr checks fail
-    #[fail(display = "Deferred point operations failed")]
-    PointOperationsFailed,
+    #[fail(display = "Deferred batch signature verification failed")]
+    BatchSignatureVerificationFailed,
 
     /// This error occurs when a MuSig signature share fails to verify
     #[fail(display = "Share #{:?} failed to verify correctly", pubkey)]

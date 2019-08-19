@@ -7,7 +7,8 @@ use super::Signature;
 
 impl Signature {
     /// Decodes a signature from a 64-byte slice.
-    pub fn from_bytes(sig: &[u8]) -> Result<Self, SchnorrError> {
+    pub fn from_bytes(sig: impl AsRefExt) -> Result<Self, SchnorrError> {
+        let sig = sig.as_ref_ext();
         if sig.len() != 64 {
             return Err(SchnorrError::InvalidSignature);
         }
@@ -27,6 +28,30 @@ impl Signature {
         buf[..32].copy_from_slice(self.R.as_bytes());
         buf[32..].copy_from_slice(self.s.as_bytes());
         buf
+    }
+}
+
+/// Same as `AsRef<[u8]>`, but extended to 64-byte array.
+pub trait AsRefExt {
+    /// Returns a slice
+    fn as_ref_ext(&self) -> &[u8];
+}
+
+impl AsRefExt for [u8] {
+    fn as_ref_ext(&self) -> &[u8] {
+        self
+    }
+}
+
+impl<'a> AsRefExt for &'a [u8] {
+    fn as_ref_ext(&self) -> &[u8] {
+        self
+    }
+}
+
+impl AsRefExt for [u8; 64] {
+    fn as_ref_ext(&self) -> &[u8] {
+        &self[..]
     }
 }
 

@@ -15,7 +15,8 @@ mod transcript;
 #[cfg(test)]
 mod tests;
 
-pub use self::batch::{BatchVerification, BatchVerifier};
+pub use self::batch::{BatchVerification, BatchVerifier, SingleVerifier};
 pub use self::errors::SchnorrError;
 pub use self::key::VerificationKey;
 pub use self::signature::Signature;
+pub use self::transcript::TranscriptProtocol;

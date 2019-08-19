@@ -64,8 +64,8 @@ mod tests {
     use bulletproofs::{BulletproofGens, PedersenGens};
     use merlin::Transcript;
     use zkvm::{
-        Anchor, Contract, Predicate, Program, Prover, Signature, Tx, TxEntry, TxHeader, TxID,
-        TxLog, VMError, VerificationKey, Verifier,
+        Anchor, Contract, Multisignature, Predicate, Program, Prover, Signature, Tx, TxEntry,
+        TxHeader, TxID, TxLog, VMError, VerificationKey, Verifier,
     };
 
     fn add_dummy_input(p: &mut Program, dummy_key: &Scalar) {

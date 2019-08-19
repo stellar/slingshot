@@ -1,11 +1,12 @@
 use bulletproofs::r1cs;
+use core::iter;
+use core::iter::FromIterator;
 use curve25519_dalek::ristretto::CompressedRistretto;
 use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
-use musig::Signature;
+use musig::{BatchVerification, Signature};
 use spacesuit;
 use spacesuit::BitRange;
-use std::iter::FromIterator;
 use std::mem;
 
 use crate::constraints::{Commitment, Constraint, Expression, Variable};
@@ -13,7 +14,6 @@ use crate::contract::{Anchor, Contract, ContractID, PortableItem};
 use crate::encoding::SliceReader;
 use crate::errors::VMError;
 use crate::ops::Instruction;
-use crate::point_ops::PointOp;
 use crate::predicate::{CallProof, Predicate};
 use crate::program::ProgramItem;
 use crate::scalar_witness::ScalarWitness;
@@ -49,18 +49,17 @@ where
 }
 
 pub(crate) trait Delegate<CS: r1cs::RandomizableConstraintSystem> {
+    /// Container type for the currently running program.
     type RunType;
+
+    /// Batch verifier for signature checks and Taproot.
+    type BatchVerifier: BatchVerification;
 
     /// Adds a Commitment to the underlying constraint system, producing a high-level variable
     fn commit_variable(
         &mut self,
         com: &Commitment,
     ) -> Result<(CompressedRistretto, r1cs::Variable), VMError>;
-
-    /// Adds a point operation to the list of deferred operation for later batch verification
-    fn verify_point_op<F>(&mut self, point_op_fn: F) -> Result<(), VMError>
-    where
-        F: FnOnce() -> PointOp;
 
     /// Adds a key represented by Predicate to either verify or
     /// sign a transaction
@@ -72,6 +71,9 @@ pub(crate) trait Delegate<CS: r1cs::RandomizableConstraintSystem> {
 
     /// Returns the delegate's underlying constraint system
     fn cs(&mut self) -> &mut CS;
+
+    /// Returns the delegate's batch verifier.
+    fn batch_verifier(&mut self) -> &mut Self::BatchVerifier;
 
     /// Returns the next instruction.
     /// Returns Err() upon decoding/format error.
@@ -292,14 +294,11 @@ where
         let v_scalar = self.pop_item()?.to_string()?.to_scalar()?.to_scalar();
         let v_point = self.pop_item()?.to_string()?.to_commitment()?.to_point();
 
-        self.delegate.verify_point_op(|| {
-            // Check V = vB => V-vB = 0
-            PointOp {
-                primary: Some(-v_scalar),
-                secondary: None,
-                arbitrary: vec![(Scalar::one(), v_point)],
-            }
-        })?;
+        self.delegate.batch_verifier().append(
+            -v_scalar,
+            iter::once(Scalar::one()),
+            iter::once(v_point.decompress()),
+        );
 
         // Push commitment item
         self.push_item(String::Opaque(v_point.as_bytes().to_vec()));
@@ -356,15 +355,13 @@ where
         let (flv_point, _) = self.delegate.commit_variable(&flv.commitment)?;
         let (qty_point, _) = self.delegate.commit_variable(&qty.commitment)?;
 
-        self.delegate.verify_point_op(|| {
-            let flv_scalar = Value::issue_flavor(&predicate, metadata);
-            // flv_point == flavor·B    ->   0 == -flv_point + flv_scalar·B
-            PointOp {
-                primary: Some(flv_scalar),
-                secondary: None,
-                arbitrary: vec![(-Scalar::one(), flv_point)],
-            }
-        })?;
+        let flv_scalar = Value::issue_flavor(&predicate, metadata);
+        // flv_point == flavor·B    ->   0 == -flv_point + flv_scalar·B
+        self.delegate.batch_verifier().append(
+            flv_scalar,
+            iter::once(-Scalar::one()),
+            iter::once(flv_point.decompress()),
+        );
 
         let value = Value {
             qty: qty.commitment.clone(),
@@ -555,8 +552,11 @@ where
         let contract = self.pop_item()?.to_contract()?;
 
         // 0 == -P + X + h1(X, M)*B
-        self.delegate
-            .verify_point_op(|| contract.predicate.prove_taproot(&program_item, &call_proof))?;
+        contract.predicate.verify_taproot_batched(
+            &program_item,
+            &call_proof,
+            self.delegate.batch_verifier(),
+        );
 
         // Place contract payload on the stack
         for item in contract.payload.into_iter() {
@@ -592,8 +592,7 @@ where
         let mut t = Transcript::new(b"ZkVM.signid");
         t.append_message(b"contract", contract_id.as_ref());
         t.append_message(b"prog", &prog.to_bytes());
-        self.delegate
-            .verify_point_op(|| signature.verify(&mut t, verification_key).into())?;
+        signature.verify_batched(&mut t, verification_key, self.delegate.batch_verifier());
 
         // Replace current program with new program
         self.continue_with_program(prog)?;
@@ -628,8 +627,7 @@ where
         let mut t = Transcript::new(b"ZkVM.signtag");
         t.append_message(b"tag", &tag.to_bytes());
         t.append_message(b"prog", &prog.to_bytes());
-        self.delegate
-            .verify_point_op(|| signature.verify(&mut t, verification_key).into())?;
+        signature.verify_batched(&mut t, verification_key, self.delegate.batch_verifier());
 
         // Replace current program with new program
         self.continue_with_program(prog)?;

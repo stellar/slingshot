@@ -14,7 +14,6 @@ mod encoding;
 mod errors;
 mod merkle;
 mod ops;
-mod point_ops;
 mod predicate;
 mod program;
 mod prover;
@@ -42,4 +41,4 @@ pub use self::verifier::Verifier;
 
 pub use self::blockchain::*;
 
-pub use musig::{Multikey, Signature, VerificationKey};
+pub use musig::{Multikey, Multisignature, Signature, VerificationKey};

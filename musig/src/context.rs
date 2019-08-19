@@ -1,9 +1,9 @@
-use super::errors::MusigError;
-use super::key::VerificationKey;
-use super::transcript::TranscriptProtocol;
 use curve25519_dalek::ristretto::RistrettoPoint;
 use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
+use schnorr::{TranscriptProtocol as SchnorrTranscriptProtocol, VerificationKey};
+
+use super::{MusigError, TranscriptProtocol};
 
 /// The context for signing - can either be a Multikey or Multimessage context.
 pub trait MusigContext {
@@ -61,7 +61,7 @@ impl Multikey {
         // Commit pubkeys into the transcript
         // <L> = H(X_1 || X_2 || ... || X_n)
         for X in &pubkeys {
-            prf.commit_point(b"X", X.as_compressed());
+            prf.append_point(b"X", X.as_compressed());
         }
 
         // aggregated_key = sum_i ( a_i * X_i )
@@ -96,7 +96,7 @@ impl Multikey {
 impl MusigContext for Multikey {
     fn commit(&self, transcript: &mut Transcript) {
         transcript.schnorr_sig_domain_sep();
-        transcript.commit_point(b"X", self.aggregated_key.as_compressed());
+        transcript.append_point(b"X", self.aggregated_key.as_compressed());
     }
 
     fn challenge(&self, i: usize, transcript: &mut Transcript) -> Scalar {
@@ -135,7 +135,7 @@ impl<M: AsRef<[u8]>> MusigContext for Multimessage<M> {
     fn commit(&self, transcript: &mut Transcript) {
         transcript.schnorr_multisig_domain_sep(self.pairs.len());
         for (key, msg) in &self.pairs {
-            transcript.commit_point(b"X", key.as_compressed());
+            transcript.append_point(b"X", key.as_compressed());
             transcript.append_message(b"m", msg.as_ref());
         }
     }

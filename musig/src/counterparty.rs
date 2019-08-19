@@ -1,12 +1,11 @@
-use super::context::MusigContext;
-use super::errors::MusigError;
-use super::key::VerificationKey;
-use crate::transcript::TranscriptProtocol;
 use curve25519_dalek::constants::RISTRETTO_BASEPOINT_POINT;
 use curve25519_dalek::ristretto::RistrettoPoint;
 use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
+use schnorr::{TranscriptProtocol, VerificationKey};
 use subtle::ConstantTimeEq;
+
+use super::{MusigContext, MusigError};
 
 #[derive(Copy, Clone)]
 pub struct NoncePrecommitment([u8; 32]);
@@ -21,7 +20,7 @@ impl NonceCommitment {
 
     pub(super) fn precommit(&self) -> NoncePrecommitment {
         let mut h = Transcript::new(b"Musig.nonce-precommit");
-        h.commit_point(b"R", &self.0.compress());
+        h.append_point(b"R", &self.0.compress());
         let mut precommitment = [0u8; 32];
         h.challenge_bytes(b"precommitment", &mut precommitment);
         NoncePrecommitment(precommitment)
