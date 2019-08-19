@@ -55,72 +55,83 @@ pub struct ConfirmedUtxo {
     proof: utreexo::Proof,
 }
 
-/// Processes a block
-fn process_block(node: &mut Node, block: &Block, bp_gens: &BulletproofGens) {
-    // 9. Alice/Bob process blockchain:
-    //     a. SPV nodes:
-    //        1. Network sends to Bob and Alice new blockheader and a changeset:
-    //           - added utxo IDs,
-    //           - merkle proof set (combined in one tree when optimized) for all deleted utxo ids.
-    //        2. Alice/Bob apply changes, producing a new utreexo (and verifying it), and a catchup struct.
-    //     b. Full nodes:
-    //        1. Network sends to Bob and Alice new block
-    //        2. Alice/Bob verify+apply changes, producing a catchup struct.
-    let (verified_block, new_state) = node.blockchain.apply_block(&block, &bp_gens).unwrap();
+impl Node {
 
-    // In a real node utxos will be indexed by ContractID, so lookup will be more efficient.
-    let hasher = utreexo::NodeHasher::new();
-    for entry in verified_block.entries() {
-        match entry {
-            TxEntry::Input(contract_id) => {
-                // Delete confirmed utxos
-                if let Some(i) = node
-                    .wallet
-                    .utxos
-                    .iter()
-                    .position(|utxo| utxo.contract_id() == *contract_id)
-                {
-                    node.wallet.utxos.remove(i);
-                }
-            }
-            TxEntry::Output(contract) => {
-                // Make pending utxos confirmed
-                let cid = contract.id();
-                if let Some(i) = node
-                    .wallet
-                    .pending_utxos
-                    .iter()
-                    .position(|utxo| utxo.contract_id() == cid)
-                {
-                    let pending_utxo = node.wallet.pending_utxos.remove(i);
-                    let proof = new_state.catchup.update_proof(&cid, None, &hasher).unwrap();
-                    node.wallet.utxos.push(pending_utxo.to_confirmed(proof));
-                }
-            }
-            _ => {}
+    /// Creates a new node
+    pub fn new(alias: impl Into<String>, blockchain: BlockchainState) -> Self {
+        Node {
+            blockchain,
+            wallet: Wallet::new(alias)
         }
     }
 
-    // Catch up utxoproofs for all the confirmed utxos.
-    let updated_proofs = node
-        .wallet
-        .utxos
-        .iter()
-        .map(|utxo| {
-            new_state
-                .catchup
-                .update_proof(&utxo.contract_id(), Some(utxo.proof.clone()), &hasher)
-        })
-        .collect::<Result<Vec<_>, _>>()
-        .unwrap();
+    /// Processes a block: detects spends, new outputs and updates utxo proofs.
+    pub fn process_block(&mut self, block: &Block, bp_gens: &BulletproofGens) {
+        // 9. Alice/Bob process blockchain:
+        //     a. SPV nodes:
+        //        1. Network sends to Bob and Alice new blockheader and a changeset:
+        //           - added utxo IDs,
+        //           - merkle proof set (combined in one tree when optimized) for all deleted utxo ids.
+        //        2. Alice/Bob apply changes, producing a new utreexo (and verifying it), and a catchup struct.
+        //     b. Full nodes:
+        //        1. Network sends to Bob and Alice new block
+        //        2. Alice/Bob verify+apply changes, producing a catchup struct.
+        let (verified_block, new_state) = self.blockchain.apply_block(&block, &bp_gens).unwrap();
 
-    // Once all proofs are succesfully updated, apply them to our storage.
-    for (p, utxo) in updated_proofs.into_iter().zip(node.wallet.utxos.iter_mut()) {
-        utxo.proof = p;
+        // In a real node utxos will be indexed by ContractID, so lookup will be more efficient.
+        let hasher = utreexo::NodeHasher::new();
+        for entry in verified_block.entries() {
+            match entry {
+                TxEntry::Input(contract_id) => {
+                    // Delete confirmed utxos
+                    if let Some(i) = self
+                        .wallet
+                        .utxos
+                        .iter()
+                        .position(|utxo| utxo.contract_id() == *contract_id)
+                    {
+                        self.wallet.utxos.remove(i);
+                    }
+                }
+                TxEntry::Output(contract) => {
+                    // Make pending utxos confirmed
+                    let cid = contract.id();
+                    if let Some(i) = self
+                        .wallet
+                        .pending_utxos
+                        .iter()
+                        .position(|utxo| utxo.contract_id() == cid)
+                    {
+                        let pending_utxo = self.wallet.pending_utxos.remove(i);
+                        let proof = new_state.catchup.update_proof(&cid, None, &hasher).unwrap();
+                        self.wallet.utxos.push(pending_utxo.to_confirmed(proof));
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        // Catch up utxoproofs for all the confirmed utxos.
+        let updated_proofs = self
+            .wallet
+            .utxos
+            .iter()
+            .map(|utxo| {
+                new_state
+                    .catchup
+                    .update_proof(&utxo.contract_id(), Some(utxo.proof.clone()), &hasher)
+            })
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+
+        // Once all proofs are succesfully updated, apply them to our storage.
+        for (p, utxo) in updated_proofs.into_iter().zip(self.wallet.utxos.iter_mut()) {
+            utxo.proof = p;
+        }
+
+        // Switch the node to the new state.
+        self.blockchain = new_state;
     }
-
-    // Switch the node to the new state.
-    node.blockchain = new_state;
 }
 
 impl Wallet {

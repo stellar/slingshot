@@ -1,4 +1,3 @@
-use serde_json;
 use curve25519_dalek::scalar::Scalar;
 
 use super::schema::*;

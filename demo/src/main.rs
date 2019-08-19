@@ -3,6 +3,7 @@
 #[macro_use] extern crate diesel;
 #[macro_use] extern crate rocket;
 #[macro_use] extern crate rocket_contrib;
+#[macro_use] extern crate serde_json;
 
 mod schema;
 mod records;
@@ -19,15 +20,17 @@ use dotenv::dotenv;
 use rocket::Request;
 use rocket_contrib::templates::Template;
 use rocket_contrib::serve::StaticFiles;
-use rocket_contrib::databases::diesel as rocket_diesel;
+//use rocket_contrib::databases::diesel as rocket_diesel;
 
 #[database("demodb")]
-struct DBConnection(rocket_diesel::SqliteConnection);
+struct DBConnection(SqliteConnection);
 
 #[get("/")]
 fn network_status(dbconn: DBConnection) -> Template {
-    let mut context = HashMap::<&str, String>::new();
-    context.insert("test", "here is test".into());
+    let context =json!({
+        "sidebar": sidebar_context(&dbconn.0)
+    });
+
     Template::render("network/status", &context)
 }
 
@@ -45,11 +48,11 @@ fn network_blocks() -> Template {
     Template::render("network/blocks", &context)
 }
 
-#[get("/accounts/<id>")]
-fn accounts_show(id: String) -> Template {
+#[get("/nodes/<alias>")]
+fn accounts_show(alias: String) -> Template {
     let mut context = HashMap::<&str, String>::new();
-    context.insert("id", id);
-    Template::render("accounts/show", &context)
+    context.insert("alias", alias);
+    Template::render("nodes/show", &context)
 }
 
 #[get("/assets/<id>")]
@@ -65,6 +68,18 @@ fn not_found(req: &Request<'_>) -> Template {
     let mut map = HashMap::new();
     map.insert("path", req.uri().path());
     Template::render("404", &map)
+}
+
+fn sidebar_context(dbconn: &SqliteConnection) -> serde_json::Value {
+    json!({
+        "nodes": [{
+            "wallet": {"alias": "Treasury"},
+        },{
+            "wallet": {"alias": "Alice"},
+        },{
+            "wallet": {"alias": "Bob"},
+        }]
+    })
 }
 
 fn prepare_db_if_needed() {
@@ -145,15 +160,14 @@ fn prepare_db_if_needed() {
         };
 
         let treasury_record = records::NodeRecord::new(treasury);
+        let alice_record = records::NodeRecord::new(Node::new("Alice", network_state.clone()));
+        let bob_record = records::NodeRecord::new(Node::new("Bob", network_state.clone()));
+
         diesel::insert_into(node_records)
-            .values(&treasury_record)
-            .execute(&db_connection).expect("Inserting a node record should work");
-
-        // TBD: add more accounts
-
+            .values(vec![&treasury_record, &alice_record, &bob_record])
+            .execute(&db_connection).expect("Inserting new node records should work");
 
         Ok(())
-        //Err(diesel::result::Error::RollbackTransaction)
     }).expect("Initial DB transaction should succeed.");
 
 }

@@ -56,31 +56,21 @@
 
 
           <h6 class="sidebar-heading d-flex justify-content-between align-items-center px-3 mt-4 mb-1 text-muted">
-            <span>Accounts</span>
-            <a class="d-flex align-items-center text-muted" href="#TBD:add-account">
+            <span>Nodes</span>
+            <a class="d-flex align-items-center text-muted" href="#TBD:add-node">
               <span data-feather="plus-circle"></span>
             </a>
           </h6>
 
           <ul class="nav flex-column">
-            <li class="nav-item">
-              <a class="nav-link" href="/accounts/alice">
-                <span data-feather="user"></span>
-                Alice
-              </a>
-            </li>
-            <li class="nav-item">
-              <a class="nav-link" href="/accounts/bob">
-                <span data-feather="user"></span>
-                Bob
-              </a>
-            </li>
-            <li class="nav-item">
-              <a class="nav-link" href="/accounts/carol">
-                <span data-feather="user"></span>
-                Carol
-              </a>
-            </li>
+            {% for node in sidebar.nodes %}
+              <li class="nav-item">
+                <a class="nav-link" href="/nodes/{{ node.wallet.alias }}">
+                  <span data-feather="user"></span>
+                  {{ node.wallet.alias }}
+                </a>
+              </li>
+            {% endfor %}
           </ul>
 
           <h6 class="sidebar-heading d-flex justify-content-between align-items-center px-3 mt-4 mb-1 text-muted">
