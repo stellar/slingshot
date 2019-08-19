@@ -8,6 +8,10 @@ body {
   vertical-align: text-bottom;
 }
 
+tt {
+  font-size:1.1em;
+}
+
 /*
  * Sidebar
  */

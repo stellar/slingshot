@@ -1,6 +1,6 @@
+use curve25519_dalek::scalar::Scalar;
 use rand::SeedableRng;
 use rand_chacha::ChaChaRng;
-use curve25519_dalek::scalar::Scalar;
 
 use keytree::Xprv;
 
@@ -27,23 +27,24 @@ pub fn scalar_from_string(string: &String) -> Scalar {
 }
 
 /// Force-decodes json string
-pub fn from_valid_json<'a, T>(string: &'a str) -> T 
+pub fn from_valid_json<'a, T>(string: &'a str) -> T
 where
     T: serde::de::Deserialize<'a>,
 {
     serde_json::de::from_str_with_binary_mode(string, serde_json::BinaryMode::Hex)
-    .expect("from_valid_json expects a valid JSON string")
+        .expect("from_valid_json expects a valid JSON string")
 }
 
 /// Encodes object to JSON
-pub fn to_json<T>(value: &T) -> String 
-where T: serde::ser::Serialize 
+pub fn to_json<T>(value: &T) -> String
+where
+    T: serde::ser::Serialize,
 {
     let mut vec = Vec::with_capacity(128);
     let mut ser = serde_json::ser::Serializer::with_formatter_and_binary_mode(
-        &mut vec, 
+        &mut vec,
         serde_json::ser::PrettyFormatter::default(),
-        serde_json::BinaryMode::Hex
+        serde_json::BinaryMode::Hex,
     );
     value
         .serialize(&mut ser)

@@ -1,7 +1,7 @@
-use serde::{Deserialize, Serialize};
 use bulletproofs::BulletproofGens;
 use curve25519_dalek::scalar::Scalar;
 use keytree::Xprv;
+use serde::{Deserialize, Serialize};
 
 use zkvm::blockchain::{Block, BlockchainState};
 use zkvm::utreexo;
@@ -56,12 +56,11 @@ pub struct ConfirmedUtxo {
 }
 
 impl Node {
-
     /// Creates a new node
     pub fn new(alias: impl Into<String>, blockchain: BlockchainState) -> Self {
         Node {
             blockchain,
-            wallet: Wallet::new(alias)
+            wallet: Wallet::new(alias),
         }
     }
 
@@ -117,9 +116,11 @@ impl Node {
             .utxos
             .iter()
             .map(|utxo| {
-                new_state
-                    .catchup
-                    .update_proof(&utxo.contract_id(), Some(utxo.proof.clone()), &hasher)
+                new_state.catchup.update_proof(
+                    &utxo.contract_id(),
+                    Some(utxo.proof.clone()),
+                    &hasher,
+                )
             })
             .collect::<Result<Vec<_>, _>>()
             .unwrap();
@@ -147,10 +148,15 @@ impl Wallet {
             utxos: Vec::new(),
             pending_utxos: Vec::new(),
         }
-    } 
+    }
 
     /// Generates a bunch of initial utxos
-    pub fn mint_utxos(&mut self, mut anchor: Anchor, flv: Scalar, qtys: impl IntoIterator<Item=u64>) -> (Vec<PendingUtxo>, Anchor) {
+    pub fn mint_utxos(
+        &mut self,
+        mut anchor: Anchor,
+        flv: Scalar,
+        qtys: impl IntoIterator<Item = u64>,
+    ) -> (Vec<PendingUtxo>, Anchor) {
         let mut results = Vec::new();
         for qty in qtys {
             // anchors are not unique, but it's irrelevant for this test

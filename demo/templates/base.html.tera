@@ -81,30 +81,14 @@
           </h6>
 
           <ul class="nav flex-column">
-            <li class="nav-item">
-              <a class="nav-link" href="/assets/usdc">
-                <span data-feather="box"></span>
-                USD/Coinbase
-              </a>
-            </li>
-            <li class="nav-item">
-              <a class="nav-link" href="/assets/btcc">
-                <span data-feather="box"></span>
-                BTC/Coinbase
-              </a>
-            </li>
-            <li class="nav-item">
-              <a class="nav-link" href="/assets/usdstamp">
-                <span data-feather="box"></span>
-                USD/Bitstamp
-              </a>
-            </li>
-            <li class="nav-item">
-              <a class="nav-link" href="/assets/eurstamp">
-                <span data-feather="box"></span>
-                EUR/Bitstamp
-              </a>
-            </li>
+            {% for asset in sidebar.assets %}
+              <li class="nav-item">
+                <a class="nav-link" href="/assets/{{ asset.alias }}">
+                  <span data-feather="user"></span>
+                  {{ asset.alias }}
+                </a>
+              </li>
+            {% endfor %}
           </ul>
 
 
