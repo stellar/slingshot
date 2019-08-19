@@ -1,8 +1,8 @@
-use curve25519_dalek::scalar::Scalar;
-
 use super::nodes::*;
 use super::schema::*;
 use super::util;
+use curve25519_dalek::scalar::Scalar;
+use zkvm::blockchain::{Block, BlockchainState};
 
 // Stored data
 
@@ -23,6 +23,26 @@ pub struct AssetRecord {
 pub struct NodeRecord {
     pub alias: String,
     pub state_json: String,
+}
+
+impl BlockRecord {
+    pub fn network_status_summary(&self) -> serde_json::Value {
+        json!({
+            "height": self.height,
+            "block_id": hex::encode(self.block().header.id().0),
+            "block": serde_json::from_str::<serde_json::Value>(&self.block_json).expect("Block should be valid JSON."),
+            "state": serde_json::from_str::<serde_json::Value>(&self.state_json).expect("State should be valid JSON."),
+            "utxos_count": self.state().utreexo.count(),
+        })
+    }
+
+    pub fn block(&self) -> Block {
+        util::from_valid_json(&self.block_json)
+    }
+
+    pub fn state(&self) -> BlockchainState {
+        util::from_valid_json(&self.state_json)
+    }
 }
 
 impl NodeRecord {

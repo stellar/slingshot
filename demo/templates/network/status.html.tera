@@ -9,11 +9,13 @@
 
   <table class="table xtable-bordered block-header">
     <tbody>
-      <tr><th>Block height</th><td>511</td></tr>
-      <tr><th>Block ID</th><td>c8ca34d438e9c47d487042ebc78498586e277bf1b69f13464db2124d4246f924</td></tr>
-      <tr><th>Timestamp</th><td>Tue Jul 30 11:47:20 2019 +0300</td></tr>
-      <tr><th>Utreexo root</th><td>08886f9b817bdcd92aa639a2537eabe86c4be04514cc5b4ed7ba9b7881439f44</td></tr>
-      <tr><th>Contract count</th><td>573 012</td></tr>
+      <tr><th>Block height</th><td>{{network_status.height}}</td></tr>
+      <tr><th>Timestamp</th><td>{{network_status.block.header.timestamp_ms}}</td></tr>
+      <tr><th>Block ID</th><td><tt>{{network_status.block_id}}</tt></td></tr>
+      <tr><th>Utreexo root</th><td><tt>{{network_status.block.header.utxoroot}}</tt></td></tr>
+      <tr><th>Contract count</th><td>{{network_status.utxos_count}}</td></tr>
+      <tr><th>State</th>
+      <td><pre><code>{{network_status.state | json_encode(pretty=true)}}</code><pre></td></tr>
     </tbody>
   </table>
 {% endblock main %}

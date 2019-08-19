@@ -22,22 +22,28 @@ use diesel::sqlite::SqliteConnection;
 use dotenv::dotenv;
 
 use rocket::response::status::NotFound;
-use rocket::{Outcome, Request};
+use rocket::Request;
 use rocket_contrib::serve::StaticFiles;
 use rocket_contrib::templates::Template;
-//use rocket_contrib::databases::diesel as rocket_diesel;
 
 #[database("demodb")]
 struct DBConnection(SqliteConnection);
 
 #[get("/")]
-fn network_status(dbconn: DBConnection) -> Template {
+fn network_status(dbconn: DBConnection) -> Result<Template, NotFound<String>> {
+    use schema::block_records::dsl::*;
+
+    let blk_record = block_records
+        .order(height.desc())
+        .first::<records::BlockRecord>(&dbconn.0)
+        .map_err(|_| NotFound("Block not found".into()))?;
+
     let context = json!({
         "sidebar": sidebar_context(&dbconn.0),
-        "network_status": {}
+        "network_status": blk_record.network_status_summary()
     });
 
-    Template::render("network/status", &context)
+    Ok(Template::render("network/status", &context))
 }
 
 #[get("/network/mempool")]
