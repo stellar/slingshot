@@ -41,4 +41,4 @@ pub use self::verifier::Verifier;
 
 pub use self::blockchain::*;
 
-pub use musig::{Multikey, Signature, VerificationKey};
+pub use musig::{Multikey, Signature, Multisignature, VerificationKey};
