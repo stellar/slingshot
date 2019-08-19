@@ -35,30 +35,36 @@ fn network_status(dbconn: DBConnection) -> Template {
 }
 
 #[get("/network/mempool")]
-fn network_mempool() -> Template {
-    let mut context = HashMap::<&str, String>::new();
-    context.insert("test", "here is test".into());
+fn network_mempool(dbconn: DBConnection) -> Template {
+    let context =json!({
+        "sidebar": sidebar_context(&dbconn.0)
+    });
     Template::render("network/mempool", &context)
 }
 
 #[get("/network/blocks")]
-fn network_blocks() -> Template {
-    let mut context = HashMap::<&str, String>::new();
-    context.insert("test", "here is test".into());
+fn network_blocks(dbconn: DBConnection) -> Template {
+    let context =json!({
+        "sidebar": sidebar_context(&dbconn.0)
+    });
     Template::render("network/blocks", &context)
 }
 
 #[get("/nodes/<alias>")]
-fn accounts_show(alias: String) -> Template {
-    let mut context = HashMap::<&str, String>::new();
-    context.insert("alias", alias);
+fn accounts_show(alias: String, dbconn: DBConnection) -> Template {
+    let context =json!({
+        "sidebar": sidebar_context(&dbconn.0),
+        "alias": alias 
+    });
     Template::render("nodes/show", &context)
 }
 
-#[get("/assets/<id>")]
-fn assets_show(id: String) -> Template {
-    let mut context = HashMap::<&str, String>::new();
-    context.insert("id", id);
+#[get("/assets/<alias>")]
+fn assets_show(alias: String, dbconn: DBConnection) -> Template {
+    let context =json!({
+        "sidebar": sidebar_context(&dbconn.0),
+        "alias": alias 
+    });
     Template::render("assets/show", &context)
 }
 
@@ -70,15 +76,14 @@ fn not_found(req: &Request<'_>) -> Template {
     Template::render("404", &map)
 }
 
+/// Returns context for the sidebar in all the pages
 fn sidebar_context(dbconn: &SqliteConnection) -> serde_json::Value {
+    use schema::node_records::dsl::*;
+    let nodes = node_records.load::<records::NodeRecord>(dbconn).expect("Error loading nodes");
     json!({
-        "nodes": [{
-            "wallet": {"alias": "Treasury"},
-        },{
-            "wallet": {"alias": "Alice"},
-        },{
-            "wallet": {"alias": "Bob"},
-        }]
+        "nodes": nodes.into_iter().map(|n|n.to_json()).collect::<Vec<_>>(),
+        "assets": [
+        ]
     })
 }
 

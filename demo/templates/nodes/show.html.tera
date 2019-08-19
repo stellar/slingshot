@@ -1,3 +1,3 @@
 {% extends "base" %}
 
-{% block title %}Account TBD{% endblock title %}
+{% block title %}Node TBD{% endblock title %}

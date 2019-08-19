@@ -33,8 +33,15 @@ impl NodeRecord {
         }
     }
 
+    /// Converts the record to the Node instance.
     pub fn node(&self) -> Node {
         util::from_valid_json(&self.state_json)
+    }
+
+    /// Converts the node to JSON object tree.
+    pub fn to_json(&self) -> serde_json::Value {
+        // stored json is guaranteed to be valid
+        serde_json::from_str(&self.state_json).unwrap()
     }
 }
 
