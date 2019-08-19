@@ -13,5 +13,5 @@
       <tr><th>Issuance privkey</th><td><tt>{{asset.prv}}</tt></td></tr>
       <tr><th>Issuance pubkey</th><td><tt>{{asset.pub}}</tt></td></tr>
     </tbody>
-  </table-->
+  </table>
 {% endblock main %}
