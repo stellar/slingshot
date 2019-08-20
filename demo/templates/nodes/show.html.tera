@@ -1,19 +1,18 @@
 {% extends "base" %}
 
-{% block title %}{{alias}}{% endblock title %}
+{% block title %}{{node.wallet.alias}}{% endblock title %}
 
 {% block main %}
   <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3">
-    <h1 class="h2">{{alias}}</h1>
+    <h1 class="h2">Node: {{node.wallet.alias}}</h1>
   </div>
 
-  <!--table class="table xtable-bordered block-header">
+  <table class="table xtable-bordered block-header">
     <tbody>
-      <tr><th>Block height</th><td>511</td></tr>
-      <tr><th>Block ID</th><td>c8ca34d438e9c47d487042ebc78498586e277bf1b69f13464db2124d4246f924</td></tr>
-      <tr><th>Timestamp</th><td>Tue Jul 30 11:47:20 2019 +0300</td></tr>
-      <tr><th>Utreexo root</th><td>08886f9b817bdcd92aa639a2537eabe86c4be04514cc5b4ed7ba9b7881439f44</td></tr>
-      <tr><th>Contract count</th><td>573 012</td></tr>
+      <tr><th>Alias</th><td>{{node.wallet.alias}}</td></tr>
+      <tr><th>Sequence #</th><td>{{node.wallet.account.sequence}}</td></tr>
+      <tr><th>Xprv</th><td><tt>{{node.wallet.xprv}}</tt></td></tr>
+      <tr><th>Xpub</th><td><tt>{{node.wallet.account.xpub}}</tt></td></tr>
     </tbody>
-  </table-->
+  </table>
 {% endblock main %}

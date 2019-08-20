@@ -9,13 +9,23 @@
 
   <table class="table xtable-bordered block-header">
     <tbody>
-      <tr><th>Block height</th><td>{{network_status.height}}</td></tr>
-      <tr><th>Timestamp</th><td>{{network_status.block.header.timestamp_ms}}</td></tr>
-      <tr><th>Block ID</th><td><tt>{{network_status.block_id}}</tt></td></tr>
+      <tr><th>Blocks count</th><td>{{network_status.height}}</td></tr>
+      <tr><th>Contracts count</th><td>{{network_status.utxos_count}}</td></tr>
+      <tr><th>Tip timestamp</th><td>{{network_status.block.header.timestamp_ms}}</td></tr>
+      <tr><th>Tip ID</th><td><tt>{{network_status.block_id}}</tt></td></tr>
+      <tr>
+        <th>Tip</th>
+        <td><pre><code>{{network_status.state.tip | json_encode(pretty=true)}}</code><pre></td>
+      </tr>
       <tr><th>Utreexo root</th><td><tt>{{network_status.block.header.utxoroot}}</tt></td></tr>
-      <tr><th>Contract count</th><td>{{network_status.utxos_count}}</td></tr>
-      <tr><th>State</th>
-      <td><pre><code>{{network_status.state | json_encode(pretty=true)}}</code><pre></td></tr>
+      <tr>
+        <th>Utreexo</th>
+        <td><pre><code>{{network_status.state.utreexo | json_encode(pretty=true)}}</code><pre></td>
+      </tr>
+      <tr>
+        <th>Catchup</th>
+        <td><pre><code>{{network_status.state.catchup | json_encode(pretty=true)}}</code><pre></td>
+      </tr>
     </tbody>
   </table>
 {% endblock main %}

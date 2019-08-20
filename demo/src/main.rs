@@ -62,13 +62,20 @@ fn network_blocks(dbconn: DBConnection) -> Template {
     Template::render("network/blocks", &context)
 }
 
-#[get("/nodes/<alias>")]
-fn accounts_show(alias: String, dbconn: DBConnection) -> Template {
+#[get("/nodes/<alias_param>")]
+fn nodes_show(alias_param: String, dbconn: DBConnection) -> Result<Template, NotFound<String>> {
+    use schema::node_records::dsl::*;
+
+    let node = node_records
+        .filter(alias.eq(alias_param))
+        .first::<records::NodeRecord>(&dbconn.0)
+        .map_err(|_| NotFound("Node not found".into()))?;
+
     let context = json!({
         "sidebar": sidebar_context(&dbconn.0),
-        "alias": alias
+        "node": node.to_json(),
     });
-    Template::render("nodes/show", &context)
+    Ok(Template::render("nodes/show", &context))
 }
 
 #[get("/assets/<alias_param>")]
@@ -224,7 +231,7 @@ fn launch_rocket_app() {
                 network_status,
                 network_mempool,
                 network_blocks,
-                accounts_show,
+                nodes_show,
                 assets_show
             ],
         )
