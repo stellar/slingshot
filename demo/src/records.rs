@@ -4,6 +4,8 @@ use super::util;
 use curve25519_dalek::scalar::Scalar;
 use zkvm::blockchain::{Block, BlockchainState};
 
+use serde_json::Value as JsonValue;
+
 // Stored data
 
 #[derive(Debug, Queryable, Insertable)]
@@ -26,12 +28,12 @@ pub struct NodeRecord {
 }
 
 impl BlockRecord {
-    pub fn network_status_summary(&self) -> serde_json::Value {
+    pub fn network_status_summary(&self) -> JsonValue {
         json!({
             "height": self.height,
             "block_id": hex::encode(self.block().header.id().0),
-            "block": serde_json::from_str::<serde_json::Value>(&self.block_json).expect("Block should be valid JSON."),
-            "state": serde_json::from_str::<serde_json::Value>(&self.state_json).expect("State should be valid JSON."),
+            "block": serde_json::from_str::<JsonValue>(&self.block_json).expect("Block should be valid JSON."),
+            "state": serde_json::from_str::<JsonValue>(&self.state_json).expect("State should be valid JSON."),
             "utxos_count": self.state().utreexo.count(),
         })
     }
@@ -59,10 +61,16 @@ impl NodeRecord {
     }
 
     /// Converts the node to JSON object tree.
-    pub fn to_json(&self) -> serde_json::Value {
+    pub fn to_json(&self) -> JsonValue {
         serde_json::from_str(&self.state_json)
             .expect("Stored json state must be correctly encoded.")
     }
+
+    pub fn balances(&self, assets: &[AssetRecord]) -> JsonValue {
+
+    }
+
+
 }
 
 impl AssetRecord {
@@ -94,12 +102,13 @@ impl AssetRecord {
     }
 
     /// Converts the node to JSON object tree.
-    pub fn to_json(&self) -> serde_json::Value {
+    pub fn to_json(&self) -> JsonValue {
         // stored json is guaranteed to be valid
         json!({
             "alias": self.alias,
-            "prv": serde_json::from_str::<serde_json::Value>(&self.key_json).expect("DB should contain valid key_json"),
-            "pub": hex::encode(self.issuance_predicate().to_point().as_bytes())
+            "prv": serde_json::from_str::<JsonValue>(&self.key_json).expect("DB should contain valid key_json"),
+            "pub": hex::encode(self.issuance_predicate().to_point().as_bytes()),
+            "flv": hex::encode(self.flavor().as_bytes())
         })
     }
 }

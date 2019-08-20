@@ -64,16 +64,27 @@ fn network_blocks(dbconn: DBConnection) -> Template {
 
 #[get("/nodes/<alias_param>")]
 fn nodes_show(alias_param: String, dbconn: DBConnection) -> Result<Template, NotFound<String>> {
-    use schema::node_records::dsl::*;
-
-    let node = node_records
+    let node = {
+        use schema::node_records::dsl::*;
+        node_records
         .filter(alias.eq(alias_param))
         .first::<records::NodeRecord>(&dbconn.0)
-        .map_err(|_| NotFound("Node not found".into()))?;
+        .map_err(|_| NotFound("Node not found".into()))?
+    };
+
+    let assets = {
+        use schema::asset_records::dsl::*;
+        asset_records
+        .load::<records::AssetRecord>(&dbconn.0)
+        .map_err(|_| NotFound("Assets can't be loaded".into()))?
+    };
+
+    let balances = node.balances(&assets);
 
     let context = json!({
         "sidebar": sidebar_context(&dbconn.0),
         "node": node.to_json(),
+        "balances": balances,
     });
     Ok(Template::render("nodes/show", &context))
 }

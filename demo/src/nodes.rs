@@ -32,6 +32,9 @@ pub struct Wallet {
     /// User's account metadata
     pub account: Account,
 
+    /// Annotated txs related to this wallet
+    pub txs: Vec<AnnotatedTx>,
+
     /// User's balances
     pub utxos: Vec<ConfirmedUtxo>,
 
@@ -53,6 +56,14 @@ pub struct ConfirmedUtxo {
     receiver_witness: ReceiverWitness,
     anchor: Anchor,
     proof: utreexo::Proof,
+}
+
+/// Tx annotated with 
+#[derive(Clone, Serialize, Deserialize)]
+pub struct AnnotatedTx {
+    raw_tx: zkvm::Tx,
+    known_inputs: Vec<(usize, ConfirmedUtxo)>,
+    known_outputs: Vec<(usize, ConfirmedUtxo)>,
 }
 
 impl Node {
@@ -79,34 +90,55 @@ impl Node {
 
         // In a real node utxos will be indexed by ContractID, so lookup will be more efficient.
         let hasher = utreexo::NodeHasher::new();
-        for entry in verified_block.entries() {
-            match entry {
-                TxEntry::Input(contract_id) => {
-                    // Delete confirmed utxos
-                    if let Some(i) = self
-                        .wallet
-                        .utxos
-                        .iter()
-                        .position(|utxo| utxo.contract_id() == *contract_id)
-                    {
-                        self.wallet.utxos.remove(i);
+        for (tx_index, vtx) in verified_block.txs.iter().enumerate() {
+            // FIXME: we don't need to retain utxo proofs in these utxos,
+            // so PendingUtxo is a better type here, but not a good name.
+            // Should rename PendingUtxo to something more close to "ProoflessUtxo".
+            // Or `UtxoWitness` and `TrackedUtxo`, etc.
+            let mut known_inputs = Vec::new();
+            let mut known_outputs =  Vec::new();
+            for (entry_index, entry) in vtx.log.iter().enumerate() {
+                match entry {
+                    TxEntry::Input(contract_id) => {
+                        // Delete confirmed utxos
+                        if let Some(i) = self
+                            .wallet
+                            .utxos
+                            .iter()
+                            .position(|utxo| utxo.contract_id() == *contract_id)
+                        {
+                            let spent_utxo = self.wallet.utxos.remove(i);
+                            known_inputs.push((entry_index, spent_utxo));
+                        }
                     }
-                }
-                TxEntry::Output(contract) => {
-                    // Make pending utxos confirmed
-                    let cid = contract.id();
-                    if let Some(i) = self
-                        .wallet
-                        .pending_utxos
-                        .iter()
-                        .position(|utxo| utxo.contract_id() == cid)
-                    {
-                        let pending_utxo = self.wallet.pending_utxos.remove(i);
-                        let proof = new_state.catchup.update_proof(&cid, None, &hasher).unwrap();
-                        self.wallet.utxos.push(pending_utxo.to_confirmed(proof));
+                    TxEntry::Output(contract) => {
+                        // Make pending utxos confirmed
+                        let cid = contract.id();
+                        if let Some(i) = self
+                            .wallet
+                            .pending_utxos
+                            .iter()
+                            .position(|utxo| utxo.contract_id() == cid)
+                        {
+                            let pending_utxo = self.wallet.pending_utxos.remove(i);
+                            let proof = new_state.catchup.update_proof(&cid, None, &hasher).unwrap();
+                            let new_utxo = pending_utxo.to_confirmed(proof);
+                            self.wallet.utxos.push(new_utxo.clone());
+                            known_outputs.push((entry_index, new_utxo));
+                        }
                     }
+                    _ => {}
                 }
-                _ => {}
+            }
+            // If this tx has anything that has to do with this wallet, add it to the annotated txs list.
+            if known_inputs.len() + known_outputs.len() > 0 {
+                let raw_tx = block.txs[tx_index].clone();
+                let atx = AnnotatedTx {
+                    raw_tx,
+                    known_inputs,
+                    known_outputs,
+                };
+                self.wallet.txs.push(atx);
             }
         }
 
@@ -145,6 +177,7 @@ impl Wallet {
             alias,
             xprv,
             account: Account::new(xprv.to_xpub()),
+            txs: Vec::new(),
             utxos: Vec::new(),
             pending_utxos: Vec::new(),
         }
