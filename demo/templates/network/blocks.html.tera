@@ -3,9 +3,31 @@
 {% block title %}Blocks{% endblock title %}
 
 {% block main %}
-    <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 xxxborder-bottom">
       <h1 class="h2">Blocks</h1>
     </div>
 
+  <div class="table-responsive">
+    <table class="table table-striped table-sm">
+      <thead>
+        <tr>
+          <th>Height</th>
+          <th>Timestamp</th>
+          <th>ID</th>
+          <th>Txs</th>
+        </tr>
+      </thead>
+      <tbody>
+  		{% for block in blocks %}
+        <tr>
+          <td>{{block.height}}</td>
+          <td>{{block.header.timestamp_ms}}</td>
+          <td><tt>{{block.id}}</tt></td>
+          <td>{{block.txs}}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
     
 {% endblock main %}

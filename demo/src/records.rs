@@ -5,6 +5,7 @@ use curve25519_dalek::scalar::Scalar;
 use zkvm::blockchain::{Block, BlockchainState};
 
 use serde_json::Value as JsonValue;
+use std::collections::HashMap;
 
 // Stored data
 
@@ -38,6 +39,16 @@ impl BlockRecord {
         })
     }
 
+    pub fn to_table_item(&self) -> JsonValue {
+        let blk = self.block();
+        json!({
+            "height": self.height,
+            "id": hex::encode(self.block().header.id().0),
+            "header": blk.header,
+            "txs": blk.txs.len(),
+        })
+    }
+
     pub fn block(&self) -> Block {
         util::from_valid_json(&self.block_json)
     }
@@ -67,10 +78,37 @@ impl NodeRecord {
     }
 
     pub fn balances(&self, assets: &[AssetRecord]) -> JsonValue {
+        // 1. Enumerate all confirmed utxos and stack up values by flavor.
+        // 2. Then, annotate each flavor with the asset name.
+        let map = self
+            .node()
+            .wallet
+            .utxos
+            .iter()
+            .map(|utxo| utxo.receiver_witness.receiver.value)
+            .fold(HashMap::new(), |mut hm, value| {
+                let key = value.flv.as_bytes().to_vec();
+                let total = *hm.get(&key).unwrap_or(&0u64);
+                hm.insert(key, total + value.qty);
+                hm
+            });
+        json!(map
+            .iter()
+            .map(|(flv, balance)| {
+                let alias = assets
+                    .iter()
+                    .find(|&asset| asset.flavor().as_bytes() == &flv[..])
+                    .map(|x| x.alias.clone())
+                    .unwrap_or(hex::encode(flv));
 
+                json!({
+                    "alias": alias,
+                    "flv": flv,
+                    "qty": balance
+                })
+            })
+            .collect::<Vec<_>>())
     }
-
-
 }
 
 impl AssetRecord {

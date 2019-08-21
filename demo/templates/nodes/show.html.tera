@@ -28,15 +28,14 @@
       </tr>
     </thead>
     <tbody>
+      {% for balance in balances | sort(attribute="alias") %}
       <tr>
-        <td>TBD</td><td align="right">123</td>
+        <td><a href="/assets/{{balance.alias}}">{{balance.alias}}</a></td><td align="right">{{balance.qty}}</td>
       </tr>
-      <tr>
-        <td>XYZ</td><td align="right">1200</td>
-      </tr>
+      {% endfor %}
     </tbody>
   </table>
-
+  
   <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3">
     <h1 class="h2">Transactions</h1>
   </div>

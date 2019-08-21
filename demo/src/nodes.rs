@@ -53,12 +53,12 @@ pub struct PendingUtxo {
 /// Stored utxo with underlying quantities, blinding factors and a utxo proof.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct ConfirmedUtxo {
-    receiver_witness: ReceiverWitness,
-    anchor: Anchor,
-    proof: utreexo::Proof,
+    pub receiver_witness: ReceiverWitness,
+    pub anchor: Anchor,
+    pub proof: utreexo::Proof,
 }
 
-/// Tx annotated with 
+/// Tx annotated with
 #[derive(Clone, Serialize, Deserialize)]
 pub struct AnnotatedTx {
     raw_tx: zkvm::Tx,
@@ -96,7 +96,7 @@ impl Node {
             // Should rename PendingUtxo to something more close to "ProoflessUtxo".
             // Or `UtxoWitness` and `TrackedUtxo`, etc.
             let mut known_inputs = Vec::new();
-            let mut known_outputs =  Vec::new();
+            let mut known_outputs = Vec::new();
             for (entry_index, entry) in vtx.log.iter().enumerate() {
                 match entry {
                     TxEntry::Input(contract_id) => {
@@ -121,7 +121,8 @@ impl Node {
                             .position(|utxo| utxo.contract_id() == cid)
                         {
                             let pending_utxo = self.wallet.pending_utxos.remove(i);
-                            let proof = new_state.catchup.update_proof(&cid, None, &hasher).unwrap();
+                            let proof =
+                                new_state.catchup.update_proof(&cid, None, &hasher).unwrap();
                             let new_utxo = pending_utxo.to_confirmed(proof);
                             self.wallet.utxos.push(new_utxo.clone());
                             known_outputs.push((entry_index, new_utxo));

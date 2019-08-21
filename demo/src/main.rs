@@ -55,11 +55,20 @@ fn network_mempool(dbconn: DBConnection) -> Template {
 }
 
 #[get("/network/blocks")]
-fn network_blocks(dbconn: DBConnection) -> Template {
+fn network_blocks(dbconn: DBConnection) -> Result<Template, NotFound<String>> {
+    use schema::block_records::dsl::*;
+
+    let blk_records = block_records
+        .order(height.desc())
+        .load::<records::BlockRecord>(&dbconn.0)
+        .map_err(|_| NotFound("Blocks can't be loaded".into()))?;
+
     let context = json!({
-        "sidebar": sidebar_context(&dbconn.0)
+        "sidebar": sidebar_context(&dbconn.0),
+        "blocks": blk_records.into_iter().map(|b|b.to_table_item()).collect::<Vec<_>>()
     });
-    Template::render("network/blocks", &context)
+
+    Ok(Template::render("network/blocks", &context))
 }
 
 #[get("/nodes/<alias_param>")]
@@ -67,16 +76,16 @@ fn nodes_show(alias_param: String, dbconn: DBConnection) -> Result<Template, Not
     let node = {
         use schema::node_records::dsl::*;
         node_records
-        .filter(alias.eq(alias_param))
-        .first::<records::NodeRecord>(&dbconn.0)
-        .map_err(|_| NotFound("Node not found".into()))?
+            .filter(alias.eq(alias_param))
+            .first::<records::NodeRecord>(&dbconn.0)
+            .map_err(|_| NotFound("Node not found".into()))?
     };
 
     let assets = {
         use schema::asset_records::dsl::*;
         asset_records
-        .load::<records::AssetRecord>(&dbconn.0)
-        .map_err(|_| NotFound("Assets can't be loaded".into()))?
+            .load::<records::AssetRecord>(&dbconn.0)
+            .map_err(|_| NotFound("Assets can't be loaded".into()))?
     };
 
     let balances = node.balances(&assets);
