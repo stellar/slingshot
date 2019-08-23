@@ -8,6 +8,7 @@ use zkvm::utreexo;
 use zkvm::{Anchor, ClearValue, Contract, ContractID, TxEntry};
 
 use accounts::{Account, ReceiverWitness};
+use musig::{Multisignature};
 
 use super::util;
 
@@ -46,8 +47,8 @@ pub struct Wallet {
 /// Users convert pending utxos into ConfirmedUtxo when they detect the output in the blockchain.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct PendingUtxo {
-    receiver_witness: ReceiverWitness,
-    anchor: Anchor,
+    pub receiver_witness: ReceiverWitness,
+    pub anchor: Anchor,
 }
 
 /// Stored utxo with underlying quantities, blinding factors and a utxo proof.
@@ -73,6 +74,113 @@ impl Node {
             blockchain,
             wallet: Wallet::new(alias),
         }
+    }
+
+    /// Constructs a payment transaction and a reply to the recipient.
+    pub fn prepare_payment_tx(&mut self, payment_receiver: &accounts::Receiver, bp_gens: &BulletproofGens)
+    -> Result<(zkvm::Tx, Vec<zkvm::utreexo::Proof>, accounts::ReceiverReply), &'static str> {
+
+        // Unwrap is used because in this test we know that we are supposed to have enough UTXOs.
+        let (spent_utxos, change_value) =
+            Account::select_utxos(&payment_receiver.value, &self.wallet.utxos)
+            .ok_or("Insufficient funds")?;
+
+        let change_receiver_witness = self.wallet.account.generate_receiver(change_value);
+
+        // 4. Sender forms a tx paying to this receiver.
+        //    Now recipient is receiving a new utxo, sender is receiving a change utxo.
+        let utx = {
+            // Note: for clarity, we are not randomizing inputs and outputs in this example.
+            // The real transaction must randomize all the things
+            let program = zkvm::Program::build(|p| {
+                // claim all the collected utxos
+                for stored_utxo in spent_utxos.iter() {
+                    p.push(stored_utxo.contract());
+                    p.input();
+                    p.sign_tx();
+                }
+
+                let pmnt = payment_receiver.blinded_value();
+                p.push(pmnt.qty);
+                p.push(pmnt.flv);
+
+                let change = change_receiver_witness.receiver.blinded_value();
+                p.push(change.qty);
+                p.push(change.flv);
+
+                p.cloak(spent_utxos.len(), 2);
+
+                // Now the payment and the change are in the same order on the stack:
+                // change is on top.
+                p.push(change_receiver_witness.receiver.predicate());
+                p.output(1);
+
+                p.push(payment_receiver.predicate());
+                p.output(1);
+
+                // TBD: change the API to not require return of the `&mut program` from the closure.
+                p
+            });
+            let header = zkvm::TxHeader {
+                version: 1u64,
+                mintime_ms: 0u64,
+                maxtime_ms: u64::max_value(),
+            };
+
+            // Build the UnverifiedTx
+            zkvm::Prover::build_tx(program, header, &bp_gens).unwrap()
+        };
+
+        // 5. Alice sends ReceiverReply to Bob with contract's anchor.
+        // Determine the payment contract's anchor and send it to Bob via ReceiverReply
+
+        // Collect all anchors for outputs.
+        let mut iterator = utx.txlog.iter().filter_map(|e| match e {
+            TxEntry::Output(contract) => Some(contract.anchor),
+            _ => None,
+        });
+        let change_anchor = iterator.next().unwrap();
+        let payment_anchor = iterator.next().unwrap();
+
+        let reply = accounts::ReceiverReply {
+            receiver_id: payment_receiver.id(),
+            anchor: payment_anchor,
+        };
+        
+        let change_pending_utxo = PendingUtxo {
+            receiver_witness: change_receiver_witness,
+            anchor: change_anchor,
+        };
+        self.wallet.pending_utxos.push(change_pending_utxo);
+
+        // Sign the tx.
+        let tx = {
+            let mut signtx_transcript = merlin::Transcript::new(b"ZkVM.signtx");
+            signtx_transcript.append_message(b"txid", &utx.txid.0);
+
+            // Derive individual signing keys for each input, according to its sequence number.
+            // In this example all inputs are coming from the same account (same xpub).
+            let signing_keys = spent_utxos
+                .iter()
+                .map(|utxo| {
+                    Account::derive_signing_key(utxo.receiver_witness.sequence, &self.wallet.xprv)
+                })
+                .collect::<Vec<_>>();
+
+            let sig = musig::Signature::sign_multi(
+                &signing_keys[..],
+                utx.signing_instructions.clone(),
+                &mut signtx_transcript,
+            )
+            .unwrap();
+
+            utx.sign(sig)
+        };
+
+
+        let utxo_proofs = spent_utxos.iter().map(|utxo| utxo.proof.clone()).collect::<Vec<_>>();
+
+        Ok((tx, utxo_proofs, reply))
     }
 
     /// Processes a block: detects spends, new outputs and updates utxo proofs.

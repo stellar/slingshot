@@ -16,6 +16,7 @@ mod util;
 
 use std::collections::HashMap;
 use std::env;
+use std::time::SystemTime;
 
 use diesel::prelude::*;
 use diesel::sqlite::SqliteConnection;
@@ -26,6 +27,8 @@ use rocket::response::{Flash, Redirect, status::NotFound};
 use rocket::Request;
 use rocket_contrib::serve::StaticFiles;
 use rocket_contrib::templates::Template;
+
+use bulletproofs::BulletproofGens;
 
 #[database("demodb")]
 struct DBConnection(SqliteConnection);
@@ -119,16 +122,118 @@ struct TransferForm {
     sender_alias: String,
     recipient_alias: String,
     flavor_alias: String,
-    qty: String,
+    qty: u64,
 }
 
 
 #[post("/pay", data = "<transfer_form>")]
-fn pay(transfer_form: Form<TransferForm>, dbconn: DBConnection) -> Flash<Redirect> {
+fn pay(transfer_form: Form<TransferForm>, dbconn: DBConnection) -> Result<Flash<Redirect>, Flash<Redirect>> {
     
-    // TBD: load all records related to sending 
+    let back_url  = uri!(nodes_show: transfer_form.sender_alias.clone());
+    let flash_error = |msg| {
+        Flash::error(Redirect::to(back_url.clone()), msg)
+    };
 
-    Flash::error(Redirect::to(uri!(nodes_show: transfer_form.sender_alias.clone())), "Insufficient funds")
+    let bp_gens = BulletproofGens::new(256, 1);
+
+    // Load all records that we'll need: sender, recipient, asset.
+    let (mut sender, mut recipient) = {
+        use schema::node_records::dsl::*;
+
+        let sender_record = node_records
+            .filter(alias.eq(&transfer_form.sender_alias))
+            .first::<records::NodeRecord>(&dbconn.0)
+            .map_err(|_| flash_error("Sender not found".to_string()))?;
+
+        let recipient_record = node_records
+            .filter(alias.eq(&transfer_form.recipient_alias))
+            .first::<records::NodeRecord>(&dbconn.0)
+            .map_err(|_| flash_error("Recipient not found".to_string()))?;
+
+        (sender_record.node(), recipient_record.node())
+    };
+
+    let asset_record = {
+        use schema::asset_records::dsl::*;
+
+        asset_records
+        .filter(alias.eq(&transfer_form.flavor_alias))
+        .first::<records::AssetRecord>(&dbconn.0)
+        .map_err(|_| flash_error("Asset not found".to_string()))?
+    };
+
+    // recipient prepares a receiver
+    let payment = zkvm::ClearValue {
+        qty: transfer_form.qty,
+        flv: asset_record.flavor(),
+    };
+    let payment_receiver_witness = recipient.wallet.account.generate_receiver(payment);
+    let payment_receiver = &payment_receiver_witness.receiver;
+
+    // Note: at this point, recipient saves the increased seq #,
+    // but since we are doing the exchange in one call, we'll skip it.
+
+    // Sender prepares a tx
+    let (tx, proofs, reply) = sender
+        .prepare_payment_tx(&payment_receiver, &bp_gens)
+        .map_err(|msg| flash_error(msg.to_string()))?;
+    // Note: at this point, sender reserves the utxos and saves its incremented seq # until sender ACK'd ReceiverReply,
+    // but since we are doing the exchange in one call, we'll skip it.
+
+
+    // Sender gives Recipient info to watch for tx.
+    recipient.wallet.pending_utxos.push(nodes::PendingUtxo {
+        receiver_witness: payment_receiver_witness,
+        anchor: reply.anchor, // store anchor sent by Alice
+    });
+    // Note: at this point, recipient saves the unconfirmed utxo,
+    // but since we are doing the exchange in one call, we'll skip it for now.
+
+    // TODO: add tx to the mempool so we can make blocks of multiple txs in the demo.
+
+    // Sender publishes the tx.
+    let new_block_record = {
+        use schema::block_records::dsl::*;
+
+        let blk_record = block_records
+            .order(height.desc())
+            .first::<records::BlockRecord>(&dbconn.0)
+            .map_err(|_| flash_error("Block not found".to_string()))?;
+
+        let state = blk_record.state();
+
+        let timestamp = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).expect("SystemTime should work").as_millis() as u64;
+        let (new_block, _verified_block, new_state) = state
+            .make_block(1, timestamp, Vec::new(), vec![tx], proofs, &bp_gens)
+            .expect("BlockchainState::make_block should succeed");
+
+        // Store the new state
+        records::BlockRecord {
+            height: new_block.header.height as i32,
+            block_json: util::to_json(&new_block),
+            state_json: util::to_json(&new_state),
+        }
+    };
+    
+    // Save everything in a single transaction
+    dbconn.0
+        .transaction::<(), diesel::result::Error, _>(|| {
+
+        
+
+        {
+            use schema::block_records::dsl::*;
+            diesel::insert_into(block_records)
+                .values(&new_block_record)
+                .execute(&dbconn.0)?;
+        }
+
+        Ok(())
+    }).map_err(|e| flash_error(format!("Database error: {}", e)) )?;
+
+    // Later: both sender and recipient process the block and update their balances.
+
+    Ok(Flash::error(Redirect::to(uri!(nodes_show: transfer_form.sender_alias.clone())), "Insufficient funds"))
 }
 
 
