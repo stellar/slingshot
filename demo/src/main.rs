@@ -192,7 +192,7 @@ fn pay(transfer_form: Form<TransferForm>, dbconn: DBConnection) -> Result<Flash<
     // TODO: add tx to the mempool so we can make blocks of multiple txs in the demo.
 
     // Sender publishes the tx.
-    let new_block_record = {
+    let (new_block_record, new_block) = {
         use schema::block_records::dsl::*;
 
         let blk_record = block_records
@@ -208,18 +208,16 @@ fn pay(transfer_form: Form<TransferForm>, dbconn: DBConnection) -> Result<Flash<
             .expect("BlockchainState::make_block should succeed");
 
         // Store the new state
-        records::BlockRecord {
+        (records::BlockRecord {
             height: new_block.header.height as i32,
             block_json: util::to_json(&new_block),
             state_json: util::to_json(&new_state),
-        }
+        },new_block)
     };
     
-    // Save everything in a single transaction
+    // Save everything in a single DB transaction.
     dbconn.0
         .transaction::<(), diesel::result::Error, _>(|| {
-
-        
 
         {
             use schema::block_records::dsl::*;
@@ -228,12 +226,26 @@ fn pay(transfer_form: Form<TransferForm>, dbconn: DBConnection) -> Result<Flash<
                 .execute(&dbconn.0)?;
         }
 
+        // Later: both sender and recipient process the block and update their balances.
+        sender.process_block(&new_block, &bp_gens);
+        recipient.process_block(&new_block, &bp_gens);
+
+        {
+            use schema::node_records::dsl::*;
+            let sender_record = records::NodeRecord::new(sender);
+            let sender_scope = node_records.filter(alias.eq(&sender_record.alias));
+            diesel::update(sender_scope).set(&sender_record).execute(&dbconn.0)?;
+
+            let recipient_record = records::NodeRecord::new(recipient);
+            let recipient_scope = node_records.filter(alias.eq(&recipient_record.alias));
+            diesel::update(recipient_scope).set(&recipient_record).execute(&dbconn.0)?;
+        }
+
         Ok(())
     }).map_err(|e| flash_error(format!("Database error: {}", e)) )?;
 
-    // Later: both sender and recipient process the block and update their balances.
 
-    Ok(Flash::error(Redirect::to(uri!(nodes_show: transfer_form.sender_alias.clone())), "Insufficient funds"))
+    Ok(Flash::success(Redirect::to(back_url), "Transaction sent!"))
 }
 
 

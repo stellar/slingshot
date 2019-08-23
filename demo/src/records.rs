@@ -22,7 +22,7 @@ pub struct AssetRecord {
     pub key_json: String,
 }
 
-#[derive(Debug, Queryable, Insertable)]
+#[derive(Debug, Queryable, Insertable, AsChangeset)]
 pub struct NodeRecord {
     pub alias: String,
     pub state_json: String,
