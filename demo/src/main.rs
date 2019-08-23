@@ -21,7 +21,8 @@ use diesel::prelude::*;
 use diesel::sqlite::SqliteConnection;
 use dotenv::dotenv;
 
-use rocket::response::status::NotFound;
+use rocket::request::{Form, FromForm, FlashMessage};
+use rocket::response::{Flash, Redirect, status::NotFound};
 use rocket::Request;
 use rocket_contrib::serve::StaticFiles;
 use rocket_contrib::templates::Template;
@@ -72,13 +73,23 @@ fn network_blocks(dbconn: DBConnection) -> Result<Template, NotFound<String>> {
 }
 
 #[get("/nodes/<alias_param>")]
-fn nodes_show(alias_param: String, dbconn: DBConnection) -> Result<Template, NotFound<String>> {
-    let node = {
+fn nodes_show(alias_param: String, flash: Option<FlashMessage>, dbconn: DBConnection) -> Result<Template, NotFound<String>> {
+    let (node,others_aliases) = {
         use schema::node_records::dsl::*;
-        node_records
-            .filter(alias.eq(alias_param))
+        let node = node_records
+            .filter(alias.eq(&alias_param))
             .first::<records::NodeRecord>(&dbconn.0)
-            .map_err(|_| NotFound("Node not found".into()))?
+            .map_err(|_| NotFound("Node not found".into()))?;
+
+        let others_aliases = node_records
+            .filter(alias.ne(&alias_param))
+            .load::<records::NodeRecord>(&dbconn.0)
+            .map_err(|_| NotFound("Cannot load nodes".into()))?
+            .into_iter()
+            .map(|rec| rec.alias)
+            .collect::<Vec<_>>();
+
+        (node, others_aliases)
     };
 
     let assets = {
@@ -94,9 +105,32 @@ fn nodes_show(alias_param: String, dbconn: DBConnection) -> Result<Template, Not
         "sidebar": sidebar_context(&dbconn.0),
         "node": node.to_json(),
         "balances": balances,
+        "others": others_aliases,
+        "flash": flash.map(|f| {json!({
+            "name": f.name(),
+            "msg": f.msg(),
+        })})
     });
     Ok(Template::render("nodes/show", &context))
 }
+
+#[derive(FromForm)]
+struct TransferForm {
+    sender_alias: String,
+    recipient_alias: String,
+    flavor_alias: String,
+    qty: String,
+}
+
+
+#[post("/pay", data = "<transfer_form>")]
+fn pay(transfer_form: Form<TransferForm>, dbconn: DBConnection) -> Flash<Redirect> {
+    
+    // TBD: load all records related to sending 
+
+    Flash::error(Redirect::to(uri!(nodes_show: transfer_form.sender_alias.clone())), "Insufficient funds")
+}
+
 
 #[get("/assets/<alias_param>")]
 fn assets_show(alias_param: String, dbconn: DBConnection) -> Result<Template, NotFound<String>> {
@@ -252,7 +286,8 @@ fn launch_rocket_app() {
                 network_mempool,
                 network_blocks,
                 nodes_show,
-                assets_show
+                assets_show,
+                pay
             ],
         )
         .launch();

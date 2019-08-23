@@ -27,31 +27,32 @@
     <h4>Transfer</h4>
   </div>
 
-  <form class="col-6">
+  <form class="col-6" action="/pay" method="POST">
+    <input type="hidden" name="sender_alias" value="{{node.wallet.alias}}" />
     <div class="form-group row">
       <label for="recipient" class="col-sm-2 col-form-label">To</label>
       <div class="col-sm-10">
-        <select class="form-control" id="recipient">
-          <option value="alias-tbd">Alice</option>
-          <option value="alias-tbd">Bob</option>
-          <option value="alias-tbd">Treasury</option>
+        <select class="form-control" id="recipient_alias" name="recipient_alias">
+          {% for alias in others | sort %}
+          <option value="{{alias}}">{{alias}}</option>
+          {% endfor %}
         </select>
       </div>
     </div>
     <div class="form-group row">
       <label for="flavor" class="col-sm-2 col-form-label">Asset</label>
       <div class="col-sm-10">
-        <select class="form-control" id="flavor">
-          <option>USD</option>
-          <option>EUR</option>
-          <option>Token</option>
+        <select class="form-control" id="flavor_alias" name="flavor_alias">
+          {% for balance in balances | sort(attribute="alias") %}
+          <option value="{{balance.alias}}">{{balance.alias}}</option>
+          {% endfor %}
         </select>
       </div>
     </div>
     <div class="form-group row">
       <label for="qty" class="col-sm-2 col-form-label">Amount</label>
       <div class="col-sm-10">
-        <input type="text" class="form-control" id="qty" placeholder="0">
+        <input type="text" class="form-control" id="qty" name="qty" placeholder=""/>
       </div>
     </div>
     <div class="form-group row">

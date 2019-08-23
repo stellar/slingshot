@@ -96,6 +96,20 @@
       </nav>
 
       <main role="main" class="col-md-9 ml-sm-auto col-lg-10 px-4">
+
+        {% if flash %}
+          {% if flash.name == "error" %}
+          <div class="alert alert-danger" role="alert">
+            {{ flash.msg }}
+          </div>
+          {% endif %}
+          {% if flash.name == "success" %}
+          <div class="alert alert-success" role="alert">
+            {{ flash.msg }}
+          </div>
+          {% endif %}
+        {% endif %}
+
         {% block main %}
         <center>N/A</center>
         {% endblock main %}
