@@ -12,6 +12,7 @@ extern crate serde_json;
 mod nodes;
 mod records;
 mod schema;
+mod publication;
 mod util;
 
 use std::collections::HashMap;
@@ -219,17 +220,7 @@ fn pay(transfer_form: Form<TransferForm>, dbconn: DBConnection) -> Result<Flash<
     dbconn.0
         .transaction::<(), diesel::result::Error, _>(|| {
 
-        {
-            use schema::block_records::dsl::*;
-            diesel::insert_into(block_records)
-                .values(&new_block_record)
-                .execute(&dbconn.0)?;
-        }
-
-        // Later: both sender and recipient process the block and update their balances.
-        sender.process_block(&new_block, &bp_gens);
-        recipient.process_block(&new_block, &bp_gens);
-
+        // Save the updated records.
         {
             use schema::node_records::dsl::*;
             let sender_record = records::NodeRecord::new(sender);
@@ -239,6 +230,27 @@ fn pay(transfer_form: Form<TransferForm>, dbconn: DBConnection) -> Result<Flash<
             let recipient_record = records::NodeRecord::new(recipient);
             let recipient_scope = node_records.filter(alias.eq(&recipient_record.alias));
             diesel::update(recipient_scope).set(&recipient_record).execute(&dbconn.0)?;
+        }
+
+        // Save the new block
+        {
+            use schema::block_records::dsl::*;
+            diesel::insert_into(block_records)
+                .values(&new_block_record)
+                .execute(&dbconn.0)?;
+        }
+
+        // Catch up ALL the nodes.
+
+        use schema::node_records::dsl::*;
+        let recs = node_records.load::<records::NodeRecord>(&dbconn.0)?;
+
+        for rec in recs.into_iter() {
+            let mut node = rec.node();
+            node.process_block(&new_block, &bp_gens);
+            let rec = records::NodeRecord::new(node);
+            diesel::update(node_records.filter(alias.eq(&rec.alias))).
+            set(&rec).execute(&dbconn.0)?;
         }
 
         Ok(())
