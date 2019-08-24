@@ -78,12 +78,12 @@ impl Node {
 
     /// Constructs a payment transaction and a reply to the recipient.
     pub fn prepare_payment_tx(&mut self, payment_receiver: &accounts::Receiver, bp_gens: &BulletproofGens)
-    -> Result<(zkvm::Tx, Vec<zkvm::utreexo::Proof>, accounts::ReceiverReply), &'static str> {
+    -> Result<(zkvm::Tx, zkvm::TxID, Vec<zkvm::utreexo::Proof>, accounts::ReceiverReply), &'static str> {
 
         // Unwrap is used because in this test we know that we are supposed to have enough UTXOs.
         let (spent_utxos, change_value) =
             Account::select_utxos(&payment_receiver.value, &self.wallet.utxos)
-            .ok_or("Insufficient funds")?;
+            .ok_or("Insufficient funds!")?;
 
         let change_receiver_witness = self.wallet.account.generate_receiver(change_value);
 
@@ -130,6 +130,7 @@ impl Node {
             // Build the UnverifiedTx
             zkvm::Prover::build_tx(program, header, &bp_gens).unwrap()
         };
+        let txid = utx.txid;
 
         // 5. Alice sends ReceiverReply to Bob with contract's anchor.
         // Determine the payment contract's anchor and send it to Bob via ReceiverReply
@@ -180,7 +181,7 @@ impl Node {
 
         let utxo_proofs = spent_utxos.iter().map(|utxo| utxo.proof.clone()).collect::<Vec<_>>();
 
-        Ok((tx, utxo_proofs, reply))
+        Ok((tx, txid, utxo_proofs, reply))
     }
 
     /// Processes a block: detects spends, new outputs and updates utxo proofs.

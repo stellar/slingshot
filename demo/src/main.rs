@@ -175,7 +175,7 @@ fn pay(transfer_form: Form<TransferForm>, dbconn: DBConnection) -> Result<Flash<
     // but since we are doing the exchange in one call, we'll skip it.
 
     // Sender prepares a tx
-    let (tx, proofs, reply) = sender
+    let (tx, txid, proofs, reply) = sender
         .prepare_payment_tx(&payment_receiver, &bp_gens)
         .map_err(|msg| flash_error(msg.to_string()))?;
     // Note: at this point, sender reserves the utxos and saves its incremented seq # until sender ACK'd ReceiverReply,
@@ -257,7 +257,8 @@ fn pay(transfer_form: Form<TransferForm>, dbconn: DBConnection) -> Result<Flash<
     }).map_err(|e| flash_error(format!("Database error: {}", e)) )?;
 
 
-    Ok(Flash::success(Redirect::to(back_url), "Transaction sent!"))
+    let msg = format!("Transaction sent: {}", hex::encode(&txid));
+    Ok(Flash::success(Redirect::to(back_url), msg))
 }
 
 
@@ -358,8 +359,9 @@ fn prepare_db_if_needed() {
                 utxos
             };
 
+            let timestamp = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).expect("SystemTime should work").as_millis() as u64;
             let (network_state, proofs) = BlockchainState::make_initial(
-                0u64,
+                timestamp,
                 pending_utxos.iter().map(|utxo| utxo.contract().id()),
             );
 

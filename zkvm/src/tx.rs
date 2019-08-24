@@ -191,6 +191,25 @@ impl TxID {
     }
 }
 
+impl AsRef<[u8]> for TxID {
+    fn as_ref(&self) -> &[u8] {
+        &self.0
+    }
+}
+
+impl core::ops::Deref for TxID {
+    type Target = [u8];
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl core::ops::DerefMut for TxID {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
 impl MerkleItem for TxEntry {
     fn commit(&self, t: &mut Transcript) {
         match self {
