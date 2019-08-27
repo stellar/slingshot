@@ -11,7 +11,7 @@ use crate::encoding::SliceReader;
 use crate::errors::VMError;
 use crate::merkle::{Hash, MerkleItem, MerkleTree};
 use crate::transcript::TranscriptProtocol;
-use crate::verifier::{Verifier};
+use crate::verifier::Verifier;
 
 /// Transaction log. `TxLog` is a type alias for `Vec<TxEntry>`.
 pub type TxLog = Vec<TxEntry>;

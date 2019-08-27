@@ -82,7 +82,6 @@ impl<'t> Delegate<r1cs::Verifier<'t>> for Verifier<'t> {
 }
 
 impl<'t> Verifier<'t> {
-
     /// Precomputes the TxID and TxLog.
     /// This is a private API until we have a nicer composable API with precomputed tx.
     /// See public API `Tx::precompute() that wraps with method`

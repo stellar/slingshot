@@ -8,7 +8,7 @@ use zkvm::utreexo;
 use zkvm::{Anchor, ClearValue, Contract, ContractID, TxEntry};
 
 use accounts::{Account, ReceiverWitness};
-use musig::{Multisignature};
+use musig::Multisignature;
 
 use super::util;
 
@@ -77,13 +77,23 @@ impl Node {
     }
 
     /// Constructs a payment transaction and a reply to the recipient.
-    pub fn prepare_payment_tx(&mut self, payment_receiver: &accounts::Receiver, bp_gens: &BulletproofGens)
-    -> Result<(zkvm::Tx, zkvm::TxID, Vec<zkvm::utreexo::Proof>, accounts::ReceiverReply), &'static str> {
-
+    pub fn prepare_payment_tx(
+        &mut self,
+        payment_receiver: &accounts::Receiver,
+        bp_gens: &BulletproofGens,
+    ) -> Result<
+        (
+            zkvm::Tx,
+            zkvm::TxID,
+            Vec<zkvm::utreexo::Proof>,
+            accounts::ReceiverReply,
+        ),
+        &'static str,
+    > {
         // Unwrap is used because in this test we know that we are supposed to have enough UTXOs.
         let (spent_utxos, change_value) =
             Account::select_utxos(&payment_receiver.value, &self.wallet.utxos)
-            .ok_or("Insufficient funds!")?;
+                .ok_or("Insufficient funds!")?;
 
         let change_receiver_witness = self.wallet.account.generate_receiver(change_value);
 
@@ -147,7 +157,7 @@ impl Node {
             receiver_id: payment_receiver.id(),
             anchor: payment_anchor,
         };
-        
+
         let change_pending_utxo = PendingUtxo {
             receiver_witness: change_receiver_witness,
             anchor: change_anchor,
@@ -178,8 +188,10 @@ impl Node {
             utx.sign(sig)
         };
 
-
-        let utxo_proofs = spent_utxos.iter().map(|utxo| utxo.proof.clone()).collect::<Vec<_>>();
+        let utxo_proofs = spent_utxos
+            .iter()
+            .map(|utxo| utxo.proof.clone())
+            .collect::<Vec<_>>();
 
         Ok((tx, txid, utxo_proofs, reply))
     }

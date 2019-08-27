@@ -59,4 +59,3 @@ where
 {
     serde_json::from_str(&to_json(value)).expect("Serialization to JSON value should work")
 }
-
