@@ -12,7 +12,7 @@ use crate::errors::VMError;
 use crate::ops::Instruction;
 use crate::predicate::Predicate;
 use crate::program::ProgramItem;
-use crate::tx::{Tx, VerifiedTx};
+use crate::tx::{Tx, TxID, TxLog, VerifiedTx};
 use crate::vm::{Delegate, VM};
 
 /// This is the entry point API for verifying a transaction.
@@ -26,6 +26,7 @@ pub struct Verifier<'t> {
     batch: musig::BatchVerifier<rand::rngs::ThreadRng>,
 }
 
+/// Verifier's implementation of the running state of the program.
 pub struct VerifierRun {
     program: Vec<u8>,
     offset: usize,
@@ -81,6 +82,31 @@ impl<'t> Delegate<r1cs::Verifier<'t>> for Verifier<'t> {
 }
 
 impl<'t> Verifier<'t> {
+    /// Precomputes the TxID and TxLog.
+    /// This is a private API until we have a nicer composable API with precomputed tx.
+    /// See public API `Tx::precompute() that wraps with method`
+    /// One obstacle towards that is relation between CS and the transcript: the CS
+    /// only holds a &mut of the transcript that can only be parked in the lexical scope,
+    /// but not in the struct. And we need CS instance both for building tx and for verifying.
+    pub(crate) fn precompute(tx: &Tx) -> Result<(TxID, TxLog), VMError> {
+        let mut r1cs_transcript = Transcript::new(b"ZkVM.r1cs");
+        let cs = r1cs::Verifier::new(&mut r1cs_transcript);
+
+        let mut verifier = Verifier {
+            signtx_items: Vec::new(),
+            cs: cs,
+            batch: musig::BatchVerifier::new(rand::thread_rng()),
+        };
+
+        let vm = VM::new(
+            tx.header,
+            VerifierRun::new(tx.program.clone()),
+            &mut verifier,
+        );
+
+        vm.run()
+    }
+
     /// Verifies the `Tx` object by executing the VM and returns the `VerifiedTx`.
     /// Returns an error if the program is malformed or any of the proofs are not valid.
     pub fn verify_tx(tx: &Tx, bp_gens: &BulletproofGens) -> Result<VerifiedTx, VMError> {

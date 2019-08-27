@@ -1,0 +1,18 @@
+{% extends "base" %}
+
+{% block title %}{{asset.alias}}{% endblock title %}
+
+{% block main %}
+  <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3">
+    <h1 class="h2">Asset: {{asset.alias}}</h1>
+  </div>
+
+  <table class="table xtable-bordered block-header">
+    <tbody>
+      <tr><th>Alias</th><td>{{asset.alias}}</td></tr>
+      <tr><th>Issuance privkey</th><td><tt>{{asset.prv}}</tt></td></tr>
+      <tr><th>Issuance pubkey</th><td><tt>{{asset.pub}}</tt></td></tr>
+      <tr><th>Flavor</th><td><tt>{{asset.flv}}</tt></td></tr>
+    </tbody>
+  </table>
+{% endblock main %}

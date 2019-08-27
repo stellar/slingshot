@@ -1,0 +1,31 @@
+{% extends "base" %}
+
+{% block title %}Status{% endblock title %}
+
+{% block main %}
+  <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3">
+    <h1 class="h2">Network status</h1>
+  </div>
+
+  <table class="table table-bordered block-header">
+    <tbody>
+      <tr><th>Blocks count</th><td>{{network_status.height}}</td></tr>
+      <tr><th>Contracts count</th><td>{{network_status.utxos_count}}</td></tr>
+      <tr><th>Tip timestamp</th><td>{{network_status.block.header.timestamp_ms}}</td></tr>
+      <tr><th>Tip ID</th><td><tt>{{network_status.block_id}}</tt></td></tr>
+      <tr>
+        <th>Tip</th>
+        <td><pre><code>{{network_status.state.tip | json_encode(pretty=true)}}</code></pre></td>
+      </tr>
+      <tr><th>Utreexo root</th><td><tt>{{network_status.block.header.utxoroot}}</tt></td></tr>
+      <tr>
+        <th>Utreexo</th>
+        <td><pre><code>{{network_status.state.utreexo | json_encode(pretty=true)}}</code></pre></td>
+      </tr>
+      <tr>
+        <th>Catchup</th>
+        <td><pre><code>{{network_status.state.catchup | json_encode(pretty=true)}}</code></pre></td>
+      </tr>
+    </tbody>
+  </table>
+{% endblock main %}

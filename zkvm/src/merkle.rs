@@ -182,6 +182,12 @@ impl MerkleNode {
     }
 }
 
+impl AsRef<[u8]> for Hash {
+    fn as_ref(&self) -> &[u8] {
+        &self.0
+    }
+}
+
 impl core::ops::Deref for Hash {
     type Target = [u8];
     fn deref(&self) -> &Self::Target {

@@ -1,0 +1,2 @@
+[global.databases]
+demodb = { url = "demodb.sqlite" }

@@ -56,6 +56,12 @@ impl Forest {
         self.generation
     }
 
+    /// Total number of items in the forest.
+    pub fn count(&self) -> u64 {
+        self.roots_iter()
+            .fold(0u64, |total, (level, _)| total + (1 << level))
+    }
+
     /// Verifies the item's proof of inclusion.
     pub fn verify<M: MerkleItem>(
         &self,

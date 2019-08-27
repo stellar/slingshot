@@ -1,0 +1,44 @@
+[package]
+name = "zkvm-demo"
+version = "0.1.0"
+authors = ["Oleg Andreev <oleganza@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+rand = "0.6"
+rocket = "0.4.2"
+diesel = { version = "1.0.0", features = ["postgres"] }
+dotenv = "0.9.0"
+merlin = "1.0.1"
+curve25519-dalek = { version = "1.0.1", features = ["serde"] }
+serde = { version = "1.0", features=["derive"] }
+rand_chacha = "0.1"
+hex = "^0.3"
+
+[dependencies.bulletproofs]
+git = "https://github.com/dalek-cryptography/bulletproofs"
+branch = "develop"
+features = ["yoloproofs"]
+
+[dependencies.keytree]
+path = "../keytree"
+
+[dependencies.musig]
+path = "../musig"
+
+[dependencies.zkvm]
+path = "../zkvm"
+
+[dependencies.accounts]
+path = "../accounts"
+
+[dependencies.rocket_contrib]
+version = "0.4.2"
+default-features = false
+features = ["handlebars_templates", "tera_templates", "serve", "diesel_sqlite_pool"]
+
+[dependencies.serde_json]
+git = "https://github.com/oleganza/json"
+#path = "../../../rust/serde-json"
+branch = "binary-support"
+features = ["binary_hex"]

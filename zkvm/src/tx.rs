@@ -11,6 +11,7 @@ use crate::encoding::SliceReader;
 use crate::errors::VMError;
 use crate::merkle::{Hash, MerkleItem, MerkleTree};
 use crate::transcript::TranscriptProtocol;
+use crate::verifier::Verifier;
 
 /// Transaction log. `TxLog` is a type alias for `Vec<TxEntry>`.
 pub type TxLog = Vec<TxEntry>;
@@ -165,6 +166,11 @@ impl Tx {
         })
     }
 
+    /// Computes the TxID and TxLog without verifying the transaction.
+    pub fn precompute(&self) -> Result<(TxID, TxLog), VMError> {
+        Verifier::precompute(self)
+    }
+
     /// Serializes the tx into a byte array.
     pub fn to_bytes(&self) -> Vec<u8> {
         self.encode_to_vec()
@@ -188,6 +194,25 @@ impl TxID {
     /// Computes TxID from a tx log
     pub fn from_log(list: &[TxEntry]) -> Self {
         TxID(MerkleTree::root(b"ZkVM.txid", list))
+    }
+}
+
+impl AsRef<[u8]> for TxID {
+    fn as_ref(&self) -> &[u8] {
+        &self.0
+    }
+}
+
+impl core::ops::Deref for TxID {
+    type Target = [u8];
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl core::ops::DerefMut for TxID {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
     }
 }
 
