@@ -35,7 +35,7 @@ where
         .expect("from_valid_json expects a valid JSON string")
 }
 
-/// Encodes object to JSON
+/// Encodes object to JSON-encoded String
 pub fn to_json<T>(value: &T) -> String
 where
     T: serde::ser::Serialize,
@@ -51,3 +51,12 @@ where
         .expect("Serialization should work");
     String::from_utf8(vec).expect("Should not emit invalid UTF-8")
 }
+
+/// Encodes object to a JSON object
+pub fn to_json_value<T>(value: &T) -> serde_json::Value
+where
+    T: serde::ser::Serialize,
+{
+    serde_json::from_str(&to_json(value)).expect("Serialization to JSON value should work")
+}
+

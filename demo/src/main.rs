@@ -76,6 +76,22 @@ fn network_blocks(dbconn: DBConnection) -> Result<Template, NotFound<String>> {
     Ok(Template::render("network/blocks", &context))
 }
 
+#[get("/network/block/<height_param>")]
+fn network_block_show(height_param: i32, dbconn: DBConnection) -> Result<Template, NotFound<String>> {
+    use schema::block_records::dsl::*;
+    let blk_record = block_records
+        .filter(height.eq(&height_param))
+        .first::<records::BlockRecord>(&dbconn.0)
+        .map_err(|_| NotFound("Block not found".into()))?;
+
+    let context = json!({
+        "sidebar": sidebar_context(&dbconn.0),
+        "block": blk_record.to_details()
+    });
+
+    Ok(Template::render("network/block_show", &context))
+}
+
 #[get("/nodes/<alias_param>")]
 fn nodes_show(alias_param: String, flash: Option<FlashMessage>, dbconn: DBConnection) -> Result<Template, NotFound<String>> {
     let (node,others_aliases) = {
@@ -416,6 +432,7 @@ fn launch_rocket_app() {
                 network_status,
                 network_mempool,
                 network_blocks,
+                network_block_show,
                 nodes_show,
                 assets_show,
                 pay
