@@ -60,6 +60,7 @@ impl BlockRecord {
                 let (txid, txlog) = tx.precompute().expect("Our blockchain does not have invalid transactions.");
                 json!({
                     "id": hex::encode(&txid),
+                    "header": &util::to_json_value(&tx.header),
                     "inputs": &util::to_json_value(&txlog.iter().filter_map(|e| {
                         match e {
                             TxEntry::Input(cid) => Some(cid),
@@ -73,6 +74,7 @@ impl BlockRecord {
                         }
                     }).collect::<Vec<_>>()),
                     "tx": &util::to_json_value(&tx),
+                    "program_hex": hex::encode(&tx.program),
                 })
             }).collect::<Vec<_>>(),
         })

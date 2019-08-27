@@ -22,7 +22,7 @@
         <tr>
           <td>{{block.height}}</td>
           <td>{{block.header.timestamp_ms}}</td>
-          <td><tt>{{block.id}}</tt></td>
+          <td><a href="/network/block/{{block.height}}"><tt>{{block.id}}</tt></a></td>
           <td>{{block.txs}}</td>
         </tr>
         {% endfor %}

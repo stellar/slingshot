@@ -12,6 +12,10 @@ tt {
   font-size:1.1em;
 }
 
+code {
+  color:#212529;
+}
+
 .alert {
   margin-top:20px;
 }

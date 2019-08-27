@@ -10,11 +10,11 @@
   <table class="table table-bordered block-header">
     <tbody>
       <tr><th>Height</th><td>{{block.height}}</td></tr>
-      <tr><th>Hash</th><td>{{block.id}}</td></tr>
+      <tr><th>Hash</th><td><tt>{{block.id}}</tt></td></tr>
       <tr><th>Txs</th><td>{{block.txs | length}}</td></tr>
       <tr>
         <th>Header</th>
-        <td><pre><code>{{block.header | json_encode(pretty=true)}}</code></pre></td>
+        <td><pre><code>{{block.header | json_encode(pretty=true) }}</code></pre></td>
       </tr>
     </tbody>
   </table>
@@ -24,34 +24,37 @@
     <h3>Transactions</h3>
   </div>
 
-  <div class="table-responsive">
-    <table class="table table-striped table-sm">
-      <thead>
-        <tr>
-          <th>#</th>
-          <th>Header</th>
-          <th>Header</th>
-          <th>Header</th>
-          <th>Header</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr>
-          <td>1,001</td>
-          <td>Lorem</td>
-          <td>ipsum</td>
-          <td>dolor</td>
-          <td>sit</td>
-        </tr>
-        <tr>
-          <td>1,002</td>
-          <td>amet</td>
-          <td>consectetur</td>
-          <td>adipiscing</td>
-          <td>elit</td>
-        </tr>
-      </tbody>
+  {% for tx in block.txs %}
+ 
+    <table class="table table-bordered block-header">
+    <tbody>
+      <tr><th>ID</th><td style="font-weight:bold"><tt>{{tx.id}}</tt></td></tr>
+      <tr><th>Version</th><td>{{tx.header.version}}</td></tr>
+      <tr><th>Time bounds</th><td>{{tx.header.mintime_ms}} — {{tx.header.maxtime_ms}}</td></tr>
+      <tr>
+        <th>Inputs</th>
+        <td><pre><code>{{tx.inputs | json_encode(pretty=true) }}</code></pre></td>
+      </tr>
+      <tr>
+        <th>Outputs</th>
+        <td><pre><code>{{tx.outputs | json_encode(pretty=true) }}</code></pre></td>
+      </tr>
+      <tr>
+        <th>Raw program</th>
+        <td><code>{{tx.program_hex}}</code></td>
+      </tr>
+      <tr>
+        <th>Signature</th>
+        <td><code>{{tx.tx.signature}}</code></td>
+      </tr>
+      <tr>
+        <th>R1CS proof</th>
+        <td><code>{{tx.tx.proof}}</code></td>
+      </tr>
+    </tbody>
     </table>
-  </div>
+
+  {% endfor %}
+
   
 {% endblock main %}
