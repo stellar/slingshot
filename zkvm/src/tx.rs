@@ -11,6 +11,7 @@ use crate::encoding::SliceReader;
 use crate::errors::VMError;
 use crate::merkle::{Hash, MerkleItem, MerkleTree};
 use crate::transcript::TranscriptProtocol;
+use crate::verifier::{Verifier};
 
 /// Transaction log. `TxLog` is a type alias for `Vec<TxEntry>`.
 pub type TxLog = Vec<TxEntry>;
@@ -163,6 +164,11 @@ impl Tx {
             signature,
             proof,
         })
+    }
+
+    /// Computes the TxID and TxLog without verifying the transaction.
+    pub fn precompute(&self) -> Result<(TxID, TxLog), VMError> {
+        Verifier::precompute(self)
     }
 
     /// Serializes the tx into a byte array.
