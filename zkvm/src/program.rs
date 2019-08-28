@@ -5,6 +5,7 @@ use crate::ops::Instruction;
 use crate::predicate::PredicateTree;
 use crate::scalar_witness::ScalarWitness;
 use crate::types::String;
+use crate::encoding::SliceReader;
 
 use core::borrow::Borrow;
 use merlin::Transcript;
@@ -58,6 +59,13 @@ impl Encodable for Program {
     }
 }
 
+impl core::ops::Deref for Program {
+    type Target = [Instruction];
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
 impl Program {
     def_op!(add, Add);
     def_op!(alloc, Alloc, Option<ScalarWitness>);
@@ -105,21 +113,22 @@ impl Program {
         builder(&mut program);
         program
     }
+
     /// Serializes a Program into a byte array.
     pub fn to_bytes(&self) -> Vec<u8> {
         self.encode_to_vec()
     }
 
-    // /// Creates a program from parsing the Bytecode data slice of encoded instructions.
-    // pub(crate) fn parse(data: &[u8]) -> Result<Self, VMError> {
-    //     SliceReader::parse(data, |r| {
-    //         let mut program = Self::new();
-    //         while r.len() > 0 {
-    //             program.0.push(Instruction::parse(r)?);
-    //         }
-    //         Ok(program)
-    //     })
-    // }
+    /// Creates a program by parsing a bytecode slice.
+    pub fn parse(data: &[u8]) -> Result<Self, VMError> {
+        SliceReader::parse(data, |r| {
+            let mut program = Self::new();
+            while r.len() > 0 {
+                program.0.push(Instruction::parse(r)?);
+            }
+            Ok(program)
+        })
+    }
 
     /// Converts the program to a plain vector of instructions.
     pub fn to_vec(self) -> Vec<Instruction> {
