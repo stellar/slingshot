@@ -103,6 +103,11 @@ impl Program {
         Program(vec![])
     }
 
+    /// Creates a new program from a vector of instructions.
+    pub fn from_vec(v: Vec<Instruction>) -> Self {
+        Program(v)
+    }
+
     /// Creates an empty `Program` and passes its &mut to the closure to let it add the instructions.
     /// Returns the resulting program.
     pub fn build<F>(builder: F) -> Self

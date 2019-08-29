@@ -40,6 +40,10 @@
         <td><pre><code>{{tx.outputs | json_encode(pretty=true) }}</code></pre></td>
       </tr>
       <tr>
+        <th>Program</th>
+        <td><code>{{tx.program_asm}}</code></td>
+      </tr>
+      <tr>
         <th>Raw program</th>
         <td><code>{{tx.program_hex}}</code></td>
       </tr>
