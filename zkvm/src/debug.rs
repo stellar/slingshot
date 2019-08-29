@@ -7,11 +7,13 @@
 
 use std::fmt;
 
-use crate::contract::Contract;
+use crate::constraints::Commitment;
+use crate::contract::{Anchor, Contract, PortableItem};
 use crate::encoding::SliceReader;
 use crate::ops::Instruction;
+use crate::predicate::Predicate;
 use crate::program::Program;
-use crate::types::String;
+use crate::types::{String, Value};
 
 impl fmt::Debug for Program {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -43,6 +45,12 @@ impl String {
     }
 }
 
+impl Value {
+    pub(crate) fn fmt_as_pushdata(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "<{:?};{:?}>", self.qty, self.flv)
+    }
+}
+
 impl Instruction {
     pub(crate) fn fmt_with_lookahead(
         &self,
@@ -59,7 +67,7 @@ impl Instruction {
                     (String::Opaque(bytes), Some(&Instruction::Input)) => {
                         SliceReader::parse(&bytes, |r| Contract::decode(r))
                             .map(|c| String::Output(Box::new(c)).fmt_as_pushdata(f))
-                            .unwrap_or(string.fmt_as_pushdata(f)) // bad encoding -> keep opaque
+                            .unwrap_or_else(|_| string.fmt_as_pushdata(f)) // bad encoding -> keep opaque
                     }
                     (string, _) => string.fmt_as_pushdata(f),
                 }
@@ -106,5 +114,40 @@ impl Instruction {
         }
 
         Ok(())
+    }
+}
+
+impl fmt::Debug for Predicate {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Predicate::Opaque(r) => write!(f, "{}", hex::encode(&r.as_bytes())),
+            Predicate::Key(vk) => write!(f, "{}", hex::encode(&vk.as_bytes())),
+            Predicate::Tree(pt) => write!(f, "{:?}", pt),
+        }
+    }
+}
+
+impl fmt::Debug for Anchor {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", hex::encode(&self.0))
+    }
+}
+
+impl fmt::Debug for PortableItem {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            PortableItem::String(s) => s.fmt_as_pushdata(f),
+            PortableItem::Program(p) => write!(f, "[{:?}]", p),
+            PortableItem::Value(v) => v.fmt_as_pushdata(f),
+        }
+    }
+}
+
+impl fmt::Debug for Commitment {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Commitment::Closed(point) => write!(f, "{}", hex::encode(&point.as_bytes())),
+            Commitment::Open(cw) => write!(f, "{:?}", cw),
+        }
     }
 }

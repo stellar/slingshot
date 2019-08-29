@@ -20,7 +20,7 @@ use crate::program::{Program, ProgramItem};
 use crate::transcript::TranscriptProtocol;
 
 /// Represents a ZkVM predicate with its optional witness data.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub enum Predicate {
     /// Verifier's view on the predicate in a compressed form to defer decompression cost.
     Opaque(CompressedRistretto),

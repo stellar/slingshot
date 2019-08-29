@@ -17,7 +17,7 @@ pub const PROG_TYPE: u8 = 0x01;
 pub const VALUE_TYPE: u8 = 0x02;
 
 /// A unique identifier for an anchor
-#[derive(Clone, Copy, PartialEq, Default, Debug)]
+#[derive(Clone, Copy, PartialEq, Default)]
 pub struct Anchor(pub [u8; 32]);
 serialize_bytes32!(Anchor);
 
@@ -40,7 +40,7 @@ pub struct Contract {
 }
 
 /// Representation of items that can be stored within outputs and contracts.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub enum PortableItem {
     /// Plain data payload
     String(String),

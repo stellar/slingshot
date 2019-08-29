@@ -71,7 +71,7 @@ pub enum SecretConstraint {
 }
 
 /// Commitment is a represention of an _open_ or _closed_ Pedersen commitment.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub enum Commitment {
     /// Hides a secret value and its blinding factor in the Ristretto point.
     Closed(CompressedRistretto),
