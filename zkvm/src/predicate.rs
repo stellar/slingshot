@@ -20,7 +20,7 @@ use crate::program::{Program, ProgramItem};
 use crate::transcript::TranscriptProtocol;
 
 /// Represents a ZkVM predicate with its optional witness data.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Predicate {
     /// Verifier's view on the predicate in a compressed form to defer decompression cost.
     Opaque(CompressedRistretto),
@@ -35,7 +35,7 @@ pub enum Predicate {
 }
 
 /// Represents a ZkVM predicate tree.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct PredicateTree {
     /// Vector of the programs and blinding factors, stored as Merkelized predicate leafs.
     leaves: Vec<PredicateLeaf>,
@@ -56,7 +56,7 @@ pub struct PredicateTree {
 
 /// Call proof represents a proof that a certain program is committed via the merkle tree into the predicate.
 /// Used by `call` instruction. The program is not the part of the proof.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct CallProof {
     // Pure verification key
     pub verification_key: VerificationKey,
@@ -69,7 +69,7 @@ pub struct CallProof {
 /// For secrecy, each program is blinded via a dummy neighbour called the "blinding leaf".
 /// From the verifier's perspective, the hash of this node simply appears as part of a merkle proof,
 /// but from the prover's perspective, some leafs are dummy uniformly random nodes.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum PredicateLeaf {
     Program(ProgramItem),
     Blinding([u8; 32]),

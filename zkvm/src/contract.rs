@@ -27,7 +27,7 @@ pub struct ContractID(pub [u8; 32]);
 serialize_bytes32!(ContractID);
 
 /// A ZkVM contract that holds a _payload_ (a list of portable items) protected by a _predicate_.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Contract {
     /// Predicate that guards access to the contract’s payload.
     pub predicate: Predicate,
@@ -40,7 +40,7 @@ pub struct Contract {
 }
 
 /// Representation of items that can be stored within outputs and contracts.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum PortableItem {
     /// Plain data payload
     String(String),

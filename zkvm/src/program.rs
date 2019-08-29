@@ -1,22 +1,22 @@
 use crate::encoding::Encodable;
+use crate::encoding::SliceReader;
 use crate::errors::VMError;
 use crate::merkle::MerkleItem;
 use crate::ops::Instruction;
 use crate::predicate::PredicateTree;
 use crate::scalar_witness::ScalarWitness;
 use crate::types::String;
-use crate::encoding::SliceReader;
 
 use core::borrow::Borrow;
 use merlin::Transcript;
 
 /// A builder type for assembling a sequence of `Instruction`s with chained method calls.
 /// E.g. `let prog = Program::new().push(...).input().push(...).output(1).to_vec()`.
-#[derive(Clone, Debug)]
+#[derive(Clone, PartialEq)]
 pub struct Program(Vec<Instruction>);
 
 /// Represents a view of a program.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum ProgramItem {
     /// `ProgramItem::Bytecode` represents the verifier's view - a Vector of bytecode-as-is.
     Bytecode(Vec<u8>),
