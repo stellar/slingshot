@@ -47,7 +47,7 @@ impl String {
 
 impl Value {
     pub(crate) fn fmt_as_pushdata(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "<{:?};{:?}>", self.qty, self.flv)
+        write!(f, "Value{{{:?},{:?}}}", self.qty, self.flv)
     }
 }
 
