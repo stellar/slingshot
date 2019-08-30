@@ -1,4 +1,5 @@
 use crate::encoding::Encodable;
+use crate::encoding::SliceReader;
 use crate::errors::VMError;
 use crate::merkle::MerkleItem;
 use crate::ops::Instruction;
@@ -11,11 +12,11 @@ use merlin::Transcript;
 
 /// A builder type for assembling a sequence of `Instruction`s with chained method calls.
 /// E.g. `let prog = Program::new().push(...).input().push(...).output(1).to_vec()`.
-#[derive(Clone, Debug)]
+#[derive(Clone, PartialEq)]
 pub struct Program(Vec<Instruction>);
 
 /// Represents a view of a program.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum ProgramItem {
     /// `ProgramItem::Bytecode` represents the verifier's view - a Vector of bytecode-as-is.
     Bytecode(Vec<u8>),
@@ -58,6 +59,13 @@ impl Encodable for Program {
     }
 }
 
+impl core::ops::Deref for Program {
+    type Target = [Instruction];
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
 impl Program {
     def_op!(add, Add);
     def_op!(alloc, Alloc, Option<ScalarWitness>);
@@ -95,6 +103,11 @@ impl Program {
         Program(vec![])
     }
 
+    /// Creates a new program from a vector of instructions.
+    pub fn from_vec(v: Vec<Instruction>) -> Self {
+        Program(v)
+    }
+
     /// Creates an empty `Program` and passes its &mut to the closure to let it add the instructions.
     /// Returns the resulting program.
     pub fn build<F>(builder: F) -> Self
@@ -105,21 +118,22 @@ impl Program {
         builder(&mut program);
         program
     }
+
     /// Serializes a Program into a byte array.
     pub fn to_bytes(&self) -> Vec<u8> {
         self.encode_to_vec()
     }
 
-    // /// Creates a program from parsing the Bytecode data slice of encoded instructions.
-    // pub(crate) fn parse(data: &[u8]) -> Result<Self, VMError> {
-    //     SliceReader::parse(data, |r| {
-    //         let mut program = Self::new();
-    //         while r.len() > 0 {
-    //             program.0.push(Instruction::parse(r)?);
-    //         }
-    //         Ok(program)
-    //     })
-    // }
+    /// Creates a program by parsing a bytecode slice.
+    pub fn parse(data: &[u8]) -> Result<Self, VMError> {
+        SliceReader::parse(data, |r| {
+            let mut program = Self::new();
+            while r.len() > 0 {
+                program.0.push(Instruction::parse(r)?);
+            }
+            Ok(program)
+        })
+    }
 
     /// Converts the program to a plain vector of instructions.
     pub fn to_vec(self) -> Vec<Instruction> {

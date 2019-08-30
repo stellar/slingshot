@@ -10,6 +10,7 @@ mod serialization;
 pub mod blockchain;
 mod constraints;
 mod contract;
+mod debug;
 mod encoding;
 mod errors;
 mod merkle;

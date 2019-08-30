@@ -75,6 +75,7 @@ impl BlockRecord {
                     }).collect::<Vec<_>>()),
                     "tx": &util::to_json_value(&tx),
                     "program_hex": hex::encode(&tx.program),
+                    "program_asm": format!("{:?}", zkvm::Program::parse(&tx.program).expect("Our blockchain does not have invalid txs.")),
                 })
             }).collect::<Vec<_>>(),
         })

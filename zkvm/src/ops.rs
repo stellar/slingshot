@@ -11,7 +11,7 @@ use crate::types::String;
 use core::mem;
 
 /// A decoded instruction.
-#[derive(Clone, Debug)]
+#[derive(Clone, PartialEq)]
 #[allow(missing_docs)]
 pub enum Instruction {
     Push(String),
