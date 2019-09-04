@@ -243,7 +243,7 @@ impl Node {
                         {
                             let pending_utxo = self.wallet.pending_utxos.remove(i);
                             let proof =
-                                new_state.catchup.update_proof(&cid, None, &hasher).unwrap();
+                                new_state.catchup.update_proof(&cid, utreexo::Proof::Transient, &hasher).unwrap();
                             let new_utxo = pending_utxo.to_confirmed(proof);
                             self.wallet.utxos.push(new_utxo.clone());
                             known_outputs.push((entry_index, new_utxo));
@@ -272,7 +272,7 @@ impl Node {
             .map(|utxo| {
                 new_state.catchup.update_proof(
                     &utxo.contract_id(),
-                    Some(utxo.proof.clone()),
+                    utxo.proof.clone(),
                     &hasher,
                 )
             })
