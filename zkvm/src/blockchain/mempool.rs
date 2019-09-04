@@ -39,7 +39,7 @@ impl Mempool {
     pub fn append<P: Borrow<utreexo::Proof>>(
         &mut self,
         tx: Tx,
-        utxo_proofs: impl IntoIterator<Item = Option<P>>,
+        utxo_proofs: impl IntoIterator<Item = P>,
         bp_gens: &BulletproofGens,
     ) -> Result<TxID, BlockchainError> {
         let verified_tx = self

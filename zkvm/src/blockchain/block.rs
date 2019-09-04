@@ -38,7 +38,7 @@ pub struct Block {
     /// List of transactions.
     pub txs: Vec<Tx>, // no Debug impl for R1CSProof yet
     /// UTXO proofs
-    pub all_utxo_proofs: Vec<Option<utreexo::Proof>>,
+    pub all_utxo_proofs: Vec<utreexo::Proof>,
 }
 
 /// VerifiedBlock contains a list of VerifiedTx.
@@ -85,8 +85,8 @@ impl Block {
     /// Returns an iterator of all utxo proofs for all transactions in a block.
     /// This interface allows us to optimize the representation of utxo proofs,
     /// while not affecting the validation logic.
-    pub fn utxo_proofs(&self) -> impl IntoIterator<Item = Option<&utreexo::Proof>> {
-        self.all_utxo_proofs.iter().map(|o| o.as_ref())
+    pub fn utxo_proofs(&self) -> impl IntoIterator<Item = &utreexo::Proof> {
+        self.all_utxo_proofs.iter()
     }
 }
 

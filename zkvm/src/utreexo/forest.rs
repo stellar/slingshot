@@ -70,11 +70,10 @@ impl Forest {
         proof: &Proof,
         hasher: &NodeHasher<M>,
     ) -> Result<(), UtreexoError> {
-        if proof.generation != self.generation {
-            return Err(UtreexoError::OutdatedProof);
-        }
-
-        let path = &proof.path;
+        let path = match proof {
+            Proof::Transient => return Err(UtreexoError::InvalidProof),
+            Proof::Committed(path) => path,
+        };
 
         // 1. Locate the root under which the item.position is located.
         let (root_level, _) =
@@ -178,12 +177,12 @@ impl WorkForest {
     pub fn delete<M: MerkleItem, P: Borrow<Proof>>(
         &mut self,
         item: &M,
-        proof: Option<P>,
+        proof: P,
         hasher: &NodeHasher<M>,
     ) -> Result<(), UtreexoError> {
-        match proof {
-            Some(proof) => self.delete_preexisting(item, proof.borrow(), hasher),
-            None => self.delete_transient(item, hasher),
+        match proof.borrow() {
+            Proof::Transient => self.delete_transient(item, hasher),
+            Proof::Committed(path) => self.delete_committed(item, path, hasher),
         }
     }
 
@@ -202,7 +201,7 @@ impl WorkForest {
 
         // If the node was already marked as modified - fail.
         // This may happen if it was a previously stored node with a proof, but part of a 1-node tree;
-        // when such node is deleted via `delete`, it is simply marked as modified.
+        // when such node is deleted via `delete_committed`, it is simply marked as modified.
         // To prevent double-spending, we need to check that flag here.
         if node.modified {
             return Err(UtreexoError::InvalidProof);
@@ -213,20 +212,14 @@ impl WorkForest {
 
     /// Fills in the missing nodes in the tree, and marks the item as deleted.
     /// The algorithm minimizes amount of computation by taking advantage of the already available data.
-    fn delete_preexisting<M: MerkleItem>(
+    fn delete_committed<M: MerkleItem>(
         &mut self,
         item: &M,
-        proof: &Proof,
+        path: &Path,
         hasher: &NodeHasher<M>,
     ) -> Result<(), UtreexoError> {
         // Determine the existing node which matches the proof, then verify the rest of the proof,
         // and mark the relevant nodes as modified.
-
-        if proof.generation != self.generation {
-            return Err(UtreexoError::OutdatedProof);
-        }
-
-        let path = &proof.path;
 
         // 1. Locate the root under which the item.position is located.
         let top = Node::find_root(self.roots_iter(), |&node| node.level, path.position)
@@ -414,29 +407,14 @@ impl Catchup {
     pub fn update_proof<M: MerkleItem>(
         &self,
         item: &M,
-        proof: Option<Proof>,
+        proof: Proof,
         hasher: &NodeHasher<M>,
     ) -> Result<Proof, UtreexoError> {
-        let proof = proof.unwrap_or(Proof {
-            generation: self.forest.generation - 1, // no overflow risk since Catchup can't be created for gen=0 forest.
-            path: Path {
-                position: 0,
-                neighbors: Vec::new(),
-            },
-        });
-
-        // If the proof is already up to date - return w/o changes
-        if proof.generation == self.forest.generation {
-            return Ok(proof);
-        }
-
-        // If the proof is not from the previous generation - fail.
-        if self.forest.generation == 0 || proof.generation != (self.forest.generation - 1) {
-            return Err(UtreexoError::OutdatedProof);
-        }
-
-        // For the newly added items `position` is irrelevant, so we create a dummy placeholder.
-        let mut path = proof.path;
+        let mut path = match proof {
+            // For the transient items `position` is irrelevant, so we may as well use 0.
+            Proof::Transient => Path::default(),
+            Proof::Committed(path) => path,
+        };
 
         // Climb up the merkle path until we find an existing node or nothing.
         let hash = hasher.leaf(item);
@@ -478,9 +456,6 @@ impl Catchup {
             },
         );
 
-        Ok(Proof {
-            generation: self.forest.generation,
-            path,
-        })
+        Ok(Proof::Committed(path))
     }
 }
