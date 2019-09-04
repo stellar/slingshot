@@ -1,3 +1,4 @@
+use core::borrow::Borrow;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -172,8 +173,22 @@ impl WorkForest {
         self.roots.push(self.heap.allocate(hash, 0, None).index);
     }
 
+    /// Fills in the missing nodes in the tree, and marks the item as deleted.
+    /// The algorithm minimizes amount of computation by taking advantage of the already available data.
+    pub fn delete<M: MerkleItem, P: Borrow<Proof>>(
+        &mut self,
+        item: &M,
+        proof: Option<P>,
+        hasher: &NodeHasher<M>,
+    ) -> Result<(), UtreexoError> {
+        match proof {
+            Some(proof) => self.delete_preexisting(item, proof.borrow(), hasher),
+            None => self.delete_transient(item, hasher),
+        }
+    }
+
     /// Deletes the transient item that does not have a proof
-    pub fn delete_transient<M: MerkleItem>(
+    fn delete_transient<M: MerkleItem>(
         &mut self,
         item: &M,
         hasher: &NodeHasher<M>,
@@ -198,7 +213,7 @@ impl WorkForest {
 
     /// Fills in the missing nodes in the tree, and marks the item as deleted.
     /// The algorithm minimizes amount of computation by taking advantage of the already available data.
-    pub fn delete<M: MerkleItem>(
+    fn delete_preexisting<M: MerkleItem>(
         &mut self,
         item: &M,
         proof: &Proof,

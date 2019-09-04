@@ -30,19 +30,19 @@ fn transient_items_utreexo() {
             forest.insert(&1, &hasher);
 
             forest
-                .delete_transient(&1, &hasher)
+                .delete(&1, None as Option<Proof>, &hasher)
                 .expect("just received proof should not fail");
             forest
-                .delete_transient(&0, &hasher)
+                .delete(&0, None as Option<Proof>, &hasher)
                 .expect("just received proof should not fail");
 
             // double spends are not allowed
             assert_eq!(
-                forest.delete_transient(&1, &hasher),
+                forest.delete(&1, None as Option::<Proof>, &hasher),
                 Err(UtreexoError::InvalidProof)
             );
             assert_eq!(
-                forest.delete_transient(&0, &hasher),
+                forest.delete(&0, None as Option::<Proof>, &hasher),
                 Err(UtreexoError::InvalidProof)
             );
 
@@ -78,7 +78,7 @@ fn insert_to_utreexo() {
     let _ = forest1
         .update(&hasher, |forest| {
             for i in 0..6u64 {
-                forest.delete(&i, &proofs1[i as usize], &hasher)?;
+                forest.delete(&i, Some(&proofs1[i as usize]), &hasher)?;
             }
             Ok(())
         })
@@ -142,7 +142,7 @@ fn insert_and_delete_utreexo() {
     //  0 1 2 3 4 5          x 1 2 3 4 5        2 3 4 5 1
     forest1.verify(&0u64, &proofs1[0], &hasher).unwrap();
     let (_, _) = verify_update(&forest1, &[2, 3, 4, 5, 1], |forest| {
-        forest.delete(&0u64, &proofs1[0], &hasher).unwrap();
+        forest.delete(&0u64, Some(&proofs1[0]), &hasher).unwrap();
     });
 
     // delete 1:
@@ -153,7 +153,7 @@ fn insert_and_delete_utreexo() {
     //  0 1 2 3 4 5          0 x 2 3 4 5        2 3 4 5 0
     forest1.verify(&1u64, &proofs1[1], &hasher).unwrap();
     let (_, _) = verify_update(&forest1, &[2, 3, 4, 5, 0], |forest| {
-        forest.delete(&1u64, &proofs1[1], &hasher).unwrap();
+        forest.delete(&1u64, Some(&proofs1[1]), &hasher).unwrap();
     });
 
     // delete 2:
@@ -163,7 +163,7 @@ fn insert_and_delete_utreexo() {
     //  |\  |\  |\           |\      |\         |\  |\
     //  0 1 2 3 4 5          0 1 x 3 4 5        0 1 4 5 3
     let (_, _) = verify_update(&forest1, &[0, 1, 4, 5, 3], |forest| {
-        forest.delete(&2u64, &proofs1[2], &hasher).unwrap();
+        forest.delete(&2u64, Some(&proofs1[2]), &hasher).unwrap();
     });
 
     // delete 5:
@@ -173,7 +173,7 @@ fn insert_and_delete_utreexo() {
     //  |\  |\  |\           |\  |\             |\  |\
     //  0 1 2 3 4 5          0 1 2 3 4 x        0 1 2 3 4
     let (_, _) = verify_update(&forest1, &[0, 1, 2, 3, 4], |forest| {
-        forest.delete(&5u64, &proofs1[5], &hasher).unwrap();
+        forest.delete(&5u64, Some(&proofs1[5]), &hasher).unwrap();
     });
 
     // delete 2,3:
@@ -183,14 +183,14 @@ fn insert_and_delete_utreexo() {
     //  |\  |\  |\           |\      |\         |\  |\
     //  0 1 2 3 4 5          0 1 x x 4 5        0 1 4 5
     let (_, _) = verify_update(&forest1, &[0, 1, 4, 5], |forest| {
-        forest.delete(&2u64, &proofs1[2], &hasher).unwrap();
-        forest.delete(&3u64, &proofs1[3], &hasher).unwrap();
+        forest.delete(&2u64, Some(&proofs1[2]), &hasher).unwrap();
+        forest.delete(&3u64, Some(&proofs1[3]), &hasher).unwrap();
     });
 
     // delete in another order
     let (_, _) = verify_update(&forest1, &[0, 1, 4, 5], |forest| {
-        forest.delete(&3u64, &proofs1[3], &hasher).unwrap();
-        forest.delete(&2u64, &proofs1[2], &hasher).unwrap();
+        forest.delete(&3u64, Some(&proofs1[3]), &hasher).unwrap();
+        forest.delete(&2u64, Some(&proofs1[2]), &hasher).unwrap();
     });
 
     // delete 0,3:
@@ -200,8 +200,8 @@ fn insert_and_delete_utreexo() {
     //  |\  |\  |\                   |\         |\  |\
     //  0 1 2 3 4 5          x 1 2 x 4 5        1 2 4 5
     let (_, _) = verify_update(&forest1, &[1, 2, 4, 5], |forest| {
-        forest.delete(&0u64, &proofs1[0], &hasher).unwrap();
-        forest.delete(&3u64, &proofs1[3], &hasher).unwrap();
+        forest.delete(&0u64, Some(&proofs1[0]), &hasher).unwrap();
+        forest.delete(&3u64, Some(&proofs1[3]), &hasher).unwrap();
     });
 
     // delete 0, insert 6, 7:
@@ -211,7 +211,7 @@ fn insert_and_delete_utreexo() {
     //  |\  |\  |\               |\  |\            |\  |\  |\
     //  0 1 2 3 4 5          x 1 2 3 4 5 6 7       2 3 4 5 1 6 7
     let (forest2, catchup) = verify_update(&forest1, &[2, 3, 4, 5, 1, 6, 7], |forest| {
-        forest.delete(&0u64, &proofs1[0], &hasher).unwrap();
+        forest.delete(&0u64, Some(&proofs1[0]), &hasher).unwrap();
         forest.insert(&6u64, &hasher);
         forest.insert(&7u64, &hasher);
     });
@@ -229,13 +229,7 @@ fn insert_and_delete_utreexo() {
     //   2 3 4 5 1 6 7        x 3 4 5 1 6 x       4 5 1 6 3
     //
     let (_forest2, _catchup) = verify_update(&forest2, &[4, 5, 1, 6, 3], |forest| {
-        forest.delete(&2u64, &proof2, &hasher).unwrap();
-        forest.delete(&7u64, &proof7, &hasher).unwrap();
+        forest.delete(&2u64, Some(&proof2), &hasher).unwrap();
+        forest.delete(&7u64, Some(&proof7), &hasher).unwrap();
     });
-}
-
-#[test]
-fn large_utreexo() {
-
-    // TBD: try random changes
 }

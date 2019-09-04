@@ -32,7 +32,10 @@ pub(super) struct ValidationContext {
 
 impl BlockchainState {
     /// Creates an initial block with a given starting set of utxos.
-    pub fn make_initial<I>(timestamp_ms: u64, utxos: I) -> (BlockchainState, Vec<utreexo::Proof>)
+    pub fn make_initial<I>(
+        timestamp_ms: u64,
+        utxos: I,
+    ) -> (BlockchainState, Vec<Option<utreexo::Proof>>)
     where
         I: IntoIterator<Item = ContractID> + Clone,
     {
@@ -48,7 +51,11 @@ impl BlockchainState {
 
         let proofs = utxos
             .into_iter()
-            .map(|utxo| catchup.update_proof(&utxo, None, &hasher).unwrap())
+            .map(|utxo| {
+                Some(catchup.update_proof(&utxo, None, &hasher).expect(
+                    "Updating proofs should never fail here because we just have created them.",
+                ))
+            })
             .collect::<Vec<_>>();
 
         let tip = BlockHeader::make_initial(timestamp_ms, utreexo.root(&hasher));
@@ -70,7 +77,7 @@ impl BlockchainState {
         timestamp_ms: u64,
         ext: Vec<u8>,
         txs: Vec<Tx>,
-        utxo_proofs: Vec<utreexo::Proof>,
+        utxo_proofs: Vec<Option<utreexo::Proof>>,
         bp_gens: &BulletproofGens,
     ) -> Result<(Block, VerifiedBlock, BlockchainState), BlockchainError> {
         check(
@@ -84,7 +91,8 @@ impl BlockchainState {
 
         let mut ctx =
             ValidationContext::new(block_version, timestamp_ms, self.utreexo.work_forest());
-        let (txroot, verified_txs) = ctx.apply_txs(txs.iter(), utxo_proofs.iter(), bp_gens)?;
+        let (txroot, verified_txs) =
+            ctx.apply_txs(txs.iter(), utxo_proofs.iter().map(|o| o.as_ref()), bp_gens)?;
         let (utxoroot, new_forest, new_catchup) = ctx.normalize_state();
 
         let header = BlockHeader {
@@ -176,7 +184,7 @@ impl ValidationContext {
     pub fn apply_txs<T: Borrow<Tx>, P: Borrow<utreexo::Proof>>(
         &mut self,
         txs: impl IntoIterator<Item = T>,
-        utxo_proofs: impl IntoIterator<Item = P>,
+        utxo_proofs: impl IntoIterator<Item = Option<P>>,
         bp_gens: &BulletproofGens,
     ) -> Result<(Hash, Vec<VerifiedTx>), BlockchainError> {
         let mut utxo_proofs = utxo_proofs.into_iter();
@@ -193,13 +201,14 @@ impl ValidationContext {
 
     /// Applies a single transaction to the state.
     /// FIXME: this is not atomic!!!
-    pub fn apply_tx<P: Borrow<utreexo::Proof>>(
+    pub fn apply_tx<T: Borrow<Tx>, P: Borrow<utreexo::Proof>>(
         &mut self,
-        tx: &Tx,
-        utxo_proofs: impl IntoIterator<Item = P>,
+        tx: T,
+        utxo_proofs: impl IntoIterator<Item = Option<P>>,
         bp_gens: &BulletproofGens,
     ) -> Result<VerifiedTx, BlockchainError> {
         let mut utxo_proofs = utxo_proofs.into_iter();
+        let tx = tx.borrow();
 
         self.check_tx_header(&tx.header)?;
 
@@ -215,7 +224,7 @@ impl ValidationContext {
                         .ok_or(BlockchainError::UtreexoProofMissing)?;
 
                     self.work_forest
-                        .delete(contract_id, proof.borrow(), &self.hasher)
+                        .delete(contract_id, proof, &self.hasher)
                         .map_err(|e| BlockchainError::UtreexoError(e))?;
                 }
                 // Add item to the UTXO set
