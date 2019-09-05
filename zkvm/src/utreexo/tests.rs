@@ -90,6 +90,143 @@ fn insert_to_utreexo() {
 }
 
 #[test]
+fn transaction_success() {
+    let hasher = NodeHasher::new();
+    let forest0 = Forest::new();
+    let (_, forest1, catchup1) = forest0
+        .update(&hasher, |forest| {
+            for i in 0..6 {
+                forest.insert(&i, &hasher);
+            }
+            Ok(())
+        })
+        .expect("cannot fail");
+
+    // update the proofs
+    let proofs1 = (0..6)
+        .map(|i| {
+            catchup1
+                .update_proof(&(i as u64), Proof::Transient, &hasher)
+                .unwrap()
+        })
+        .collect::<Vec<_>>();
+
+    //  d
+    //  |\
+    //  a   b   c
+    //  |\  |\  |\
+    //  0 1 2 3 4 5
+
+    // We want to do several changes that would succeed, then do a failing transaction
+    // and check that all pre-transaction changes were respected.
+
+    let mut wf = forest1.work_forest();
+    wf.insert(&6, &hasher);
+    wf.delete(&0, &proofs1[0], &hasher)
+        .expect("Should not fail.");
+
+    //  d
+    //  |\
+    //  a   b   c   new
+    //  |\  |\  |\  |
+    //  x 1 2 3 4 5 6
+
+    match wf.transaction::<_, (), ()>(|wf| {
+        wf.insert(&7, &hasher);
+        wf.insert(&8, &hasher);
+        wf.delete(&7, &Proof::Transient, &hasher)
+            .expect("Should not fail.");
+        wf.delete(&1, &proofs1[1], &hasher)
+            .expect("Should not fail.");
+        Ok(())
+    }) {
+        Err(_) => {}
+        Ok(_) => {}
+    };
+
+    let (new_forest, _) = wf.normalize(&hasher);
+
+    //  d
+    //  |\
+    //  a   b   c   new
+    //  |\  |\  |\  |\
+    //  x x 2 3 4 5 6 8
+    assert_eq!(
+        new_forest.root(&hasher),
+        MerkleTree::root::<u64>(b"ZkVM.utreexo", &[2, 3, 4, 5, 6, 8])
+    );
+}
+
+#[test]
+fn transaction_fail() {
+    let hasher = NodeHasher::new();
+    let forest0 = Forest::new();
+    let (_, forest1, catchup1) = forest0
+        .update(&hasher, |forest| {
+            for i in 0..6 {
+                forest.insert(&i, &hasher);
+            }
+            Ok(())
+        })
+        .expect("cannot fail");
+
+    // update the proofs
+    let proofs1 = (0..6)
+        .map(|i| {
+            catchup1
+                .update_proof(&(i as u64), Proof::Transient, &hasher)
+                .unwrap()
+        })
+        .collect::<Vec<_>>();
+
+    //  d
+    //  |\
+    //  a   b   c
+    //  |\  |\  |\
+    //  0 1 2 3 4 5
+
+    // We want to do several changes that would succeed, then do a failing transaction
+    // and check that all pre-transaction changes were respected.
+
+    let mut wf = forest1.work_forest();
+    wf.insert(&6, &hasher);
+    wf.delete(&0, &proofs1[0], &hasher)
+        .expect("Should not fail.");
+
+    //  d
+    //  |\
+    //  a   b   c   new
+    //  |\  |\  |\  |
+    //  x 1 2 3 4 5 6
+
+    match wf.transaction::<_, (), ()>(|wf| {
+        wf.insert(&7, &hasher);
+        wf.insert(&8, &hasher);
+        wf.delete(&7, &Proof::Transient, &hasher)
+            .expect("Should not fail.");
+        wf.delete(&1, &proofs1[1], &hasher)
+            .expect("Should not fail.");
+        Err(())
+    }) {
+        Err(_) => {}
+        Ok(_) => {}
+    };
+
+    let (new_forest, _) = wf.normalize(&hasher);
+
+    // Should contain only the changes before transaction
+    //  d                                         f
+    //  |\                                        | \
+    //  a   b   c  new   ->     b   c       ->    b   c   h
+    //  |\  |\  |\  |           |\  |\            |\  |\  |\
+    //  x 1 2 3 4 5 6         x 1 2 3 4 5 6       2 3 4 5 1 6
+    assert_eq!(
+        new_forest.root(&hasher),
+        MerkleTree::root::<u64>(b"ZkVM.utreexo", &[2, 3, 4, 5, 1, 6])
+    );
+}
+
+#[test]
 fn insert_and_delete_utreexo() {
     let n = 6u64;
     let hasher = NodeHasher::new();

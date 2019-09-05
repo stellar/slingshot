@@ -8,10 +8,8 @@ use super::path::{Directions, Path, Position, Proof};
 use crate::merkle::{Hash, MerkleItem};
 
 /// Forest consists of a number of roots of merkle binary trees.
-/// Each forest is identified by a generation.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Forest {
-    generation: u64,
     #[serde(with = "crate::serialization::array64")]
     roots: [Option<Hash>; 64], // roots of the trees for levels 0 to 63
 }
@@ -19,14 +17,13 @@ pub struct Forest {
 /// State of the Utreexo forest during update
 #[derive(Clone, Serialize, Deserialize)]
 pub struct WorkForest {
-    generation: u64,
     roots: Vec<NodeIndex>, // roots of all the trees including the newly inserted nodes
     heap: Heap,
     #[serde(skip)]
     undo_list: Option<Vec<UndoAction>>,
 }
 
-/// Structure that helps auto-updating the proofs created for a previous generation of a forest.
+/// Structure that helps auto-updating the proofs created for a previous state of a forest.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Catchup {
     forest: WorkForest,           // forest that stores the inner nodes
@@ -60,15 +57,7 @@ enum UndoAction {
 impl Forest {
     /// Creates a new instance of Forest.
     pub fn new() -> Self {
-        Forest {
-            generation: 0,
-            roots: [None; 64],
-        }
-    }
-
-    /// Generation of this forest.
-    pub fn generation(&self) -> u64 {
-        self.generation
+        Forest { roots: [None; 64] }
     }
 
     /// Total number of items in the forest.
@@ -128,7 +117,6 @@ impl Forest {
             .collect();
 
         WorkForest {
-            generation: self.generation,
             roots,
             heap,
             undo_list: None,
@@ -403,7 +391,6 @@ impl WorkForest {
         );
 
         let new_forest = WorkForest {
-            generation: self.generation + 1,
             roots: new_roots.iter().rev().filter_map(|r| *r).collect(),
             heap: new_heap,
             undo_list: None,
@@ -417,7 +404,6 @@ impl WorkForest {
             roots
         });
         let utreexo = Forest {
-            generation: self.generation + 1,
             roots: utreexo_roots,
         };
 
@@ -470,7 +456,7 @@ impl WorkForest {
 
 impl Catchup {
     /// Updates the proof if it's slightly out of date
-    /// (made against the previous generation of the Utreexo).
+    /// (made against the previous state of the Utreexo).
     pub fn update_proof<M: MerkleItem>(
         &self,
         item: &M,
