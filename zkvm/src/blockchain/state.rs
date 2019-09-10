@@ -89,7 +89,8 @@ impl BlockchainState {
 
         let mut ctx =
             ValidationContext::new(block_version, timestamp_ms, self.utreexo.work_forest());
-        let (txroot, verified_txs) = ctx.apply_txs(txs.iter(), utxo_proofs.iter(), bp_gens)?;
+        let (txroot, verified_txs) =
+            ctx.apply_txs_nonatomic(txs.iter(), utxo_proofs.iter(), bp_gens)?;
         let (utxoroot, new_forest, new_catchup) = ctx.normalize_state();
 
         let header = BlockHeader {
@@ -138,7 +139,7 @@ impl BlockchainState {
         );
 
         let (txroot, verified_txs) =
-            ctx.apply_txs(block.txs.iter(), block.utxo_proofs(), bp_gens)?;
+            ctx.apply_txs_nonatomic(block.txs.iter(), block.utxo_proofs(), bp_gens)?;
 
         if block.header.txroot != txroot {
             return Err(BlockchainError::InconsistentHeader);
@@ -168,6 +169,7 @@ impl BlockchainState {
 
 impl ValidationContext {
     /// Create a new context with given block version, timestamp and work forest for utxos.
+    /// FIXME: make this not accumulate undo items when validating a block.
     pub fn new(block_version: u64, timestamp_ms: u64, work_forest: WorkForest) -> Self {
         Self {
             block_version,
@@ -178,7 +180,8 @@ impl ValidationContext {
     }
 
     /// Applies a list of transactions to the state and returns the txroot.
-    pub fn apply_txs<T: Borrow<Tx>, P: Borrow<utreexo::Proof>>(
+    /// FIXME: make this more sanely organized.
+    pub fn apply_txs_nonatomic<T: Borrow<Tx>, P: Borrow<utreexo::Proof>>(
         &mut self,
         txs: impl IntoIterator<Item = T>,
         utxo_proofs: impl IntoIterator<Item = P>,
@@ -187,7 +190,16 @@ impl ValidationContext {
         let mut utxo_proofs = utxo_proofs.into_iter();
         let verified_txs = txs
             .into_iter()
-            .map(|tx| self.apply_tx(tx.borrow(), &mut utxo_proofs, bp_gens))
+            .map(|tx| {
+                self.check_tx_header(&tx.borrow().header)?;
+                Self::apply_tx_nonatomic(
+                    &mut self.work_forest,
+                    &self.hasher,
+                    tx.borrow(),
+                    &mut utxo_proofs,
+                    bp_gens,
+                )
+            })
             .collect::<Result<Vec<_>, _>>()?;
 
         // TBD: change this O(n) allocation to a more compact (log(n)) merkle root hasher.
@@ -197,17 +209,31 @@ impl ValidationContext {
     }
 
     /// Applies a single transaction to the state.
-    /// FIXME: this is not atomic!!!
+    /// If one of the inputs has an invalid proof or already spent,
+    /// state is left unchanged.
     pub fn apply_tx<T: Borrow<Tx>, P: Borrow<utreexo::Proof>>(
         &mut self,
         tx: T,
         utxo_proofs: impl IntoIterator<Item = P>,
         bp_gens: &BulletproofGens,
     ) -> Result<VerifiedTx, BlockchainError> {
+        self.check_tx_header(&tx.borrow().header)?;
+        let hasher = &self.hasher;
+        self.work_forest.transaction(|work_forest| {
+            Self::apply_tx_nonatomic(work_forest, hasher, tx, utxo_proofs, bp_gens)
+        })
+    }
+    /// Applies a single transaction to the state.
+    /// WARNING: this leaves the Utreexo state modified if one of the updates failed.
+    fn apply_tx_nonatomic<T: Borrow<Tx>, P: Borrow<utreexo::Proof>>(
+        work_forest: &mut WorkForest,
+        hasher: &NodeHasher<ContractID>,
+        tx: T,
+        utxo_proofs: impl IntoIterator<Item = P>,
+        bp_gens: &BulletproofGens,
+    ) -> Result<VerifiedTx, BlockchainError> {
         let mut utxo_proofs = utxo_proofs.into_iter();
         let tx = tx.borrow();
-
-        self.check_tx_header(&tx.header)?;
 
         let verified_tx =
             Verifier::verify_tx(tx, bp_gens).map_err(|e| BlockchainError::TxValidation(e))?;
@@ -220,13 +246,13 @@ impl ValidationContext {
                         .next()
                         .ok_or(BlockchainError::UtreexoProofMissing)?;
 
-                    self.work_forest
-                        .delete(contract_id, proof.borrow(), &self.hasher)
+                    work_forest
+                        .delete(contract_id, proof.borrow(), &hasher)
                         .map_err(|e| BlockchainError::UtreexoError(e))?;
                 }
                 // Add item to the UTXO set
                 TxEntry::Output(contract) => {
-                    self.work_forest.insert(&contract.id(), &self.hasher);
+                    work_forest.insert(&contract.id(), &hasher);
                 }
                 // Ignore all other log items
                 _ => {}
@@ -289,26 +315,6 @@ fn check_block_header(
     )?;
     Ok(())
 }
-
-// /// Checks the tx header for consistency with the block header.
-// fn check_tx_header(
-//     tx_header: &TxHeader,
-//     block_version: u64,
-//     timestamp_ms: u64,
-// ) -> Result<(), BlockchainError> {
-//     check(
-//         tx_header.mintime_ms <= timestamp_ms,
-//         BlockchainError::BadTxTimestamp,
-//     )?;
-//     check(
-//         tx_header.maxtime_ms >= timestamp_ms,
-//         BlockchainError::BadTxTimestamp,
-//     )?;
-//     if block_version == 1 {
-//         check(tx_header.version == 1, BlockchainError::BadTxVersion)?;
-//     }
-//     Ok(())
-// }
 
 #[inline]
 fn check(cond: bool, err: BlockchainError) -> Result<(), BlockchainError> {
