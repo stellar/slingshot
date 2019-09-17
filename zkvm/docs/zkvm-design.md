@@ -31,7 +31,7 @@ ZkVM aims at lowering the costs of participating in a global network by making t
 **Efficient:** The ZkVM blockchain uses a compact data model that fits in a few kilobytes. Verification of transactions is highly parallelizable and takes 1-2 ms per CPU core. Nodes can bootstrap instantly from a network-verified snapshot. Virtually any computing device can run a full node, without relying on intermediate infrastructure and trusted third parties. Devices with limited cellular data plans can save bandwidth by tracking relevant state updates only (e.g. watching their own payment channels), without having to verify all transactions.
 
 **Simple:** ZkVM requires no special compilers, debuggers, or optimizers. Its abstractions map well onto real-world concepts, and the technology stack consists of a small number of inventions reviewed by a global community of cryptographers and engineers.
-ZkVM is an evolution of the authors’ prior work on [TxVM](https://chain.com/assets/txvm.pdf), which in turn was influenced by the design of [Bitcoin](https://bitcoin.org/bitcoin.pdf) and [Ethereum](https://ethereum.github.io/yellowpaper/paper.pdf). The motivation for such ledgers was originally expressed in the paper Secure Property Titles by [Nick Szabo](https://nakamotoinstitute.org/secure-property-titles/).
+ZkVM is an evolution of the authors’ prior work on [TxVM](https://github.com/chain/txvm/blob/main/whitepaper/whitepaper.pdf), which in turn was influenced by the design of [Bitcoin](https://bitcoin.org/bitcoin.pdf) and [Ethereum](https://ethereum.github.io/yellowpaper/paper.pdf). The motivation for such ledgers was originally expressed in the paper Secure Property Titles by [Nick Szabo](https://nakamotoinstitute.org/secure-property-titles/).
 
 
 ## Transactions
@@ -174,7 +174,7 @@ This work was sponsored by [Interstellar](https://interstellar.com) and [Stellar
 
 ## References
 
-* [TxVM: Transaction Virtual Machine](https://chain.com/assets/txvm.pdf) by Bob Glickstein, Cathie Yun, Dan Robinson, Keith Rarick, Oleg Andreev
+* [TxVM: Transaction Virtual Machine](https://github.com/chain/txvm/blob/main/whitepaper/whitepaper.pdf) by Bob Glickstein, Cathie Yun, Dan Robinson, Keith Rarick, Oleg Andreev
 * [Bitcoin: A Peer-to-Peer Electronic Cash System](https://bitcoin.org/bitcoin.pdf) by Satoshi Nakamoto
 * [Ethereum: a secure decentralized generalized transaction ledger](https://ethereum.github.io/yellowpaper/paper.pdf) by Gavin Wood
 * [Secure Property Titles with Owner Authority](https://nakamotoinstitute.org/secure-property-titles/) by Nick Szabo

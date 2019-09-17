@@ -87,7 +87,7 @@ ZkVM defines a procedural representation for blockchain transactions and the rul
 
 ### Motivation
 
-[TxVM](https://chain.com/assets/txvm.pdf) introduced a novel representation for the blockchain transactions:
+[TxVM](https://github.com/chain/txvm/blob/main/whitepaper/whitepaper.pdf) introduced a novel representation for the blockchain transactions:
 1. Each transaction is an executable program that produces effects to the blockchain state.
 2. Values as first-class types subject to [linear logic](http://girard.perso.math.cnrs.fr/Synsem.pdf).
 3. Contracts are first-class types that implement [object-capability model](https://en.wikipedia.org/wiki/Object-capability_model).
