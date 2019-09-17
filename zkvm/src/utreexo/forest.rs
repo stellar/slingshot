@@ -19,8 +19,6 @@ pub struct Forest {
 pub struct WorkForest {
     roots: Vec<NodeIndex>, // roots of all the trees including the newly inserted nodes
     heap: Heap,
-    #[serde(skip)]
-    undo_list: Option<Vec<UndoAction>>,
 }
 
 /// Structure that helps auto-updating the proofs created for a previous state of a forest.
@@ -41,17 +39,6 @@ pub enum UtreexoError {
     /// to which it should.
     #[fail(display = "Merkle proof is invalid")]
     InvalidProof,
-}
-
-/// A kind of undo action to perform
-#[derive(Clone)]
-enum UndoAction {
-    /// Root index of the inserted root node.
-    Insertion(usize),
-    /// Heap index of a deleted root node.
-    DeleteTransient(usize, NodeIndex),
-    /// Heap index of a modified node.
-    Modification(NodeIndex),
 }
 
 impl Forest {
@@ -116,11 +103,7 @@ impl Forest {
             .map(|(level, hash)| heap.allocate(hash, level, None).index)
             .collect();
 
-        WorkForest {
-            roots,
-            heap,
-            undo_list: None,
-        }
+        WorkForest { roots, heap }
     }
 
     /// Lets user to modify the utreexo.
@@ -173,9 +156,6 @@ impl WorkForest {
     pub fn insert<M: MerkleItem>(&mut self, item: &M, hasher: &NodeHasher<M>) {
         let hash = hasher.leaf(item);
         self.roots.push(self.heap.allocate(hash, 0, None).index);
-        if let Some(ref mut undos) = self.undo_list {
-            undos.push(UndoAction::Insertion(self.roots.len() - 1));
-        }
     }
 
     /// Fills in the missing nodes in the tree, and marks the item as deleted.
@@ -212,10 +192,7 @@ impl WorkForest {
         if node.modified {
             return Err(UtreexoError::InvalidProof);
         }
-        let node_index = self.roots.remove(index);
-        if let Some(ref mut undos) = self.undo_list {
-            undos.push(UndoAction::DeleteTransient(index, node_index));
-        }
+        self.roots.remove(index);
         return Ok(());
     }
 
@@ -286,25 +263,13 @@ impl WorkForest {
         // Update modification flag for all parents of the deleted leaf.
         // Note: `existing` might be equal to `top`, so after this call `top` will pick up new children
         // from the heap where they were written in the above line.
-        let mut undos = self.undo_list.as_mut();
         let top = self.heap.update(top.index, |node| {
-            if !node.modified {
-                node.modified = true;
-                if let Some(ref mut undos) = undos {
-                    undos.push(UndoAction::Modification(node.index));
-                }
-            }
+            node.modified = true;
         });
         let _ = path.iter().rev().try_fold(top, |node, (side, _)| {
             node.children.map(|(l, r)| {
-                let mut undos = self.undo_list.as_mut();
                 self.heap.update(side.choose(l, r).0, |node| {
-                    if !node.modified {
-                        node.modified = true;
-                        if let Some(ref mut undos) = undos {
-                            undos.push(UndoAction::Modification(node.index));
-                        }
-                    }
+                    node.modified = true;
                 })
             })
         });
@@ -317,30 +282,15 @@ impl WorkForest {
     where
         F: FnOnce(&mut Self) -> Result<T, E>,
     {
-        let prev_undos = mem::replace(&mut self.undo_list, Some(Vec::new()));
-        let result = closure(self);
-        let mut current_undos = mem::replace(&mut self.undo_list, prev_undos)
-            .expect("We just placed Some and rightfully expect to get it back.");
-        if result.is_err() {
-            // apply undos
-            while let Some(item) = current_undos.pop() {
-                match item {
-                    // Note: inserted node remains on the heap
-                    UndoAction::Insertion(i) => {
-                        self.roots.remove(i);
-                    }
-                    UndoAction::DeleteTransient(i, node_index) => {
-                        self.roots.insert(i, node_index);
-                    }
-                    UndoAction::Modification(node_index) => {
-                        // If the node was modified before this transaction, it would not get the modification Undo item.
-                        // If the node was not modified before, but got modified at any point in this tx, it will.
-                        self.heap.update(node_index, |node| node.modified = false);
-                    }
-                }
-            }
-        }
-        result
+        // TBD: make this more efficient via custom copy-on-write.
+        let mut wf = self.clone();
+
+        // if the closure fails, the temporary `wf` is going to be thrown away.
+        let result = closure(&mut wf)?;
+
+        // replace the existing work forest with the new, updated one.
+        mem::replace(self, wf);
+        Ok(result)
     }
 
     /// Normalizes the forest into minimal number of ordered perfect trees.
@@ -393,7 +343,6 @@ impl WorkForest {
         let new_forest = WorkForest {
             roots: new_roots.iter().rev().filter_map(|r| *r).collect(),
             heap: new_heap,
-            undo_list: None,
         };
 
         let utreexo_roots = new_roots.iter().fold([None; 64], |mut roots, ni| {
