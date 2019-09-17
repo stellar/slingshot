@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 /// (1) compression is not performed again when key is appended to the Transcript;
 /// (2) decompression failures are handled during decoding and allow key derivation without errors.
 #[derive(Copy, Clone, PartialEq, Eq, Default, Debug, Serialize, Deserialize)]
-#[serde(from="RistrettoPoint", into="RistrettoPoint")]
+#[serde(from = "RistrettoPoint", into = "RistrettoPoint")]
 pub struct VerificationKey {
     point: RistrettoPoint,
     precompressed: CompressedRistretto,
