@@ -181,7 +181,7 @@ impl ValidationContext {
 
     /// Applies a list of transactions to the state and returns the txroot.
     /// FIXME: make this more sanely organized.
-    pub fn apply_txs_nonatomic<T: Borrow<Tx>, P: Borrow<utreexo::Proof>>(
+    fn apply_txs_nonatomic<T: Borrow<Tx>, P: Borrow<utreexo::Proof>>(
         &mut self,
         txs: impl IntoIterator<Item = T>,
         utxo_proofs: impl IntoIterator<Item = P>,
