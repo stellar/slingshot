@@ -3,7 +3,7 @@
 use crate::utreexo;
 use crate::{Tx, TxID, VerifiedTx};
 use bulletproofs::BulletproofGens;
-use core::borrow::Borrow;
+use std::mem;
 
 use super::{BlockchainError, BlockchainState, ValidationContext};
 
@@ -12,7 +12,7 @@ pub struct Mempool {
     state: BlockchainState,
     timestamp_ms: u64,
     validation: ValidationContext,
-    txs: Vec<(Tx, VerifiedTx)>,
+    txs: Vec<(Tx, VerifiedTx, Vec<utreexo::Proof>)>,
 }
 
 impl Mempool {
@@ -28,25 +28,47 @@ impl Mempool {
         }
     }
 
-    /// Clears mempool
+    /// Clears mempool.
     pub fn reset(&mut self) {
         let work_forest = self.state.utreexo.work_forest();
         self.validation = ValidationContext::new(self.timestamp_ms, self.timestamp_ms, work_forest);
         self.txs.clear();
     }
 
+    /// Updates timestamp and re-applies txs to filter out the outdated ones.
+    pub fn update_timestamp(&mut self, timestamp_ms: u64, bp_gens: &BulletproofGens) {
+        // TBD: refactor the state API to work with VerifiedTx
+        // so we don't repeat expensive stateless checks.
+
+        self.timestamp_ms = timestamp_ms;
+
+        let work_forest = self.state.utreexo.work_forest();
+        self.validation = ValidationContext::new(self.timestamp_ms, self.timestamp_ms, work_forest);
+
+        let oldtxs = mem::replace(&mut self.txs, Vec::new());
+
+        for (tx, _vtx, proofs) in oldtxs.into_iter() {
+            match self.append(tx, proofs, bp_gens) {
+                Ok(_) => {},
+                Err(_) => {
+                    // tx kicked out of the mempool
+                }
+            }
+        }
+    }
+
     /// Adds transaction to the mempool and verifies it.
-    pub fn append<P: Borrow<utreexo::Proof>>(
+    pub fn append(
         &mut self,
         tx: Tx,
-        utxo_proofs: impl IntoIterator<Item = P>,
+        utxo_proofs: Vec<utreexo::Proof>,
         bp_gens: &BulletproofGens,
     ) -> Result<TxID, BlockchainError> {
         let verified_tx = self
             .validation
-            .apply_tx(&tx, utxo_proofs.into_iter(), bp_gens)?;
+            .apply_tx(&tx, utxo_proofs.iter(), bp_gens)?;
         let txid = verified_tx.id;
-        self.txs.push((tx, verified_tx));
+        self.txs.push((tx, verified_tx, utxo_proofs));
         Ok(txid)
     }
 }

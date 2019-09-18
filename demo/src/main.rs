@@ -17,6 +17,7 @@ mod util;
 
 use std::collections::HashMap;
 use std::env;
+use std::sync::Mutex;
 use std::time::SystemTime;
 
 use diesel::prelude::*;
@@ -30,6 +31,7 @@ use rocket_contrib::serve::StaticFiles;
 use rocket_contrib::templates::Template;
 
 use bulletproofs::BulletproofGens;
+use zkvm::blockchain::Mempool;
 
 #[database("demodb")]
 struct DBConnection(SqliteConnection);
@@ -333,16 +335,24 @@ fn sidebar_context(dbconn: &SqliteConnection) -> serde_json::Value {
     })
 }
 
+//
+// Initial setup helpers
+//
+
+fn establish_db_connection() -> SqliteConnection {
+    dotenv().ok();
+
+    let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
+    SqliteConnection::establish(&database_url)
+        .expect(&format!("Error connecting to {}", database_url))
+}
+
 fn prepare_db_if_needed() {
     use schema::asset_records::dsl::*;
     use schema::block_records::dsl::*;
     use schema::node_records::dsl::*;
 
-    dotenv().ok();
-
-    let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
-    let db_connection = SqliteConnection::establish(&database_url)
-        .expect(&format!("Error connecting to {}", database_url));
+    let db_connection = establish_db_connection();
 
     let results = block_records
         .limit(1)
@@ -439,7 +449,25 @@ fn prepare_db_if_needed() {
         .expect("Initial DB transaction should succeed.");
 }
 
+fn prepare_mempool() -> Mempool {
+    use schema::block_records::dsl::*;
+    let dbconn = establish_db_connection();
+
+    let blk_record = block_records
+        .order(height.desc())
+        .first::<records::BlockRecord>(&dbconn)
+        .expect("Block not found. Make sure prepare_db_if_needed() was called.".into());
+
+    let timestamp_ms = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .expect("SystemTime should work")
+        .as_millis() as u64;
+        
+    Mempool::new(blk_record.state(), timestamp_ms)
+}
+
 fn launch_rocket_app() {
+    let mempool = Mutex::new(prepare_mempool());
     rocket::ignite()
         .attach(DBConnection::fairing())
         .attach(Template::fairing())
@@ -456,6 +484,7 @@ fn launch_rocket_app() {
                 pay
             ],
         )
+        .manage(mempool)
         .launch();
 }
 
