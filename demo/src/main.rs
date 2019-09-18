@@ -32,6 +32,7 @@ use rocket_contrib::templates::Template;
 
 use bulletproofs::BulletproofGens;
 use zkvm::blockchain::Mempool;
+use zkvm::utreexo;
 
 #[database("demodb")]
 struct DBConnection(SqliteConnection);
@@ -64,11 +65,14 @@ fn network_mempool(dbconn: DBConnection, mempool: State<Mutex<Mempool>>) -> Temp
         "sidebar": sidebar_context(&dbconn.0),
         "mempool_len": mempool.len(),
         "mempool_size_kb": (mempool.estimated_memory_cost() as f64) / 1024.0,
+        "mempool_txs": mempool.txs().map(|tx| {
+            records::BlockRecord::tx_details(&tx)
+        }).collect::<Vec<_>>()
     });
     Template::render("network/mempool", &context)
 }
 
-#[get("/network/mempool/makeblock")]
+#[post("/network/mempool/makeblock")]
 fn network_mempool_makeblock(
     dbconn: DBConnection,
     mempool: State<Mutex<Mempool>>,
@@ -285,9 +289,10 @@ fn pay(
     // but since we are doing the exchange in one call, we'll skip it.
 
     // Sender gives Recipient info to watch for tx.
-    recipient.wallet.pending_utxos.push(nodes::PendingUtxo {
+    recipient.wallet.pending_utxos.push(nodes::Utxo {
         receiver_witness: payment_receiver_witness,
         anchor: reply.anchor, // store anchor sent by Alice
+        proof: utreexo::Proof::Transient,
     });
     // Note: at this point, recipient saves the unconfirmed utxo,
     // but since we are doing the exchange in one call, we'll skip it for now.
@@ -442,7 +447,10 @@ fn prepare_db_if_needed() {
             treasury_wallet.utxos = pending_utxos
                 .into_iter()
                 .zip(proofs.into_iter())
-                .map(|(pending_utxo, proof)| pending_utxo.to_confirmed(proof))
+                .map(|(mut pending_utxo, proof)| {
+                    pending_utxo.proof = proof;
+                    pending_utxo
+                })
                 .collect();
 
             let initial_block_record = records::BlockRecord {

@@ -36,35 +36,36 @@ pub struct Wallet {
     /// Annotated txs related to this wallet
     pub txs: Vec<AnnotatedTx>,
 
-    /// User's balances
-    pub utxos: Vec<ConfirmedUtxo>,
+    /// User's balances in confirmed and unconfirmed utxos
+    pub utxos: Vec<Utxo>,
 
-    /// User's pending incoming payments
-    pub pending_utxos: Vec<PendingUtxo>,
+    /// User's incoming payments that are just promised and not confirmed yet.
+    /// These are created even before we've seen a transaction.
+    pub pending_utxos: Vec<Utxo>,
 }
 
 /// UTXO that has not been confirmed yet. It is formed from Receiver and ReceiverReply.
 /// Users convert pending utxos into ConfirmedUtxo when they detect the output in the blockchain.
+/// WARNING: this demo app makes an assumption that every unconfirmed tx is going to be published.
+/// This means:
+/// - mempool is cleared before app gets shut down - 
+///   otherwise items marked as spent are going to be lost.
+///   You should reset DB if you kill the app with non-empty mempool.
+/// - unconfirmed utxos are stored as spendable, even if it's not change, but incoming payment
+/// - spent utxos are not coming back, so we preemptively remove them when building a tx.
 #[derive(Clone, Serialize, Deserialize)]
-pub struct PendingUtxo {
+pub struct Utxo {
     pub receiver_witness: ReceiverWitness,
     pub anchor: Anchor,
-}
-
-/// Stored utxo with underlying quantities, blinding factors and a utxo proof.
-#[derive(Clone, Serialize, Deserialize)]
-pub struct ConfirmedUtxo {
-    pub receiver_witness: ReceiverWitness,
-    pub anchor: Anchor,
-    pub proof: utreexo::Proof,
+    pub proof: utreexo::Proof, // when Transient, it is an unconfirmed txo
 }
 
 /// Tx annotated with
 #[derive(Clone, Serialize, Deserialize)]
 pub struct AnnotatedTx {
     raw_tx: zkvm::Tx,
-    known_inputs: Vec<(usize, ConfirmedUtxo)>,
-    known_outputs: Vec<(usize, ConfirmedUtxo)>,
+    known_inputs: Vec<(usize, Utxo)>,
+    known_outputs: Vec<(usize, Utxo)>,
 }
 
 impl Node {
@@ -90,7 +91,6 @@ impl Node {
         ),
         &'static str,
     > {
-        // Unwrap is used because in this test we know that we are supposed to have enough UTXOs.
         let (spent_utxos, change_value) =
             Account::select_utxos(&payment_receiver.value, &self.wallet.utxos)
                 .ok_or("Insufficient funds!")?;
@@ -138,7 +138,8 @@ impl Node {
             };
 
             // Build the UnverifiedTx
-            zkvm::Prover::build_tx(program, header, &bp_gens).unwrap()
+            zkvm::Prover::build_tx(program, header, &bp_gens)
+                .expect("We are supposed to compose the program correctly.")
         };
         let txid = utx.txid;
 
@@ -150,19 +151,23 @@ impl Node {
             TxEntry::Output(contract) => Some(contract.anchor),
             _ => None,
         });
-        let change_anchor = iterator.next().unwrap();
-        let payment_anchor = iterator.next().unwrap();
+        let change_anchor = iterator
+            .next()
+            .expect("We have just built 2 outputs above.");
+        let payment_anchor = iterator
+            .next()
+            .expect("We have just built 2 outputs above.");
 
         let reply = accounts::ReceiverReply {
             receiver_id: payment_receiver.id(),
             anchor: payment_anchor,
         };
 
-        let change_pending_utxo = PendingUtxo {
+        let change_utxo = Utxo {
             receiver_witness: change_receiver_witness,
             anchor: change_anchor,
+            proof: utreexo::Proof::Transient,
         };
-        self.wallet.pending_utxos.push(change_pending_utxo);
 
         // Sign the tx.
         let tx = {
@@ -192,6 +197,20 @@ impl Node {
             .iter()
             .map(|utxo| utxo.proof.clone())
             .collect::<Vec<_>>();
+
+        let contract_ids = spent_utxos
+            .iter()
+            .map(|utxo| utxo.contract_id())
+            .collect::<Vec<_>>();
+
+        // Mark all spent utxos by removing them.
+        for cid in contract_ids.iter() {
+            let i = self.wallet.utxos.iter().position(|o| o.contract_id() == *cid)
+            .expect("We just found utxos for spending, so we should find them again.");
+            self.wallet.utxos.remove(i);
+        }
+        // save the change utxo - it is spendable right away, via a chain of unconfirmed txs.
+        self.wallet.utxos.push(change_utxo);
 
         Ok((tx, txid, utxo_proofs, reply))
     }
@@ -235,21 +254,39 @@ impl Node {
                     TxEntry::Output(contract) => {
                         // Make pending utxos confirmed
                         let cid = contract.id();
-                        if let Some(i) = self
+
+                        // First, find the spendable pending utxos
+                        let maybe_utxo = if let Some(i) = self
+                            .wallet
+                            .utxos
+                            .iter()
+                            .position(|utxo| utxo.contract_id() == cid)
+                        {
+                            Some(self.wallet.utxos.remove(i))
+
+                        // Second, try pending utxos
+                        } else if let Some(i) = self
                             .wallet
                             .pending_utxos
                             .iter()
                             .position(|utxo| utxo.contract_id() == cid)
                         {
-                            let pending_utxo = self.wallet.pending_utxos.remove(i);
-                            let proof = new_state
+                            Some(self.wallet.pending_utxos.remove(i))
+                        } else {
+                            None
+                        };
+
+                        maybe_utxo.map(|mut utxo| {
+                            utxo.proof = new_state
                                 .catchup
-                                .update_proof(&cid, utreexo::Proof::Transient, &hasher)
-                                .unwrap();
-                            let new_utxo = pending_utxo.to_confirmed(proof);
-                            self.wallet.utxos.push(new_utxo.clone());
-                            known_outputs.push((entry_index, new_utxo));
-                        }
+                                .update_proof(&cid, utxo.proof, &hasher)
+                                .expect(
+                                "Updating proof must succeed as pending utxo has transient proof",
+                            );
+                            self.wallet.utxos.push(utxo.clone());
+                            known_outputs.push((entry_index, utxo));
+                            ()
+                        });
                     }
                     _ => {}
                 }
@@ -311,7 +348,7 @@ impl Wallet {
         mut anchor: Anchor,
         flv: Scalar,
         qtys: impl IntoIterator<Item = u64>,
-    ) -> (Vec<PendingUtxo>, Anchor) {
+    ) -> (Vec<Utxo>, Anchor) {
         let mut results = Vec::new();
         for qty in qtys {
             // anchors are not unique, but it's irrelevant for this test
@@ -319,43 +356,23 @@ impl Wallet {
 
             let receiver_witness = self.account.generate_receiver(ClearValue { qty, flv });
 
-            results.push(PendingUtxo {
+            results.push(Utxo {
                 receiver_witness,
                 anchor,
+                proof: utreexo::Proof::Transient,
             });
         }
         (results, anchor)
     }
 }
 
-impl AsRef<ClearValue> for ConfirmedUtxo {
+impl AsRef<ClearValue> for Utxo {
     fn as_ref(&self) -> &ClearValue {
         &self.receiver_witness.receiver.value
     }
 }
 
-impl PendingUtxo {
-    /// Convert utxo to a Contract instance
-    pub fn contract(&self) -> Contract {
-        self.receiver_witness.contract(self.anchor)
-    }
-
-    /// Returns the UTXO ID
-    pub fn contract_id(&self) -> ContractID {
-        self.contract().id()
-    }
-
-    /// Converts pending utxo into stored utxo
-    pub fn to_confirmed(self, proof: utreexo::Proof) -> ConfirmedUtxo {
-        ConfirmedUtxo {
-            receiver_witness: self.receiver_witness,
-            anchor: self.anchor,
-            proof,
-        }
-    }
-}
-
-impl ConfirmedUtxo {
+impl Utxo {
     /// Convert utxo to a Contract instance
     pub fn contract(&self) -> Contract {
         self.receiver_witness.contract(self.anchor)

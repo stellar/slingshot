@@ -39,6 +39,11 @@ impl Mempool {
             .sum()
     }
 
+    /// Returns a list of transactions
+    pub fn txs(&self) -> impl Iterator<Item = &Tx> {
+        self.txs.iter().map(|(tx, _, _)| tx)
+    }
+
     /// Returns the size of the mempool in number of transactions.
     pub fn len(&self) -> usize {
         self.txs.len()

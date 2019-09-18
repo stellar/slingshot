@@ -3,7 +3,7 @@ use super::schema::*;
 use super::util;
 use curve25519_dalek::scalar::Scalar;
 use zkvm::blockchain::{Block, BlockchainState};
-use zkvm::TxEntry;
+use zkvm::{Tx,TxEntry};
 
 use serde_json::Value as JsonValue;
 use std::collections::HashMap;
@@ -57,27 +57,31 @@ impl BlockRecord {
             "id": hex::encode(self.block().header.id().0),
             "header": &util::to_json_value(&blk.header),
             "txs": blk.txs.into_iter().map(|tx| {
-                let (txid, txlog) = tx.precompute().expect("Our blockchain does not have invalid transactions.");
-                json!({
-                    "id": hex::encode(&txid),
-                    "header": &util::to_json_value(&tx.header),
-                    "inputs": &util::to_json_value(&txlog.iter().filter_map(|e| {
-                        match e {
-                            TxEntry::Input(cid) => Some(cid),
-                            _ => None
-                        }
-                    }).collect::<Vec<_>>()),
-                    "outputs": &util::to_json_value(&txlog.iter().filter_map(|e| {
-                        match e {
-                            TxEntry::Output(c) => Some(c.id()),
-                            _ => None
-                        }
-                    }).collect::<Vec<_>>()),
-                    "tx": &util::to_json_value(&tx),
-                    "program_hex": hex::encode(&tx.program),
-                    "program_asm": format!("{:?}", zkvm::Program::parse(&tx.program).expect("Our blockchain does not have invalid txs.")),
-                })
+                Self::tx_details(&tx)
             }).collect::<Vec<_>>(),
+        })
+    }
+
+    pub fn tx_details(tx: &Tx) -> JsonValue {
+        let (txid, txlog) = tx.precompute().expect("Our blockchain does not have invalid transactions.");
+        json!({
+            "id": hex::encode(&txid),
+            "header": &util::to_json_value(&tx.header),
+            "inputs": &util::to_json_value(&txlog.iter().filter_map(|e| {
+                match e {
+                    TxEntry::Input(cid) => Some(cid),
+                    _ => None
+                }
+            }).collect::<Vec<_>>()),
+            "outputs": &util::to_json_value(&txlog.iter().filter_map(|e| {
+                match e {
+                    TxEntry::Output(c) => Some(c.id()),
+                    _ => None
+                }
+            }).collect::<Vec<_>>()),
+            "tx": &util::to_json_value(&tx),
+            "program_hex": hex::encode(&tx.program),
+            "program_asm": format!("{:?}", zkvm::Program::parse(&tx.program).expect("Our blockchain does not have invalid txs.")),
         })
     }
 
