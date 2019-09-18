@@ -44,16 +44,14 @@ impl Mempool {
         self.txs.iter().map(|(tx, _, _)| tx)
     }
 
+    /// Returns a list of transactions
+    pub fn utxo_proofs(&self) -> impl Iterator<Item = &utreexo::Proof> {
+        self.txs.iter().flat_map(|(_, _, proofs)| proofs.iter())
+    }
+
     /// Returns the size of the mempool in number of transactions.
     pub fn len(&self) -> usize {
         self.txs.len()
-    }
-
-    /// Clears mempool.
-    pub fn reset(&mut self) {
-        let work_forest = self.state.utreexo.work_forest();
-        self.validation = ValidationContext::new(self.timestamp_ms, self.timestamp_ms, work_forest);
-        self.txs.clear();
     }
 
     /// Updates timestamp and re-applies txs to filter out the outdated ones.

@@ -96,3 +96,16 @@ impl VerifiedBlock {
         self.txs.iter().flat_map(|tx| tx.log.iter())
     }
 }
+
+impl AsRef<[u8]> for BlockID {
+    fn as_ref(&self) -> &[u8] {
+        &self.0
+    }
+}
+
+impl core::ops::Deref for BlockID {
+    type Target = [u8];
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}

@@ -15,8 +15,10 @@ mod records;
 mod schema;
 mod util;
 
+use std::ops::DerefMut;
 use std::collections::HashMap;
 use std::env;
+use std::mem;
 use std::sync::Mutex;
 use std::time::SystemTime;
 
@@ -77,69 +79,83 @@ fn network_mempool_makeblock(
     dbconn: DBConnection,
     mempool: State<Mutex<Mempool>>,
 ) -> Result<Flash<Redirect>, Flash<Redirect>> {
+    let bp_gens = BulletproofGens::new(256, 1);
+
     let back_url = uri!(network_mempool);
+    let flash_error = |msg| Flash::error(Redirect::to(back_url.clone()), msg);
 
-    // let (new_block_record, new_block) = {
-    //     use schema::block_records::dsl::*;
+    let mut mempool = mempool
+        .lock()
+        .expect("Threads haven't crashed holding the mutex lock");
 
-    //     let blk_record = block_records
-    //         .order(height.desc())
-    //         .first::<records::BlockRecord>(&dbconn.0)
-    //         .map_err(|_| flash_error("Block not found".to_string()))?;
+    let timestamp_ms = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .expect("SystemTime should work")
+        .as_millis() as u64;
 
-    //     let state = blk_record.state();
+    let (new_block_record, new_block, new_state) = {
+        use schema::block_records::dsl::*;
 
-    //     let timestamp = SystemTime::now()
-    //         .duration_since(SystemTime::UNIX_EPOCH)
-    //         .expect("SystemTime should work")
-    //         .as_millis() as u64;
-    //     let (new_block, _verified_block, new_state) = state
-    //         .make_block(1, timestamp, Vec::new(), vec![tx], proofs, &bp_gens)
-    //         .expect("BlockchainState::make_block should succeed");
+        let blk_record = block_records
+            .order(height.desc())
+            .first::<records::BlockRecord>(&dbconn.0)
+            .map_err(|_| flash_error("Block not found".to_string()))?;
 
-    //     // Store the new state
-    //     (
-    //         records::BlockRecord {
-    //             height: new_block.header.height as i32,
-    //             block_json: util::to_json(&new_block),
-    //             state_json: util::to_json(&new_state),
-    //         },
-    //         new_block,
-    //     )
-    // };
+        let state = blk_record.state();
 
-    // // Save everything in a single DB transaction.
-    // dbconn
-    //     .0
-    //     .transaction::<(), diesel::result::Error, _>(|| {
-    //         // Save the new block
-    //         {
-    //             use schema::block_records::dsl::*;
-    //             diesel::insert_into(block_records)
-    //                 .values(&new_block_record)
-    //                 .execute(&dbconn.0)?;
-    //         }
+        let txs = mempool.txs().map(|tx| tx.clone()).collect::<Vec<_>>();
+        let proofs = mempool.utxo_proofs().map(|proof| proof.clone()).collect::<Vec<_>>();
 
-    //         // Catch up ALL the nodes.
+        let (new_block, _verified_block, new_state) = state
+            .make_block(1, timestamp_ms, Vec::new(), txs, proofs, &bp_gens)
+            .expect("BlockchainState::make_block should succeed");
 
-    //         use schema::node_records::dsl::*;
-    //         let recs = node_records.load::<records::NodeRecord>(&dbconn.0)?;
+        // Store the new state
+        (
+            records::BlockRecord {
+                height: new_block.header.height as i32,
+                block_json: util::to_json(&new_block),
+                state_json: util::to_json(&new_state),
+            },
+            new_block,
+            new_state,
+        )
+    };
 
-    //         for rec in recs.into_iter() {
-    //             let mut node = rec.node();
-    //             node.process_block(&new_block, &bp_gens);
-    //             let rec = records::NodeRecord::new(node);
-    //             diesel::update(node_records.filter(alias.eq(&rec.alias)))
-    //                 .set(&rec)
-    //                 .execute(&dbconn.0)?;
-    //         }
+    // Save everything in a single DB transaction.
+    dbconn
+        .0
+        .transaction::<(), diesel::result::Error, _>(|| {
+            // Save the new block
+            {
+                use schema::block_records::dsl::*;
+                diesel::insert_into(block_records)
+                    .values(&new_block_record)
+                    .execute(&dbconn.0)?;
+            }
 
-    //         Ok(())
-    //     })
-    //     .map_err(|e| flash_error(format!("Database error: {}", e)))?;
+            // Catch up ALL the nodes.
 
-    //let msg = format!("Block published: ", hex::encode(&blockid));
-    let msg = format!("Block published: TBD");
+            use schema::node_records::dsl::*;
+            let recs = node_records.load::<records::NodeRecord>(&dbconn.0)?;
+
+            for rec in recs.into_iter() {
+                let mut node = rec.node();
+                node.process_block(&new_block, &bp_gens);
+                let rec = records::NodeRecord::new(node);
+                diesel::update(node_records.filter(alias.eq(&rec.alias)))
+                    .set(&rec)
+                    .execute(&dbconn.0)?;
+            }
+
+            Ok(())
+        })
+        .map_err(|e| flash_error(format!("Database error: {}", e)))?;
+
+    // If tx succeeded, reset the mempool to the new state.
+    mem::replace(mempool.deref_mut(), Mempool::new(new_state, timestamp_ms));
+
+    let msg = format!("Block published: {}", hex::encode(&new_block.header.id()));
     Ok(Flash::success(Redirect::to(back_url), msg))
 }
 
