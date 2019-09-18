@@ -9,8 +9,8 @@
 
   <table class="table xtable-bordered col-12 col-md-3">
     <tbody>
-      <tr><th>Count</th><td>TBD</td></tr>
-      <tr><th>Size</th><td>{TBD} Kb</td></tr>
+      <tr><th>Count</th><td>{{mempool_len}}</td></tr>
+      <tr><th>Size</th><td>{{mempool_size_kb}} Kb</td></tr>
     </tbody>
   </table>
 

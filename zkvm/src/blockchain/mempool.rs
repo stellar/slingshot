@@ -1,5 +1,6 @@
 //! In-memory transaction pool for transactions that are not yet in a block.
 
+use crate::encoding::Encodable;
 use crate::utreexo;
 use crate::{Tx, TxID, VerifiedTx};
 use bulletproofs::BulletproofGens;
@@ -28,6 +29,21 @@ impl Mempool {
         }
     }
 
+    /// Estimated cost of a memory occupied by transactions in the mempool.
+    pub fn estimated_memory_cost(&self) -> usize {
+        self.txs
+            .iter()
+            .map(|(tx, _, proofs)| {
+                tx.serialized_length() + proofs.iter().map(|p| p.serialized_length()).sum::<usize>()
+            })
+            .sum()
+    }
+
+    /// Returns the size of the mempool in number of transactions.
+    pub fn len(&self) -> usize {
+        self.txs.len()
+    }
+
     /// Clears mempool.
     pub fn reset(&mut self) {
         let work_forest = self.state.utreexo.work_forest();
@@ -49,7 +65,7 @@ impl Mempool {
 
         for (tx, _vtx, proofs) in oldtxs.into_iter() {
             match self.append(tx, proofs, bp_gens) {
-                Ok(_) => {},
+                Ok(_) => {}
                 Err(_) => {
                     // tx kicked out of the mempool
                 }
@@ -64,9 +80,7 @@ impl Mempool {
         utxo_proofs: Vec<utreexo::Proof>,
         bp_gens: &BulletproofGens,
     ) -> Result<TxID, BlockchainError> {
-        let verified_tx = self
-            .validation
-            .apply_tx(&tx, utxo_proofs.iter(), bp_gens)?;
+        let verified_tx = self.validation.apply_tx(&tx, utxo_proofs.iter(), bp_gens)?;
         let txid = verified_tx.id;
         self.txs.push((tx, verified_tx, utxo_proofs));
         Ok(txid)
