@@ -1,22 +1,17 @@
 # ZkVM demo
 
-## Schema
-
-### Nodes
+How to run the demo:
 
 ```
-- id
-- blockchain_state
-- xprv
-- account sequence number
-- confirmed_utxos
-- pending_utxos
-```
+# Install the required version of Rust (see ./rust-toolchain)
+rustup install nightly-2019-08-19
 
-### Blocks
+# Install the database tool
+cargo install diesel_cli --no-default-features --features sqlite
 
-```
-- block height
-- block_json 
-```
+# Setup database
+diesel database reset
 
+# Run the app
+cargo run
+```
