@@ -30,19 +30,19 @@ fn transient_items_utreexo() {
             forest.insert(&1, &hasher);
 
             forest
-                .delete_transient(&1, &hasher)
+                .delete(&1, Proof::Transient, &hasher)
                 .expect("just received proof should not fail");
             forest
-                .delete_transient(&0, &hasher)
+                .delete(&0, Proof::Transient, &hasher)
                 .expect("just received proof should not fail");
 
             // double spends are not allowed
             assert_eq!(
-                forest.delete_transient(&1, &hasher),
+                forest.delete(&1, Proof::Transient, &hasher),
                 Err(UtreexoError::InvalidProof)
             );
             assert_eq!(
-                forest.delete_transient(&0, &hasher),
+                forest.delete(&0, Proof::Transient, &hasher),
                 Err(UtreexoError::InvalidProof)
             );
 
@@ -71,7 +71,11 @@ fn insert_to_utreexo() {
 
     // update the proofs
     let proofs1 = (0..6)
-        .map(|i| catchup1.update_proof(&(i as u64), None, &hasher).unwrap())
+        .map(|i| {
+            catchup1
+                .update_proof(&(i as u64), Proof::Transient, &hasher)
+                .unwrap()
+        })
         .collect::<Vec<_>>();
 
     // after the proofs were updated, deletions should succeed
@@ -83,6 +87,143 @@ fn insert_to_utreexo() {
             Ok(())
         })
         .expect("all proofs must be valid");
+}
+
+#[test]
+fn transaction_success() {
+    let hasher = NodeHasher::new();
+    let forest0 = Forest::new();
+    let (_, forest1, catchup1) = forest0
+        .update(&hasher, |forest| {
+            for i in 0..6 {
+                forest.insert(&i, &hasher);
+            }
+            Ok(())
+        })
+        .expect("cannot fail");
+
+    // update the proofs
+    let proofs1 = (0..6)
+        .map(|i| {
+            catchup1
+                .update_proof(&(i as u64), Proof::Transient, &hasher)
+                .unwrap()
+        })
+        .collect::<Vec<_>>();
+
+    //  d
+    //  |\
+    //  a   b   c
+    //  |\  |\  |\
+    //  0 1 2 3 4 5
+
+    // We want to do several changes that would succeed, then do a failing transaction
+    // and check that all pre-transaction changes were respected.
+
+    let mut wf = forest1.work_forest();
+    wf.insert(&6, &hasher);
+    wf.delete(&0, &proofs1[0], &hasher)
+        .expect("Should not fail.");
+
+    //  d
+    //  |\
+    //  a   b   c   new
+    //  |\  |\  |\  |
+    //  x 1 2 3 4 5 6
+
+    match wf.transaction::<_, (), ()>(|wf| {
+        wf.insert(&7, &hasher);
+        wf.insert(&8, &hasher);
+        wf.delete(&7, &Proof::Transient, &hasher)
+            .expect("Should not fail.");
+        wf.delete(&1, &proofs1[1], &hasher)
+            .expect("Should not fail.");
+        Ok(())
+    }) {
+        Err(_) => {}
+        Ok(_) => {}
+    };
+
+    let (new_forest, _) = wf.normalize(&hasher);
+
+    //  d
+    //  |\
+    //  a   b   c   new
+    //  |\  |\  |\  |\
+    //  x x 2 3 4 5 6 8
+    assert_eq!(
+        new_forest.root(&hasher),
+        MerkleTree::root::<u64>(b"ZkVM.utreexo", &[2, 3, 4, 5, 6, 8])
+    );
+}
+
+#[test]
+fn transaction_fail() {
+    let hasher = NodeHasher::new();
+    let forest0 = Forest::new();
+    let (_, forest1, catchup1) = forest0
+        .update(&hasher, |forest| {
+            for i in 0..6 {
+                forest.insert(&i, &hasher);
+            }
+            Ok(())
+        })
+        .expect("cannot fail");
+
+    // update the proofs
+    let proofs1 = (0..6)
+        .map(|i| {
+            catchup1
+                .update_proof(&(i as u64), Proof::Transient, &hasher)
+                .unwrap()
+        })
+        .collect::<Vec<_>>();
+
+    //  d
+    //  |\
+    //  a   b   c
+    //  |\  |\  |\
+    //  0 1 2 3 4 5
+
+    // We want to do several changes that would succeed, then do a failing transaction
+    // and check that all pre-transaction changes were respected.
+
+    let mut wf = forest1.work_forest();
+    wf.insert(&6, &hasher);
+    wf.delete(&0, &proofs1[0], &hasher)
+        .expect("Should not fail.");
+
+    //  d
+    //  |\
+    //  a   b   c   new
+    //  |\  |\  |\  |
+    //  x 1 2 3 4 5 6
+
+    match wf.transaction::<_, (), ()>(|wf| {
+        wf.insert(&7, &hasher);
+        wf.insert(&8, &hasher);
+        wf.delete(&7, &Proof::Transient, &hasher)
+            .expect("Should not fail.");
+        wf.delete(&1, &proofs1[1], &hasher)
+            .expect("Should not fail.");
+        Err(())
+    }) {
+        Err(_) => {}
+        Ok(_) => {}
+    };
+
+    let (new_forest, _) = wf.normalize(&hasher);
+
+    // Should contain only the changes before transaction
+    //  d                                         f
+    //  |\                                        | \
+    //  a   b   c  new   ->     b   c       ->    b   c   h
+    //  |\  |\  |\  |           |\  |\            |\  |\  |\
+    //  x 1 2 3 4 5 6         x 1 2 3 4 5 6       2 3 4 5 1 6
+    assert_eq!(
+        new_forest.root(&hasher),
+        MerkleTree::root::<u64>(b"ZkVM.utreexo", &[2, 3, 4, 5, 1, 6])
+    );
 }
 
 #[test]
@@ -101,7 +242,11 @@ fn insert_and_delete_utreexo() {
 
     // update the proofs
     let proofs1 = (0..n)
-        .map(|i| catchup1.update_proof(&(i as u64), None, &hasher).unwrap())
+        .map(|i| {
+            catchup1
+                .update_proof(&(i as u64), Proof::Transient, &hasher)
+                .unwrap()
+        })
         .collect::<Vec<_>>();
 
     // after the proofs were updated, deletions should succeed
@@ -216,9 +361,11 @@ fn insert_and_delete_utreexo() {
         forest.insert(&7u64, &hasher);
     });
 
-    let proof7 = catchup.update_proof(&7u64, None, &hasher).unwrap();
+    let proof7 = catchup
+        .update_proof(&7u64, Proof::Transient, &hasher)
+        .unwrap();
     let proof2 = catchup
-        .update_proof(&2u64, Some(proofs1[2].clone()), &hasher)
+        .update_proof(&2u64, proofs1[2].clone(), &hasher)
         .unwrap();
 
     // delete 2, 7:
@@ -232,10 +379,4 @@ fn insert_and_delete_utreexo() {
         forest.delete(&2u64, &proof2, &hasher).unwrap();
         forest.delete(&7u64, &proof7, &hasher).unwrap();
     });
-}
-
-#[test]
-fn large_utreexo() {
-
-    // TBD: try random changes
 }

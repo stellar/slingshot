@@ -20,13 +20,22 @@ pub struct BlockchainState {
     pub catchup: Catchup,
 }
 
+/// All the data necessary for validating and applying transactions.
+/// `BlockchainState` API uses it to apply a block of transactions.
+/// `Mempool` API uses it to apply one transaction after another.
+pub(super) struct ValidationContext {
+    block_version: u64,
+    timestamp_ms: u64,
+    work_forest: WorkForest,
+    hasher: NodeHasher<ContractID>,
+}
+
 impl BlockchainState {
     /// Creates an initial block with a given starting set of utxos.
     pub fn make_initial<I>(timestamp_ms: u64, utxos: I) -> (BlockchainState, Vec<utreexo::Proof>)
     where
         I: IntoIterator<Item = ContractID> + Clone,
     {
-        // Q: why do we need to re-use an ?
         let hasher = NodeHasher::new();
         let (_, utreexo, catchup) = Forest::new()
             .update(&hasher, |forest| {
@@ -37,10 +46,15 @@ impl BlockchainState {
             })
             .unwrap(); // safe to unwrap because we only insert which never fails.
 
-        let proofs = utxos
-            .into_iter()
-            .map(|utxo| catchup.update_proof(&utxo, None, &hasher).unwrap())
-            .collect::<Vec<_>>();
+        let proofs =
+            utxos
+                .into_iter()
+                .map(|utxo| {
+                    catchup.update_proof(&utxo, utreexo::Proof::Transient, &hasher).expect(
+                    "Updating proofs should never fail here because we just have created them.",
+                )
+                })
+                .collect::<Vec<_>>();
 
         let tip = BlockHeader::make_initial(timestamp_ms, utreexo.root(&hasher));
         let state = BlockchainState {
@@ -51,52 +65,6 @@ impl BlockchainState {
         };
 
         (state, proofs)
-    }
-
-    /// Applies the block to the current state and returns a new one.
-    pub fn apply_block(
-        &mut self,
-        block: &Block,
-        bp_gens: &BulletproofGens,
-    ) -> Result<(VerifiedBlock, BlockchainState), BlockchainError> {
-        check_block_header(&block.header, &self.tip)?;
-
-        let hasher = NodeHasher::new();
-        let mut work_forest = self.utreexo.work_forest();
-
-        let (txroot, verified_txs) = apply_txs(
-            block.header.version,
-            block.header.timestamp_ms,
-            block.txs.iter(),
-            block.utxo_proofs(),
-            &mut work_forest,
-            &hasher,
-            bp_gens,
-        )?;
-
-        if block.header.txroot != txroot {
-            return Err(BlockchainError::InconsistentHeader);
-        }
-
-        let (new_forest, new_catchup) = work_forest.normalize(&hasher);
-
-        if block.header.utxoroot != new_forest.root(&hasher) {
-            return Err(BlockchainError::InconsistentHeader);
-        }
-
-        let verified_block = VerifiedBlock {
-            header: block.header.clone(),
-            txs: verified_txs,
-        };
-
-        let new_state = BlockchainState {
-            initial_id: self.initial_id,
-            tip: block.header.clone(),
-            utreexo: new_forest,
-            catchup: new_catchup,
-        };
-
-        Ok((verified_block, new_state))
     }
 
     /// Creates a new block with a set of verified transactions.
@@ -119,22 +87,11 @@ impl BlockchainState {
             BlockchainError::InconsistentHeader,
         )?;
 
-        let hasher = NodeHasher::new();
-        let mut work_forest = self.utreexo.work_forest();
-
-        let (txroot, verified_txs) = apply_txs(
-            block_version,
-            timestamp_ms,
-            txs.iter(),
-            utxo_proofs.iter(),
-            &mut work_forest,
-            &hasher,
-            bp_gens,
-        )?;
-
-        let (new_forest, new_catchup) = work_forest.normalize(&hasher);
-
-        let utxoroot = new_forest.root(&hasher);
+        let mut ctx =
+            ValidationContext::new(block_version, timestamp_ms, self.utreexo.work_forest());
+        let (txroot, verified_txs) =
+            ctx.apply_txs_nonatomic(txs.iter(), utxo_proofs.iter(), bp_gens)?;
+        let (utxoroot, new_forest, new_catchup) = ctx.normalize_state();
 
         let header = BlockHeader {
             version: block_version,
@@ -166,83 +123,173 @@ impl BlockchainState {
 
         Ok((new_block, new_block_verified, new_state))
     }
+
+    /// Applies the block to the current state and returns a new one.
+    pub fn apply_block(
+        &mut self,
+        block: &Block,
+        bp_gens: &BulletproofGens,
+    ) -> Result<(VerifiedBlock, BlockchainState), BlockchainError> {
+        check_block_header(&self.tip, &block.header)?;
+
+        let mut ctx = ValidationContext::new(
+            block.header.version,
+            block.header.timestamp_ms,
+            self.utreexo.work_forest(),
+        );
+
+        let (txroot, verified_txs) =
+            ctx.apply_txs_nonatomic(block.txs.iter(), block.utxo_proofs(), bp_gens)?;
+
+        if block.header.txroot != txroot {
+            return Err(BlockchainError::InconsistentHeader);
+        }
+
+        let (utxoroot, new_forest, new_catchup) = ctx.normalize_state();
+
+        if block.header.utxoroot != utxoroot {
+            return Err(BlockchainError::InconsistentHeader);
+        }
+
+        let verified_block = VerifiedBlock {
+            header: block.header.clone(),
+            txs: verified_txs,
+        };
+
+        let new_state = BlockchainState {
+            initial_id: self.initial_id,
+            tip: block.header.clone(),
+            utreexo: new_forest,
+            catchup: new_catchup,
+        };
+
+        Ok((verified_block, new_state))
+    }
 }
 
-/// Applies a single transaction to the state.
-fn apply_tx<P: Borrow<utreexo::Proof>>(
-    block_version: u64,
-    timestamp_ms: u64,
-    tx: &Tx,
-    utxo_proofs: impl IntoIterator<Item = P>,
-    work_forest: &mut WorkForest,
-    hasher: &NodeHasher<ContractID>,
-    bp_gens: &BulletproofGens,
-) -> Result<VerifiedTx, BlockchainError> {
-    let mut utxo_proofs = utxo_proofs.into_iter();
-
-    check_tx_header(&tx.header, block_version, timestamp_ms)?;
-
-    let verified_tx =
-        Verifier::verify_tx(tx, bp_gens).map_err(|e| BlockchainError::TxValidation(e))?;
-
-    for entry in verified_tx.log.iter() {
-        match entry {
-            // Remove item from the UTXO set
-            TxEntry::Input(contract_id) => {
-                let proof = utxo_proofs
-                    .next()
-                    .ok_or(BlockchainError::UtreexoProofMissing)?;
-                work_forest
-                    .delete(contract_id, proof.borrow(), &hasher)
-                    .map_err(|e| BlockchainError::UtreexoError(e))?;
-            }
-            // Add item to the UTXO set
-            TxEntry::Output(contract) => {
-                work_forest.insert(&contract.id(), &hasher);
-            }
-            _ => {}
+impl ValidationContext {
+    /// Create a new context with given block version, timestamp and work forest for utxos.
+    /// FIXME: make this not accumulate undo items when validating a block.
+    pub fn new(block_version: u64, timestamp_ms: u64, work_forest: WorkForest) -> Self {
+        Self {
+            block_version,
+            timestamp_ms,
+            work_forest,
+            hasher: NodeHasher::new(),
         }
     }
 
-    Ok(verified_tx)
-}
+    /// Applies a list of transactions to the state and returns the txroot.
+    /// FIXME: make this more sanely organized.
+    fn apply_txs_nonatomic<T: Borrow<Tx>, P: Borrow<utreexo::Proof>>(
+        &mut self,
+        txs: impl IntoIterator<Item = T>,
+        utxo_proofs: impl IntoIterator<Item = P>,
+        bp_gens: &BulletproofGens,
+    ) -> Result<(Hash, Vec<VerifiedTx>), BlockchainError> {
+        let mut utxo_proofs = utxo_proofs.into_iter();
+        let verified_txs = txs
+            .into_iter()
+            .map(|tx| {
+                self.check_tx_header(&tx.borrow().header)?;
+                Self::apply_tx_nonatomic(
+                    &mut self.work_forest,
+                    &self.hasher,
+                    tx.borrow(),
+                    &mut utxo_proofs,
+                    bp_gens,
+                )
+            })
+            .collect::<Result<Vec<_>, _>>()?;
 
-/// Applies a list of transactions to the state and returns the txroot.
-fn apply_txs<T: Borrow<Tx>, P: Borrow<utreexo::Proof>>(
-    block_version: u64,
-    timestamp_ms: u64,
-    txs: impl IntoIterator<Item = T>,
-    utxo_proofs: impl IntoIterator<Item = P>,
-    mut work_forest: &mut WorkForest,
-    hasher: &NodeHasher<ContractID>,
-    bp_gens: &BulletproofGens,
-) -> Result<(Hash, Vec<VerifiedTx>), BlockchainError> {
-    let mut utxo_proofs = utxo_proofs.into_iter();
-    let verified_txs = txs
-        .into_iter()
-        .map(|tx| {
-            apply_tx(
-                block_version,
-                timestamp_ms,
-                tx.borrow(),
-                &mut utxo_proofs,
-                &mut work_forest,
-                &hasher,
-                bp_gens,
-            )
+        // TBD: change this O(n) allocation to a more compact (log(n)) merkle root hasher.
+        let txids = verified_txs.iter().map(|tx| tx.id).collect::<Vec<_>>();
+        let txroot = MerkleTree::root(b"ZkVM.txroot", &txids);
+        Ok((txroot, verified_txs))
+    }
+
+    /// Applies a single transaction to the state.
+    /// If one of the inputs has an invalid proof or already spent,
+    /// state is left unchanged.
+    pub fn apply_tx<T: Borrow<Tx>, P: Borrow<utreexo::Proof>>(
+        &mut self,
+        tx: T,
+        utxo_proofs: impl IntoIterator<Item = P>,
+        bp_gens: &BulletproofGens,
+    ) -> Result<VerifiedTx, BlockchainError> {
+        self.check_tx_header(&tx.borrow().header)?;
+        let hasher = &self.hasher;
+        self.work_forest.transaction(|work_forest| {
+            Self::apply_tx_nonatomic(work_forest, hasher, tx, utxo_proofs, bp_gens)
         })
-        .collect::<Result<Vec<_>, _>>()?;
+    }
+    /// Applies a single transaction to the state.
+    /// WARNING: this leaves the Utreexo state modified if one of the updates failed.
+    fn apply_tx_nonatomic<T: Borrow<Tx>, P: Borrow<utreexo::Proof>>(
+        work_forest: &mut WorkForest,
+        hasher: &NodeHasher<ContractID>,
+        tx: T,
+        utxo_proofs: impl IntoIterator<Item = P>,
+        bp_gens: &BulletproofGens,
+    ) -> Result<VerifiedTx, BlockchainError> {
+        let mut utxo_proofs = utxo_proofs.into_iter();
+        let tx = tx.borrow();
 
-    // TBD: change this O(n) allocation to a more compact (log(n)) merkle root hasher.
-    let txids = verified_txs.iter().map(|tx| tx.id).collect::<Vec<_>>();
-    let txroot = MerkleTree::root(b"ZkVM.txroot", &txids);
-    Ok((txroot, verified_txs))
+        let verified_tx =
+            Verifier::verify_tx(tx, bp_gens).map_err(|e| BlockchainError::TxValidation(e))?;
+
+        for entry in verified_tx.log.iter() {
+            match entry {
+                // Remove item from the UTXO set
+                TxEntry::Input(contract_id) => {
+                    let proof = utxo_proofs
+                        .next()
+                        .ok_or(BlockchainError::UtreexoProofMissing)?;
+
+                    work_forest
+                        .delete(contract_id, proof.borrow(), &hasher)
+                        .map_err(|e| BlockchainError::UtreexoError(e))?;
+                }
+                // Add item to the UTXO set
+                TxEntry::Output(contract) => {
+                    work_forest.insert(&contract.id(), &hasher);
+                }
+                // Ignore all other log items
+                _ => {}
+            }
+        }
+
+        Ok(verified_tx)
+    }
+
+    /// Normalizes the state into a new compact forest.
+    pub fn normalize_state(self) -> (Hash, Forest, Catchup) {
+        let (forest, catchup) = self.work_forest.normalize(&self.hasher);
+        let root = forest.root(&self.hasher);
+        (root, forest, catchup)
+    }
+
+    /// Checks the tx header for consistency with the block header.
+    fn check_tx_header(&self, tx_header: &TxHeader) -> Result<(), BlockchainError> {
+        check(
+            tx_header.mintime_ms <= self.timestamp_ms,
+            BlockchainError::BadTxTimestamp,
+        )?;
+        check(
+            tx_header.maxtime_ms >= self.timestamp_ms,
+            BlockchainError::BadTxTimestamp,
+        )?;
+        if self.block_version == 1 {
+            check(tx_header.version == 1, BlockchainError::BadTxVersion)?;
+        }
+        Ok(())
+    }
 }
 
 /// Verifies consistency of the block header with respect to the previous block header.
 fn check_block_header(
-    block_header: &BlockHeader,
     prev_header: &BlockHeader,
+    block_header: &BlockHeader,
 ) -> Result<(), BlockchainError> {
     check(
         block_header.version >= prev_header.version,
@@ -269,26 +316,7 @@ fn check_block_header(
     Ok(())
 }
 
-/// Checks the tx header for consistency with the block header.
-fn check_tx_header(
-    tx_header: &TxHeader,
-    block_version: u64,
-    timestamp_ms: u64,
-) -> Result<(), BlockchainError> {
-    check(
-        tx_header.mintime_ms <= timestamp_ms,
-        BlockchainError::BadTxTimestamp,
-    )?;
-    check(
-        tx_header.maxtime_ms >= timestamp_ms,
-        BlockchainError::BadTxTimestamp,
-    )?;
-    if block_version == 1 {
-        check(tx_header.version == 1, BlockchainError::BadTxVersion)?;
-    }
-    Ok(())
-}
-
+#[inline]
 fn check(cond: bool, err: BlockchainError) -> Result<(), BlockchainError> {
     if !cond {
         return Err(err);

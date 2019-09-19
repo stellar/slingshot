@@ -17,6 +17,9 @@ mod util;
 
 use std::collections::HashMap;
 use std::env;
+use std::mem;
+use std::ops::DerefMut;
+use std::sync::Mutex;
 use std::time::SystemTime;
 
 use diesel::prelude::*;
@@ -25,11 +28,13 @@ use dotenv::dotenv;
 
 use rocket::request::{FlashMessage, Form, FromForm};
 use rocket::response::{status::NotFound, Flash, Redirect};
-use rocket::Request;
+use rocket::{Request, State};
 use rocket_contrib::serve::StaticFiles;
 use rocket_contrib::templates::Template;
 
 use bulletproofs::BulletproofGens;
+use zkvm::blockchain::Mempool;
+use zkvm::utreexo;
 
 #[database("demodb")]
 struct DBConnection(SqliteConnection);
@@ -52,11 +57,117 @@ fn network_status(dbconn: DBConnection) -> Result<Template, NotFound<String>> {
 }
 
 #[get("/network/mempool")]
-fn network_mempool(dbconn: DBConnection) -> Template {
+fn network_mempool(
+    dbconn: DBConnection,
+    mempool: State<Mutex<Mempool>>,
+    flash: Option<FlashMessage>,
+) -> Template {
+    // Add tx to the mempool so we can make blocks of multiple txs in the demo.
+    let mempool = mempool
+        .lock()
+        .expect("Threads haven't crashed holding the mutex lock");
+
     let context = json!({
-        "sidebar": sidebar_context(&dbconn.0)
+        "sidebar": sidebar_context(&dbconn.0),
+        "mempool_len": mempool.len(),
+        "mempool_size_kb": (mempool.estimated_memory_cost() as f64) / 1024.0,
+        "mempool_txs": mempool.txs().map(|tx| {
+            records::BlockRecord::tx_details(&tx)
+        }).collect::<Vec<_>>(),
+        "flash": flash.map(|f| json!({
+            "name": f.name(),
+            "msg": f.msg(),
+        }))
     });
     Template::render("network/mempool", &context)
+}
+
+#[post("/network/mempool/makeblock")]
+fn network_mempool_makeblock(
+    dbconn: DBConnection,
+    mempool: State<Mutex<Mempool>>,
+) -> Result<Flash<Redirect>, Flash<Redirect>> {
+    let bp_gens = BulletproofGens::new(256, 1);
+
+    let back_url = uri!(network_mempool);
+    let flash_error = |msg| Flash::error(Redirect::to(back_url.clone()), msg);
+
+    let mut mempool = mempool
+        .lock()
+        .expect("Threads haven't crashed holding the mutex lock");
+
+    let timestamp_ms = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .expect("SystemTime should work")
+        .as_millis() as u64;
+
+    let (new_block_record, new_block, new_state) = {
+        use schema::block_records::dsl::*;
+
+        let blk_record = block_records
+            .order(height.desc())
+            .first::<records::BlockRecord>(&dbconn.0)
+            .map_err(|_| flash_error("Block not found".to_string()))?;
+
+        let state = blk_record.state();
+
+        let txs = mempool.txs().map(|tx| tx.clone()).collect::<Vec<_>>();
+        let proofs = mempool
+            .utxo_proofs()
+            .map(|proof| proof.clone())
+            .collect::<Vec<_>>();
+
+        let (new_block, _verified_block, new_state) = state
+            .make_block(1, timestamp_ms, Vec::new(), txs, proofs, &bp_gens)
+            .expect("BlockchainState::make_block should succeed");
+
+        // Store the new state
+        (
+            records::BlockRecord {
+                height: new_block.header.height as i32,
+                block_json: util::to_json(&new_block),
+                state_json: util::to_json(&new_state),
+            },
+            new_block,
+            new_state,
+        )
+    };
+
+    // Save everything in a single DB transaction.
+    dbconn
+        .0
+        .transaction::<(), diesel::result::Error, _>(|| {
+            // Save the new block
+            {
+                use schema::block_records::dsl::*;
+                diesel::insert_into(block_records)
+                    .values(&new_block_record)
+                    .execute(&dbconn.0)?;
+            }
+
+            // Catch up ALL the nodes.
+
+            use schema::node_records::dsl::*;
+            let recs = node_records.load::<records::NodeRecord>(&dbconn.0)?;
+
+            for rec in recs.into_iter() {
+                let mut node = rec.node();
+                node.process_block(&new_block, &bp_gens);
+                let rec = records::NodeRecord::new(node);
+                diesel::update(node_records.filter(alias.eq(&rec.alias)))
+                    .set(&rec)
+                    .execute(&dbconn.0)?;
+            }
+
+            Ok(())
+        })
+        .map_err(|e| flash_error(format!("Database error: {}", e)))?;
+
+    // If tx succeeded, reset the mempool to the new state.
+    mem::replace(mempool.deref_mut(), Mempool::new(new_state, timestamp_ms));
+
+    let msg = format!("Block published: {}", hex::encode(&new_block.header.id()));
+    Ok(Flash::success(Redirect::to(back_url), msg))
 }
 
 #[get("/network/blocks")]
@@ -133,10 +244,10 @@ fn nodes_show(
         "node": node.to_json(),
         "balances": balances,
         "others": others_aliases,
-        "flash": flash.map(|f| {json!({
+        "flash": flash.map(|f| json!({
             "name": f.name(),
             "msg": f.msg(),
-        })})
+        }))
     });
     Ok(Template::render("nodes/show", &context))
 }
@@ -153,6 +264,7 @@ struct TransferForm {
 fn pay(
     transfer_form: Form<TransferForm>,
     dbconn: DBConnection,
+    mempool: State<Mutex<Mempool>>,
 ) -> Result<Flash<Redirect>, Flash<Redirect>> {
     let back_url = uri!(nodes_show: transfer_form.sender_alias.clone());
     let flash_error = |msg| Flash::error(Redirect::to(back_url.clone()), msg);
@@ -197,99 +309,51 @@ fn pay(
     // but since we are doing the exchange in one call, we'll skip it.
 
     // Sender prepares a tx
-    let (tx, txid, proofs, reply) = sender
+    let (tx, _txid, proofs, reply) = sender
         .prepare_payment_tx(&payment_receiver, &bp_gens)
         .map_err(|msg| flash_error(msg.to_string()))?;
     // Note: at this point, sender reserves the utxos and saves its incremented seq # until sender ACK'd ReceiverReply,
     // but since we are doing the exchange in one call, we'll skip it.
 
     // Sender gives Recipient info to watch for tx.
-    recipient.wallet.pending_utxos.push(nodes::PendingUtxo {
+    recipient.wallet.pending_utxos.push(nodes::Utxo {
         receiver_witness: payment_receiver_witness,
         anchor: reply.anchor, // store anchor sent by Alice
+        proof: utreexo::Proof::Transient,
     });
     // Note: at this point, recipient saves the unconfirmed utxo,
     // but since we are doing the exchange in one call, we'll skip it for now.
 
-    // TODO: add tx to the mempool so we can make blocks of multiple txs in the demo.
-
-    // Sender publishes the tx.
-    let (new_block_record, new_block) = {
-        use schema::block_records::dsl::*;
-
-        let blk_record = block_records
-            .order(height.desc())
-            .first::<records::BlockRecord>(&dbconn.0)
-            .map_err(|_| flash_error("Block not found".to_string()))?;
-
-        let state = blk_record.state();
-
-        let timestamp = SystemTime::now()
-            .duration_since(SystemTime::UNIX_EPOCH)
-            .expect("SystemTime should work")
-            .as_millis() as u64;
-        let (new_block, _verified_block, new_state) = state
-            .make_block(1, timestamp, Vec::new(), vec![tx], proofs, &bp_gens)
-            .expect("BlockchainState::make_block should succeed");
-
-        // Store the new state
-        (
-            records::BlockRecord {
-                height: new_block.header.height as i32,
-                block_json: util::to_json(&new_block),
-                state_json: util::to_json(&new_state),
-            },
-            new_block,
-        )
-    };
+    // Add tx to the mempool so we can make blocks of multiple txs in the demo.
+    let txid = mempool
+        .lock()
+        .expect("Thread should have not crashed holding the unlocked mutex.")
+        .append(tx, proofs, &bp_gens)
+        .map_err(|msg| flash_error(msg.to_string()))?;
 
     // Save everything in a single DB transaction.
     dbconn
         .0
         .transaction::<(), diesel::result::Error, _>(|| {
             // Save the updated records.
-            {
-                use schema::node_records::dsl::*;
-                let sender_record = records::NodeRecord::new(sender);
-                let sender_scope = node_records.filter(alias.eq(&sender_record.alias));
-                diesel::update(sender_scope)
-                    .set(&sender_record)
-                    .execute(&dbconn.0)?;
-
-                let recipient_record = records::NodeRecord::new(recipient);
-                let recipient_scope = node_records.filter(alias.eq(&recipient_record.alias));
-                diesel::update(recipient_scope)
-                    .set(&recipient_record)
-                    .execute(&dbconn.0)?;
-            }
-
-            // Save the new block
-            {
-                use schema::block_records::dsl::*;
-                diesel::insert_into(block_records)
-                    .values(&new_block_record)
-                    .execute(&dbconn.0)?;
-            }
-
-            // Catch up ALL the nodes.
-
             use schema::node_records::dsl::*;
-            let recs = node_records.load::<records::NodeRecord>(&dbconn.0)?;
+            let sender_record = records::NodeRecord::new(sender);
+            let sender_scope = node_records.filter(alias.eq(&sender_record.alias));
+            diesel::update(sender_scope)
+                .set(&sender_record)
+                .execute(&dbconn.0)?;
 
-            for rec in recs.into_iter() {
-                let mut node = rec.node();
-                node.process_block(&new_block, &bp_gens);
-                let rec = records::NodeRecord::new(node);
-                diesel::update(node_records.filter(alias.eq(&rec.alias)))
-                    .set(&rec)
-                    .execute(&dbconn.0)?;
-            }
+            let recipient_record = records::NodeRecord::new(recipient);
+            let recipient_scope = node_records.filter(alias.eq(&recipient_record.alias));
+            diesel::update(recipient_scope)
+                .set(&recipient_record)
+                .execute(&dbconn.0)?;
 
             Ok(())
         })
         .map_err(|e| flash_error(format!("Database error: {}", e)))?;
 
-    let msg = format!("Transaction sent: {}", hex::encode(&txid));
+    let msg = format!("Transaction added to mempool: {}", hex::encode(&txid));
     Ok(Flash::success(Redirect::to(back_url), msg))
 }
 
@@ -333,16 +397,24 @@ fn sidebar_context(dbconn: &SqliteConnection) -> serde_json::Value {
     })
 }
 
+//
+// Initial setup helpers
+//
+
+fn establish_db_connection() -> SqliteConnection {
+    dotenv().ok();
+
+    let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
+    SqliteConnection::establish(&database_url)
+        .expect(&format!("Error connecting to {}", database_url))
+}
+
 fn prepare_db_if_needed() {
     use schema::asset_records::dsl::*;
     use schema::block_records::dsl::*;
     use schema::node_records::dsl::*;
 
-    dotenv().ok();
-
-    let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
-    let db_connection = SqliteConnection::establish(&database_url)
-        .expect(&format!("Error connecting to {}", database_url));
+    let db_connection = establish_db_connection();
 
     let results = block_records
         .limit(1)
@@ -402,7 +474,10 @@ fn prepare_db_if_needed() {
             treasury_wallet.utxos = pending_utxos
                 .into_iter()
                 .zip(proofs.into_iter())
-                .map(|(pending_utxo, proof)| pending_utxo.to_confirmed(proof))
+                .map(|(mut pending_utxo, proof)| {
+                    pending_utxo.proof = proof;
+                    pending_utxo
+                })
                 .collect();
 
             let initial_block_record = records::BlockRecord {
@@ -439,16 +514,40 @@ fn prepare_db_if_needed() {
         .expect("Initial DB transaction should succeed.");
 }
 
+fn prepare_mempool() -> Mempool {
+    use schema::block_records::dsl::*;
+    let dbconn = establish_db_connection();
+
+    let blk_record = block_records
+        .order(height.desc())
+        .first::<records::BlockRecord>(&dbconn)
+        .expect("Block not found. Make sure prepare_db_if_needed() was called.".into());
+
+    let timestamp_ms = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .expect("SystemTime should work")
+        .as_millis() as u64;
+
+    Mempool::new(blk_record.state(), timestamp_ms)
+}
+
 fn launch_rocket_app() {
+    // TBD: make the gens size big enough
+    let bp_gens = BulletproofGens::new(256, 1);
+    let mempool = Mutex::new(prepare_mempool());
+
     rocket::ignite()
         .attach(DBConnection::fairing())
         .attach(Template::fairing())
+        .manage(mempool)
+        .manage(bp_gens)
         .mount("/static", StaticFiles::from("static"))
         .mount(
             "/",
             routes![
                 network_status,
                 network_mempool,
+                network_mempool_makeblock,
                 network_blocks,
                 network_block_show,
                 nodes_show,

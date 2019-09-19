@@ -1,15 +1,15 @@
+use core::borrow::Borrow;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::mem;
 
 use super::nodes::{Heap, Node, NodeHasher, NodeIndex};
 use super::path::{Directions, Path, Position, Proof};
 use crate::merkle::{Hash, MerkleItem};
 
 /// Forest consists of a number of roots of merkle binary trees.
-/// Each forest is identified by a generation.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Forest {
-    generation: u64,
     #[serde(with = "crate::serialization::array64")]
     roots: [Option<Hash>; 64], // roots of the trees for levels 0 to 63
 }
@@ -17,12 +17,11 @@ pub struct Forest {
 /// State of the Utreexo forest during update
 #[derive(Clone, Serialize, Deserialize)]
 pub struct WorkForest {
-    generation: u64,
     roots: Vec<NodeIndex>, // roots of all the trees including the newly inserted nodes
     heap: Heap,
 }
 
-/// Structure that helps auto-updating the proofs created for a previous generation of a forest.
+/// Structure that helps auto-updating the proofs created for a previous state of a forest.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Catchup {
     forest: WorkForest,           // forest that stores the inner nodes
@@ -45,15 +44,7 @@ pub enum UtreexoError {
 impl Forest {
     /// Creates a new instance of Forest.
     pub fn new() -> Self {
-        Forest {
-            generation: 0,
-            roots: [None; 64],
-        }
-    }
-
-    /// Generation of this forest.
-    pub fn generation(&self) -> u64 {
-        self.generation
+        Forest { roots: [None; 64] }
     }
 
     /// Total number of items in the forest.
@@ -69,11 +60,10 @@ impl Forest {
         proof: &Proof,
         hasher: &NodeHasher<M>,
     ) -> Result<(), UtreexoError> {
-        if proof.generation != self.generation {
-            return Err(UtreexoError::OutdatedProof);
-        }
-
-        let path = &proof.path;
+        let path = match proof {
+            Proof::Transient => return Err(UtreexoError::InvalidProof),
+            Proof::Committed(path) => path,
+        };
 
         // 1. Locate the root under which the item.position is located.
         let (root_level, _) =
@@ -113,11 +103,7 @@ impl Forest {
             .map(|(level, hash)| heap.allocate(hash, level, None).index)
             .collect();
 
-        WorkForest {
-            generation: self.generation,
-            roots,
-            heap,
-        }
+        WorkForest { roots, heap }
     }
 
     /// Lets user to modify the utreexo.
@@ -172,8 +158,22 @@ impl WorkForest {
         self.roots.push(self.heap.allocate(hash, 0, None).index);
     }
 
+    /// Fills in the missing nodes in the tree, and marks the item as deleted.
+    /// The algorithm minimizes amount of computation by taking advantage of the already available data.
+    pub fn delete<M: MerkleItem, P: Borrow<Proof>>(
+        &mut self,
+        item: &M,
+        proof: P,
+        hasher: &NodeHasher<M>,
+    ) -> Result<(), UtreexoError> {
+        match proof.borrow() {
+            Proof::Transient => self.delete_transient(item, hasher),
+            Proof::Committed(path) => self.delete_committed(item, path, hasher),
+        }
+    }
+
     /// Deletes the transient item that does not have a proof
-    pub fn delete_transient<M: MerkleItem>(
+    fn delete_transient<M: MerkleItem>(
         &mut self,
         item: &M,
         hasher: &NodeHasher<M>,
@@ -187,7 +187,7 @@ impl WorkForest {
 
         // If the node was already marked as modified - fail.
         // This may happen if it was a previously stored node with a proof, but part of a 1-node tree;
-        // when such node is deleted via `delete`, it is simply marked as modified.
+        // when such node is deleted via `delete_committed`, it is simply marked as modified.
         // To prevent double-spending, we need to check that flag here.
         if node.modified {
             return Err(UtreexoError::InvalidProof);
@@ -198,20 +198,14 @@ impl WorkForest {
 
     /// Fills in the missing nodes in the tree, and marks the item as deleted.
     /// The algorithm minimizes amount of computation by taking advantage of the already available data.
-    pub fn delete<M: MerkleItem>(
+    fn delete_committed<M: MerkleItem>(
         &mut self,
         item: &M,
-        proof: &Proof,
+        path: &Path,
         hasher: &NodeHasher<M>,
     ) -> Result<(), UtreexoError> {
         // Determine the existing node which matches the proof, then verify the rest of the proof,
         // and mark the relevant nodes as modified.
-
-        if proof.generation != self.generation {
-            return Err(UtreexoError::OutdatedProof);
-        }
-
-        let path = &proof.path;
 
         // 1. Locate the root under which the item.position is located.
         let top = Node::find_root(self.roots_iter(), |&node| node.level, path.position)
@@ -267,9 +261,11 @@ impl WorkForest {
             .update(existing.index, |node| node.children = new_children);
 
         // Update modification flag for all parents of the deleted leaf.
-        // Note: `existing` might be == `top`, so after this call top will pick up new children
+        // Note: `existing` might be equal to `top`, so after this call `top` will pick up new children
         // from the heap where they were written in the above line.
-        let top = self.heap.update(top.index, |node| node.modified = true);
+        let top = self.heap.update(top.index, |node| {
+            node.modified = true;
+        });
         let _ = path.iter().rev().try_fold(top, |node, (side, _)| {
             node.children.map(|(l, r)| {
                 self.heap.update(side.choose(l, r).0, |node| {
@@ -279,6 +275,22 @@ impl WorkForest {
         });
 
         Ok(())
+    }
+
+    /// Allows performing multiple updates atomically.
+    pub fn transaction<F, T, E>(&mut self, closure: F) -> Result<T, E>
+    where
+        F: FnOnce(&mut Self) -> Result<T, E>,
+    {
+        // TBD: make this more efficient via custom copy-on-write.
+        let mut wf = self.clone();
+
+        // if the closure fails, the temporary `wf` is going to be thrown away.
+        let result = closure(&mut wf)?;
+
+        // replace the existing work forest with the new, updated one.
+        mem::replace(self, wf);
+        Ok(result)
     }
 
     /// Normalizes the forest into minimal number of ordered perfect trees.
@@ -329,7 +341,6 @@ impl WorkForest {
         );
 
         let new_forest = WorkForest {
-            generation: self.generation + 1,
             roots: new_roots.iter().rev().filter_map(|r| *r).collect(),
             heap: new_heap,
         };
@@ -342,7 +353,6 @@ impl WorkForest {
             roots
         });
         let utreexo = Forest {
-            generation: self.generation + 1,
             roots: utreexo_roots,
         };
 
@@ -395,33 +405,18 @@ impl WorkForest {
 
 impl Catchup {
     /// Updates the proof if it's slightly out of date
-    /// (made against the previous generation of the Utreexo).
+    /// (made against the previous state of the Utreexo).
     pub fn update_proof<M: MerkleItem>(
         &self,
         item: &M,
-        proof: Option<Proof>,
+        proof: Proof,
         hasher: &NodeHasher<M>,
     ) -> Result<Proof, UtreexoError> {
-        let proof = proof.unwrap_or(Proof {
-            generation: self.forest.generation - 1, // no overflow risk since Catchup can't be created for gen=0 forest.
-            path: Path {
-                position: 0,
-                neighbors: Vec::new(),
-            },
-        });
-
-        // If the proof is already up to date - return w/o changes
-        if proof.generation == self.forest.generation {
-            return Ok(proof);
-        }
-
-        // If the proof is not from the previous generation - fail.
-        if self.forest.generation == 0 || proof.generation != (self.forest.generation - 1) {
-            return Err(UtreexoError::OutdatedProof);
-        }
-
-        // For the newly added items `position` is irrelevant, so we create a dummy placeholder.
-        let mut path = proof.path;
+        let mut path = match proof {
+            // For the transient items `position` is irrelevant, so we may as well use 0.
+            Proof::Transient => Path::default(),
+            Proof::Committed(path) => path,
+        };
 
         // Climb up the merkle path until we find an existing node or nothing.
         let hash = hasher.leaf(item);
@@ -463,9 +458,6 @@ impl Catchup {
             },
         );
 
-        Ok(Proof {
-            generation: self.forest.generation,
-            path,
-        })
+        Ok(Proof::Committed(path))
     }
 }

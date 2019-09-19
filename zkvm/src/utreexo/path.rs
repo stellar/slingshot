@@ -7,24 +7,24 @@ use super::nodes::NodeHasher;
 /// Absolute position of an item in the tree.
 pub type Position = u64;
 
+/// Proof of inclusion in the Utreexo accumulator.
+/// Transient items (those that were inserted before the forest is normalized)
+/// do not have merkle paths and therefore come with a special `Proof::Transient`.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum Proof {
+    /// Proof without a merkle path because the item was not committed to utreexo yet.
+    Transient,
+    /// Proof with a merkle path for an item that was stored in a normalized forest.
+    Committed(Path),
+}
+
 /// Merkle proof of inclusion of a node in a `Forest`.
 /// The exact tree is determined by the `position`, an absolute position of the item
 /// within the set of all items in the forest.
 /// Neighbors are counted from lowest to the highest.
 /// Left/right position of the neighbor is determined by the appropriate bit in `position`.
 /// (Lowest bit=1 means the first neighbor is to the left of the node.)
-/// `generation` points to the generation of the Forest to which the proof applies.
 /// `path` is None if this proof is for a newly added item that has no merkle path yet.
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Proof {
-    /// Generation of the forest to which the proof applies.
-    pub generation: u64,
-
-    /// Merkle path to the item. If missing, the proof applies to a yet-to-be-normalized forest.
-    pub path: Path,
-}
-
-/// Merkle path to the item.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Path {
     pub(super) position: Position,
@@ -35,6 +35,16 @@ pub struct Path {
 pub(super) enum Side {
     Left,
     Right,
+}
+
+impl Proof {
+    /// Returns a reference to a path if this proof contains one.
+    pub fn path(&self) -> Option<&Path> {
+        match self {
+            Proof::Transient => None,
+            Proof::Committed(p) => Some(p),
+        }
+    }
 }
 
 impl Side {
@@ -58,6 +68,15 @@ impl Side {
         match bit {
             0 => Side::Left,
             _ => Side::Right,
+        }
+    }
+}
+
+impl Default for Path {
+    fn default() -> Path {
+        Path {
+            position: 0,
+            neighbors: Vec::new(),
         }
     }
 }
@@ -93,12 +112,22 @@ impl Path {
 
 impl Encodable for Proof {
     fn encode(&self, buf: &mut Vec<u8>) {
-        encoding::write_u64(self.generation, buf);
-        self.path.encode(buf);
+        match self {
+            Proof::Transient => {
+                encoding::write_u8(0, buf);
+            }
+            Proof::Committed(path) => {
+                encoding::write_u8(1, buf);
+                path.encode(buf);
+            }
+        }
     }
 
     fn serialized_length(&self) -> usize {
-        8 + self.path.serialized_length()
+        match self {
+            Proof::Transient => 1,
+            Proof::Committed(path) => 1 + path.serialized_length(),
+        }
     }
 }
 

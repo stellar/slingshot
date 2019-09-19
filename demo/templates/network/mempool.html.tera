@@ -9,55 +9,57 @@
 
   <table class="table xtable-bordered col-12 col-md-3">
     <tbody>
-      <tr><th>Count</th><td>TBD</td></tr>
-      <tr><th>Size</th><td>{TBD} Kb</td></tr>
+      <tr><th>Count</th><td>{{mempool_len}}</td></tr>
+      <tr><th>Size</th><td>{{mempool_size_kb}} Kb</td></tr>
+      <tr>
+        <th></th>
+        <td>
+          <form class="col-6" action="/network/mempool/makeblock" method="POST" style="padding:0;margin:0;">
+            <button type="submit" class="btn btn-primary" style="min-width:130px">Make block</button>
+          </form>
+        </td>
+      </tr>
     </tbody>
   </table>
 
-  <!--
-  <div class="table-responsive">
-    <table class="table table-striped table-sm">
-      <thead>
-        <tr>
-          <th>#</th>
-          <th>Header</th>
-          <th>Header</th>
-          <th>Header</th>
-          <th>Header</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr>
-          <td>1,001</td>
-          <td>Lorem</td>
-          <td>ipsum</td>
-          <td>dolor</td>
-          <td>sit</td>
-        </tr>
-        <tr>
-          <td>1,013</td>
-          <td>torquent</td>
-          <td>per</td>
-          <td>conubia</td>
-          <td>nostra</td>
-        </tr>
-        <tr>
-          <td>1,014</td>
-          <td>per</td>
-          <td>inceptos</td>
-          <td>himenaeos</td>
-          <td>Curabitur</td>
-        </tr>
-        <tr>
-          <td>1,015</td>
-          <td>sodales</td>
-          <td>ligula</td>
-          <td>in</td>
-          <td>libero</td>
-        </tr>
-      </tbody>
-    </table>
+  <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3">
+    <h3>Transactions</h3>
   </div>
-  -->
+
+  {% for tx in mempool_txs %}
+ 
+    <table class="table table-bordered block-header">
+    <tbody>
+      <tr><th>ID</th><td style="font-weight:bold"><tt>{{tx.id}}</tt></td></tr>
+      <tr><th>Version</th><td>{{tx.header.version}}</td></tr>
+      <tr><th>Time bounds</th><td>{{tx.header.mintime_ms}} — {{tx.header.maxtime_ms}}</td></tr>
+      <tr>
+        <th>Inputs</th>
+        <td><pre><code>{{tx.inputs | json_encode(pretty=true) }}</code></pre></td>
+      </tr>
+      <tr>
+        <th>Outputs</th>
+        <td><pre><code>{{tx.outputs | json_encode(pretty=true) }}</code></pre></td>
+      </tr>
+      <tr>
+        <th>Program</th>
+        <td><code>{{tx.program_asm}}</code></td>
+      </tr>
+      <tr>
+        <th>Raw program</th>
+        <td><code>{{tx.program_hex}}</code></td>
+      </tr>
+      <tr>
+        <th>Signature</th>
+        <td><code>{{tx.tx.signature}}</code></td>
+      </tr>
+      <tr>
+        <th>R1CS proof</th>
+        <td><code>{{tx.tx.proof}}</code></td>
+      </tr>
+    </tbody>
+    </table>
+
+  {% endfor %}
     
 {% endblock main %}
