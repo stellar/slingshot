@@ -48,7 +48,7 @@ pub struct Wallet {
 /// Users convert pending utxos into ConfirmedUtxo when they detect the output in the blockchain.
 /// WARNING: this demo app makes an assumption that every unconfirmed tx is going to be published.
 /// This means:
-/// - mempool is cleared before app gets shut down - 
+/// - mempool is cleared before app gets shut down -
 ///   otherwise items marked as spent are going to be lost.
 ///   You should reset DB if you kill the app with non-empty mempool.
 /// - unconfirmed utxos are stored as spendable, even if it's not change, but incoming payment
@@ -205,8 +205,12 @@ impl Node {
 
         // Mark all spent utxos by removing them.
         for cid in contract_ids.iter() {
-            let i = self.wallet.utxos.iter().position(|o| o.contract_id() == *cid)
-            .expect("We just found utxos for spending, so we should find them again.");
+            let i = self
+                .wallet
+                .utxos
+                .iter()
+                .position(|o| o.contract_id() == *cid)
+                .expect("We just found utxos for spending, so we should find them again.");
             self.wallet.utxos.remove(i);
         }
         // save the change utxo - it is spendable right away, via a chain of unconfirmed txs.

@@ -3,7 +3,7 @@ use super::schema::*;
 use super::util;
 use curve25519_dalek::scalar::Scalar;
 use zkvm::blockchain::{Block, BlockchainState};
-use zkvm::{Tx,TxEntry};
+use zkvm::{Tx, TxEntry};
 
 use serde_json::Value as JsonValue;
 use std::collections::HashMap;
@@ -63,7 +63,9 @@ impl BlockRecord {
     }
 
     pub fn tx_details(tx: &Tx) -> JsonValue {
-        let (txid, txlog) = tx.precompute().expect("Our blockchain does not have invalid transactions.");
+        let (txid, txlog) = tx
+            .precompute()
+            .expect("Our blockchain does not have invalid transactions.");
         json!({
             "id": hex::encode(&txid),
             "header": &util::to_json_value(&tx.header),

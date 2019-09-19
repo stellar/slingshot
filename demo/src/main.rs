@@ -15,10 +15,10 @@ mod records;
 mod schema;
 mod util;
 
-use std::ops::DerefMut;
 use std::collections::HashMap;
 use std::env;
 use std::mem;
+use std::ops::DerefMut;
 use std::sync::Mutex;
 use std::time::SystemTime;
 
@@ -57,7 +57,11 @@ fn network_status(dbconn: DBConnection) -> Result<Template, NotFound<String>> {
 }
 
 #[get("/network/mempool")]
-fn network_mempool(dbconn: DBConnection, mempool: State<Mutex<Mempool>>) -> Template {
+fn network_mempool(
+    dbconn: DBConnection,
+    mempool: State<Mutex<Mempool>>,
+    flash: Option<FlashMessage>,
+) -> Template {
     // Add tx to the mempool so we can make blocks of multiple txs in the demo.
     let mempool = mempool
         .lock()
@@ -69,7 +73,11 @@ fn network_mempool(dbconn: DBConnection, mempool: State<Mutex<Mempool>>) -> Temp
         "mempool_size_kb": (mempool.estimated_memory_cost() as f64) / 1024.0,
         "mempool_txs": mempool.txs().map(|tx| {
             records::BlockRecord::tx_details(&tx)
-        }).collect::<Vec<_>>()
+        }).collect::<Vec<_>>(),
+        "flash": flash.map(|f| json!({
+            "name": f.name(),
+            "msg": f.msg(),
+        }))
     });
     Template::render("network/mempool", &context)
 }
@@ -104,7 +112,10 @@ fn network_mempool_makeblock(
         let state = blk_record.state();
 
         let txs = mempool.txs().map(|tx| tx.clone()).collect::<Vec<_>>();
-        let proofs = mempool.utxo_proofs().map(|proof| proof.clone()).collect::<Vec<_>>();
+        let proofs = mempool
+            .utxo_proofs()
+            .map(|proof| proof.clone())
+            .collect::<Vec<_>>();
 
         let (new_block, _verified_block, new_state) = state
             .make_block(1, timestamp_ms, Vec::new(), txs, proofs, &bp_gens)
@@ -233,10 +244,10 @@ fn nodes_show(
         "node": node.to_json(),
         "balances": balances,
         "others": others_aliases,
-        "flash": flash.map(|f| {json!({
+        "flash": flash.map(|f| json!({
             "name": f.name(),
             "msg": f.msg(),
-        })})
+        }))
     });
     Ok(Template::render("nodes/show", &context))
 }
@@ -316,7 +327,7 @@ fn pay(
     // Add tx to the mempool so we can make blocks of multiple txs in the demo.
     let txid = mempool
         .lock()
-        .expect("Threads haven't crashed holding the mutex lock")
+        .expect("Thread should have not crashed holding the unlocked mutex.")
         .append(tx, proofs, &bp_gens)
         .map_err(|msg| flash_error(msg.to_string()))?;
 
@@ -342,7 +353,7 @@ fn pay(
         })
         .map_err(|e| flash_error(format!("Database error: {}", e)))?;
 
-    let msg = format!("Transaction saved in mempool: {}", hex::encode(&txid));
+    let msg = format!("Transaction added to mempool: {}", hex::encode(&txid));
     Ok(Flash::success(Redirect::to(back_url), msg))
 }
 
