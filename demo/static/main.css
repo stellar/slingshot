@@ -20,6 +20,13 @@ code {
   margin-top:20px;
 }
 
+.expand-hex {
+  cursor:pointer;
+}
+.expand-hex:hover {
+  text-decoration:underline;
+}
+
 /*
  * Sidebar
  */

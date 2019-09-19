@@ -120,8 +120,8 @@ impl Instruction {
 impl fmt::Debug for Predicate {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Predicate::Opaque(r) => write!(f, "{}", hex::encode(&r.as_bytes())),
-            Predicate::Key(vk) => write!(f, "{}", hex::encode(&vk.as_bytes())),
+            Predicate::Opaque(r) => write!(f, "0x{}", hex::encode(&r.as_bytes())),
+            Predicate::Key(vk) => write!(f, "0x{}", hex::encode(&vk.as_bytes())),
             Predicate::Tree(pt) => write!(f, "{:?}", pt),
         }
     }
@@ -129,7 +129,7 @@ impl fmt::Debug for Predicate {
 
 impl fmt::Debug for Anchor {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", hex::encode(&self.0))
+        write!(f, "0x{}", hex::encode(&self.0))
     }
 }
 
@@ -146,7 +146,7 @@ impl fmt::Debug for PortableItem {
 impl fmt::Debug for Commitment {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Commitment::Closed(point) => write!(f, "{}", hex::encode(&point.as_bytes())),
+            Commitment::Closed(point) => write!(f, "0x{}", hex::encode(&point.as_bytes())),
             Commitment::Open(cw) => write!(f, "{:?}", cw),
         }
     }
