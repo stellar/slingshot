@@ -33,16 +33,14 @@ code {
 }
 
 .tx-summary {
-  margin:16px 0 32px 0;
-  background-color:#f9f7f5;
-  padding:32px 24px 24px 24px;
+  margin:0px 0 16px 0;
+  padding:32px 0px 24px 0px;
 }
 
 .tx-summary h3 {
-  font-family: monospace;
+  font-family: SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace;
   font-weight: bold;
-  font-size:16px;
-  border-bottom:4px solid white;
+  font-size:18px;
   margin:-16px -24px 0 -24px;
   padding:0px 24px 10px 24px;
 }
@@ -51,13 +49,13 @@ code {
   min-width:120px;
 }
 
-.tx-summary th,
+/*.tx-summary th,
 .tx-summary td {
   padding-top:16px;
   padding-bottom:0px;
   vertical-align: top;
 }
-
+*/
 
 
 /*

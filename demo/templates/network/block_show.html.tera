@@ -9,13 +9,14 @@
 
   <table class="table table-bordered block-header">
     <tbody>
-      <tr><th>Height</th><td>{{block.height}}</td></tr>
       <tr><th>Hash</th><td><code>{{block.id}}</code></td></tr>
-      <tr><th>Transactions</th><td>{{block.txs | length}}</td></tr>
-      <tr>
-        <th>Header</th>
-        <td><pre><code>{{block.header | json_encode(pretty=true) }}</code></pre></td>
-      </tr>
+      <tr><th>Version</th><td><code>{{block.header.version}}</code></td></tr>
+      <tr><th>Height</th><td><code>{{block.header.height}}</code></td></tr>
+      <tr><th>Previous</th><td><code>{{block.header.prev}}</code></td></tr>
+      <tr><th>Timestamp (ms)</th><td><code>{{block.header.timestamp_ms}}</code></td></tr>
+      <tr><th>Txroot</th><td><code>{{block.header.txroot}}</code></td></tr>
+      <tr><th>Utxoroot</th><td><code>{{block.header.utxoroot}}</code></td></tr>
+      <tr><th>Ext</th><td><code>{{block.header.ext | json_encode}}</code></td></tr>
     </tbody>
   </table>
 
@@ -27,8 +28,8 @@
   {% for tx in block.txs %}
  
      <div class="tx-summary">
-      <h3>{{tx.id}}</h3>
-      <table>
+      <h3>Tx {{tx.id}}</h3>
+      <table class="table table-bordered">
       <tbody>
         <tr><th>Version</th><td><code>{{tx.header.version}}</code></td></tr>
         <tr><th>Time bounds</th><td><code>[{{tx.header.mintime_ms}}; {{tx.header.maxtime_ms}}]</code></td></tr>

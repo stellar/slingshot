@@ -8,13 +8,13 @@
     </div>
 
   <div class="table-responsive">
-    <table class="table table-striped table-sm">
+    <table class="table table-bordered table-sm">
       <thead>
         <tr>
           <th>Height</th>
           <th>Timestamp</th>
-          <th>ID</th>
           <th>Txs</th>
+          <th>ID</th>
         </tr>
       </thead>
       <tbody>
@@ -22,8 +22,8 @@
         <tr>
           <td>{{block.height}}</td>
           <td>{{block.header.timestamp_ms}}</td>
-          <td><a href="/network/block/{{block.height}}"><tt>{{block.id}}</tt></a></td>
           <td>{{block.txs}}</td>
+          <td><a href="/network/block/{{block.height}}"><code>{{block.id}}</code></a></td>
         </tr>
         {% endfor %}
       </tbody>

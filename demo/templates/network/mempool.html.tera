@@ -29,8 +29,8 @@
   {% for tx in mempool_txs %}
     
     <div class="tx-summary">
-      <h3>{{tx.id}}</h3>
-      <table>
+      <h3>Tx {{tx.id}}</h3>
+      <table class="table table-bordered">
       <tbody>
         <tr><th>Version</th><td><code>{{tx.header.version}}</code></td></tr>
         <tr><th>Time bounds</th><td><code>[{{tx.header.mintime_ms}}; {{tx.header.maxtime_ms}}]</code></td></tr>
