@@ -193,6 +193,7 @@ fn network_blocks(dbconn: DBConnection) -> Result<Template, NotFound<String>> {
 fn network_block_show(
     height_param: i32,
     dbconn: DBConnection,
+    flash: Option<FlashMessage>,
 ) -> Result<Template, NotFound<String>> {
     use schema::block_records::dsl::*;
     let blk_record = block_records
@@ -202,7 +203,11 @@ fn network_block_show(
 
     let context = json!({
         "sidebar": sidebar_context(&dbconn.0),
-        "block": blk_record.to_details()
+        "block": blk_record.to_details(),
+        "flash": flash.map(|f| json!({
+            "name": f.name(),
+            "msg": f.msg(),
+        }))
     });
 
     Ok(Template::render("network/block_show", &context))
@@ -431,6 +436,8 @@ fn assets_create(
     dbconn: DBConnection,
 ) -> Result<Flash<Redirect>, Flash<Redirect>> {
     let flash_error = |msg| Flash::error(Redirect::to(uri!(network_status)), msg);
+
+    // TODO: use any issuer's utxo to help create an issuance transaction.
 
     Err(flash_error("Not implemented yet!"))
 }
