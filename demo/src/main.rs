@@ -371,6 +371,39 @@ fn assets_show(alias_param: String, dbconn: DBConnection) -> Result<Template, No
     Ok(Template::render("assets/show", &context))
 }
 
+#[derive(FromForm)]
+struct NewNodeForm {
+    back_uri: String,
+    alias: String,
+}
+
+#[post("/nodes/new", data = "<form>")]
+fn nodes_new(
+    form: Form<NewNodeForm>,
+    dbconn: DBConnection,
+) -> Result<Flash<Redirect>, Flash<Redirect>> {
+    let flash_error = |msg| Flash::error(Redirect::to(form.back_uri.clone()), msg);
+
+    Err(flash_error("Not implemented yet!"))
+}
+
+#[derive(FromForm)]
+struct NewAssetForm {
+    back_uri: String,
+    alias: String,
+    qty: u64,
+}
+
+#[post("/assets/new", data = "<form>")]
+fn assets_new(
+    form: Form<NewAssetForm>,
+    dbconn: DBConnection,
+) -> Result<Flash<Redirect>, Flash<Redirect>> {
+    let flash_error = |msg| Flash::error(Redirect::to(form.back_uri.clone()), msg);
+
+    Err(flash_error("Not implemented yet!"))
+}
+
 #[catch(404)]
 fn not_found(req: &Request<'_>) -> Template {
     let mut map = HashMap::new();
