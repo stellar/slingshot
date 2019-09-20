@@ -10,8 +10,8 @@
   <table class="table table-bordered block-header">
     <tbody>
       <tr><th>Height</th><td>{{block.height}}</td></tr>
-      <tr><th>Hash</th><td><tt>{{block.id}}</tt></td></tr>
-      <tr><th>Txs</th><td>{{block.txs | length}}</td></tr>
+      <tr><th>Hash</th><td><code>{{block.id}}</code></td></tr>
+      <tr><th>Transactions</th><td>{{block.txs | length}}</td></tr>
       <tr>
         <th>Header</th>
         <td><pre><code>{{block.header | json_encode(pretty=true) }}</code></pre></td>
@@ -21,42 +21,52 @@
 
 
   <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3">
-    <h3>Transactions</h3>
+    <h3>Transactions ({{block.txs | length}})</h3>
   </div>
 
   {% for tx in block.txs %}
  
-    <table class="table table-bordered block-header">
-    <tbody>
-      <tr><th>ID</th><td style="font-weight:bold"><tt>{{tx.id}}</tt></td></tr>
-      <tr><th>Version</th><td>{{tx.header.version}}</td></tr>
-      <tr><th>Time bounds</th><td>{{tx.header.mintime_ms}} — {{tx.header.maxtime_ms}}</td></tr>
-      <tr>
-        <th>Inputs</th>
-        <td><pre><code>{{tx.inputs | json_encode(pretty=true) }}</code></pre></td>
-      </tr>
-      <tr>
-        <th>Outputs</th>
-        <td><pre><code>{{tx.outputs | json_encode(pretty=true) }}</code></pre></td>
-      </tr>
-      <tr>
-        <th>Program</th>
-        <td><code class="abbrev-hex">{{tx.program_asm}}</code></td>
-      </tr>
-      <tr>
-        <th>Raw program</th>
-        <td><code>{{tx.program_hex}}</code></td>
-      </tr>
-      <tr>
-        <th>Signature</th>
-        <td><code>{{tx.tx.signature}}</code></td>
-      </tr>
-      <tr>
-        <th>R1CS proof</th>
-        <td><code>{{tx.tx.proof}}</code></td>
-      </tr>
-    </tbody>
-    </table>
+     <div class="tx-summary">
+      <h3>{{tx.id}}</h3>
+      <table>
+      <tbody>
+        <tr><th>Version</th><td><code>{{tx.header.version}}</code></td></tr>
+        <tr><th>Time bounds</th><td><code>[{{tx.header.mintime_ms}}; {{tx.header.maxtime_ms}}]</code></td></tr>
+        <tr>
+          <th>Inputs ({{tx.inputs | length}})</th>
+          <td><code>
+            {% for hex in tx.inputs %}
+              {{hex}}<br/>
+            {% endfor %}
+          </code></td>
+        </tr>
+        <tr>
+          <th>Outputs ({{tx.outputs | length}})</th>
+          <td><code>
+            {% for hex in tx.outputs %}
+              {{hex}}<br/>
+            {% endfor %}
+          </code></td>
+        </tr>
+        <tr>
+          <th>Program</th>
+          <td><code class="abbrev-hex highlight-zkvm" data-abbrev-length="2">{{tx.program_asm}}</code></td>
+        </tr>
+        <tr>
+          <th>Raw program</th>
+          <td><code class="abbrev-hex">{{tx.program_hex}}</code></td>
+        </tr>
+        <tr>
+          <th>Signature</th>
+          <td><code class="abbrev-hex">{{tx.tx.signature}}</code></td>
+        </tr>
+        <tr>
+          <th>R1CS proof</th>
+          <td><code class="abbrev-hex">{{tx.tx.proof}}</code></td>
+        </tr>
+      </tbody>
+      </table>
+    </div>
 
   {% endfor %}
 

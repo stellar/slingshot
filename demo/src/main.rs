@@ -69,6 +69,7 @@ fn network_mempool(
 
     let context = json!({
         "sidebar": sidebar_context(&dbconn.0),
+        "mempool_timestamp": current_timestamp_ms(),
         "mempool_len": mempool.len(),
         "mempool_size_kb": (mempool.estimated_memory_cost() as f64) / 1024.0,
         "mempool_txs": mempool.txs().map(|tx| {
@@ -96,10 +97,7 @@ fn network_mempool_makeblock(
         .lock()
         .expect("Threads haven't crashed holding the mutex lock");
 
-    let timestamp_ms = SystemTime::now()
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .expect("SystemTime should work")
-        .as_millis() as u64;
+    let timestamp_ms = current_timestamp_ms();
 
     let (new_block_record, new_block, new_state) = {
         use schema::block_records::dsl::*;
@@ -462,12 +460,9 @@ fn prepare_db_if_needed() {
                 utxos
             };
 
-            let timestamp = SystemTime::now()
-                .duration_since(SystemTime::UNIX_EPOCH)
-                .expect("SystemTime should work")
-                .as_millis() as u64;
+            let timestamp_ms = current_timestamp_ms();
             let (network_state, proofs) = BlockchainState::make_initial(
-                timestamp,
+                timestamp_ms,
                 pending_utxos.iter().map(|utxo| utxo.contract().id()),
             );
 
@@ -523,12 +518,16 @@ fn prepare_mempool() -> Mempool {
         .first::<records::BlockRecord>(&dbconn)
         .expect("Block not found. Make sure prepare_db_if_needed() was called.".into());
 
-    let timestamp_ms = SystemTime::now()
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .expect("SystemTime should work")
-        .as_millis() as u64;
+    let timestamp_ms = current_timestamp_ms();
 
     Mempool::new(blk_record.state(), timestamp_ms)
+}
+
+fn current_timestamp_ms() -> u64 {
+    SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .expect("SystemTime should work")
+        .as_millis() as u64
 }
 
 fn launch_rocket_app() {

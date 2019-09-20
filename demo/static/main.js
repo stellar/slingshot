@@ -14,18 +14,35 @@ function sidebarHighlightCurrentLink() {
 
 function abbreviateHexStrings() {
     $(".abbrev-hex").html(function () {
-        var text = $(this).text();
-        text = text.replace(/0x([0-9a-fA-F]{4})([0-9a-fA-F]+)/mg,
-            "<span class=\"expand-hex\" data-switchto=\"0x$1$2\">0x$1…</span>");
+        var text = $(this).html();
+        var abbrev_length = parseInt($(this).data("abbrev-length") || "32");
+        text = text.replace(/(0x)?([0-9a-fA-F]{16,})/mg, function(m, p1,p2, offset, whole) {
+            p1 = p1 || "";
+            if (p2.length <= abbrev_length*2) {
+                return p1+p2;
+            } 
+            return "<span class=\"expand-hex\" data-switch-to=\"" + p1 + "" + p2 + "\">"+ 
+                   p1 + "" + p2.substr(0,abbrev_length*2) + "…</span>";
+        });
         return text;
     });
 
     $(".expand-hex").click(function(){
-        var t2 = $(this).data("switchto");
+        var t2 = $(this).data("switch-to");
         var t1 = $(this).text();
-        $(this).data("switchto", t1);
+        $(this).data("switch-to", t1);
         $(this).text(t2);
     });
+}
+
+function highlightZkvmOpcodes() {
+    $(".highlight-zkvm").html(function(){
+        var text = $(this).html();
+        text = " " + text + " ";
+        text = text.replace(/(\W)(push|drop|dup:\d+|roll:\d+|const|var|alloc|mintime|maxtime|expr|neg|add|mul|eq|range|and|or|not|verify|unblind|issue|borrow|retire|cloak:\d+:\d+|input|output:\d+|contract:\d+|log|call|signtx|signid)/mg,
+            "$1<span class=\"zkvm-op\">$2</span>");
+        return text;
+    })
 }
 
 (function () {
@@ -33,5 +50,6 @@ function abbreviateHexStrings() {
 
     feather.replace();
     sidebarHighlightCurrentLink();
+    highlightZkvmOpcodes();
     abbreviateHexStrings();
 }())
