@@ -123,24 +123,24 @@
 <div class="modal fade" id="new-node" tabindex="-1" role="dialog" aria-labelledby="new-node-label" aria-hidden="true">
   <div class="modal-dialog" role="document">
     <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title" id="new-node-label">New node</h5>
-        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
-          <span aria-hidden="true">&times;</span>
-        </button>
-      </div>
-      <div class="modal-body">
-        <form action="/nodes/create" method="POST">
+      <form action="/nodes/create" method="POST">
+        <div class="modal-header">
+          <h5 class="modal-title" id="new-node-label">New node</h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+        <div class="modal-body">
           <div class="form-group">
             <label for="alias" class="col-form-label">Alias:</label>
             <input type="text" class="form-control" name="alias" id="alias">
           </div>
-        </form>
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
-        <button type="submit" class="btn btn-primary">Create node</button>
-      </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+          <button type="submit" class="btn btn-primary">Create node</button>
+        </div>
+      </form>
     </div>
   </div>
 </div>
@@ -151,14 +151,14 @@
 <div class="modal fade" id="new-asset" tabindex="-1" role="dialog" aria-labelledby="new-asset-label" aria-hidden="true">
   <div class="modal-dialog" role="document">
     <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title" id="new-asset-label">Issue new asset</h5>
-        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
-          <span aria-hidden="true">&times;</span>
-        </button>
-      </div>
-      <div class="modal-body">
-        <form action="/assets/create" method="POST">
+      <form action="/assets/create" method="POST">
+        <div class="modal-header">
+          <h5 class="modal-title" id="new-asset-label">Issue new asset</h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+        <div class="modal-body">
           <div class="form-group">
             <label for="alias" class="col-form-label">Alias:</label>
             <input type="text" class="form-control" name="alias" id="alias">
@@ -167,12 +167,12 @@
             <label for="alias" class="col-form-label">Quantity:</label>
             <input type="text" class="form-control" name="qty" id="qty">
           </div>
-        </form>
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
-        <button type="submit" class="btn btn-primary">Issue</button>
-      </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+          <button type="submit" class="btn btn-primary">Issue</button>
+        </div>
+      </form>
     </div>
   </div>
 </div>
