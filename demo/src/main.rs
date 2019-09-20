@@ -40,7 +40,7 @@ use zkvm::utreexo;
 struct DBConnection(SqliteConnection);
 
 #[get("/")]
-fn network_status(dbconn: DBConnection) -> Result<Template, NotFound<String>> {
+fn network_status(dbconn: DBConnection,flash: Option<FlashMessage>,) -> Result<Template, NotFound<String>> {
     use schema::block_records::dsl::*;
 
     let blk_record = block_records
@@ -50,7 +50,11 @@ fn network_status(dbconn: DBConnection) -> Result<Template, NotFound<String>> {
 
     let context = json!({
         "sidebar": sidebar_context(&dbconn.0),
-        "network_status": blk_record.network_status_summary()
+        "network_status": blk_record.network_status_summary(),
+        "flash": flash.map(|f| json!({
+            "name": f.name(),
+            "msg": f.msg(),
+        }))
     });
 
     Ok(Template::render("network/status", &context))
@@ -69,6 +73,7 @@ fn network_mempool(
 
     let context = json!({
         "sidebar": sidebar_context(&dbconn.0),
+        "mempool_timestamp": current_timestamp_ms(),
         "mempool_len": mempool.len(),
         "mempool_size_kb": (mempool.estimated_memory_cost() as f64) / 1024.0,
         "mempool_txs": mempool.txs().map(|tx| {
@@ -96,10 +101,7 @@ fn network_mempool_makeblock(
         .lock()
         .expect("Threads haven't crashed holding the mutex lock");
 
-    let timestamp_ms = SystemTime::now()
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .expect("SystemTime should work")
-        .as_millis() as u64;
+    let timestamp_ms = current_timestamp_ms();
 
     let (new_block_record, new_block, new_state) = {
         use schema::block_records::dsl::*;
@@ -167,7 +169,7 @@ fn network_mempool_makeblock(
     mem::replace(mempool.deref_mut(), Mempool::new(new_state, timestamp_ms));
 
     let msg = format!("Block published: {}", hex::encode(&new_block.header.id()));
-    Ok(Flash::success(Redirect::to(back_url), msg))
+    Ok(Flash::success(Redirect::to(uri!(network_block_show: new_block.header.height as i32)), msg))
 }
 
 #[get("/network/blocks")]
@@ -191,6 +193,7 @@ fn network_blocks(dbconn: DBConnection) -> Result<Template, NotFound<String>> {
 fn network_block_show(
     height_param: i32,
     dbconn: DBConnection,
+    flash: Option<FlashMessage>,
 ) -> Result<Template, NotFound<String>> {
     use schema::block_records::dsl::*;
     let blk_record = block_records
@@ -200,7 +203,11 @@ fn network_block_show(
 
     let context = json!({
         "sidebar": sidebar_context(&dbconn.0),
-        "block": blk_record.to_details()
+        "block": blk_record.to_details(),
+        "flash": flash.map(|f| json!({
+            "name": f.name(),
+            "msg": f.msg(),
+        }))
     });
 
     Ok(Template::render("network/block_show", &context))
@@ -373,6 +380,68 @@ fn assets_show(alias_param: String, dbconn: DBConnection) -> Result<Template, No
     Ok(Template::render("assets/show", &context))
 }
 
+#[derive(FromForm)]
+struct NewNodeForm {
+    alias: String,
+}
+
+#[post("/nodes/create", data = "<form>")]
+fn nodes_create(
+    form: Form<NewNodeForm>,
+    dbconn: DBConnection,
+) -> Result<Flash<Redirect>, Flash<Redirect>> {
+    let flash_error = |msg| Flash::error(Redirect::to(uri!(network_status)), msg);
+
+    let dbconn = dbconn.0;
+    dbconn
+        .transaction::<(), diesel::result::Error, _>(|| {
+            
+            use nodes::Node;
+
+            let blk_record = {
+                use schema::block_records::dsl::*;
+                block_records
+                    .order(height.desc())
+                    .first::<records::BlockRecord>(&dbconn)
+                    .expect("Tip block not found. Make sure prepare_db_if_needed() was called.".into())
+            };
+
+            let network_state = blk_record.state();
+            let new_record = records::NodeRecord::new(Node::new(&form.alias, network_state));
+
+            {
+                use schema::node_records::dsl::*;
+                diesel::insert_into(node_records)
+                    .values(&new_record)
+                    .execute(&dbconn)?;
+            }
+
+            Ok(())
+        })
+        .map_err(|e| flash_error(e.to_string()) )?;
+
+    let msg = format!("Node created: {}", &form.alias);
+    Ok(Flash::success(Redirect::to(uri!(nodes_show: &form.alias)), msg))
+}
+
+#[derive(FromForm)]
+struct NewAssetForm {
+    alias: String,
+    qty: u64,
+}
+
+#[post("/assets/create", data = "<form>")]
+fn assets_create(
+    form: Form<NewAssetForm>,
+    dbconn: DBConnection,
+) -> Result<Flash<Redirect>, Flash<Redirect>> {
+    let flash_error = |msg| Flash::error(Redirect::to(uri!(network_status)), msg);
+
+    // TODO: use any issuer's utxo to help create an issuance transaction.
+
+    Err(flash_error("Not implemented yet!"))
+}
+
 #[catch(404)]
 fn not_found(req: &Request<'_>) -> Template {
     let mut map = HashMap::new();
@@ -462,12 +531,9 @@ fn prepare_db_if_needed() {
                 utxos
             };
 
-            let timestamp = SystemTime::now()
-                .duration_since(SystemTime::UNIX_EPOCH)
-                .expect("SystemTime should work")
-                .as_millis() as u64;
+            let timestamp_ms = current_timestamp_ms();
             let (network_state, proofs) = BlockchainState::make_initial(
-                timestamp,
+                timestamp_ms,
                 pending_utxos.iter().map(|utxo| utxo.contract().id()),
             );
 
@@ -523,12 +589,16 @@ fn prepare_mempool() -> Mempool {
         .first::<records::BlockRecord>(&dbconn)
         .expect("Block not found. Make sure prepare_db_if_needed() was called.".into());
 
-    let timestamp_ms = SystemTime::now()
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .expect("SystemTime should work")
-        .as_millis() as u64;
+    let timestamp_ms = current_timestamp_ms();
 
     Mempool::new(blk_record.state(), timestamp_ms)
+}
+
+fn current_timestamp_ms() -> u64 {
+    SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .expect("SystemTime should work")
+        .as_millis() as u64
 }
 
 fn launch_rocket_app() {
@@ -551,7 +621,9 @@ fn launch_rocket_app() {
                 network_blocks,
                 network_block_show,
                 nodes_show,
+                nodes_create,
                 assets_show,
+                assets_create,
                 pay
             ],
         )

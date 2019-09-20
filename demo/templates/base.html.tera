@@ -57,7 +57,7 @@
 
           <h6 class="sidebar-heading d-flex justify-content-between align-items-center px-3 mt-4 mb-1 text-muted">
             <span>Nodes</span>
-            <a class="d-flex align-items-center text-muted" href="#TBD:add-node">
+            <a class="d-flex align-items-center text-muted" class="btn btn-primary" data-toggle="modal" data-target="#new-node">
               <span data-feather="plus-circle"></span>
             </a>
           </h6>
@@ -75,7 +75,7 @@
 
           <h6 class="sidebar-heading d-flex justify-content-between align-items-center px-3 mt-4 mb-1 text-muted">
             <span>Assets</span>
-            <a class="d-flex align-items-center text-muted" href="#TBD:add-asset">
+            <a class="d-flex align-items-center text-muted" class="btn btn-primary" data-toggle="modal" data-target="#new-asset">
               <span data-feather="plus-circle"></span>
             </a>
           </h6>
@@ -117,11 +117,72 @@
     </div>
   </div>
 
+
+<!-- New Node form -->
+
+<div class="modal fade" id="new-node" tabindex="-1" role="dialog" aria-labelledby="new-node-label" aria-hidden="true">
+  <div class="modal-dialog" role="document">
+    <div class="modal-content">
+      <form action="/nodes/create" method="POST">
+        <div class="modal-header">
+          <h5 class="modal-title" id="new-node-label">New node</h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label for="alias" class="col-form-label">Alias:</label>
+            <input type="text" class="form-control" name="alias" id="alias">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+          <button type="submit" class="btn btn-primary">Create node</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+
+<!-- New asset form -->
+
+<div class="modal fade" id="new-asset" tabindex="-1" role="dialog" aria-labelledby="new-asset-label" aria-hidden="true">
+  <div class="modal-dialog" role="document">
+    <div class="modal-content">
+      <form action="/assets/create" method="POST">
+        <div class="modal-header">
+          <h5 class="modal-title" id="new-asset-label">Issue new asset</h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label for="alias" class="col-form-label">Alias:</label>
+            <input type="text" class="form-control" name="alias" id="alias">
+          </div>
+          <div class="form-group">
+            <label for="alias" class="col-form-label">Quantity:</label>
+            <input type="text" class="form-control" name="qty" id="qty">
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+          <button type="submit" class="btn btn-primary">Issue</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+
 <script src="https://code.jquery.com/jquery-3.3.1.slim.min.js" integrity="sha384-q8i/X+965DzO0rT7abK41JStQIAqVgRVzpbzo5smXKp4YfRvH+8abtTE1Pi6jizo" crossorigin="anonymous"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.7/umd/popper.min.js" integrity="sha384-UO2eT0CpHqdSJQ6hJty5KVphtPhzWj9WO1clHTMGa3JDZwrnQq4sF86dIHNDz0W1" crossorigin="anonymous"></script>
 <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/js/bootstrap.min.js" integrity="sha384-JjSmVgyd0p3pXB1rRibZUAYoIIy6OrQ6VrjIEaFf/nJGzIxFDsf4x0xIM+B07jRM" crossorigin="anonymous"></script>
 <script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js" crossorigin="anonymous"></script>
- <script src="/static/main.js"></script>
+<script src="/static/main.js"></script>
 </body>
 </html>
 

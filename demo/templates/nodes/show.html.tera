@@ -11,8 +11,8 @@
     <tbody>
       <tr><th>Alias</th><td>{{node.wallet.alias}}</td></tr>
       <tr><th>Sequence #</th><td>{{node.wallet.account.sequence}}</td></tr>
-      <tr><th>Xprv</th><td><tt>{{node.wallet.xprv}}</tt></td></tr>
-      <tr><th>Xpub</th><td><tt>{{node.wallet.account.xpub}}</tt></td></tr>
+      <tr><th>Xprv</th><td><code>{{node.wallet.xprv}}</code></td></tr>
+      <tr><th>Xpub</th><td><code>{{node.wallet.account.xpub}}</code></td></tr>
       {% for balance in balances | sort(attribute="alias") %}
       <tr>
         <th><a href="/assets/{{balance.alias}}">{{balance.alias}}</a></th>
@@ -52,7 +52,7 @@
     <div class="form-group row">
       <label for="qty" class="col-sm-2 col-form-label">Amount</label>
       <div class="col-sm-10">
-        <input type="text" class="form-control" id="qty" name="qty" placeholder=""/>
+        <input type="text" class="form-control" id="qty" name="qty" placeholder="" autocomplete="off"/>
       </div>
     </div>
     <div class="form-group row">
