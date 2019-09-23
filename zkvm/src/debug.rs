@@ -5,6 +5,7 @@
 //! * `[...]` is a sub-program.
 //! * `{...}` is a contract.
 
+use std;
 use std::fmt;
 
 use crate::constraints::Commitment;
@@ -36,12 +37,32 @@ impl fmt::Debug for Instruction {
 impl String {
     pub(crate) fn fmt_as_pushdata(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            String::Opaque(bytes) => write!(f, "0x{}", hex::encode(&bytes)),
-            String::Predicate(predicate) => write!(f, "push({:?})", predicate),
-            String::Commitment(commitment) => write!(f, "push({:?})", commitment),
-            String::Scalar(scalar_witness) => write!(f, "push({:?})", scalar_witness),
-            String::Output(contract) => write!(f, "push({:?})", contract),
+            String::Opaque(bytes) => {
+                // short strings are usually human-readable, so let's try decode them as utf-8.
+                if bytes.len() < 32 {
+                    match std::string::String::from_utf8(bytes.clone()) {
+                        Ok(s) => write!(f, "push:\"{}\"", s),
+                        Err(_) => write!(f, "push:0x{}", hex::encode(&bytes)),
+                    }
+                } else {
+                    write!(f, "push:0x{}", hex::encode(&bytes))
+                }
+            }
+            String::Predicate(predicate) => write!(f, "push:{:?}", predicate),
+            String::Commitment(commitment) => write!(f, "push:{:?}", commitment),
+            String::Scalar(scalar_witness) => write!(f, "push:{:?}", scalar_witness),
+            String::Output(contract) => write!(f, "push:{:?}", contract),
         }
+    }
+}
+
+impl fmt::Debug for Contract {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "Contract{{predicate:{:?},anchor:{:?},payload:{:?}}}",
+            self.predicate, self.anchor, self.payload
+        )
     }
 }
 
