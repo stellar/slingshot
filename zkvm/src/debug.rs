@@ -41,18 +41,28 @@ impl String {
                 // short strings are usually human-readable, so let's try decode them as utf-8.
                 if bytes.len() < 32 {
                     match std::string::String::from_utf8(bytes.clone()) {
-                        Ok(s) => write!(f, "\"{}\"", s),
-                        Err(_) => write!(f, "0x{}", hex::encode(&bytes)),
+                        Ok(s) => write!(f, "push:\"{}\"", s),
+                        Err(_) => write!(f, "push:0x{}", hex::encode(&bytes)),
                     }
                 } else {
-                    write!(f, "0x{}", hex::encode(&bytes))
+                    write!(f, "push:0x{}", hex::encode(&bytes))
                 }
             }
-            String::Predicate(predicate) => write!(f, "push({:?})", predicate),
-            String::Commitment(commitment) => write!(f, "push({:?})", commitment),
-            String::Scalar(scalar_witness) => write!(f, "push({:?})", scalar_witness),
-            String::Output(contract) => write!(f, "push({:?})", contract),
+            String::Predicate(predicate) => write!(f, "push:{:?}", predicate),
+            String::Commitment(commitment) => write!(f, "push:{:?}", commitment),
+            String::Scalar(scalar_witness) => write!(f, "push:{:?}", scalar_witness),
+            String::Output(contract) => write!(f, "push:{:?}", contract),
         }
+    }
+}
+
+impl fmt::Debug for Contract {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "Contract(predicate:{:?},anchor:{:?},payload:{:?})",
+            self.predicate, self.anchor, self.payload
+        )
     }
 }
 
