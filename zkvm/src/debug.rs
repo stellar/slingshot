@@ -5,6 +5,7 @@
 //! * `[...]` is a sub-program.
 //! * `{...}` is a contract.
 
+use std;
 use std::fmt;
 
 use crate::constraints::Commitment;
@@ -36,7 +37,17 @@ impl fmt::Debug for Instruction {
 impl String {
     pub(crate) fn fmt_as_pushdata(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            String::Opaque(bytes) => write!(f, "0x{}", hex::encode(&bytes)),
+            String::Opaque(bytes) => {
+                // short strings are usually human-readable, so let's try decode them as utf-8.
+                if bytes.len() < 32 {
+                    match std::string::String::from_utf8(bytes.clone()) {
+                        Ok(s) => write!(f, "\"{}\"", s),
+                        Err(_) => write!(f, "0x{}", hex::encode(&bytes)),
+                    }
+                } else {
+                    write!(f, "0x{}", hex::encode(&bytes))
+                }
+            }
             String::Predicate(predicate) => write!(f, "push({:?})", predicate),
             String::Commitment(commitment) => write!(f, "push({:?})", commitment),
             String::Scalar(scalar_witness) => write!(f, "push({:?})", scalar_witness),

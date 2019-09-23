@@ -77,6 +77,150 @@ impl Node {
         }
     }
 
+    /// Constructs an issuance transaction and a reply to the recipient.
+    pub fn prepare_issuance_tx(
+        &mut self,
+        issuance_key: Scalar,
+        issuance_metadata: zkvm::String,
+        payment_receiver: &accounts::Receiver,
+        bp_gens: &BulletproofGens,
+    ) -> Result<
+        (
+            zkvm::Tx,
+            zkvm::TxID,
+            Vec<zkvm::utreexo::Proof>,
+            accounts::ReceiverReply,
+        ),
+        &'static str,
+    > {
+        // check that we have at least one utxo to anchor the tx.
+        if self.wallet.utxos.len() == 0 {
+            return Err("Issuer needs at least one available UTXO to anchor the transaction.");
+        }
+
+        let anchoring_utxo = &self.wallet.utxos[0];
+        let change_receiver_witness = self
+            .wallet
+            .account
+            .generate_receiver(anchoring_utxo.receiver_witness.receiver.value);
+
+        // Sender forms a tx paying to this receiver.
+        //    Now recipient is receiving a new utxo, sender is receiving a change utxo.
+        let utx = {
+            // Note: for clarity, we are not randomizing inputs and outputs in this example.
+            // The real transaction must randomize all the things
+            let program = zkvm::Program::build(|p| {
+                p.push(anchoring_utxo.contract());
+                p.input();
+                p.sign_tx();
+
+                let issuance_predicate =
+                    zkvm::Predicate::Key(zkvm::VerificationKey::from_secret(&issuance_key));
+
+                p.push(zkvm::Commitment::blinded(payment_receiver.value.qty)) // stack: qty
+                    .var() // stack: qty-var
+                    .push(zkvm::Commitment::unblinded(payment_receiver.value.flv)) // stack: qty-var, flv
+                    .var() // stack: qty-var, flv-var
+                    .push(issuance_metadata) // stack: qty-var, flv-var, data
+                    .push(issuance_predicate) // stack: qty-var, flv-var, data, flv-pred
+                    .issue() // stack: issue-contract
+                    .sign_tx(); // stack: issued-value
+
+                let pmnt = payment_receiver.blinded_value();
+                p.push(pmnt.qty);
+                p.push(pmnt.flv);
+
+                let change = change_receiver_witness.receiver.blinded_value();
+                p.push(change.qty);
+                p.push(change.flv);
+
+                p.cloak(2, 2);
+
+                // Now the payment and the change are in the same order on the stack:
+                // change is on top.
+                p.push(change_receiver_witness.receiver.predicate());
+                p.output(1);
+
+                p.push(payment_receiver.predicate());
+                p.output(1);
+
+                // TBD: change the API to not require return of the `&mut program` from the closure.
+                p
+            });
+            let header = zkvm::TxHeader {
+                version: 1u64,
+                mintime_ms: 0u64,
+                maxtime_ms: u64::max_value(),
+            };
+
+            // Build the UnverifiedTx
+            zkvm::Prover::build_tx(program, header, &bp_gens)
+                .expect("We are supposed to compose the program correctly.")
+        };
+        let txid = utx.txid;
+
+        // Alice sends ReceiverReply to Bob with contract's anchor.
+        // Determine the payment contract's anchor and send it to Bob via ReceiverReply
+
+        // Collect all anchors for outputs.
+        let mut iterator = utx.txlog.iter().filter_map(|e| match e {
+            TxEntry::Output(contract) => Some(contract.anchor),
+            _ => None,
+        });
+        let change_anchor = iterator
+            .next()
+            .expect("We have just built 2 outputs above.");
+        let payment_anchor = iterator
+            .next()
+            .expect("We have just built 2 outputs above.");
+
+        let reply = accounts::ReceiverReply {
+            receiver_id: payment_receiver.id(),
+            anchor: payment_anchor,
+        };
+
+        let change_utxo = Utxo {
+            receiver_witness: change_receiver_witness,
+            anchor: change_anchor,
+            proof: utreexo::Proof::Transient,
+        };
+
+        // Sign the tx.
+        let tx = {
+            let mut signtx_transcript = merlin::Transcript::new(b"ZkVM.signtx");
+            signtx_transcript.append_message(b"txid", &utx.txid.0);
+
+            // Derive individual signing keys for each input, according to its sequence number.
+            // In this example all inputs are coming from the same account (same xpub).
+            let signing_keys = vec![
+                Account::derive_signing_key(
+                    anchoring_utxo.receiver_witness.sequence,
+                    &self.wallet.xprv,
+                ),
+                issuance_key,
+            ];
+
+            let sig = musig::Signature::sign_multi(
+                &signing_keys[..],
+                utx.signing_instructions.clone(),
+                &mut signtx_transcript,
+            )
+            .unwrap();
+
+            utx.sign(sig)
+        };
+
+        let utxo_proofs = vec![anchoring_utxo.proof.clone()];
+
+        // Remove spent utxo
+        self.wallet.utxos.remove(0);
+
+        // Save the change utxo - it is spendable right away, via a chain of unconfirmed txs.
+        self.wallet.utxos.push(change_utxo);
+
+        Ok((tx, txid, utxo_proofs, reply))
+    }
+
     /// Constructs a payment transaction and a reply to the recipient.
     pub fn prepare_payment_tx(
         &mut self,
@@ -97,7 +241,7 @@ impl Node {
 
         let change_receiver_witness = self.wallet.account.generate_receiver(change_value);
 
-        // 4. Sender forms a tx paying to this receiver.
+        // Sender forms a tx paying to this receiver.
         //    Now recipient is receiving a new utxo, sender is receiving a change utxo.
         let utx = {
             // Note: for clarity, we are not randomizing inputs and outputs in this example.
@@ -143,7 +287,7 @@ impl Node {
         };
         let txid = utx.txid;
 
-        // 5. Alice sends ReceiverReply to Bob with contract's anchor.
+        // Alice sends ReceiverReply to Bob with contract's anchor.
         // Determine the payment contract's anchor and send it to Bob via ReceiverReply
 
         // Collect all anchors for outputs.
@@ -221,7 +365,7 @@ impl Node {
 
     /// Processes a block: detects spends, new outputs and updates utxo proofs.
     pub fn process_block(&mut self, block: &Block, bp_gens: &BulletproofGens) {
-        // 9. Alice/Bob process blockchain:
+        // Alice/Bob process blockchain:
         //     a. SPV nodes:
         //        1. Network sends to Bob and Alice new blockheader and a changeset:
         //           - added utxo IDs,
