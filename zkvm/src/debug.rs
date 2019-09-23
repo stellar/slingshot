@@ -60,7 +60,7 @@ impl fmt::Debug for Contract {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "Contract(predicate:{:?},anchor:{:?},payload:{:?})",
+            "Contract{{predicate:{:?},anchor:{:?},payload:{:?}}}",
             self.predicate, self.anchor, self.payload
         )
     }
