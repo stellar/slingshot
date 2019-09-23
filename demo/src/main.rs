@@ -40,7 +40,10 @@ use zkvm::utreexo;
 struct DBConnection(SqliteConnection);
 
 #[get("/")]
-fn network_status(dbconn: DBConnection,flash: Option<FlashMessage>,) -> Result<Template, NotFound<String>> {
+fn network_status(
+    dbconn: DBConnection,
+    flash: Option<FlashMessage>,
+) -> Result<Template, NotFound<String>> {
     use schema::block_records::dsl::*;
 
     let blk_record = block_records
@@ -91,9 +94,8 @@ fn network_mempool(
 fn network_mempool_makeblock(
     dbconn: DBConnection,
     mempool: State<Mutex<Mempool>>,
+    bp_gens: State<BulletproofGens>,
 ) -> Result<Flash<Redirect>, Flash<Redirect>> {
-    let bp_gens = BulletproofGens::new(256, 1);
-
     let back_url = uri!(network_mempool);
     let flash_error = |msg| Flash::error(Redirect::to(back_url.clone()), msg);
 
@@ -169,7 +171,10 @@ fn network_mempool_makeblock(
     mem::replace(mempool.deref_mut(), Mempool::new(new_state, timestamp_ms));
 
     let msg = format!("Block published: {}", hex::encode(&new_block.header.id()));
-    Ok(Flash::success(Redirect::to(uri!(network_block_show: new_block.header.height as i32)), msg))
+    Ok(Flash::success(
+        Redirect::to(uri!(network_block_show: new_block.header.height as i32)),
+        msg,
+    ))
 }
 
 #[get("/network/blocks")]
@@ -272,11 +277,10 @@ fn pay(
     transfer_form: Form<TransferForm>,
     dbconn: DBConnection,
     mempool: State<Mutex<Mempool>>,
+    bp_gens: State<BulletproofGens>,
 ) -> Result<Flash<Redirect>, Flash<Redirect>> {
     let back_url = uri!(nodes_show: transfer_form.sender_alias.clone());
     let flash_error = |msg| Flash::error(Redirect::to(back_url.clone()), msg);
-
-    let bp_gens = BulletproofGens::new(256, 1);
 
     // Load all records that we'll need: sender, recipient, asset.
     let (mut sender, mut recipient) = {
@@ -323,7 +327,10 @@ fn pay(
     // but since we are doing the exchange in one call, we'll skip it.
 
     // Sender gives Recipient info to watch for tx.
-    recipient.wallet.pending_utxos.push(nodes::Utxo {
+
+    // In a real system we'd add pending_utxos here, but since we are not pruning the mempool,
+    // we want to show these as contributing to the node's balance immediately.
+    recipient.wallet.utxos.push(nodes::Utxo {
         receiver_witness: payment_receiver_witness,
         anchor: reply.anchor, // store anchor sent by Alice
         proof: utreexo::Proof::Transient,
@@ -395,7 +402,6 @@ fn nodes_create(
     let dbconn = dbconn.0;
     dbconn
         .transaction::<(), diesel::result::Error, _>(|| {
-            
             use nodes::Node;
 
             let blk_record = {
@@ -403,7 +409,9 @@ fn nodes_create(
                 block_records
                     .order(height.desc())
                     .first::<records::BlockRecord>(&dbconn)
-                    .expect("Tip block not found. Make sure prepare_db_if_needed() was called.".into())
+                    .expect(
+                        "Tip block not found. Make sure prepare_db_if_needed() was called.".into(),
+                    )
             };
 
             let network_state = blk_record.state();
@@ -418,10 +426,13 @@ fn nodes_create(
 
             Ok(())
         })
-        .map_err(|e| flash_error(e.to_string()) )?;
+        .map_err(|e| flash_error(e.to_string()))?;
 
     let msg = format!("Node created: {}", &form.alias);
-    Ok(Flash::success(Redirect::to(uri!(nodes_show: &form.alias)), msg))
+    Ok(Flash::success(
+        Redirect::to(uri!(nodes_show: &form.alias)),
+        msg,
+    ))
 }
 
 #[derive(FromForm)]
@@ -433,13 +444,105 @@ struct NewAssetForm {
 #[post("/assets/create", data = "<form>")]
 fn assets_create(
     form: Form<NewAssetForm>,
+    mempool: State<Mutex<Mempool>>,
+    bp_gens: State<BulletproofGens>,
     dbconn: DBConnection,
 ) -> Result<Flash<Redirect>, Flash<Redirect>> {
     let flash_error = |msg| Flash::error(Redirect::to(uri!(network_status)), msg);
 
-    // TODO: use any issuer's utxo to help create an issuance transaction.
+    // Uses any issuer's utxo to help create an issuance transaction.
 
-    Err(flash_error("Not implemented yet!"))
+    let dbconn = dbconn.0;
+
+    let asset_record = dbconn
+        .transaction::<records::AssetRecord, diesel::result::Error, _>(|| {
+            // Try to find the record by name, if not found - create one.
+
+            use schema::asset_records::dsl::*;
+
+            let rec = asset_records
+                .filter(alias.eq(&form.alias))
+                .first::<records::AssetRecord>(&dbconn)
+                .unwrap_or_else(|_| {
+                    let rec = records::AssetRecord::new(form.alias.clone());
+                    diesel::insert_into(asset_records)
+                        .values(&rec)
+                        .execute(&dbconn)
+                        .expect("Inserting an asset record should work");
+                    rec
+                });
+            Ok(rec)
+        })
+        .map_err(|e| flash_error(e.to_string()))?;
+
+    // Find some utxo from the Issuer's account and use it as an anchoring tool.
+    let mut issuer = {
+        use schema::node_records::dsl::*;
+        node_records
+            .filter(alias.eq("Issuer"))
+            .first::<records::NodeRecord>(&dbconn)
+            .map_err(|msg| flash_error(msg.to_string()))?
+            .node()
+    };
+
+    // Issuer will be receiving the tokens it issues.
+    let payment = zkvm::ClearValue {
+        qty: form.qty,
+        flv: asset_record.flavor(),
+    };
+    let payment_receiver_witness = issuer.wallet.account.generate_receiver(payment);
+    let payment_receiver = &payment_receiver_witness.receiver;
+
+    // Note: at this point, recipient saves the increased seq #,
+    // but since we are doing the exchange in one call, we'll skip it.
+
+    // Sender prepares a tx
+    let (tx, _txid, proofs, reply) = issuer
+        .prepare_issuance_tx(
+            asset_record.issuance_key(),
+            asset_record.metadata(),
+            &payment_receiver,
+            &bp_gens,
+        )
+        .map_err(|msg| flash_error(msg.to_string()))?;
+    // Note: at this point, sender reserves the utxos and saves its incremented seq # until sender ACK'd ReceiverReply,
+    // but since we are doing the exchange in one call, we'll skip it.
+
+    // Issuer receives new tokens, so they can spend them right away.
+    issuer.wallet.utxos.push(nodes::Utxo {
+        receiver_witness: payment_receiver_witness,
+        anchor: reply.anchor, // store anchor sent by Alice
+        proof: utreexo::Proof::Transient,
+    });
+
+    // Note: at this point, recipient saves the unconfirmed utxo,
+    // but since we are doing the exchange in one call, we'll skip it for now.
+
+    // Add tx to the mempool so we can make blocks of multiple txs in the demo.
+    let txid = mempool
+        .lock()
+        .expect("Thread should have not crashed holding the unlocked mutex.")
+        .append(tx, proofs, &bp_gens)
+        .map_err(|msg| flash_error(msg.to_string()))?;
+
+    // Save everything in a single DB transaction.
+    dbconn
+        .transaction::<(), diesel::result::Error, _>(|| {
+            // Save the updated records.
+            use schema::node_records::dsl::*;
+            let issuer_record = records::NodeRecord::new(issuer);
+            let scope = node_records.filter(alias.eq(&issuer_record.alias));
+            diesel::update(scope).set(&issuer_record).execute(&dbconn)?;
+
+            Ok(())
+        })
+        .map_err(|e| flash_error(format!("Database error: {}", e)))?;
+
+    let msg = format!("Transaction added to mempool: {}", hex::encode(&txid));
+    Ok(Flash::success(
+        Redirect::to(uri!(nodes_show: "Issuer")),
+        msg,
+    ))
 }
 
 #[catch(404)]

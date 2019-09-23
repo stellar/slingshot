@@ -45,6 +45,15 @@ function highlightZkvmOpcodes() {
     })
 }
 
+function autofocusModals() {
+    $('#new-node').on('shown.bs.modal', function() {
+        $('#new-node-alias').focus();
+    });
+    $('#new-asset').on('shown.bs.modal', function() {
+        $('#new-asset-alias').focus();
+    });
+}
+
 (function () {
     'use strict'
 
@@ -52,4 +61,5 @@ function highlightZkvmOpcodes() {
     sidebarHighlightCurrentLink();
     highlightZkvmOpcodes();
     abbreviateHexStrings();
+    autofocusModals();
 }())
