@@ -32,8 +32,15 @@
       <h3>Tx {{tx.id}}</h3>
       <table class="table table-bordered">
       <tbody>
-        <tr><th>Version</th><td><code>{{tx.header.version}}</code></td></tr>
-        <tr><th>Time bounds</th><td><code>[{{tx.header.mintime_ms}}; {{tx.header.maxtime_ms}}]</code></td></tr>
+        <tr>
+          <th>Header</th>
+          <td>
+            <code>
+              <strong>Version:</strong> {{tx.header.version}}<br/>
+              <strong>Time bounds:</strong> [{{tx.header.mintime_ms}}; {{tx.header.maxtime_ms}}]
+            </code>
+          </td>
+        </tr>
         <tr>
           <th>Inputs ({{tx.inputs | length}})</th>
           <td><code>
@@ -55,16 +62,15 @@
           <td><code class="abbrev-hex highlight-zkvm" data-abbrev-length="2">{{tx.program_asm}}</code></td>
         </tr>
         <tr>
-          <th>Raw program</th>
-          <td><code class="abbrev-hex">{{tx.program_hex}}</code></td>
-        </tr>
-        <tr>
-          <th>Signature</th>
-          <td><code class="abbrev-hex">{{tx.tx.signature}}</code></td>
-        </tr>
-        <tr>
-          <th>R1CS proof</th>
-          <td><code class="abbrev-hex">{{tx.tx.proof}}</code></td>
+          <th>Raw</th>
+          <td><code class="abbrev-hex">
+            <strong>Program:&nbsp;&nbsp;&nbsp;</strong>
+            {{tx.program_hex}}</br>
+            <strong>Signature:&nbsp;</strong>
+            {{tx.tx.signature}}</br>
+            <strong>R1CS proof:</strong>
+            {{tx.tx.proof}}
+          </code></td>
         </tr>
       </tbody>
       </table>
