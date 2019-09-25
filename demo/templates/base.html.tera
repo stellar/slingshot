@@ -127,7 +127,7 @@
         </div>
         <div class="modal-body">
           <div class="form-group">
-            <label for="new-node-alias" class="col-form-label">Alias:</label>
+            <label for="new-node-alias" class="col-form-label">Node alias:</label>
             <input type="text" class="form-control" name="alias" id="new-node-alias"/>
           </div>
         </div>
@@ -155,7 +155,7 @@
         </div>
         <div class="modal-body">
           <div class="form-group">
-            <label for="new-asset-alias" class="col-form-label">Alias:</label>
+            <label for="new-asset-alias" class="col-form-label">Asset alias:</label>
             <input type="text" class="form-control" name="alias" id="new-asset-alias"/>
           </div>
           <div class="form-group">

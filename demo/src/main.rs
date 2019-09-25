@@ -256,6 +256,9 @@ fn nodes_show(
         "node": node.to_json(),
         "balances": balances,
         "others": others_aliases,
+        "txs": node.node().wallet.txs.iter().map(|atx| {
+            atx.tx_details()
+        }).collect::<Vec<_>>(),
         "flash": flash.map(|f| json!({
             "name": f.name(),
             "msg": f.msg(),

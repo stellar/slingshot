@@ -2,6 +2,7 @@ use bulletproofs::BulletproofGens;
 use curve25519_dalek::scalar::Scalar;
 use keytree::Xprv;
 use serde::{Deserialize, Serialize};
+use serde_json::Value as JsonValue;
 
 use zkvm::blockchain::{Block, BlockchainState};
 use zkvm::utreexo;
@@ -11,6 +12,7 @@ use accounts::{Account, ReceiverWitness};
 use musig::Multisignature;
 
 use super::util;
+use super::records;
 
 /// The complete state of the user node: their wallet and their blockchain state.
 #[derive(Clone, Serialize, Deserialize)]
@@ -63,9 +65,10 @@ pub struct Utxo {
 /// Tx annotated with
 #[derive(Clone, Serialize, Deserialize)]
 pub struct AnnotatedTx {
-    raw_tx: zkvm::Tx,
-    known_inputs: Vec<(usize, Utxo)>,
-    known_outputs: Vec<(usize, Utxo)>,
+    pub block_height: u64,
+    pub raw_tx: zkvm::Tx,
+    pub known_inputs: Vec<(usize, Utxo)>,
+    pub known_outputs: Vec<(usize, Utxo)>,
 }
 
 impl Node {
@@ -443,6 +446,7 @@ impl Node {
             if known_inputs.len() + known_outputs.len() > 0 {
                 let raw_tx = block.txs[tx_index].clone();
                 let atx = AnnotatedTx {
+                    block_height: block.header.height,
                     raw_tx,
                     known_inputs,
                     known_outputs,
@@ -518,6 +522,18 @@ impl AsRef<ClearValue> for Utxo {
     fn as_ref(&self) -> &ClearValue {
         &self.receiver_witness.receiver.value
     }
+}
+
+impl AnnotatedTx {
+    pub fn tx_details(&self) -> JsonValue {
+        json!({
+            "block_height": self.block_height,
+            "generic_tx": records::BlockRecord::tx_details(&self.raw_tx),
+        })
+    }
+    // pub raw_tx: zkvm::Tx,
+    // pub known_inputs: Vec<(usize, Utxo)>,
+    // pub known_outputs: Vec<(usize, Utxo)>,
 }
 
 impl Utxo {

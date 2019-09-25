@@ -123,16 +123,23 @@ impl NodeRecord {
             .wallet
             .utxos
             .iter()
-            .map(|utxo| utxo.receiver_witness.receiver.value)
-            .fold(HashMap::new(), |mut hm, value| {
+            .fold(HashMap::new(), |mut hm: HashMap<Vec<u8>,(u64,Vec<Utxo>)>, utxo| {
+                let value = utxo.receiver_witness.receiver.value;
                 let key = value.flv.as_bytes().to_vec();
-                let total = *hm.get(&key).unwrap_or(&0u64);
-                hm.insert(key, total + value.qty);
+                match hm.get_mut(&key) {
+                    Some((total, list)) => {
+                        *total += value.qty;
+                        list.push(utxo.clone());
+                    },
+                    None => {
+                        hm.insert(key, (value.qty, vec![utxo.clone()]));
+                    }
+                }
                 hm
             });
         json!(map
             .iter()
-            .map(|(flv, balance)| {
+            .map(|(flv, (balance, utxos))| {
                 let alias = assets
                     .iter()
                     .find(|&asset| asset.flavor().as_bytes() == &flv[..])
@@ -142,7 +149,13 @@ impl NodeRecord {
                 json!({
                     "alias": alias,
                     "flv": flv,
-                    "qty": balance
+                    "qty": balance,
+                    "utxos": utxos.iter().map(|utxo| {
+                        json!({
+                            "contract_id": hex::encode(&utxo.contract_id()),
+                            "qty": utxo.receiver_witness.receiver.value.qty
+                        })
+                    } ).collect::<Vec<_>>()
                 })
             })
             .collect::<Vec<_>>())
