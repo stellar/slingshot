@@ -4,7 +4,7 @@
 
 {% block main %}
   <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3">
-    <h2>Node: {{node.wallet.alias}}</h2>
+    <h1 class="h1">Account: <em>{{node.wallet.alias}}</em></h2>
   </div>
 
   <table class="table table-bordered block-header">
@@ -13,94 +13,205 @@
       <tr><th>Sequence #</th><td>{{node.wallet.account.sequence}}</td></tr>
       <tr><th>Xprv</th><td><code>{{node.wallet.xprv}}</code></td></tr>
       <tr><th>Xpub</th><td><code>{{node.wallet.account.xpub}}</code></td></tr>
-      {% for balance in balances | sort(attribute="alias") %}
-      <tr>
-        <th><a href="/assets/{{balance.alias}}">{{balance.alias}}</a></th>
-        <td>{{balance.qty}}</td>
-      </tr>
-      {% endfor %}
     </tbody>
   </table>
 
+{% set balances_len = balances | length %}
+{% if balances_len > 0 %}
 
-  <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3">
-    <h4>Transfer</h4>
-  </div>
+<br/>
+<p>
+<div class="btn-group btn-group-toggle" data-toggle="buttons">
+  <label class="btn btn-outline-primary btn-sm active">
+    <input type="radio" name="options" id="option1" autocomplete="off" checked onchange="$('#compact-balances').toggle();$('#detailed-balances').toggle();">
+    &nbsp; &nbsp; Balances &nbsp; &nbsp;
+  </label>
+  <label class="btn btn-outline-primary btn-sm">
+    <input type="radio" name="options" id="option2" autocomplete="off" onchange="$('#compact-balances').toggle();$('#detailed-balances').toggle();"> 
+    &nbsp; Raw outputs &nbsp;
+  </label>
+</div>
+</p>
 
-  <form class="col-6" action="/pay" method="POST">
-    <input type="hidden" name="sender_alias" value="{{node.wallet.alias}}" />
-    <div class="form-group row">
-      <label for="recipient" class="col-sm-2 col-form-label">To</label>
-      <div class="col-sm-10">
-        <select class="form-control" id="recipient_alias" name="recipient_alias">
-          {% for alias in others | sort %}
-          <option value="{{alias}}">{{alias}}</option>
-          {% endfor %}
-        </select>
-      </div>
-    </div>
-    <div class="form-group row">
-      <label for="flavor" class="col-sm-2 col-form-label">Asset</label>
-      <div class="col-sm-10">
-        <select class="form-control" id="flavor_alias" name="flavor_alias">
-          {% for balance in balances | sort(attribute="alias") %}
-          <option value="{{balance.alias}}">{{balance.alias}}</option>
-          {% endfor %}
-        </select>
-      </div>
-    </div>
-    <div class="form-group row">
-      <label for="qty" class="col-sm-2 col-form-label">Amount</label>
-      <div class="col-sm-10">
-        <input type="text" class="form-control" id="qty" name="qty" placeholder="" autocomplete="off"/>
-      </div>
-    </div>
-    <div class="form-group row">
-      <div class="col-sm-2">
-      </div>
-      <div class="col-sm-10">
-        <button type="submit" class="btn btn-primary">Send</button>
-      </div>
-    </div>
-    
-  </form>
+<table class="table table-bordered block-header" style="max-width:264px" id="compact-balances">
+  <tbody>
+    <tr>
+      <th>
+        Alias
+      </th>
+      <th style="text-align:right">Total</th>
+    </tr>
+    {% for balance in balances | sort(attribute="alias") %}
+    <tr>
+      <td width="164"><a href="/assets/{{balance.alias}}">{{balance.alias}}</a></td>
+      <td width="100" align="right">{{balance.qty}}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
 
-  <hr/>
-  
-  <!--
-  <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3">
-    <h3>Transactions</h3>
-  </div>
+<table class="table table-bordered block-header" style="max-width:800px;display:none;" id="detailed-balances">
+  <tbody>
+    <tr>
+      <th>
+        Alias
+      </th>
+      <th style="text-align:right">Qty</th>
+      <th>Contract ID</th>
+    </tr>
 
-  <div class="table-responsive">
-    <table class="table table-striped table-sm">
-      <thead>
-        <tr>
-          <th>#</th>
-          <th>Header</th>
-          <th>Header</th>
-          <th>Header</th>
-          <th>Header</th>
-        </tr>
-      </thead>
+    {% for balance in balances | sort(attribute="alias") %}
+      {% for utxo in balance.utxos %}
+      <tr>
+        <td width="164"><a href="/assets/{{balance.alias}}">{{balance.alias}}</a></td>
+        <td width="100" align="right">{{utxo.qty}}</td>
+        <td><code>{{utxo.contract_id}}</code></td>
+      </tr>
+      {% endfor %}
+    {% endfor %}
+  </tbody>
+</table>
+
+<button type="submit" class="btn btn-primary" style="min-width:130px;" data-toggle="modal" data-target="#transfer">Transfer</button>
+<br/>
+<br/>
+<br/>
+{% endif %}
+
+
+{% set txs_len = txs | length %}
+{% if txs_len > 0 %}
+
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3">
+  <h2 class="h2">Transactions <em>{{txs | length}}</em></h2>
+</div>
+
+{% for atx in txs | reverse %}
+
+    {% set tx = atx.generic_tx %}
+
+    <div class="tx-summary">
+      <table class="table table-bordered">
       <tbody>
         <tr>
-          <td>1,001</td>
-          <td>Lorem</td>
-          <td>ipsum</td>
-          <td>dolor</td>
-          <td>sit</td>
+          <th colspan="2" class="txid">
+            <code>{{tx.id}}</code>
+          </th>
         </tr>
         <tr>
-          <td>1,002</td>
-          <td>amet</td>
-          <td>consectetur</td>
-          <td>adipiscing</td>
-          <td>elit</td>
+          <th>Block</th>
+          <td>
+            <a href="/network/block/{{atx.block_height}}">{{atx.block_height}}</a>
+          </td>
+        </tr>
+        <tr>
+          <th>Header</th>
+          <td>
+            <code>
+              <strong>Version:</strong> {{tx.header.version}}<br/>
+              <strong>Time bounds:</strong> [{{tx.header.mintime_ms}}; {{tx.header.maxtime_ms}}]
+            </code>
+          </td>
+        </tr>
+        <tr>
+          <th>Inputs ({{tx.inputs | length}})</th>
+          <td><code class="abbrev-hex" data-abbrev-length="4">
+            {% for entry in atx.inputs %}
+              {{entry.id}}
+              {% if entry.value %}
+                (<b>{{entry.value.qty}}</b> <a href="/assets/{{entry.value.alias}}">{{entry.value.alias}}</a>)
+              {% endif %}
+              <br/>
+            {% endfor %}
+          </code></td>
+        </tr>
+        <tr>
+          <th>Outputs ({{tx.outputs | length}})</th>
+          <td><code class="abbrev-hex" data-abbrev-length="4">
+            {% for entry in atx.outputs %}
+              {{entry.id}}
+              {% if entry.value %}
+                (<b>{{entry.value.qty}}</b> <a href="/assets/{{entry.value.alias}}">{{entry.value.alias}}</a>)
+              {% endif %}
+              <br/>
+            {% endfor %}
+          </code></td>
+        </tr>
+        <tr>
+          <th>Program</th>
+          <td><code class="abbrev-hex highlight-zkvm" data-abbrev-length="2">{{tx.program_asm}}</code></td>
+        </tr>
+        <tr>
+          <th>Raw</th>
+          <td><code class="abbrev-hex">
+            <strong>Program:&nbsp;&nbsp;&nbsp;</strong>
+            {{tx.program_hex}}</br>
+            <strong>Signature:&nbsp;</strong>
+            {{tx.tx.signature}}</br>
+            <strong>R1CS proof:</strong>
+            {{tx.tx.proof}}
+          </code></td>
         </tr>
       </tbody>
-    </table>
+      </table>
+    </div>
+
+
+{% endfor %}
+{% endif %}
+
+
+<!-- Transfer form -->
+
+<div class="modal fade" id="transfer" tabindex="-1" role="dialog" aria-labelledby="transfer-label" aria-hidden="true">
+  <div class="modal-dialog" role="document">
+    <div class="modal-content">
+      <form action="/pay" method="POST">
+        <input type="hidden" name="sender_alias" value="{{node.wallet.alias}}" />
+        <div class="modal-header">
+          <h5 class="modal-title" id="transfer-label">Transfer</h5>
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+        <div class="modal-body">
+
+          <div class="form-group row">
+            <label for="recipient" class="col-sm-2 col-form-label">To</label>
+            <div class="col-sm-10">
+              <select class="form-control" id="recipient_alias" name="recipient_alias">
+                {% for alias in others | sort %}
+                <option value="{{alias}}">{{alias}}</option>
+                {% endfor %}
+              </select>
+            </div>
+          </div>
+          <div class="form-group row">
+            <label for="flavor" class="col-sm-2 col-form-label">Asset</label>
+            <div class="col-sm-10">
+              <select class="form-control" id="flavor_alias" name="flavor_alias">
+                {% for balance in balances | sort(attribute="alias") %}
+                <option value="{{balance.alias}}">{{balance.alias}}</option>
+                {% endfor %}
+              </select>
+            </div>
+          </div>
+          <div class="form-group row">
+            <label for="qty" class="col-sm-2 col-form-label">Amount</label>
+            <div class="col-sm-10">
+              <input type="text" class="form-control" id="qty" name="qty" placeholder="" autocomplete="off"/>
+            </div>
+          </div>
+
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+          <button type="submit" class="btn btn-primary">Send</button>
+        </div>
+      </form>
+    </div>
   </div>
-  -->
-  
+</div>
+
+
 {% endblock main %}

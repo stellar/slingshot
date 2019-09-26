@@ -256,6 +256,9 @@ fn nodes_show(
         "node": node.to_json(),
         "balances": balances,
         "others": others_aliases,
+        "txs": node.node().wallet.txs.iter().map(|atx| {
+            atx.tx_details(&assets)
+        }).collect::<Vec<_>>(),
         "flash": flash.map(|f| json!({
             "name": f.name(),
             "msg": f.msg(),
@@ -334,6 +337,7 @@ fn pay(
         receiver_witness: payment_receiver_witness,
         anchor: reply.anchor, // store anchor sent by Alice
         proof: utreexo::Proof::Transient,
+        spent: false,
     });
     // Note: at this point, recipient saves the unconfirmed utxo,
     // but since we are doing the exchange in one call, we'll skip it for now.
@@ -513,6 +517,7 @@ fn assets_create(
         receiver_witness: payment_receiver_witness,
         anchor: reply.anchor, // store anchor sent by Alice
         proof: utreexo::Proof::Transient,
+        spent: false,
     });
 
     // Note: at this point, recipient saves the unconfirmed utxo,
@@ -622,13 +627,13 @@ fn prepare_db_if_needed() {
                 let anchor = Anchor::from_raw_bytes([0; 32]);
 
                 let (mut list, anchor) =
-                    treasury_wallet.mint_utxos(anchor, token_record.flavor(), vec![1, 2, 4, 8]);
+                    treasury_wallet.mint_utxos(anchor, token_record.flavor(), vec![21]);
                 utxos.append(&mut list);
                 let (mut list, anchor) =
-                    treasury_wallet.mint_utxos(anchor, usd_record.flavor(), vec![1000, 5000]);
+                    treasury_wallet.mint_utxos(anchor, usd_record.flavor(), vec![1200]);
                 utxos.append(&mut list);
                 let (mut list, _) =
-                    treasury_wallet.mint_utxos(anchor, eur_record.flavor(), vec![80, 99, 7000]);
+                    treasury_wallet.mint_utxos(anchor, eur_record.flavor(), vec![1000]);
                 utxos.append(&mut list);
 
                 utxos
