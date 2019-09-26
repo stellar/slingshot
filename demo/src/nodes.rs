@@ -235,7 +235,10 @@ impl Node {
 
         // remember the outgoing payment metadata
         self.wallet.outgoing_utxos.push(Utxo {
-            receiver_witness: ReceiverWitness{sequence:0, receiver: payment_receiver.clone()},
+            receiver_witness: ReceiverWitness {
+                sequence: 0,
+                receiver: payment_receiver.clone(),
+            },
             anchor: reply.anchor,
             proof: utreexo::Proof::Transient,
             spent: false,
@@ -389,7 +392,10 @@ impl Node {
 
         // remember the outgoing payment metadata
         self.wallet.outgoing_utxos.push(Utxo {
-            receiver_witness: ReceiverWitness{sequence:0, receiver: payment_receiver.clone()},
+            receiver_witness: ReceiverWitness {
+                sequence: 0,
+                receiver: payment_receiver.clone(),
+            },
             anchor: reply.anchor,
             proof: utreexo::Proof::Transient,
             spent: false,
@@ -444,11 +450,11 @@ impl Node {
                             .wallet
                             .outgoing_utxos
                             .iter()
-                            .position(|utxo| utxo.contract_id() == *contract_id) 
-                            {
-                                // remove outgoing utxo, but do not cause the tx to be annotated as ours.
-                                let _ = self.wallet.outgoing_utxos.remove(i);
-                            }
+                            .position(|utxo| utxo.contract_id() == *contract_id)
+                        {
+                            // remove outgoing utxo, but do not cause the tx to be annotated as ours.
+                            let _ = self.wallet.outgoing_utxos.remove(i);
+                        }
                     }
                     TxEntry::Output(contract) => {
                         // Make pending utxos confirmed

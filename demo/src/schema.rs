@@ -20,8 +20,4 @@ table! {
     }
 }
 
-allow_tables_to_appear_in_same_query!(
-    asset_records,
-    block_records,
-    node_records,
-);
+allow_tables_to_appear_in_same_query!(asset_records, block_records, node_records,);
