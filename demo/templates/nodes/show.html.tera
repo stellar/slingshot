@@ -99,23 +99,19 @@
           </th>
         </tr>
         <tr>
-          <th>Block</th>
-          <td>
-            <a href="/network/block/{{atx.block_height}}">{{atx.block_height}}</a>
-          </td>
-        </tr>
-        <tr>
-          <th>Header</th>
-          <td>
+          <td colspan="2">
             <code>
-              <strong>Version:</strong> {{tx.header.version}}<br/>
-              <strong>Time bounds:</strong> [{{tx.header.mintime_ms}}; {{tx.header.maxtime_ms}}]
+            <strong>Block</strong> <a href="/network/block/{{atx.block_height}}">{{atx.block_height}}</a>
+            &nbsp;
+            <strong>Version:</strong> {{tx.header.version}}
+            &nbsp;
+            <strong>Time bounds:</strong> [{{tx.header.mintime_ms}}; {{tx.header.maxtime_ms}}]
             </code>
           </td>
         </tr>
         <tr>
-          <th>Inputs ({{tx.inputs | length}})</th>
-          <td><code class="abbrev-hex" data-abbrev-length="4">
+          <td width="50%"><code class="abbrev-hex" data-abbrev-length="4">
+            <strong>Inputs</strong><br/>
             {% for entry in atx.inputs %}
               {{entry.id}}
               {% if entry.value %}
@@ -123,11 +119,10 @@
               {% endif %}
               <br/>
             {% endfor %}
-          </code></td>
-        </tr>
-        <tr>
-          <th>Outputs ({{tx.outputs | length}})</th>
-          <td><code class="abbrev-hex" data-abbrev-length="4">
+          </code>
+          </td>
+          <td width="50%"><code class="abbrev-hex" data-abbrev-length="4">
+            <strong>Outputs</strong><br/>
             {% for entry in atx.outputs %}
               {{entry.id}}
               {% if entry.value %}
@@ -138,19 +133,21 @@
           </code></td>
         </tr>
         <tr>
-          <th>Program</th>
-          <td><code class="abbrev-hex highlight-zkvm" data-abbrev-length="2">{{tx.program_asm}}</code></td>
-        </tr>
-        <tr>
-          <th>Raw</th>
-          <td><code class="abbrev-hex">
-            <strong>Program:&nbsp;&nbsp;&nbsp;</strong>
-            {{tx.program_hex}}</br>
-            <strong>Signature:&nbsp;</strong>
-            {{tx.tx.signature}}</br>
-            <strong>R1CS proof:</strong>
-            {{tx.tx.proof}}
-          </code></td>
+          <td colspan="2">
+            <code class="abbrev-hex highlight-zkvm" data-abbrev-length="2">
+              <strong>Program:</strong><br/>
+              {{tx.program_asm}}
+            </code>
+            <br/><br/>
+            <code class="abbrev-hex highlight-zkvm" data-abbrev-length="32">
+              <strong>Raw program:</strong>
+              {{tx.program_hex}}</br>
+              <strong>Signature:&nbsp;</strong>
+              {{tx.tx.signature}}</br>
+              <strong>R1CS proof:</strong>
+              {{tx.tx.proof}}
+            </code>
+          </td>
         </tr>
       </tbody>
       </table>

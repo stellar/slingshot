@@ -610,12 +610,11 @@ fn prepare_db_if_needed() {
             use nodes::{Node, Wallet};
             use zkvm::{Anchor, Block, BlockchainState};
 
-            let token_record = records::AssetRecord::new("Token");
+            let token_record = records::AssetRecord::new("XLM");
             let usd_record = records::AssetRecord::new("USD");
-            let eur_record = records::AssetRecord::new("EUR");
 
             diesel::insert_into(asset_records)
-                .values(vec![&token_record, &usd_record, &eur_record])
+                .values(vec![&token_record, &usd_record])
                 .execute(&db_connection)
                 .expect("Inserting an asset record should work");
 
@@ -627,13 +626,11 @@ fn prepare_db_if_needed() {
                 let anchor = Anchor::from_raw_bytes([0; 32]);
 
                 let (mut list, anchor) =
-                    treasury_wallet.mint_utxos(anchor, token_record.flavor(), vec![21]);
+                    treasury_wallet.mint_utxos(anchor, token_record.flavor(), vec![1, 20]);
                 utxos.append(&mut list);
-                let (mut list, anchor) =
-                    treasury_wallet.mint_utxos(anchor, usd_record.flavor(), vec![1200]);
+                let (mut list, _anchor) =
+                    treasury_wallet.mint_utxos(anchor, usd_record.flavor(), vec![1000, 200]);
                 utxos.append(&mut list);
-                let (mut list, _) =
-                    treasury_wallet.mint_utxos(anchor, eur_record.flavor(), vec![1000]);
                 utxos.append(&mut list);
 
                 utxos
