@@ -503,7 +503,7 @@ impl Node {
                             .wallet
                             .outgoing_utxos
                             .iter()
-                            .position(|utxo| utxo.contract_id() == cid) 
+                            .position(|utxo| utxo.contract_id() == cid)
                             {
                                 let utxo = self.wallet.outgoing_utxos[i].clone();
                                 known_outputs.push((entry_index, utxo));

@@ -10,9 +10,9 @@
   <table class="table table-bordered block-header" style="max-width:700px">
     <tbody>
       <tr><th>Alias</th><td>{{asset.alias}}</td></tr>
+      <tr><th>Flavor ID</th><td><code>{{asset.flv}}</code></td></tr>
       <tr><th>Issuance privkey</th><td><code>{{asset.prv}}</code></td></tr>
       <tr><th>Issuance pubkey</th><td><code>{{asset.pub}}</code></td></tr>
-      <tr><th>Flavor</th><td><code>{{asset.flv}}</code></td></tr>
     </tbody>
   </table>
 {% endblock main %}
