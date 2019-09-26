@@ -4,7 +4,7 @@
 
 {% block main %}
   <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3">
-    <h2>Block {{block.height}}</h2>
+    <h1 class="h1">Block <em>{{block.height}}</em></h1>
   </div>
 
   <table class="table table-bordered block-header">
@@ -22,15 +22,19 @@
 
 
   <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3">
-    <h3>Transactions ({{block.txs | length}})</h3>
+    <h2 class="h2">Transactions <em>{{block.txs | length}}</em></h2>
   </div>
 
   {% for tx in block.txs %}
  
      <div class="tx-summary">
-      <h3>Tx {{tx.id}}</h3>
       <table class="table table-bordered">
       <tbody>
+        <tr>
+          <th colspan="2" class="txid">
+            <code>{{tx.id}}</code>
+          </th>
+        </tr>
         <tr>
           <th>Header</th>
           <td>

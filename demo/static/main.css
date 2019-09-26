@@ -2,10 +2,37 @@ body {
   font-size: .875rem;
 }
 
+#logo {
+  width:200px;
+  padding:16px;
+}
+
 .feather {
   width: 16px;
   height: 16px;
   vertical-align: text-bottom;
+}
+
+.h1 {
+  color:red;
+  font-weight:800;
+}
+
+.h1 em {
+  color:black;
+}
+
+.h1, .h2, .h3 {
+  font-style:italic;
+  text-transform:uppercase;
+}
+
+.h2 {
+  font-weight:700;
+}
+
+.h2 em {
+  color:red;
 }
 
 tt {
@@ -33,8 +60,12 @@ code {
 }
 
 .tx-summary {
-  margin:0px 0 16px 0;
-  padding:32px 0px 24px 0px;
+  margin:0px 0 32px 0;
+  padding:0px 0px 0px 0px;
+}
+
+.tx-summary .txid {
+  font-size:18px; 
 }
 
 .tx-summary h3 {
@@ -60,7 +91,7 @@ code {
   bottom: 0;
   left: 0;
   z-index: 100; /* Behind the navbar */
-  padding: 48px 0 0; /* Height of navbar */
+  padding: 0px 0 0; /* Height of navbar */
   box-shadow: inset -1px 0 0 rgba(0, 0, 0, .1);
 }
 
@@ -85,6 +116,26 @@ code {
   color: #333;
 }
 
+.sidebar .nav-separator {
+  border-top:1px solid #eee;
+  margin:4px 16px;
+  padding:0;
+  height:1px;
+}
+
+.sidebar .nav-action-item .feather {
+  color: #ee1111;
+}
+
+.sidebar .nav-action-item .nav-link.active {
+  color: inherit;
+}
+
+.sidebar .nav-action-item .nav-link:hover .feather,
+.sidebar .nav-action-item .nav-link:hover {
+  color: #ff0000;
+}
+
 .sidebar .nav-link .feather {
   margin-right: 4px;
   color: #999;
@@ -100,50 +151,6 @@ code {
 }
 
 .sidebar-heading {
-  font-size: .75rem;
+  font-size: 0.8rem;
   text-transform: uppercase;
 }
-
-/*
- * Content
- */
-
-[role="main"] {
-  padding-top: 133px; /* Space for fixed navbar */
-}
-
-@media (min-width: 768px) {
-  [role="main"] {
-    padding-top: 48px; /* Space for fixed navbar */
-  }
-}
-
-/*
- * Navbar
- */
-
-.navbar-brand {
-  padding-top: .75rem;
-  padding-bottom: .75rem;
-  font-size: 1rem;
-  background-color: rgba(0, 0, 0, .25);
-  box-shadow: inset -1px 0 0 rgba(0, 0, 0, .25);
-}
-
-.navbar .form-control {
-  padding: .75rem 1rem;
-  border-width: 0;
-  border-radius: 0;
-}
-
-.form-control-dark {
-  color: #fff;
-  background-color: rgba(255, 255, 255, .1);
-  border-color: rgba(255, 255, 255, .1);
-}
-
-.form-control-dark:focus {
-  border-color: transparent;
-  box-shadow: 0 0 0 3px rgba(255, 255, 255, .25);
-}
-

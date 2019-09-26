@@ -4,7 +4,7 @@
 
 {% block main %}
   <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3">
-    <h2>Node: {{node.wallet.alias}}</h2>
+    <h1 class="h1">Account: <em>{{node.wallet.alias}}</em></h2>
   </div>
 
   <table class="table table-bordered block-header">
@@ -19,13 +19,16 @@
 {% set balances_len = balances | length %}
 {% if balances_len > 0 %}
 
+<br/>
 <p>
 <div class="btn-group btn-group-toggle" data-toggle="buttons">
-  <label class="btn btn-outline-secondary active">
-    <input type="radio" name="options" id="option1" autocomplete="off" checked onchange="$('#compact-balances').toggle();$('#detailed-balances').toggle();"> Balances
+  <label class="btn btn-outline-primary btn-sm active">
+    <input type="radio" name="options" id="option1" autocomplete="off" checked onchange="$('#compact-balances').toggle();$('#detailed-balances').toggle();">
+    &nbsp; &nbsp; Balances &nbsp; &nbsp;
   </label>
-  <label class="btn btn-outline-secondary">
-    <input type="radio" name="options" id="option2" autocomplete="off" onchange="$('#compact-balances').toggle();$('#detailed-balances').toggle();"> Raw outputs
+  <label class="btn btn-outline-primary btn-sm">
+    <input type="radio" name="options" id="option2" autocomplete="off" onchange="$('#compact-balances').toggle();$('#detailed-balances').toggle();"> 
+    &nbsp; Raw outputs &nbsp;
   </label>
 </div>
 </p>
@@ -72,6 +75,7 @@
 <button type="submit" class="btn btn-primary" style="min-width:130px;" data-toggle="modal" data-target="#transfer">Transfer</button>
 <br/>
 <br/>
+<br/>
 {% endif %}
 
 
@@ -79,17 +83,21 @@
 {% if txs_len > 0 %}
 
 <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3">
-  <h3>Transactions ({{txs | length}})</h3>
+  <h2 class="h2">Transactions <em>{{txs | length}}</em></h2>
 </div>
 
-{% for atx in txs %}
+{% for atx in txs | reverse %}
 
     {% set tx = atx.generic_tx %}
 
     <div class="tx-summary">
-      <h3>Tx {{tx.id}}</h3>
       <table class="table table-bordered">
       <tbody>
+        <tr>
+          <th colspan="2" class="txid">
+            <code>{{tx.id}}</code>
+          </th>
+        </tr>
         <tr>
           <th>Block</th>
           <td>
@@ -107,17 +115,25 @@
         </tr>
         <tr>
           <th>Inputs ({{tx.inputs | length}})</th>
-          <td><code>
-            {% for hex in tx.inputs %}
-              {{hex}}<br/>
+          <td><code class="abbrev-hex" data-abbrev-length="4">
+            {% for entry in atx.inputs %}
+              {{entry.id}}
+              {% if entry.value %}
+                (<b>{{entry.value.qty}}</b> <a href="/assets/{{entry.value.alias}}">{{entry.value.alias}}</a>)
+              {% endif %}
+              <br/>
             {% endfor %}
           </code></td>
         </tr>
         <tr>
           <th>Outputs ({{tx.outputs | length}})</th>
-          <td><code>
-            {% for hex in tx.outputs %}
-              {{hex}}<br/>
+          <td><code class="abbrev-hex" data-abbrev-length="4">
+            {% for entry in atx.outputs %}
+              {{entry.id}}
+              {% if entry.value %}
+                (<b>{{entry.value.qty}}</b> <a href="/assets/{{entry.value.alias}}">{{entry.value.alias}}</a>)
+              {% endif %}
+              <br/>
             {% endfor %}
           </code></td>
         </tr>

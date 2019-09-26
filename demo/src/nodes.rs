@@ -2,7 +2,6 @@ use bulletproofs::BulletproofGens;
 use curve25519_dalek::scalar::Scalar;
 use keytree::Xprv;
 use serde::{Deserialize, Serialize};
-use serde_json::Value as JsonValue;
 
 use zkvm::blockchain::{Block, BlockchainState};
 use zkvm::utreexo;
@@ -12,7 +11,6 @@ use accounts::{Account, ReceiverWitness};
 use musig::Multisignature;
 
 use super::util;
-use super::records;
 
 /// The complete state of the user node: their wallet and their blockchain state.
 #[derive(Clone, Serialize, Deserialize)]
@@ -60,6 +58,7 @@ pub struct Utxo {
     pub receiver_witness: ReceiverWitness,
     pub anchor: Anchor,
     pub proof: utreexo::Proof, // when Transient, it is an unconfirmed txo
+    pub spent: bool,
 }
 
 /// Tx annotated with
@@ -96,12 +95,13 @@ impl Node {
         ),
         &'static str,
     > {
-        // check that we have at least one utxo to anchor the tx.
-        if self.wallet.utxos.len() == 0 {
-            return Err("Issuer needs at least one available UTXO to anchor the transaction.");
-        }
-
-        let anchoring_utxo = &self.wallet.utxos[0];
+        let anchoring_utxo = &self
+            .wallet
+            .utxos
+            .iter()
+            .filter(|u| !u.spent)
+            .next()
+            .ok_or("Issuer needs at least one available UTXO to anchor the transaction.")?;
         let change_receiver_witness = self
             .wallet
             .account
@@ -186,6 +186,7 @@ impl Node {
             receiver_witness: change_receiver_witness,
             anchor: change_anchor,
             proof: utreexo::Proof::Transient,
+            spent: false,
         };
 
         // Sign the tx.
@@ -215,8 +216,15 @@ impl Node {
 
         let utxo_proofs = vec![anchoring_utxo.proof.clone()];
 
-        // Remove spent utxo
-        self.wallet.utxos.remove(0);
+        // Remove spent anchoring utxo
+        let i = self
+            .wallet
+            .utxos
+            .iter()
+            .position(|o| o.contract_id() == anchoring_utxo.contract_id())
+            .expect("We just found utxos for spending, so we should find them again.");
+
+        self.wallet.utxos[i].spent = true;
 
         // Save the change utxo - it is spendable right away, via a chain of unconfirmed txs.
         self.wallet.utxos.push(change_utxo);
@@ -238,9 +246,11 @@ impl Node {
         ),
         &'static str,
     > {
-        let (spent_utxos, change_value) =
-            Account::select_utxos(&payment_receiver.value, &self.wallet.utxos)
-                .ok_or("Insufficient funds!")?;
+        let (spent_utxos, change_value) = Account::select_utxos(
+            &payment_receiver.value,
+            self.wallet.utxos.iter().filter(|u| !u.spent),
+        )
+        .ok_or("Insufficient funds!")?;
 
         let change_receiver_witness = self.wallet.account.generate_receiver(change_value);
 
@@ -314,6 +324,7 @@ impl Node {
             receiver_witness: change_receiver_witness,
             anchor: change_anchor,
             proof: utreexo::Proof::Transient,
+            spent: false,
         };
 
         // Sign the tx.
@@ -350,7 +361,7 @@ impl Node {
             .map(|utxo| utxo.contract_id())
             .collect::<Vec<_>>();
 
-        // Mark all spent utxos by removing them.
+        // Mark all spent utxos.
         for cid in contract_ids.iter() {
             let i = self
                 .wallet
@@ -358,7 +369,8 @@ impl Node {
                 .iter()
                 .position(|o| o.contract_id() == *cid)
                 .expect("We just found utxos for spending, so we should find them again.");
-            self.wallet.utxos.remove(i);
+
+            self.wallet.utxos[i].spent = true;
         }
         // save the change utxo - it is spendable right away, via a chain of unconfirmed txs.
         self.wallet.utxos.push(change_utxo);
@@ -381,6 +393,10 @@ impl Node {
 
         // In a real node utxos will be indexed by ContractID, so lookup will be more efficient.
         let hasher = utreexo::NodeHasher::new();
+        println!(
+            "Node {:?} is processing block {}...",
+            &self.wallet.alias, block.header.height
+        );
         for (tx_index, vtx) in verified_block.txs.iter().enumerate() {
             // FIXME: we don't need to retain utxo proofs in these utxos,
             // so PendingUtxo is a better type here, but not a good name.
@@ -398,6 +414,10 @@ impl Node {
                             .iter()
                             .position(|utxo| utxo.contract_id() == *contract_id)
                         {
+                            println!(
+                                "Node {:?} deletes utxo {:?} (entry index {})",
+                                &self.wallet.alias, &contract_id, entry_index
+                            );
                             let spent_utxo = self.wallet.utxos.remove(i);
                             known_inputs.push((entry_index, spent_utxo));
                         }
@@ -411,7 +431,7 @@ impl Node {
                             .wallet
                             .utxos
                             .iter()
-                            .position(|utxo| utxo.contract_id() == cid)
+                            .position(|utxo| utxo.contract_id() == cid && !utxo.spent)
                         {
                             Some(self.wallet.utxos.remove(i))
 
@@ -420,7 +440,7 @@ impl Node {
                             .wallet
                             .pending_utxos
                             .iter()
-                            .position(|utxo| utxo.contract_id() == cid)
+                            .position(|utxo| utxo.contract_id() == cid && !utxo.spent)
                         {
                             Some(self.wallet.pending_utxos.remove(i))
                         } else {
@@ -428,6 +448,10 @@ impl Node {
                         };
 
                         maybe_utxo.map(|mut utxo| {
+                            println!(
+                                "Node {:?} updates proof for utxo {:?} (entry index {})",
+                                &self.wallet.alias, &cid, entry_index
+                            );
                             utxo.proof = new_state
                                 .catchup
                                 .update_proof(&cid, utxo.proof, &hasher)
@@ -512,6 +536,7 @@ impl Wallet {
                 receiver_witness,
                 anchor,
                 proof: utreexo::Proof::Transient,
+                spent: false,
             });
         }
         (results, anchor)
@@ -522,18 +547,6 @@ impl AsRef<ClearValue> for Utxo {
     fn as_ref(&self) -> &ClearValue {
         &self.receiver_witness.receiver.value
     }
-}
-
-impl AnnotatedTx {
-    pub fn tx_details(&self) -> JsonValue {
-        json!({
-            "block_height": self.block_height,
-            "generic_tx": records::BlockRecord::tx_details(&self.raw_tx),
-        })
-    }
-    // pub raw_tx: zkvm::Tx,
-    // pub known_inputs: Vec<(usize, Utxo)>,
-    // pub known_outputs: Vec<(usize, Utxo)>,
 }
 
 impl Utxo {

@@ -123,20 +123,24 @@ impl NodeRecord {
             .wallet
             .utxos
             .iter()
-            .fold(HashMap::new(), |mut hm: HashMap<Vec<u8>,(u64,Vec<Utxo>)>, utxo| {
-                let value = utxo.receiver_witness.receiver.value;
-                let key = value.flv.as_bytes().to_vec();
-                match hm.get_mut(&key) {
-                    Some((total, list)) => {
-                        *total += value.qty;
-                        list.push(utxo.clone());
-                    },
-                    None => {
-                        hm.insert(key, (value.qty, vec![utxo.clone()]));
+            .filter(|utxo| !utxo.spent)
+            .fold(
+                HashMap::new(),
+                |mut hm: HashMap<Vec<u8>, (u64, Vec<Utxo>)>, utxo| {
+                    let value = utxo.receiver_witness.receiver.value;
+                    let key = value.flv.as_bytes().to_vec();
+                    match hm.get_mut(&key) {
+                        Some((total, list)) => {
+                            *total += value.qty;
+                            list.push(utxo.clone());
+                        }
+                        None => {
+                            hm.insert(key, (value.qty, vec![utxo.clone()]));
+                        }
                     }
-                }
-                hm
-            });
+                    hm
+                },
+            );
         json!(map
             .iter()
             .map(|(flv, (balance, utxos))| {
@@ -198,6 +202,76 @@ impl AssetRecord {
             "prv": serde_json::from_str::<JsonValue>(&self.key_json).expect("DB should contain valid key_json"),
             "pub": hex::encode(self.issuance_predicate().to_point().as_bytes()),
             "flv": hex::encode(self.flavor().as_bytes())
+        })
+    }
+}
+
+impl AnnotatedTx {
+    pub fn tx_details(&self, assets: &[AssetRecord]) -> JsonValue {
+        let (_txid, txlog) = self
+            .raw_tx
+            .precompute()
+            .expect("Our blockchain does not have invalid transactions.");
+        json!({
+            "block_height": self.block_height,
+            "generic_tx": BlockRecord::tx_details(&self.raw_tx),
+            "known_inputs": self.known_inputs,
+            "known_outputs": self.known_outputs,
+            "inputs": &txlog.iter().enumerate().filter_map(|(i,e)| {
+                match e {
+                    TxEntry::Input(cid) => Some((i,cid)),
+                    _ => None
+                }
+            })
+            .map(|(i,cid)| {
+                json!({
+                    "id": &util::to_json_value(&cid),
+                    "value": self.known_inputs.iter().find(|&(i2,_)| *i2 == i).map(|(_,utxo)| {
+                        // 1. Find a known utxo.
+                        let qty = utxo.receiver_witness.receiver.value.qty;
+                        let flv = utxo.receiver_witness.receiver.value.flv;
+                        // 2. If found, find asset alias for its flavor.
+                        let maybe_alias = assets
+                            .iter()
+                            .find(|&asset| asset.flavor() == flv)
+                            .map(|x| x.alias.clone());
+                        json!({
+                            "qty": qty,
+                            "flv": &util::to_json_value(&flv),
+                            "alias": maybe_alias
+                        })
+                    })
+                })
+            })
+            .collect::<Vec<_>>(),
+
+            "outputs": &txlog.iter().enumerate().filter_map(|(i,e)| {
+                match e {
+                    TxEntry::Output(c) => Some((i,c.id())),
+                    _ => None
+                }
+            })
+            .map(|(i,cid)| {
+                json!({
+                    "id": &util::to_json_value(&cid),
+                    "value": self.known_outputs.iter().find(|&(i2,_)| *i2 == i).map(|(_,utxo)| {
+                        // 1. Find a known utxo.
+                        let qty = utxo.receiver_witness.receiver.value.qty;
+                        let flv = utxo.receiver_witness.receiver.value.flv;
+                        // 2. If found, find asset alias for its flavor.
+                        let maybe_alias = assets
+                            .iter()
+                            .find(|&asset| asset.flavor() == flv)
+                            .map(|x| x.alias.clone());
+                        json!({
+                            "qty": qty,
+                            "flv": &util::to_json_value(&flv),
+                            "alias": maybe_alias
+                        })
+                    })
+                })
+            })
+            .collect::<Vec<_>>(),
         })
     }
 }
