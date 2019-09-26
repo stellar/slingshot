@@ -42,6 +42,10 @@ pub struct Wallet {
     /// User's incoming payments that are just promised and not confirmed yet.
     /// These are created even before we've seen a transaction.
     pub pending_utxos: Vec<Utxo>,
+
+    /// User's outgoing payments that belong to someone else.
+    /// We track these so we can annotate this user's transactions.
+    pub outgoing_utxos: Vec<Utxo>,
 }
 
 /// UTXO that has not been confirmed yet. It is formed from Receiver and ReceiverReply.
@@ -229,6 +233,14 @@ impl Node {
         // Save the change utxo - it is spendable right away, via a chain of unconfirmed txs.
         self.wallet.utxos.push(change_utxo);
 
+        // remember the outgoing payment metadata
+        self.wallet.outgoing_utxos.push(Utxo {
+            receiver_witness: ReceiverWitness{sequence:0, receiver: payment_receiver.clone()},
+            anchor: reply.anchor,
+            proof: utreexo::Proof::Transient,
+            spent: false,
+        });
+
         Ok((tx, txid, utxo_proofs, reply))
     }
 
@@ -375,6 +387,14 @@ impl Node {
         // save the change utxo - it is spendable right away, via a chain of unconfirmed txs.
         self.wallet.utxos.push(change_utxo);
 
+        // remember the outgoing payment metadata
+        self.wallet.outgoing_utxos.push(Utxo {
+            receiver_witness: ReceiverWitness{sequence:0, receiver: payment_receiver.clone()},
+            anchor: reply.anchor,
+            proof: utreexo::Proof::Transient,
+            spent: false,
+        });
+
         Ok((tx, txid, utxo_proofs, reply))
     }
 
@@ -420,7 +440,15 @@ impl Node {
                             );
                             let spent_utxo = self.wallet.utxos.remove(i);
                             known_inputs.push((entry_index, spent_utxo));
-                        }
+                        } else if let Some(i) = self
+                            .wallet
+                            .outgoing_utxos
+                            .iter()
+                            .position(|utxo| utxo.contract_id() == *contract_id) 
+                            {
+                                // remove outgoing utxo, but do not cause the tx to be annotated as ours.
+                                let _ = self.wallet.outgoing_utxos.remove(i);
+                            }
                     }
                     TxEntry::Output(contract) => {
                         // Make pending utxos confirmed
@@ -431,7 +459,7 @@ impl Node {
                             .wallet
                             .utxos
                             .iter()
-                            .position(|utxo| utxo.contract_id() == cid && !utxo.spent)
+                            .position(|utxo| utxo.contract_id() == cid)
                         {
                             Some(self.wallet.utxos.remove(i))
 
@@ -440,7 +468,7 @@ impl Node {
                             .wallet
                             .pending_utxos
                             .iter()
-                            .position(|utxo| utxo.contract_id() == cid && !utxo.spent)
+                            .position(|utxo| utxo.contract_id() == cid)
                         {
                             Some(self.wallet.pending_utxos.remove(i))
                         } else {
@@ -452,16 +480,30 @@ impl Node {
                                 "Node {:?} updates proof for utxo {:?} (entry index {})",
                                 &self.wallet.alias, &cid, entry_index
                             );
-                            utxo.proof = new_state
-                                .catchup
-                                .update_proof(&cid, utxo.proof, &hasher)
-                                .expect(
-                                "Updating proof must succeed as pending utxo has transient proof",
-                            );
+                            if !utxo.spent {
+                                utxo.proof = new_state
+                                    .catchup
+                                    .update_proof(&cid, utxo.proof, &hasher)
+                                    .expect(
+                                    "Updating proof must succeed as pending utxo has transient proof",
+                                );
+                            }
                             self.wallet.utxos.push(utxo.clone());
                             known_outputs.push((entry_index, utxo));
                             ()
-                        });
+                        }).unwrap_or_else(|| {
+                            // Try finding an outgoing utxo
+                            if let Some(i) = self
+                            .wallet
+                            .outgoing_utxos
+                            .iter()
+                            .position(|utxo| utxo.contract_id() == cid) 
+                            {
+                                let utxo = self.wallet.outgoing_utxos[i].clone();
+                                known_outputs.push((entry_index, utxo));
+                            }
+                            ()
+                        })
                     }
                     _ => {}
                 }
@@ -515,6 +557,7 @@ impl Wallet {
             txs: Vec::new(),
             utxos: Vec::new(),
             pending_utxos: Vec::new(),
+            outgoing_utxos: Vec::new(),
         }
     }
 
