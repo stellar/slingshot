@@ -3,7 +3,7 @@ body {
 }
 
 #logo {
-  width:200px;
+  height:150px;
   padding:16px;
 }
 
@@ -80,6 +80,13 @@ code {
   min-width:120px;
 }
 
+/*
+  Status
+*/
+
+#utreexo {
+  margin:32px 0;
+}
 
 /*
  * Sidebar
