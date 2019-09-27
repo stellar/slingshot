@@ -2,8 +2,23 @@ body {
   font-size: .875rem;
 }
 
+.alert {
+  font-size:1.1em;
+  padding:24px;
+  border: none;
+  border-radius:0;
+}
+.alert-success {
+  color: #00741c;
+  background-color: #cefdc5;
+}
+.alert-danger {
+  color: #721c24;
+  background-color: #fee3dd;
+}
+
 #logo {
-  width:200px;
+  height:150px;
   padding:16px;
 }
 
@@ -80,6 +95,14 @@ code {
   min-width:120px;
 }
 
+/*
+  Status
+*/
+
+#utreexo {
+  margin:32px 0;
+  border:1px solid #dee2e6;
+}
 
 /*
  * Sidebar

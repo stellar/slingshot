@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 
 use zkvm::blockchain::{Block, BlockchainState};
 use zkvm::utreexo;
-use zkvm::{Anchor, ClearValue, Contract, ContractID, TxEntry};
+use zkvm::{Anchor, ClearValue, Contract, ContractID, Tx, TxEntry, TxLog};
 
 use accounts::{Account, ReceiverWitness};
 use musig::Multisignature;
@@ -267,7 +267,11 @@ impl Node {
         )
         .ok_or("Insufficient funds!")?;
 
-        let change_receiver_witness = self.wallet.account.generate_receiver(change_value);
+        let change_receiver_witness = if change_value.qty > 0 {
+            Some(self.wallet.account.generate_receiver(change_value))
+        } else {
+            None
+        };
 
         // Sender forms a tx paying to this receiver.
         //    Now recipient is receiving a new utxo, sender is receiving a change utxo.
@@ -286,16 +290,23 @@ impl Node {
                 p.push(pmnt.qty);
                 p.push(pmnt.flv);
 
-                let change = change_receiver_witness.receiver.blinded_value();
-                p.push(change.qty);
-                p.push(change.flv);
+                if let Some(crw) = &change_receiver_witness {
+                    let change = crw.receiver.blinded_value();
+                    p.push(change.qty);
+                    p.push(change.flv);
+                }
 
-                p.cloak(spent_utxos.len(), 2);
+                p.cloak(
+                    spent_utxos.len(),
+                    change_receiver_witness.as_ref().map(|_| 2).unwrap_or(1),
+                );
 
                 // Now the payment and the change are in the same order on the stack:
                 // change is on top.
-                p.push(change_receiver_witness.receiver.predicate());
-                p.output(1);
+                if let Some(crw) = &change_receiver_witness {
+                    p.push(crw.receiver.predicate());
+                    p.output(1);
+                }
 
                 p.push(payment_receiver.predicate());
                 p.output(1);
@@ -323,24 +334,26 @@ impl Node {
             TxEntry::Output(contract) => Some(contract.anchor),
             _ => None,
         });
-        let change_anchor = iterator
-            .next()
-            .expect("We have just built 2 outputs above.");
+        let change_anchor = change_receiver_witness.as_ref().map(|_| {
+            iterator
+                .next()
+                .expect("We have just built the outputs above.")
+        });
         let payment_anchor = iterator
             .next()
-            .expect("We have just built 2 outputs above.");
+            .expect("We have just built the outputs above.");
 
         let reply = accounts::ReceiverReply {
             receiver_id: payment_receiver.id(),
             anchor: payment_anchor,
         };
 
-        let change_utxo = Utxo {
-            receiver_witness: change_receiver_witness,
-            anchor: change_anchor,
+        let change_utxo = change_receiver_witness.map(|crw| Utxo {
+            receiver_witness: crw,
+            anchor: change_anchor.expect("If CRW is present, then anchor must be too."),
             proof: utreexo::Proof::Transient,
             spent: false,
-        };
+        });
 
         // Sign the tx.
         let tx = {
@@ -388,7 +401,9 @@ impl Node {
             self.wallet.utxos[i].spent = true;
         }
         // save the change utxo - it is spendable right away, via a chain of unconfirmed txs.
-        self.wallet.utxos.push(change_utxo);
+        if let Some(change_utxo) = change_utxo {
+            self.wallet.utxos.push(change_utxo);
+        }
 
         // remember the outgoing payment metadata
         self.wallet.outgoing_utxos.push(Utxo {
@@ -547,6 +562,101 @@ impl Node {
 
         // Switch the node to the new state.
         self.blockchain = new_state;
+    }
+
+    /// Attempts to annotate the tx, and returns Some if this tx belongs to the account.
+    /// WARNING: this modifies the node's utxo set but does not update UTXO proofs.
+    /// FIXME: when we make the block application more efficient (w/o re-validation of expensive tx proofs),
+    ///        we'll refactor this code to use the same logic for mempool txs and block txs.
+    pub fn process_pending_tx(
+        &mut self,
+        tx: &Tx,
+        txlog: &TxLog,
+        block_height: u64,
+    ) -> Option<AnnotatedTx> {
+        let mut known_inputs = Vec::new();
+        let mut known_outputs = Vec::new();
+        for (entry_index, entry) in txlog.iter().enumerate() {
+            match entry {
+                TxEntry::Input(contract_id) => {
+                    // Delete confirmed utxos
+                    if let Some(i) = self
+                        .wallet
+                        .utxos
+                        .iter()
+                        .position(|utxo| utxo.contract_id() == *contract_id)
+                    {
+                        let spent_utxo = self.wallet.utxos.remove(i);
+                        known_inputs.push((entry_index, spent_utxo));
+                    } else if let Some(i) = self
+                        .wallet
+                        .outgoing_utxos
+                        .iter()
+                        .position(|utxo| utxo.contract_id() == *contract_id)
+                    {
+                        // remove outgoing utxo, but do not cause the tx to be annotated as ours.
+                        let _ = self.wallet.outgoing_utxos.remove(i);
+                    }
+                }
+                TxEntry::Output(contract) => {
+                    // Make pending utxos confirmed
+                    let cid = contract.id();
+
+                    // First, find the spendable pending utxos
+                    let maybe_utxo = if let Some(i) = self
+                        .wallet
+                        .utxos
+                        .iter()
+                        .position(|utxo| utxo.contract_id() == cid)
+                    {
+                        Some(self.wallet.utxos.remove(i))
+
+                    // Second, try pending utxos
+                    } else if let Some(i) = self
+                        .wallet
+                        .pending_utxos
+                        .iter()
+                        .position(|utxo| utxo.contract_id() == cid)
+                    {
+                        Some(self.wallet.pending_utxos.remove(i))
+                    } else {
+                        None
+                    };
+
+                    maybe_utxo
+                        .map(|utxo| {
+                            self.wallet.utxos.push(utxo.clone());
+                            known_outputs.push((entry_index, utxo));
+                            ()
+                        })
+                        .unwrap_or_else(|| {
+                            // Try finding an outgoing utxo
+                            if let Some(i) = self
+                                .wallet
+                                .outgoing_utxos
+                                .iter()
+                                .position(|utxo| utxo.contract_id() == cid)
+                            {
+                                let utxo = self.wallet.outgoing_utxos[i].clone();
+                                known_outputs.push((entry_index, utxo));
+                            }
+                            ()
+                        })
+                }
+                _ => {}
+            }
+        }
+        // If this tx has anything that has to do with this wallet, add it to the annotated txs list.
+        if known_inputs.len() + known_outputs.len() > 0 {
+            Some(AnnotatedTx {
+                block_height,
+                raw_tx: tx.clone(),
+                known_inputs,
+                known_outputs,
+            })
+        } else {
+            None
+        }
     }
 }
 

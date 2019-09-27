@@ -16,14 +16,127 @@
       <tr><th>Tip timestamp (ms)</th><td>{{network_status.block.header.timestamp_ms}}</td></tr>
       
       <tr><th>Utreexo root</th><td><code>{{network_status.block.header.utxoroot}}</code></td></tr>
-      <tr>
-        <th>Utreexo</th>
-        <td><pre><code>{{network_status.state.utreexo | json_encode(pretty=true)}}</code></pre></td>
-      </tr>
+    </tbody>
+  </table>
+
+  <div id="utreexo" style="height:400px;width:100%">
+  </div>
+
+  <!--table class="table table-bordered block-header">
+    <tbody>
       <tr>
         <th>Catchup</th>
         <td><pre><code>{{network_status.state.catchup | json_encode(pretty=true)}}</code></pre></td>
       </tr>
     </tbody>
-  </table>
+  </table-->
 {% endblock main %}
+
+{% block page_script %}
+<script>
+  var padding_top = 64;
+  var padding_left = 32;
+  var padding_bottom = 32;
+  var level_height = 32;
+  var height_factor = 1.66;
+  var item_spacing = 32;
+  var item_diameter = 12;
+  var node_diameter = 8;
+
+  // removes trailing nulls
+  function trim_array(arr) {
+    var x = null;
+    do { x = arr.pop(); } while(x == null);
+    if (x != null) { arr.push(x); }
+    return arr;
+  }
+  // returns total number of items based on merkle roots
+  function total_count(roots) {
+    var total = 0;
+    for (i = 0; i < roots.length; i++) {
+      if (roots[i] != null) { total += (1 << i); }
+    }
+    return total;
+  }
+  function draw_tree(svg, title, level, x, y) {
+    if (level > 0) {
+      var horiz_offset = item_spacing*(1<<(level-1));
+
+      var y2 = y + (height_for_level(level) - height_for_level(level-1));
+      var xa = x;
+      var xb = x + horiz_offset;
+
+      svg.line(x, y, xa, y2).stroke({ width: 1 });
+      svg.line(x, y, xb, y2).stroke({ width: 1 });
+      draw_tree(svg, null, level-1, xa, y2);
+      draw_tree(svg, null, level-1, xb, y2);
+    }
+    if (title != null) {
+      // merkle root
+      var d = item_diameter;
+      svg.circle(d,d).move(x - d/2, y - d/2).stroke({ color: '#f00', width: 1 }).fill('#f00');
+      svg.text(title).move(x - d/2, y - d/2 - 20).font({
+        family:   'SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace',
+        size:     12,
+        anchor:   'left',
+      });
+    } else if (level == 0) {
+      // low-level item
+      var d = item_diameter;
+      svg.circle(d,d).move(x - d/2, y - d/2).stroke({ color: '#000', width: 1 }).fill('#fff');
+    } else {
+      // intermediate node
+      var d = node_diameter;
+      svg.circle(d,d).move(x - d/2, y - d/2).stroke({ color: '#000', width: 1 }).fill('#fff');
+    }
+  }
+  function height_for_level(level) {
+    var h = 0;
+    for (i = 0; i < level; i++) {
+      h += level_height * Math.pow(height_factor, i);
+    }
+    return h;
+  }
+  function draw_utreexo(utreexo_roots) {
+    var roots = trim_array(utreexo_roots.roots);
+    if (roots.length == 0) {
+      return; // no items - no trees
+    }
+    var svg = SVG('utreexo');
+
+    var max_level = roots.length - 1;
+    var max_height = height_for_level(max_level);
+
+    $("#utreexo").height((padding_top + max_height + padding_bottom) + "px")
+
+    var horizontal_offset = padding_left;
+    for (root_index = roots.length-1; root_index >= 0; root_index--) {
+      var maybe_root = roots[root_index];
+      if (maybe_root != null) {
+        var root = maybe_root;
+        var level = root_index; // 0 => 1 item, 3 => 8 items
+        var vertical_offset = padding_top + max_height - height_for_level(level);
+        draw_tree(svg, root, level, horizontal_offset, vertical_offset);
+        horizontal_offset += item_spacing*(1<<level);
+      }
+    }
+
+    // draw.line(0, 0, 100, 150).stroke({ width: 1 })
+    // draw.circle(10,10).move(200,200).stroke({ color: '#000', width: 1 }).fill('#f00')
+  }
+  
+  let utreexo_roots = {{ network_status.state.utreexo | json_encode(pretty=true) }};
+  SVG.on(document, 'DOMContentLoaded', function() {
+    draw_utreexo(utreexo_roots);
+    // draw_utreexo({roots: [
+    //   "0af338f096654b796d641d6a428dab3fd18e34556e1d93a309504ba62e4f8f8b", 
+    //   null,
+    //   "639d748787a2c8cd16f3400c41db7864d1bb5bb5726e2bd198c1bf6c37d89f62", 
+    //   "739d748787a2c8cd16f3400c41db7864d1bb5bb5726e2bd198c1bf6c37d89f62", 
+    //   "f54b796d641d6a428dab30af333a38f096fd14ba62e4f8f8b8e34556e1d90950"]
+    // });
+
+  });
+
+</script>
+{% endblock page_script %}

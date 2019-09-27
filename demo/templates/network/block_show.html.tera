@@ -71,9 +71,9 @@
             <code class="abbrev-hex highlight-zkvm" data-abbrev-length="32">
               <strong>Raw program:</strong>
               {{tx.program_hex}}</br>
-              <strong>Signature:&nbsp;</strong>
+              <strong>Signature:&nbsp;&nbsp;</strong>
               {{tx.tx.signature}}</br>
-              <strong>R1CS proof:</strong>
+              <strong>R1CS proof:&nbsp;</strong>
               {{tx.tx.proof}}
             </code>
           </td>
