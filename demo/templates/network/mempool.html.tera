@@ -24,7 +24,7 @@
   {% set mempool_txs_len = mempool_txs | length %}  
   {% if mempool_txs_len > 0 %}
   <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3">
-    <h2 class="h2">Transactions <em>{{mempool_txs | length}}</em></h2>
+    <h2 class="h2">Pending transactions <em>{{mempool_txs | length}}</em></h2>
   </div>
 
   {% for tx in mempool_txs | reverse %}
@@ -73,9 +73,9 @@
             <code class="abbrev-hex highlight-zkvm" data-abbrev-length="32">
               <strong>Raw program:</strong>
               {{tx.program_hex}}</br>
-              <strong>Signature:&nbsp;</strong>
+              <strong>Signature:&nbsp;&nbsp;</strong>
               {{tx.tx.signature}}</br>
-              <strong>R1CS proof:</strong>
+              <strong>R1CS proof:&nbsp;</strong>
               {{tx.tx.proof}}
             </code>
           </td>

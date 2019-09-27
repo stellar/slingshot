@@ -79,6 +79,86 @@
 {% endif %}
 
 
+{% set pending_txs_len = pending_txs | length %}
+{% if pending_txs_len > 0 %}
+
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3">
+  <h2 class="h2">Pending transactions <em>{{pending_txs | length}}</em></h2>
+</div>
+
+{% for atx in pending_txs | reverse %}
+
+    {% set tx = atx.generic_tx %}
+
+    <div class="tx-summary">
+      <table class="table table-bordered">
+      <tbody>
+        <tr>
+          <th colspan="2" class="txid">
+            <code>{{tx.id}}</code>
+          </th>
+        </tr>
+        <tr>
+          <td colspan="2">
+            <code>
+            <strong>Block:</strong> N/A
+            &nbsp;
+            <strong>Version:</strong> {{tx.header.version}}
+            &nbsp;
+            <strong>Time bounds:</strong> [{{tx.header.mintime_ms}}; {{tx.header.maxtime_ms}}]
+            </code>
+          </td>
+        </tr>
+        <tr>
+          <td width="50%"><code class="abbrev-hex" data-abbrev-length="4">
+            <strong>Inputs</strong><br/>
+            {% for entry in atx.inputs %}
+              {{entry.id}}
+              {% if entry.value %}
+                (<b>{{entry.value.qty}}</b> <a href="/assets/{{entry.value.alias}}">{{entry.value.alias}}</a>)
+              {% endif %}
+              <br/>
+            {% endfor %}
+          </code>
+          </td>
+          <td width="50%"><code class="abbrev-hex" data-abbrev-length="4">
+            <strong>Outputs</strong><br/>
+            {% for entry in atx.outputs %}
+              {{entry.id}}
+              {% if entry.value %}
+                (<b>{{entry.value.qty}}</b> <a href="/assets/{{entry.value.alias}}">{{entry.value.alias}}</a>)
+              {% endif %}
+              <br/>
+            {% endfor %}
+          </code></td>
+        </tr>
+        <tr>
+          <td colspan="2">
+            <code class="abbrev-hex highlight-zkvm" data-abbrev-length="2">
+              <strong>Program:</strong><br/>
+              {{tx.program_asm}}
+            </code>
+            <br/><br/>
+            <code class="abbrev-hex highlight-zkvm" data-abbrev-length="32">
+              <strong>Raw program:</strong>
+              {{tx.program_hex}}</br>
+              <strong>Signature:&nbsp;&nbsp;</strong>
+              {{tx.tx.signature}}</br>
+              <strong>R1CS proof:&nbsp;</strong>
+              {{tx.tx.proof}}
+            </code>
+          </td>
+        </tr>
+      </tbody>
+      </table>
+    </div>
+
+
+{% endfor %}
+<hr/>
+{% endif %}
+
+
 {% set txs_len = txs | length %}
 {% if txs_len > 0 %}
 
@@ -101,7 +181,7 @@
         <tr>
           <td colspan="2">
             <code>
-            <strong>Block</strong> <a href="/network/block/{{atx.block_height}}">{{atx.block_height}}</a>
+            <strong>Block:</strong> <a href="/network/block/{{atx.block_height}}">{{atx.block_height}}</a>
             &nbsp;
             <strong>Version:</strong> {{tx.header.version}}
             &nbsp;

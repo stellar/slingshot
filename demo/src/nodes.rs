@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 
 use zkvm::blockchain::{Block, BlockchainState};
 use zkvm::utreexo;
-use zkvm::{Anchor, ClearValue, Contract, ContractID, TxEntry};
+use zkvm::{Anchor, ClearValue, Contract, ContractID, Tx, TxEntry, TxLog};
 
 use accounts::{Account, ReceiverWitness};
 use musig::Multisignature;
@@ -547,6 +547,101 @@ impl Node {
 
         // Switch the node to the new state.
         self.blockchain = new_state;
+    }
+
+    /// Attempts to annotate the tx, and returns Some if this tx belongs to the account.
+    /// WARNING: this modifies the node's utxo set but does not update UTXO proofs.
+    /// FIXME: when we make the block application more efficient (w/o re-validation of expensive tx proofs),
+    ///        we'll refactor this code to use the same logic for mempool txs and block txs.
+    pub fn process_pending_tx(
+        &mut self,
+        tx: &Tx,
+        txlog: &TxLog,
+        block_height: u64,
+    ) -> Option<AnnotatedTx> {
+        let mut known_inputs = Vec::new();
+        let mut known_outputs = Vec::new();
+        for (entry_index, entry) in txlog.iter().enumerate() {
+            match entry {
+                TxEntry::Input(contract_id) => {
+                    // Delete confirmed utxos
+                    if let Some(i) = self
+                        .wallet
+                        .utxos
+                        .iter()
+                        .position(|utxo| utxo.contract_id() == *contract_id)
+                    {
+                        let spent_utxo = self.wallet.utxos.remove(i);
+                        known_inputs.push((entry_index, spent_utxo));
+                    } else if let Some(i) = self
+                        .wallet
+                        .outgoing_utxos
+                        .iter()
+                        .position(|utxo| utxo.contract_id() == *contract_id)
+                    {
+                        // remove outgoing utxo, but do not cause the tx to be annotated as ours.
+                        let _ = self.wallet.outgoing_utxos.remove(i);
+                    }
+                }
+                TxEntry::Output(contract) => {
+                    // Make pending utxos confirmed
+                    let cid = contract.id();
+
+                    // First, find the spendable pending utxos
+                    let maybe_utxo = if let Some(i) = self
+                        .wallet
+                        .utxos
+                        .iter()
+                        .position(|utxo| utxo.contract_id() == cid)
+                    {
+                        Some(self.wallet.utxos.remove(i))
+
+                    // Second, try pending utxos
+                    } else if let Some(i) = self
+                        .wallet
+                        .pending_utxos
+                        .iter()
+                        .position(|utxo| utxo.contract_id() == cid)
+                    {
+                        Some(self.wallet.pending_utxos.remove(i))
+                    } else {
+                        None
+                    };
+
+                    maybe_utxo
+                        .map(|utxo| {
+                            self.wallet.utxos.push(utxo.clone());
+                            known_outputs.push((entry_index, utxo));
+                            ()
+                        })
+                        .unwrap_or_else(|| {
+                            // Try finding an outgoing utxo
+                            if let Some(i) = self
+                                .wallet
+                                .outgoing_utxos
+                                .iter()
+                                .position(|utxo| utxo.contract_id() == cid)
+                            {
+                                let utxo = self.wallet.outgoing_utxos[i].clone();
+                                known_outputs.push((entry_index, utxo));
+                            }
+                            ()
+                        })
+                }
+                _ => {}
+            }
+        }
+        // If this tx has anything that has to do with this wallet, add it to the annotated txs list.
+        if known_inputs.len() + known_outputs.len() > 0 {
+            Some(AnnotatedTx {
+                block_height,
+                raw_tx: tx.clone(),
+                known_inputs,
+                known_outputs,
+            })
+        } else {
+            None
+        }
     }
 }
 

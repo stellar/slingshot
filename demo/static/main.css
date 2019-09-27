@@ -2,6 +2,21 @@ body {
   font-size: .875rem;
 }
 
+.alert {
+  font-size:1.1em;
+  padding:24px;
+  border: none;
+  border-radius:0;
+}
+.alert-success {
+  color: #00741c;
+  background-color: #cefdc5;
+}
+.alert-danger {
+  color: #721c24;
+  background-color: #fee3dd;
+}
+
 #logo {
   height:150px;
   padding:16px;

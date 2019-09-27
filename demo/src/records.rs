@@ -65,7 +65,7 @@ impl BlockRecord {
     pub fn tx_details(tx: &Tx) -> JsonValue {
         let (txid, txlog) = tx
             .precompute()
-            .expect("Our blockchain does not have invalid transactions.");
+            .expect("Our blockchain should not contain invalid transactions.");
         json!({
             "id": hex::encode(&txid),
             "header": &util::to_json_value(&tx.header),

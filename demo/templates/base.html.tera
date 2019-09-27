@@ -112,6 +112,13 @@
           {% endif %}
         {% endif %}
 
+        <!--div class="alert alert-danger" role="alert">
+          Some long and disappointing error message!
+        </div>
+        <div class="alert alert-success" role="alert">
+          Some long success message: 257ff3b0c0...74e4b823687d
+        </div-->
+
         {% block main %}
         <center>N/A</center>
         {% endblock main %}

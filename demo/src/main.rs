@@ -222,6 +222,7 @@ fn network_block_show(
 fn nodes_show(
     alias_param: String,
     flash: Option<FlashMessage>,
+    mempool: State<Mutex<Mempool>>,
     dbconn: DBConnection,
 ) -> Result<Template, NotFound<String>> {
     let (node, others_aliases) = {
@@ -251,11 +252,28 @@ fn nodes_show(
 
     let balances = node.balances(&assets);
 
+    // load mempool txs and annotate them.
+    let mempool = mempool
+        .lock()
+        .expect("Threads haven't crashed holding the mutex lock");
+
+    let mut node_pending = node.node();
+    let pending_txs = mempool.txs().filter_map(|tx| {
+        let (_txid, txlog) = tx
+            .precompute()
+            .expect("Our mempool should not contain invalid transactions.");
+
+        node_pending.process_pending_tx(tx, &txlog, 0)
+    });
+
     let context = json!({
         "sidebar": sidebar_context(&dbconn.0),
         "node": node.to_json(),
         "balances": balances,
         "others": others_aliases,
+        "pending_txs": pending_txs.map(|atx| {
+            atx.tx_details(&assets)
+        }).collect::<Vec<_>>(),
         "txs": node.node().wallet.txs.iter().map(|atx| {
             atx.tx_details(&assets)
         }).collect::<Vec<_>>(),
@@ -285,6 +303,9 @@ fn pay(
     let back_url = uri!(nodes_show: transfer_form.sender_alias.clone());
     let flash_error = |msg| Flash::error(Redirect::to(back_url.clone()), msg);
 
+    if transfer_form.qty == 0 {
+        return Err(flash_error("Cannot transfer zero".into()));
+    }
     // Load all records that we'll need: sender, recipient, asset.
     let (mut sender, mut recipient) = {
         use schema::node_records::dsl::*;
