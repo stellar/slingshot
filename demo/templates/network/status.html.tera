@@ -40,8 +40,8 @@
   var level_height = 32;
   var height_factor = 1.66;
   var item_spacing = 32;
-  var item_diameter = 10;
-  var node_diameter = 5;
+  var item_diameter = 12;
+  var node_diameter = 8;
 
   // removes trailing nulls
   function trim_array(arr) {

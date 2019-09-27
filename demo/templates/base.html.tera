@@ -135,7 +135,7 @@
         <div class="modal-body">
           <div class="form-group">
             <label for="new-node-alias" class="col-form-label">Node alias:</label>
-            <input type="text" class="form-control" name="alias" id="new-node-alias"/>
+            <input type="text" class="form-control" name="alias" id="new-node-alias" autocomplete="off"/>
           </div>
         </div>
         <div class="modal-footer">
@@ -163,11 +163,23 @@
         <div class="modal-body">
           <div class="form-group">
             <label for="new-asset-alias" class="col-form-label">Asset alias:</label>
-            <input type="text" class="form-control" name="alias" id="new-asset-alias"/>
+            <input type="text" class="form-control" name="asset_alias" id="new-asset-alias" autocomplete="off"/>
           </div>
           <div class="form-group">
             <label for="new-asset-qty" class="col-form-label">Quantity:</label>
-            <input type="text" class="form-control" name="qty" id="new-asset-qty"/>
+            <input type="text" class="form-control" name="qty" id="new-asset-qty" autocomplete="off"/>
+          </div>
+          <div class="form-group">
+            <label for="recipient" class="col-form-label">Recipient</label>
+            
+            <select class="form-control" id="recipient_alias" name="recipient_alias">
+              {% for node in sidebar.nodes %}
+                {% if node.wallet.alias != "Issuer" %}
+                <option value="{{node.wallet.alias}}">{{node.wallet.alias}}</option>
+                {% endif %}
+              {% endfor %}
+            </select>
+          
           </div>
         </div>
         <div class="modal-footer">

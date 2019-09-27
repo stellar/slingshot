@@ -441,8 +441,9 @@ fn nodes_create(
 
 #[derive(FromForm)]
 struct NewAssetForm {
-    alias: String,
+    asset_alias: String,
     qty: u64,
+    recipient_alias: String,
 }
 
 #[post("/assets/create", data = "<form>")]
@@ -465,10 +466,10 @@ fn assets_create(
             use schema::asset_records::dsl::*;
 
             let rec = asset_records
-                .filter(alias.eq(&form.alias))
+                .filter(alias.eq(&form.asset_alias))
                 .first::<records::AssetRecord>(&dbconn)
                 .unwrap_or_else(|_| {
-                    let rec = records::AssetRecord::new(form.alias.clone());
+                    let rec = records::AssetRecord::new(form.asset_alias.clone());
                     diesel::insert_into(asset_records)
                         .values(&rec)
                         .execute(&dbconn)
@@ -478,6 +479,12 @@ fn assets_create(
             Ok(rec)
         })
         .map_err(|e| flash_error(e.to_string()))?;
+
+    if form.recipient_alias == "Issuer" {
+        return Err(flash_error(
+            "Issuer cannot be the recipient (we'll fix this limitation later)".into(),
+        ));
+    }
 
     // Find some utxo from the Issuer's account and use it as an anchoring tool.
     let mut issuer = {
@@ -489,12 +496,21 @@ fn assets_create(
             .node()
     };
 
+    let mut recipient = {
+        use schema::node_records::dsl::*;
+        node_records
+            .filter(alias.eq(&form.recipient_alias))
+            .first::<records::NodeRecord>(&dbconn)
+            .map_err(|msg| flash_error(msg.to_string()))?
+            .node()
+    };
+
     // Issuer will be receiving the tokens it issues.
     let payment = zkvm::ClearValue {
         qty: form.qty,
         flv: asset_record.flavor(),
     };
-    let payment_receiver_witness = issuer.wallet.account.generate_receiver(payment);
+    let payment_receiver_witness = recipient.wallet.account.generate_receiver(payment);
     let payment_receiver = &payment_receiver_witness.receiver;
 
     // Note: at this point, recipient saves the increased seq #,
@@ -512,8 +528,8 @@ fn assets_create(
     // Note: at this point, sender reserves the utxos and saves its incremented seq # until sender ACK'd ReceiverReply,
     // but since we are doing the exchange in one call, we'll skip it.
 
-    // Issuer receives new tokens, so they can spend them right away.
-    issuer.wallet.utxos.push(nodes::Utxo {
+    // Recipient receives new tokens, so they can spend them right away.
+    recipient.wallet.utxos.push(nodes::Utxo {
         receiver_witness: payment_receiver_witness,
         anchor: reply.anchor, // store anchor sent by Alice
         proof: utreexo::Proof::Transient,
@@ -539,13 +555,19 @@ fn assets_create(
             let scope = node_records.filter(alias.eq(&issuer_record.alias));
             diesel::update(scope).set(&issuer_record).execute(&dbconn)?;
 
+            let recipient_record = records::NodeRecord::new(recipient);
+            let scope = node_records.filter(alias.eq(&recipient_record.alias));
+            diesel::update(scope)
+                .set(&recipient_record)
+                .execute(&dbconn)?;
+
             Ok(())
         })
         .map_err(|e| flash_error(format!("Database error: {}", e)))?;
 
     let msg = format!("Transaction added to mempool: {}", hex::encode(&txid));
     Ok(Flash::success(
-        Redirect::to(uri!(nodes_show: "Issuer")),
+        Redirect::to(uri!(nodes_show: &form.recipient_alias)),
         msg,
     ))
 }
