@@ -267,7 +267,11 @@ impl Node {
         )
         .ok_or("Insufficient funds!")?;
 
-        let change_receiver_witness = self.wallet.account.generate_receiver(change_value);
+        let change_receiver_witness = if change_value.qty > 0 {
+            Some(self.wallet.account.generate_receiver(change_value))
+        } else {
+            None
+        };
 
         // Sender forms a tx paying to this receiver.
         //    Now recipient is receiving a new utxo, sender is receiving a change utxo.
@@ -286,16 +290,23 @@ impl Node {
                 p.push(pmnt.qty);
                 p.push(pmnt.flv);
 
-                let change = change_receiver_witness.receiver.blinded_value();
-                p.push(change.qty);
-                p.push(change.flv);
+                if let Some(crw) = &change_receiver_witness {
+                    let change = crw.receiver.blinded_value();
+                    p.push(change.qty);
+                    p.push(change.flv);
+                }
 
-                p.cloak(spent_utxos.len(), 2);
+                p.cloak(
+                    spent_utxos.len(),
+                    change_receiver_witness.as_ref().map(|_| 2).unwrap_or(1),
+                );
 
                 // Now the payment and the change are in the same order on the stack:
                 // change is on top.
-                p.push(change_receiver_witness.receiver.predicate());
-                p.output(1);
+                if let Some(crw) = &change_receiver_witness {
+                    p.push(crw.receiver.predicate());
+                    p.output(1);
+                }
 
                 p.push(payment_receiver.predicate());
                 p.output(1);
@@ -323,24 +334,26 @@ impl Node {
             TxEntry::Output(contract) => Some(contract.anchor),
             _ => None,
         });
-        let change_anchor = iterator
-            .next()
-            .expect("We have just built 2 outputs above.");
+        let change_anchor = change_receiver_witness.as_ref().map(|_| {
+            iterator
+                .next()
+                .expect("We have just built the outputs above.")
+        });
         let payment_anchor = iterator
             .next()
-            .expect("We have just built 2 outputs above.");
+            .expect("We have just built the outputs above.");
 
         let reply = accounts::ReceiverReply {
             receiver_id: payment_receiver.id(),
             anchor: payment_anchor,
         };
 
-        let change_utxo = Utxo {
-            receiver_witness: change_receiver_witness,
-            anchor: change_anchor,
+        let change_utxo = change_receiver_witness.map(|crw| Utxo {
+            receiver_witness: crw,
+            anchor: change_anchor.expect("If CRW is present, then anchor must be too."),
             proof: utreexo::Proof::Transient,
             spent: false,
-        };
+        });
 
         // Sign the tx.
         let tx = {
@@ -388,7 +401,9 @@ impl Node {
             self.wallet.utxos[i].spent = true;
         }
         // save the change utxo - it is spendable right away, via a chain of unconfirmed txs.
-        self.wallet.utxos.push(change_utxo);
+        if let Some(change_utxo) = change_utxo {
+            self.wallet.utxos.push(change_utxo);
+        }
 
         // remember the outgoing payment metadata
         self.wallet.outgoing_utxos.push(Utxo {
