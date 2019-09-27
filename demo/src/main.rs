@@ -648,7 +648,7 @@ fn prepare_db_if_needed() {
                 let anchor = Anchor::from_raw_bytes([0; 32]);
 
                 let (mut list, anchor) =
-                    treasury_wallet.mint_utxos(anchor, token_record.flavor(), vec![1, 20]);
+                    treasury_wallet.mint_utxos(anchor, token_record.flavor(), vec![1, 2, 4, 8, 16]);
                 utxos.append(&mut list);
                 let (mut list, _anchor) =
                     treasury_wallet.mint_utxos(anchor, usd_record.flavor(), vec![1000, 200]);
