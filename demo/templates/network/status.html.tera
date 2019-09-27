@@ -97,6 +97,20 @@
     }
     return h;
   }
+  function draw_trees(svg, roots, max_height) {
+    svg.clear();
+    var horizontal_offset = padding_left;
+    for (root_index = roots.length-1; root_index >= 0; root_index--) {
+      var maybe_root = roots[root_index];
+      if (maybe_root != null) {
+        var root = maybe_root;
+        var level = root_index; // 0 => 1 item, 3 => 8 items
+        var vertical_offset = padding_top + max_height - height_for_level(level);
+        draw_tree(svg, root, level, horizontal_offset, vertical_offset);
+        horizontal_offset += item_spacing*(1<<level);
+      }
+    }
+  }
   function draw_utreexo(utreexo_roots) {
     var roots = trim_array(utreexo_roots.roots);
     if (roots.length == 0) {
@@ -109,20 +123,24 @@
 
     $("#utreexo").height((padding_top + max_height + padding_bottom) + "px")
 
-    var horizontal_offset = padding_left;
-    for (root_index = roots.length-1; root_index >= 0; root_index--) {
-      var maybe_root = roots[root_index];
-      if (maybe_root != null) {
-        var root = maybe_root;
-        var level = root_index; // 0 => 1 item, 3 => 8 items
-        var vertical_offset = padding_top + max_height - height_for_level(level);
-        draw_tree(svg, root, level, horizontal_offset, vertical_offset);
-        horizontal_offset += item_spacing*(1<<level);
-      }
+    var total = total_count(roots);
+    var duration = 500;
+    var interval = duration/total;
+    for (i = 0; i < total; i++) {
+      (function(roots2) {
+        var bits = i;
+        while (bits > 0) {
+          roots2.push(((bits & 1) == 1) ? "" : null);
+          bits = bits >> 1;
+        }
+        setTimeout(function(){
+          draw_trees(svg, roots2, max_height);
+        }, interval*i);
+      })([]);
     }
-
-    // draw.line(0, 0, 100, 150).stroke({ width: 1 })
-    // draw.circle(10,10).move(200,200).stroke({ color: '#000', width: 1 }).fill('#f00')
+    setTimeout(function(){
+        draw_trees(svg, roots, max_height)    
+    }, duration + 100);
   }
   
   let utreexo_roots = {{ network_status.state.utreexo | json_encode(pretty=true) }};
