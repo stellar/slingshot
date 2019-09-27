@@ -34,8 +34,9 @@
 
 {% block page_script %}
 <script>
-  var padding_top = 32;
-  var padding_left = 16;
+  var padding_top = 64;
+  var padding_left = 32;
+  var padding_bottom = 32;
   var level_height = 32;
   var height_factor = 1.66;
   var item_spacing = 32;
@@ -106,7 +107,7 @@
     var max_level = roots.length - 1;
     var max_height = height_for_level(max_level);
 
-    $("#utreexo").height((padding_top + max_height + item_diameter) + "px")
+    $("#utreexo").height((padding_top + max_height + padding_bottom) + "px")
 
     var horizontal_offset = padding_left;
     for (root_index = roots.length-1; root_index >= 0; root_index--) {
