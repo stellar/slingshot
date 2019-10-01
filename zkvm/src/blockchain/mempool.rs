@@ -55,7 +55,7 @@ impl Mempool {
     }
 
     /// Updates timestamp and re-applies txs to filter out the outdated ones.
-    pub fn update_timestamp(&mut self, timestamp_ms: u64, bp_gens: &BulletproofGens) {
+    pub fn update_timestamp(&mut self, timestamp_ms: u64) {
         // TBD: refactor the state API to work with VerifiedTx
         // so we don't repeat expensive stateless checks.
 
@@ -66,9 +66,12 @@ impl Mempool {
 
         let oldtxs = mem::replace(&mut self.txs, Vec::new());
 
-        for (tx, _vtx, proofs) in oldtxs.into_iter() {
-            match self.append(tx, proofs, bp_gens) {
-                Ok(_) => {}
+        for (tx, vtx, proofs) in oldtxs.into_iter() {
+            match self.validation.apply_tx(&vtx, proofs.iter()) {
+                Ok(_) => {
+                    // put back to mempool
+                    self.txs.push((tx, vtx, proofs));
+                }
                 Err(_) => {
                     // tx kicked out of the mempool
                 }
@@ -83,7 +86,10 @@ impl Mempool {
         utxo_proofs: Vec<utreexo::Proof>,
         bp_gens: &BulletproofGens,
     ) -> Result<TxID, BlockchainError> {
-        let verified_tx = self.validation.apply_tx(&tx, utxo_proofs.iter(), bp_gens)?;
+        let verified_tx = tx
+            .verify(bp_gens)
+            .map_err(|e| BlockchainError::TxValidation(e))?;
+        self.validation.apply_tx(&verified_tx, utxo_proofs.iter())?;
         let txid = verified_tx.id;
         self.txs.push((tx, verified_tx, utxo_proofs));
         Ok(txid)

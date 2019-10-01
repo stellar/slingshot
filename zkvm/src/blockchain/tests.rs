@@ -67,12 +67,14 @@ fn test_state_machine() {
         utx.sign(sig)
     };
 
-    let (block, _verified_block, future_state) = state
-        .make_block(1, 1, Vec::new(), vec![tx], proofs, &bp_gens)
-        .unwrap();
+    let (_block, verified_block, future_state) = state
+        .make_block(1, 1, Vec::new(), vec![tx], proofs.iter(), &bp_gens)
+        .expect("Block should be created successfully");
 
     // Apply the block to the state
-    let (_verified_block, new_state) = state.apply_block(&block, &bp_gens).unwrap();
+    let new_state = state
+        .apply_block(&verified_block, proofs.iter())
+        .expect("Block application should succeed.");
 
     let hasher = utreexo::NodeHasher::<ContractID>::new();
     assert_eq!(
