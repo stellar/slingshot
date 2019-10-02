@@ -1,22 +1,20 @@
 //! In-memory transaction pool for transactions that are not yet in a block.
 
-use crate::encoding::Encodable;
 use crate::utreexo;
-use crate::{Tx, TxID, VerifiedTx};
-use bulletproofs::BulletproofGens;
+use crate::{TxID, VerifiedTx};
 use std::mem;
 
 use super::{BlockchainError, BlockchainState, ValidationContext};
 
 /// Implements a pool of unconfirmed (not-in-the-block) transactions.
-pub struct Mempool {
+pub struct Mempool<T: AsRef<VerifiedTx>> {
     state: BlockchainState,
     timestamp_ms: u64,
     validation: ValidationContext,
-    txs: Vec<(Tx, VerifiedTx, Vec<utreexo::Proof>)>,
+    txs: Vec<(T, Vec<utreexo::Proof>)>,
 }
 
-impl Mempool {
+impl<T: AsRef<VerifiedTx>> Mempool<T> {
     /// Creates an empty mempool at a given state.
     pub fn new(state: BlockchainState, timestamp_ms: u64) -> Self {
         let validation =
@@ -29,24 +27,14 @@ impl Mempool {
         }
     }
 
-    /// Estimated cost of a memory occupied by transactions in the mempool.
-    pub fn estimated_memory_cost(&self) -> usize {
-        self.txs
-            .iter()
-            .map(|(tx, _, proofs)| {
-                tx.serialized_length() + proofs.iter().map(|p| p.serialized_length()).sum::<usize>()
-            })
-            .sum()
-    }
-
     /// Returns a list of transactions
-    pub fn txs(&self) -> impl Iterator<Item = &Tx> {
-        self.txs.iter().map(|(tx, _, _)| tx)
+    pub fn txs(&self) -> impl Iterator<Item = &T> {
+        self.txs.iter().map(|(t, _)| t)
     }
 
     /// Returns a list of transactions
     pub fn utxo_proofs(&self) -> impl Iterator<Item = &utreexo::Proof> {
-        self.txs.iter().flat_map(|(_, _, proofs)| proofs.iter())
+        self.txs.iter().flat_map(|(_, proofs)| proofs.iter())
     }
 
     /// Returns the size of the mempool in number of transactions.
@@ -66,11 +54,11 @@ impl Mempool {
 
         let oldtxs = mem::replace(&mut self.txs, Vec::new());
 
-        for (tx, vtx, proofs) in oldtxs.into_iter() {
-            match self.validation.apply_tx(&vtx, proofs.iter()) {
+        for (tx, proofs) in oldtxs.into_iter() {
+            match self.validation.apply_tx(tx.as_ref(), proofs.iter()) {
                 Ok(_) => {
                     // put back to mempool
-                    self.txs.push((tx, vtx, proofs));
+                    self.txs.push((tx, proofs));
                 }
                 Err(_) => {
                     // tx kicked out of the mempool
@@ -82,16 +70,12 @@ impl Mempool {
     /// Adds transaction to the mempool and verifies it.
     pub fn append(
         &mut self,
-        tx: Tx,
+        tx: T,
         utxo_proofs: Vec<utreexo::Proof>,
-        bp_gens: &BulletproofGens,
     ) -> Result<TxID, BlockchainError> {
-        let verified_tx = tx
-            .verify(bp_gens)
-            .map_err(|e| BlockchainError::TxValidation(e))?;
-        self.validation.apply_tx(&verified_tx, utxo_proofs.iter())?;
-        let txid = verified_tx.id;
-        self.txs.push((tx, verified_tx, utxo_proofs));
+        self.validation.apply_tx(tx.as_ref(), utxo_proofs.iter())?;
+        let txid = tx.as_ref().id;
+        self.txs.push((tx, utxo_proofs));
         Ok(txid)
     }
 }
