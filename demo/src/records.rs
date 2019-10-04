@@ -3,6 +3,7 @@ use super::schema::*;
 use super::util;
 use curve25519_dalek::scalar::Scalar;
 use zkvm::blockchain::{Block, BlockchainState};
+use zkvm::utreexo;
 use zkvm::{Tx, TxEntry};
 
 use serde_json::Value as JsonValue;
@@ -14,6 +15,7 @@ use std::collections::HashMap;
 pub struct BlockRecord {
     pub height: i32, // FIXME: diesel doesn't allow u64 here...
     pub block_json: String,
+    pub utxo_proofs_json: String,
     pub state_json: String, // latest state will be used for *the* network state
 }
 
@@ -89,6 +91,10 @@ impl BlockRecord {
 
     pub fn block(&self) -> Block {
         util::from_valid_json(&self.block_json)
+    }
+
+    pub fn utxo_proofs(&self) -> Vec<utreexo::Proof> {
+        util::from_valid_json(&self.utxo_proofs_json)
     }
 
     pub fn state(&self) -> BlockchainState {

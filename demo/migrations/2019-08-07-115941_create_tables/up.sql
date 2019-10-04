@@ -1,6 +1,7 @@
 CREATE TABLE IF NOT EXISTS block_records (
   height integer PRIMARY KEY NOT NULL,
   block_json text NOT NULL,
+  utxo_proofs_json text NOT NULL,
   state_json text NOT NULL
 );
 

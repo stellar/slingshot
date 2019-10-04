@@ -9,6 +9,7 @@ extern crate rocket_contrib;
 #[macro_use]
 extern crate serde_json;
 
+mod mempool;
 mod nodes;
 mod publication;
 mod records;
@@ -33,8 +34,9 @@ use rocket_contrib::serve::StaticFiles;
 use rocket_contrib::templates::Template;
 
 use bulletproofs::BulletproofGens;
-use zkvm::blockchain::Mempool;
 use zkvm::utreexo;
+
+use crate::mempool::{Mempool, MempoolItem};
 
 #[database("demodb")]
 struct DBConnection(SqliteConnection);
@@ -78,9 +80,9 @@ fn network_mempool(
         "sidebar": sidebar_context(&dbconn.0),
         "mempool_timestamp": current_timestamp_ms(),
         "mempool_len": mempool.len(),
-        "mempool_size_kb": (mempool.estimated_memory_cost() as f64) / 1024.0,
-        "mempool_txs": mempool.txs().map(|tx| {
-            records::BlockRecord::tx_details(&tx)
+        "mempool_size_kb": (mempool::estimated_memory_cost(&mempool) as f64) / 1024.0,
+        "mempool_txs": mempool.items().map(|item| {
+            records::BlockRecord::tx_details(&item.tx)
         }).collect::<Vec<_>>(),
         "flash": flash.map(|f| json!({
             "name": f.name(),
@@ -105,7 +107,7 @@ fn network_mempool_makeblock(
 
     let timestamp_ms = current_timestamp_ms();
 
-    let (new_block_record, new_block, new_state) = {
+    let (new_block_record, new_block, new_state, proofs) = {
         use schema::block_records::dsl::*;
 
         let blk_record = block_records
@@ -115,14 +117,17 @@ fn network_mempool_makeblock(
 
         let state = blk_record.state();
 
-        let txs = mempool.txs().map(|tx| tx.clone()).collect::<Vec<_>>();
+        let txs = mempool
+            .items()
+            .map(|item| item.tx.clone())
+            .collect::<Vec<_>>();
         let proofs = mempool
             .utxo_proofs()
             .map(|proof| proof.clone())
             .collect::<Vec<_>>();
 
         let (new_block, _verified_block, new_state) = state
-            .make_block(1, timestamp_ms, Vec::new(), txs, proofs, &bp_gens)
+            .make_block(1, timestamp_ms, Vec::new(), txs, &proofs, &bp_gens)
             .expect("BlockchainState::make_block should succeed");
 
         // Store the new state
@@ -130,10 +135,12 @@ fn network_mempool_makeblock(
             records::BlockRecord {
                 height: new_block.header.height as i32,
                 block_json: util::to_json(&new_block),
+                utxo_proofs_json: util::to_json(&proofs),
                 state_json: util::to_json(&new_state),
             },
             new_block,
             new_state,
+            proofs,
         )
     };
 
@@ -156,7 +163,7 @@ fn network_mempool_makeblock(
 
             for rec in recs.into_iter() {
                 let mut node = rec.node();
-                node.process_block(&new_block, &bp_gens);
+                node.process_block(&new_block, &proofs, &bp_gens);
                 let rec = records::NodeRecord::new(node);
                 diesel::update(node_records.filter(alias.eq(&rec.alias)))
                     .set(&rec)
@@ -258,12 +265,13 @@ fn nodes_show(
         .expect("Threads haven't crashed holding the mutex lock");
 
     let mut node_pending = node.node();
-    let pending_txs = mempool.txs().filter_map(|tx| {
-        let (_txid, txlog) = tx
+    let pending_txs = mempool.items().filter_map(|item| {
+        let (_txid, txlog) = item
+            .tx
             .precompute()
             .expect("Our mempool should not contain invalid transactions.");
 
-        node_pending.process_pending_tx(tx, &txlog, 0)
+        node_pending.process_pending_tx(&item.tx, &txlog, 0)
     });
 
     let context = json!({
@@ -363,11 +371,15 @@ fn pay(
     // Note: at this point, recipient saves the unconfirmed utxo,
     // but since we are doing the exchange in one call, we'll skip it for now.
 
+    let verified_tx = tx
+        .verify(&bp_gens)
+        .expect("We just formed a tx and it must be valid");
+
     // Add tx to the mempool so we can make blocks of multiple txs in the demo.
     let txid = mempool
         .lock()
         .expect("Thread should have not crashed holding the unlocked mutex.")
-        .append(tx, proofs, &bp_gens)
+        .append(MempoolItem { tx, verified_tx }, proofs)
         .map_err(|msg| flash_error(msg.to_string()))?;
 
     // Save everything in a single DB transaction.
@@ -560,11 +572,15 @@ fn assets_create(
     // Note: at this point, recipient saves the unconfirmed utxo,
     // but since we are doing the exchange in one call, we'll skip it for now.
 
+    let verified_tx = tx
+        .verify(&bp_gens)
+        .expect("We just formed a tx and it must be valid");
+
     // Add tx to the mempool so we can make blocks of multiple txs in the demo.
     let txid = mempool
         .lock()
         .expect("Thread should have not crashed holding the unlocked mutex.")
-        .append(tx, proofs, &bp_gens)
+        .append(MempoolItem { tx, verified_tx }, proofs)
         .map_err(|msg| flash_error(msg.to_string()))?;
 
     // Save everything in a single DB transaction.
@@ -699,8 +715,8 @@ fn prepare_db_if_needed() {
                 block_json: util::to_json(&Block {
                     header: network_state.tip.clone(),
                     txs: Vec::new(),
-                    all_utxo_proofs: Vec::new(),
                 }),
+                utxo_proofs_json: "[]".to_string(),
                 state_json: util::to_json(&network_state),
             };
 

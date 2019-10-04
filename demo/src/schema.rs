@@ -9,6 +9,7 @@ table! {
     block_records (height) {
         height -> Integer,
         block_json -> Text,
+        utxo_proofs_json -> Text,
         state_json -> Text,
     }
 }

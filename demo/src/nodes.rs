@@ -420,7 +420,14 @@ impl Node {
     }
 
     /// Processes a block: detects spends, new outputs and updates utxo proofs.
-    pub fn process_block(&mut self, block: &Block, bp_gens: &BulletproofGens) {
+    pub fn process_block<P>(
+        &mut self,
+        block: &Block,
+        proofs: impl IntoIterator<Item = P>,
+        bp_gens: &BulletproofGens,
+    ) where
+        P: core::borrow::Borrow<utreexo::Proof>,
+    {
         // Alice/Bob process blockchain:
         //     a. SPV nodes:
         //        1. Network sends to Bob and Alice new blockheader and a changeset:
@@ -430,7 +437,13 @@ impl Node {
         //     b. Full nodes:
         //        1. Network sends to Bob and Alice new block
         //        2. Alice/Bob verify+apply changes, producing a catchup struct.
-        let (verified_block, new_state) = self.blockchain.apply_block(&block, &bp_gens).unwrap();
+        let verified_block = block
+            .verify(&self.blockchain.tip, &bp_gens)
+            .expect("Block must be valid.");
+        let new_state = self
+            .blockchain
+            .apply_block(&verified_block, proofs)
+            .expect("Block must apply to this state.");
 
         // In a real node utxos will be indexed by ContractID, so lookup will be more efficient.
         let hasher = utreexo::NodeHasher::new();

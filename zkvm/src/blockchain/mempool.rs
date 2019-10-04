@@ -11,7 +11,7 @@ pub struct Mempool<T: AsRef<VerifiedTx>> {
     state: BlockchainState,
     timestamp_ms: u64,
     validation: ValidationContext,
-    txs: Vec<(T, Vec<utreexo::Proof>)>,
+    items: Vec<(T, Vec<utreexo::Proof>)>,
 }
 
 impl<T: AsRef<VerifiedTx>> Mempool<T> {
@@ -23,23 +23,23 @@ impl<T: AsRef<VerifiedTx>> Mempool<T> {
             state,
             timestamp_ms,
             validation,
-            txs: Vec::new(),
+            items: Vec::new(),
         }
     }
 
     /// Returns a list of transactions
-    pub fn txs(&self) -> impl Iterator<Item = &T> {
-        self.txs.iter().map(|(t, _)| t)
+    pub fn items(&self) -> impl Iterator<Item = &T> {
+        self.items.iter().map(|(t, _)| t)
     }
 
     /// Returns a list of transactions
     pub fn utxo_proofs(&self) -> impl Iterator<Item = &utreexo::Proof> {
-        self.txs.iter().flat_map(|(_, proofs)| proofs.iter())
+        self.items.iter().flat_map(|(_, proofs)| proofs.iter())
     }
 
     /// Returns the size of the mempool in number of transactions.
     pub fn len(&self) -> usize {
-        self.txs.len()
+        self.items.len()
     }
 
     /// Updates timestamp and re-applies txs to filter out the outdated ones.
@@ -52,13 +52,13 @@ impl<T: AsRef<VerifiedTx>> Mempool<T> {
         let work_forest = self.state.utreexo.work_forest();
         self.validation = ValidationContext::new(self.timestamp_ms, self.timestamp_ms, work_forest);
 
-        let oldtxs = mem::replace(&mut self.txs, Vec::new());
+        let oldtxs = mem::replace(&mut self.items, Vec::new());
 
         for (tx, proofs) in oldtxs.into_iter() {
             match self.validation.apply_tx(tx.as_ref(), proofs.iter()) {
                 Ok(_) => {
                     // put back to mempool
-                    self.txs.push((tx, proofs));
+                    self.items.push((tx, proofs));
                 }
                 Err(_) => {
                     // tx kicked out of the mempool
@@ -75,7 +75,7 @@ impl<T: AsRef<VerifiedTx>> Mempool<T> {
     ) -> Result<TxID, BlockchainError> {
         self.validation.apply_tx(tx.as_ref(), utxo_proofs.iter())?;
         let txid = tx.as_ref().id;
-        self.txs.push((tx, utxo_proofs));
+        self.items.push((tx, utxo_proofs));
         Ok(txid)
     }
 }
