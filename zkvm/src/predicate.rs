@@ -191,7 +191,7 @@ impl PredicateTree {
         if leaves.len() > (1 << 31) {
             return Err(VMError::InvalidPredicateTree);
         }
-        let root = MerkleTree::root(b"ZkVM.taproot", &leaves);
+        let root = MerkleTree::root(b"ZkVM.taproot", leaves.iter());
 
         // P = X + h(X, M)*G
         let adjustment_factor = Predicate::commit_taproot(&key, &root);

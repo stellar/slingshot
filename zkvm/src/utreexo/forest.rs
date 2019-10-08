@@ -277,7 +277,9 @@ impl WorkForest {
         Ok(())
     }
 
-    /// Allows performing multiple updates atomically.
+    /// Allows performing multiple updates atomically: none of the changes
+    /// are applied if some of them failed.
+    /// Note: atomicity here does NOT mean that you can use this method across threads.
     pub fn transaction<F, T, E>(&mut self, closure: F) -> Result<T, E>
     where
         F: FnOnce(&mut Self) -> Result<T, E>,

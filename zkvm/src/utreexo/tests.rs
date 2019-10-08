@@ -15,7 +15,7 @@ fn empty_utreexo() {
     let forest0 = Forest::new();
     assert_eq!(
         forest0.root(&hasher),
-        MerkleTree::root::<u64>(b"ZkVM.utreexo", &[])
+        MerkleTree::empty_root(b"ZkVM.utreexo")
     );
 }
 
@@ -66,7 +66,7 @@ fn insert_to_utreexo() {
 
     assert_eq!(
         forest1.root(&hasher),
-        MerkleTree::root::<u64>(b"ZkVM.utreexo", &(0..6).collect::<Vec<_>>())
+        MerkleTree::root(b"ZkVM.utreexo", 0..6)
     );
 
     // update the proofs
@@ -153,7 +153,7 @@ fn transaction_success() {
     //  x x 2 3 4 5 6 8
     assert_eq!(
         new_forest.root(&hasher),
-        MerkleTree::root::<u64>(b"ZkVM.utreexo", &[2, 3, 4, 5, 6, 8])
+        MerkleTree::root(b"ZkVM.utreexo", &[2, 3, 4, 5, 6, 8])
     );
 }
 
@@ -222,7 +222,7 @@ fn transaction_fail() {
     //  x 1 2 3 4 5 6         x 1 2 3 4 5 6       2 3 4 5 1 6
     assert_eq!(
         new_forest.root(&hasher),
-        MerkleTree::root::<u64>(b"ZkVM.utreexo", &[2, 3, 4, 5, 1, 6])
+        MerkleTree::root(b"ZkVM.utreexo", &[2, 3, 4, 5, 1, 6])
     );
 }
 

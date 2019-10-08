@@ -1,9 +1,7 @@
-use bulletproofs::BulletproofGens;
 use merlin::Transcript;
 use serde::{Deserialize, Serialize};
 
-use super::BlockchainError;
-use crate::{Hash, MerkleTree, Tx, TxEntry, TxID, VerifiedTx};
+use crate::{Hash, MerkleTree, Tx};
 
 /// Identifier of the block, computed as a hash of the `BlockHeader`.
 #[derive(Clone, Copy, PartialEq, Default, Debug)]
@@ -40,15 +38,6 @@ pub struct Block {
     pub txs: Vec<Tx>, // no Debug impl for R1CSProof yet
 }
 
-/// VerifiedBlock contains a list of VerifiedTx.
-#[derive(Clone)]
-pub struct VerifiedBlock {
-    /// Block header.
-    pub header: BlockHeader,
-    /// List of transactions.
-    pub txs: Vec<VerifiedTx>,
-}
-
 impl BlockHeader {
     /// Computes the ID of the block header.
     pub fn id(&self) -> BlockID {
@@ -73,60 +62,10 @@ impl BlockHeader {
             height: 1,
             prev: BlockID([0; 32]),
             timestamp_ms,
-            txroot: MerkleTree::root::<TxID>(b"ZkVM.txroot", &[]),
+            txroot: MerkleTree::empty_root(b"ZkVM.txroot"),
             utxoroot,
             ext: Vec::new(),
         }
-    }
-
-    /// Verifies block header with respect to the previous header.
-    fn verify(&self, prev_header: &BlockHeader) -> Result<(), BlockchainError> {
-        check(
-            self.version >= prev_header.version,
-            BlockchainError::InconsistentHeader,
-        )?;
-        if self.version == 1 {
-            check(self.ext.len() == 0, BlockchainError::IllegalExtension)?;
-        }
-        check(
-            self.height == prev_header.height + 1,
-            BlockchainError::InconsistentHeader,
-        )?;
-        check(
-            self.prev == prev_header.id(),
-            BlockchainError::InconsistentHeader,
-        )?;
-        check(
-            self.timestamp_ms > prev_header.timestamp_ms,
-            BlockchainError::InconsistentHeader,
-        )?;
-        Ok(())
-    }
-}
-
-impl Block {
-    /// Performs stateless verification of all txs in a block.
-    pub fn verify(
-        &self,
-        prev_header: &BlockHeader,
-        bp_gens: &BulletproofGens,
-    ) -> Result<VerifiedBlock, BlockchainError> {
-        self.header.verify(prev_header)?;
-
-        let vtxs = Tx::verify_batch(self.txs.iter(), bp_gens)
-            .map_err(|vmerr| BlockchainError::TxValidation(vmerr))?;
-
-        Ok(VerifiedBlock {
-            header: self.header.clone(),
-            txs: vtxs,
-        })
-    }
-}
-
-impl VerifiedBlock {
-    /// Returns an iterator over all transaction log entries for all transactions in the block.
-    pub fn entries(&self) -> impl Iterator<Item = &TxEntry> {
-        self.txs.iter().flat_map(|tx| tx.log.iter())
     }
 }
 
@@ -141,12 +80,4 @@ impl core::ops::Deref for BlockID {
     fn deref(&self) -> &Self::Target {
         &self.0
     }
-}
-
-#[inline]
-fn check<E>(cond: bool, err: E) -> Result<(), E> {
-    if !cond {
-        return Err(err);
-    }
-    Ok(())
 }
