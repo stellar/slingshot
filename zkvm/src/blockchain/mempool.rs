@@ -4,25 +4,25 @@ use crate::utreexo;
 use crate::{TxID, VerifiedTx};
 use std::mem;
 
-use super::{BlockchainError, BlockchainState, ValidationContext};
+use super::{apply_tx, check_tx_header};
+use super::{BlockchainError, BlockchainState};
 
 /// Implements a pool of unconfirmed (not-in-the-block) transactions.
 pub struct Mempool<T: AsRef<VerifiedTx>> {
     state: BlockchainState,
     timestamp_ms: u64,
-    validation: ValidationContext,
+    utreexo: utreexo::WorkForest,
     items: Vec<(T, Vec<utreexo::Proof>)>,
 }
 
 impl<T: AsRef<VerifiedTx>> Mempool<T> {
     /// Creates an empty mempool at a given state.
     pub fn new(state: BlockchainState, timestamp_ms: u64) -> Self {
-        let validation =
-            ValidationContext::new(state.tip.version, timestamp_ms, state.utreexo.work_forest());
+        let utreexo = state.utreexo.work_forest();
         Mempool {
             state,
             timestamp_ms,
-            validation,
+            utreexo,
             items: Vec::new(),
         }
     }
@@ -48,14 +48,12 @@ impl<T: AsRef<VerifiedTx>> Mempool<T> {
         // so we don't repeat expensive stateless checks.
 
         self.timestamp_ms = timestamp_ms;
-
-        let work_forest = self.state.utreexo.work_forest();
-        self.validation = ValidationContext::new(self.timestamp_ms, self.timestamp_ms, work_forest);
+        self.utreexo = self.state.utreexo.work_forest();
 
         let oldtxs = mem::replace(&mut self.items, Vec::new());
 
         for (tx, proofs) in oldtxs.into_iter() {
-            match self.validation.apply_tx(tx.as_ref(), proofs.iter()) {
+            match self.apply_tx(tx.as_ref(), &proofs) {
                 Ok(_) => {
                     // put back to mempool
                     self.items.push((tx, proofs));
@@ -73,9 +71,21 @@ impl<T: AsRef<VerifiedTx>> Mempool<T> {
         tx: T,
         utxo_proofs: Vec<utreexo::Proof>,
     ) -> Result<TxID, BlockchainError> {
-        self.validation.apply_tx(tx.as_ref(), utxo_proofs.iter())?;
+        self.apply_tx(tx.as_ref(), &utxo_proofs)?;
         let txid = tx.as_ref().id;
         self.items.push((tx, utxo_proofs));
         Ok(txid)
+    }
+
+    fn apply_tx(
+        &mut self,
+        vtx: &VerifiedTx,
+        proofs: &[utreexo::Proof],
+    ) -> Result<(), BlockchainError> {
+        check_tx_header(&vtx.header, self.timestamp_ms, self.state.tip.version)?;
+
+        self.utreexo.transaction(|forest| {
+            apply_tx(forest, &vtx.log, proofs.iter(), &utreexo::NodeHasher::new())
+        })
     }
 }

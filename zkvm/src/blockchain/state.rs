@@ -19,16 +19,6 @@ pub struct BlockchainState {
     pub catchup: Catchup,
 }
 
-/// All the data necessary for validating and applying transactions.
-/// `BlockchainState` API uses it to apply a block of transactions.
-/// `Mempool` API uses it to apply one transaction after another.
-pub(super) struct ValidationContext {
-    block_version: u64,
-    timestamp_ms: u64,
-    work_forest: WorkForest,
-    hasher: NodeHasher<ContractID>,
-}
-
 impl BlockchainState {
     /// Creates an initial block with a given starting set of utxos.
     pub fn make_initial<I>(timestamp_ms: u64, utxos: I) -> (BlockchainState, Vec<utreexo::Proof>)
@@ -186,75 +176,6 @@ impl BlockchainState {
     }
 }
 
-impl ValidationContext {
-    /// Create a new context with given block version, timestamp and work forest for utxos.
-    pub fn new(block_version: u64, timestamp_ms: u64, work_forest: WorkForest) -> Self {
-        Self {
-            block_version,
-            timestamp_ms,
-            work_forest,
-            hasher: NodeHasher::new(),
-        }
-    }
-
-    /// Applies a single transaction to the state.
-    /// If one of the inputs has an invalid proof or already spent,
-    /// state is left unchanged.
-    pub fn apply_tx<T, P>(
-        &mut self,
-        tx: T,
-        utxo_proofs: impl IntoIterator<Item = P>,
-    ) -> Result<(), BlockchainError>
-    where
-        T: Borrow<VerifiedTx>,
-        P: Borrow<utreexo::Proof>,
-    {
-        check_tx_header(&tx.borrow().header, self.timestamp_ms, self.block_version)?;
-        let hasher = &self.hasher;
-        self.work_forest.transaction(|work_forest| {
-            Self::apply_tx_nonatomic(work_forest, hasher, tx, utxo_proofs)
-        })
-    }
-    /// Applies a single transaction to the state.
-    /// WARNING: this leaves the Utreexo state modified if one of the updates failed.
-    fn apply_tx_nonatomic<T, P>(
-        work_forest: &mut WorkForest,
-        hasher: &NodeHasher<ContractID>,
-        verified_tx: T,
-        utxo_proofs: impl IntoIterator<Item = P>,
-    ) -> Result<(), BlockchainError>
-    where
-        T: Borrow<VerifiedTx>,
-        P: Borrow<utreexo::Proof>,
-    {
-        let mut utxo_proofs = utxo_proofs.into_iter();
-        let verified_tx = verified_tx.borrow();
-
-        for entry in verified_tx.log.iter() {
-            match entry {
-                // Remove item from the UTXO set
-                TxEntry::Input(contract_id) => {
-                    let proof = utxo_proofs
-                        .next()
-                        .ok_or(BlockchainError::UtreexoProofMissing)?;
-
-                    work_forest
-                        .delete(contract_id, proof.borrow(), &hasher)
-                        .map_err(|e| BlockchainError::UtreexoError(e))?;
-                }
-                // Add item to the UTXO set
-                TxEntry::Output(contract) => {
-                    work_forest.insert(&contract.id(), &hasher);
-                }
-                // Ignore all other log items
-                _ => {}
-            }
-        }
-
-        Ok(())
-    }
-}
-
 /// Applies transaction to the Utreexo forest
 pub(crate) fn apply_tx<P>(
     work_forest: &mut WorkForest,
@@ -291,6 +212,28 @@ where
     Ok(())
 }
 
+/// Checks the tx header for consistency with the block header.
+pub(crate) fn check_tx_header(
+    tx_header: &TxHeader,
+    timestamp_ms: u64,
+    block_version: u64,
+) -> Result<(), BlockchainError> {
+    check(
+        tx_header.mintime_ms <= timestamp_ms,
+        BlockchainError::BadTxTimestamp,
+    )?;
+    check(
+        tx_header.maxtime_ms >= timestamp_ms,
+        BlockchainError::BadTxTimestamp,
+    )?;
+    if block_version == 1 {
+        check(tx_header.version == 1, BlockchainError::BadTxVersion)?;
+    } else {
+        // future block versions permit higher tx versions
+    }
+    Ok(())
+}
+
 /// Verifies block header with respect to the previous header.
 fn check_block_header(
     block_header: &BlockHeader,
@@ -318,28 +261,6 @@ fn check_block_header(
         block_header.prev == prev_header.id(),
         BlockchainError::InconsistentHeader,
     )?;
-    Ok(())
-}
-
-/// Checks the tx header for consistency with the block header.
-pub(crate) fn check_tx_header(
-    tx_header: &TxHeader,
-    timestamp_ms: u64,
-    block_version: u64,
-) -> Result<(), BlockchainError> {
-    check(
-        tx_header.mintime_ms <= timestamp_ms,
-        BlockchainError::BadTxTimestamp,
-    )?;
-    check(
-        tx_header.maxtime_ms >= timestamp_ms,
-        BlockchainError::BadTxTimestamp,
-    )?;
-    if block_version == 1 {
-        check(tx_header.version == 1, BlockchainError::BadTxVersion)?;
-    } else {
-        // future block versions permit higher tx versions
-    }
     Ok(())
 }
 
