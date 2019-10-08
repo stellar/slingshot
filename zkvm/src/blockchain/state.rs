@@ -176,7 +176,6 @@ impl BlockchainState {
 
 impl ValidationContext {
     /// Create a new context with given block version, timestamp and work forest for utxos.
-    /// FIXME: make this not accumulate undo items when validating a block.
     pub fn new(block_version: u64, timestamp_ms: u64, work_forest: WorkForest) -> Self {
         Self {
             block_version,
@@ -204,9 +203,6 @@ impl ValidationContext {
             Self::apply_tx_nonatomic(&mut self.work_forest, &self.hasher, tx, &mut utxo_proofs)?;
         }
 
-        // TBD: change this O(n) allocation to a more compact (log(n)) merkle root hasher.
-        // let txids = verified_txs.iter().map(|tx| tx.id).collect::<Vec<_>>();
-        // let txroot = MerkleTree::root(b"ZkVM.txroot", &txids);
         Ok(())
     }
 

@@ -23,7 +23,7 @@ The block and all the transactions in it are validated in 4 stages:
     * utxo root is computed and verified to match the commitment,
     * new state is computed and returned.
 
-To keep the API simple, contextual validation is performed in-place:
+To keep the API simple, contextual validation for txs and block headers is performed in-place:
 
 * tx version and time bounds are checked when tx is added to mempool, or when txroot is computed for a block.
 * block version and timestamp is checked when block is applied to the state.
