@@ -1,7 +1,7 @@
 use merlin::Transcript;
 use serde::{Deserialize, Serialize};
 
-use crate::{Hash, MerkleTree, Tx};
+use crate::{Hash, MerkleTree};
 
 /// Identifier of the block, computed as a hash of the `BlockHeader`.
 #[derive(Clone, Copy, PartialEq, Default, Debug)]
@@ -27,15 +27,6 @@ pub struct BlockHeader {
     pub utxoroot: Hash,
     /// Extra data for the future extensions.
     pub ext: Vec<u8>,
-}
-
-/// Block is a collection of transactions.
-#[derive(Clone, Serialize, Deserialize)]
-pub struct Block {
-    /// Block header.
-    pub header: BlockHeader,
-    /// List of transactions.
-    pub txs: Vec<Tx>, // no Debug impl for R1CSProof yet
 }
 
 impl BlockHeader {

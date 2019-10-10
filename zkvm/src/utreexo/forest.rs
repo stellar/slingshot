@@ -297,7 +297,7 @@ impl WorkForest {
 
     /// Normalizes the forest into minimal number of ordered perfect trees.
     /// Returns a root of the new forst, the forest and a catchup structure.
-    pub fn normalize<M: MerkleItem>(self, hasher: &NodeHasher<M>) -> (Forest, Catchup) {
+    pub fn normalize<M: MerkleItem>(&self, hasher: &NodeHasher<M>) -> (Forest, Catchup) {
         // TBD: what's the best way to estimate the vector capacity from self.heap.len()?
         let estimated_cap = self.heap.len() / 2;
 
