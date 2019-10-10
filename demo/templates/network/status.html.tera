@@ -13,9 +13,9 @@
       <tr><th>Contracts count</th><td>{{network_status.utxos_count}}</td></tr>
 
       <tr><th>Tip hash</th><td><code>{{network_status.block_id}}</code></td></tr>
-      <tr><th>Tip timestamp (ms)</th><td>{{network_status.block.header.timestamp_ms}}</td></tr>
+      <tr><th>Tip timestamp (ms)</th><td>{{network_status.block_header.timestamp_ms}}</td></tr>
       
-      <tr><th>Utreexo root</th><td><code>{{network_status.block.header.utxoroot}}</code></td></tr>
+      <tr><th>Utreexo root</th><td><code>{{network_status.block_header.utxoroot}}</code></td></tr>
     </tbody>
   </table>
 

@@ -3,9 +3,9 @@ use curve25519_dalek::scalar::Scalar;
 use keytree::Xprv;
 use serde::{Deserialize, Serialize};
 
-use zkvm::blockchain::{Block, BlockchainState};
+use zkvm::blockchain::{BlockHeader, BlockchainState};
 use zkvm::utreexo;
-use zkvm::{Anchor, ClearValue, Contract, ContractID, Tx, TxEntry, TxLog};
+use zkvm::{Anchor, ClearValue, Contract, ContractID, Tx, TxEntry, TxLog, VerifiedTx};
 
 use accounts::{Account, ReceiverWitness};
 use musig::Multisignature;
@@ -422,9 +422,10 @@ impl Node {
     /// Processes a block: detects spends, new outputs and updates utxo proofs.
     pub fn process_block<P>(
         &mut self,
-        block: &Block,
+        block_header: &BlockHeader,
+        vtxs: &[VerifiedTx],
+        txs: &[Tx],
         proofs: impl IntoIterator<Item = P>,
-        bp_gens: &BulletproofGens,
     ) where
         P: core::borrow::Borrow<utreexo::Proof>,
     {
@@ -437,21 +438,18 @@ impl Node {
         //     b. Full nodes:
         //        1. Network sends to Bob and Alice new block
         //        2. Alice/Bob verify+apply changes, producing a catchup struct.
-        let verified_block = block
-            .verify(&self.blockchain.tip, &bp_gens)
-            .expect("Block must be valid.");
         let new_state = self
             .blockchain
-            .apply_block(&verified_block, proofs)
+            .apply_block(block_header.clone(), vtxs.iter(), proofs)
             .expect("Block must apply to this state.");
 
         // In a real node utxos will be indexed by ContractID, so lookup will be more efficient.
         let hasher = utreexo::NodeHasher::new();
         println!(
             "Node {:?} is processing block {}...",
-            &self.wallet.alias, block.header.height
+            &self.wallet.alias, block_header.height
         );
-        for (tx_index, vtx) in verified_block.txs.iter().enumerate() {
+        for (tx_index, vtx) in vtxs.iter().enumerate() {
             // FIXME: we don't need to retain utxo proofs in these utxos,
             // so PendingUtxo is a better type here, but not a good name.
             // Should rename PendingUtxo to something more close to "ProoflessUtxo".
@@ -544,9 +542,9 @@ impl Node {
             }
             // If this tx has anything that has to do with this wallet, add it to the annotated txs list.
             if known_inputs.len() + known_outputs.len() > 0 {
-                let raw_tx = block.txs[tx_index].clone();
+                let raw_tx = txs[tx_index].clone();
                 let atx = AnnotatedTx {
-                    block_height: block.header.height,
+                    block_height: block_header.height,
                     raw_tx,
                     known_inputs,
                     known_outputs,

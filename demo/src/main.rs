@@ -36,7 +36,7 @@ use rocket_contrib::templates::Template;
 use bulletproofs::BulletproofGens;
 use zkvm::utreexo;
 
-use crate::mempool::{Mempool, MempoolItem};
+use crate::mempool::{Mempool, MempoolTx};
 
 #[database("demodb")]
 struct DBConnection(SqliteConnection);
@@ -96,7 +96,6 @@ fn network_mempool(
 fn network_mempool_makeblock(
     dbconn: DBConnection,
     mempool: State<Mutex<Mempool>>,
-    bp_gens: State<BulletproofGens>,
 ) -> Result<Flash<Redirect>, Flash<Redirect>> {
     let back_url = uri!(network_mempool);
     let flash_error = |msg| Flash::error(Redirect::to(back_url.clone()), msg);
@@ -107,41 +106,31 @@ fn network_mempool_makeblock(
 
     let timestamp_ms = current_timestamp_ms();
 
-    let (new_block_record, new_block, new_state, proofs) = {
-        use schema::block_records::dsl::*;
+    let txs = mempool
+        .items()
+        .map(|item| item.tx.clone())
+        .collect::<Vec<_>>();
 
-        let blk_record = block_records
-            .order(height.desc())
-            .first::<records::BlockRecord>(&dbconn.0)
-            .map_err(|_| flash_error("Block not found".to_string()))?;
+    let verified_txs = mempool
+        .items()
+        .map(|item| item.verified_tx.clone())
+        .collect::<Vec<_>>();
 
-        let state = blk_record.state();
+    let proofs = mempool
+        .items()
+        .flat_map(|i| i.proofs.iter().cloned())
+        .collect::<Vec<_>>();
 
-        let txs = mempool
-            .items()
-            .map(|item| item.tx.clone())
-            .collect::<Vec<_>>();
-        let proofs = mempool
-            .utxo_proofs()
-            .map(|proof| proof.clone())
-            .collect::<Vec<_>>();
+    let new_state = mempool
+        .make_block()
+        .expect("Mempool::make_block should succeed");
 
-        let (new_block, _verified_block, new_state) = state
-            .make_block(1, timestamp_ms, Vec::new(), txs, &proofs, &bp_gens)
-            .expect("BlockchainState::make_block should succeed");
-
-        // Store the new state
-        (
-            records::BlockRecord {
-                height: new_block.header.height as i32,
-                block_json: util::to_json(&new_block),
-                utxo_proofs_json: util::to_json(&proofs),
-                state_json: util::to_json(&new_state),
-            },
-            new_block,
-            new_state,
-            proofs,
-        )
+    let new_block_record = records::BlockRecord {
+        height: new_state.tip.height as i32,
+        header_json: util::to_json(&new_state.tip),
+        txs_json: util::to_json(&txs),
+        utxo_proofs_json: util::to_json(&proofs),
+        state_json: util::to_json(&new_state),
     };
 
     // Save everything in a single DB transaction.
@@ -163,7 +152,7 @@ fn network_mempool_makeblock(
 
             for rec in recs.into_iter() {
                 let mut node = rec.node();
-                node.process_block(&new_block, &proofs, &bp_gens);
+                node.process_block(&new_state.tip, &verified_txs, &txs, proofs.iter());
                 let rec = records::NodeRecord::new(node);
                 diesel::update(node_records.filter(alias.eq(&rec.alias)))
                     .set(&rec)
@@ -174,12 +163,15 @@ fn network_mempool_makeblock(
         })
         .map_err(|e| flash_error(format!("Database error: {}", e)))?;
 
+    let block_height = new_state.tip.height;
+    let block_id = new_state.tip.id();
+
     // If tx succeeded, reset the mempool to the new state.
     mem::replace(mempool.deref_mut(), Mempool::new(new_state, timestamp_ms));
 
-    let msg = format!("Block published: {}", hex::encode(&new_block.header.id()));
+    let msg = format!("Block published: {}", hex::encode(&block_id));
     Ok(Flash::success(
-        Redirect::to(uri!(network_block_show: new_block.header.height as i32)),
+        Redirect::to(uri!(network_block_show: block_height as i32)),
         msg,
     ))
 }
@@ -375,11 +367,17 @@ fn pay(
         .verify(&bp_gens)
         .expect("We just formed a tx and it must be valid");
 
+    let txid = verified_tx.id;
+
     // Add tx to the mempool so we can make blocks of multiple txs in the demo.
-    let txid = mempool
+    mempool
         .lock()
         .expect("Thread should have not crashed holding the unlocked mutex.")
-        .append(MempoolItem { tx, verified_tx }, proofs)
+        .append(MempoolTx {
+            tx,
+            verified_tx,
+            proofs,
+        })
         .map_err(|msg| flash_error(msg.to_string()))?;
 
     // Save everything in a single DB transaction.
@@ -576,11 +574,17 @@ fn assets_create(
         .verify(&bp_gens)
         .expect("We just formed a tx and it must be valid");
 
+    let txid = verified_tx.id;
+
     // Add tx to the mempool so we can make blocks of multiple txs in the demo.
-    let txid = mempool
+    mempool
         .lock()
         .expect("Thread should have not crashed holding the unlocked mutex.")
-        .append(MempoolItem { tx, verified_tx }, proofs)
+        .append(MempoolTx {
+            tx,
+            verified_tx,
+            proofs,
+        })
         .map_err(|msg| flash_error(msg.to_string()))?;
 
     // Save everything in a single DB transaction.
@@ -667,7 +671,7 @@ fn prepare_db_if_needed() {
     db_connection
         .transaction::<(), diesel::result::Error, _>(|| {
             use nodes::{Node, Wallet};
-            use zkvm::{Anchor, Block, BlockchainState};
+            use zkvm::{Anchor, BlockchainState};
 
             let token_record = records::AssetRecord::new("XLM");
             let usd_record = records::AssetRecord::new("USD");
@@ -712,10 +716,8 @@ fn prepare_db_if_needed() {
 
             let initial_block_record = records::BlockRecord {
                 height: 1,
-                block_json: util::to_json(&Block {
-                    header: network_state.tip.clone(),
-                    txs: Vec::new(),
-                }),
+                header_json: util::to_json(&network_state.tip),
+                txs_json: "[]".to_string(),
                 utxo_proofs_json: "[]".to_string(),
                 state_json: util::to_json(&network_state),
             };
