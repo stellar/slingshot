@@ -2,7 +2,8 @@ use super::nodes::*;
 use super::schema::*;
 use super::util;
 use curve25519_dalek::scalar::Scalar;
-use zkvm::blockchain::{Block, BlockchainState};
+use zkvm::blockchain::{BlockHeader, BlockchainState};
+use zkvm::utreexo;
 use zkvm::{Tx, TxEntry};
 
 use serde_json::Value as JsonValue;
@@ -13,7 +14,9 @@ use std::collections::HashMap;
 #[derive(Debug, Queryable, Insertable)]
 pub struct BlockRecord {
     pub height: i32, // FIXME: diesel doesn't allow u64 here...
-    pub block_json: String,
+    pub header_json: String,
+    pub txs_json: String,
+    pub utxo_proofs_json: String,
     pub state_json: String, // latest state will be used for *the* network state
 }
 
@@ -33,30 +36,30 @@ impl BlockRecord {
     pub fn network_status_summary(&self) -> JsonValue {
         json!({
             "height": self.height,
-            "block_id": hex::encode(self.block().header.id().0),
-            "block": serde_json::from_str::<JsonValue>(&self.block_json).expect("Block should be valid JSON."),
+            "block_id": hex::encode(self.block_header().id().0),
+            "block_header": serde_json::from_str::<JsonValue>(&self.header_json).expect("Block header should be valid JSON."),
             "state": serde_json::from_str::<JsonValue>(&self.state_json).expect("State should be valid JSON."),
             "utxos_count": self.state().utreexo.count(),
         })
     }
 
     pub fn to_table_item(&self) -> JsonValue {
-        let blk = self.block();
+        let block_header = self.block_header();
         json!({
             "height": self.height,
-            "id": hex::encode(self.block().header.id().0),
-            "header": blk.header,
-            "txs": blk.txs.len(),
+            "id": hex::encode(block_header.id().0),
+            "header": block_header,
+            "txs": self.txs().len(),
         })
     }
 
     pub fn to_details(&self) -> JsonValue {
-        let blk = self.block();
+        let block_header = self.block_header();
         json!({
             "height": self.height,
-            "id": hex::encode(self.block().header.id().0),
-            "header": &util::to_json_value(&blk.header),
-            "txs": blk.txs.into_iter().map(|tx| {
+            "id": hex::encode(block_header.id().0),
+            "header": &util::to_json_value(&block_header),
+            "txs": self.txs().into_iter().map(|tx| {
                 Self::tx_details(&tx)
             }).collect::<Vec<_>>(),
         })
@@ -87,8 +90,16 @@ impl BlockRecord {
         })
     }
 
-    pub fn block(&self) -> Block {
-        util::from_valid_json(&self.block_json)
+    pub fn block_header(&self) -> BlockHeader {
+        util::from_valid_json(&self.header_json)
+    }
+
+    pub fn txs(&self) -> Vec<Tx> {
+        util::from_valid_json(&self.txs_json)
+    }
+
+    pub fn utxo_proofs(&self) -> Vec<utreexo::Proof> {
+        util::from_valid_json(&self.utxo_proofs_json)
     }
 
     pub fn state(&self) -> BlockchainState {

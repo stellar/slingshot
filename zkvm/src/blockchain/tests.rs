@@ -7,7 +7,7 @@ use rand::RngCore;
 use super::*;
 use crate::{
     utreexo, Anchor, Commitment, Contract, ContractID, PortableItem, Predicate, Program, Prover,
-    String, TxHeader, Value, VerificationKey,
+    String, TxHeader, Value, VerificationKey, VerifiedTx,
 };
 
 fn make_predicate(privkey: u64) -> Predicate {
@@ -32,12 +32,27 @@ fn make_nonce_contract(privkey: u64, qty: u64) -> Contract {
     }
 }
 
+struct MempoolTx {
+    vtx: VerifiedTx,
+    proofs: Vec<utreexo::Proof>,
+}
+
+impl MempoolItem for MempoolTx {
+    fn verified_tx(&self) -> &VerifiedTx {
+        &self.vtx
+    }
+
+    fn utreexo_proofs(&self) -> &[utreexo::Proof] {
+        &self.proofs
+    }
+}
+
 #[test]
 fn test_state_machine() {
     let bp_gens = BulletproofGens::new(256, 1);
     let privkey = Scalar::from(1u64);
     let initial_contract = make_nonce_contract(1, 100);
-    let (mut state, proofs) = BlockchainState::make_initial(0u64, vec![initial_contract.id()]);
+    let (state, proofs) = BlockchainState::make_initial(0u64, vec![initial_contract.id()]);
 
     let tx = {
         let program = Program::build(|p| {
@@ -67,12 +82,25 @@ fn test_state_machine() {
         utx.sign(sig)
     };
 
-    let (block, _verified_block, future_state) = state
-        .make_block(1, 1, Vec::new(), vec![tx], proofs, &bp_gens)
-        .unwrap();
+    let vtx = tx.verify(&bp_gens).expect("Tx should be valid");
+
+    let mut mempool = Mempool::new(state.clone(), 42);
+
+    mempool
+        .append(MempoolTx {
+            vtx: vtx.clone(),
+            proofs: proofs.clone(),
+        })
+        .expect("Tx must be valid");
+
+    let future_state = mempool
+        .make_block()
+        .expect("Block must be created successfully");
 
     // Apply the block to the state
-    let (_verified_block, new_state) = state.apply_block(&block, &bp_gens).unwrap();
+    let new_state = state
+        .apply_block(future_state.tip, &[vtx], proofs.iter())
+        .expect("Block application should succeed.");
 
     let hasher = utreexo::NodeHasher::<ContractID>::new();
     assert_eq!(

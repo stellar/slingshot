@@ -1,8 +1,7 @@
 use merlin::Transcript;
 use serde::{Deserialize, Serialize};
 
-use super::super::utreexo;
-use crate::{Hash, MerkleTree, Tx, TxEntry, TxID, VerifiedTx};
+use crate::{Hash, MerkleTree};
 
 /// Identifier of the block, computed as a hash of the `BlockHeader`.
 #[derive(Clone, Copy, PartialEq, Default, Debug)]
@@ -30,26 +29,6 @@ pub struct BlockHeader {
     pub ext: Vec<u8>,
 }
 
-/// Block is a collection of transactions.
-#[derive(Clone, Serialize, Deserialize)]
-pub struct Block {
-    /// Block header.
-    pub header: BlockHeader,
-    /// List of transactions.
-    pub txs: Vec<Tx>, // no Debug impl for R1CSProof yet
-    /// UTXO proofs
-    pub all_utxo_proofs: Vec<utreexo::Proof>,
-}
-
-/// VerifiedBlock contains a list of VerifiedTx.
-#[derive(Clone)]
-pub struct VerifiedBlock {
-    /// Block header.
-    pub header: BlockHeader,
-    /// List of transactions.
-    pub txs: Vec<VerifiedTx>,
-}
-
 impl BlockHeader {
     /// Computes the ID of the block header.
     pub fn id(&self) -> BlockID {
@@ -74,26 +53,10 @@ impl BlockHeader {
             height: 1,
             prev: BlockID([0; 32]),
             timestamp_ms,
-            txroot: MerkleTree::root::<TxID>(b"ZkVM.txroot", &[]),
+            txroot: MerkleTree::empty_root(b"ZkVM.txroot"),
             utxoroot,
             ext: Vec::new(),
         }
-    }
-}
-
-impl Block {
-    /// Returns an iterator of all utxo proofs for all transactions in a block.
-    /// This interface allows us to optimize the representation of utxo proofs,
-    /// while not affecting the validation logic.
-    pub fn utxo_proofs(&self) -> impl IntoIterator<Item = &utreexo::Proof> {
-        self.all_utxo_proofs.iter()
-    }
-}
-
-impl VerifiedBlock {
-    /// Returns an iterator over all transaction log entries for all transactions in the block.
-    pub fn entries(&self) -> impl Iterator<Item = &TxEntry> {
-        self.txs.iter().flat_map(|tx| tx.log.iter())
     }
 }
 

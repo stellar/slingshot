@@ -7,11 +7,28 @@ use curve25519_dalek::scalar::Scalar;
 use keytree::Xprv;
 use musig::{Multisignature, Signature};
 
-use zkvm::blockchain::{Block, BlockchainState};
+use zkvm::blockchain::{BlockHeader, BlockchainState, Mempool, MempoolItem};
 use zkvm::utreexo;
-use zkvm::{Anchor, ClearValue, Contract, ContractID, Program, Prover, TxEntry, TxHeader};
+use zkvm::{
+    Anchor, ClearValue, Contract, ContractID, Program, Prover, TxEntry, TxHeader, VerifiedTx,
+};
 
 use crate::{Account, ReceiverReply, ReceiverWitness};
+
+struct MempoolTx {
+    vtx: VerifiedTx,
+    proofs: Vec<utreexo::Proof>,
+}
+
+impl MempoolItem for MempoolTx {
+    fn verified_tx(&self) -> &VerifiedTx {
+        &self.vtx
+    }
+
+    fn utreexo_proofs(&self) -> &[utreexo::Proof] {
+        &self.proofs
+    }
+}
 
 /// The complete state of the user node: their wallet and their blockchain state.
 #[derive(Clone)]
@@ -234,17 +251,33 @@ fn basic_accounts_test() {
         .iter()
         .map(|utxo| utxo.proof.clone())
         .collect::<Vec<_>>();
-    let (block, _verified_block, _network_state2) = network_state
-        .make_block(1, 1, Vec::new(), vec![tx], utxo_proofs, &bp_gens)
-        .unwrap();
+
+    let vtx = tx.verify(&bp_gens).expect("Tx should be valid");
+    let mut mempool = Mempool::<MempoolTx>::new(network_state.clone(), 42);
+    mempool
+        .append(MempoolTx {
+            vtx: vtx.clone(),
+            proofs: utxo_proofs.clone(),
+        })
+        .expect("Tx must be valid");
+
+    let future_state = mempool
+        .make_block()
+        .expect("Block must be created successfully");
 
     // 9. Alice and Bob process the incoming block:
-    process_block(&mut alice, &block, &bp_gens);
-    process_block(&mut bob, &block, &bp_gens);
+    let vtxs = [vtx];
+    process_block(&mut alice, future_state.tip.clone(), &vtxs, &utxo_proofs);
+    process_block(&mut bob, future_state.tip.clone(), &vtxs, &utxo_proofs);
 }
 
 /// Processes a block
-fn process_block(node: &mut Node, block: &Block, bp_gens: &BulletproofGens) {
+fn process_block(
+    node: &mut Node,
+    block_header: BlockHeader,
+    vtxs: &[VerifiedTx],
+    proofs: &[utreexo::Proof],
+) {
     // 9. Alice/Bob process blockchain:
     //     a. SPV nodes:
     //        1. Network sends to Bob and Alice new blockheader and a changeset:
@@ -254,11 +287,14 @@ fn process_block(node: &mut Node, block: &Block, bp_gens: &BulletproofGens) {
     //     b. Full nodes:
     //        1. Network sends to Bob and Alice new block
     //        2. Alice/Bob verify+apply changes, producing a catchup struct.
-    let (verified_block, new_state) = node.blockchain.apply_block(&block, &bp_gens).unwrap();
+    let new_state = node
+        .blockchain
+        .apply_block(block_header, vtxs, proofs.iter())
+        .expect("We expect a valid block");
 
     // In a real node utxos will be indexed by ContractID, so lookup will be more efficient.
     let hasher = utreexo::NodeHasher::new();
-    for entry in verified_block.entries() {
+    for entry in vtxs.iter().flat_map(|vtx| vtx.log.iter()) {
         match entry {
             TxEntry::Input(contract_id) => {
                 // Delete confirmed utxos

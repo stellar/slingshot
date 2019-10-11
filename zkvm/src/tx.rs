@@ -1,4 +1,6 @@
 use bulletproofs::r1cs::R1CSProof;
+use bulletproofs::BulletproofGens;
+use core::borrow::Borrow;
 use curve25519_dalek::ristretto::CompressedRistretto;
 use merlin::Transcript;
 use musig::{Signature, VerificationKey};
@@ -169,6 +171,27 @@ impl Tx {
     /// Computes the TxID and TxLog without verifying the transaction.
     pub fn precompute(&self) -> Result<(TxID, TxLog), VMError> {
         Verifier::precompute(self)
+    }
+
+    /// Performs stateless verification of the transaction:
+    /// logic, signatures and ZK R1CS proof.
+    pub fn verify(&self, bp_gens: &BulletproofGens) -> Result<VerifiedTx, VMError> {
+        Verifier::verify_tx(self, bp_gens)
+    }
+
+    /// Verifies a batch of transactions, typically coming from a Block.
+    pub fn verify_batch<T>(
+        txs: impl IntoIterator<Item = T>,
+        bp_gens: &BulletproofGens,
+    ) -> Result<Vec<VerifiedTx>, VMError>
+    where
+        T: Borrow<Self>,
+    {
+        // TODO: implement and adopt a batch verification API for R1CS proofs.
+
+        txs.into_iter()
+            .map(|tx| tx.borrow().verify(bp_gens))
+            .collect()
     }
 
     /// Serializes the tx into a byte array.

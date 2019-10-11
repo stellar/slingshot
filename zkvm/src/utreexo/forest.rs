@@ -277,7 +277,9 @@ impl WorkForest {
         Ok(())
     }
 
-    /// Allows performing multiple updates atomically.
+    /// Allows performing multiple updates atomically: none of the changes
+    /// are applied if some of them failed.
+    /// Note: atomicity here does NOT mean that you can use this method across threads.
     pub fn transaction<F, T, E>(&mut self, closure: F) -> Result<T, E>
     where
         F: FnOnce(&mut Self) -> Result<T, E>,
@@ -295,7 +297,7 @@ impl WorkForest {
 
     /// Normalizes the forest into minimal number of ordered perfect trees.
     /// Returns a root of the new forst, the forest and a catchup structure.
-    pub fn normalize<M: MerkleItem>(self, hasher: &NodeHasher<M>) -> (Forest, Catchup) {
+    pub fn normalize<M: MerkleItem>(&self, hasher: &NodeHasher<M>) -> (Forest, Catchup) {
         // TBD: what's the best way to estimate the vector capacity from self.heap.len()?
         let estimated_cap = self.heap.len() / 2;
 
