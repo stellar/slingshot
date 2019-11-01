@@ -1,18 +1,18 @@
 {% extends "base" %}
 
-{% block title %}{{node.wallet.alias}}{% endblock title %}
+{% block title %}{{wallet.alias}}{% endblock title %}
 
 {% block main %}
   <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3">
-    <h1 class="h1">Account: <em>{{node.wallet.alias}}</em></h2>
+    <h1 class="h1">Account: <em>{{wallet.alias}}</em></h2>
   </div>
 
   <table class="table table-bordered block-header">
     <tbody>
-      <tr><th>Alias</th><td>{{node.wallet.alias}}</td></tr>
-      <tr><th>Sequence #</th><td>{{node.wallet.account.sequence}}</td></tr>
-      <tr><th>Xprv</th><td><code>{{node.wallet.xprv}}</code></td></tr>
-      <tr><th>Xpub</th><td><code>{{node.wallet.account.xpub}}</code></td></tr>
+      <tr><th>Alias</th><td>{{wallet.alias}}</td></tr>
+      <tr><th>Sequence #</th><td>{{wallet.account.sequence}}</td></tr>
+      <tr><th>Xprv</th><td><code>{{wallet.xprv}}</code></td></tr>
+      <tr><th>Xpub</th><td><code>{{wallet.account.xpub}}</code></td></tr>
     </tbody>
   </table>
 
@@ -244,7 +244,7 @@
   <div class="modal-dialog" role="document">
     <div class="modal-content">
       <form action="/pay" method="POST">
-        <input type="hidden" name="sender_alias" value="{{node.wallet.alias}}" />
+        <input type="hidden" name="sender_alias" value="{{wallet.alias}}" />
         <div class="modal-header">
           <h5 class="modal-title" id="transfer-label">Transfer</h5>
           <button type="button" class="close" data-dismiss="modal" aria-label="Close">

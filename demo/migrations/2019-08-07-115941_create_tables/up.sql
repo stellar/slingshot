@@ -6,13 +6,23 @@ CREATE TABLE IF NOT EXISTS block_records (
   state_json text NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS user_records (
+  id varchar PRIMARY KEY NOT NULL,
+  seed varchar NOT NULL,
+  info_json text NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS asset_records (
-  alias varchar PRIMARY KEY NOT NULL,
-  key_json text NOT NULL
+  owner_id varchar NOT NULL,
+  alias varchar NOT NULL,
+  key_hex varchar NOT NULL,
+  flavor_hex varchar NOT NULL,
+  PRIMARY KEY (owner_id, alias)
 );
 
-CREATE TABLE IF NOT EXISTS node_records (
-  alias varchar PRIMARY KEY NOT NULL,
-  state_json text NOT NULL
+CREATE TABLE IF NOT EXISTS account_records (
+  owner_id varchar NOT NULL,
+  alias varchar NOT NULL,
+  wallet_json text NOT NULL,
+  PRIMARY KEY (owner_id, alias)
 );
-

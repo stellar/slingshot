@@ -9,23 +9,25 @@ extern crate rocket_contrib;
 #[macro_use]
 extern crate serde_json;
 
+mod db;
+mod user;
 mod mempool;
-mod nodes;
+mod asset;
+mod account;
 mod publication;
-mod records;
+mod blockchain;
 mod schema;
 mod util;
+mod names;
 
 use std::collections::HashMap;
-use std::env;
+
 use std::mem;
 use std::ops::DerefMut;
 use std::sync::Mutex;
-use std::time::SystemTime;
 
 use diesel::prelude::*;
 use diesel::sqlite::SqliteConnection;
-use dotenv::dotenv;
 
 use rocket::request::{FlashMessage, Form, FromForm};
 use rocket::response::{status::NotFound, Flash, Redirect};
@@ -36,10 +38,11 @@ use rocket_contrib::templates::Template;
 use bulletproofs::BulletproofGens;
 use zkvm::utreexo;
 
-use crate::mempool::{Mempool, MempoolTx};
-
-#[database("demodb")]
-struct DBConnection(SqliteConnection);
+use mempool::{Mempool, MempoolTx};
+use db::DBConnection;
+use asset::AssetRecord;
+use user::User;
+use account::{AccountRecord,Wallet,Utxo};
 
 #[get("/")]
 fn network_status(
@@ -50,7 +53,7 @@ fn network_status(
 
     let blk_record = block_records
         .order(height.desc())
-        .first::<records::BlockRecord>(&dbconn.0)
+        .first::<blockchain::BlockRecord>(&dbconn.0)
         .map_err(|_| NotFound("Block not found".into()))?;
 
     let context = json!({
@@ -78,11 +81,11 @@ fn network_mempool(
 
     let context = json!({
         "sidebar": sidebar_context(&dbconn.0),
-        "mempool_timestamp": current_timestamp_ms(),
+        "mempool_timestamp": util::current_timestamp_ms(),
         "mempool_len": mempool.len(),
         "mempool_size_kb": (mempool::estimated_memory_cost(&mempool) as f64) / 1024.0,
         "mempool_txs": mempool.items().map(|item| {
-            records::BlockRecord::tx_details(&item.tx)
+            blockchain::BlockRecord::tx_details(&item.tx)
         }).collect::<Vec<_>>(),
         "flash": flash.map(|f| json!({
             "name": f.name(),
@@ -104,7 +107,7 @@ fn network_mempool_makeblock(
         .lock()
         .expect("Threads haven't crashed holding the mutex lock");
 
-    let timestamp_ms = current_timestamp_ms();
+    let timestamp_ms = util::current_timestamp_ms();
 
     let txs = mempool
         .items()
@@ -125,7 +128,7 @@ fn network_mempool_makeblock(
         .make_block()
         .expect("Mempool::make_block should succeed");
 
-    let new_block_record = records::BlockRecord {
+    let new_block_record = blockchain::BlockRecord {
         height: new_state.tip.height as i32,
         header_json: util::to_json(&new_state.tip),
         txs_json: util::to_json(&txs),
@@ -147,14 +150,14 @@ fn network_mempool_makeblock(
 
             // Catch up ALL the nodes.
 
-            use schema::node_records::dsl::*;
-            let recs = node_records.load::<records::NodeRecord>(&dbconn.0)?;
+            use schema::account_records::dsl::*;
+            let recs = account_records.load::<AccountRecord>(&dbconn.0)?;
 
             for rec in recs.into_iter() {
-                let mut node = rec.node();
-                node.process_block(&new_state.tip, &verified_txs, &txs, proofs.iter());
-                let rec = records::NodeRecord::new(node);
-                diesel::update(node_records.filter(alias.eq(&rec.alias)))
+                let mut wallet = rec.wallet();
+                wallet.process_block(&verified_txs, &txs, new_state.tip.height, &new_state.catchup);
+                let rec = AccountRecord::new(&wallet);
+                diesel::update(account_records.filter(alias.eq(&rec.alias)))
                     .set(&rec)
                     .execute(&dbconn.0)?;
             }
@@ -182,7 +185,7 @@ fn network_blocks(dbconn: DBConnection) -> Result<Template, NotFound<String>> {
 
     let blk_records = block_records
         .order(height.desc())
-        .load::<records::BlockRecord>(&dbconn.0)
+        .load::<blockchain::BlockRecord>(&dbconn.0)
         .map_err(|_| NotFound("Blocks can't be loaded".into()))?;
 
     let context = json!({
@@ -202,7 +205,7 @@ fn network_block_show(
     use schema::block_records::dsl::*;
     let blk_record = block_records
         .filter(height.eq(&height_param))
-        .first::<records::BlockRecord>(&dbconn.0)
+        .first::<blockchain::BlockRecord>(&dbconn.0)
         .map_err(|_| NotFound("Block not found".into()))?;
 
     let context = json!({
@@ -224,57 +227,59 @@ fn nodes_show(
     mempool: State<Mutex<Mempool>>,
     dbconn: DBConnection,
 ) -> Result<Template, NotFound<String>> {
-    let (node, others_aliases) = {
-        use schema::node_records::dsl::*;
-        let node = node_records
+    let (acc_record, others_aliases) = {
+        use schema::account_records::dsl::*;
+        let acc_record = account_records
             .filter(alias.eq(&alias_param))
-            .first::<records::NodeRecord>(&dbconn.0)
-            .map_err(|_| NotFound("Node not found".into()))?;
+            .first::<AccountRecord>(&dbconn.0)
+            .map_err(|_| NotFound("Account record not found".into()))?;
 
-        let others_aliases = node_records
+        let others_aliases = account_records
             .filter(alias.ne(&alias_param))
-            .load::<records::NodeRecord>(&dbconn.0)
-            .map_err(|_| NotFound("Cannot load nodes".into()))?
+            .load::<AccountRecord>(&dbconn.0)
+            .map_err(|_| NotFound("Cannot load account records".into()))?
             .into_iter()
             .map(|rec| rec.alias)
             .collect::<Vec<_>>();
 
-        (node, others_aliases)
+        (acc_record, others_aliases)
     };
 
     let assets = {
         use schema::asset_records::dsl::*;
         asset_records
-            .load::<records::AssetRecord>(&dbconn.0)
+            .load::<AssetRecord>(&dbconn.0)
             .map_err(|_| NotFound("Assets can't be loaded".into()))?
     };
 
-    let balances = node.balances(&assets);
 
     // load mempool txs and annotate them.
     let mempool = mempool
         .lock()
         .expect("Threads haven't crashed holding the mutex lock");
 
-    let mut node_pending = node.node();
+    let mut wallet_pending = acc_record.wallet();
     let pending_txs = mempool.items().filter_map(|item| {
         let (_txid, txlog) = item
             .tx
             .precompute()
             .expect("Our mempool should not contain invalid transactions.");
 
-        node_pending.process_pending_tx(&item.tx, &txlog, 0)
-    });
+        wallet_pending.process_tx(&item.tx, &txlog, None)
+    }).collect::<Vec<_>>();
+
+    let balances = wallet_pending.balances(&assets);
+
 
     let context = json!({
         "sidebar": sidebar_context(&dbconn.0),
-        "node": node.to_json(),
+        "wallet": wallet_pending.to_json(),
         "balances": balances,
         "others": others_aliases,
-        "pending_txs": pending_txs.map(|atx| {
+        "pending_txs": pending_txs.into_iter().map(|atx| {
             atx.tx_details(&assets)
         }).collect::<Vec<_>>(),
-        "txs": node.node().wallet.txs.iter().map(|atx| {
+        "txs": acc_record.wallet().txs.iter().map(|atx| {
             atx.tx_details(&assets)
         }).collect::<Vec<_>>(),
         "flash": flash.map(|f| json!({
@@ -308,19 +313,19 @@ fn pay(
     }
     // Load all records that we'll need: sender, recipient, asset.
     let (mut sender, mut recipient) = {
-        use schema::node_records::dsl::*;
+        use schema::account_records::dsl::*;
 
-        let sender_record = node_records
+        let sender_record = account_records
             .filter(alias.eq(&transfer_form.sender_alias))
-            .first::<records::NodeRecord>(&dbconn.0)
+            .first::<AccountRecord>(&dbconn.0)
             .map_err(|_| flash_error("Sender not found".to_string()))?;
 
-        let recipient_record = node_records
+        let recipient_record = account_records
             .filter(alias.eq(&transfer_form.recipient_alias))
-            .first::<records::NodeRecord>(&dbconn.0)
+            .first::<AccountRecord>(&dbconn.0)
             .map_err(|_| flash_error("Recipient not found".to_string()))?;
 
-        (sender_record.node(), recipient_record.node())
+        (sender_record.wallet(), recipient_record.wallet())
     };
 
     let asset_record = {
@@ -328,7 +333,7 @@ fn pay(
 
         asset_records
             .filter(alias.eq(&transfer_form.flavor_alias))
-            .first::<records::AssetRecord>(&dbconn.0)
+            .first::<AssetRecord>(&dbconn.0)
             .map_err(|_| flash_error("Asset not found".to_string()))?
     };
 
@@ -337,7 +342,7 @@ fn pay(
         qty: transfer_form.qty,
         flv: asset_record.flavor(),
     };
-    let payment_receiver_witness = recipient.wallet.account.generate_receiver(payment);
+    let payment_receiver_witness = recipient.account.generate_receiver(payment);
     let payment_receiver = &payment_receiver_witness.receiver;
 
     // Note: at this point, recipient saves the increased seq #,
@@ -354,12 +359,12 @@ fn pay(
 
     // In a real system we'd add pending_utxos here, but since we are not pruning the mempool,
     // we want to show these as contributing to the node's balance immediately.
-    recipient.wallet.utxos.push(nodes::Utxo {
-        receiver_witness: payment_receiver_witness,
+    recipient.utxos.push(Utxo {
+        receiver: payment_receiver.clone(),
+        sequence: payment_receiver_witness.sequence,
         anchor: reply.anchor, // store anchor sent by Alice
         proof: utreexo::Proof::Transient,
-        spent: false,
-    });
+    }.received());
     // Note: at this point, recipient saves the unconfirmed utxo,
     // but since we are doing the exchange in one call, we'll skip it for now.
 
@@ -385,15 +390,15 @@ fn pay(
         .0
         .transaction::<(), diesel::result::Error, _>(|| {
             // Save the updated records.
-            use schema::node_records::dsl::*;
-            let sender_record = records::NodeRecord::new(sender);
-            let sender_scope = node_records.filter(alias.eq(&sender_record.alias));
+            use schema::account_records::dsl::*;
+            let sender_record = AccountRecord::new(&sender);
+            let sender_scope = account_records.filter(alias.eq(&sender_record.alias));
             diesel::update(sender_scope)
                 .set(&sender_record)
                 .execute(&dbconn.0)?;
 
-            let recipient_record = records::NodeRecord::new(recipient);
-            let recipient_scope = node_records.filter(alias.eq(&recipient_record.alias));
+            let recipient_record = AccountRecord::new(&recipient);
+            let recipient_scope = account_records.filter(alias.eq(&recipient_record.alias));
             diesel::update(recipient_scope)
                 .set(&recipient_record)
                 .execute(&dbconn.0)?;
@@ -412,7 +417,7 @@ fn assets_show(alias_param: String, dbconn: DBConnection) -> Result<Template, No
 
     let asset = asset_records
         .filter(alias.eq(alias_param))
-        .first::<records::AssetRecord>(&dbconn.0)
+        .first::<AssetRecord>(&dbconn.0)
         .map_err(|_| NotFound("Asset not found".into()))?;
 
     let context = json!({
@@ -423,38 +428,27 @@ fn assets_show(alias_param: String, dbconn: DBConnection) -> Result<Template, No
 }
 
 #[derive(FromForm)]
-struct NewNodeForm {
+struct NewAccountForm {
     alias: String,
 }
 
 #[post("/nodes/create", data = "<form>")]
 fn nodes_create(
-    form: Form<NewNodeForm>,
+    form: Form<NewAccountForm>,
     dbconn: DBConnection,
+    current_user: User,
 ) -> Result<Flash<Redirect>, Flash<Redirect>> {
     let flash_error = |msg| Flash::error(Redirect::to(uri!(network_status)), msg);
 
     let dbconn = dbconn.0;
     dbconn
         .transaction::<(), diesel::result::Error, _>(|| {
-            use nodes::Node;
 
-            let blk_record = {
-                use schema::block_records::dsl::*;
-                block_records
-                    .order(height.desc())
-                    .first::<records::BlockRecord>(&dbconn)
-                    .expect(
-                        "Tip block not found. Make sure prepare_db_if_needed() was called.".into(),
-                    )
-            };
-
-            let network_state = blk_record.state();
-            let new_record = records::NodeRecord::new(Node::new(&form.alias, network_state));
+            let new_record = AccountRecord::new(&Wallet::new(&current_user, &form.alias));
 
             {
-                use schema::node_records::dsl::*;
-                diesel::insert_into(node_records)
+                use schema::account_records::dsl::*;
+                diesel::insert_into(account_records)
                     .values(&new_record)
                     .execute(&dbconn)?;
             }
@@ -463,7 +457,7 @@ fn nodes_create(
         })
         .map_err(|e| flash_error(e.to_string()))?;
 
-    let msg = format!("Node created: {}", &form.alias);
+    let msg = format!("Account created: {}", &form.alias);
     Ok(Flash::success(
         Redirect::to(uri!(nodes_show: &form.alias)),
         msg,
@@ -483,6 +477,7 @@ fn assets_create(
     mempool: State<Mutex<Mempool>>,
     bp_gens: State<BulletproofGens>,
     dbconn: DBConnection,
+    current_user: User,
 ) -> Result<Flash<Redirect>, Flash<Redirect>> {
     let flash_error = |msg| Flash::error(Redirect::to(uri!(network_status)), msg);
 
@@ -491,16 +486,16 @@ fn assets_create(
     let dbconn = dbconn.0;
 
     let asset_record = dbconn
-        .transaction::<records::AssetRecord, diesel::result::Error, _>(|| {
+        .transaction::<AssetRecord, diesel::result::Error, _>(|| {
             // Try to find the record by name, if not found - create one.
 
             use schema::asset_records::dsl::*;
 
             let rec = asset_records
                 .filter(alias.eq(&form.asset_alias))
-                .first::<records::AssetRecord>(&dbconn)
+                .first::<AssetRecord>(&dbconn)
                 .unwrap_or_else(|_| {
-                    let rec = records::AssetRecord::new(form.asset_alias.clone());
+                    let rec = AssetRecord::new(&current_user, form.asset_alias.clone());
                     diesel::insert_into(asset_records)
                         .values(&rec)
                         .execute(&dbconn)
@@ -519,21 +514,21 @@ fn assets_create(
 
     // Find some utxo from the Issuer's account and use it as an anchoring tool.
     let mut issuer = {
-        use schema::node_records::dsl::*;
-        node_records
+        use schema::account_records::dsl::*;
+        account_records
             .filter(alias.eq("Issuer"))
-            .first::<records::NodeRecord>(&dbconn)
+            .first::<AccountRecord>(&dbconn)
             .map_err(|msg| flash_error(msg.to_string()))?
-            .node()
+            .wallet()
     };
 
     let mut recipient = {
-        use schema::node_records::dsl::*;
-        node_records
+        use schema::account_records::dsl::*;
+        account_records
             .filter(alias.eq(&form.recipient_alias))
-            .first::<records::NodeRecord>(&dbconn)
+            .first::<AccountRecord>(&dbconn)
             .map_err(|msg| flash_error(msg.to_string()))?
-            .node()
+            .wallet()
     };
 
     // Issuer will be receiving the tokens it issues.
@@ -541,7 +536,7 @@ fn assets_create(
         qty: form.qty,
         flv: asset_record.flavor(),
     };
-    let payment_receiver_witness = recipient.wallet.account.generate_receiver(payment);
+    let payment_receiver_witness = recipient.account.generate_receiver(payment);
     let payment_receiver = &payment_receiver_witness.receiver;
 
     // Note: at this point, recipient saves the increased seq #,
@@ -560,12 +555,12 @@ fn assets_create(
     // but since we are doing the exchange in one call, we'll skip it.
 
     // Recipient receives new tokens, so they can spend them right away.
-    recipient.wallet.utxos.push(nodes::Utxo {
-        receiver_witness: payment_receiver_witness,
+    recipient.utxos.push(Utxo {
+        receiver: payment_receiver.clone(),
+        sequence: payment_receiver_witness.sequence,
         anchor: reply.anchor, // store anchor sent by Alice
         proof: utreexo::Proof::Transient,
-        spent: false,
-    });
+    }.received());
 
     // Note: at this point, recipient saves the unconfirmed utxo,
     // but since we are doing the exchange in one call, we'll skip it for now.
@@ -591,13 +586,13 @@ fn assets_create(
     dbconn
         .transaction::<(), diesel::result::Error, _>(|| {
             // Save the updated records.
-            use schema::node_records::dsl::*;
-            let issuer_record = records::NodeRecord::new(issuer);
-            let scope = node_records.filter(alias.eq(&issuer_record.alias));
+            use schema::account_records::dsl::*;
+            let issuer_record = AccountRecord::new(&issuer);
+            let scope = account_records.filter(alias.eq(&issuer_record.alias));
             diesel::update(scope).set(&issuer_record).execute(&dbconn)?;
 
-            let recipient_record = records::NodeRecord::new(recipient);
-            let scope = node_records.filter(alias.eq(&recipient_record.alias));
+            let recipient_record = AccountRecord::new(&recipient);
+            let scope = account_records.filter(alias.eq(&recipient_record.alias));
             diesel::update(scope)
                 .set(&recipient_record)
                 .execute(&dbconn)?;
@@ -623,13 +618,13 @@ fn not_found(req: &Request<'_>) -> Template {
 /// Returns context for the sidebar in all the pages
 fn sidebar_context(dbconn: &SqliteConnection) -> serde_json::Value {
     use schema::asset_records::dsl::*;
-    use schema::node_records::dsl::*;
+    use schema::account_records::dsl::*;
 
-    let nodes = node_records
-        .load::<records::NodeRecord>(dbconn)
+    let nodes = account_records
+        .load::<AccountRecord>(dbconn)
         .expect("Error loading nodes");
     let assets = asset_records
-        .load::<records::AssetRecord>(dbconn)
+        .load::<AssetRecord>(dbconn)
         .expect("Error loading assets");
     json!({
         "nodes": nodes.into_iter().map(|n|n.to_json()).collect::<Vec<_>>(),
@@ -637,134 +632,19 @@ fn sidebar_context(dbconn: &SqliteConnection) -> serde_json::Value {
     })
 }
 
-//
-// Initial setup helpers
-//
-
-fn establish_db_connection() -> SqliteConnection {
-    dotenv().ok();
-
-    let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
-    SqliteConnection::establish(&database_url)
-        .expect(&format!("Error connecting to {}", database_url))
-}
-
-fn prepare_db_if_needed() {
-    use schema::asset_records::dsl::*;
-    use schema::block_records::dsl::*;
-    use schema::node_records::dsl::*;
-
-    let db_connection = establish_db_connection();
-
-    let results = block_records
-        .limit(1)
-        .load::<records::BlockRecord>(&db_connection)
-        .expect("Error loading a block");
-
-    if results.len() > 0 {
-        return;
-    }
-
-    // Initialize the blockchain
-
-    println!("No blocks found in the database. Initializing blockchain...");
-    db_connection
-        .transaction::<(), diesel::result::Error, _>(|| {
-            use nodes::{Node, Wallet};
-            use zkvm::{Anchor, BlockchainState};
-
-            let token_record = records::AssetRecord::new("XLM");
-            let usd_record = records::AssetRecord::new("USD");
-
-            diesel::insert_into(asset_records)
-                .values(vec![&token_record, &usd_record])
-                .execute(&db_connection)
-                .expect("Inserting an asset record should work");
-
-            // Create a treasury node that will issue various tokens to anyone.
-            let mut treasury_wallet = Wallet::new("Issuer");
-
-            let pending_utxos = {
-                let mut utxos = Vec::new();
-                let anchor = Anchor::from_raw_bytes([0; 32]);
-
-                let (mut list, anchor) =
-                    treasury_wallet.mint_utxos(anchor, token_record.flavor(), vec![1, 2, 4, 8, 16]);
-                utxos.append(&mut list);
-                let (mut list, _anchor) =
-                    treasury_wallet.mint_utxos(anchor, usd_record.flavor(), vec![1000, 200]);
-                utxos.append(&mut list);
-                utxos.append(&mut list);
-
-                utxos
-            };
-
-            let timestamp_ms = current_timestamp_ms();
-            let (network_state, proofs) = BlockchainState::make_initial(
-                timestamp_ms,
-                pending_utxos.iter().map(|utxo| utxo.contract().id()),
-            );
-
-            treasury_wallet.utxos = pending_utxos
-                .into_iter()
-                .zip(proofs.into_iter())
-                .map(|(mut pending_utxo, proof)| {
-                    pending_utxo.proof = proof;
-                    pending_utxo
-                })
-                .collect();
-
-            let initial_block_record = records::BlockRecord {
-                height: 1,
-                header_json: util::to_json(&network_state.tip),
-                txs_json: "[]".to_string(),
-                utxo_proofs_json: "[]".to_string(),
-                state_json: util::to_json(&network_state),
-            };
-
-            diesel::insert_into(block_records)
-                .values(&initial_block_record)
-                .execute(&db_connection)
-                .expect("Inserting a block record should work");
-
-            let treasury = Node {
-                blockchain: network_state.clone(),
-                wallet: treasury_wallet,
-            };
-
-            let treasury_record = records::NodeRecord::new(treasury);
-            let alice_record = records::NodeRecord::new(Node::new("Alice", network_state.clone()));
-            let bob_record = records::NodeRecord::new(Node::new("Bob", network_state.clone()));
-
-            diesel::insert_into(node_records)
-                .values(vec![&treasury_record, &alice_record, &bob_record])
-                .execute(&db_connection)
-                .expect("Inserting new node records should work");
-
-            Ok(())
-        })
-        .expect("Initial DB transaction should succeed.");
-}
 
 fn prepare_mempool() -> Mempool {
     use schema::block_records::dsl::*;
-    let dbconn = establish_db_connection();
+    let dbconn = db::establish_db_connection();
 
     let blk_record = block_records
         .order(height.desc())
-        .first::<records::BlockRecord>(&dbconn)
+        .first::<blockchain::BlockRecord>(&dbconn)
         .expect("Block not found. Make sure prepare_db_if_needed() was called.".into());
 
-    let timestamp_ms = current_timestamp_ms();
+    let timestamp_ms = util::current_timestamp_ms();
 
     Mempool::new(blk_record.state(), timestamp_ms)
-}
-
-fn current_timestamp_ms() -> u64 {
-    SystemTime::now()
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .expect("SystemTime should work")
-        .as_millis() as u64
 }
 
 fn launch_rocket_app() {
@@ -775,6 +655,7 @@ fn launch_rocket_app() {
     rocket::ignite()
         .attach(DBConnection::fairing())
         .attach(Template::fairing())
+        .register(catchers![not_found])
         .manage(mempool)
         .manage(bp_gens)
         .mount("/static", StaticFiles::from("static"))
@@ -797,6 +678,6 @@ fn launch_rocket_app() {
 }
 
 fn main() {
-    prepare_db_if_needed();
+    db::prepare_db_if_needed();
     launch_rocket_app();
 }
