@@ -54,11 +54,11 @@
           </h6>
 
           <ul class="nav flex-column">
-            {% for node in sidebar.nodes %}
+            {% for wallet in sidebar.accounts %}
               <li class="nav-item">
-                <a class="nav-link" href="/nodes/{{ node.wallet.alias }}">
+                <a class="nav-link" href="/nodes/{{ wallet.alias }}">
                   <span data-feather="user"></span>
-                  {{ node.wallet.alias }}
+                  {{ wallet.alias }}
                 </a>
               </li>
             {% endfor %}
@@ -181,9 +181,9 @@
             <label for="recipient" class="col-form-label">Recipient</label>
             
             <select class="form-control" id="recipient_alias" name="recipient_alias">
-              {% for node in sidebar.nodes %}
-                {% if node.wallet.alias != "Issuer" %}
-                <option value="{{node.wallet.alias}}">{{node.wallet.alias}}</option>
+              {% for wallet in sidebar.accounts %}
+                {% if wallet.alias != "Issuer" %}
+                <option value="{{wallet.alias}}">{{wallet.alias}}</option>
                 {% endif %}
               {% endfor %}
             </select>

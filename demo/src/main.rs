@@ -620,14 +620,14 @@ fn sidebar_context(dbconn: &SqliteConnection) -> serde_json::Value {
     use schema::asset_records::dsl::*;
     use schema::account_records::dsl::*;
 
-    let nodes = account_records
+    let accounts = account_records
         .load::<AccountRecord>(dbconn)
-        .expect("Error loading nodes");
+        .expect("Error loading accounts");
     let assets = asset_records
         .load::<AssetRecord>(dbconn)
         .expect("Error loading assets");
     json!({
-        "nodes": nodes.into_iter().map(|n|n.to_json()).collect::<Vec<_>>(),
+        "accounts": accounts.into_iter().map(|n|n.to_json()).collect::<Vec<_>>(),
         "assets": assets.into_iter().map(|a|a.to_json()).collect::<Vec<_>>(),
     })
 }
