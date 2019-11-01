@@ -47,6 +47,22 @@ impl Xprv {
         }
     }
 
+    /// Returns a new Xprv, generated from a given seed
+    pub fn from_seed(seed: impl AsRef<[u8]>) -> Self {
+        let mut t = Transcript::new(b"Keytree.from_seed");
+        t.append_message(b"seed", seed.as_ref());
+        let scalar = t.challenge_scalar(b"scalar");
+        let mut dk = [0u8; 32];
+        t.challenge_bytes(b"dk", &mut dk[..]);
+
+        let pubkey = VerificationKey::from_secret(&scalar);
+
+        Xprv {
+            scalar,
+            xpub: Xpub { pubkey, dk },
+        }
+    }
+
     /// Returns a new Xpub, generated from the provided Xprv.
     pub fn as_xpub(&self) -> &Xpub {
         &self.xpub
