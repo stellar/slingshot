@@ -203,6 +203,7 @@ fn nodes_show(
             .map_err(|_| NotFound("Account record not found".into()))?;
 
         let others_aliases = account_records
+            .filter(owner_id.eq(&current_user.id()))
             .filter(alias.ne(&alias_param))
             .load::<AccountRecord>(&dbconn.0)
             .map_err(|_| NotFound("Cannot load account records".into()))?
@@ -212,6 +213,13 @@ fn nodes_show(
 
         (acc_record, others_aliases)
     };
+
+    let others_accs = others_aliases.into_iter().map(|alias| {
+        json!({
+            "wallet_id": Wallet::wallet_id(&current_user.id(), &alias),
+            "alias": alias
+        })
+    }).collect::<Vec<_>>();
 
     // TBD: we actually need all our own assets here + all the assets we know about.
     let assets = {
@@ -245,7 +253,7 @@ fn nodes_show(
         "sidebar": sidebar.json,
         "wallet": wallet_pending.to_json(),
         "balances": balances,
-        "others": others_aliases,
+        "others": others_accs,
         "pending_txs": pending_txs.into_iter().map(|atx| {
             atx.tx_details(&assets)
         }).collect::<Vec<_>>(),
@@ -259,8 +267,9 @@ fn nodes_show(
 #[derive(FromForm)]
 struct TransferForm {
     sender_alias: String,
-    recipient_alias: String,
-    flavor_alias: String,
+    recipient_wallet_id: String,
+    ext_recipient_wallet_id: String,
+    flavor_hex: String,
     qty: u64,
 }
 
@@ -270,6 +279,7 @@ fn pay(
     dbconn: DBConnection,
     mempool: State<Mutex<Mempool>>,
     bp_gens: State<BulletproofGens>,
+    current_user: User,
 ) -> Result<Flash<Redirect>, Flash<Redirect>> {
     let back_url = uri!(nodes_show: transfer_form.sender_alias.clone());
     let flash_error = |msg| Flash::error(Redirect::to(back_url.clone()), msg);
@@ -277,28 +287,40 @@ fn pay(
     if transfer_form.qty == 0 {
         return Err(flash_error("Cannot transfer zero".into()));
     }
+
+    let (recipient_owner_id, recipient_alias) = if transfer_form.ext_recipient_wallet_id.is_empty() {
+        Wallet::parse_wallet_id(&transfer_form.recipient_wallet_id)
+    } else {
+        // TODO: remember this account
+        Wallet::parse_wallet_id(&transfer_form.ext_recipient_wallet_id)
+    }
+    .ok_or(flash_error("Sorry, could not parse Wallet ID.".to_string()))?;
+
     // Load all records that we'll need: sender, recipient, asset.
     let (mut sender, mut recipient) = {
         use schema::account_records::dsl::*;
 
         let sender_record = account_records
+            .filter(owner_id.eq(&current_user.id()))
             .filter(alias.eq(&transfer_form.sender_alias))
             .first::<AccountRecord>(&dbconn.0)
             .map_err(|_| flash_error("Sender not found".to_string()))?;
 
         let recipient_record = account_records
-            .filter(alias.eq(&transfer_form.recipient_alias))
+            .filter(owner_id.eq(&recipient_owner_id))
+            .filter(alias.eq(&recipient_alias))
             .first::<AccountRecord>(&dbconn.0)
             .map_err(|_| flash_error("Recipient not found".to_string()))?;
 
         (sender_record.wallet(), recipient_record.wallet())
     };
 
+    // FIXME: we should actually just decode flavor from hex!
     let asset_record = {
         use schema::asset_records::dsl::*;
 
         asset_records
-            .filter(alias.eq(&transfer_form.flavor_alias))
+            .filter(flavor_hex.eq(&transfer_form.flavor_hex))
             .first::<AssetRecord>(&dbconn.0)
             .map_err(|_| flash_error("Asset not found".to_string()))?
     };
@@ -459,6 +481,9 @@ fn assets_create(
     let (recipient_owner_id, recipient_alias) = if form.ext_recipient_wallet_id.is_empty() {
         Wallet::parse_wallet_id(&form.recipient_wallet_id)
     } else {
+        
+        // TODO: remember this account
+
         Wallet::parse_wallet_id(&form.ext_recipient_wallet_id)
     }
     .ok_or(flash_error("Sorry, could not parse Wallet ID.".to_string()))?;

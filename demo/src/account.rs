@@ -305,6 +305,7 @@ impl Wallet {
 
                 json!({
                     "alias": alias,
+                    "flavor_hex": hex::encode(&flv),
                     "flv": flv,
                     "qty": balance,
                     "utxos": utxos.iter().map(|utxo| {
