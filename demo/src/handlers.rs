@@ -213,6 +213,7 @@ fn nodes_show(
         (acc_record, others_aliases)
     };
 
+    // TBD: we actually need all our own assets here + all the assets we know about.
     let assets = {
         use schema::asset_records::dsl::*;
         asset_records
@@ -439,7 +440,8 @@ fn nodes_create(
 struct NewAssetForm {
     asset_alias: String,
     qty: u64,
-    recipient_alias: String,
+    recipient_wallet_id: String,
+    ext_recipient_wallet_id: String,
 }
 
 #[post("/assets/create", data = "<form>")]
@@ -452,6 +454,15 @@ fn assets_create(
 ) -> Result<Flash<Redirect>, Flash<Redirect>> {
     let flash_error = |msg| Flash::error(Redirect::to(uri!(network_status)), msg);
 
+    // Determine the recipient.
+
+    let (recipient_owner_id, recipient_alias) = if form.ext_recipient_wallet_id.is_empty() {
+        Wallet::parse_wallet_id(&form.recipient_wallet_id)
+    } else {
+        Wallet::parse_wallet_id(&form.ext_recipient_wallet_id)
+    }
+    .ok_or(flash_error("Sorry, could not parse Wallet ID.".to_string()))?;
+
     // Uses any issuer's utxo to help create an issuance transaction.
 
     let dbconn = dbconn.0;
@@ -463,6 +474,7 @@ fn assets_create(
             use schema::asset_records::dsl::*;
 
             let rec = asset_records
+                .filter(owner_id.eq(&current_user.id()))
                 .filter(alias.eq(&form.asset_alias))
                 .first::<AssetRecord>(&dbconn)
                 .unwrap_or_else(|_| {
@@ -477,12 +489,6 @@ fn assets_create(
         })
         .map_err(|e| flash_error(e.to_string()))?;
 
-    if form.recipient_alias == "Root" {
-        return Err(flash_error(
-            "Root cannot be the recipient (we'll fix this limitation later)".into(),
-        ));
-    }
-
     // Find some utxo from the Root's account and use it as an anchoring tool.
     let mut issuer = {
         use schema::account_records::dsl::*;
@@ -496,7 +502,8 @@ fn assets_create(
     let mut recipient = {
         use schema::account_records::dsl::*;
         account_records
-            .filter(alias.eq(&form.recipient_alias))
+            .filter(owner_id.eq(&recipient_owner_id))
+            .filter(alias.eq(&recipient_alias))
             .first::<AccountRecord>(&dbconn)
             .map_err(|msg| flash_error(msg.to_string()))?
             .wallet()
@@ -575,11 +582,21 @@ fn assets_create(
         })
         .map_err(|e| flash_error(format!("Database error: {}", e)))?;
 
-    let msg = format!("Transaction added to mempool: {}", hex::encode(&txid));
-    Ok(Flash::success(
-        Redirect::to(uri!(nodes_show: &form.recipient_alias)),
-        msg,
-    ))
+    let msg = format!(
+        "Asset {} issued. Transaction added to mempool: {}",
+        form.asset_alias,
+        hex::encode(&txid)
+    );
+
+    if recipient_owner_id == current_user.id() {
+        Ok(Flash::success(
+            Redirect::to(uri!(nodes_show: &recipient_alias)),
+            msg,
+        ))
+    } else {
+        // If external account - show the mempool
+        Ok(Flash::success(Redirect::to(uri!(network_mempool)), msg))
+    }
 }
 
 #[catch(404)]

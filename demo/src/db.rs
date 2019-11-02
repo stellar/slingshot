@@ -7,13 +7,82 @@ use diesel::sqlite::SqliteConnection;
 use zkvm::{Anchor, BlockchainState};
 
 use crate::account::{AccountRecord, Wallet};
-use crate::asset;
+use crate::asset::{self, AssetRecord};
 use crate::blockchain::BlockRecord;
 use crate::user::{User, UserRecord};
 use crate::util;
 
 #[database("demodb")]
 pub struct DBConnection(SqliteConnection);
+
+//
+// Helpers
+//
+impl AccountRecord {
+    pub fn find_root(dbconn: &SqliteConnection) -> Option<Self> {
+        use crate::schema::account_records::dsl::*;
+
+        if let Ok(root) = account_records
+            .filter(alias.eq("Root"))
+            .first::<AccountRecord>(dbconn)
+        {
+            Some(root)
+        } else {
+            None
+        }
+    }
+
+    pub fn find(
+        owner_id_string: String,
+        alias_string: impl Into<String>,
+        dbconn: &SqliteConnection,
+    ) -> Option<Self> {
+        use crate::schema::account_records::dsl::*;
+
+        if let Ok(acc) = account_records
+            .filter(owner_id.eq(owner_id_string))
+            .filter(alias.eq(alias_string.into()))
+            .first::<AccountRecord>(dbconn)
+        {
+            Some(acc)
+        } else {
+            None
+        }
+    }
+}
+
+impl AssetRecord {
+    pub fn find_root_token(dbconn: &SqliteConnection) -> Option<Self> {
+        use crate::schema::asset_records::dsl::*;
+
+        if let Ok(root) = asset_records
+            .filter(alias.eq("XLM"))
+            .first::<AssetRecord>(dbconn)
+        {
+            Some(root)
+        } else {
+            None
+        }
+    }
+
+    pub fn find(
+        owner_id_string: String,
+        alias_string: impl Into<String>,
+        dbconn: &SqliteConnection,
+    ) -> Option<Self> {
+        use crate::schema::asset_records::dsl::*;
+
+        if let Ok(asset) = asset_records
+            .filter(owner_id.eq(owner_id_string))
+            .filter(alias.eq(alias_string.into()))
+            .first::<AssetRecord>(dbconn)
+        {
+            Some(asset)
+        } else {
+            None
+        }
+    }
+}
 
 //
 // Initial setup helpers

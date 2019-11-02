@@ -5,7 +5,7 @@ use curve25519_dalek::scalar::Scalar;
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 
-use accounts::{Account, Receiver};
+use accounts::{Account, Receiver, ReceiverWitness};
 use keytree::Xprv;
 use musig::Multisignature;
 
@@ -30,6 +30,9 @@ pub struct AccountRecord {
 pub struct Wallet {
     /// Name of the account
     pub alias: String,
+
+    /// NB. Redundant for json encoding
+    pub wallet_id: String,
 
     /// Account's root wallet key
     pub xprv: Xprv,
@@ -98,13 +101,30 @@ impl Wallet {
             t.append_message(b"account_alias", alias.as_bytes());
         });
 
+        let wallet_id = Self::wallet_id(&owner.id(), &alias);
+
         Self {
             alias,
+            wallet_id,
             xprv,
             owner_id: owner.id(),
             account: Account::new(xprv.to_xpub()),
             txs: Vec::new(),
             utxos: Vec::new(),
+        }
+    }
+
+    pub fn wallet_id(owner_id: &str, alias: &str) -> String {
+        format!("{}/{}", owner_id, alias)
+    }
+
+    // Returns (owner ID, alias)
+    pub fn parse_wallet_id(wallet_id: &str) -> Option<(&str, &str)> {
+        let parts: Vec<&str> = wallet_id.split('/').collect();
+        if parts.len() == 2 {
+            Some((parts[0], parts[1]))
+        } else {
+            None
         }
     }
 
@@ -332,7 +352,7 @@ impl Wallet {
             // Note: for clarity, we are not randomizing inputs and outputs in this example.
             // The real transaction must randomize all the things
             let program = zkvm::Program::build(|p| {
-                p.push(anchoring_utxo.contract());
+                p.push(anchoring_utxo.contract_witness());
                 p.input();
                 p.sign_tx();
 
@@ -491,7 +511,7 @@ impl Wallet {
             let program = zkvm::Program::build(|p| {
                 // claim all the collected utxos
                 for stored_utxo in spent_utxos.iter() {
-                    p.push(stored_utxo.contract());
+                    p.push(stored_utxo.contract_witness());
                     p.input();
                     p.sign_tx();
                 }
@@ -727,6 +747,15 @@ impl Utxo {
     /// Convert utxo to a Contract instance
     pub fn contract(&self) -> Contract {
         self.receiver.contract(self.anchor)
+    }
+
+    /// Preserves Predicate as ::Key, not as ::Opaque
+    pub fn contract_witness(&self) -> Contract {
+        ReceiverWitness {
+            sequence: self.sequence,
+            receiver: self.receiver.clone(),
+        }
+        .contract(self.anchor)
     }
     /// Returns the UTXO ID
     pub fn contract_id(&self) -> ContractID {

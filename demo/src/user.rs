@@ -3,11 +3,15 @@ use keytree::Xprv;
 use merlin::Transcript;
 use rand::{self, Rng};
 
+use bulletproofs::BulletproofGens;
+use zkvm::utreexo;
+
 use rocket::http::Cookie;
 use rocket::outcome::IntoOutcome;
 use rocket::request::{self, FromRequest, Request};
 
-use crate::account::{AccountRecord, Wallet};
+use crate::account::{AccountRecord, Utxo, Wallet};
+use crate::asset::AssetRecord;
 use crate::db::DBConnection;
 use crate::names;
 use crate::schema::user_records;
@@ -29,7 +33,7 @@ impl User {
     pub fn id(&self) -> String {
         let mut t = Transcript::new(b"zkvmdemo.user_id");
         t.append_message(b"seed", &self.seed.as_bytes());
-        let mut id = [0u8; 16];
+        let mut id = [0u8; 10]; // unique enough for the demo
         t.challenge_bytes(b"user_id", &mut id[..]);
         hex::encode(&id)
     }
@@ -76,25 +80,70 @@ impl User {
         let dbconn = &dbconn.0;
         dbconn
             .transaction::<(), diesel::result::Error, _>(|| {
-                use crate::schema::account_records::dsl::*;
-                use crate::schema::user_records::dsl::*;
+                {
+                    use crate::schema::user_records::dsl::*;
 
-                diesel::insert_into(user_records)
-                    .values(&UserRecord::new(&self))
-                    .execute(dbconn)
-                    .expect("Cannot insert a new user (remembered in a cookie) to the DB");
+                    diesel::insert_into(user_records)
+                        .values(&UserRecord::new(&self))
+                        .execute(dbconn)
+                        .expect("Cannot insert a new user (remembered in a cookie) to the DB");
+                }
 
-                // TBD: find the issuer, make a payment of 10 XLM to the first wallet.
+                // // TBD: find the issuer, make a payment of 10 XLM to the first wallet.
+                // if let Some(root) = AccountRecord::find_root(dbconn) {
+                //     let root = root.wallet();
+                //     let xlm = AssetRecord::find_root_token(dbconn).expect("root token should exist");
 
-                diesel::insert_into(account_records)
-                    .values(&AccountRecord::new(&wallet1))
-                    .execute(dbconn)
-                    .expect("Cannot insert a new wallet #1 to the DB");
+                //     let sender = root;
+                //     let recipient = wallet1;
 
-                diesel::insert_into(account_records)
-                    .values(&AccountRecord::new(&wallet2))
-                    .execute(dbconn)
-                    .expect("Cannot insert a new wallet #2 to the DB");
+                //     // recipient prepares a receiver
+                //     let payment = zkvm::ClearValue {
+                //         qty: 10,
+                //         flv: xlm.flavor(),
+                //     };
+                //     let payment_receiver_witness = recipient.account.generate_receiver(payment);
+                //     let payment_receiver = &payment_receiver_witness.receiver;
+
+                //     // Note: at this point, recipient saves the increased seq #,
+                //     // but since we are doing the exchange in one call, we'll skip it.
+
+                //     // Sender prepares a tx
+                //     let (tx, _txid, proofs, reply) = sender
+                //         .prepare_payment_tx(&payment_receiver, &bp_gens)
+                //         .expect("TBD: handle payment tx failure properly")
+
+                //     // Note: at this point, sender reserves the utxos and saves its incremented seq # until sender ACK'd ReceiverReply,
+                //     // but since we are doing the exchange in one call, we'll skip it.
+
+                //     // Sender gives Recipient info to watch for tx.
+
+                //     // In a real system we'd add pending_utxos here, but since we are not pruning the mempool,
+                //     // we want to show these as contributing to the node's balance immediately.
+                //     recipient.utxos.push(
+                //         Utxo {
+                //             receiver: payment_receiver.clone(),
+                //             sequence: payment_receiver_witness.sequence,
+                //             anchor: reply.anchor, // store anchor sent by Alice
+                //             proof: utreexo::Proof::Transient,
+                //         }
+                //         .received(),
+                //     );
+                // }
+
+                {
+                    use crate::schema::account_records::dsl::*;
+
+                    diesel::insert_into(account_records)
+                        .values(&AccountRecord::new(&wallet1))
+                        .execute(dbconn)
+                        .expect("Cannot insert a new wallet #1 to the DB");
+
+                    diesel::insert_into(account_records)
+                        .values(&AccountRecord::new(&wallet2))
+                        .execute(dbconn)
+                        .expect("Cannot insert a new wallet #2 to the DB");
+                }
 
                 Ok(())
             })

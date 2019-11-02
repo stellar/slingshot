@@ -27,15 +27,23 @@ impl<'a, 'r> FromRequest<'a, 'r> for Sidebar {
 
         // TBD: load User and user-specific accounts and assets
 
-        use schema::account_records::dsl::*;
-        use schema::asset_records::dsl::*;
+        let accounts = {
+            use schema::account_records::dsl::*;
 
-        let accounts = account_records
-            .load::<AccountRecord>(&dbconn)
-            .expect("Error loading accounts");
-        let assets = asset_records
-            .load::<AssetRecord>(&dbconn)
-            .expect("Error loading assets");
+            account_records
+                .filter(owner_id.eq(current_user.id()))
+                .load::<AccountRecord>(&dbconn)
+                .expect("Error loading accounts")
+        };
+
+        let assets = {
+            use schema::asset_records::dsl::*;
+
+            asset_records
+                .filter(owner_id.eq(current_user.id()))
+                .load::<AssetRecord>(&dbconn)
+                .expect("Error loading assets")
+        };
 
         Some(Sidebar {
             json: json!({

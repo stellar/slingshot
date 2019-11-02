@@ -135,20 +135,20 @@
     <div class="modal-content">
       <form action="/nodes/create" method="POST">
         <div class="modal-header">
-          <h5 class="modal-title" id="new-node-label">New node</h5>
+          <h5 class="modal-title" id="new-node-label">New account</h5>
           <button type="button" class="close" data-dismiss="modal" aria-label="Close">
             <span aria-hidden="true">&times;</span>
           </button>
         </div>
         <div class="modal-body">
           <div class="form-group">
-            <label for="new-node-alias" class="col-form-label">Node alias:</label>
+            <label for="new-node-alias" class="col-form-label">Account alias:</label>
             <input type="text" class="form-control" name="alias" id="new-node-alias" autocomplete="off"/>
           </div>
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
-          <button type="submit" class="btn btn-primary">Create node</button>
+          <button type="submit" class="btn btn-primary">Create account</button>
         </div>
       </form>
     </div>
@@ -180,14 +180,19 @@
           <div class="form-group">
             <label for="recipient" class="col-form-label">Recipient</label>
             
-            <select class="form-control" id="recipient_alias" name="recipient_alias">
+            <select class="form-control" id="recipient_wallet_id" name="recipient_wallet_id" onchange="NewAssetForm_toggleExtWalletID()">
               {% for wallet in sidebar.accounts %}
-                {% if wallet.alias != "Root" %}
-                <option value="{{wallet.alias}}">{{wallet.alias}}</option>
-                {% endif %}
+                <option value="{{wallet.wallet_id}}">{{wallet.alias}}</option>
               {% endfor %}
+              
+              <!--TODO: also include all the remembered accounts -->
+
+              <option value="external-wallet-id...">External Wallet ID...</option>
             </select>
-          
+          </div>
+          <div class="form-group" id="ext-wallet-id-group" style="display:none">
+            <label for="new-asset-qty" class="col-form-label">Recipient’s Wallet ID:</label>
+            <input type="text" class="form-control" id="ext_recipient_wallet_id" name="ext_recipient_wallet_id" value="" autocomplete="off"/>
           </div>
         </div>
         <div class="modal-footer">
@@ -198,6 +203,17 @@
     </div>
   </div>
 </div>
+
+<script>
+function NewAssetForm_toggleExtWalletID() {
+  if ($("#recipient_wallet_id").val() == "external-wallet-id...") {
+      $("#ext-wallet-id-group").show();
+  } else {
+      $("#ext_recipient_wallet_id").val("");
+      $("#ext-wallet-id-group").hide();
+  }
+}
+</script>
 
 
 <script src="https://code.jquery.com/jquery-3.3.1.slim.min.js" integrity="sha384-q8i/X+965DzO0rT7abK41JStQIAqVgRVzpbzo5smXKp4YfRvH+8abtTE1Pi6jizo" crossorigin="anonymous"></script>
