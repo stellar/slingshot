@@ -1,20 +1,19 @@
-use std::env;
 use dotenv::dotenv;
+use std::env;
 
 use diesel::prelude::*;
 use diesel::sqlite::SqliteConnection;
 
 use zkvm::{Anchor, BlockchainState};
 
-use crate::user::{User,UserRecord};
+use crate::account::{AccountRecord, Wallet};
 use crate::asset;
 use crate::blockchain::BlockRecord;
-use crate::account::{AccountRecord,Wallet};
+use crate::user::{User, UserRecord};
 use crate::util;
 
 #[database("demodb")]
 pub struct DBConnection(SqliteConnection);
-
 
 //
 // Initial setup helpers
@@ -29,10 +28,10 @@ pub fn establish_db_connection() -> SqliteConnection {
 }
 
 pub fn prepare_db_if_needed() {
+    use crate::schema::account_records::dsl::*;
+    use crate::schema::asset_records::dsl::*;
     use crate::schema::block_records::dsl::*;
     use crate::schema::user_records::dsl::*;
-    use crate::schema::asset_records::dsl::*;
-    use crate::schema::account_records::dsl::*;
 
     let db_connection = establish_db_connection();
 
@@ -50,7 +49,6 @@ pub fn prepare_db_if_needed() {
     println!("No blocks found in the database. Initializing blockchain...");
     db_connection
         .transaction::<(), diesel::result::Error, _>(|| {
-
             // Create a treasury account
             let treasury_owner = User::random();
             let xlm_record = asset::AssetRecord::new(&treasury_owner, "XLM");
@@ -61,13 +59,13 @@ pub fn prepare_db_if_needed() {
                 .expect("Inserting an asset record should work");
 
             // Create a treasury account that will issue various tokens to anyone.
-            let mut treasury = Wallet::new(&treasury_owner, "Issuer");
+            let mut treasury = Wallet::new(&treasury_owner, "Root");
 
             let initial_utxos = {
                 let mut utxos = Vec::new();
                 let anchor = Anchor::from_raw_bytes([0; 32]);
                 let (mut list, _anchor) =
-                        treasury.mint_utxos(anchor, xlm_record.flavor(), vec![1_000_000_000u64]);
+                    treasury.mint_utxos(anchor, xlm_record.flavor(), vec![1_000_000_000u64]);
                 utxos.append(&mut list);
                 utxos
             };
@@ -87,12 +85,11 @@ pub fn prepare_db_if_needed() {
                 })
                 .collect();
 
-            
             diesel::insert_into(user_records)
                 .values(vec![&UserRecord::new(&treasury_owner)])
                 .execute(&db_connection)
                 .expect("Inserting new user record should work");
-            
+
             diesel::insert_into(account_records)
                 .values(vec![&AccountRecord::new(&treasury)])
                 .execute(&db_connection)
@@ -109,4 +106,3 @@ pub fn prepare_db_if_needed() {
         })
         .expect("Initial DB transaction should succeed.");
 }
-

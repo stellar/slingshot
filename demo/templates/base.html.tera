@@ -100,15 +100,15 @@
 
       <main role="main" class="col-md-9 ml-sm-auto col-lg-10 px-4">
 
-        {% if flash %}
-          {% if flash.name == "error" %}
+        {% if sidebar.flash %}
+          {% if sidebar.flash.name == "error" %}
           <div class="alert alert-danger" role="alert">
-            {{ flash.msg }}
+            {{ sidebar.flash.msg }}
           </div>
           {% endif %}
-          {% if flash.name == "success" %}
+          {% if sidebar.flash.name == "success" %}
           <div class="alert alert-success" role="alert">
-            {{ flash.msg }}
+            {{ sidebar.flash.msg }}
           </div>
           {% endif %}
         {% endif %}
@@ -182,7 +182,7 @@
             
             <select class="form-control" id="recipient_alias" name="recipient_alias">
               {% for wallet in sidebar.accounts %}
-                {% if wallet.alias != "Issuer" %}
+                {% if wallet.alias != "Root" %}
                 <option value="{{wallet.alias}}">{{wallet.alias}}</option>
                 {% endif %}
               {% endfor %}

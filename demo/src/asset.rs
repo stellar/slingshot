@@ -1,8 +1,8 @@
-use serde_json::Value as JsonValue;
 use curve25519_dalek::scalar::Scalar;
+use serde_json::Value as JsonValue;
 
-use super::user::User;
 use super::schema::*;
+use super::user::User;
 
 #[derive(Debug, Queryable, Insertable)]
 pub struct AssetRecord {
@@ -36,7 +36,7 @@ impl AssetRecord {
     /// Creates a new asset record with key derived from the alias.
     pub fn new(owner: &User, alias: impl Into<String>) -> Self {
         let alias = alias.into();
-        let issuance_key = owner.xprv().derive_key(|t|{
+        let issuance_key = owner.xprv().derive_key(|t| {
             t.append_message(b"asset_alias", alias.as_bytes());
         });
         let adef = AssetDefinition {
@@ -56,7 +56,8 @@ impl AssetRecord {
         let mut bytes = [0u8; 32];
         let vec = hex::decode(&self.key_hex).expect("DB must contain valid asset_records.key_hex");
         bytes[..].copy_from_slice(&vec);
-        Scalar::from_canonical_bytes(bytes).expect("DB must contain canonical Scalar in asset_records.key_hex")
+        Scalar::from_canonical_bytes(bytes)
+            .expect("DB must contain canonical Scalar in asset_records.key_hex")
     }
 
     pub fn metadata(&self) -> zkvm::String {
@@ -81,8 +82,7 @@ impl AssetRecord {
     fn asset_definition(&self) -> AssetDefinition {
         AssetDefinition {
             issuance_key: self.issuance_key(),
-            alias: self.alias.clone()
+            alias: self.alias.clone(),
         }
     }
 }
-

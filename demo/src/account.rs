@@ -1,22 +1,29 @@
 use std::collections::HashMap;
 
-use serde::{Deserialize, Serialize};
-use serde_json::Value as JsonValue;
 use bulletproofs::BulletproofGens;
 use curve25519_dalek::scalar::Scalar;
+use serde::{Deserialize, Serialize};
+use serde_json::Value as JsonValue;
 
-use keytree::Xprv;
 use accounts::{Account, Receiver};
+use keytree::Xprv;
 use musig::Multisignature;
 
 use zkvm::utreexo;
 use zkvm::{Anchor, ClearValue, Contract, ContractID, Tx, TxEntry, TxLog, VerifiedTx};
 
-use crate::user::User;
 use crate::asset::AssetRecord;
-use crate::util;
 use crate::blockchain::BlockRecord;
 use crate::schema::*;
+use crate::user::User;
+use crate::util;
+
+#[derive(Debug, Queryable, Insertable, AsChangeset)]
+pub struct AccountRecord {
+    pub owner_id: String,
+    pub alias: String,
+    pub wallet_json: String,
+}
 
 /// User's wallet account data
 #[derive(Clone, Serialize, Deserialize)]
@@ -59,7 +66,7 @@ pub enum UtxoStatus {
     /// Received utxo contains a utreexo proof that's always being updated.
     Received,
 
-    /// Our utxo that we marked as spent. It's not removed right away until we process 
+    /// Our utxo that we marked as spent. It's not removed right away until we process
     /// transaction and annotate our own txs.
     Spent,
 }
@@ -69,7 +76,7 @@ pub enum UtxoStatus {
 pub struct Utxo {
     pub receiver: Receiver,
     pub anchor: Anchor,
-    pub sequence: u64, // 0 for outgoing utxos
+    pub sequence: u64,         // 0 for outgoing utxos
     pub proof: utreexo::Proof, // transient for outgoing and unconfirmed utxos
 }
 
@@ -82,13 +89,12 @@ pub struct AnnotatedTx {
     pub known_entries: Vec<(usize, ClearValue)>,
 }
 
-
 impl Wallet {
     /// Creates a new user account with a privkey and pre-seeded collection of utxos
     pub fn new(owner: &User, alias: impl Into<String>) -> Self {
         let alias = alias.into();
 
-        let xprv = owner.xprv().derive_intermediate_key(|t|{
+        let xprv = owner.xprv().derive_intermediate_key(|t| {
             t.append_message(b"account_alias", alias.as_bytes());
         });
 
@@ -128,10 +134,12 @@ impl Wallet {
 
     pub fn remove_utxo(&mut self, contract_id: ContractID) -> Option<UtxoWithStatus> {
         // Remove spent anchoring utxo
-        let maybe_i = self.utxos.iter()
+        let maybe_i = self
+            .utxos
+            .iter()
             .position(|o| o.contract_id() == contract_id);
 
-        if let Some(i)  = maybe_i {
+        if let Some(i) = maybe_i {
             Some(self.utxos.remove(i))
         } else {
             None
@@ -140,10 +148,12 @@ impl Wallet {
 
     pub fn spend_utxo(&mut self, contract_id: ContractID) {
         // Remove spent anchoring utxo
-        let maybe_i = self.utxos.iter()
+        let maybe_i = self
+            .utxos
+            .iter()
             .position(|o| o.contract_id() == contract_id);
 
-        if let Some(i)  = maybe_i {
+        if let Some(i) = maybe_i {
             self.utxos[i].mark_as_spent();
         }
     }
@@ -214,11 +224,7 @@ impl Wallet {
                 TxEntry::Output(contract) => {
                     let cid = contract.id();
 
-                    if let Some(i) = self
-                        .utxos
-                        .iter()
-                        .position(|utxo| utxo.contract_id() == cid)
-                    {
+                    if let Some(i) = self.utxos.iter().position(|utxo| utxo.contract_id() == cid) {
                         let utxo = &self.utxos[i];
                         known_entries.push((entry_index, utxo.value()));
                         if let Some(_) = utxo.our_utxo() {
@@ -291,7 +297,6 @@ impl Wallet {
             })
             .collect::<Vec<_>>())
     }
-
 
     /// Constructs an issuance transaction and a reply to the recipient.
     pub fn prepare_issuance_tx(
@@ -396,7 +401,7 @@ impl Wallet {
             anchor: payment_anchor,
         };
 
-        let change_utxo = Utxo{
+        let change_utxo = Utxo {
             receiver: change_receiver,
             anchor: change_anchor,
             sequence: change_seq,
@@ -410,15 +415,9 @@ impl Wallet {
 
             // Derive individual signing keys for each input, according to its sequence number.
             // In this example all inputs are coming from the same account (same xpub).
-            let spending_key = Account::derive_signing_key(
-                anchoring_utxo.sequence,
-                &self.xprv,
-            );
+            let spending_key = Account::derive_signing_key(anchoring_utxo.sequence, &self.xprv);
 
-            let signing_keys = vec![
-                spending_key,
-                issuance_key,
-            ];
+            let signing_keys = vec![spending_key, issuance_key];
 
             let sig = musig::Signature::sign_multi(
                 &signing_keys[..],
@@ -439,18 +438,21 @@ impl Wallet {
         // but we currently don't do persistent changes when new txs land in a mempool,
         // so if we mark it as Incoming, we won't be able to spend it until it's confirmed in a block.
         // WARNING: This will cause an issue if the tx is not going to get into mempool.
-        //          However, it's similar to having mempool cleared - 
+        //          However, it's similar to having mempool cleared -
         //          we need a proper solution to rollback utxo storage when some
         //          txs get fail to get into block.
         self.utxos.push(change_utxo.received());
 
         // remember the outgoing payment
-        self.utxos.push(Utxo{
-            receiver: payment_receiver.clone(),
-            anchor: reply.anchor,
-            sequence: 0,
-            proof: utreexo::Proof::Transient,
-        }.outgoing());
+        self.utxos.push(
+            Utxo {
+                receiver: payment_receiver.clone(),
+                anchor: reply.anchor,
+                sequence: 0,
+                proof: utreexo::Proof::Transient,
+            }
+            .outgoing(),
+        );
 
         Ok((tx, txid, utxo_proofs, reply))
     }
@@ -506,7 +508,10 @@ impl Wallet {
 
                 p.cloak(
                     spent_utxos.len(),
-                    maybe_change_receiver_witness.as_ref().map(|_| 2).unwrap_or(1),
+                    maybe_change_receiver_witness
+                        .as_ref()
+                        .map(|_| 2)
+                        .unwrap_or(1),
                 );
 
                 // Now the payment and the change are in the same order on the stack:
@@ -544,7 +549,9 @@ impl Wallet {
         });
 
         let maybe_change_utxo = maybe_change_receiver_witness.map(|crw| {
-            let change_anchor = iterator.next().expect("We have just built the outputs above.");
+            let change_anchor = iterator
+                .next()
+                .expect("We have just built the outputs above.");
             Utxo {
                 receiver: crw.receiver,
                 anchor: change_anchor,
@@ -571,9 +578,7 @@ impl Wallet {
             // In this example all inputs are coming from the same account (same xpub).
             let signing_keys = spent_utxos
                 .iter()
-                .map(|utxo| {
-                    Account::derive_signing_key(utxo.sequence, &self.xprv)
-                })
+                .map(|utxo| Account::derive_signing_key(utxo.sequence, &self.xprv))
                 .collect::<Vec<_>>();
 
             let sig = musig::Signature::sign_multi(
@@ -600,7 +605,7 @@ impl Wallet {
         for cid in contract_ids.iter() {
             self.spend_utxo(*cid);
         }
-        
+
         // Save the change utxo
         if let Some(change_utxo) = maybe_change_utxo {
             // Save the change utxo - it is spendable right away, via a chain of unconfirmed txs.
@@ -608,19 +613,22 @@ impl Wallet {
             // but we currently don't do persistent changes when new txs land in a mempool,
             // so if we mark it as Incoming, we won't be able to spend it until it's confirmed in a block.
             // WARNING: This will cause an issue if the tx is not going to get into mempool.
-            //          However, it's similar to having mempool cleared - 
+            //          However, it's similar to having mempool cleared -
             //          we need a proper solution to rollback utxo storage when some
             //          txs get fail to get into block.
             self.utxos.push(change_utxo.received());
         }
 
         // Remember the outgoing payment
-        self.utxos.push(Utxo{
-            receiver: payment_receiver.clone(),
-            anchor: reply.anchor,
-            sequence: 0,
-            proof: utreexo::Proof::Transient,
-        }.outgoing());
+        self.utxos.push(
+            Utxo {
+                receiver: payment_receiver.clone(),
+                anchor: reply.anchor,
+                sequence: 0,
+                proof: utreexo::Proof::Transient,
+            }
+            .outgoing(),
+        );
 
         Ok((tx, txid, utxo_proofs, reply))
     }
@@ -629,14 +637,6 @@ impl Wallet {
     pub fn to_json(&self) -> JsonValue {
         util::to_json_value(&self)
     }
-}
-
-
-#[derive(Debug, Queryable, Insertable, AsChangeset)]
-pub struct AccountRecord {
-    pub owner_id: String,
-    pub alias: String,
-    pub wallet_json: String,
 }
 
 impl AccountRecord {
@@ -659,7 +659,6 @@ impl AccountRecord {
             .expect("Stored json state must be correctly encoded.")
     }
 }
-
 
 impl AnnotatedTx {
     pub fn tx_details(&self, assets: &[AssetRecord]) -> JsonValue {
@@ -688,10 +687,18 @@ impl AnnotatedTx {
     }
 
     fn find_known_value(&self, entry_index: usize) -> Option<ClearValue> {
-        self.known_entries.iter().find(|&(i,_)| *i == entry_index).map(|(_,value)| *value)
+        self.known_entries
+            .iter()
+            .find(|&(i, _)| *i == entry_index)
+            .map(|(_, value)| *value)
     }
 
-    fn annotated_entry(&self, entry_index: usize, cid: ContractID, assets: &[AssetRecord]) -> JsonValue {
+    fn annotated_entry(
+        &self,
+        entry_index: usize,
+        cid: ContractID,
+        assets: &[AssetRecord],
+    ) -> JsonValue {
         json!({
             "id": &util::to_json_value(&cid),
             "value": self.find_known_value(entry_index).map(|value| {
@@ -709,7 +716,6 @@ impl AnnotatedTx {
         })
     }
 }
-
 
 impl AsRef<ClearValue> for Utxo {
     fn as_ref(&self) -> &ClearValue {
@@ -734,27 +740,26 @@ impl Utxo {
     pub fn outgoing(self) -> UtxoWithStatus {
         UtxoWithStatus {
             status: UtxoStatus::Outgoing,
-            utxo: self
+            utxo: self,
         }
     }
 
     pub fn incoming(self) -> UtxoWithStatus {
         UtxoWithStatus {
             status: UtxoStatus::Incoming,
-            utxo: self
+            utxo: self,
         }
     }
 
     pub fn received(self) -> UtxoWithStatus {
         UtxoWithStatus {
             status: UtxoStatus::Received,
-            utxo: self
+            utxo: self,
         }
     }
 }
 
 impl UtxoWithStatus {
-
     pub fn value(&self) -> ClearValue {
         self.any_utxo().value()
     }
@@ -777,10 +782,10 @@ impl UtxoWithStatus {
         match self.status {
             UtxoStatus::Incoming => {
                 self.status = UtxoStatus::Received;
-            },
+            }
             UtxoStatus::Received => {}
-            UtxoStatus::Spent => {},
-            UtxoStatus::Outgoing => {},
+            UtxoStatus::Spent => {}
+            UtxoStatus::Outgoing => {}
         }
     }
 
@@ -789,7 +794,7 @@ impl UtxoWithStatus {
     }
 
     pub fn as_mut_utxo(&mut self) -> &mut Utxo {
-        &mut  self.utxo
+        &mut self.utxo
     }
 
     pub fn any_utxo(&self) -> &Utxo {
@@ -826,5 +831,3 @@ impl UtxoWithStatus {
         }
     }
 }
-
-

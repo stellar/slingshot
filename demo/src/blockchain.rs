@@ -19,7 +19,6 @@ pub struct BlockRecord {
 }
 
 impl BlockRecord {
-
     pub fn initial(network_state: &BlockchainState) -> Self {
         Self {
             height: 1,
@@ -103,4 +102,3 @@ impl BlockRecord {
         util::from_valid_json(&self.state_json)
     }
 }
-
