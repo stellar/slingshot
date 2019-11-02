@@ -90,49 +90,52 @@ impl<'a, 'r> FromRequest<'a, 'r> for User {
 
         let dbconn = request.guard::<DBConnection>()?.0;
 
-        request.cookies()
-            .get(cookie_name)
-            .map(|cookie| {
-                let seed = cookie.value().to_string();
-                let user = User{seed};
-                {
-                    use crate::schema::user_records::dsl::*;
+        eprintln!("getting cookies");
+        let mut cookies = request.cookies();
 
-                    // If we have reset DB, but user still has a cookie,
-                    // we need to re-add the entry to DB.
-                    if let Err(_e) = user_records
-                        .filter(id.eq(&user.id()))
-                        .first::<UserRecord>(&dbconn) {
+        if let Some(cookie) = cookies.get(cookie_name) {
+            let seed = cookie.value().to_string();
+            let user = User{seed};
+            {
+                use crate::schema::user_records::dsl::*;
 
-                            // FIXME: change this for normal error handling
-                            diesel::insert_into(user_records)
-                                .values(&UserRecord::new(&user))
-                                .execute(&dbconn)
-                                .expect("Cannot insert a new user (remembered in a cookie) to the DB");
-                        }
-                }
-                user
-            })
-            .or_else(|| {
-                
-                let user = User::random();
+                // If we have reset DB, but user still has a cookie,
+                // we need to re-add the entry to DB.
+                if let Err(_e) = user_records
+                    .filter(id.eq(&user.id()))
+                    .first::<UserRecord>(&dbconn) {
 
-                {
-                    use crate::schema::user_records::dsl::*;
+                        // FIXME: change this for normal error handling
+                        diesel::insert_into(user_records)
+                            .values(&UserRecord::new(&user))
+                            .execute(&dbconn)
+                            .expect("Cannot insert a new user (remembered in a cookie) to the DB");
+                    }
+            }
+            Some(user)
+        } else {
+            let user = User::random();
 
-                    // Insert new user record into DB.
-                    if let Err(_e) = diesel::insert_into(user_records)
-                        .values(&UserRecord::new(&user))
-                        .execute(&dbconn) {
-                            return None;
-                        }
-                }
-                
+            {
+                use crate::schema::user_records::dsl::*;
 
-                request.cookies().add(Cookie::new(cookie_name, user.seed.clone()));
-                Some(user)
-            })
-            .or_forward(())
+                // Insert new user record into DB.
+                if let Err(_e) = diesel::insert_into(user_records)
+                    .values(&UserRecord::new(&user))
+                    .execute(&dbconn) {
+                        return None.or_forward(());
+                    }
+            }
+            
+            cookies.add(Cookie::build(cookie_name, user.seed.clone())
+                .path("/")
+                .secure(false)
+                .max_age(time::Duration::days(366))
+                .finish()
+            );
+
+            Some(user)
+        }.or_forward(())
     }
 }
 

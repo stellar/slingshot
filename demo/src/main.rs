@@ -9,6 +9,8 @@ extern crate rocket_contrib;
 #[macro_use]
 extern crate serde_json;
 
+extern crate time;
+
 mod db;
 mod user;
 mod mempool;
@@ -32,6 +34,7 @@ use diesel::sqlite::SqliteConnection;
 use rocket::request::{FlashMessage, Form, FromForm};
 use rocket::response::{status::NotFound, Flash, Redirect};
 use rocket::{Request, State};
+
 use rocket_contrib::serve::StaticFiles;
 use rocket_contrib::templates::Template;
 
@@ -44,9 +47,11 @@ use asset::AssetRecord;
 use user::User;
 use account::{AccountRecord,Wallet,Utxo};
 
+
 #[get("/")]
 fn network_status(
     dbconn: DBConnection,
+    current_user: User,
     flash: Option<FlashMessage>,
 ) -> Result<Template, NotFound<String>> {
     use schema::block_records::dsl::*;
@@ -62,7 +67,8 @@ fn network_status(
         "flash": flash.map(|f| json!({
             "name": f.name(),
             "msg": f.msg(),
-        }))
+        })),
+        "current_user_id": current_user.id()
     });
 
     Ok(Template::render("network/status", &context))
@@ -226,11 +232,13 @@ fn nodes_show(
     flash: Option<FlashMessage>,
     mempool: State<Mutex<Mempool>>,
     dbconn: DBConnection,
+    current_user: User,
 ) -> Result<Template, NotFound<String>> {
     let (acc_record, others_aliases) = {
         use schema::account_records::dsl::*;
         let acc_record = account_records
             .filter(alias.eq(&alias_param))
+            .filter(owner_id.eq(&current_user.id()))
             .first::<AccountRecord>(&dbconn.0)
             .map_err(|_| NotFound("Account record not found".into()))?;
 
@@ -659,6 +667,7 @@ fn launch_rocket_app() {
         .manage(mempool)
         .manage(bp_gens)
         .mount("/static", StaticFiles::from("static"))
+        .mount("/favicon.ico", StaticFiles::from("static"))
         .mount(
             "/",
             routes![
