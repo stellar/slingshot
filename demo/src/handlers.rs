@@ -319,6 +319,8 @@ fn pay(
         (sender_record.wallet(), recipient_record.wallet())
     };
 
+    let sending_to_yourself = (recipient.wallet_id == sender.wallet_id);
+
     // FIXME: we should actually just decode flavor from hex!
     let asset_record = {
         use schema::asset_records::dsl::*;
@@ -360,6 +362,17 @@ fn pay(
         }
         .received(),
     );
+    if sending_to_yourself {
+        sender.utxos.push(
+            Utxo {
+                receiver: payment_receiver.clone(),
+                sequence: payment_receiver_witness.sequence,
+                anchor: reply.anchor, // store anchor sent by Alice
+                proof: utreexo::Proof::Transient,
+            }
+            .received(),
+        );
+    }
     // Note: at this point, recipient saves the unconfirmed utxo,
     // but since we are doing the exchange in one call, we'll skip it for now.
 
@@ -392,12 +405,13 @@ fn pay(
                 .set(&sender_record)
                 .execute(&dbconn.0)?;
 
-            let recipient_record = AccountRecord::new(&recipient);
-            let recipient_scope = account_records.filter(alias.eq(&recipient_record.alias));
-            diesel::update(recipient_scope)
-                .set(&recipient_record)
-                .execute(&dbconn.0)?;
-
+            if !sending_to_yourself {
+                let recipient_record = AccountRecord::new(&recipient);
+                let recipient_scope = account_records.filter(alias.eq(&recipient_record.alias));
+                diesel::update(recipient_scope)
+                    .set(&recipient_record)
+                    .execute(&dbconn.0)?;
+            }
             Ok(())
         })
         .map_err(|e| flash_error(format!("Database error: {}", e)))?;
