@@ -140,19 +140,26 @@
         </tr>
         <tr>
           <td colspan="2">
-            <code class="abbrev-hex highlight-zkvm" data-abbrev-length="2">
-              <strong>Program:</strong><br/>
-              {{tx.program_asm}}
-            </code>
-            <br/><br/>
-            <code class="abbrev-hex highlight-zkvm" data-abbrev-length="32">
-              <strong>Raw program:</strong>
-              {{tx.program_hex}}</br>
-              <strong>Signature:&nbsp;&nbsp;</strong>
-              {{tx.tx.signature}}</br>
-              <strong>R1CS proof:&nbsp;</strong>
-              {{tx.tx.proof}}
-            </code>
+            <div class="tx-show-details">
+              <code class="show-button-wrapper" style="display:block;cursor:pointer">
+                <span style="border-bottom:1px dotted black" href="#">Show details</span>
+              </code>
+              <div class="details-being-shown" style="display:none;">
+                <code class="abbrev-hex highlight-zkvm" data-abbrev-length="2">
+                  <strong>Program:</strong><br/>
+                  {{tx.program_asm}}
+                </code>
+                <br/><br/>
+                <code class="abbrev-hex highlight-zkvm" data-abbrev-length="32">
+                  <strong>Raw program:</strong>
+                  {{tx.program_hex}}</br>
+                  <strong>Signature:&nbsp;&nbsp;</strong>
+                  {{tx.tx.signature}}</br>
+                  <strong>R1CS proof:&nbsp;</strong>
+                  {{tx.tx.proof}}
+                </code>
+              </div>
+            </div>
           </td>
         </tr>
       </tbody>
@@ -220,19 +227,26 @@
         </tr>
         <tr>
           <td colspan="2">
-            <code class="abbrev-hex highlight-zkvm" data-abbrev-length="2">
-              <strong>Program:</strong><br/>
-              {{tx.program_asm}}
-            </code>
-            <br/><br/>
-            <code class="abbrev-hex highlight-zkvm" data-abbrev-length="32">
-              <strong>Raw program:</strong>
-              {{tx.program_hex}}</br>
-              <strong>Signature:&nbsp;&nbsp;</strong>
-              {{tx.tx.signature}}</br>
-              <strong>R1CS proof:&nbsp;</strong>
-              {{tx.tx.proof}}
-            </code>
+            <div class="tx-show-details">
+              <code class="show-button-wrapper" style="display:block;cursor:pointer">
+                <span style="border-bottom:1px dotted black" href="#">Show details</span>
+              </code>
+              <div class="details-being-shown" style="display:none;">
+                <code class="abbrev-hex highlight-zkvm" data-abbrev-length="2">
+                  <strong>Program:</strong><br/>
+                  {{tx.program_asm}}
+                </code>
+                <br/><br/>
+                <code class="abbrev-hex highlight-zkvm" data-abbrev-length="32">
+                  <strong>Raw program:</strong>
+                  {{tx.program_hex}}</br>
+                  <strong>Signature:&nbsp;&nbsp;</strong>
+                  {{tx.tx.signature}}</br>
+                  <strong>R1CS proof:&nbsp;</strong>
+                  {{tx.tx.proof}}
+                </code>
+              </div>
+            </div>
           </td>
         </tr>
       </tbody>
