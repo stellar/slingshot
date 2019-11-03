@@ -12,8 +12,7 @@
       <tr>
         <th>Wallet ID</th>
         <td>
-          <tt style="font-weight:bold;font-size:16px">{{wallet.wallet_id}}</tt>
-          <br/>
+          <tt style="font-weight:bold;font-size:16px;display:inline-block;">{{wallet.wallet_id}}</tt><br/>
           <em>Use the Wallet ID to receive payments from other people.</em>
         </td>
       </tr>
@@ -277,7 +276,7 @@
           <div class="form-group row" id="pay-ext-wallet-id-group" style="display:none">
             <label for="new-asset-qty" class="col-sm-3 col-form-label">Wallet ID:</label>
             <div class="col-sm-9">
-              <input type="text" class="form-control" id="pay_ext_recipient_wallet_id" name="ext_recipient_wallet_id" value="" autocomplete="off"/>
+              <input type="text" class="form-control trim-wallet-id" id="pay_ext_recipient_wallet_id" name="ext_recipient_wallet_id" value="" autocomplete="off"/>
             </div>
           </div>
           <div class="form-group row">
