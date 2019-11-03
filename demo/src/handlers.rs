@@ -192,7 +192,10 @@ fn nodes_show(
     mempool: State<Mutex<Mempool>>,
     dbconn: DBConnection,
     sidebar: Sidebar,
-) -> Result<Template, NotFound<String>> {
+) -> Result<Template, Flash<Redirect>> {
+    let back_url = uri!(network_status);
+    let flash_error = |msg| Flash::error(Redirect::to(back_url.clone()), msg);
+
     let current_user = sidebar.current_user;
     let (acc_record, others_aliases) = {
         use schema::account_records::dsl::*;
@@ -200,13 +203,13 @@ fn nodes_show(
             .filter(alias.eq(&alias_param))
             .filter(owner_id.eq(&current_user.id()))
             .first::<AccountRecord>(&dbconn.0)
-            .map_err(|_| NotFound("Account record not found".into()))?;
+            .map_err(|_| flash_error(format!("Account record not found: {}", alias_param)))?;
 
         let others_aliases = account_records
             .filter(owner_id.eq(&current_user.id()))
             .filter(alias.ne(&alias_param))
             .load::<AccountRecord>(&dbconn.0)
-            .map_err(|_| NotFound("Cannot load account records".into()))?
+            .map_err(|_| flash_error("Cannot load other account records".to_string()))?
             .into_iter()
             .map(|rec| rec.alias)
             .collect::<Vec<_>>();
@@ -214,19 +217,22 @@ fn nodes_show(
         (acc_record, others_aliases)
     };
 
-    let others_accs = others_aliases.into_iter().map(|alias| {
-        json!({
-            "wallet_id": Wallet::wallet_id(&current_user.id(), &alias),
-            "alias": alias
+    let others_accs = others_aliases
+        .into_iter()
+        .map(|alias| {
+            json!({
+                "wallet_id": Wallet::compute_wallet_id(&current_user.id(), &alias),
+                "alias": alias
+            })
         })
-    }).collect::<Vec<_>>();
+        .collect::<Vec<_>>();
 
     // TBD: we actually need all our own assets here + all the assets we know about.
     let assets = {
         use schema::asset_records::dsl::*;
         asset_records
             .load::<AssetRecord>(&dbconn.0)
-            .map_err(|_| NotFound("Assets can't be loaded".into()))?
+            .map_err(|_| flash_error("Assets can't be loaded".to_string()))?
     };
 
     // load mempool txs and annotate them.
@@ -273,28 +279,27 @@ struct TransferForm {
     qty: u64,
 }
 
-#[post("/pay", data = "<transfer_form>")]
+#[post("/pay", data = "<form>")]
 fn pay(
-    transfer_form: Form<TransferForm>,
+    form: Form<TransferForm>,
     dbconn: DBConnection,
     mempool: State<Mutex<Mempool>>,
     bp_gens: State<BulletproofGens>,
     current_user: User,
 ) -> Result<Flash<Redirect>, Flash<Redirect>> {
-    let back_url = uri!(nodes_show: transfer_form.sender_alias.clone());
+    let back_url = uri!(nodes_show: form.sender_alias.clone());
     let flash_error = |msg| Flash::error(Redirect::to(back_url.clone()), msg);
 
-    if transfer_form.qty == 0 {
+    if form.qty == 0 {
         return Err(flash_error("Cannot transfer zero".into()));
     }
 
-    let (recipient_owner_id, recipient_alias) = if transfer_form.ext_recipient_wallet_id.is_empty() {
-        Wallet::parse_wallet_id(&transfer_form.recipient_wallet_id)
+    let recipient_wallet_id = if form.ext_recipient_wallet_id.is_empty() {
+        &form.recipient_wallet_id
     } else {
         // TODO: remember this account
-        Wallet::parse_wallet_id(&transfer_form.ext_recipient_wallet_id)
-    }
-    .ok_or(flash_error("Sorry, could not parse Wallet ID.".to_string()))?;
+        &form.ext_recipient_wallet_id
+    };
 
     // Load all records that we'll need: sender, recipient, asset.
     let (mut sender, mut recipient) = {
@@ -302,13 +307,12 @@ fn pay(
 
         let sender_record = account_records
             .filter(owner_id.eq(&current_user.id()))
-            .filter(alias.eq(&transfer_form.sender_alias))
+            .filter(alias.eq(&form.sender_alias))
             .first::<AccountRecord>(&dbconn.0)
             .map_err(|_| flash_error("Sender not found".to_string()))?;
 
         let recipient_record = account_records
-            .filter(owner_id.eq(&recipient_owner_id))
-            .filter(alias.eq(&recipient_alias))
+            .filter(wallet_id.eq(&recipient_wallet_id))
             .first::<AccountRecord>(&dbconn.0)
             .map_err(|_| flash_error("Recipient not found".to_string()))?;
 
@@ -320,14 +324,14 @@ fn pay(
         use schema::asset_records::dsl::*;
 
         asset_records
-            .filter(flavor_hex.eq(&transfer_form.flavor_hex))
+            .filter(flavor_hex.eq(&form.flavor_hex))
             .first::<AssetRecord>(&dbconn.0)
             .map_err(|_| flash_error("Asset not found".to_string()))?
     };
 
     // recipient prepares a receiver
     let payment = zkvm::ClearValue {
-        qty: transfer_form.qty,
+        qty: form.qty,
         flv: asset_record.flavor(),
     };
     let payment_receiver_witness = recipient.account.generate_receiver(payment);
@@ -478,15 +482,12 @@ fn assets_create(
 
     // Determine the recipient.
 
-    let (recipient_owner_id, recipient_alias) = if form.ext_recipient_wallet_id.is_empty() {
-        Wallet::parse_wallet_id(&form.recipient_wallet_id)
+    let recipient_wallet_id = if form.ext_recipient_wallet_id.is_empty() {
+        &form.recipient_wallet_id
     } else {
-        
         // TODO: remember this account
-
-        Wallet::parse_wallet_id(&form.ext_recipient_wallet_id)
-    }
-    .ok_or(flash_error("Sorry, could not parse Wallet ID.".to_string()))?;
+        &form.ext_recipient_wallet_id
+    };
 
     // Uses any issuer's utxo to help create an issuance transaction.
 
@@ -527,8 +528,7 @@ fn assets_create(
     let mut recipient = {
         use schema::account_records::dsl::*;
         account_records
-            .filter(owner_id.eq(&recipient_owner_id))
-            .filter(alias.eq(&recipient_alias))
+            .filter(wallet_id.eq(&recipient_wallet_id))
             .first::<AccountRecord>(&dbconn)
             .map_err(|msg| flash_error(msg.to_string()))?
             .wallet()
@@ -613,9 +613,9 @@ fn assets_create(
         hex::encode(&txid)
     );
 
-    if recipient_owner_id == current_user.id() {
+    if recipient.owner_id == current_user.id() {
         Ok(Flash::success(
-            Redirect::to(uri!(nodes_show: &recipient_alias)),
+            Redirect::to(uri!(nodes_show: &recipient.alias)),
             msg,
         ))
     } else {

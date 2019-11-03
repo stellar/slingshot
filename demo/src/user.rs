@@ -3,15 +3,11 @@ use keytree::Xprv;
 use merlin::Transcript;
 use rand::{self, Rng};
 
-use bulletproofs::BulletproofGens;
-use zkvm::utreexo;
-
 use rocket::http::Cookie;
 use rocket::outcome::IntoOutcome;
 use rocket::request::{self, FromRequest, Request};
 
-use crate::account::{AccountRecord, Utxo, Wallet};
-use crate::asset::AssetRecord;
+use crate::account::{AccountRecord, Wallet};
 use crate::db::DBConnection;
 use crate::names;
 use crate::schema::user_records;

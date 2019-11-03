@@ -22,6 +22,7 @@ use crate::util;
 pub struct AccountRecord {
     pub owner_id: String,
     pub alias: String,
+    pub wallet_id: String,
     pub wallet_json: String,
 }
 
@@ -101,7 +102,7 @@ impl Wallet {
             t.append_message(b"account_alias", alias.as_bytes());
         });
 
-        let wallet_id = Self::wallet_id(&owner.id(), &alias);
+        let wallet_id = Self::compute_wallet_id(&owner.id(), &alias);
 
         Self {
             alias,
@@ -114,18 +115,8 @@ impl Wallet {
         }
     }
 
-    pub fn wallet_id(owner_id: &str, alias: &str) -> String {
-        format!("{}/{}", owner_id, alias)
-    }
-
-    // Returns (owner ID, alias)
-    pub fn parse_wallet_id(wallet_id: &str) -> Option<(&str, &str)> {
-        let parts: Vec<&str> = wallet_id.split('/').collect();
-        if parts.len() == 2 {
-            Some((parts[0], parts[1]))
-        } else {
-            None
-        }
+    pub fn compute_wallet_id(owner_id: &str, alias: &str) -> String {
+        format!("{}0000{}", alias, owner_id)
     }
 
     /// Generates a bunch of initial utxos
@@ -665,6 +656,7 @@ impl AccountRecord {
         Self {
             owner_id: wallet.owner_id.clone(),
             alias: wallet.alias.clone(),
+            wallet_id: wallet.wallet_id.clone(),
             wallet_json: util::to_json(&wallet),
         }
     }

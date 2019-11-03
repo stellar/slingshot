@@ -2,6 +2,7 @@ table! {
     account_records (owner_id, alias) {
         owner_id -> Text,
         alias -> Text,
+        wallet_id -> Text,
         wallet_json -> Text,
     }
 }

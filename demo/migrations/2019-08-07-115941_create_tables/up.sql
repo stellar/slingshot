@@ -23,6 +23,7 @@ CREATE TABLE IF NOT EXISTS asset_records (
 CREATE TABLE IF NOT EXISTS account_records (
   owner_id varchar NOT NULL,
   alias varchar NOT NULL,
+  wallet_id varchar NOT NULL,
   wallet_json text NOT NULL,
   PRIMARY KEY (owner_id, alias)
 );

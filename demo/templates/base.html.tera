@@ -214,6 +214,9 @@
               <option value="external-wallet-id...">External Wallet ID...</option>
             </select>
           </div>
+          <!--Include an empty hidden field with the same name, 
+              so the browser send something if actual field is hidden.-->
+          <input type="hidden" name="ext_recipient_wallet_id" value=""/>
           <div class="form-group" id="ext-wallet-id-group" style="display:none">
             <label for="new-asset-qty" class="col-form-label">Recipient’s Wallet ID:</label>
             <input type="text" class="form-control trim-wallet-id" id="ext_recipient_wallet_id" name="ext_recipient_wallet_id" value="" autocomplete="off"/>

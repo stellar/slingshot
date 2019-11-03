@@ -13,7 +13,7 @@
         <th>Wallet ID</th>
         <td>
           <tt style="font-weight:bold;font-size:16px;display:inline-block;">{{wallet.wallet_id}}</tt><br/>
-          <em>Use the Wallet ID to receive payments from other people.</em>
+          <em>Use this Wallet ID to receive payments from other people.</em>
         </td>
       </tr>
       <tr><th>Sequence&nbsp;#</th><td>{{wallet.account.sequence}}</td></tr>
@@ -273,6 +273,9 @@
               </select>
             </div>
           </div>
+          <!--Include an empty hidden field with the same name, 
+              so the browser send something if actual field is hidden.-->
+          <input type="hidden" name="ext_recipient_wallet_id" value=""/>
           <div class="form-group row" id="pay-ext-wallet-id-group" style="display:none">
             <label for="new-asset-qty" class="col-sm-3 col-form-label">Wallet ID:</label>
             <div class="col-sm-9">
