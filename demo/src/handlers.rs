@@ -319,7 +319,7 @@ fn pay(
         (sender_record.wallet(), recipient_record.wallet())
     };
 
-    let sending_to_yourself = (recipient.wallet_id == sender.wallet_id);
+    let sending_to_yourself = recipient.wallet_id == sender.wallet_id;
 
     // FIXME: we should actually just decode flavor from hex!
     let asset_record = {
@@ -420,16 +420,16 @@ fn pay(
     Ok(Flash::success(Redirect::to(back_url), msg))
 }
 
-#[get("/assets/<alias_param>")]
+#[get("/assets/<flavor_param>")]
 fn assets_show(
-    alias_param: String,
+    flavor_param: String,
     dbconn: DBConnection,
     sidebar: Sidebar,
 ) -> Result<Template, NotFound<String>> {
     use schema::asset_records::dsl::*;
 
     let asset = asset_records
-        .filter(alias.eq(alias_param))
+        .filter(flavor_hex.eq(flavor_param))
         .first::<AssetRecord>(&dbconn.0)
         .map_err(|_| NotFound("Asset not found".into()))?;
 

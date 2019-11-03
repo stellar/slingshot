@@ -82,7 +82,7 @@
           <ul class="nav flex-column">
             {% for asset in sidebar.assets %}
               <li class="nav-item">
-                <a class="nav-link" href="/assets/{{ asset.alias }}">
+                <a class="nav-link" href="/assets/{{ asset.flv }}">
                   <span data-feather="user"></span>
                   {{ asset.alias }}
                 </a>

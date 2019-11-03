@@ -49,7 +49,7 @@
     </tr>
     {% for balance in balances | sort(attribute="alias") %}
     <tr>
-      <td width="164"><a href="/assets/{{balance.alias}}">{{balance.alias}}</a></td>
+      <td width="164"><a href="/assets/{{balance.flavor_hex}}">{{balance.alias}}</a></td>
       <td width="100" align="right">{{balance.qty}}</td>
     </tr>
     {% endfor %}
