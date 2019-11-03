@@ -99,15 +99,17 @@
     <div class="tx-summary">
       <table class="table table-bordered">
       <tbody>
-        <tr>
+        <!--tr>
           <th colspan="2" class="txid">
             <code>{{tx.id}}</code>
           </th>
-        </tr>
+        </tr-->
         <tr>
           <td colspan="2">
-            <code>
-            <strong>Block:</strong> N/A
+            <code class="abbrev-hex" data-abbrev-length="4">
+            <strong style="color:red">ID: {{tx.id}}</strong>
+            &nbsp;
+            <strong>Location:</strong> Mempool
             &nbsp;
             <strong>Version:</strong> {{tx.header.version}}
             &nbsp;
@@ -186,14 +188,16 @@
     <div class="tx-summary">
       <table class="table table-bordered">
       <tbody>
-        <tr>
+        <!--tr>
           <th colspan="2" class="txid">
             <code>{{tx.id}}</code>
           </th>
-        </tr>
+        </tr-->
         <tr>
           <td colspan="2">
-            <code>
+            <code class="abbrev-hex" data-abbrev-length="4">
+            <strong style="color:red">ID: {{tx.id}}</strong>
+            &nbsp;
             <strong>Block:</strong> <a href="/network/block/{{atx.block_height}}">{{atx.block_height}}</a>
             &nbsp;
             <strong>Version:</strong> {{tx.header.version}}

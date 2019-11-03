@@ -32,14 +32,16 @@
     <div class="tx-summary">
       <table class="table table-bordered">
       <tbody>
-        <tr>
+        <!--tr>
           <th colspan="2" class="txid">
             <code>{{tx.id}}</code>
           </th>
-        </tr>
+        </tr-->
         <tr>
           <td colspan="2">
-            <code>
+            <code class="abbrev-hex" data-abbrev-length="4">
+            <strong style="color:red">ID: {{tx.id}}</strong>
+            &nbsp;
             <strong>Version:</strong> {{tx.header.version}}
             &nbsp;
             <strong>Time bounds:</strong> [{{tx.header.mintime_ms}}; {{tx.header.maxtime_ms}}]
