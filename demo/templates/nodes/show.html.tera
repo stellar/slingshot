@@ -9,9 +9,15 @@
 
   <table class="table table-bordered block-header">
     <tbody>
-      <tr><th>Alias</th><td>{{wallet.alias}}</td></tr>
-      <tr><th>Wallet ID</th><td><tt>{{wallet.wallet_id}}</tt></td></tr>
-      <tr><th>Sequence #</th><td>{{wallet.account.sequence}}</td></tr>
+      <tr>
+        <th>Wallet ID</th>
+        <td>
+          <tt style="font-weight:bold;font-size:16px">{{wallet.wallet_id}}</tt>
+          <br/>
+          <em>Use the Wallet ID to receive payments from other people.</em>
+        </td>
+      </tr>
+      <tr><th>Sequence&nbsp;#</th><td>{{wallet.account.sequence}}</td></tr>
       <tr><th>Xprv</th><td><code>{{wallet.xprv}}</code></td></tr>
       <tr><th>Xpub</th><td><code>{{wallet.account.xpub}}</code></td></tr>
     </tbody>
