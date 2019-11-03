@@ -39,8 +39,8 @@
         </tr-->
         <tr>
           <td colspan="2">
-            <code class="abbrev-hex" data-abbrev-length="4">
-            <strong style="color:red">ID: {{tx.id}}</strong>
+            <code>
+            <strong class="abbrev-hex" data-abbrev-length="4" style="color:red">ID: {{tx.id}}</strong>
             &nbsp;
             <strong>Version:</strong> {{tx.header.version}}
             &nbsp;

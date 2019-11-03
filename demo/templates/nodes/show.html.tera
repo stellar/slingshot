@@ -106,8 +106,8 @@
         </tr-->
         <tr>
           <td colspan="2">
-            <code class="abbrev-hex" data-abbrev-length="4">
-            <strong style="color:red">ID: {{tx.id}}</strong>
+            <code>
+            <strong class="abbrev-hex" data-abbrev-length="4" style="color:red">ID: {{tx.id}}</strong>
             &nbsp;
             <strong>Location:</strong> Mempool
             &nbsp;
@@ -195,8 +195,8 @@
         </tr-->
         <tr>
           <td colspan="2">
-            <code class="abbrev-hex" data-abbrev-length="4">
-            <strong style="color:red">ID: {{tx.id}}</strong>
+            <code>
+            <strong class="abbrev-hex" data-abbrev-length="4" style="color:red">ID: {{tx.id}}</strong>
             &nbsp;
             <strong>Block:</strong> <a href="/network/block/{{atx.block_height}}">{{atx.block_height}}</a>
             &nbsp;
