@@ -69,7 +69,7 @@
     {% for balance in balances | sort(attribute="alias") %}
       {% for utxo in balance.utxos %}
       <tr>
-        <td width="164"><a href="/assets/{{balance.alias}}">{{balance.alias}}</a></td>
+        <td width="164"><a href="/assets/{{balance.flavor_hex}}">{{balance.alias}}</a></td>
         <td width="100" align="right">{{utxo.qty}}</td>
         <td><code>{{utxo.contract_id}}</code></td>
       </tr>
@@ -118,23 +118,23 @@
           </td>
         </tr>
         <tr>
-          <td width="50%"><code class="abbrev-hex" data-abbrev-length="4">
+          <td width="50%"><code>
             <strong>Inputs</strong><br/>
             {% for entry in atx.inputs %}
-              {{entry.id}}
+              <span class="abbrev-hex" data-abbrev-length="4">{{entry.id}}</span>
               {% if entry.value %}
-                (<b>{{entry.value.qty}}</b> <a href="/assets/{{entry.value.alias}}">{{entry.value.alias}}</a>)
+                (<b>{{entry.value.qty}}</b> <a href="/assets/{{entry.value.flv}}">{{entry.value.alias}}</a>)
               {% endif %}
               <br/>
             {% endfor %}
           </code>
           </td>
-          <td width="50%"><code class="abbrev-hex" data-abbrev-length="4">
+          <td width="50%"><code>
             <strong>Outputs</strong><br/>
             {% for entry in atx.outputs %}
-              {{entry.id}}
+              <span class="abbrev-hex" data-abbrev-length="4">{{entry.id}}</span>
               {% if entry.value %}
-                (<b>{{entry.value.qty}}</b> <a href="/assets/{{entry.value.alias}}">{{entry.value.alias}}</a>)
+                (<b>{{entry.value.qty}}</b> <a href="/assets/{{entry.value.flv}}">{{entry.value.alias}}</a>)
               {% endif %}
               <br/>
             {% endfor %}
@@ -207,23 +207,23 @@
           </td>
         </tr>
         <tr>
-          <td width="50%"><code class="abbrev-hex" data-abbrev-length="4">
+          <td width="50%"><code>
             <strong>Inputs</strong><br/>
             {% for entry in atx.inputs %}
-              {{entry.id}}
+              <span class="abbrev-hex" data-abbrev-length="4">{{entry.id}}</span>
               {% if entry.value %}
-                (<b>{{entry.value.qty}}</b> <a href="/assets/{{entry.value.alias}}">{{entry.value.alias}}</a>)
+                (<b>{{entry.value.qty}}</b> <a href="/assets/{{entry.value.flv}}">{{entry.value.alias}}</a>)
               {% endif %}
               <br/>
             {% endfor %}
           </code>
           </td>
-          <td width="50%"><code class="abbrev-hex" data-abbrev-length="4">
+          <td width="50%"><code>
             <strong>Outputs</strong><br/>
             {% for entry in atx.outputs %}
-              {{entry.id}}
+              <span class="abbrev-hex" data-abbrev-length="4">{{entry.id}}</span>
               {% if entry.value %}
-                (<b>{{entry.value.qty}}</b> <a href="/assets/{{entry.value.alias}}">{{entry.value.alias}}</a>)
+                (<b>{{entry.value.qty}}</b> <a href="/assets/{{entry.value.flv}}">{{entry.value.alias}}</a>)
               {% endif %}
               <br/>
             {% endfor %}

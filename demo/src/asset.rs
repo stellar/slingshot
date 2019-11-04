@@ -73,6 +73,7 @@ impl AssetRecord {
         // stored json is guaranteed to be valid
         json!({
             "alias": self.alias,
+            "owner_id": self.owner_id,
             "prv": hex::encode(self.issuance_key().as_bytes()),
             "pub": hex::encode(self.asset_definition().issuance_predicate().to_point().as_bytes()),
             "flv": hex::encode(self.flavor().as_bytes())
