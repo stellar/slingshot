@@ -208,7 +208,6 @@ impl Tx {
 }
 
 impl TxEntry {
-
     /// Converts entry to the input and provides its contract ID.
     pub fn as_input(&self) -> Option<ContractID> {
         match self {
