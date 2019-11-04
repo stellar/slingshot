@@ -9,7 +9,10 @@
 
     <title>{% block title %}ZkVM Demo{% endblock title %}</title>
     <!-- Bootstrap core CSS -->
-    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css" integrity="sha384-ggOyR0iXCbMQv3Xipma34MD+dH/1fQ784/j6cY/iJTQUOhcWr7x9JvoRxT2MZw1T" crossorigin="anonymous">
+    <!--
+      <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css" integrity="sha384-ggOyR0iXCbMQv3Xipma34MD+dH/1fQ784/j6cY/iJTQUOhcWr7x9JvoRxT2MZw1T" crossorigin="anonymous">
+    -->
+    <link rel="stylesheet" href="/static/vendor/bootstrap.min.css" integrity="sha384-ggOyR0iXCbMQv3Xipma34MD+dH/1fQ784/j6cY/iJTQUOhcWr7x9JvoRxT2MZw1T" crossorigin="anonymous">
 
     <!-- Custom styles for this template -->
     <link href="/static/main.css" rel="stylesheet">
@@ -22,7 +25,7 @@
       <nav class="col-md-2 bg-light sidebar">
         <div class="sidebar-sticky" id="sidebar">
 
-          <center><img src="/static/motocrab.png" alt="zkvm motocrab" id="logo"/></center>
+          <img src="/static/motocrab.png" alt="zkvm motocrab" id="logo"/>
 
           <h6 class="sidebar-heading d-flex justify-content-between align-items-center px-3 mt-4 mb-1 text-muted">
             <span>Network</span>
@@ -54,11 +57,11 @@
           </h6>
 
           <ul class="nav flex-column">
-            {% for node in sidebar.nodes %}
+            {% for wallet in sidebar.accounts %}
               <li class="nav-item">
-                <a class="nav-link" href="/nodes/{{ node.wallet.alias }}">
+                <a class="nav-link" href="/nodes/{{ wallet.alias }}">
                   <span data-feather="user"></span>
-                  {{ node.wallet.alias }}
+                  {{ wallet.alias }}
                 </a>
               </li>
             {% endfor %}
@@ -79,7 +82,7 @@
           <ul class="nav flex-column">
             {% for asset in sidebar.assets %}
               <li class="nav-item">
-                <a class="nav-link" href="/assets/{{ asset.alias }}">
+                <a class="nav-link" href="/assets/{{ asset.flv }}">
                   <span data-feather="user"></span>
                   {{ asset.alias }}
                 </a>
@@ -94,21 +97,42 @@
             </li>
           </ul>
 
+          <h6 class="sidebar-heading d-flex justify-content-between align-items-center px-3 mt-4 mb-1 text-muted">
+            <span>Resources</span>
+          </h6>
+
+          <ul class="nav flex-column">
+            <li class="nav-item">
+              <a class="nav-link" href="https://github.com/stellar/slingshot/blob/main/zkvm/docs/zkvm-design.md">
+                <span data-feather="file"></span>
+                Whitepaper
+              </a>
+              <a class="nav-link" href="https://github.com/stellar/slingshot/blob/main/zkvm/docs/zkvm-spec.md">
+                <span data-feather="file-text"></span>
+                Specification
+              </a>
+              <a class="nav-link" href="https://github.com/stellar/slingshot">
+                <span data-feather="github"></span>
+                Source code
+              </a>
+            </li>
+          </ul>
+
 
         </div>
       </nav>
 
       <main role="main" class="col-md-9 ml-sm-auto col-lg-10 px-4">
 
-        {% if flash %}
-          {% if flash.name == "error" %}
+        {% if sidebar.flash %}
+          {% if sidebar.flash.name == "error" %}
           <div class="alert alert-danger" role="alert">
-            {{ flash.msg }}
+            {{ sidebar.flash.msg }}
           </div>
           {% endif %}
-          {% if flash.name == "success" %}
+          {% if sidebar.flash.name == "success" %}
           <div class="alert alert-success" role="alert">
-            {{ flash.msg }}
+            {{ sidebar.flash.msg }}
           </div>
           {% endif %}
         {% endif %}
@@ -135,20 +159,20 @@
     <div class="modal-content">
       <form action="/nodes/create" method="POST">
         <div class="modal-header">
-          <h5 class="modal-title" id="new-node-label">New node</h5>
+          <h5 class="modal-title" id="new-node-label">New account</h5>
           <button type="button" class="close" data-dismiss="modal" aria-label="Close">
             <span aria-hidden="true">&times;</span>
           </button>
         </div>
         <div class="modal-body">
           <div class="form-group">
-            <label for="new-node-alias" class="col-form-label">Node alias:</label>
+            <label for="new-node-alias" class="col-form-label">Account alias:</label>
             <input type="text" class="form-control" name="alias" id="new-node-alias" autocomplete="off"/>
           </div>
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
-          <button type="submit" class="btn btn-primary">Create node</button>
+          <button type="submit" class="btn btn-primary">Create account</button>
         </div>
       </form>
     </div>
@@ -180,14 +204,22 @@
           <div class="form-group">
             <label for="recipient" class="col-form-label">Recipient</label>
             
-            <select class="form-control" id="recipient_alias" name="recipient_alias">
-              {% for node in sidebar.nodes %}
-                {% if node.wallet.alias != "Issuer" %}
-                <option value="{{node.wallet.alias}}">{{node.wallet.alias}}</option>
-                {% endif %}
+            <select class="form-control" id="recipient_wallet_id" name="recipient_wallet_id" onchange="NewAssetForm_toggleExtWalletID()">
+              {% for wallet in sidebar.accounts %}
+                <option value="{{wallet.wallet_id}}">{{wallet.alias}}</option>
               {% endfor %}
+              
+              <!--TODO: also include all the remembered accounts -->
+
+              <option value="external-wallet-id...">External Wallet ID...</option>
             </select>
-          
+          </div>
+          <!--Include an empty hidden field with the same name, 
+              so the browser send something if actual field is hidden.-->
+          <input type="hidden" name="ext_recipient_wallet_id" value=""/>
+          <div class="form-group" id="ext-wallet-id-group" style="display:none">
+            <label for="new-asset-qty" class="col-form-label">Recipient’s Wallet ID:</label>
+            <input type="text" class="form-control trim-wallet-id" id="ext_recipient_wallet_id" name="ext_recipient_wallet_id" value="" autocomplete="off"/>
           </div>
         </div>
         <div class="modal-footer">
@@ -199,12 +231,30 @@
   </div>
 </div>
 
+<script>
+function NewAssetForm_toggleExtWalletID() {
+  if ($("#recipient_wallet_id").val() == "external-wallet-id...") {
+      $("#ext-wallet-id-group").show();
+  } else {
+      $("#ext_recipient_wallet_id").val("");
+      $("#ext-wallet-id-group").hide();
+  }
+}
+</script>
 
+<!--
 <script src="https://code.jquery.com/jquery-3.3.1.slim.min.js" integrity="sha384-q8i/X+965DzO0rT7abK41JStQIAqVgRVzpbzo5smXKp4YfRvH+8abtTE1Pi6jizo" crossorigin="anonymous"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.7/umd/popper.min.js" integrity="sha384-UO2eT0CpHqdSJQ6hJty5KVphtPhzWj9WO1clHTMGa3JDZwrnQq4sF86dIHNDz0W1" crossorigin="anonymous"></script>
 <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/js/bootstrap.min.js" integrity="sha384-JjSmVgyd0p3pXB1rRibZUAYoIIy6OrQ6VrjIEaFf/nJGzIxFDsf4x0xIM+B07jRM" crossorigin="anonymous"></script>
 <script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js" crossorigin="anonymous"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/svg.js/2.7.1/svg.min.js" crossorigin="anonymous"></script>
+-->
+
+<script src="/static/vendor/jquery-3.3.1.slim.min.js" integrity="sha384-q8i/X+965DzO0rT7abK41JStQIAqVgRVzpbzo5smXKp4YfRvH+8abtTE1Pi6jizo" crossorigin="anonymous"></script>
+<script src="/static/vendor/popper.min.js" integrity="sha384-UO2eT0CpHqdSJQ6hJty5KVphtPhzWj9WO1clHTMGa3JDZwrnQq4sF86dIHNDz0W1" crossorigin="anonymous"></script>
+<script src="/static/vendor/bootstrap.min.js" integrity="sha384-JjSmVgyd0p3pXB1rRibZUAYoIIy6OrQ6VrjIEaFf/nJGzIxFDsf4x0xIM+B07jRM" crossorigin="anonymous"></script>
+<script src="/static/vendor/feather.min.js" crossorigin="anonymous"></script>
+<script src="/static/vendor/svg.min.js" crossorigin="anonymous"></script>
 <script src="/static/main.js"></script>
 
 {% block page_script %}

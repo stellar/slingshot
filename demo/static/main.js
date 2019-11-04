@@ -54,6 +54,13 @@ function autofocusModals() {
     });
 }
 
+function prepareTxShowDetails() {
+    $(".tx-show-details").on("click", function(){
+        $(".show-button-wrapper", this).hide();
+        $(".details-being-shown", this).show();
+    });
+}
+
 (function () {
     'use strict'
 
@@ -62,4 +69,5 @@ function autofocusModals() {
     highlightZkvmOpcodes();
     abbreviateHexStrings();
     autofocusModals();
+    prepareTxShowDetails();
 }())

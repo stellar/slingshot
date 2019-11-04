@@ -207,6 +207,24 @@ impl Tx {
     }
 }
 
+impl TxEntry {
+    /// Converts entry to the input and provides its contract ID.
+    pub fn as_input(&self) -> Option<ContractID> {
+        match self {
+            TxEntry::Input(cid) => Some(*cid),
+            _ => None,
+        }
+    }
+
+    /// Converts entry to the output and provides a reference to its contract.
+    pub fn as_output(&self) -> Option<&Contract> {
+        match self {
+            TxEntry::Output(c) => Some(c),
+            _ => None,
+        }
+    }
+}
+
 impl MerkleItem for TxID {
     fn commit(&self, t: &mut Transcript) {
         t.append_message(b"txid", &self.0)

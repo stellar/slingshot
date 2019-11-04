@@ -1,18 +1,24 @@
 {% extends "base" %}
 
-{% block title %}{{node.wallet.alias}}{% endblock title %}
+{% block title %}{{wallet.alias}}{% endblock title %}
 
 {% block main %}
   <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3">
-    <h1 class="h1">Account: <em>{{node.wallet.alias}}</em></h2>
+    <h1 class="h1">Account: <em>{{wallet.alias}}</em></h2>
   </div>
 
   <table class="table table-bordered block-header">
     <tbody>
-      <tr><th>Alias</th><td>{{node.wallet.alias}}</td></tr>
-      <tr><th>Sequence #</th><td>{{node.wallet.account.sequence}}</td></tr>
-      <tr><th>Xprv</th><td><code>{{node.wallet.xprv}}</code></td></tr>
-      <tr><th>Xpub</th><td><code>{{node.wallet.account.xpub}}</code></td></tr>
+      <tr>
+        <th>Wallet ID</th>
+        <td>
+          <tt style="font-weight:bold;font-size:16px;display:inline-block;">{{wallet.wallet_id}}</tt><br/>
+          <em>Use this Wallet ID to receive payments from other people.</em>
+        </td>
+      </tr>
+      <tr><th>Sequence&nbsp;#</th><td>{{wallet.account.sequence}}</td></tr>
+      <tr><th>Xprv</th><td><code>{{wallet.xprv}}</code></td></tr>
+      <tr><th>Xpub</th><td><code>{{wallet.account.xpub}}</code></td></tr>
     </tbody>
   </table>
 
@@ -43,7 +49,7 @@
     </tr>
     {% for balance in balances | sort(attribute="alias") %}
     <tr>
-      <td width="164"><a href="/assets/{{balance.alias}}">{{balance.alias}}</a></td>
+      <td width="164"><a href="/assets/{{balance.flavor_hex}}">{{balance.alias}}</a></td>
       <td width="100" align="right">{{balance.qty}}</td>
     </tr>
     {% endfor %}
@@ -93,15 +99,17 @@
     <div class="tx-summary">
       <table class="table table-bordered">
       <tbody>
-        <tr>
+        <!--tr>
           <th colspan="2" class="txid">
             <code>{{tx.id}}</code>
           </th>
-        </tr>
+        </tr-->
         <tr>
           <td colspan="2">
             <code>
-            <strong>Block:</strong> N/A
+            <strong class="abbrev-hex" data-abbrev-length="4" style="color:red">ID: {{tx.id}}</strong>
+            &nbsp;
+            <strong>Location:</strong> Mempool
             &nbsp;
             <strong>Version:</strong> {{tx.header.version}}
             &nbsp;
@@ -134,19 +142,26 @@
         </tr>
         <tr>
           <td colspan="2">
-            <code class="abbrev-hex highlight-zkvm" data-abbrev-length="2">
-              <strong>Program:</strong><br/>
-              {{tx.program_asm}}
-            </code>
-            <br/><br/>
-            <code class="abbrev-hex highlight-zkvm" data-abbrev-length="32">
-              <strong>Raw program:</strong>
-              {{tx.program_hex}}</br>
-              <strong>Signature:&nbsp;&nbsp;</strong>
-              {{tx.tx.signature}}</br>
-              <strong>R1CS proof:&nbsp;</strong>
-              {{tx.tx.proof}}
-            </code>
+            <div class="tx-show-details">
+              <code class="show-button-wrapper" style="display:block;cursor:pointer">
+                <span style="border-bottom:1px dotted black" href="#">Show details</span>
+              </code>
+              <div class="details-being-shown" style="display:none;">
+                <code class="abbrev-hex highlight-zkvm" data-abbrev-length="2">
+                  <strong>Program:</strong><br/>
+                  {{tx.program_asm}}
+                </code>
+                <br/><br/>
+                <code class="abbrev-hex highlight-zkvm" data-abbrev-length="32">
+                  <strong>Raw program:</strong>
+                  {{tx.program_hex}}</br>
+                  <strong>Signature:&nbsp;&nbsp;</strong>
+                  {{tx.tx.signature}}</br>
+                  <strong>R1CS proof:&nbsp;</strong>
+                  {{tx.tx.proof}}
+                </code>
+              </div>
+            </div>
           </td>
         </tr>
       </tbody>
@@ -173,14 +188,16 @@
     <div class="tx-summary">
       <table class="table table-bordered">
       <tbody>
-        <tr>
+        <!--tr>
           <th colspan="2" class="txid">
             <code>{{tx.id}}</code>
           </th>
-        </tr>
+        </tr-->
         <tr>
           <td colspan="2">
             <code>
+            <strong class="abbrev-hex" data-abbrev-length="4" style="color:red">ID: {{tx.id}}</strong>
+            &nbsp;
             <strong>Block:</strong> <a href="/network/block/{{atx.block_height}}">{{atx.block_height}}</a>
             &nbsp;
             <strong>Version:</strong> {{tx.header.version}}
@@ -214,19 +231,26 @@
         </tr>
         <tr>
           <td colspan="2">
-            <code class="abbrev-hex highlight-zkvm" data-abbrev-length="2">
-              <strong>Program:</strong><br/>
-              {{tx.program_asm}}
-            </code>
-            <br/><br/>
-            <code class="abbrev-hex highlight-zkvm" data-abbrev-length="32">
-              <strong>Raw program:</strong>
-              {{tx.program_hex}}</br>
-              <strong>Signature:&nbsp;&nbsp;</strong>
-              {{tx.tx.signature}}</br>
-              <strong>R1CS proof:&nbsp;</strong>
-              {{tx.tx.proof}}
-            </code>
+            <div class="tx-show-details">
+              <code class="show-button-wrapper" style="display:block;cursor:pointer">
+                <span style="border-bottom:1px dotted black" href="#">Show details</span>
+              </code>
+              <div class="details-being-shown" style="display:none;">
+                <code class="abbrev-hex highlight-zkvm" data-abbrev-length="2">
+                  <strong>Program:</strong><br/>
+                  {{tx.program_asm}}
+                </code>
+                <br/><br/>
+                <code class="abbrev-hex highlight-zkvm" data-abbrev-length="32">
+                  <strong>Raw program:</strong>
+                  {{tx.program_hex}}</br>
+                  <strong>Signature:&nbsp;&nbsp;</strong>
+                  {{tx.tx.signature}}</br>
+                  <strong>R1CS proof:&nbsp;</strong>
+                  {{tx.tx.proof}}
+                </code>
+              </div>
+            </div>
           </td>
         </tr>
       </tbody>
@@ -244,7 +268,7 @@
   <div class="modal-dialog" role="document">
     <div class="modal-content">
       <form action="/pay" method="POST">
-        <input type="hidden" name="sender_alias" value="{{node.wallet.alias}}" />
+        <input type="hidden" name="sender_alias" value="{{wallet.alias}}" />
         <div class="modal-header">
           <h5 class="modal-title" id="transfer-label">Transfer</h5>
           <button type="button" class="close" data-dismiss="modal" aria-label="Close">
@@ -254,28 +278,41 @@
         <div class="modal-body">
 
           <div class="form-group row">
-            <label for="recipient" class="col-sm-2 col-form-label">To</label>
-            <div class="col-sm-10">
-              <select class="form-control" id="recipient_alias" name="recipient_alias">
-                {% for alias in others | sort %}
-                <option value="{{alias}}">{{alias}}</option>
+            <label for="recipient" class="col-sm-3 col-form-label">To</label>
+            <div class="col-sm-9">
+              <select class="form-control" id="pay_recipient_wallet_id" name="recipient_wallet_id" onchange="PayForm_toggleExtWalletID()">
+                {% for acc in others | sort(attribute="alias") %}
+                <option value="{{acc.wallet_id}}">{{acc.alias}}</option>
                 {% endfor %}
+
+                <!--TODO: also include all the remembered accounts -->
+
+                <option value="external-wallet-id...">External Wallet ID...</option>
               </select>
             </div>
           </div>
+          <!--Include an empty hidden field with the same name, 
+              so the browser send something if actual field is hidden.-->
+          <input type="hidden" name="ext_recipient_wallet_id" value=""/>
+          <div class="form-group row" id="pay-ext-wallet-id-group" style="display:none">
+            <label for="new-asset-qty" class="col-sm-3 col-form-label">Wallet ID:</label>
+            <div class="col-sm-9">
+              <input type="text" class="form-control trim-wallet-id" id="pay_ext_recipient_wallet_id" name="ext_recipient_wallet_id" value="" autocomplete="off"/>
+            </div>
+          </div>
           <div class="form-group row">
-            <label for="flavor" class="col-sm-2 col-form-label">Asset</label>
-            <div class="col-sm-10">
-              <select class="form-control" id="flavor_alias" name="flavor_alias">
+            <label for="flavor" class="col-sm-3 col-form-label">Asset</label>
+            <div class="col-sm-9">
+              <select class="form-control" id="flavor_hex" name="flavor_hex">
                 {% for balance in balances | sort(attribute="alias") %}
-                <option value="{{balance.alias}}">{{balance.alias}}</option>
+                <option value="{{balance.flavor_hex}}">{{balance.alias}}</option>
                 {% endfor %}
               </select>
             </div>
           </div>
           <div class="form-group row">
-            <label for="qty" class="col-sm-2 col-form-label">Amount</label>
-            <div class="col-sm-10">
+            <label for="qty" class="col-sm-3 col-form-label">Amount</label>
+            <div class="col-sm-9">
               <input type="text" class="form-control" id="qty" name="qty" placeholder="" autocomplete="off"/>
             </div>
           </div>
@@ -290,5 +327,16 @@
   </div>
 </div>
 
+
+<script>
+function PayForm_toggleExtWalletID() {
+  if ($("#pay_recipient_wallet_id").val() == "external-wallet-id...") {
+      $("#pay-ext-wallet-id-group").show();
+  } else {
+      $("#pay_ext_recipient_wallet_id").val("");
+      $("#pay-ext-wallet-id-group").hide();
+  }
+}
+</script>
 
 {% endblock main %}

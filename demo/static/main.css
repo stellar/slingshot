@@ -18,7 +18,8 @@ body {
 }
 
 #logo {
-  height:150px;
+  width:100%;
+  max-width:200px;
   padding:16px;
 }
 
@@ -116,8 +117,27 @@ code {
   z-index: 100; /* Behind the navbar */
   padding: 0px 0 0; /* Height of navbar */
   box-shadow: inset -1px 0 0 rgba(0, 0, 0, .1);
+
+  -ms-flex: 0 0 25%;
+  flex: 0 0 25%;
+  max-width: 25%;
 }
 
+main {
+  -ms-flex: 0 0 75% !important;
+  flex: 0 0 75% !important;
+  max-width: 75% !important;
+  margin-left: auto !important;
+}
+
+/*@media (max-width: 768px) 
+.sidebar {
+  background-color:red !important;
+  -ms-flex: 0 0 20%;
+  flex: 0 0 20%;
+  max-width: 20%;
+}
+*/
 .sidebar-sticky {
   position: relative;
   top: 0;

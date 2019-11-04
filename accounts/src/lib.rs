@@ -175,6 +175,15 @@ impl Receiver {
             flv: Commitment::blinded_with_factor(self.value.flv, self.flv_blinding),
         }
     }
+
+    /// Creates a new contract for the given receiver and an anchor.
+    pub fn contract(&self, anchor: Anchor) -> Contract {
+        Contract {
+            predicate: self.predicate(),
+            payload: vec![PortableItem::Value(self.blinded_value())],
+            anchor,
+        }
+    }
 }
 
 impl Account {
