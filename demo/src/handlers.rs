@@ -435,7 +435,8 @@ fn assets_show(
 
     let context = json!({
         "sidebar": sidebar.json,
-        "asset": asset.to_json()
+        "asset": asset.to_json(),
+        "asset_is_external": asset.owner_id != sidebar.current_user.id(),
     });
     Ok(Template::render("assets/show", &context))
 }
