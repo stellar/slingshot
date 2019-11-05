@@ -127,7 +127,8 @@ fn network_mempool_makeblock(
                     &new_state.catchup,
                 );
                 let rec = AccountRecord::new(&wallet);
-                diesel::update(account_records.filter(alias.eq(&rec.alias)))
+                diesel::update(account_records.filter(owner_id.eq(&rec.owner_id)))
+                    .filter(alias.eq(&rec.alias))
                     .set(&rec)
                     .execute(&dbconn.0)?;
             }
@@ -200,8 +201,8 @@ fn nodes_show(
     let (acc_record, others_aliases) = {
         use schema::account_records::dsl::*;
         let acc_record = account_records
-            .filter(alias.eq(&alias_param))
             .filter(owner_id.eq(&current_user.id()))
+            .filter(alias.eq(&alias_param))
             .first::<AccountRecord>(&dbconn.0)
             .map_err(|_| flash_error(format!("Account record not found: {}", alias_param)))?;
 
@@ -400,14 +401,18 @@ fn pay(
             // Save the updated records.
             use schema::account_records::dsl::*;
             let sender_record = AccountRecord::new(&sender);
-            let sender_scope = account_records.filter(alias.eq(&sender_record.alias));
+            let sender_scope = account_records
+                .filter(owner_id.eq(&sender_record.owner_id))
+                .filter(alias.eq(&sender_record.alias));
             diesel::update(sender_scope)
                 .set(&sender_record)
                 .execute(&dbconn.0)?;
 
             if !sending_to_yourself {
                 let recipient_record = AccountRecord::new(&recipient);
-                let recipient_scope = account_records.filter(alias.eq(&recipient_record.alias));
+                let recipient_scope = account_records
+                    .filter(owner_id.eq(&recipient_record.owner_id))
+                    .filter(alias.eq(&recipient_record.alias));
                 diesel::update(recipient_scope)
                     .set(&recipient_record)
                     .execute(&dbconn.0)?;
@@ -609,11 +614,15 @@ fn assets_create(
             // Save the updated records.
             use schema::account_records::dsl::*;
             let issuer_record = AccountRecord::new(&issuer);
-            let scope = account_records.filter(alias.eq(&issuer_record.alias));
+            let scope = account_records
+                .filter(owner_id.eq(&issuer_record.owner_id))
+                .filter(alias.eq(&issuer_record.alias));
             diesel::update(scope).set(&issuer_record).execute(&dbconn)?;
 
             let recipient_record = AccountRecord::new(&recipient);
-            let scope = account_records.filter(alias.eq(&recipient_record.alias));
+            let scope = account_records
+                .filter(owner_id.eq(&recipient_record.owner_id))
+                .filter(alias.eq(&recipient_record.alias));
             diesel::update(scope)
                 .set(&recipient_record)
                 .execute(&dbconn)?;
