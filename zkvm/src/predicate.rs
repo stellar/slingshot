@@ -363,8 +363,12 @@ mod tests {
 
     #[test]
     fn valid_taproot() {
-        let prog1 = Program::build(|p| p.drop());
-        let prog2 = Program::build(|p| p.dup(1));
+        let prog1 = Program::build(|p| {
+            p.drop();
+        });
+        let prog2 = Program::build(|p| {
+            p.dup(1);
+        });
         let progs = vec![prog1, prog2];
         let blinding_key = rand::thread_rng().gen::<[u8; 32]>();
         let tree = PredicateTree::new(None, progs, blinding_key).unwrap();
@@ -376,9 +380,15 @@ mod tests {
 
     #[test]
     fn invalid_taproot() {
-        let prog1 = Program::build(|p| p.drop());
-        let prog2 = Program::build(|p| p.dup(1));
-        let prog3 = Program::build(|p| p.dup(2));
+        let prog1 = Program::build(|p| {
+            p.drop();
+        });
+        let prog2 = Program::build(|p| {
+            p.dup(1);
+        });
+        let prog3 = Program::build(|p| {
+            p.dup(2);
+        });
         let progs = vec![prog1, prog2];
         let blinding_key = rand::thread_rng().gen::<[u8; 32]>();
         let tree = PredicateTree::new(None, progs, blinding_key).unwrap();

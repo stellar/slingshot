@@ -170,7 +170,7 @@ fn spend_1_1_contract(
     Program::build(|p| {
         p.input_helper(input, flv, input_pred)
             .cloak_helper(1, vec![(output, flv)])
-            .output_helper(output_pred)
+            .output_helper(output_pred);
     })
 }
 
@@ -219,7 +219,7 @@ fn spend_1_2_contract(
         p.input_helper(input, flv, input_pred) // stack: input
             .cloak_helper(1, vec![(output_1, flv), (output_2, flv)]) // stack: output-1, output-2
             .output_helper(output_2_pred) // stack: output-1
-            .output_helper(output_1_pred) // stack: empty
+            .output_helper(output_1_pred); // stack: empty
     })
 }
 
@@ -272,7 +272,7 @@ fn spend_2_1_contract(
         p.input_helper(input_1, flv, input_1_pred) // stack: input-1
             .input_helper(input_2, flv, input_2_pred) // stack: input-1, input-2
             .cloak_helper(2, vec![(output, flv)]) // stack: output
-            .output_helper(output_pred) // stack: empty
+            .output_helper(output_pred); // stack: empty
     })
 }
 
@@ -328,7 +328,7 @@ fn spend_2_2_contract(
             .input_helper(input_2, flv, input_2_pred) // stack: input-1, input-2
             .cloak_helper(2, vec![(output_1, flv), (output_2, flv)]) // stack: output-1, output-2
             .output_helper(output_2_pred) // stack: output-1
-            .output_helper(output_1_pred) // stack: empty
+            .output_helper(output_1_pred); // stack: empty
     })
 }
 
@@ -388,7 +388,7 @@ fn issue_and_spend_contract(
             .issue_helper(issue_qty, flv, issuance_pred) // stack: issued-val
             .cloak_helper(2, vec![(output_1, flv), (output_2, flv)]) // stack: output-1, output-2
             .output_helper(output_2_pred) // stack: output-1
-            .output_helper(output_1_pred) // stack: empty
+            .output_helper(output_1_pred); // stack: empty
     })
 }
 
@@ -442,7 +442,7 @@ fn spend_with_secret_scalar(qty: u64, flavor: Scalar, pred: Predicate, secret: S
             .push(secret)
             .r#const()
             .eq()
-            .verify()
+            .verify();
     })
 }
 
@@ -459,7 +459,7 @@ fn taproot_happy_path() {
             .input()
             .sign_tx()
             .push(Predicate::Key(pk)) // send to the key
-            .output(1)
+            .output(1);
     });
 
     build_and_verify(prog, &vec![sk + factor]).unwrap();
@@ -488,7 +488,7 @@ fn taproot_program_path() {
             .input()
             .push(String::Opaque(call_proof.to_bytes().clone()))
             .program(call_prog.clone())
-            .call()
+            .call();
     });
     build_and_verify(prog, &vec![sk + factor]).unwrap();
 
@@ -498,7 +498,7 @@ fn taproot_program_path() {
             .input()
             .push(String::Opaque(call_proof.to_bytes().clone()))
             .program(call_prog)
-            .call()
+            .call();
     });
     if build_and_verify(wrong_prog, &vec![sk + factor]).is_ok() {
         panic!("Unlocking input with incorrect secret scalar should have failed but didn't");
@@ -508,8 +508,10 @@ fn taproot_program_path() {
 #[test]
 fn programs_cannot_be_copied_or_dropped() {
     let prog = Program::build(|p| {
-        p.program(Program::build(|inner| inner.verify())) // some arbitrary program
-            .dup(0)
+        p.program(Program::build(|inner| {
+            inner.verify();
+        })) // some arbitrary program
+        .dup(0);
     });
 
     assert_eq!(
@@ -518,8 +520,10 @@ fn programs_cannot_be_copied_or_dropped() {
     );
 
     let prog = Program::build(|p| {
-        p.program(Program::build(|inner| inner.verify())) // some arbitrary program
-            .drop()
+        p.program(Program::build(|inner| {
+            inner.verify();
+        })) // some arbitrary program
+        .drop();
     });
 
     assert_eq!(
@@ -532,7 +536,7 @@ fn programs_cannot_be_copied_or_dropped() {
 fn expressions_cannot_be_copied_or_dropped() {
     let prog = Program::build(|p| {
         p.mintime() // some arbitrary expression
-            .dup(0)
+            .dup(0);
     });
 
     assert_eq!(
@@ -542,7 +546,7 @@ fn expressions_cannot_be_copied_or_dropped() {
 
     let prog = Program::build(|p| {
         p.mintime() // some arbitrary expression
-            .drop()
+            .drop();
     });
 
     assert_eq!(
@@ -557,7 +561,7 @@ fn constraints_cannot_be_copied_or_dropped() {
         p.mintime()
             .mintime()
             .eq() // some arbitrary constraint
-            .dup(0)
+            .dup(0);
     });
 
     assert_eq!(
@@ -569,7 +573,7 @@ fn constraints_cannot_be_copied_or_dropped() {
         p.mintime()
             .mintime()
             .eq() // some arbitrary constraint
-            .drop()
+            .drop();
     });
 
     assert_eq!(
@@ -592,7 +596,7 @@ fn borrow_output() {
             .borrow() // stack: Value(10,1), Value(-5, 1), Value(5,1)
             .output_helper(preds[0].clone()) // stack: Value(10,1), Value(-5, 1); outputs (5,1)
             .cloak_helper(2, vec![(5u64, flv)]) // stack:  Value(5,1)
-            .output_helper(preds[2].clone()) // outputs (5,1)
+            .output_helper(preds[2].clone()); // outputs (5,1)
     });
     build_and_verify(borrow_prog, &vec![scalars[1].clone()]).unwrap();
 }

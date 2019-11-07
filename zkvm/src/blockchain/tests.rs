@@ -60,7 +60,7 @@ fn test_state_machine() {
                 .input()
                 .sign_tx()
                 .push(make_predicate(2u64))
-                .output(1)
+                .output(1);
         });
         let header = TxHeader {
             version: 1u64,
