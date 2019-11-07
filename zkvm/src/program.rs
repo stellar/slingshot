@@ -112,7 +112,7 @@ impl Program {
     /// Returns the resulting program.
     pub fn build<F>(builder: F) -> Self
     where
-        F: FnOnce(&mut Self) -> &mut Self,
+        F: FnOnce(&mut Self) -> (),
     {
         let mut program = Self::new();
         builder(&mut program);

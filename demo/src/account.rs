@@ -377,9 +377,6 @@ impl Wallet {
 
                 p.push(payment_receiver.predicate());
                 p.output(1);
-
-                // TBD: change the API to not require return of the `&mut program` from the closure.
-                p
             });
             let header = zkvm::TxHeader {
                 version: 1u64,
@@ -535,9 +532,6 @@ impl Wallet {
 
                 p.push(payment_receiver.predicate());
                 p.output(1);
-
-                // TBD: change the API to not require return of the `&mut program` from the closure.
-                p
             });
             let header = zkvm::TxHeader {
                 version: 1u64,

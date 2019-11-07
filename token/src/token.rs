@@ -91,7 +91,7 @@ mod tests {
 
             let program = Program::build(|p| {
                 add_dummy_input(p, &dummy_key);
-                usd.issue_to(p, 10u64, dest.clone())
+                usd.issue_to(p, 10u64, dest.clone());
             });
             build(program, vec![issue_key, dummy_key]).unwrap()
         };
@@ -115,7 +115,7 @@ mod tests {
             let dest = Predicate::Key(VerificationKey::from_secret(&dest_key));
             let issue_program = Program::build(|p| {
                 add_dummy_input(p, &dummy_key);
-                usd.issue_to(p, 10u64, dest.clone())
+                usd.issue_to(p, 10u64, dest.clone());
             });
             let (_, _, issue_txlog) = build(issue_program, vec![issue_key, dummy_key]).unwrap();
 
