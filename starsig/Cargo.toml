@@ -1,8 +1,14 @@
 [package]
-name = "schnorr"
+name = "starsig"
 version = "0.1.0"
 authors = ["Oleg Andreev <oleganza@gmail.com>", "Cathie Yun <cathieyun@gmail.com>"]
 edition = "2018"
+readme = "README.md"
+license = "MIT"
+repository = "https://github.com/stellar/slingshot/blob/main/starsig"
+categories = ["cryptography"]
+keywords = ["cryptography", "crypto", "signatures", "schnorr", "batch"]
+description = "A pure-Rust implementation of Schnorr signatures using Ristretto"
 
 [dependencies]
 failure = "0.1"
