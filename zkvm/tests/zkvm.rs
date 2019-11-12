@@ -132,7 +132,7 @@ fn build_and_verify(program: Program, keys: &Vec<Scalar>) -> Result<TxID, VMErro
                 .iter()
                 .filter_map(|(pubkey, _msg)| {
                     for k in keys {
-                        if (k * gens.B).compress() == *pubkey.as_compressed() {
+                        if (k * gens.B).compress() == *pubkey.as_point() {
                             return Some(*k);
                         }
                     }

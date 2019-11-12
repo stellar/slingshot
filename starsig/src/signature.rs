@@ -6,7 +6,7 @@ use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
 
 use super::batch::{BatchVerification, SingleVerifier};
-use super::errors::SchnorrError;
+use super::errors::StarsigError;
 use super::key::VerificationKey;
 use super::transcript::TranscriptProtocol;
 
@@ -35,8 +35,8 @@ impl Signature {
         let R = (RISTRETTO_BASEPOINT_POINT * r).compress();
 
         let c = {
-            transcript.schnorr_sig_domain_sep();
-            transcript.append_point(b"X", X.as_compressed());
+            transcript.starsig_domain_sep();
+            transcript.append_point(b"X", X.as_point());
             transcript.append_point(b"R", &R);
             transcript.challenge_scalar(b"c")
         };
@@ -53,7 +53,7 @@ impl Signature {
         &self,
         transcript: &mut Transcript,
         X: VerificationKey,
-    ) -> Result<(), SchnorrError> {
+    ) -> Result<(), StarsigError> {
         SingleVerifier::verify(|verifier| self.verify_batched(transcript, X, verifier))
     }
 
@@ -69,8 +69,8 @@ impl Signature {
         // Make c = H(X, R, m)
         // The message has already been fed into the transcript
         let c = {
-            transcript.schnorr_sig_domain_sep();
-            transcript.append_point(b"X", X.as_compressed());
+            transcript.starsig_domain_sep();
+            transcript.append_point(b"X", X.as_point());
             transcript.append_point(b"R", &self.R);
             transcript.challenge_scalar(b"c")
         };
@@ -82,7 +82,7 @@ impl Signature {
         batch.append(
             -self.s,
             iter::once(Scalar::one()).chain(iter::once(c)),
-            iter::once(self.R.decompress()).chain(iter::once(Some(X.into_point()))),
+            iter::once(self.R.decompress()).chain(iter::once(X.into_point().decompress())),
         );
     }
 }

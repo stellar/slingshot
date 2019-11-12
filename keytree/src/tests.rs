@@ -126,7 +126,7 @@ fn random_xprv_derivation_test() {
         "36e435eabc2a562ef228b82b399fbd004b2cc64103313fa673bd1fca0971f59d"
     );
     assert_eq!(
-        to_hex_32(xprv.xpub.pubkey.as_compressed().to_bytes()),
+        to_hex_32(xprv.xpub.pubkey.to_bytes()),
         "7414c0c5238c2277318ba3e51fc6fb8e836a2d9b4c04508f93cd5a455422221b"
     );
 }
@@ -214,10 +214,7 @@ fn deserialize_xpub_test() {
 
     assert_eq!(xpub.dk, expected_xpub.dk);
     assert_eq!(xpub.pubkey, expected_xpub.pubkey);
-    assert_eq!(
-        xpub.pubkey.as_compressed(),
-        expected_xpub.pubkey.as_compressed()
-    );
+    assert_eq!(xpub.pubkey.as_point(), expected_xpub.pubkey.as_point());
 }
 
 #[test]

@@ -203,7 +203,7 @@ impl Account {
         ReceiverWitness {
             sequence: seq,
             receiver: Receiver {
-                opaque_predicate: key.into_compressed(),
+                opaque_predicate: key.into_point(),
                 value,
                 qty_blinding,
                 flv_blinding,

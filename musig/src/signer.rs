@@ -4,7 +4,7 @@ use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
 use rand;
 
-use schnorr::{Signature, TranscriptProtocol};
+use starsig::{Signature, TranscriptProtocol};
 
 use super::counterparty::*;
 use super::{MusigContext, MusigError};

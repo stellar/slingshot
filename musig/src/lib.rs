@@ -16,10 +16,10 @@ mod transcript;
 #[cfg(test)]
 mod tests;
 
-// Convenience re-exports from `schnorr` crate.
-pub use schnorr::TranscriptProtocol as SchnorrTranscriptProtocol;
-pub use schnorr::{
-    BatchVerification, BatchVerifier, SchnorrError, Signature, SingleVerifier, VerificationKey,
+// Convenience re-exports from `starsig` crate.
+pub use starsig::TranscriptProtocol as StarsigTranscriptProtocol;
+pub use starsig::{
+    BatchVerification, BatchVerifier, Signature, SingleVerifier, StarsigError, VerificationKey,
 };
 
 pub use self::context::{Multikey, Multimessage, MusigContext};

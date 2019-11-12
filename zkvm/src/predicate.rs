@@ -89,8 +89,8 @@ impl Predicate {
     pub fn to_point(&self) -> CompressedRistretto {
         match self {
             Predicate::Opaque(p) => *p,
-            Predicate::Key(k) => k.into_compressed(),
-            Predicate::Tree(d) => d.precomputed_key.into_compressed(),
+            Predicate::Key(k) => k.into_point(),
+            Predicate::Tree(d) => d.precomputed_key.into_point(),
         }
     }
 
@@ -130,7 +130,7 @@ impl Predicate {
 
     fn commit_taproot(key: &VerificationKey, root: &Hash) -> Scalar {
         let mut t = Transcript::new(b"ZkVM.taproot");
-        t.append_message(b"key", &key.as_compressed().to_bytes());
+        t.append_message(b"key", key.as_bytes());
         t.append_message(b"merkle", root);
         t.challenge_scalar(b"h")
     }
@@ -152,7 +152,7 @@ impl Predicate {
         batch.append(
             h,
             iter::once(-Scalar::one()).chain(iter::once(Scalar::one())),
-            iter::once(self.to_point().decompress()).chain(iter::once(Some(key.into_point()))),
+            iter::once(self.to_point().decompress()).chain(iter::once(key.into_point().decompress())),
         )
     }
 
@@ -197,7 +197,7 @@ impl PredicateTree {
         let adjustment_factor = Predicate::commit_taproot(&key, &root);
         let precomputed_key = {
             let h = adjustment_factor;
-            let x = key.into_point();
+            let x = key.into_point().decompress().ok_or(VMError::InvalidPoint)?;
             let p = x + h * PedersenGens::default().B;
             VerificationKey::from(p)
         };
@@ -279,7 +279,7 @@ impl PredicateTree {
 impl Encodable for CallProof {
     /// Serializes the call proof to a byte array.
     fn encode(&self, buf: &mut Vec<u8>) {
-        encoding::write_point(self.verification_key.as_compressed(), buf);
+        encoding::write_point(self.verification_key.as_point(), buf);
 
         let num_neighbors = self.neighbors.len();
         let mut positions: u32 = 1 << num_neighbors;
