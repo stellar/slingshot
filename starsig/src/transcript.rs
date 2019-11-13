@@ -6,7 +6,7 @@ use merlin::Transcript;
 /// generating challenges as scalars.
 pub trait TranscriptProtocol {
     /// Commit a domain separator for a single-message signature protocol.
-    fn schnorr_sig_domain_sep(&mut self);
+    fn starsig_domain_sep(&mut self);
     /// Commit a `scalar` with the given `label`.
     fn append_scalar(&mut self, label: &'static [u8], scalar: &Scalar);
     /// Commit a `point` with the given `label`.
@@ -16,8 +16,8 @@ pub trait TranscriptProtocol {
 }
 
 impl TranscriptProtocol for Transcript {
-    fn schnorr_sig_domain_sep(&mut self) {
-        self.append_message(b"dom-sep", b"schnorr-signature v1");
+    fn starsig_domain_sep(&mut self) {
+        self.append_message(b"dom-sep", b"starsig v1");
     }
 
     fn append_scalar(&mut self, label: &'static [u8], scalar: &Scalar) {

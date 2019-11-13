@@ -151,7 +151,7 @@ mod tests {
             .iter()
             .filter_map(|(pubkey, _msg)| {
                 for k in keys.iter() {
-                    if (k * gens.B).compress() == *pubkey.as_compressed() {
+                    if (k * gens.B).compress() == *pubkey.as_point() {
                         return Some(*k);
                     }
                 }

@@ -2,11 +2,11 @@
 //! Implementation of the key tree protocol, a key blinding scheme for deriving hierarchies of public keys.
 
 use curve25519_dalek::constants;
-use curve25519_dalek::ristretto::CompressedRistretto;
+use curve25519_dalek::ristretto::{CompressedRistretto, RistrettoPoint};
 use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
 use rand::{CryptoRng, RngCore};
-use schnorr::VerificationKey;
+use starsig::VerificationKey;
 
 use crate::transcript::TranscriptProtocol;
 
@@ -29,6 +29,7 @@ pub struct Xprv {
 #[derive(Copy, Clone, PartialEq, Eq, Default, Debug)]
 pub struct Xpub {
     pubkey: VerificationKey,
+    pubkey_decompressed: RistrettoPoint,
     dk: [u8; 32],
 }
 
@@ -39,12 +40,7 @@ impl Xprv {
         let mut dk = [0u8; 32];
         rng.fill_bytes(&mut dk);
 
-        let pubkey = VerificationKey::from_secret(&scalar);
-
-        Xprv {
-            scalar,
-            xpub: Xpub { pubkey, dk },
-        }
+        Self::from_raw_parts(scalar, dk)
     }
 
     /// Returns a new Xprv, generated from a given seed
@@ -55,11 +51,19 @@ impl Xprv {
         let mut dk = [0u8; 32];
         t.challenge_bytes(b"dk", &mut dk[..]);
 
-        let pubkey = VerificationKey::from_secret(&scalar);
+        Self::from_raw_parts(scalar, dk)
+    }
 
+    /// Returns a new Xprv, generated from a given seed
+    fn from_raw_parts(scalar: Scalar, dk: [u8; 32]) -> Self {
+        let point = VerificationKey::from_secret_decompressed(&scalar);
         Xprv {
             scalar,
-            xpub: Xpub { pubkey, dk },
+            xpub: Xpub {
+                pubkey: point.compress().into(),
+                pubkey_decompressed: point,
+                dk,
+            },
         }
     }
 
@@ -122,13 +126,7 @@ impl Xprv {
         let mut dk = [0u8; 32];
         dk.copy_from_slice(&bytes[32..]);
 
-        return Some(Xprv {
-            scalar,
-            xpub: Xpub {
-                pubkey: VerificationKey::from_secret(&scalar),
-                dk,
-            },
-        });
+        return Some(Self::from_raw_parts(scalar, dk));
     }
 }
 
@@ -142,13 +140,13 @@ impl Xpub {
     /// Returns a leaf `VerificationKey` derived using a PRF customized with a user-provided closure.
     pub fn derive_key(&self, customize: impl FnOnce(&mut Transcript)) -> VerificationKey {
         let f = self.derive_leaf_helper(self.prepare_prf(), customize);
-        (self.pubkey.as_point() + (&f * &constants::RISTRETTO_BASEPOINT_TABLE)).into()
+        (self.pubkey_decompressed + (&f * &constants::RISTRETTO_BASEPOINT_TABLE)).into()
     }
 
     /// Serializes this Xpub to a sequence of bytes.
     pub fn to_bytes(&self) -> [u8; 64] {
         let mut buf = [0u8; 64];
-        buf[..32].copy_from_slice(self.pubkey.as_compressed().as_bytes());
+        buf[..32].copy_from_slice(self.pubkey.as_bytes());
         buf[32..].copy_from_slice(&self.dk);
         buf
     }
@@ -164,17 +162,21 @@ impl Xpub {
         let mut dk = [0u8; 32];
         dk.copy_from_slice(&bytes[32..]);
 
-        let pubkey = match VerificationKey::from_compressed(compressed_pubkey) {
+        let point = match compressed_pubkey.decompress() {
             Some(p) => p,
             None => return None,
         };
 
-        Some(Xpub { pubkey, dk })
+        Some(Xpub {
+            pubkey: compressed_pubkey.into(),
+            pubkey_decompressed: point,
+            dk,
+        })
     }
 
     fn prepare_prf(&self) -> Transcript {
         let mut t = Transcript::new(b"Keytree.derivation");
-        t.commit_point(b"pt", self.pubkey.as_compressed());
+        t.commit_point(b"pt", self.pubkey.as_point());
         t.append_message(b"dk", &self.dk);
         t
     }
@@ -194,10 +196,11 @@ impl Xpub {
         let mut child_dk = [0u8; 32];
         prf.challenge_bytes(b"dk", &mut child_dk);
 
-        let child_point = self.pubkey.as_point() + (&f * &constants::RISTRETTO_BASEPOINT_TABLE);
+        let child_point = self.pubkey_decompressed + (&f * &constants::RISTRETTO_BASEPOINT_TABLE);
 
         let xpub = Xpub {
-            pubkey: child_point.into(),
+            pubkey: child_point.compress().into(),
+            pubkey_decompressed: child_point,
             dk: child_dk,
         };
 

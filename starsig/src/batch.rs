@@ -6,7 +6,7 @@ use curve25519_dalek::scalar::Scalar;
 use curve25519_dalek::traits::{IsIdentity, VartimeMultiscalarMul};
 use rand_core::{CryptoRng, RngCore};
 
-use super::errors::SchnorrError;
+use super::errors::StarsigError;
 
 /// Trait for a batch verification of signatures.
 /// If you are only verifying signatures, without other proofs, you can use
@@ -25,17 +25,17 @@ pub trait BatchVerification {
 
 /// Single signature verifier that implements batching interface.
 pub struct SingleVerifier {
-    result: Result<(), SchnorrError>,
+    result: Result<(), StarsigError>,
 }
 
 impl SingleVerifier {
     /// Creates a new verifier
-    pub fn verify<F>(closure: F) -> Result<(), SchnorrError>
+    pub fn verify<F>(closure: F) -> Result<(), StarsigError>
     where
         F: FnOnce(&mut Self),
     {
         let mut verifier = Self {
-            result: Err(SchnorrError::InvalidSignature),
+            result: Err(StarsigError::InvalidSignature),
         };
         closure(&mut verifier);
         verifier.result
@@ -53,12 +53,12 @@ impl BatchVerification for SingleVerifier {
             iter::once(basepoint_scalar).chain(dynamic_scalars),
             iter::once(Some(RISTRETTO_BASEPOINT_POINT)).chain(dynamic_points),
         )
-        .ok_or(SchnorrError::InvalidSignature)
+        .ok_or(StarsigError::InvalidSignature)
         .and_then(|result| {
             if result.is_identity() {
                 Ok(())
             } else {
-                Err(SchnorrError::InvalidSignature)
+                Err(StarsigError::InvalidSignature)
             }
         })
     }
@@ -90,16 +90,16 @@ impl<R: RngCore + CryptoRng> BatchVerifier<R> {
     }
 
     /// Performs the verification and returns the result.
-    pub fn verify(self) -> Result<(), SchnorrError> {
+    pub fn verify(self) -> Result<(), StarsigError> {
         let result = RistrettoPoint::optional_multiscalar_mul(
             iter::once(self.basepoint_scalar).chain(self.dyn_weights.into_iter()),
             iter::once(Some(RISTRETTO_BASEPOINT_POINT)).chain(self.dyn_points.into_iter()),
         )
-        .ok_or(SchnorrError::InvalidBatch)?;
+        .ok_or(StarsigError::InvalidBatch)?;
         if result.is_identity() {
             Ok(())
         } else {
-            Err(SchnorrError::InvalidBatch)
+            Err(StarsigError::InvalidBatch)
         }
     }
 }

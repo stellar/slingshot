@@ -1,4 +1,4 @@
-# Schnorr signatures specification
+# Starsig specification
 
 This is a technical specification for single-message Schnorr signature protocol
 implemented with [Ristretto](https://ristretto.group) and [Merlin transcripts](https://merlin.cool).
@@ -98,7 +98,7 @@ The protocol is the following:
 1. Prover and verifier obtain a [transcript](#transcript) `T` that is assumed to be already bound to the _message_ being signed.
 2. Prover and verifier both commit the verification key `X` (computed by the prover as `X = x·B`):
     ```
-    T.append("dom-sep", "schnorr-signature v1")
+    T.append("dom-sep", "starsig v1")
     T.append("X", X)
     ```
 3. Prover creates a _secret nonce_: a randomly sampled [scalar](#scalar) `r`.

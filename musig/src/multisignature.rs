@@ -3,13 +3,13 @@ use core::iter;
 use curve25519_dalek::constants::RISTRETTO_BASEPOINT_POINT;
 use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
-use schnorr::{
-    BatchVerification, SchnorrError, Signature, SingleVerifier, TranscriptProtocol, VerificationKey,
+use starsig::{
+    BatchVerification, Signature, SingleVerifier, StarsigError, TranscriptProtocol, VerificationKey,
 };
 
 use super::{Multimessage, MusigContext, MusigError};
 
-/// Extension trait for `schnorr::Signature`.
+/// Extension trait for `starsig::Signature`.
 pub trait Multisignature {
     /// Creates a multi-message signature.
     fn sign_multi<P, M>(
@@ -28,7 +28,7 @@ pub trait Multisignature {
         &self,
         transcript: &mut Transcript,
         messages: Vec<(VerificationKey, M)>,
-    ) -> Result<(), SchnorrError>;
+    ) -> Result<(), StarsigError>;
 
     /// Verifies a multi-message signature in a batch.
     fn verify_multi_batched<M: AsRef<[u8]>>(
@@ -94,7 +94,7 @@ impl Multisignature for Signature {
         &self,
         transcript: &mut Transcript,
         messages: Vec<(VerificationKey, M)>,
-    ) -> Result<(), SchnorrError> {
+    ) -> Result<(), StarsigError> {
         SingleVerifier::verify(|verifier| self.verify_multi_batched(transcript, messages, verifier))
     }
 
@@ -118,7 +118,7 @@ impl Multisignature for Signature {
             iter::once(Scalar::one())
                 .chain((0..n).map(|i| context.challenge(i, &mut transcript.clone()))),
             iter::once(self.R.decompress())
-                .chain((0..n).map(|i| Some(context.key(i).into_point()))),
+                .chain((0..n).map(|i| context.key(i).into_point().decompress())),
         );
     }
 }

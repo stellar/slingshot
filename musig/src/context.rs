@@ -1,7 +1,7 @@
 use curve25519_dalek::ristretto::RistrettoPoint;
 use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
-use schnorr::{TranscriptProtocol as SchnorrTranscriptProtocol, VerificationKey};
+use starsig::{TranscriptProtocol as StarsigTranscriptProtocol, VerificationKey};
 
 use super::{MusigError, TranscriptProtocol};
 
@@ -61,14 +61,14 @@ impl Multikey {
         // Commit pubkeys into the transcript
         // <L> = H(X_1 || X_2 || ... || X_n)
         for X in &pubkeys {
-            prf.append_point(b"X", X.as_compressed());
+            prf.append_point(b"X", X.as_point());
         }
 
         // aggregated_key = sum_i ( a_i * X_i )
         let mut aggregated_key = RistrettoPoint::default();
         for (i, X) in pubkeys.iter().enumerate() {
             let a = Multikey::compute_factor(&prf, i);
-            let X = X.into_point();
+            let X = X.as_point().decompress().ok_or(MusigError::InvalidPoint)?;
             aggregated_key = aggregated_key + a * X;
         }
 
@@ -95,8 +95,8 @@ impl Multikey {
 
 impl MusigContext for Multikey {
     fn commit(&self, transcript: &mut Transcript) {
-        transcript.schnorr_sig_domain_sep();
-        transcript.append_point(b"X", self.aggregated_key.as_compressed());
+        transcript.starsig_domain_sep();
+        transcript.append_point(b"X", self.aggregated_key.as_point());
     }
 
     fn challenge(&self, i: usize, transcript: &mut Transcript) -> Scalar {
@@ -133,9 +133,9 @@ impl<M: AsRef<[u8]>> Multimessage<M> {
 
 impl<M: AsRef<[u8]>> MusigContext for Multimessage<M> {
     fn commit(&self, transcript: &mut Transcript) {
-        transcript.schnorr_multisig_domain_sep(self.pairs.len());
+        transcript.musig_multimessage_domain_sep(self.pairs.len());
         for (key, msg) in &self.pairs {
-            transcript.append_point(b"X", key.as_compressed());
+            transcript.append_point(b"X", key.as_point());
             transcript.append_message(b"m", msg.as_ref());
         }
     }

@@ -1,4 +1,4 @@
-use super::{BatchVerifier, SchnorrError, Signature, VerificationKey};
+use super::{BatchVerifier, Signature, StarsigError, VerificationKey};
 use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
 
@@ -82,7 +82,7 @@ fn sign_and_verify_batch() {
         &mut bad_batch,
     );
 
-    assert_eq!(bad_batch.verify(), Err(SchnorrError::InvalidBatch));
+    assert_eq!(bad_batch.verify(), Err(StarsigError::InvalidBatch));
 
     // Invalid batch (wrong key):
 
@@ -104,7 +104,7 @@ fn sign_and_verify_batch() {
         &mut bad_batch,
     );
 
-    assert_eq!(bad_batch.verify(), Err(SchnorrError::InvalidBatch));
+    assert_eq!(bad_batch.verify(), Err(StarsigError::InvalidBatch));
 
     // Invalid batch (wrong signature):
 
@@ -126,5 +126,5 @@ fn sign_and_verify_batch() {
         &mut bad_batch,
     );
 
-    assert_eq!(bad_batch.verify(), Err(SchnorrError::InvalidBatch));
+    assert_eq!(bad_batch.verify(), Err(StarsigError::InvalidBatch));
 }

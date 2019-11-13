@@ -2,15 +2,15 @@ use curve25519_dalek::ristretto::CompressedRistretto;
 use curve25519_dalek::scalar::Scalar;
 use serde::{de::Deserializer, de::Visitor, ser::Serializer, Deserialize, Serialize};
 
-use super::SchnorrError;
 use super::Signature;
+use super::StarsigError;
 
 impl Signature {
     /// Decodes a signature from a 64-byte slice.
-    pub fn from_bytes(sig: impl AsRefExt) -> Result<Self, SchnorrError> {
+    pub fn from_bytes(sig: impl AsRefExt) -> Result<Self, StarsigError> {
         let sig = sig.as_ref_ext();
         if sig.len() != 64 {
-            return Err(SchnorrError::InvalidSignature);
+            return Err(StarsigError::InvalidSignature);
         }
         let mut Rbuf = [0u8; 32];
         let mut sbuf = [0u8; 32];
@@ -18,7 +18,7 @@ impl Signature {
         sbuf[..].copy_from_slice(&sig[32..]);
         Ok(Signature {
             R: CompressedRistretto(Rbuf),
-            s: Scalar::from_canonical_bytes(sbuf).ok_or(SchnorrError::InvalidSignature)?,
+            s: Scalar::from_canonical_bytes(sbuf).ok_or(StarsigError::InvalidSignature)?,
         })
     }
 

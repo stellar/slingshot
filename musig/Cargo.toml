@@ -1,7 +1,7 @@
 [package]
 name = "musig"
 version = "0.1.0"
-authors = ["Cathie Yun <cathieyun@gmail.com>"]
+authors = ["Cathie Yun <cathieyun@gmail.com>", "Oleg Andreev <oleganza@gmail.com>"]
 edition = "2018"
 
 [dependencies]
@@ -12,5 +12,5 @@ subtle = "2"
 curve25519-dalek = { version = "1.0.1", features = ["serde"] }
 serde = { version = "1.0", features=["derive"] }
 
-[dependencies.schnorr]
-path = "../schnorr"
+[dependencies.starsig]
+path = "../starsig"

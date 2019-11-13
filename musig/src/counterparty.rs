@@ -2,7 +2,7 @@ use curve25519_dalek::constants::RISTRETTO_BASEPOINT_POINT;
 use curve25519_dalek::ristretto::RistrettoPoint;
 use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
-use schnorr::{TranscriptProtocol, VerificationKey};
+use starsig::{TranscriptProtocol, VerificationKey};
 use subtle::ConstantTimeEq;
 
 use super::{MusigContext, MusigError};
@@ -75,7 +75,7 @@ impl CounterpartyPrecommitted {
         let equal = self.precommitment.0.ct_eq(&received_precommitment.0);
         if equal.unwrap_u8() == 0 {
             return Err(MusigError::ShareError {
-                pubkey: self.pubkey.into_compressed().to_bytes(),
+                pubkey: self.pubkey.to_bytes(),
             });
         }
 
@@ -98,11 +98,14 @@ impl CounterpartyCommitted {
         // s_i * G == R_i + c_i * X_i.
         let S_i = share * RISTRETTO_BASEPOINT_POINT;
         let c_i = context.challenge(self.position, &mut transcript.clone());
-        let X_i = self.pubkey.into_point();
+        let X_i_compressed = self.pubkey.into_point();
+        let X_i = X_i_compressed
+            .decompress()
+            .ok_or(MusigError::InvalidPoint)?;
 
         if S_i != self.commitment.0 + c_i * X_i {
             return Err(MusigError::ShareError {
-                pubkey: X_i.compress().to_bytes(),
+                pubkey: X_i_compressed.to_bytes(),
             });
         }
 

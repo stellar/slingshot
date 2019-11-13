@@ -2,7 +2,7 @@ use curve25519_dalek::ristretto::CompressedRistretto;
 use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
 
-use schnorr::{Signature, TranscriptProtocol, VerificationKey};
+use starsig::{Signature, TranscriptProtocol, VerificationKey};
 
 use crate::{Multikey, Multimessage, Multisignature, MusigContext, MusigError, Signer};
 
@@ -42,7 +42,7 @@ fn make_multikey() {
         239, 6, 119, 17, 228, 9, 231, 89, 28, 228, 113, 87,
     ]);
 
-    assert_eq!(expected_pubkey, multikey.aggregated_key().into_compressed());
+    assert_eq!(expected_pubkey, multikey.aggregated_key().into_point());
 }
 
 fn multikey_helper(priv_keys: &Vec<Scalar>) -> Multikey {
