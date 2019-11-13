@@ -7,9 +7,13 @@ implemented with [Ristretto](https://ristretto.group) and [Merlin transcripts](h
 
 ## Features
 
-* Single and batch signature verification.
-* Compatibility with our [../musig](Musig) API.
-* Transcript-based and message-based APIs.
+* Simple message-based API.
+* Flexible [transcript](https://merlin.cool)-based API.
+* Single signature verification.
+* Batch signature verification.
+* Compatible with [../musig](Musig) API.
+* Compatible with [../keytree](Keytree) key derivation API.
+* VRF (aka “HMAC verifiable by a public key”) is in development.
 
 ## Authors
 
