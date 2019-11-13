@@ -152,7 +152,8 @@ impl Predicate {
         batch.append(
             h,
             iter::once(-Scalar::one()).chain(iter::once(Scalar::one())),
-            iter::once(self.to_point().decompress()).chain(iter::once(key.into_point().decompress())),
+            iter::once(self.to_point().decompress())
+                .chain(iter::once(key.into_point().decompress())),
         )
     }
 
