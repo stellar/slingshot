@@ -573,7 +573,7 @@ mod tests {
             )
         );
 
-        let mut cs = MockMultiplierCS { num_vars: 0 };
+        let mut cs = MockMultiplierCS { num_multipliers: 0 };
 
         let e1 = Expression::Constant(10u64.into());
         let e2 = Expression::Constant(20u64.into());
@@ -709,7 +709,7 @@ mod tests {
     }
 
     struct MockMultiplierCS {
-        pub num_vars: usize,
+        pub num_multipliers: usize,
     }
 
     impl r1cs::ConstraintSystem for MockMultiplierCS {
@@ -724,8 +724,8 @@ mod tests {
             _left: r1cs::LinearCombination,
             _right: r1cs::LinearCombination,
         ) -> (r1cs::Variable, r1cs::Variable, r1cs::Variable) {
-            let var = self.num_vars;
-            self.num_vars += 1;
+            let var = self.num_multipliers;
+            self.num_multipliers += 1;
             let l_var = r1cs::Variable::MultiplierLeft(var);
             let r_var = r1cs::Variable::MultiplierRight(var);
             let o_var = r1cs::Variable::MultiplierOutput(var);
@@ -743,8 +743,8 @@ mod tests {
             &mut self,
             _assignments: Option<(Scalar, Scalar)>,
         ) -> Result<(r1cs::Variable, r1cs::Variable, r1cs::Variable), r1cs::R1CSError> {
-            let var = self.num_vars;
-            self.num_vars += 1;
+            let var = self.num_multipliers;
+            self.num_multipliers += 1;
 
             // Create variables for l,r,o
             let l_var = r1cs::Variable::MultiplierLeft(var);
@@ -755,5 +755,9 @@ mod tests {
         }
 
         fn constrain(&mut self, _lc: r1cs::LinearCombination) {}
+
+        fn multipliers_len(&self) -> usize {
+            self.num_multipliers
+        }
     }
 }
