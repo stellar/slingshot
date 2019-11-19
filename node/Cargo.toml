@@ -1,0 +1,33 @@
+[package]
+name = "node"
+version = "0.1.0"
+authors = ["Oleg Andreev <oleganza@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+actix-web = "1.0"
+libp2p = "0.13.1"
+futures = "0.1" # for libp2p
+tokio = "0.1" # for libp2p
+#curve25519-dalek = { version = "1.0.1", features = ["serde"] }
+#serde = { version = "1.0", features=["derive"] }
+#rand_chacha = "0.1"
+#hex = "^0.3"
+
+#[dependencies.bulletproofs]
+#git = "https://github.com/dalek-cryptography/bulletproofs"
+#branch = "develop"
+#features = ["yoloproofs"]
+#
+#[dependencies.keytree]
+#path = "../keytree"
+#
+#[dependencies.musig]
+#path = "../musig"
+#
+#[dependencies.zkvm]
+#path = "../zkvm"
+#
+#[dependencies.accounts]
+#path = "../accounts"
+
