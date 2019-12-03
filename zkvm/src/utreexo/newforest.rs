@@ -9,7 +9,7 @@ use std::rc::Rc;
 use super::forest::Forest;
 use super::forest::UtreexoError;
 use super::nodes::NodeHasher;
-use super::path::{Path, Position};
+use super::path::{Directions, Path, Position, Proof};
 use crate::merkle::{Hash, MerkleItem};
 
 /// Roots of the perfect merkle trees forming a forest, which itself is an imperfect merkle tree.
@@ -253,6 +253,92 @@ impl WorkForest {
         };
 
         (new_forest, catchup)
+    }
+}
+
+impl Catchup {
+    /// Updates the proof if it's slightly out of date
+    /// (made against the previous state of the Utreexo).
+    pub fn update_proof<M: MerkleItem>(
+        &self,
+        item: &M,
+        proof: Proof,
+        hasher: &NodeHasher<M>,
+    ) -> Result<Proof, UtreexoError> {
+        let mut path = match proof {
+            // For the transient items `position` is irrelevant, so we may as well use 0.
+            Proof::Transient => Path::default(),
+            Proof::Committed(path) => path,
+        };
+
+        // 1. Climb up the merkle path until we find an existing node or nothing.
+
+        // let (midlevel, catchup_result) = path.walk_up(hash, &hasher).fold(
+        //     (0, self.map.get(&hash)),
+        //     |(level, catchup_result), (p, _)| {
+        //         match catchup_result {
+        //             Some(r) => (level, Some(r)),           // keep the found result
+        //             None => (level + 1, self.map.get(&p)), // try a higher parent
+        //         }
+        //     },
+        // );
+        let leaf_hash = hasher.leaf(item);
+
+        let (midlevel, maybe_offset, _midhash) = path.iter().fold(
+            (0, self.map.get(&leaf_hash), leaf_hash),
+            |(level, maybe_offset, node_hash), (side, neighbor_hash)| {
+                match maybe_offset {
+                    // either keep the result we already have...
+                    Some(offset) => (level, Some(offset), node_hash),
+                    None => {
+                        // ...or try finding a higher-level hash
+                        let (l, r) = side.order(node_hash, *neighbor_hash);
+                        let parent_hash = hasher.intermediate(&l, &r);
+                        (level + 1, self.map.get(&parent_hash), parent_hash)
+                    }
+                }
+            },
+        );
+
+        // Fail early if we did not find any catchup point.
+        let position_offset = maybe_offset.ok_or(UtreexoError::InvalidProof)?;
+
+        // Adjust the absolute position:
+        // keep the lowest (level+1) bits and add the stored position offset for the stored subtree
+        let mask: Position = (1 << midlevel) - 1; // L=0 -> ...00, L=1 -> ...01, L=2 -> ...11
+        path.position = position_offset + (path.position & mask);
+
+        // Remove all outdated neighbors
+        path.neighbors.truncate(midlevel);
+
+        // Find the root to which the updated position belongs
+        let root = find_root::<_, Rc<Node>>(self.forest.roots.iter(), path.position)
+            .ok_or(UtreexoError::InvalidProof)?;
+
+        // Construct a new directions object.
+        // We cannot take it from path because it does not have all neighbors yet.
+        let directions = Directions {
+            position: path.position,
+            depth: root.level,
+        };
+
+        path.neighbors = directions
+            .rev()
+            .fold(
+                (path.neighbors, root),
+                |(mut neighbors, mut parent), side| {
+                    if let Some((ref l, ref r)) = parent.children {
+                        let (trunk, neighbor) = side.choose(l, r);
+                        // TODO: this is not the fastest way to insert missing neighbors
+                        neighbors.insert(midlevel, neighbor.hash);
+                        parent = trunk
+                    }
+                    (neighbors, parent)
+                },
+            )
+            .0;
+
+        Ok(Proof::Committed(path))
     }
 }
 
