@@ -1,8 +1,15 @@
-use crate::merkle::{Hash, MerkleItem};
+use merlin::Transcript;
+use core::marker::PhantomData;
 use serde::{Deserialize, Serialize};
 
+use crate::merkle::{Hash, MerkleItem};
 use super::super::encoding::{self, Encodable};
-use super::nodes::NodeHasher;
+
+/// Precomputed hash instance for computing Utreexo trees.
+pub struct NodeHasher<M: MerkleItem> {
+    t: Transcript,
+    phantom: PhantomData<M>,
+}
 
 /// Absolute position of an item in the tree.
 pub type Position = u64;
@@ -36,6 +43,50 @@ pub(super) enum Side {
     Left,
     Right,
 }
+
+impl<M: MerkleItem> Clone for NodeHasher<M> {
+    fn clone(&self) -> Self {
+        Self {
+            t: self.t.clone(),
+            phantom: self.phantom,
+        }
+    }
+}
+
+impl<M: MerkleItem> NodeHasher<M> {
+    /// Creates a new hasher instance.
+    pub fn new() -> Self {
+        NodeHasher {
+            t: Transcript::new(b"ZkVM.utreexo"),
+            phantom: PhantomData,
+        }
+    }
+
+    pub(super) fn leaf(&self, item: &M) -> Hash {
+        let mut t = self.t.clone();
+        item.commit(&mut t);
+        let mut hash = Hash::default();
+        t.challenge_bytes(b"merkle.leaf", &mut hash);
+        hash
+    }
+
+    pub(super) fn intermediate(&self, left: &Hash, right: &Hash) -> Hash {
+        let mut t = self.t.clone();
+        t.append_message(b"L", &left);
+        t.append_message(b"R", &right);
+        let mut hash = Hash::default();
+        t.challenge_bytes(b"merkle.node", &mut hash);
+        hash
+    }
+
+    pub(super) fn empty(&self) -> Hash {
+        let mut t = self.t.clone();
+        let mut hash = Hash::default();
+        t.challenge_bytes(b"merkle.empty", &mut hash);
+        hash
+    }
+}
+
 
 impl Proof {
     /// Returns a reference to a path if this proof contains one.

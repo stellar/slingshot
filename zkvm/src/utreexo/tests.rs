@@ -24,7 +24,7 @@ fn transient_items_utreexo() {
     let hasher = NodeHasher::new();
     let forest0 = Forest::new();
 
-    let (_, _forest1, _catchup) = forest0
+    let (_forest1, _catchup) = forest0
         .update(&hasher, |forest| {
             forest.insert(&0, &hasher);
             forest.insert(&1, &hasher);
@@ -55,7 +55,7 @@ fn transient_items_utreexo() {
 fn insert_to_utreexo() {
     let hasher = NodeHasher::new();
     let forest0 = Forest::new();
-    let (_, forest1, catchup1) = forest0
+    let (forest1, catchup1) = forest0
         .update(&hasher, |forest| {
             for i in 0..6 {
                 forest.insert(&i, &hasher);
@@ -93,7 +93,7 @@ fn insert_to_utreexo() {
 fn transaction_success() {
     let hasher = NodeHasher::new();
     let forest0 = Forest::new();
-    let (_, forest1, catchup1) = forest0
+    let (forest1, catchup1) = forest0
         .update(&hasher, |forest| {
             for i in 0..6 {
                 forest.insert(&i, &hasher);
@@ -141,7 +141,7 @@ fn transaction_success() {
     //  |\  |\  |\  |
     //  x 1 2 3 4 5 6
 
-    match wf.transaction::<_, (), ()>(|wf| {
+    match wf.update::<_, ()>(|wf| {
         wf.insert(&7, &hasher);
         wf.insert(&8, &hasher);
         wf.delete(&7, &Proof::Transient, &hasher)
@@ -171,7 +171,7 @@ fn transaction_success() {
 fn transaction_fail() {
     let hasher = NodeHasher::new();
     let forest0 = Forest::new();
-    let (_, forest1, catchup1) = forest0
+    let (forest1, catchup1) = forest0
         .update(&hasher, |forest| {
             for i in 0..6 {
                 forest.insert(&i, &hasher);
@@ -209,7 +209,7 @@ fn transaction_fail() {
     //  |\  |\  |\  |
     //  x 1 2 3 4 5 6
 
-    match wf.transaction::<_, (), ()>(|wf| {
+    match wf.update::<_, ()>(|wf| {
         wf.insert(&7, &hasher);
         wf.insert(&8, &hasher);
         wf.delete(&7, &Proof::Transient, &hasher)
@@ -241,7 +241,7 @@ fn insert_and_delete_utreexo() {
     let n = 6u64;
     let hasher = NodeHasher::new();
     let forest0 = Forest::new();
-    let (_, forest1, catchup1) = forest0
+    let (forest1, catchup1) = forest0
         .update(&hasher, |forest| {
             for i in 0..n {
                 forest.insert(&i, &hasher);
@@ -274,7 +274,7 @@ fn insert_and_delete_utreexo() {
         upd: impl FnOnce(&mut WorkForest),
     ) -> (Forest, Catchup) {
         let hasher = NodeHasher::<M>::new();
-        let (_, forest2, catchup2) = forest
+        let (forest2, catchup2) = forest
             .update(&hasher, |forest| {
                 upd(forest);
                 Ok(())

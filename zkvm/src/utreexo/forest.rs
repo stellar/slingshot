@@ -1,11 +1,12 @@
 use core::borrow::Borrow;
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::mem;
+use std::rc::Rc;
+use serde::{Deserialize, Serialize};
 
-use super::nodes::{Heap, Node, NodeHasher, NodeIndex};
-use super::path::{Directions, Path, Position, Proof};
+use super::path::{NodeHasher, Directions, Path, Position, Proof};
 use crate::merkle::{Hash, MerkleItem};
+
 
 /// Forest consists of a number of roots of merkle binary trees.
 #[derive(Clone, Serialize, Deserialize)]
@@ -15,15 +16,14 @@ pub struct Forest {
                                           // FIXME: make this private!
 }
 
-/// State of the Utreexo forest during update
-#[derive(Clone, Serialize, Deserialize)]
+/// Roots of the perfect merkle trees forming a forest, which itself is an imperfect merkle tree.
+#[derive(Clone,PartialEq,Debug)]
 pub struct WorkForest {
-    roots: Vec<NodeIndex>, // roots of all the trees including the newly inserted nodes
-    heap: Heap,
+    roots: Vec<Rc<Node>>, // roots of all the perfect binary trees, including the newly inserted nodes
 }
 
 /// Structure that helps auto-updating the proofs created for a previous state of a forest.
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone)]
 pub struct Catchup {
     forest: WorkForest,           // forest that stores the inner nodes
     map: HashMap<Hash, Position>, // node hash -> new position offset for this node
@@ -67,9 +67,8 @@ impl Forest {
         };
 
         // 1. Locate the root under which the item.position is located.
-        let (root_level, _) =
-            Node::find_root(self.roots_iter(), |&(level, _)| level, path.position)
-                .ok_or(UtreexoError::InvalidProof)?;
+        let root_level = find_root(self.roots_iter().map(|(l,_)| l), path.position)
+            .ok_or(UtreexoError::InvalidProof)?;
 
         // 2. The proof should be of exact size from a leaf up to a tree root.
         if path.neighbors.len() != root_level {
@@ -77,15 +76,17 @@ impl Forest {
         }
 
         // 3. Now, walk the merkle proof starting with the leaf,
-        //    creating the missing nodes until we hit the root.
-        let current_hash = hasher.leaf(item);
-        let current_hash = path
-            .walk_up(current_hash, &hasher)
+        //    creating the intermediate hashes until we hit the last neighbor.
+        let top_hash = path
+            .iter()
             .take(root_level)
-            .fold(current_hash, |_, (parent, _children)| parent);
+            .fold(hasher.leaf(item), |curr_hash, (side, neighbor_hash)| {
+                let (l, r) = side.order(&curr_hash, neighbor_hash);
+                hasher.intermediate(l, r)
+            });
 
         // 4. Check if the computed root matches the stored root.
-        if Some(current_hash) != self.roots[root_level] {
+        if Some(top_hash) != self.roots[root_level] {
             // We haven't met the node we expected to meet, so the proof is invalid.
             return Err(UtreexoError::InvalidProof);
         }
@@ -96,32 +97,33 @@ impl Forest {
     /// Lets use modify the utreexo and yields a new state of the utreexo,
     /// along with a catchup structure.
     pub fn work_forest(&self) -> WorkForest {
-        let mut heap = Heap::with_capacity(64);
-
-        // Convert the root hashes into the nodes
-        let roots = self
+        WorkForest {
+            roots: self
             .roots_iter()
-            .map(|(level, hash)| heap.allocate(hash, level, None).index)
-            .collect();
-
-        WorkForest { roots, heap }
+            .map(|(level, hash)| {
+                Rc::new(Node{
+                    level,
+                    hash,
+                    modified: false,
+                    children: None,
+                })
+            })
+            .collect()
+        }
     }
 
     /// Lets user to modify the utreexo.
     /// Returns a new state, along with a catchup structure.
-    pub fn update<F, T, M>(
+    pub fn update<M: MerkleItem>(
         &self,
         hasher: &NodeHasher<M>,
-        closure: F,
-    ) -> Result<(T, Self, Catchup), UtreexoError>
-    where
-        F: FnOnce(&mut WorkForest) -> Result<T, UtreexoError>,
-        M: MerkleItem,
+        closure: impl FnOnce(&mut WorkForest) -> Result<(), UtreexoError>,
+    ) -> Result<(Self, Catchup), UtreexoError>
     {
-        let mut forest = self.work_forest();
-        let result = closure(&mut forest)?;
-        let (next_utreexo, catchup) = forest.normalize(&hasher);
-        Ok((result, next_utreexo, catchup))
+        let mut wforest = self.work_forest();
+        let _ = closure(&mut wforest)?;
+        let (next_forest, catchup) = wforest.normalize(&hasher);
+        Ok((next_forest, catchup))
     }
 
     /// Since each root is balanced, the top root is composed of n-1 pairs:
@@ -153,14 +155,37 @@ impl Forest {
 }
 
 impl WorkForest {
+
     /// Adds a new item to the tree, appending a node to the end.
     pub fn insert<M: MerkleItem>(&mut self, item: &M, hasher: &NodeHasher<M>) {
-        let hash = hasher.leaf(item);
-        self.roots.push(self.heap.allocate(hash, 0, None).index);
+        self.roots.push(Rc::new(Node{
+            level: 0,
+            hash: hasher.leaf(item),
+            modified: false,
+            children: None,
+        }));
+    }
+
+    /// Performs multiple updates in a transactional fashion.
+    /// If any update fails, all of the changes are effectively undone.
+    pub fn update<F, E>(&mut self, closure: F) -> Result<(), E>
+    where
+        F: FnOnce(&mut Self) -> Result<(), E>,
+    {
+        let mut wf = self.clone();
+
+        // If any update fails within a closure, the temporary `wf` is going to be consumed.
+        let _ = closure(&mut wf)?;
+
+        // replace the existing work forest with the new, updated one.
+        let _ = mem::replace(self, wf);
+        Ok(())
     }
 
     /// Fills in the missing nodes in the tree, and marks the item as deleted.
     /// The algorithm minimizes amount of computation by taking advantage of the already available data.
+    /// This consumes the forest in case of error, since it may be left in an inconsistent state.
+    /// Use `WorkForest::update` to perform updates.
     pub fn delete<M: MerkleItem, P: Borrow<Proof>>(
         &mut self,
         item: &M,
@@ -173,7 +198,7 @@ impl WorkForest {
         }
     }
 
-    /// Deletes the transient item that does not have a proof
+    /// Deletes the transient item that does not have a proof.
     fn delete_transient<M: MerkleItem>(
         &mut self,
         item: &M,
@@ -181,7 +206,8 @@ impl WorkForest {
     ) -> Result<(), UtreexoError> {
         let item_hash = hasher.leaf(item);
         let (index, node) = self
-            .roots_iter()
+            .roots
+            .iter()
             .enumerate()
             .find(|&(_i, node)| node.level == 0 && node.hash == item_hash)
             .ok_or(UtreexoError::InvalidProof)?;
@@ -194,11 +220,14 @@ impl WorkForest {
             return Err(UtreexoError::InvalidProof);
         }
         self.roots.remove(index);
-        return Ok(());
+
+        Ok(())
     }
 
     /// Fills in the missing nodes in the tree, and marks the item as deleted.
-    /// The algorithm minimizes amount of computation by taking advantage of the already available data.
+    /// The algorithm minimizes amount of hashing by taking advantage of the already available data.
+    /// This consumes the forest in case of error, since it may be left in an inconsistent state.
+    /// Use `WorkForest::update` to perform updates.
     fn delete_committed<M: MerkleItem>(
         &mut self,
         item: &M,
@@ -209,8 +238,9 @@ impl WorkForest {
         // and mark the relevant nodes as modified.
 
         // 1. Locate the root under which the item.position is located.
-        let top = Node::find_root(self.roots_iter(), |&node| node.level, path.position)
+        let top = find_root(self.roots.iter_mut(), path.position)
             .ok_or(UtreexoError::InvalidProof)?;
+        let top = Rc::make_mut(top);
 
         // 2. The proof should be of exact size from a leaf up to a tree root.
         if path.neighbors.len() != top.level {
@@ -220,7 +250,22 @@ impl WorkForest {
         // 3. Find the lowest-available node in a tree, up to which
         //    we have to fill in the missing nodes based on the merkle proof.
         //    And also check the higher-level neighbors in the proof.
-        let existing = self.existing_node_for_path(top, &path)?;
+        //let existing = top.descend(&path)?;
+        let existing = path
+            .iter()
+            .rev()
+            .try_fold(top, |node, (side, neighbor_hash)| {
+                if let Some((ref mut l, ref mut r)) = node.children {
+                    let (next_node, actual_neighbor) = side.choose(l, r);
+                    if &actual_neighbor.hash == neighbor_hash {
+                        Ok(Rc::make_mut(next_node))
+                    } else {
+                        Err(UtreexoError::InvalidProof)
+                    }
+                } else {
+                    Ok(node)
+                }
+            })?;
 
         // If the existing node is the leaf, and it's marked as deleted - reject the proof
         if existing.level == 0 && existing.modified {
@@ -229,180 +274,149 @@ impl WorkForest {
 
         // 4. Now, walk the merkle proof starting with the leaf,
         //    creating the missing nodes until we hit the bottom node.
-        //    Note, it is fine if we fail mid-way updating the state -
-        //    it will be completely discarded by `Utreexo::update`.
-        let item_hash = hasher.leaf(item);
-
-        let (hash, new_children) = path
-            .directions()
-            .zip(path.walk_up(item_hash, &hasher))
-            .enumerate()
-            .take(existing.level)
-            .fold(
-                (item_hash, None),
-                |(_hash, children), (i, (side, (parent_hash, (left_hash, right_hash))))| {
-                    let (left_children, right_children) = side.order(children, None);
-                    let (l, r) = (
-                        self.heap.allocate(left_hash, i, left_children),
-                        self.heap.allocate(right_hash, i, right_children),
-                    );
-                    (parent_hash, Some((l.index, r.index)))
-                },
-            );
+        let new_node = path.iter().take(existing.level).fold(
+            Node {
+                level: 0,
+                hash: hasher.leaf(item),
+                modified: true,
+                children: None,
+            },
+            |node, (side, neighbor_hash)| {
+                let level = node.level;
+                let neighbor = Node {
+                    level: level,
+                    hash: *neighbor_hash,
+                    modified: false,
+                    children: None,
+                };
+                let (l, r) = side.order(node, neighbor);
+                Node {
+                    level: level + 1,
+                    hash: hasher.intermediate(&l.hash, &r.hash),
+                    modified: true,
+                    children: Some((Rc::new(l), Rc::new(r))),
+                }
+            },
+        );
 
         // 5. Check if we arrived at a correct lowest-available node.
-        if hash != existing.hash {
+        if new_node.hash != existing.hash {
             // We haven't met the node we expected to meet, so the proof is invalid.
             return Err(UtreexoError::InvalidProof);
         }
 
-        // Connect children to the existing lower node.
-        let _ = self
-            .heap
-            .update(existing.index, |node| node.children = new_children);
+        // 6. Replace the existing node with the newly constructed node.
+        //    Note this does not make an unnecessary allocation: the new node exists on the stack.
+        //    We simply copy its contents over the heap-allocated `existing_node` behind Rc.
+        let _ = mem::replace(existing, new_node);
 
-        // Update modification flag for all parents of the deleted leaf.
-        // Note: `existing` might be equal to `top`, so after this call `top` will pick up new children
-        // from the heap where they were written in the above line.
-        let top = self.heap.update(top.index, |node| {
+        // 7. Mark all existing nodes as modified
+        let top = find_root(self.roots.iter_mut(), path.position)
+            .ok_or(UtreexoError::InvalidProof)?;
+        let top = Rc::get_mut(top).expect("At this point, there must be uniquely owned top node.");
+
+        path.iter().rev().try_fold(top, |node, (side, _neighbor)| {
             node.modified = true;
-        });
-        let _ = path.iter().rev().try_fold(top, |node, (side, _)| {
-            node.children.map(|(l, r)| {
-                self.heap.update(side.choose(l, r).0, |node| {
-                    node.modified = true;
-                })
+            node.children.map(|(ref mut l, ref mut r)| {
+                let node_rc = side.choose(l,r).0;
+                Rc::get_mut(node_rc).expect("At this point, each node in the chain should be uniquely owned.")
             })
         });
 
         Ok(())
     }
 
-    /// Allows performing multiple updates atomically: none of the changes
-    /// are applied if some of them failed.
-    /// Note: atomicity here does NOT mean that you can use this method across threads.
-    pub fn transaction<F, T, E>(&mut self, closure: F) -> Result<T, E>
-    where
-        F: FnOnce(&mut Self) -> Result<T, E>,
-    {
-        // TBD: make this more efficient via custom copy-on-write.
-        let mut wf = self.clone();
-
-        // if the closure fails, the temporary `wf` is going to be thrown away.
-        let result = closure(&mut wf)?;
-
-        // replace the existing work forest with the new, updated one.
-        mem::replace(self, wf);
-        Ok(result)
-    }
-
-    /// Normalizes the forest into minimal number of ordered perfect trees.
-    /// Returns a root of the new forst, the forest and a catchup structure.
+    /// Normalizes the forest into a minimal number of ordered perfect trees.
+    /// Returns the new forest and a catchup structure.
     pub fn normalize<M: MerkleItem>(&self, hasher: &NodeHasher<M>) -> (Forest, Catchup) {
-        // TBD: what's the best way to estimate the vector capacity from self.heap.len()?
-        let estimated_cap = self.heap.len() / 2;
+        // Tree with modified nodes {d, b, 3, 6}:
+        // (a, c have pruned children)
+        //  d
+        //  |\
+        //  a   b   c
+        //  |\  |\  |\
+        //      2 x     x 7 8 9
+        //
+        //  |
+        //  v
+        //
+        //  a      c
+        //  |\     |\
+        //      2      7 8 9
+        //
+        // The catchup structure is needed to transform higher parts of the proofs
+        // against the old tree into the paths within a new tree.
+        // Once we moved the childless nodes {a,2,c,7,8,9} somewhere in the new tree,
+        // we need to collect a hashmap from their hash into their new offset.
 
-        // Collect all nodes that were not modified.
-        // We delay allocation of the nodes so we don't have to mutably borrow `new_heap`
-        // in two iterators, and instead yield pairs `(hash, level)`.
-        let non_modified_nodes = self
-            .heap
-            .traverse(self.roots_iter(), |n| n.modified)
-            .filter_map(|(_offset, node)| {
-                if !node.modified {
-                    Some((node.hash, node.level))
-                } else {
-                    None
-                }
-            });
+        // 1. Traverse the tree and collect all nodes that were not modified.
+        let non_modified_nodes =
+            TreeTraversal::new(self.roots.iter()).map(|(_offset, node_rc)| node_rc.clone());
 
-        // Compute perfect roots for the new tree,
-        // joining together same-level nodes into higher-level nodes.
-        let (new_heap, new_roots) = non_modified_nodes.fold(
-            (
-                Heap::with_capacity(estimated_cap),
-                [None as Option<NodeIndex>; 64],
-            ),
-            |(mut new_heap, mut roots), (hash, level)| {
-                let mut node = new_heap.allocate(hash, level, None);
-                // If we have a left node at the same level already,
-                // merge it with the current node.
-                // Do the same with the new parent, until it lands on a unoccupied slot.
-                while let Some(i) = roots[node.level] {
-                    let left = new_heap.node_at(i);
-                    node = new_heap.allocate(
-                        hasher.intermediate(&left.hash, &node.hash),
-                        left.level + 1,
-                        Some((left.index, node.index)),
-                    );
-                    roots[left.level] = None;
+        // 2. Compute perfect roots for the new tree,
+        //    joining together same-level nodes into higher-level nodes.
+        let mut new_root_nodes = non_modified_nodes.fold(
+            none_64_times::<Rc<Node>>(), // "2^64 of anything should be enough for everyone"
+            |mut roots, mut curr_node| {
+                let mut level = curr_node.level;
+                while let Some(left_node) = roots[curr_node.level].take() {
+                    level = curr_node.level;
+                    curr_node = Rc::new(Node {
+                        level: level + 1,
+                        hash: hasher.intermediate(&left_node.hash, &curr_node.hash),
+                        modified: true,
+                        children: Some((left_node, curr_node)),
+                    });
                 }
-                // Place the node in the unoccupied slot.
-                roots[node.level] = Some(node.index);
-                (new_heap, roots)
+                roots[level] = Some(curr_node);
+                roots
             },
         );
 
-        let new_forest = WorkForest {
-            roots: new_roots.iter().rev().filter_map(|r| *r).collect(),
-            heap: new_heap,
+        // 3. Create the new normalized forest
+        let new_forest = Forest {
+            roots: new_root_nodes.iter().fold([None; 64], |mut roots, node| {
+                if let Some(node) = node {
+                    roots[node.level] = Some(node.hash);
+                }
+                roots
+            }),
         };
 
-        let utreexo_roots = new_roots.iter().fold([None; 64], |mut roots, ni| {
-            if let Some(ni) = ni {
-                let node = new_forest.heap.node_at(*ni);
-                roots[node.level] = Some(node.hash);
-            }
-            roots
-        });
-        let utreexo = Forest {
-            roots: utreexo_roots,
+        // 4. Create the new work forest with new roots.
+        //    Note: the roots in the array are ordered by higher-level-last,
+        //    but we need to keep bigger trees to the left, so we'll rev() them.
+        let new_work_forest = WorkForest {
+            // One day Rust will implement IntoIterator for arrays >32 elements.
+            // On that day we will do this:
+            // new_root_nodes.into_iter().rev().filter_map(|r| r).collect()
+            roots: new_root_nodes
+                .iter_mut()
+                .rev()
+                .filter_map(|r| r.take())
+                .collect(),
         };
 
-        let catchup_map = new_forest
-            .heap
-            .traverse(new_forest.roots_iter(), |_| true)
-            .fold(
-                HashMap::<Hash, Position>::new(),
-                |mut map, (offset, node)| {
-                    if node.children == None {
-                        map.insert(node.hash, offset);
-                    }
-                    map
-                },
-            );
+        // 5. Finally, traverse the new forest and collect new positions for all childless nodes
+        //    these will be the points of update for the proofs made against the old tree.
+        //    All the paths from leaf to these childless nodes remain valid, while the rest of
+        //    the path must be computed from
+        let catchup_map = TreeTraversal::new(new_work_forest.roots.iter()).fold(
+            HashMap::<Hash, Position>::new(),
+            |mut map, (offset, node)| {
+                if node.children.is_none() {
+                    map.insert(node.hash, offset);
+                }
+                map
+            },
+        );
+
         let catchup = Catchup {
-            forest: new_forest,
+            forest: new_work_forest,
             map: catchup_map,
         };
 
-        (utreexo, catchup)
-    }
-
-    /// Returns the lowest-available node for a given path and verifies the higher-level
-    /// neighbors in the path.
-    fn existing_node_for_path(&self, root: Node, path: &Path) -> Result<Node, UtreexoError> {
-        self.heap
-            .walk_down(root, path.directions().rev())
-            .zip(path.neighbors.iter().rev())
-            .try_fold(
-                root,
-                |_parent, ((node, actual_neighbor), proof_neighbor)| {
-                    if proof_neighbor != &actual_neighbor.hash {
-                        Err(UtreexoError::InvalidProof)
-                    } else {
-                        Ok(node)
-                    }
-                },
-            )
-    }
-
-    /// Returns an iterator over roots of the forest,
-    /// from the highest to the lowest level.
-    fn roots_iter<'a>(&'a self) -> impl DoubleEndedIterator<Item = Node> + 'a {
-        self.roots
-            .iter()
-            .map(move |&index| self.heap.node_at(index))
+        (new_forest, catchup)
     }
 }
 
@@ -421,20 +435,37 @@ impl Catchup {
             Proof::Committed(path) => path,
         };
 
-        // Climb up the merkle path until we find an existing node or nothing.
-        let hash = hasher.leaf(item);
-        let (midlevel, catchup_result) = path.walk_up(hash, &hasher).fold(
-            (0, self.map.get(&hash)),
-            |(level, catchup_result), (p, _)| {
-                match catchup_result {
-                    Some(r) => (level, Some(r)),           // keep the found result
-                    None => (level + 1, self.map.get(&p)), // try a higher parent
+        // 1. Climb up the merkle path until we find an existing node or nothing.
+
+        // let (midlevel, catchup_result) = path.walk_up(hash, &hasher).fold(
+        //     (0, self.map.get(&hash)),
+        //     |(level, catchup_result), (p, _)| {
+        //         match catchup_result {
+        //             Some(r) => (level, Some(r)),           // keep the found result
+        //             None => (level + 1, self.map.get(&p)), // try a higher parent
+        //         }
+        //     },
+        // );
+        let leaf_hash = hasher.leaf(item);
+
+        let (midlevel, maybe_offset, _midhash) = path.iter().fold(
+            (0, self.map.get(&leaf_hash), leaf_hash),
+            |(level, maybe_offset, node_hash), (side, neighbor_hash)| {
+                match maybe_offset {
+                    // either keep the result we already have...
+                    Some(offset) => (level, Some(offset), node_hash),
+                    None => {
+                        // ...or try finding a higher-level hash
+                        let (l, r) = side.order(node_hash, *neighbor_hash);
+                        let parent_hash = hasher.intermediate(&l, &r);
+                        (level + 1, self.map.get(&parent_hash), parent_hash)
+                    }
                 }
             },
         );
 
         // Fail early if we did not find any catchup point.
-        let position_offset = catchup_result.ok_or(UtreexoError::InvalidProof)?;
+        let position_offset = maybe_offset.ok_or(UtreexoError::InvalidProof)?;
 
         // Adjust the absolute position:
         // keep the lowest (level+1) bits and add the stored position offset for the stored subtree
@@ -445,22 +476,221 @@ impl Catchup {
         path.neighbors.truncate(midlevel);
 
         // Find the root to which the updated position belongs
-        let root = Node::find_root(self.forest.roots_iter(), |&node| node.level, path.position)
+        let root = find_root(self.forest.roots.iter(), path.position)
             .ok_or(UtreexoError::InvalidProof)?;
 
+        // Construct a new directions object.
+        // We cannot take it from path because it does not have all neighbors yet.
         let directions = Directions {
             position: path.position,
             depth: root.level,
         };
-        path.neighbors = self.forest.heap.walk_down(root, directions.rev()).fold(
-            path.neighbors,
-            |mut list, (_node, new_neighbor)| {
-                // TODO: this is not the fastest way to insert missing neighbors
-                list.insert(midlevel, new_neighbor.hash);
-                list
-            },
-        );
+
+        path.neighbors = directions
+            .rev()
+            .fold(
+                (path.neighbors, root),
+                |(mut neighbors, mut parent), side| {
+                    if let Some((ref l, ref r)) = parent.children {
+                        let (trunk, neighbor) = side.choose(l, r);
+                        // TODO: this is not the fastest way to insert missing neighbors
+                        neighbors.insert(midlevel, neighbor.hash);
+                        parent = trunk
+                    }
+                    (neighbors, parent)
+                },
+            )
+            .0;
 
         Ok(Proof::Committed(path))
     }
+}
+
+/// Node in the merkle tree
+#[derive(Clone,PartialEq,Debug)]
+struct Node {
+    // level    hash                             modified  children (rc,rc)
+    // 8 bytes  32 bytes                         1 byte   16 bytes
+    /// Level of this node. Level 0 is for leaves.
+    /// Level N node is a root of a tree over 2^N items.
+    level: usize,
+
+    /// Merkle hash of this node
+    hash: Hash,
+    /// Flag indicates if any node in the subtree is marked for deletion.
+    /// If modified=true for level=0, it means the node is deleted.
+    modified: bool,
+    /// Some(): node has children
+    /// None: node is a leaf, or it has no children, only a hash (pruned subtree)
+    /// Note that Rc is > 1 only when we are in a `WorkForest::update` block.
+    children: Option<(Rc<Node>, Rc<Node>)>,
+}
+
+impl Node {
+    /// maximum number of items in this subtree, ignoring deletions
+    pub(super) fn capacity(&self) -> u64 {
+        1 << self.level
+    }
+}
+
+/// Iterator implementing traversal of the binary tree.
+/// Yields only the nodes without children and their global offset.
+struct TreeTraversal<'a, I>
+where
+    I: Iterator<Item = &'a Rc<Node>>,
+{
+    /// reference to the roots
+    roots: I,
+    /// nodes in the queue - next node to be yielded is in the end of the list
+    stack: Vec<(Position, &'a Rc<Node>)>,
+    /// offset of the top root
+    root_offset: Position,
+}
+
+impl<'a, I> TreeTraversal<'a, I>
+where
+    I: Iterator<Item = &'a Rc<Node>>,
+{
+    fn new(roots: I) -> Self {
+        Self {
+            roots,
+            stack: Vec::with_capacity(16),
+            root_offset: 0,
+        }
+    }
+}
+
+impl<'a, I> Iterator for TreeTraversal<'a, I>
+where
+    I: Iterator<Item = &'a Rc<Node>>,
+{
+    type Item = (Position, &'a Rc<Node>);
+    fn next(&mut self) -> Option<Self::Item> {
+        // traverse the current stack of roots until we hit the childless node which we yield.
+        while let Some((offset, node)) = self.stack.pop() {
+            if let Some((ref l, ref r)) = node.children {
+                self.stack.push((offset + node.capacity() / 2, r));
+                self.stack.push((offset, l));
+            } else {
+                return Some((offset, node));
+            }
+        }
+        // when there is nothing else to traverse, try the next root.
+        if let Some(root) = self.roots.next() {
+            self.stack.push((self.root_offset, root));
+            self.root_offset += root.capacity();
+            self.next() // this is guaranteed to be 1-level recursion
+        } else {
+            None
+        }
+    }
+}
+
+fn find_root<I>(roots: I, position: Position) -> Option<I::Item>
+where
+    I: IntoIterator,
+    I::Item: NodeLevel,
+{
+    let mut offset: Position = 0;
+    for item in roots.into_iter() {
+        offset += 1u64 << item.node_level();
+        if position < offset {
+            return Some(item);
+        }
+    }
+    None
+}
+
+trait NodeLevel {
+    fn node_level(&self) -> usize;
+}
+
+impl<'a> NodeLevel for &'a Rc<Node> {
+    fn node_level(&self) -> usize {
+        self.level
+    }
+}
+
+impl<'a> NodeLevel for &'a mut Rc<Node> {
+    fn node_level(&self) -> usize {
+        self.level
+    }
+}
+
+impl NodeLevel for usize {
+    fn node_level(&self) -> usize {
+        *self
+    }
+}
+
+
+/// This is a workaround for issue with `[None as Option<T>; N]` where T is not Copy.
+/// See https://github.com/rust-lang/rfcs/blob/master/text/2203-const-repeat-expr.md
+const fn none_64_times<T>() -> [Option<T>; 64] {
+    [
+        None as Option<T>,
+        None as Option<T>,
+        None as Option<T>,
+        None as Option<T>,
+        None as Option<T>,
+        None as Option<T>,
+        None as Option<T>,
+        None as Option<T>,
+        None as Option<T>,
+        None as Option<T>,
+        None as Option<T>,
+        None as Option<T>,
+        None as Option<T>,
+        None as Option<T>,
+        None as Option<T>,
+        None as Option<T>,
+        None as Option<T>,
+        None as Option<T>,
+        None as Option<T>,
+        None as Option<T>,
+        None as Option<T>,
+        None as Option<T>,
+        None as Option<T>,
+        None as Option<T>,
+        None as Option<T>,
+        None as Option<T>,
+        None as Option<T>,
+        None as Option<T>,
+        None as Option<T>,
+        None as Option<T>,
+        None as Option<T>,
+        None as Option<T>,
+        None as Option<T>,
+        None as Option<T>,
+        None as Option<T>,
+        None as Option<T>,
+        None as Option<T>,
+        None as Option<T>,
+        None as Option<T>,
+        None as Option<T>,
+        None as Option<T>,
+        None as Option<T>,
+        None as Option<T>,
+        None as Option<T>,
+        None as Option<T>,
+        None as Option<T>,
+        None as Option<T>,
+        None as Option<T>,
+        None as Option<T>,
+        None as Option<T>,
+        None as Option<T>,
+        None as Option<T>,
+        None as Option<T>,
+        None as Option<T>,
+        None as Option<T>,
+        None as Option<T>,
+        None as Option<T>,
+        None as Option<T>,
+        None as Option<T>,
+        None as Option<T>,
+        None as Option<T>,
+        None as Option<T>,
+        None as Option<T>,
+        None as Option<T>,
+    ]
 }
