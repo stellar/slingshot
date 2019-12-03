@@ -1,6 +1,7 @@
 //! Implementation of a utxo accumulator inspired by Tadge Dryja's Utreexo design,
 //! with small differences in normalization algorithm.
 mod forest;
+mod newforest;
 mod nodes;
 mod path;
 

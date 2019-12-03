@@ -11,7 +11,8 @@ use crate::merkle::{Hash, MerkleItem};
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Forest {
     #[serde(with = "crate::serialization::array64")]
-    roots: [Option<Hash>; 64], // roots of the trees for levels 0 to 63
+    pub(super) roots: [Option<Hash>; 64], // roots of the trees for levels 0 to 63
+                                          // FIXME: make this private!
 }
 
 /// State of the Utreexo forest during update
