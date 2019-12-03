@@ -1,12 +1,11 @@
 use core::borrow::Borrow;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::mem;
 use std::rc::Rc;
-use serde::{Deserialize, Serialize};
 
-use super::path::{NodeHasher, Directions, Path, Position, Proof};
+use super::path::{Directions, NodeHasher, Path, Position, Proof};
 use crate::merkle::{Hash, MerkleItem};
-
 
 /// Forest consists of a number of roots of merkle binary trees.
 #[derive(Clone, Serialize, Deserialize)]
@@ -17,7 +16,7 @@ pub struct Forest {
 }
 
 /// Roots of the perfect merkle trees forming a forest, which itself is an imperfect merkle tree.
-#[derive(Clone,PartialEq,Debug)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct WorkForest {
     roots: Vec<Rc<Node>>, // roots of all the perfect binary trees, including the newly inserted nodes
 }
@@ -67,7 +66,7 @@ impl Forest {
         };
 
         // 1. Locate the root under which the item.position is located.
-        let root_level = find_root(self.roots_iter().map(|(l,_)| l), path.position)
+        let root_level = find_root(self.roots_iter().map(|(l, _)| l), path.position)
             .ok_or(UtreexoError::InvalidProof)?;
 
         // 2. The proof should be of exact size from a leaf up to a tree root.
@@ -77,13 +76,13 @@ impl Forest {
 
         // 3. Now, walk the merkle proof starting with the leaf,
         //    creating the intermediate hashes until we hit the last neighbor.
-        let top_hash = path
-            .iter()
-            .take(root_level)
-            .fold(hasher.leaf(item), |curr_hash, (side, neighbor_hash)| {
+        let top_hash = path.iter().take(root_level).fold(
+            hasher.leaf(item),
+            |curr_hash, (side, neighbor_hash)| {
                 let (l, r) = side.order(&curr_hash, neighbor_hash);
                 hasher.intermediate(l, r)
-            });
+            },
+        );
 
         // 4. Check if the computed root matches the stored root.
         if Some(top_hash) != self.roots[root_level] {
@@ -99,16 +98,16 @@ impl Forest {
     pub fn work_forest(&self) -> WorkForest {
         WorkForest {
             roots: self
-            .roots_iter()
-            .map(|(level, hash)| {
-                Rc::new(Node{
-                    level,
-                    hash,
-                    modified: false,
-                    children: None,
+                .roots_iter()
+                .map(|(level, hash)| {
+                    Rc::new(Node {
+                        level,
+                        hash,
+                        modified: false,
+                        children: None,
+                    })
                 })
-            })
-            .collect()
+                .collect(),
         }
     }
 
@@ -118,8 +117,7 @@ impl Forest {
         &self,
         hasher: &NodeHasher<M>,
         closure: impl FnOnce(&mut WorkForest) -> Result<(), UtreexoError>,
-    ) -> Result<(Self, Catchup), UtreexoError>
-    {
+    ) -> Result<(Self, Catchup), UtreexoError> {
         let mut wforest = self.work_forest();
         let _ = closure(&mut wforest)?;
         let (next_forest, catchup) = wforest.normalize(&hasher);
@@ -155,10 +153,9 @@ impl Forest {
 }
 
 impl WorkForest {
-
     /// Adds a new item to the tree, appending a node to the end.
     pub fn insert<M: MerkleItem>(&mut self, item: &M, hasher: &NodeHasher<M>) {
-        self.roots.push(Rc::new(Node{
+        self.roots.push(Rc::new(Node {
             level: 0,
             hash: hasher.leaf(item),
             modified: false,
@@ -238,8 +235,8 @@ impl WorkForest {
         // and mark the relevant nodes as modified.
 
         // 1. Locate the root under which the item.position is located.
-        let top = find_root(self.roots.iter_mut(), path.position)
-            .ok_or(UtreexoError::InvalidProof)?;
+        let top =
+            find_root(self.roots.iter_mut(), path.position).ok_or(UtreexoError::InvalidProof)?;
         let top = Rc::make_mut(top);
 
         // 2. The proof should be of exact size from a leaf up to a tree root.
@@ -311,15 +308,16 @@ impl WorkForest {
         let _ = mem::replace(existing, new_node);
 
         // 7. Mark all existing nodes as modified
-        let top = find_root(self.roots.iter_mut(), path.position)
-            .ok_or(UtreexoError::InvalidProof)?;
+        let top =
+            find_root(self.roots.iter_mut(), path.position).ok_or(UtreexoError::InvalidProof)?;
         let top = Rc::get_mut(top).expect("At this point, there must be uniquely owned top node.");
 
         path.iter().rev().try_fold(top, |node, (side, _neighbor)| {
             node.modified = true;
             node.children.map(|(ref mut l, ref mut r)| {
-                let node_rc = side.choose(l,r).0;
-                Rc::get_mut(node_rc).expect("At this point, each node in the chain should be uniquely owned.")
+                let node_rc = side.choose(l, r).0;
+                Rc::get_mut(node_rc)
+                    .expect("At this point, each node in the chain should be uniquely owned.")
             })
         });
 
@@ -436,18 +434,7 @@ impl Catchup {
         };
 
         // 1. Climb up the merkle path until we find an existing node or nothing.
-
-        // let (midlevel, catchup_result) = path.walk_up(hash, &hasher).fold(
-        //     (0, self.map.get(&hash)),
-        //     |(level, catchup_result), (p, _)| {
-        //         match catchup_result {
-        //             Some(r) => (level, Some(r)),           // keep the found result
-        //             None => (level + 1, self.map.get(&p)), // try a higher parent
-        //         }
-        //     },
-        // );
         let leaf_hash = hasher.leaf(item);
-
         let (midlevel, maybe_offset, _midhash) = path.iter().fold(
             (0, self.map.get(&leaf_hash), leaf_hash),
             |(level, maybe_offset, node_hash), (side, neighbor_hash)| {
@@ -476,8 +463,8 @@ impl Catchup {
         path.neighbors.truncate(midlevel);
 
         // Find the root to which the updated position belongs
-        let root = find_root(self.forest.roots.iter(), path.position)
-            .ok_or(UtreexoError::InvalidProof)?;
+        let root =
+            find_root(self.forest.roots.iter(), path.position).ok_or(UtreexoError::InvalidProof)?;
 
         // Construct a new directions object.
         // We cannot take it from path because it does not have all neighbors yet.
@@ -507,10 +494,8 @@ impl Catchup {
 }
 
 /// Node in the merkle tree
-#[derive(Clone,PartialEq,Debug)]
+#[derive(Clone, PartialEq, Debug)]
 struct Node {
-    // level    hash                             modified  children (rc,rc)
-    // 8 bytes  32 bytes                         1 byte   16 bytes
     /// Level of this node. Level 0 is for leaves.
     /// Level N node is a root of a tree over 2^N items.
     level: usize,
@@ -586,11 +571,7 @@ where
     }
 }
 
-fn find_root<I>(roots: I, position: Position) -> Option<I::Item>
-where
-    I: IntoIterator,
-    I::Item: NodeLevel,
-{
+fn find_root<T: NodeLevel>(roots: impl IntoIterator<Item = T>, position: Position) -> Option<T> {
     let mut offset: Position = 0;
     for item in roots.into_iter() {
         offset += 1u64 << item.node_level();
@@ -605,92 +586,33 @@ trait NodeLevel {
     fn node_level(&self) -> usize;
 }
 
+#[rustfmt::skip]
 impl<'a> NodeLevel for &'a Rc<Node> {
-    fn node_level(&self) -> usize {
-        self.level
-    }
+    fn node_level(&self) -> usize { self.level }
 }
 
+#[rustfmt::skip]
 impl<'a> NodeLevel for &'a mut Rc<Node> {
-    fn node_level(&self) -> usize {
-        self.level
-    }
+    fn node_level(&self) -> usize { self.level }
 }
 
+#[rustfmt::skip]
 impl NodeLevel for usize {
-    fn node_level(&self) -> usize {
-        *self
-    }
+    fn node_level(&self) -> usize { *self }
 }
-
 
 /// This is a workaround for issue with `[None as Option<T>; N]` where T is not Copy.
 /// See https://github.com/rust-lang/rfcs/blob/master/text/2203-const-repeat-expr.md
+#[rustfmt::skip]
 const fn none_64_times<T>() -> [Option<T>; 64] {
     [
-        None as Option<T>,
-        None as Option<T>,
-        None as Option<T>,
-        None as Option<T>,
-        None as Option<T>,
-        None as Option<T>,
-        None as Option<T>,
-        None as Option<T>,
-        None as Option<T>,
-        None as Option<T>,
-        None as Option<T>,
-        None as Option<T>,
-        None as Option<T>,
-        None as Option<T>,
-        None as Option<T>,
-        None as Option<T>,
-        None as Option<T>,
-        None as Option<T>,
-        None as Option<T>,
-        None as Option<T>,
-        None as Option<T>,
-        None as Option<T>,
-        None as Option<T>,
-        None as Option<T>,
-        None as Option<T>,
-        None as Option<T>,
-        None as Option<T>,
-        None as Option<T>,
-        None as Option<T>,
-        None as Option<T>,
-        None as Option<T>,
-        None as Option<T>,
-        None as Option<T>,
-        None as Option<T>,
-        None as Option<T>,
-        None as Option<T>,
-        None as Option<T>,
-        None as Option<T>,
-        None as Option<T>,
-        None as Option<T>,
-        None as Option<T>,
-        None as Option<T>,
-        None as Option<T>,
-        None as Option<T>,
-        None as Option<T>,
-        None as Option<T>,
-        None as Option<T>,
-        None as Option<T>,
-        None as Option<T>,
-        None as Option<T>,
-        None as Option<T>,
-        None as Option<T>,
-        None as Option<T>,
-        None as Option<T>,
-        None as Option<T>,
-        None as Option<T>,
-        None as Option<T>,
-        None as Option<T>,
-        None as Option<T>,
-        None as Option<T>,
-        None as Option<T>,
-        None as Option<T>,
-        None as Option<T>,
-        None as Option<T>,
+        None as Option<T>, None as Option<T>, None as Option<T>, None as Option<T>, None as Option<T>, None as Option<T>, None as Option<T>, None as Option<T>,
+        None as Option<T>, None as Option<T>, None as Option<T>, None as Option<T>, None as Option<T>, None as Option<T>, None as Option<T>, None as Option<T>,
+        None as Option<T>, None as Option<T>, None as Option<T>, None as Option<T>, None as Option<T>, None as Option<T>, None as Option<T>, None as Option<T>,
+        None as Option<T>, None as Option<T>, None as Option<T>, None as Option<T>, None as Option<T>, None as Option<T>, None as Option<T>, None as Option<T>,
+        None as Option<T>, None as Option<T>, None as Option<T>, None as Option<T>, None as Option<T>, None as Option<T>, None as Option<T>, None as Option<T>,
+        None as Option<T>, None as Option<T>, None as Option<T>, None as Option<T>, None as Option<T>, None as Option<T>, None as Option<T>, None as Option<T>,
+        None as Option<T>, None as Option<T>, None as Option<T>, None as Option<T>, None as Option<T>, None as Option<T>, None as Option<T>, None as Option<T>,
+        None as Option<T>, None as Option<T>, None as Option<T>, None as Option<T>, None as Option<T>, None as Option<T>, None as Option<T>, None as Option<T>,
     ]
 }

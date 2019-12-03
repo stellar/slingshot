@@ -1,9 +1,9 @@
-use merlin::Transcript;
 use core::marker::PhantomData;
+use merlin::Transcript;
 use serde::{Deserialize, Serialize};
 
-use crate::merkle::{Hash, MerkleItem};
 use super::super::encoding::{self, Encodable};
+use crate::merkle::{Hash, MerkleItem};
 
 /// Precomputed hash instance for computing Utreexo trees.
 pub struct NodeHasher<M: MerkleItem> {
@@ -87,7 +87,6 @@ impl<M: MerkleItem> NodeHasher<M> {
     }
 }
 
-
 impl Proof {
     /// Returns a reference to a path if this proof contains one.
     pub fn path(&self) -> Option<&Path> {
@@ -138,26 +137,11 @@ impl Path {
     ) -> impl DoubleEndedIterator<Item = (Side, &Hash)> + ExactSizeIterator {
         self.directions().zip(self.neighbors.iter())
     }
-    pub(super) fn directions(&self) -> Directions {
+    fn directions(&self) -> Directions {
         Directions {
             position: self.position,
             depth: self.neighbors.len(),
         }
-    }
-    /// Returns an iterator that walks up the path
-    /// and yields parent hash and children hashes at each step.
-    pub(super) fn walk_up<'a, 'b: 'a, M: MerkleItem>(
-        &'a self,
-        item_hash: Hash,
-        hasher: &'b NodeHasher<M>,
-    ) -> impl Iterator<Item = (Hash, (Hash, Hash))> + 'a {
-        self.iter()
-            .scan(item_hash, move |item_hash, (side, neighbor)| {
-                let (l, r) = side.order(*item_hash, *neighbor);
-                let p = hasher.intermediate(&l, &r);
-                *item_hash = p;
-                Some((p, (l, r)))
-            })
     }
 }
 
