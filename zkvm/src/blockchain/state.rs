@@ -24,7 +24,7 @@ pub struct BlockchainState {
 pub struct Mempool<T: MempoolItem> {
     state: BlockchainState,
     timestamp_ms: u64,
-    utreexo: utreexo::WorkForest,
+    work_utreexo: utreexo::WorkForest,
     items: Vec<T>,
 }
 
@@ -44,14 +44,14 @@ impl BlockchainState {
         I: IntoIterator<Item = ContractID> + Clone,
     {
         let hasher = NodeHasher::new();
-        let (_, utreexo, catchup) = Forest::new()
+        let (utreexo, catchup) = Forest::new()
             .update(&hasher, |forest| {
                 for utxo in utxos.clone() {
                     forest.insert(&utxo, &hasher);
                 }
                 Ok(())
             })
-            .unwrap(); // safe to unwrap because we only insert which never fails.
+            .unwrap(); // safe to unwrap because we only insert, which never fails.
 
         let proofs =
             utxos
@@ -128,11 +128,11 @@ impl BlockchainState {
 impl<T: MempoolItem> Mempool<T> {
     /// Creates an empty mempool at a given state.
     pub fn new(state: BlockchainState, timestamp_ms: u64) -> Self {
-        let utreexo = state.utreexo.work_forest();
+        let work_utreexo = state.utreexo.work_forest();
         Mempool {
             state,
             timestamp_ms,
-            utreexo,
+            work_utreexo,
             items: Vec::new(),
         }
     }
@@ -176,7 +176,7 @@ impl<T: MempoolItem> Mempool<T> {
             .root();
 
         let hasher = NodeHasher::<ContractID>::new();
-        let (new_forest, new_catchup) = self.utreexo.normalize(&hasher);
+        let (new_forest, new_catchup) = self.work_utreexo.normalize(&hasher);
         let utxoroot = new_forest.root(&hasher);
 
         let new_header = BlockHeader {
@@ -201,7 +201,7 @@ impl<T: MempoolItem> Mempool<T> {
 
     fn update_mempool(&mut self) {
         // reset the utreexo to the original state
-        self.utreexo = self.state.utreexo.work_forest();
+        self.work_utreexo = self.state.utreexo.work_forest();
 
         // extract old
         let old_items = mem::replace(&mut self.items, Vec::new());
@@ -225,9 +225,7 @@ impl<T: MempoolItem> Mempool<T> {
 
         check_tx_header(&vtx.header, self.timestamp_ms, self.state.tip.version)?;
 
-        self.utreexo.transaction(|forest| {
-            apply_tx(forest, &vtx.log, proofs.iter(), &utreexo::NodeHasher::new())
-        })
+        apply_tx(&mut self.work_utreexo, &vtx.log, proofs.iter(), &utreexo::NodeHasher::new())
     }
 }
 

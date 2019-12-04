@@ -12,17 +12,16 @@ use crate::merkle::{Hash, MerkleItem};
 pub struct Forest {
     #[serde(with = "crate::serialization::array64")]
     pub(super) roots: [Option<Hash>; 64], // roots of the trees for levels 0 to 63
-                                          // FIXME: make this private!
 }
 
 /// Roots of the perfect merkle trees forming a forest, which itself is an imperfect merkle tree.
 #[derive(Clone, PartialEq, Debug)]
 pub struct WorkForest {
-    roots: Vec<Rc<Node>>, // roots of all the perfect binary trees, including the newly inserted nodes
+    pub(super) roots: Vec<Rc<Node>>, // roots of all the perfect binary trees, including the newly inserted nodes
 }
 
 /// Structure that helps auto-updating the proofs created for a previous state of a forest.
-#[derive(Clone)]
+#[derive(Clone,Serialize,Deserialize)]
 pub struct Catchup {
     forest: WorkForest,           // forest that stores the inner nodes
     map: HashMap<Hash, Position>, // node hash -> new position offset for this node
@@ -39,6 +38,24 @@ pub enum UtreexoError {
     /// to which it should.
     #[fail(display = "Merkle proof is invalid")]
     InvalidProof,
+}
+
+/// Node in the merkle tree
+#[derive(Clone, PartialEq, Debug)]
+pub(super) struct Node {
+    /// Level of this node. Level 0 is for leaves.
+    /// Level N node is a root of a tree over 2^N items.
+    pub(super) level: usize,
+
+    /// Merkle hash of this node
+    pub(super) hash: Hash,
+    /// Flag indicates if any node in the subtree is marked for deletion.
+    /// If modified=true for level=0, it means the node is deleted.
+    pub(super) modified: bool,
+    /// Some(): node has children
+    /// None: node is a leaf, or it has no children, only a hash (pruned subtree)
+    /// Note that Rc is > 1 only when we are in a `WorkForest::update` block.
+    pub(super) children: Option<(Rc<Node>, Rc<Node>)>,
 }
 
 impl Forest {
@@ -314,11 +331,15 @@ impl WorkForest {
 
         path.iter().rev().try_fold(top, |node, (side, _neighbor)| {
             node.modified = true;
-            node.children.map(|(ref mut l, ref mut r)| {
-                let node_rc = side.choose(l, r).0;
-                Rc::get_mut(node_rc)
-                    .expect("At this point, each node in the chain should be uniquely owned.")
-            })
+            match node.children {
+                Some((ref mut l, ref mut r)) => {
+                    let node_rc = side.choose(l, r).0;
+                    let node = Rc::get_mut(node_rc)
+                    .expect("At this point, each node in the chain should be uniquely owned.");
+                    Some(node)
+                },
+                None => None,
+            }
         });
 
         Ok(())
@@ -356,17 +377,17 @@ impl WorkForest {
         let mut new_root_nodes = non_modified_nodes.fold(
             none_64_times::<Rc<Node>>(), // "2^64 of anything should be enough for everyone"
             |mut roots, mut curr_node| {
-                let mut level = curr_node.level;
+                let mut store_level = curr_node.level;
                 while let Some(left_node) = roots[curr_node.level].take() {
-                    level = curr_node.level;
                     curr_node = Rc::new(Node {
-                        level: level + 1,
+                        level: curr_node.level + 1,
                         hash: hasher.intermediate(&left_node.hash, &curr_node.hash),
                         modified: true,
                         children: Some((left_node, curr_node)),
                     });
+                    store_level = curr_node.level;
                 }
-                roots[level] = Some(curr_node);
+                roots[store_level] = Some(curr_node);
                 roots
             },
         );
@@ -491,24 +512,6 @@ impl Catchup {
 
         Ok(Proof::Committed(path))
     }
-}
-
-/// Node in the merkle tree
-#[derive(Clone, PartialEq, Debug)]
-struct Node {
-    /// Level of this node. Level 0 is for leaves.
-    /// Level N node is a root of a tree over 2^N items.
-    level: usize,
-
-    /// Merkle hash of this node
-    hash: Hash,
-    /// Flag indicates if any node in the subtree is marked for deletion.
-    /// If modified=true for level=0, it means the node is deleted.
-    modified: bool,
-    /// Some(): node has children
-    /// None: node is a leaf, or it has no children, only a hash (pruned subtree)
-    /// Note that Rc is > 1 only when we are in a `WorkForest::update` block.
-    children: Option<(Rc<Node>, Rc<Node>)>,
 }
 
 impl Node {
