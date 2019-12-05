@@ -111,15 +111,11 @@ fn transaction_success() {
         })
         .collect::<Vec<_>>();
 
-    dbg!(proofs1.clone());
-
     let proofs1 = proofs1
         .into_iter()
         .enumerate()
         .map(|(i, p)| catchup1.update_proof(&(i as u64), p, &hasher).unwrap())
         .collect::<Vec<_>>();
-
-    dbg!(proofs1.clone());
 
     //  d
     //  |\

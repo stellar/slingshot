@@ -21,7 +21,7 @@ pub struct WorkForest {
 }
 
 /// Structure that helps auto-updating the proofs created for a previous state of a forest.
-#[derive(Clone,Serialize,Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Catchup {
     forest: WorkForest,           // forest that stores the inner nodes
     map: HashMap<Hash, Position>, // node hash -> new position offset for this node
@@ -335,9 +335,9 @@ impl WorkForest {
                 Some((ref mut l, ref mut r)) => {
                     let node_rc = side.choose(l, r).0;
                     let node = Rc::get_mut(node_rc)
-                    .expect("At this point, each node in the chain should be uniquely owned.");
+                        .expect("At this point, each node in the chain should be uniquely owned.");
                     Some(node)
-                },
+                }
                 None => None,
             }
         });
@@ -370,7 +370,13 @@ impl WorkForest {
 
         // 1. Traverse the tree and collect all nodes that were not modified.
         let non_modified_nodes =
-            TreeTraversal::new(self.roots.iter()).map(|(_offset, node_rc)| node_rc.clone());
+            ChildlessNodesIterator::new(self.roots.iter()).filter_map(|(_offset, node_rc)| {
+                if node_rc.modified {
+                    None
+                } else {
+                    Some(node_rc.clone())
+                }
+            });
 
         // 2. Compute perfect roots for the new tree,
         //    joining together same-level nodes into higher-level nodes.
@@ -420,7 +426,7 @@ impl WorkForest {
         //    these will be the points of update for the proofs made against the old tree.
         //    All the paths from leaf to these childless nodes remain valid, while the rest of
         //    the path must be computed from
-        let catchup_map = TreeTraversal::new(new_work_forest.roots.iter()).fold(
+        let catchup_map = ChildlessNodesIterator::new(new_work_forest.roots.iter()).fold(
             HashMap::<Hash, Position>::new(),
             |mut map, (offset, node)| {
                 if node.children.is_none() {
@@ -522,8 +528,8 @@ impl Node {
 }
 
 /// Iterator implementing traversal of the binary tree.
-/// Yields only the nodes without children and their global offset.
-struct TreeTraversal<'a, I>
+/// Note: yields only the nodes without children and their global offset.
+struct ChildlessNodesIterator<'a, I>
 where
     I: Iterator<Item = &'a Rc<Node>>,
 {
@@ -535,7 +541,7 @@ where
     root_offset: Position,
 }
 
-impl<'a, I> TreeTraversal<'a, I>
+impl<'a, I> ChildlessNodesIterator<'a, I>
 where
     I: Iterator<Item = &'a Rc<Node>>,
 {
@@ -548,7 +554,7 @@ where
     }
 }
 
-impl<'a, I> Iterator for TreeTraversal<'a, I>
+impl<'a, I> Iterator for ChildlessNodesIterator<'a, I>
 where
     I: Iterator<Item = &'a Rc<Node>>,
 {

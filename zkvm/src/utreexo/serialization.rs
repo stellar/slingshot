@@ -1,18 +1,18 @@
-use std::rc::Rc;
 use byteorder::{ByteOrder, LittleEndian};
+use std::rc::Rc;
 
 use serde::de::Visitor;
 use serde::{self, Deserialize, Deserializer, Serialize, Serializer};
 
-use super::forest::{WorkForest,Node};
-use crate::merkle::{Hash};
+use super::forest::{Node, WorkForest};
+use crate::merkle::Hash;
 
 impl WorkForest {
     /// Serializes the forest to a variable-length binary string.
     ///
     /// ```ascii
     ///    +-------------------------+--------+--------+-----
-    ///    | number of roots: u64-LE | root 0 | root 1 | ... 
+    ///    | number of roots: u64-LE | root 0 | root 1 | ...
     ///    +-------------------------+--------+--------+-----
     /// ```
     ///
@@ -25,12 +25,12 @@ impl WorkForest {
     ///    | level (bits 0..5) | modified | children |
     ///    +-------------------+----------+----------+
     /// ```
-    /// 
+    ///
     /// Lower bits 0..5 indicate level 0..63. 6th bit is "modified" flag. 7th bit is "children present" flag.
-    /// 
+    ///
     /// If a node has children, then it immediately follows by the left child,
     /// which possibly is followed by its children; then the right child.
-    /// 
+    ///
     /// ```ascii
     ///      a
     ///   b     c     ->   {a,b,d,e,c,f,h,i,g}
@@ -45,7 +45,7 @@ impl WorkForest {
     /// We currently do not check consistency of modification flags or values of hashes.
     /// **Do not** use this encoding for receiving work trees from untrusted sources.
     pub fn to_bytes(&self) -> Vec<u8> {
-        let mut result = Vec::with_capacity(8 + 33*self.roots.len());
+        let mut result = Vec::with_capacity(8 + 33 * self.roots.len());
 
         // Write number of roots
         {
@@ -55,15 +55,14 @@ impl WorkForest {
         }
 
         fn write_node(node: &Node, buf: &mut Vec<u8>) {
-            let byte = 
-                (node.level as u8) +
-                (if node.modified { 64u8 } else { 0u8 }) + 
-                (if node.children.is_some() { 128u8 } else { 0u8 });
+            let byte = (node.level as u8)
+                + (if node.modified { 64u8 } else { 0u8 })
+                + (if node.children.is_some() { 128u8 } else { 0u8 });
 
             buf.push(byte);
             buf.extend_from_slice(&node.hash[..]);
         }
-        
+
         let mut stack: Vec<&Node> = Vec::with_capacity(16);
         for root in self.roots.iter() {
             stack.push(&root);
@@ -82,7 +81,6 @@ impl WorkForest {
     /// Deserializes the forest from a binary string.
     /// See format description in the documentaton for [`to_bytes`](WorkForest::to_bytes).
     pub fn from_bytes(slice: &[u8]) -> Option<Self> {
-
         macro_rules! read {
             ($n:tt, $slice:ident) => {{
                 let mut piece = [0u8; $n];
@@ -117,12 +115,9 @@ impl WorkForest {
             }
 
             let (children, slice) = if has_children {
-                let (l, slice) = read_node(slice, level-1)?;
-                let (r, slice) = read_node(slice, level-1)?;
-                (
-                    Some((Rc::new(l), Rc::new(r))),
-                    slice
-                )
+                let (l, slice) = read_node(slice, level - 1)?;
+                let (r, slice) = read_node(slice, level - 1)?;
+                (Some((Rc::new(l), Rc::new(r))), slice)
             } else {
                 (None, slice)
             };
@@ -133,13 +128,13 @@ impl WorkForest {
                 modified,
                 children,
             };
-            
-            Some((node,slice))
+
+            Some((node, slice))
         }
 
         let (prefix, slice) = read!(8, slice);
         let roots_count = LittleEndian::read_u64(&prefix);
-        if roots_count > (slice.len() as u64)/33 {
+        if roots_count > (slice.len() as u64) / 33 {
             // DoS prevention: the slice consisting entirely of N roots
             // will be at least N*33 bytes long (we've already shifted
             // the slice by 8 bytes in read!(8)).
@@ -147,7 +142,7 @@ impl WorkForest {
         }
 
         let mut roots = Vec::with_capacity(roots_count as usize);
-        
+
         let mut slice = slice;
         for _ in 0..roots_count {
             let (node, remainder) = read_node(slice, 63)?;
@@ -155,7 +150,7 @@ impl WorkForest {
             roots.push(Rc::new(node))
         }
 
-        Some(WorkForest{roots})
+        Some(WorkForest { roots })
     }
 }
 
@@ -200,9 +195,129 @@ mod tests {
 
     #[test]
     fn empty() {
-        let wf = WorkForest{roots: Vec::new()};
+        let wf = WorkForest { roots: Vec::new() };
         let bytes = wf.to_bytes();
         assert_eq!(hex::encode(&bytes), "0000000000000000");
-        assert_eq!(WorkForest::from_bytes(&bytes).expect("should decode").roots, Vec::new());
+        assert_eq!(
+            WorkForest::from_bytes(&bytes).expect("should decode").roots,
+            Vec::new()
+        );
+    }
+
+    #[test]
+    fn one_node() {
+        let roots = || {
+            vec![Rc::new(Node {
+                level: 0,
+                hash: Hash([0x78; 32]),
+                modified: false,
+                children: None,
+            })]
+        };
+        let wf = WorkForest { roots: roots() };
+        let bytes = wf.to_bytes();
+        assert_eq!(
+            hex::encode(&bytes),
+            "0100000000000000\
+             007878787878787878787878787878787878787878787878787878787878787878"
+        );
+        assert_eq!(
+            WorkForest::from_bytes(&bytes).expect("should decode").roots,
+            roots()
+        );
+    }
+
+    #[test]
+    fn three_nodes() {
+        let roots = || {
+            vec![
+                Rc::new(Node {
+                    level: 0,
+                    hash: Hash([0x78; 32]),
+                    modified: false,
+                    children: None,
+                }),
+                Rc::new(Node {
+                    level: 1,
+                    hash: Hash([0x89; 32]),
+                    modified: true,
+                    children: None,
+                }),
+                Rc::new(Node {
+                    level: 2,
+                    hash: Hash([0x9a; 32]),
+                    modified: true,
+                    children: None,
+                }),
+            ]
+        };
+
+        let wf = WorkForest { roots: roots() };
+        let bytes = wf.to_bytes();
+        assert_eq!(
+            hex::encode(&bytes),
+            "0300000000000000\
+             007878787878787878787878787878787878787878787878787878787878787878\
+             418989898989898989898989898989898989898989898989898989898989898989\
+             429a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a"
+        );
+        assert_eq!(
+            WorkForest::from_bytes(&bytes).expect("should decode").roots,
+            roots()
+        );
+    }
+
+    #[test]
+    fn subtree_nodes() {
+        let roots = || {
+            vec![Rc::new(Node {
+                level: 10,
+                hash: Hash([0x78; 32]),
+                modified: true,
+                children: Some((
+                    Rc::new(Node {
+                        level: 9,
+                        hash: Hash([0x89; 32]),
+                        modified: true,
+                        children: Some((
+                            Rc::new(Node {
+                                level: 8,
+                                hash: Hash([0x12; 32]),
+                                modified: false,
+                                children: None,
+                            }),
+                            Rc::new(Node {
+                                level: 8,
+                                hash: Hash([0x34; 32]),
+                                modified: true,
+                                children: None,
+                            }),
+                        )),
+                    }),
+                    Rc::new(Node {
+                        level: 9,
+                        hash: Hash([0x9a; 32]),
+                        modified: false,
+                        children: None,
+                    }),
+                )),
+            })]
+        };
+
+        let wf = WorkForest { roots: roots() };
+        let bytes = wf.to_bytes();
+        assert_eq!(
+            hex::encode(&bytes),
+            "0100000000000000\
+             ca7878787878787878787878787878787878787878787878787878787878787878\
+             c98989898989898989898989898989898989898989898989898989898989898989\
+             081212121212121212121212121212121212121212121212121212121212121212\
+             483434343434343434343434343434343434343434343434343434343434343434\
+             099a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a9a"
+        );
+        assert_eq!(
+            WorkForest::from_bytes(&bytes).expect("should decode").roots,
+            roots()
+        );
     }
 }

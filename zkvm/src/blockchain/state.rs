@@ -225,7 +225,12 @@ impl<T: MempoolItem> Mempool<T> {
 
         check_tx_header(&vtx.header, self.timestamp_ms, self.state.tip.version)?;
 
-        apply_tx(&mut self.work_utreexo, &vtx.log, proofs.iter(), &utreexo::NodeHasher::new())
+        apply_tx(
+            &mut self.work_utreexo,
+            &vtx.log,
+            proofs.iter(),
+            &utreexo::NodeHasher::new(),
+        )
     }
 }
 
