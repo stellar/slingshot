@@ -57,7 +57,8 @@ pub struct MerkleRootBuilder {
 impl fmt::Debug for Hash {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "Hash({})", hex::encode(&self.0))
-        //write!(f, "{:x?}", &self.0) // outputs [aa, 11, 5a, ...]
+        // Without hex crate we'd do this, but it outputs comma-separated numbers: [aa, 11, 5a, ...]
+        // write!(f, "{:x?}", &self.0)
     }
 }
 
