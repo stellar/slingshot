@@ -186,6 +186,7 @@ impl WorkForest {
     where
         F: FnOnce(&mut Self) -> Result<(), E>,
     {
+        let prev_roots = self.roots.clone();
         let checkpoint = self.heap.checkpoint();
 
         match closure(self) {
@@ -195,6 +196,7 @@ impl WorkForest {
             }
             Err(e) => {
                 self.heap.rollback(checkpoint);
+                self.roots = prev_roots;
                 Err(e)
             }
         }
@@ -255,12 +257,13 @@ impl WorkForest {
         // and mark the relevant nodes as modified.
 
         // 1. Locate the root under which the item.position is located.
-        let mut top_index =
-            self.roots[find_root(self.roots_iter().map(|r| r.level), path.position)
-                .ok_or(UtreexoError::InvalidProof)?
-                .0];
+        let top_position = find_root(self.roots_iter().map(|r| r.level), path.position)
+            .ok_or(UtreexoError::InvalidProof)?
+            .0;
 
-        self.heap.make_mut(&mut top_index);
+        let top_index = &mut self.roots[top_position]; // get the updateable ref to the index
+        self.heap.make_mut(top_index); // update the index to CoW'd one (if needed).
+        let top_index = *top_index; // copy out the updated index
 
         // 2. The proof should be of exact size from a leaf up to a tree root.
         if path.neighbors.len() != self.heap.get_ref(top_index).level {
@@ -677,8 +680,8 @@ impl<T: Clone> Heap<T> {
     /// Panics if the wrong checkpoint is used.
     pub(super) fn rollback(&mut self, checkpoint: HeapCheckpoint) {
         assert!(self.checkpoint == checkpoint.curr);
+        self.items.truncate(checkpoint.curr);
         self.checkpoint = checkpoint.prev;
-        self.items.truncate(self.checkpoint);
     }
 
     /// Commits existing changes and shifts checkpoint to the previous position.
