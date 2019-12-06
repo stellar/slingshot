@@ -1,3 +1,4 @@
+/*
 use byteorder::{ByteOrder, LittleEndian};
 use std::rc::Rc;
 
@@ -321,3 +322,4 @@ mod tests {
         );
     }
 }
+*/

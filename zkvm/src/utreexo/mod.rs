@@ -2,7 +2,7 @@
 //! with small differences in normalization algorithm.
 mod forest;
 mod path;
-mod serialization;
+//mod serialization;
 
 #[cfg(test)]
 mod tests;

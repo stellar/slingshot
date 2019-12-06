@@ -98,19 +98,12 @@ impl Proof {
 }
 
 impl Side {
-    /// Orders (current, neighbor) pair of nodes as (left, right) per `current`'s side.
-    pub(super) fn order<T>(self, node: T, neighbor: T) -> (T, T) {
+    /// Orders (current, neighbor) pair of nodes as (left, right)
+    /// Alternative meaning in context of a path traversal: orders (left, right) pair of nodes as (main, neighbor)
+    pub(super) fn order<T>(self, a: T, b: T) -> (T, T) {
         match self {
-            Side::Left => (node, neighbor),
-            Side::Right => (neighbor, node),
-        }
-    }
-
-    /// Returns (current, neighbor) pair, reversing effects of `order`.
-    pub(super) fn choose<T>(self, left: T, right: T) -> (T, T) {
-        match self {
-            Side::Left => (left, right),
-            Side::Right => (right, left),
+            Side::Left => (a, b),
+            Side::Right => (b, a),
         }
     }
 
