@@ -1,11 +1,12 @@
 use core::borrow::Borrow;
 use merlin::Transcript;
+use std::fmt;
 use subtle::ConstantTimeEq;
 
 use crate::errors::VMError;
 
 /// Merkle hash of a node.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Default, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub struct Hash(pub [u8; 32]);
 serialize_bytes32!(Hash);
 
@@ -51,6 +52,14 @@ enum MerkleNode {
 pub struct MerkleRootBuilder {
     transcript: Transcript,
     roots: Vec<Option<Hash>>,
+}
+
+impl fmt::Debug for Hash {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Hash({})", hex::encode(&self.0))
+        // Without hex crate we'd do this, but it outputs comma-separated numbers: [aa, 11, 5a, ...]
+        // write!(f, "{:x?}", &self.0)
+    }
 }
 
 impl MerkleTree {

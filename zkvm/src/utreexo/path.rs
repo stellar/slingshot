@@ -1,8 +1,15 @@
-use crate::merkle::{Hash, MerkleItem};
+use core::marker::PhantomData;
+use merlin::Transcript;
 use serde::{Deserialize, Serialize};
 
 use super::super::encoding::{self, Encodable};
-use super::nodes::NodeHasher;
+use crate::merkle::{Hash, MerkleItem};
+
+/// Precomputed hash instance for computing Utreexo trees.
+pub struct NodeHasher<M: MerkleItem> {
+    t: Transcript,
+    phantom: PhantomData<M>,
+}
 
 /// Absolute position of an item in the tree.
 pub type Position = u64;
@@ -37,6 +44,49 @@ pub(super) enum Side {
     Right,
 }
 
+impl<M: MerkleItem> Clone for NodeHasher<M> {
+    fn clone(&self) -> Self {
+        Self {
+            t: self.t.clone(),
+            phantom: self.phantom,
+        }
+    }
+}
+
+impl<M: MerkleItem> NodeHasher<M> {
+    /// Creates a new hasher instance.
+    pub fn new() -> Self {
+        NodeHasher {
+            t: Transcript::new(b"ZkVM.utreexo"),
+            phantom: PhantomData,
+        }
+    }
+
+    pub(super) fn leaf(&self, item: &M) -> Hash {
+        let mut t = self.t.clone();
+        item.commit(&mut t);
+        let mut hash = Hash::default();
+        t.challenge_bytes(b"merkle.leaf", &mut hash);
+        hash
+    }
+
+    pub(super) fn intermediate(&self, left: &Hash, right: &Hash) -> Hash {
+        let mut t = self.t.clone();
+        t.append_message(b"L", &left);
+        t.append_message(b"R", &right);
+        let mut hash = Hash::default();
+        t.challenge_bytes(b"merkle.node", &mut hash);
+        hash
+    }
+
+    pub(super) fn empty(&self) -> Hash {
+        let mut t = self.t.clone();
+        let mut hash = Hash::default();
+        t.challenge_bytes(b"merkle.empty", &mut hash);
+        hash
+    }
+}
+
 impl Proof {
     /// Returns a reference to a path if this proof contains one.
     pub fn path(&self) -> Option<&Path> {
@@ -48,19 +98,12 @@ impl Proof {
 }
 
 impl Side {
-    /// Orders (current, neighbor) pair of nodes as (left, right) per `current`'s side.
-    pub(super) fn order<T>(self, node: T, neighbor: T) -> (T, T) {
+    /// Orders (current, neighbor) pair of nodes as (left, right)
+    /// Alternative meaning in context of a path traversal: orders (left, right) pair of nodes as (main, neighbor)
+    pub(super) fn order<T>(self, a: T, b: T) -> (T, T) {
         match self {
-            Side::Left => (node, neighbor),
-            Side::Right => (neighbor, node),
-        }
-    }
-
-    /// Returns (current, neighbor) pair, reversing effects of `order`.
-    pub(super) fn choose<T>(self, left: T, right: T) -> (T, T) {
-        match self {
-            Side::Left => (left, right),
-            Side::Right => (right, left),
+            Side::Left => (a, b),
+            Side::Right => (b, a),
         }
     }
 
@@ -87,26 +130,11 @@ impl Path {
     ) -> impl DoubleEndedIterator<Item = (Side, &Hash)> + ExactSizeIterator {
         self.directions().zip(self.neighbors.iter())
     }
-    pub(super) fn directions(&self) -> Directions {
+    fn directions(&self) -> Directions {
         Directions {
             position: self.position,
             depth: self.neighbors.len(),
         }
-    }
-    /// Returns an iterator that walks up the path
-    /// and yields parent hash and children hashes at each step.
-    pub(super) fn walk_up<'a, 'b: 'a, M: MerkleItem>(
-        &'a self,
-        item_hash: Hash,
-        hasher: &'b NodeHasher<M>,
-    ) -> impl Iterator<Item = (Hash, (Hash, Hash))> + 'a {
-        self.iter()
-            .scan(item_hash, move |item_hash, (side, neighbor)| {
-                let (l, r) = side.order(*item_hash, *neighbor);
-                let p = hasher.intermediate(&l, &r);
-                *item_hash = p;
-                Some((p, (l, r)))
-            })
     }
 }
 
