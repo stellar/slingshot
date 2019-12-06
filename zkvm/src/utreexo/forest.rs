@@ -2,7 +2,6 @@ use core::borrow::Borrow;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::mem;
-use std::rc::Rc;
 
 use super::path::{Directions, NodeHasher, Path, Position, Proof};
 use crate::merkle::{Hash, MerkleItem};
@@ -17,8 +16,8 @@ pub struct Forest {
 /// Roots of the perfect merkle trees forming a forest, which itself is an imperfect merkle tree.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct WorkForest {
-    pub(super) roots: Vec<HeapIndex>, // roots of all the perfect binary trees, including the newly inserted nodes
-    pub(super) heap: Heap<Node>,
+    roots: Vec<HeapIndex>, // roots of all the perfect binary trees, including the newly inserted nodes
+    heap: Heap<Node>,
 }
 
 /// Structure that helps auto-updating the proofs created for a previous state of a forest.
@@ -46,17 +45,17 @@ pub enum UtreexoError {
 pub(super) struct Node {
     /// Level of this node. Level 0 is for leaves.
     /// Level N node is a root of a tree over 2^N items.
-    pub(super) level: usize,
+    level: usize,
 
     /// Merkle hash of this node
-    pub(super) hash: Hash,
+    hash: Hash,
     /// Flag indicates if any node in the subtree is marked for deletion.
     /// If modified=true for level=0, it means the node is deleted.
-    pub(super) modified: bool,
+    modified: bool,
     /// Some(): node has children
     /// None: node is a leaf, or it has no children, only a hash (pruned subtree)
     /// Note that Rc is > 1 only when we are in a `WorkForest::update` block.
-    pub(super) children: Option<(HeapIndex, HeapIndex)>,
+    children: Option<(HeapIndex, HeapIndex)>,
 }
 
 impl Forest {
@@ -84,7 +83,7 @@ impl Forest {
         };
 
         // 1. Locate the root under which the item.position is located.
-        let (_i,root_level) = find_root(self.roots_iter().map(|(l, _)| l), path.position)
+        let (_i, root_level) = find_root(self.roots_iter().map(|(l, _)| l), path.position)
             .ok_or(UtreexoError::InvalidProof)?;
 
         // 2. The proof should be of exact size from a leaf up to a tree root.
@@ -116,20 +115,17 @@ impl Forest {
     pub fn work_forest(&self) -> WorkForest {
         let mut heap = Heap::new();
         let roots = self
-                .roots_iter()
-                .map(|(level, hash)| {
-                    heap.allocate(Node {
-                        level,
-                        hash,
-                        modified: false,
-                        children: None,
-                    })
+            .roots_iter()
+            .map(|(level, hash)| {
+                heap.allocate(Node {
+                    level,
+                    hash,
+                    modified: false,
+                    children: None,
                 })
-                .collect();
-        WorkForest {
-            roots,
-            heap
-        }
+            })
+            .collect();
+        WorkForest { roots, heap }
     }
 
     /// Lets user to modify the utreexo.
@@ -162,7 +158,7 @@ impl Forest {
             .unwrap_or(hasher.empty())
     }
 
-    /// Returns an iterator over roots of the forest,
+    /// Returns an iterator over roots of the forest as (level, hash) pairs,
     /// from the highest to the lowest level.
     fn roots_iter<'a>(&'a self) -> impl DoubleEndedIterator<Item = (usize, Hash)> + 'a {
         self.roots
@@ -174,9 +170,6 @@ impl Forest {
 }
 
 impl WorkForest {
-
-    //pub fn new(i)
-
     /// Adds a new item to the tree, appending a node to the end.
     pub fn insert<M: MerkleItem>(&mut self, item: &M, hasher: &NodeHasher<M>) {
         self.roots.push(self.heap.allocate(Node {
@@ -262,10 +255,10 @@ impl WorkForest {
         // and mark the relevant nodes as modified.
 
         // 1. Locate the root under which the item.position is located.
-        let mut top_index = self.roots[
-               find_root(self.roots_iter().map(|r| r.level), path.position)
-               .ok_or(UtreexoError::InvalidProof)?.0
-        ];
+        let mut top_index =
+            self.roots[find_root(self.roots_iter().map(|r| r.level), path.position)
+                .ok_or(UtreexoError::InvalidProof)?
+                .0];
 
         self.heap.make_mut(&mut top_index);
 
@@ -277,27 +270,29 @@ impl WorkForest {
         // 3. Find the lowest-available node in a tree, up to which
         //    we have to fill in the missing nodes based on the merkle proof.
         //    And also check the higher-level neighbors in the proof.
-        let existing_index = path
-            .iter()
-            .rev()
-            .try_fold(top_index, |node_index, (side, neighbor_hash)| {
-                
-                if let Some((l, r)) = self.heap.get_ref(node_index).children {
-                    let (mut next_node, actual_neighbor) = side.order(l, r);
-                    if &self.heap.get_ref(actual_neighbor).hash == neighbor_hash {
-                        // CoW the next node
-                        self.heap.make_mut(&mut next_node);
-                        // update the parent node's reference.
-                        let mut parent = self.heap.get_mut(node_index).expect("parent node is already CoW-ed");
-                        parent.children = Some(side.order(next_node, actual_neighbor));
-                        Ok(next_node)
+        let existing_index =
+            path.iter()
+                .rev()
+                .try_fold(top_index, |node_index, (side, neighbor_hash)| {
+                    if let Some((l, r)) = self.heap.get_ref(node_index).children {
+                        let (mut next_node, actual_neighbor) = side.order(l, r);
+                        if &self.heap.get_ref(actual_neighbor).hash == neighbor_hash {
+                            // CoW the next node
+                            self.heap.make_mut(&mut next_node);
+                            // update the parent node's reference.
+                            let mut parent = self
+                                .heap
+                                .get_mut(node_index)
+                                .expect("traversing down - parent node is already CoW-ed");
+                            parent.children = Some(side.order(next_node, actual_neighbor));
+                            Ok(next_node)
+                        } else {
+                            Err(UtreexoError::InvalidProof)
+                        }
                     } else {
-                        Err(UtreexoError::InvalidProof)
+                        Ok(node_index)
                     }
-                } else {
-                    Ok(node_index)
-                }
-            })?;
+                })?;
 
         // If the existing node is the leaf, and it's marked as deleted - reject the proof
         let existing = self.heap.get_ref(existing_index).clone();
@@ -341,27 +336,36 @@ impl WorkForest {
         // 6. Replace the existing node with the newly constructed node.
         //    Note this does not make an unnecessary allocation: the new node exists on the stack.
         //    We simply copy its contents over the heap-allocated `existing_node` behind Rc.
-        let _ = mem::replace(self.heap.get_mut(existing_index).expect("already CoW'd"), new_node);
+        let _ = mem::replace(
+            self.heap
+                .get_mut(existing_index)
+                .expect("replacing midlevel - already CoW'd"),
+            new_node,
+        );
 
         // 7. Mark all existing nodes as modified
-        
-        let mut top_index = self.roots[
-               find_root(self.roots_iter().map(|r| r.level), path.position)
-               .ok_or(UtreexoError::InvalidProof)?.0
-        ];
+
+        let top_index = self.roots[find_root(self.roots_iter().map(|r| r.level), path.position)
+            .ok_or(UtreexoError::InvalidProof)?
+            .0];
 
         // 8. Mark all nodes in the path as modified.
-        path.iter().rev().try_fold(top_index, |node_index, (side, _neighbor)| {
-            let node = self.heap.get_mut(node_index).expect("already CoW'd");
-            node.modified = true;
-            match node.children {
-                Some((l, r)) => {
-                    let (child_index, _neighbor) = side.order(l, r);
-                    Some(child_index)
+        path.iter()
+            .rev()
+            .try_fold(top_index, |node_index, (side, _neighbor)| {
+                let node = self
+                    .heap
+                    .get_mut(node_index)
+                    .expect("marking as modified - already CoW'd");
+                node.modified = true;
+                match node.children {
+                    Some((l, r)) => {
+                        let (child_index, _neighbor) = side.order(l, r);
+                        Some(child_index)
+                    }
+                    None => None,
                 }
-                None => None,
-            }
-        });
+            });
 
         Ok(())
     }
@@ -369,60 +373,64 @@ impl WorkForest {
     /// Normalizes the forest into a minimal number of ordered perfect trees.
     /// Returns the new forest and a catchup structure.
     pub fn normalize<M: MerkleItem>(&self, hasher: &NodeHasher<M>) -> (Forest, Catchup) {
-        // Tree with modified nodes {d, b, 3, 6}:
-        // (a, c have pruned children)
+        // Tree with modified nodes {d, b, 3, 6}, while {a, c} have pruned children:
+        //
         //  d
         //  |\
-        //  a   b   c
-        //  |\  |\  |\
-        //      2 x     x 7 8 9
-        //
-        //  |
-        //  v
-        //
-        //  a      c
-        //  |\     |\
-        //      2      7 8 9
+        //  a   b   c              ---->   a      c
+        //  |\  |\  |\                     |\     |\
+        //      2 x     x 7 8 9                2      7 8 9
         //
         // The catchup structure is needed to transform higher parts of the proofs
         // against the old tree into the paths within a new tree.
         // Once we moved the childless nodes {a,2,c,7,8,9} somewhere in the new tree,
-        // we need to collect a hashmap from their hash into their new offset.
+        // we need to collect a hashmap from their hashes into their new offsets.
 
         // 1. Traverse the tree and collect all nodes that were not modified.
-        let non_modified_nodes =
-            ChildlessNodesIterator::new(&self.heap, self.roots.iter()).filter_map(|(_offset, node)| {
+        let mut non_modified_nodes = Vec::<HeapIndex>::new();
+        let mut new_heap = Heap::<Node>::new();
+
+        for node in ChildlessNodesIterator::new(&self.heap, self.roots.iter()).filter_map(
+            |(_offset, node)| {
                 if node.modified {
                     None
                 } else {
                     Some(node)
                 }
-            });
+            },
+        ) {
+            assert!(node.children.is_none());
+            let node_index = new_heap.allocate(node);
+            non_modified_nodes.push(node_index);
+        }
 
         // 2. Compute perfect roots for the new tree,
         //    joining together same-level nodes into higher-level nodes.
-        let mut new_root_nodes = non_modified_nodes.fold(
-            none_64_times::<Rc<Node>>(), // "2^64 of anything should be enough for everyone"
-            |mut roots, mut curr_node| {
-                let mut store_level = curr_node.level;
-                while let Some(left_node) = roots[curr_node.level].take() {
-                    curr_node = Rc::new(Node {
-                        level: curr_node.level + 1,
-                        hash: hasher.intermediate(&left_node.hash, &curr_node.hash),
+        let new_root_nodes = non_modified_nodes.into_iter().fold(
+            [None as Option<HeapIndex>; 64], // "2^64 of anything should be enough for everyone"]
+            |mut roots, mut curr_node_index| {
+                let mut curr_level = new_heap.get_ref(curr_node_index).level;
+                while let Some(left_node_index) = roots[curr_level].take() {
+                    let left_node_hash = new_heap.get_ref(left_node_index).hash;
+                    curr_node_index = new_heap.allocate(Node {
+                        level: curr_level + 1,
+                        hash: hasher
+                            .intermediate(&left_node_hash, &new_heap.get_ref(curr_node_index).hash),
                         modified: true,
-                        children: Some((left_node, curr_node)),
+                        children: Some((left_node_index, curr_node_index)),
                     });
-                    store_level = curr_node.level;
+                    curr_level += 1;
                 }
-                roots[store_level] = Some(curr_node);
+                roots[curr_level] = Some(curr_node_index);
                 roots
             },
         );
 
         // 3. Create the new normalized forest
         let new_forest = Forest {
-            roots: new_root_nodes.iter().fold([None; 64], |mut roots, node| {
-                if let Some(node) = node {
+            roots: new_root_nodes.iter().fold([None; 64], |mut roots, ni| {
+                if let Some(ni) = ni {
+                    let node = new_heap.get_ref(*ni);
                     roots[node.level] = Some(node.hash);
                 }
                 roots
@@ -433,29 +441,29 @@ impl WorkForest {
         //    Note: the roots in the array are ordered by higher-level-last,
         //    but we need to keep bigger trees to the left, so we'll rev() them.
         let new_work_forest = WorkForest {
-            // One day Rust will implement IntoIterator for arrays >32 elements.
-            // On that day we will do this:
-            // new_root_nodes.into_iter().rev().filter_map(|r| r).collect()
             roots: new_root_nodes
-                .iter_mut()
+                .iter()
                 .rev()
-                .filter_map(|r| r.take())
+                .filter_map(|r| r.as_ref().take())
+                .copied()
                 .collect(),
+            heap: new_heap,
         };
 
         // 5. Finally, traverse the new forest and collect new positions for all childless nodes
         //    these will be the points of update for the proofs made against the old tree.
         //    All the paths from leaf to these childless nodes remain valid, while the rest of
         //    the path must be computed from
-        let catchup_map = ChildlessNodesIterator::new(&self.heap, new_work_forest.roots.iter()).fold(
-            HashMap::<Hash, Position>::new(),
-            |mut map, (offset, node)| {
-                if node.children.is_none() {
-                    map.insert(node.hash, offset);
-                }
-                map
-            },
-        );
+        let catchup_map =
+            ChildlessNodesIterator::new(&new_work_forest.heap, new_work_forest.roots.iter()).fold(
+                HashMap::<Hash, Position>::new(),
+                |mut map, (offset, node)| {
+                    if node.children.is_none() {
+                        map.insert(node.hash, offset);
+                    }
+                    map
+                },
+            );
 
         let catchup = Catchup {
             forest: new_work_forest,
@@ -465,11 +473,8 @@ impl WorkForest {
         (new_forest, catchup)
     }
 
-    fn roots_iter(&self) -> impl DoubleEndedIterator<Item=&Node> + '_ {
-        self
-            .roots
-            .iter()
-            .map(|i| self.heap.get_ref(*i) )
+    fn roots_iter<'a>(&'a self) -> impl DoubleEndedIterator<Item = &Node> + 'a {
+        self.roots.iter().map(move |i| self.heap.get_ref(*i))
     }
 }
 
@@ -519,7 +524,9 @@ impl Catchup {
 
         // Find the root to which the updated position belongs
         let root_index =
-            self.forest.roots[find_root(self.forest.roots_iter().map(|r|r.level), path.position).ok_or(UtreexoError::InvalidProof)?.0];
+            self.forest.roots[find_root(self.forest.roots_iter().map(|r| r.level), path.position)
+                .ok_or(UtreexoError::InvalidProof)?
+                .0];
 
         // Construct a new directions object.
         // We cannot take it from path because it does not have all neighbors yet.
@@ -559,7 +566,8 @@ impl Node {
 /// Note: yields only the nodes without children and their global offset.
 struct ChildlessNodesIterator<'h, I>
 where
-    I: Iterator<Item = HeapIndex>,
+    I: Iterator,
+    I::Item: Borrow<HeapIndex>,
 {
     /// reference to the heap containing the nodes
     heap: &'h Heap<Node>,
@@ -573,7 +581,8 @@ where
 
 impl<'h, I> ChildlessNodesIterator<'h, I>
 where
-    I: Iterator<Item = HeapIndex>,
+    I: Iterator,
+    I::Item: Borrow<HeapIndex>,
 {
     fn new(heap: &'h Heap<Node>, roots: I) -> Self {
         Self {
@@ -587,7 +596,8 @@ where
 
 impl<'h, I> Iterator for ChildlessNodesIterator<'h, I>
 where
-    I: Iterator<Item = HeapIndex>,
+    I: Iterator,
+    I::Item: Borrow<HeapIndex>,
 {
     type Item = (Position, Node);
     fn next(&mut self) -> Option<Self::Item> {
@@ -603,8 +613,9 @@ where
         }
         // when there is nothing else to traverse, try the next root.
         if let Some(root_index) = self.roots.next() {
-            let root = self.heap.get_ref(root_index);
-            self.stack.push((self.root_offset, root_index));
+            let i = *root_index.borrow();
+            let root = self.heap.get_ref(i);
+            self.stack.push((self.root_offset, i));
             self.root_offset += root.capacity();
             self.next() // this is guaranteed to be 1-level recursion
         } else {
@@ -614,55 +625,15 @@ where
 }
 
 /// Scans the list of roots' levels and returns the index and the level of the root that contains the position in a tree.
-fn find_root(roots: impl IntoIterator<Item = usize>, position: Position) -> Option<(usize,usize)> {
+fn find_root(roots: impl IntoIterator<Item = usize>, position: Position) -> Option<(usize, usize)> {
     let mut offset: Position = 0;
     for (i, level) in roots.into_iter().enumerate() {
         offset += 1u64 << level;
         if position < offset {
-            return Some((i,level));
+            return Some((i, level));
         }
     }
     None
-}
-
-// trait NodeLevel {
-//     fn node_level(&self) -> usize;
-// }
-
-// #[rustfmt::skip]
-// impl<'a> NodeLevel for &'a Node {
-//     fn node_level(&self) -> usize { self.level }
-// }
-
-// #[rustfmt::skip]
-// impl<'a> NodeLevel for &'a Rc<Node> {
-//     fn node_level(&self) -> usize { self.level }
-// }
-
-// #[rustfmt::skip]
-// impl<'a> NodeLevel for &'a mut Rc<Node> {
-//     fn node_level(&self) -> usize { self.level }
-// }
-
-// #[rustfmt::skip]
-// impl NodeLevel for usize {
-//     fn node_level(&self) -> usize { *self }
-// }
-
-/// This is a workaround for issue with `[None as Option<T>; N]` where T is not Copy.
-/// See https://github.com/rust-lang/rfcs/blob/master/text/2203-const-repeat-expr.md
-#[rustfmt::skip]
-const fn none_64_times<T>() -> [Option<T>; 64] {
-    [
-        None as Option<T>, None as Option<T>, None as Option<T>, None as Option<T>, None as Option<T>, None as Option<T>, None as Option<T>, None as Option<T>,
-        None as Option<T>, None as Option<T>, None as Option<T>, None as Option<T>, None as Option<T>, None as Option<T>, None as Option<T>, None as Option<T>,
-        None as Option<T>, None as Option<T>, None as Option<T>, None as Option<T>, None as Option<T>, None as Option<T>, None as Option<T>, None as Option<T>,
-        None as Option<T>, None as Option<T>, None as Option<T>, None as Option<T>, None as Option<T>, None as Option<T>, None as Option<T>, None as Option<T>,
-        None as Option<T>, None as Option<T>, None as Option<T>, None as Option<T>, None as Option<T>, None as Option<T>, None as Option<T>, None as Option<T>,
-        None as Option<T>, None as Option<T>, None as Option<T>, None as Option<T>, None as Option<T>, None as Option<T>, None as Option<T>, None as Option<T>,
-        None as Option<T>, None as Option<T>, None as Option<T>, None as Option<T>, None as Option<T>, None as Option<T>, None as Option<T>, None as Option<T>,
-        None as Option<T>, None as Option<T>, None as Option<T>, None as Option<T>, None as Option<T>, None as Option<T>, None as Option<T>, None as Option<T>,
-    ]
 }
 
 /// Clone-on-write heap implementation with the following key features:
@@ -671,8 +642,8 @@ const fn none_64_times<T>() -> [Option<T>; 64] {
 ///    because there are no smart pointers.
 #[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
 struct Heap<T: Clone> {
-    checkpoint: usize,
-    items: Vec<T>
+    checkpoint: usize, // all items before this index are considered immutable and cloned by `make_mut`.
+    items: Vec<T>,
 }
 
 #[derive(Copy, Clone, PartialEq, Debug, Serialize, Deserialize)]
@@ -680,16 +651,15 @@ struct HeapIndex(usize);
 
 struct HeapCheckpoint {
     prev: usize,
-    curr: usize
+    curr: usize,
 }
 
 impl<T: Clone> Heap<T> {
-
     /// Creates a new empty heap.
     pub(super) fn new() -> Self {
         Self {
             checkpoint: 0,
-            items: Vec::new()
+            items: Vec::new(),
         }
     }
 
@@ -697,7 +667,7 @@ impl<T: Clone> Heap<T> {
     pub(super) fn checkpoint(&mut self) -> HeapCheckpoint {
         let cp = HeapCheckpoint {
             prev: self.checkpoint,
-            curr: self.items.len()
+            curr: self.items.len(),
         };
         self.checkpoint = cp.curr;
         cp
