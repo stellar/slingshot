@@ -2,6 +2,7 @@ use core::borrow::Borrow;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::mem;
+use std::fmt;
 
 use super::path::{Directions, NodeHasher, Path, Position, Proof};
 use crate::merkle::{Hash, MerkleItem};
@@ -14,7 +15,7 @@ pub struct Forest {
 }
 
 /// Roots of the perfect merkle trees forming a forest, which itself is an imperfect merkle tree.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct WorkForest {
     roots: Vec<HeapIndex>, // roots of all the perfect binary trees, including the newly inserted nodes
     heap: Heap<Node>,
@@ -721,5 +722,41 @@ impl<T: Clone> Heap<T> {
             *index = HeapIndex(self.items.len() - 1);
         }
         &mut self.items[index.0]
+    }
+}
+
+impl fmt::Debug for Forest {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "utreexo::Forest{{\n")?;
+        for (level,root) in self.roots.iter().enumerate().rev().skip_while(|(_,&x)| x.is_none()) {
+            write!(f, "  [{}] {}\n", level, root.as_ref().map(|r|hex::encode(&r)).unwrap_or_else(||"none".to_string()))?;
+        }
+        write!(f, "}}")
+    }
+}
+
+impl fmt::Debug for WorkForest {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "utreexo::WorkForest{{\n")?;
+        for root in self.roots.iter() {
+            self.heap.get_ref(*root).debug_fmt(&self.heap, f, "    ")?;
+        }
+        write!(f, "}}")
+    }
+}
+
+impl Node {
+    fn debug_fmt(&self, heap: &Heap<Node>, f: &mut fmt::Formatter<'_>, indent: &str) -> fmt::Result {
+        write!(f, "{}[{}] {} ({})\n", 
+            indent,
+            if self.modified { "x" } else { " " },
+            hex::encode(&self.hash),
+            self.level
+        )?;
+        if let Some((l,r)) = self.children {
+            heap.get_ref(l).debug_fmt(heap, f, &(indent.to_owned() + "    "))?;
+            heap.get_ref(r).debug_fmt(heap, f, &(indent.to_owned() + "    "))?;
+        }
+        Ok(())
     }
 }
