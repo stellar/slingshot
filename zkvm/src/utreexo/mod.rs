@@ -9,4 +9,10 @@ mod tests;
 
 // Public API
 pub use self::forest::{Catchup, Forest, UtreexoError, WorkForest};
-pub use self::path::{NodeHasher, Path, Position, Proof};
+pub use self::path::{Path, Position, Proof};
+pub use super::merkle::Hasher;
+
+/// Utreexo-labeled hasher.
+pub fn utreexo_hasher<T: super::merkle::MerkleItem>() -> Hasher<T> {
+    Hasher::new(b"ZkVM.utreexo")
+}

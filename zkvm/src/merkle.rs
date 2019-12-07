@@ -1,4 +1,5 @@
 use core::borrow::Borrow;
+use core::marker::PhantomData;
 use merlin::Transcript;
 use std::fmt;
 use subtle::ConstantTimeEq;
@@ -25,6 +26,12 @@ where
     }
 }
 
+/// Precomputed hash instance.
+pub struct Hasher<M: MerkleItem> {
+    t: Transcript,
+    phantom: PhantomData<M>,
+}
+
 /// MerkleNeighbor is a step in a Merkle proof of inclusion.
 #[derive(Copy, Clone, PartialEq, Debug)]
 pub enum MerkleNeighbor {
@@ -49,8 +56,8 @@ enum MerkleNode {
 
 /// Efficient builder of the merkle root.
 /// See `MerkleTree::build_root`
-pub struct MerkleRootBuilder {
-    transcript: Transcript,
+pub struct MerkleRootBuilder<M: MerkleItem> {
+    hasher: Hasher<M>,
     roots: Vec<Option<Hash>>,
 }
 
@@ -64,17 +71,16 @@ impl fmt::Debug for Hash {
 
 impl MerkleTree {
     /// Prepares a root builder to compute the root iteratively.
-    pub fn build_root(label: &'static [u8]) -> MerkleRootBuilder {
+    pub fn build_root<M: MerkleItem>(label: &'static [u8]) -> MerkleRootBuilder<M> {
         MerkleRootBuilder {
-            transcript: Transcript::new(label),
+            hasher: Hasher::new(label),
             roots: Vec::new(),
         }
     }
 
     /// Constructs a new MerkleTree based on the input list of entries.
     pub fn build<M: MerkleItem>(label: &'static [u8], list: &[M]) -> Self {
-        let t = Transcript::new(label);
-        let root = Self::build_tree(t, list);
+        let root = Self::build_tree(&Hasher::new(label), list);
         MerkleTree {
             size: list.len(),
             label,
@@ -105,25 +111,13 @@ impl MerkleTree {
         entry: &M,
         proof: &Vec<MerkleNeighbor>,
     ) -> Hash {
-        let transcript = Transcript::new(label);
-        let mut result = Hash::default();
-        Self::leaf(transcript.clone(), entry, &mut result);
-        for node in proof.iter() {
-            let mut t = transcript.clone();
-            match node {
-                MerkleNeighbor::Left(l) => {
-                    t.append_message(b"L", l);
-                    t.append_message(b"R", &result);
-                    t.challenge_bytes(b"merkle.node", &mut result);
-                }
-                MerkleNeighbor::Right(r) => {
-                    t.append_message(b"L", &result);
-                    t.append_message(b"R", r);
-                    t.challenge_bytes(b"merkle.node", &mut result);
-                }
-            }
-        }
-        result
+        let hasher = Hasher::new(label);
+        proof
+            .iter()
+            .fold(hasher.leaf(entry), |curr, neighbor| match neighbor {
+                MerkleNeighbor::Left(l) => hasher.intermediate(l, &curr),
+                MerkleNeighbor::Right(r) => hasher.intermediate(&curr, r),
+            })
     }
 
     /// Verifies the Merkle path for an item given the path and the Merkle root.
@@ -145,10 +139,7 @@ impl MerkleTree {
     /// This is provided so the user does not have to fill in complex type annotations
     /// when the empty container is untyped.
     pub fn empty_root(label: &'static [u8]) -> Hash {
-        let t = Transcript::new(label);
-        let mut h = Hash::default();
-        Self::empty(t, &mut h);
-        h
+        Hasher::<()>::new(label).empty()
     }
 
     /// Builds and returns the root hash of a Merkle tree constructed from
@@ -166,55 +157,31 @@ impl MerkleTree {
             .root()
     }
 
-    fn build_tree<M: MerkleItem>(t: Transcript, list: &[M]) -> MerkleNode {
-        let mut h = Hash::default();
+    fn build_tree<M: MerkleItem>(hasher: &Hasher<M>, list: &[M]) -> MerkleNode {
         match list.len() {
-            0 => {
-                Self::empty(t, &mut h);
-                MerkleNode::Empty(h)
-            }
-            1 => {
-                Self::leaf(t, &list[0], &mut h);
-                MerkleNode::Leaf(h)
-            }
+            0 => MerkleNode::Empty(hasher.empty()),
+            1 => MerkleNode::Leaf(hasher.leaf(&list[0])),
             n => {
                 let k = n.next_power_of_two() / 2;
-                let left = Self::build_tree(t.clone(), &list[..k]);
-                let right = Self::build_tree(t.clone(), &list[k..]);
-                let mut hash = *right.hash();
-                Self::intermediate(t, &left.hash(), &mut hash);
-                MerkleNode::Node(hash, Box::new(left), Box::new(right))
+                let left = Self::build_tree(&hasher, &list[..k]);
+                let right = Self::build_tree(&hasher, &list[k..]);
+                let parent = hasher.intermediate(&left.hash(), &right.hash());
+                MerkleNode::Node(parent, Box::new(left), Box::new(right))
             }
         }
     }
-
-    fn intermediate(mut t: Transcript, left: &Hash, right: &mut Hash) {
-        t.append_message(b"L", left);
-        t.append_message(b"R", right);
-        t.challenge_bytes(b"merkle.node", right);
-    }
-
-    fn empty(mut t: Transcript, result: &mut Hash) {
-        t.challenge_bytes(b"merkle.empty", result);
-    }
-
-    fn leaf<M: MerkleItem>(mut t: Transcript, entry: &M, result: &mut Hash) {
-        entry.commit(&mut t);
-        t.challenge_bytes(b"merkle.leaf", result);
-    }
 }
 
-impl MerkleRootBuilder {
+impl<M: MerkleItem> MerkleRootBuilder<M> {
     /// Appends an item to the merkle tree.
-    pub fn append<M: MerkleItem>(&mut self, item: &M) {
+    pub fn append(&mut self, item: &M) {
         let mut level = 0usize;
-        let mut current_hash = Hash::default();
-        MerkleTree::leaf(self.transcript.clone(), item, &mut current_hash);
+        let mut current_hash = self.hasher.leaf(item);
         while self.roots.len() > level {
             if let Some(left_hash) = self.roots[level] {
                 // Found an existing slot at the current level:
                 // merge with the current hash and liberate the slot.
-                MerkleTree::intermediate(self.transcript.clone(), &left_hash, &mut current_hash);
+                current_hash = self.hasher.intermediate(&left_hash, &current_hash);
                 self.roots[level] = None;
             } else {
                 // Found an empty slot - fill it with the current hash and return
@@ -229,30 +196,27 @@ impl MerkleRootBuilder {
 
     /// Compute the merkle root.
     pub fn root(self) -> Hash {
-        let t = self.transcript;
+        let hasher = self.hasher;
         self.roots
             .into_iter()
             .fold(None, |maybe_current, maybe_root| {
-                if let Some(mut r) = maybe_current {
-                    if let Some(l) = maybe_root {
-                        // if we have a pair of roots, merge them in a new root.
-                        MerkleTree::intermediate(t.clone(), &l, &mut r);
-                    } else {
-                        // if we don't yet have a root, keep the current one unchanged.
-                    }
-                    Some(r)
-                } else {
-                    // while we don't have any current root, keep
-                    maybe_root
-                }
+                maybe_current.map(|r| {
+                    maybe_root.map(|l| {
+                        hasher.intermediate(&l, &r)
+                    }).unwrap_or(r)
+                }).or(maybe_root)
             })
             .unwrap_or_else(|| {
                 // If no root was computed (the roots vector was empty),
                 // return a hash for the "empty" set.
-                let mut hash = Hash::default();
-                MerkleTree::empty(t.clone(), &mut hash);
-                hash
+                hasher.empty()
             })
+    }
+}
+
+impl MerkleItem for () {
+    fn commit(&self, t: &mut Transcript) {
+        t.append_message(b"", b"");
     }
 }
 
@@ -306,6 +270,49 @@ impl core::ops::Deref for Hash {
 impl core::ops::DerefMut for Hash {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
+    }
+}
+
+impl<M: MerkleItem> Clone for Hasher<M> {
+    fn clone(&self) -> Self {
+        Self {
+            t: self.t.clone(),
+            phantom: self.phantom,
+        }
+    }
+}
+
+impl<M: MerkleItem> Hasher<M> {
+    /// Creates a new hasher instance.
+    pub fn new(label: &'static [u8]) -> Self {
+        Self {
+            t: Transcript::new(label),
+            phantom: PhantomData,
+        }
+    }
+
+    pub(super) fn leaf(&self, item: &M) -> Hash {
+        let mut t = self.t.clone();
+        item.commit(&mut t);
+        let mut hash = Hash::default();
+        t.challenge_bytes(b"merkle.leaf", &mut hash);
+        hash
+    }
+
+    pub(super) fn intermediate(&self, left: &Hash, right: &Hash) -> Hash {
+        let mut t = self.t.clone();
+        t.append_message(b"L", &left);
+        t.append_message(b"R", &right);
+        let mut hash = Hash::default();
+        t.challenge_bytes(b"merkle.node", &mut hash);
+        hash
+    }
+
+    pub(super) fn empty(&self) -> Hash {
+        let mut t = self.t.clone();
+        let mut hash = Hash::default();
+        t.challenge_bytes(b"merkle.empty", &mut hash);
+        hash
     }
 }
 

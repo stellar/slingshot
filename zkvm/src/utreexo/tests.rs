@@ -11,7 +11,7 @@ impl MerkleItem for u64 {
 
 #[test]
 fn empty_utreexo() {
-    let hasher = NodeHasher::<u64>::new();
+    let hasher = utreexo_hasher::<u64>();
     let forest0 = Forest::new();
     assert_eq!(
         forest0.root(&hasher),
@@ -21,7 +21,7 @@ fn empty_utreexo() {
 
 #[test]
 fn transient_items_utreexo() {
-    let hasher = NodeHasher::new();
+    let hasher = utreexo_hasher();
     let forest0 = Forest::new();
 
     let (_forest1, _catchup) = forest0
@@ -53,7 +53,7 @@ fn transient_items_utreexo() {
 
 #[test]
 fn insert_to_utreexo() {
-    let hasher = NodeHasher::new();
+    let hasher = utreexo_hasher();
     let forest0 = Forest::new();
     let (forest1, catchup1) = forest0
         .update(&hasher, |forest| {
@@ -91,7 +91,7 @@ fn insert_to_utreexo() {
 
 #[test]
 fn transaction_success() {
-    let hasher = NodeHasher::new();
+    let hasher = utreexo_hasher();
     let forest0 = Forest::new();
     let (forest1, catchup1) = forest0
         .update(&hasher, |forest| {
@@ -165,7 +165,7 @@ fn transaction_success() {
 
 #[test]
 fn transaction_fail() {
-    let hasher = NodeHasher::new();
+    let hasher = utreexo_hasher();
     let forest0 = Forest::new();
     let (forest1, catchup1) = forest0
         .update(&hasher, |forest| {
@@ -235,7 +235,7 @@ fn transaction_fail() {
 #[test]
 fn insert_and_delete_utreexo() {
     let n = 6u64;
-    let hasher = NodeHasher::new();
+    let hasher = utreexo_hasher();
     let forest0 = Forest::new();
     let (forest1, catchup1) = forest0
         .update(&hasher, |forest| {
@@ -269,7 +269,7 @@ fn insert_and_delete_utreexo() {
         new_set: &[M],
         upd: impl FnOnce(&mut WorkForest),
     ) -> (Forest, Catchup) {
-        let hasher = NodeHasher::<M>::new();
+        let hasher = utreexo_hasher::<M>();
         let (forest2, catchup2) = forest
             .update(&hasher, |forest| {
                 upd(forest);

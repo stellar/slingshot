@@ -102,7 +102,7 @@ fn test_state_machine() {
         .apply_block(future_state.tip, &[vtx], proofs.iter())
         .expect("Block application should succeed.");
 
-    let hasher = utreexo::NodeHasher::<ContractID>::new();
+    let hasher = utreexo::utreexo_hasher::<ContractID>();
     assert_eq!(
         new_state.utreexo.root(&hasher),
         future_state.utreexo.root(&hasher)

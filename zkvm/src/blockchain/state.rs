@@ -4,8 +4,9 @@ use serde::{Deserialize, Serialize};
 
 use super::block::{BlockHeader, BlockID};
 use super::errors::BlockchainError;
-use crate::utreexo::{self, Catchup, Forest, NodeHasher, WorkForest};
-use crate::{ContractID, MerkleTree, TxEntry, TxHeader, TxLog, VerifiedTx};
+use crate::merkle::{Hasher, MerkleTree};
+use crate::utreexo::{self, utreexo_hasher, Catchup, Forest, WorkForest};
+use crate::{ContractID, TxEntry, TxHeader, TxLog, VerifiedTx};
 
 /// State of the blockchain node.
 #[derive(Clone, Serialize, Deserialize)]
@@ -43,7 +44,7 @@ impl BlockchainState {
     where
         I: IntoIterator<Item = ContractID> + Clone,
     {
-        let hasher = NodeHasher::new();
+        let hasher = utreexo_hasher();
         let (utreexo, catchup) = Forest::new()
             .update(&hasher, |forest| {
                 for utxo in utxos.clone() {
@@ -89,7 +90,7 @@ impl BlockchainState {
         let mut work_forest = self.utreexo.work_forest();
         let mut utxo_proofs = utxo_proofs.into_iter();
         let mut txroot_builder = MerkleTree::build_root(b"ZkVM.txroot");
-        let hasher = NodeHasher::new();
+        let hasher = utreexo_hasher::<ContractID>();
         for vtx in verified_txs.into_iter() {
             // Check that tx header is consistent with the version / timestamp.
             check_tx_header(&vtx.header, block_header.timestamp_ms, block_header.version)?;
@@ -175,7 +176,7 @@ impl<T: MempoolItem> Mempool<T> {
             )
             .root();
 
-        let hasher = NodeHasher::<ContractID>::new();
+        let hasher = utreexo_hasher::<ContractID>();
         let (new_forest, new_catchup) = self.work_utreexo.normalize(&hasher);
         let utxoroot = new_forest.root(&hasher);
 
@@ -229,7 +230,7 @@ impl<T: MempoolItem> Mempool<T> {
             &mut self.work_utreexo,
             &vtx.log,
             proofs.iter(),
-            &utreexo::NodeHasher::new(),
+            &utreexo_hasher(),
         )
     }
 }
@@ -239,7 +240,7 @@ fn apply_tx<P>(
     work_forest: &mut WorkForest,
     txlog: &TxLog,
     utxo_proofs: impl IntoIterator<Item = P>,
-    hasher: &NodeHasher<ContractID>,
+    hasher: &Hasher<ContractID>,
 ) -> Result<(), BlockchainError>
 where
     P: Borrow<utreexo::Proof>,

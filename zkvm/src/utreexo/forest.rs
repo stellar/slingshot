@@ -4,8 +4,8 @@ use std::collections::HashMap;
 use std::fmt;
 use std::mem;
 
-use super::path::{Directions, NodeHasher, Path, Position, Proof};
-use crate::merkle::{Hash, MerkleItem};
+use super::path::{Directions, Path, Position, Proof};
+use crate::merkle::{Hash, Hasher, MerkleItem};
 
 /// Forest consists of a number of roots of merkle binary trees.
 #[derive(Clone, Serialize, Deserialize)]
@@ -76,7 +76,7 @@ impl Forest {
         &self,
         item: &M,
         proof: &Proof,
-        hasher: &NodeHasher<M>,
+        hasher: &Hasher<M>,
     ) -> Result<(), UtreexoError> {
         let path = match proof {
             Proof::Transient => return Err(UtreexoError::InvalidProof),
@@ -133,7 +133,7 @@ impl Forest {
     /// Returns a new state, along with a catchup structure.
     pub fn update<M: MerkleItem>(
         &self,
-        hasher: &NodeHasher<M>,
+        hasher: &Hasher<M>,
         closure: impl FnOnce(&mut WorkForest) -> Result<(), UtreexoError>,
     ) -> Result<(Self, Catchup), UtreexoError> {
         let mut wforest = self.work_forest();
@@ -144,7 +144,7 @@ impl Forest {
 
     /// Since each root is balanced, the top root is composed of n-1 pairs:
     /// `hash(R3, hash(R2, hash(R1, R0)))`
-    pub fn root<M: MerkleItem>(&self, hasher: &NodeHasher<M>) -> Hash {
+    pub fn root<M: MerkleItem>(&self, hasher: &Hasher<M>) -> Hash {
         self.roots_iter()
             .rev()
             .fold(None, |optional_hash, (_level, hash2)| {
@@ -172,7 +172,7 @@ impl Forest {
 
 impl WorkForest {
     /// Adds a new item to the tree, appending a node to the end.
-    pub fn insert<M: MerkleItem>(&mut self, item: &M, hasher: &NodeHasher<M>) {
+    pub fn insert<M: MerkleItem>(&mut self, item: &M, hasher: &Hasher<M>) {
         self.roots.push(self.heap.allocate(Node {
             level: 0,
             hash: hasher.leaf(item),
@@ -211,7 +211,7 @@ impl WorkForest {
         &mut self,
         item: &M,
         proof: P,
-        hasher: &NodeHasher<M>,
+        hasher: &Hasher<M>,
     ) -> Result<(), UtreexoError> {
         match proof.borrow() {
             Proof::Transient => self.delete_transient(item, hasher),
@@ -223,7 +223,7 @@ impl WorkForest {
     fn delete_transient<M: MerkleItem>(
         &mut self,
         item: &M,
-        hasher: &NodeHasher<M>,
+        hasher: &Hasher<M>,
     ) -> Result<(), UtreexoError> {
         let item_hash = hasher.leaf(item);
         let (index, node) = self
@@ -252,7 +252,7 @@ impl WorkForest {
         &mut self,
         item: &M,
         path: &Path,
-        hasher: &NodeHasher<M>,
+        hasher: &Hasher<M>,
     ) -> Result<(), UtreexoError> {
         // Determine the existing node which matches the proof, then verify the rest of the proof,
         // and mark the relevant nodes as modified.
@@ -376,7 +376,7 @@ impl WorkForest {
 
     /// Normalizes the forest into a minimal number of ordered perfect trees.
     /// Returns the new forest and a catchup structure.
-    pub fn normalize<M: MerkleItem>(&self, hasher: &NodeHasher<M>) -> (Forest, Catchup) {
+    pub fn normalize<M: MerkleItem>(&self, hasher: &Hasher<M>) -> (Forest, Catchup) {
         // Tree with modified nodes {d, b, 3, 6}, while {a, c} have pruned children:
         //
         //  d
@@ -489,7 +489,7 @@ impl Catchup {
         &self,
         item: &M,
         proof: Proof,
-        hasher: &NodeHasher<M>,
+        hasher: &Hasher<M>,
     ) -> Result<Proof, UtreexoError> {
         let mut path = match proof {
             // For the transient items `position` is irrelevant, so we may as well use 0.
