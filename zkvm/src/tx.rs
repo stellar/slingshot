@@ -289,6 +289,7 @@ impl MerkleItem for TxEntry {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::merkle::Hasher;
 
     fn txlog_helper() -> Vec<TxEntry> {
         vec![
@@ -309,25 +310,25 @@ mod tests {
 
     #[test]
     fn valid_txid_proof() {
-        let (entry, txid, proof) = {
+        let (entry, txid, path) = {
             let entries = txlog_helper();
             let root = MerkleTree::build(b"ZkVM.txid", &entries);
             let index = 3;
-            let proof = root.create_path(index).unwrap();
-            (entries[index].clone(), TxID::from_log(&entries), proof)
+            let path = root.create_path(index).unwrap();
+            (entries[index].clone(), TxID::from_log(&entries), path)
         };
-        MerkleTree::verify_path(b"ZkVM.txid", &entry, proof, &txid.0).unwrap();
+        assert!(path.verify_root(&txid.0, &entry, &Hasher::new(b"ZkVM.txid")));
     }
 
     #[test]
     fn invalid_txid_proof() {
-        let (entry, txid, proof) = {
+        let (entry, txid, path) = {
             let entries = txlog_helper();
             let root = MerkleTree::build(b"ZkVM.txid", &entries);
             let index = 3;
-            let proof = root.create_path(index).unwrap();
-            (entries[index + 1].clone(), TxID::from_log(&entries), proof)
+            let path = root.create_path(index).unwrap();
+            (entries[index + 1].clone(), TxID::from_log(&entries), path)
         };
-        assert!(MerkleTree::verify_path(b"ZkVM.txid", &entry, proof, &txid.0).is_err());
+        assert!(path.verify_root(&txid.0, &entry, &Hasher::new(b"ZkVM.txid")) == false);
     }
 }

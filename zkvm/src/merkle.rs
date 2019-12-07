@@ -1,12 +1,11 @@
+use crate::encoding::{self, Encodable, SliceReader};
+use crate::errors::VMError;
 use core::borrow::Borrow;
 use core::marker::PhantomData;
 use merlin::Transcript;
+use serde::{Deserialize, Serialize};
 use std::fmt;
 use subtle::ConstantTimeEq;
-use serde::{Deserialize, Serialize};
-use crate::encoding::{self,Encodable};
-
-use crate::errors::VMError;
 
 /// Merkle hash of a node.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Default)]
@@ -32,15 +31,6 @@ where
 pub struct Hasher<M: MerkleItem> {
     t: Transcript,
     phantom: PhantomData<M>,
-}
-
-/// MerkleNeighbor is a step in a Merkle proof of inclusion.
-#[derive(Copy, Clone, PartialEq, Debug)]
-pub enum MerkleNeighbor {
-    /// Hash of left subtree
-    Left(Hash),
-    /// Hash of right subtree
-    Right(Hash),
 }
 
 /// Merkle tree of hashes with a given size.
@@ -95,43 +85,13 @@ impl MerkleTree {
 
     /// Builds the Merkle path of inclusion for the entry at the given index in the
     /// Merkle tree.
-    pub fn create_path(&self, index: usize) -> Result<Vec<MerkleNeighbor>, VMError> {
+    pub fn create_path(&self, index: usize) -> Option<Path> {
         if index >= self.size {
-            return Err(VMError::InvalidMerkleProof);
+            return None;
         }
-        let mut result = Vec::new();
+        let mut result = Path::default();
         self.root.subpath(index, self.size, &mut result)?;
-        Ok(result)
-    }
-
-    /// Computes the Merkle root, given the Merkle path.
-    pub fn compute_root_from_path<M: MerkleItem>(
-        label: &'static [u8],
-        entry: &M,
-        proof: &Vec<MerkleNeighbor>,
-    ) -> Hash {
-        let hasher = Hasher::new(label);
-        proof
-            .iter()
-            .fold(hasher.leaf(entry), |curr, neighbor| match neighbor {
-                MerkleNeighbor::Left(l) => hasher.intermediate(l, &curr),
-                MerkleNeighbor::Right(r) => hasher.intermediate(&curr, r),
-            })
-    }
-
-    /// Verifies the Merkle path for an item given the path and the Merkle root.
-    pub fn verify_path<M: MerkleItem>(
-        label: &'static [u8],
-        entry: &M,
-        proof: Vec<MerkleNeighbor>,
-        root: &Hash,
-    ) -> Result<(), VMError> {
-        let result = Self::compute_root_from_path(label, entry, &proof);
-        if result.ct_eq(root).unwrap_u8() == 1 {
-            Ok(())
-        } else {
-            Err(VMError::InvalidMerkleProof)
-        }
+        Some(result)
     }
 
     /// Returns a root of an empty tree.
@@ -199,11 +159,9 @@ impl<M: MerkleItem> MerkleRootBuilder<M> {
         self.roots
             .into_iter()
             .fold(None, |maybe_current, maybe_root| {
-                maybe_current.map(|r| {
-                    maybe_root.map(|l| {
-                        hasher.intermediate(&l, &r)
-                    }).unwrap_or(r)
-                }).or(maybe_root)
+                maybe_current
+                    .map(|r| maybe_root.map(|l| hasher.intermediate(&l, &r)).unwrap_or(r))
+                    .or(maybe_root)
             })
             .unwrap_or_else(|| {
                 // If no root was computed (the roots vector was empty),
@@ -220,23 +178,22 @@ impl MerkleItem for () {
 }
 
 impl MerkleNode {
-    fn subpath(
-        &self,
-        index: usize,
-        size: usize,
-        result: &mut Vec<MerkleNeighbor>,
-    ) -> Result<(), VMError> {
+    fn subpath(&self, index: usize, size: usize, result: &mut Path) -> Option<()> {
         match self {
-            MerkleNode::Empty(_) => Err(VMError::InvalidMerkleProof),
-            MerkleNode::Leaf(_) => Ok(()),
+            MerkleNode::Empty(_) => None,
+            MerkleNode::Leaf(_) => Some(()),
             MerkleNode::Node(_, l, r) => {
                 let k = size.next_power_of_two() / 2;
+                // Note: path.position is not necessarily the same as the global index.
+                // See documentation for `Path::position`.
+                result.position = result.position << 1;
                 if index >= k {
-                    result.insert(0, MerkleNeighbor::Left(l.hash().clone()));
+                    result.position = result.position | 1;
+                    result.neighbors.insert(0, *l.hash());
                     r.subpath(index - k, size - k, result)
                 } else {
-                    result.insert(0, MerkleNeighbor::Right(r.hash().clone()));
-                    return l.subpath(index, k, result);
+                    result.neighbors.insert(0, *r.hash());
+                    l.subpath(index, k, result)
                 }
             }
         }
@@ -317,7 +274,6 @@ impl<M: MerkleItem> Hasher<M> {
     }
 }
 
-
 /// Absolute position of an item in the tree.
 pub type Position = u64;
 
@@ -328,9 +284,27 @@ pub type Position = u64;
 /// Left/right position of the neighbor is determined by the appropriate bit in `position`.
 /// (Lowest bit=1 means the first neighbor is to the left of the node.)
 /// `path` is None if this proof is for a newly added item that has no merkle path yet.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
 pub struct Path {
     /// Position of the item under this path.
+    ///
+    /// IMPORTANT: path.position is not necessarily the same as the global index.
+    /// it acts as a list of sides for the neighoring hashes.  
+    ///
+    /// E.g. in a 7-item tree, the last item `g` has position "3" (11 in binary) because it has
+    /// two left neighbors (z,w), but item `d` also has position "3" (011 in binary),
+    /// because its first neighbors are also on the left (c, x),
+    /// but there's also one more right-side neighbor `u`.
+    /// ```ascii
+    ///
+    ///        r
+    ///       / \
+    ///      w   u
+    ///     /|   | \
+    ///    x y   z  \
+    ///   /| |\  |\  \  
+    ///  a b c d e f  g
+    /// ```
     pub position: Position,
     /// List of neighbor hashes for this path.
     pub neighbors: Vec<Hash>,
@@ -343,7 +317,6 @@ pub enum Side {
     /// Indicates that the item is to the right of its neighbor.
     Right,
 }
-
 
 impl Side {
     /// Orders (current, neighbor) pair of nodes as (left, right)
@@ -373,19 +346,54 @@ impl Default for Path {
 }
 
 impl Path {
-    pub(super) fn iter(
-        &self,
-    ) -> impl DoubleEndedIterator<Item = (Side, &Hash)> + ExactSizeIterator {
+    /// Iterates over elements of the path.
+    pub fn iter(&self) -> impl DoubleEndedIterator<Item = (Side, &Hash)> + ExactSizeIterator {
         self.directions().zip(self.neighbors.iter())
     }
+
     fn directions(&self) -> Directions {
         Directions {
             position: self.position,
             depth: self.neighbors.len(),
         }
     }
+
+    /// Computes the root hash for the item with this path.
+    pub fn compute_root<M: MerkleItem>(&self, item: &M, hasher: &Hasher<M>) -> Hash {
+        self.iter()
+            .fold(hasher.leaf(item), |curr, (side, neighbor)| {
+                let (l, r) = side.order(&curr, neighbor);
+                hasher.intermediate(l, r)
+            })
+    }
+
+    /// Verifies that this path matches a given merkle root.
+    pub fn verify_root<M: MerkleItem>(&self, root: &Hash, item: &M, hasher: &Hasher<M>) -> bool {
+        self.compute_root(item, hasher).ct_eq(&root).unwrap_u8() == 1
+    }
 }
 
+// zkvm-specific impl
+impl Path {
+    pub fn decode<'a>(reader: &mut SliceReader<'a>) -> Result<Self, VMError> {
+        let position = reader.read_u64()?;
+        let neighbors_len = reader.read_u32()? as usize;
+        if neighbors_len > reader.len() / 32 {
+            // preven DoS by capping length prefix to a maximum possible value
+            return Err(VMError::FormatError);
+        }
+        let mut path = Path {
+            position,
+            neighbors: Vec::with_capacity(neighbors_len),
+        };
+        for _ in 0..neighbors_len {
+            path.neighbors.push(Hash(reader.read_u8x32()?));
+        }
+        Ok(path)
+    }
+}
+
+// zkvm-specific impl
 impl Encodable for Path {
     fn encode(&self, buf: &mut Vec<u8>) {
         encoding::write_u64(self.position, buf);
@@ -467,29 +475,31 @@ mod tests {
 
     macro_rules! assert_proof {
         ($num:ident, $idx:ident) => {
-            let (item, root, proof) = {
+            let label = b"test";
+            let (item, root, path) = {
                 let items = test_items(*$num as usize);
-                let tree = MerkleTree::build(b"test", &items);
-                let proof = tree.create_path(*$idx as usize).unwrap();
-                (items[*$idx as usize].clone(), tree.hash().clone(), proof)
+                let tree = MerkleTree::build(label, &items);
+                let path = tree.create_path(*$idx as usize).unwrap();
+                (items[*$idx as usize].clone(), *tree.hash(), path)
             };
-            MerkleTree::verify_path(b"test", &item, proof, &root).unwrap();
+            assert!(path.verify_root(&root, &item, &Hasher::new(label)));
         };
     }
 
     macro_rules! assert_proof_err {
         ($num:ident, $idx:ident, $wrong_idx:ident) => {
-            let (item, root, proof) = {
+            let label = b"test";
+            let (item, root, path) = {
                 let items = test_items(*$num as usize);
-                let tree = MerkleTree::build(b"test", &items);
-                let proof = tree.create_path(*$idx as usize).unwrap();
+                let tree = MerkleTree::build(label, &items);
+                let path = tree.create_path(*$idx as usize).unwrap();
                 (
                     items[*$wrong_idx as usize].clone(),
                     tree.hash().clone(),
-                    proof,
+                    path,
                 )
             };
-            assert!(MerkleTree::verify_path(b"test", &item, proof, &root).is_err());
+            assert!(path.verify_root(&root, &item, &Hasher::new(label)) == false);
         };
     }
 
@@ -497,7 +507,7 @@ mod tests {
     fn invalid_range() {
         let entries = test_items(5);
         let root = MerkleTree::build(b"test", &entries);
-        assert!(root.create_path(7).is_err())
+        assert!(root.create_path(7).is_none());
     }
 
     #[test]

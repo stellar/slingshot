@@ -3,7 +3,6 @@ use serde::{Deserialize, Serialize};
 use super::super::encoding::{self, Encodable};
 use crate::merkle::Path;
 
-
 /// Proof of inclusion in the Utreexo accumulator.
 /// Transient items (those that were inserted before the forest is normalized)
 /// do not have merkle paths and therefore come with a special `Proof::Transient`.
