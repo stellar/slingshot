@@ -44,7 +44,6 @@ pub enum MerkleNeighbor {
 /// Merkle tree of hashes with a given size.
 pub struct MerkleTree {
     size: usize,
-    label: &'static [u8],
     root: MerkleNode,
 }
 
@@ -83,7 +82,6 @@ impl MerkleTree {
         let root = Self::build_tree(&Hasher::new(label), list);
         MerkleTree {
             size: list.len(),
-            label,
             root,
         }
     }
@@ -99,9 +97,8 @@ impl MerkleTree {
         if index >= self.size {
             return Err(VMError::InvalidMerkleProof);
         }
-        let t = Transcript::new(self.label);
         let mut result = Vec::new();
-        self.root.subpath(t, index, self.size, &mut result)?;
+        self.root.subpath(index, self.size, &mut result)?;
         Ok(result)
     }
 
@@ -223,7 +220,6 @@ impl MerkleItem for () {
 impl MerkleNode {
     fn subpath(
         &self,
-        t: Transcript,
         index: usize,
         size: usize,
         result: &mut Vec<MerkleNeighbor>,
@@ -235,10 +231,10 @@ impl MerkleNode {
                 let k = size.next_power_of_two() / 2;
                 if index >= k {
                     result.insert(0, MerkleNeighbor::Left(l.hash().clone()));
-                    r.subpath(t, index - k, size - k, result)
+                    r.subpath(index - k, size - k, result)
                 } else {
                     result.insert(0, MerkleNeighbor::Right(r.hash().clone()));
-                    return l.subpath(t, index, k, result);
+                    return l.subpath(index, k, result);
                 }
             }
         }
