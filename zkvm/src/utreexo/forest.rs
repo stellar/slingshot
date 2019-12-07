@@ -4,8 +4,8 @@ use std::collections::HashMap;
 use std::fmt;
 use std::mem;
 
-use super::path::{Directions, Path, Position, Proof};
-use crate::merkle::{Hash, Hasher, MerkleItem};
+use super::path::{Proof};
+use crate::merkle::{Hash, Hasher, MerkleItem, Directions, Path, Position};
 
 /// Forest consists of a number of roots of merkle binary trees.
 #[derive(Clone, Serialize, Deserialize)]
