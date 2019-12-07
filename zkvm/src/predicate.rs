@@ -235,8 +235,10 @@ impl PredicateTree {
             PredicateLeaf::Blinding(_) => 2 * prog_index + 1,
             PredicateLeaf::Program(_) => 2 * prog_index,
         };
-        let tree = MerkleTree::build(b"ZkVM.taproot", &self.leaves);
-        let path = tree.create_path(leaf_index).ok_or(VMError::BadArguments)?;
+        // let tree = MerkleTree::build(b"ZkVM.taproot", &self.leaves);
+        // let path = tree.create_path(leaf_index).ok_or(VMError::BadArguments)?;
+        let path = Path::new(&self.leaves, leaf_index, &Hasher::new(b"ZkVM.taproot"))
+            .ok_or(VMError::BadArguments)?;
         let verification_key = self.key.clone();
         let call_proof = CallProof {
             verification_key,

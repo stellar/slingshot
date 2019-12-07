@@ -137,11 +137,10 @@ impl<M: MerkleItem> MerkleRootBuilder<M> {
         let mut level = 0usize;
         let mut current_hash = self.hasher.leaf(item);
         while self.roots.len() > level {
-            if let Some(left_hash) = self.roots[level] {
+            if let Some(left_hash) = self.roots[level].take() {
                 // Found an existing slot at the current level:
-                // merge with the current hash and liberate the slot.
+                // merge with the current hash. Slot is liberated via Option::take().
                 current_hash = self.hasher.intermediate(&left_hash, &current_hash);
-                self.roots[level] = None;
             } else {
                 // Found an empty slot - fill it with the current hash and return
                 self.roots[level] = Some(current_hash);
@@ -154,20 +153,27 @@ impl<M: MerkleItem> MerkleRootBuilder<M> {
     }
 
     /// Compute the merkle root.
-    pub fn root(self) -> Hash {
-        let hasher = self.hasher;
+    pub fn root(&self) -> Hash {
+        let hasher = &self.hasher;
         self.roots
-            .into_iter()
+            .iter()
             .fold(None, |maybe_current, maybe_root| {
                 maybe_current
                     .map(|r| maybe_root.map(|l| hasher.intermediate(&l, &r)).unwrap_or(r))
-                    .or(maybe_root)
+                    .or(*maybe_root)
             })
             .unwrap_or_else(|| {
                 // If no root was computed (the roots vector was empty),
                 // return a hash for the "empty" set.
                 hasher.empty()
             })
+    }
+
+    /// Resets the builder to the clean state,
+    /// keeping allocated memory.
+    /// Use this to recycle allocated memoy when you need to compute multiple roots.
+    pub fn reset(&mut self) {
+        self.roots.truncate(0);
     }
 }
 
@@ -356,6 +362,54 @@ impl Path {
             position: self.position,
             depth: self.neighbors.len(),
         }
+    }
+
+    /// Creates a new path by hashing the merkle tree on the fly
+    /// without allocating the entire tree.
+    pub fn new<M: MerkleItem>(list: &[M], item_index: usize, hasher: &Hasher<M>) -> Option<Self> {
+        fn root<M: MerkleItem>(list: &[M], builder: &mut MerkleRootBuilder<M>) -> Hash {
+            builder.reset();
+            list.iter()
+                .fold(builder, |bldr, item| {
+                    bldr.append(item);
+                    bldr
+                })
+                .root()
+        }
+        fn fill_neighbors<M: MerkleItem>(
+            list: &[M],
+            index: usize,
+            path: &mut Path,
+            hasher: &Hasher<M>,
+            builder: &mut MerkleRootBuilder<M>,
+        ) {
+            if list.len() < 2 {
+                // if we have a tree to talk about
+                return;
+            }
+            let k = list.len().next_power_of_two() / 2;
+            // Note: path.position is not necessarily the same as the global index.
+            // See documentation for `Path::position`.
+            path.position = path.position << 1;
+            if index >= k {
+                path.position = path.position | 1;
+                path.neighbors.insert(0, root(&list[..k], builder));
+                fill_neighbors(&list[k..], index - k, path, hasher, builder);
+            } else {
+                path.neighbors.insert(0, root(&list[k..], builder));
+                fill_neighbors(&list[..k], index, path, hasher, builder);
+            }
+        }
+        if item_index > list.len() {
+            return None;
+        }
+        let mut builder = MerkleRootBuilder {
+            hasher: hasher.clone(),
+            roots: Vec::new(),
+        };
+        let mut path = Path::default();
+        fill_neighbors(list, item_index, &mut path, hasher, &mut builder);
+        Some(path)
     }
 
     /// Computes the root hash for the item with this path.
