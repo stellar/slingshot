@@ -439,15 +439,14 @@ impl Catchup {
         let (midlevel, maybe_offset, _midhash) = path.iter().fold(
             (0, self.map.get(&leaf_hash), leaf_hash),
             |(level, maybe_offset, node_hash), (side, neighbor_hash)| {
-                match maybe_offset {
+                if let Some(offset) = maybe_offset {
                     // either keep the result we already have...
-                    Some(offset) => (level, Some(offset), node_hash),
-                    None => {
-                        // ...or try finding a higher-level hash
-                        let (l, r) = side.order(node_hash, *neighbor_hash);
-                        let parent_hash = hasher.intermediate(&l, &r);
-                        (level + 1, self.map.get(&parent_hash), parent_hash)
-                    }
+                    (level, Some(offset), node_hash)
+                } else {
+                    // ...or try finding a higher-level hash
+                    let (l, r) = side.order(node_hash, *neighbor_hash);
+                    let parent_hash = hasher.intermediate(&l, &r);
+                    (level + 1, self.map.get(&parent_hash), parent_hash)
                 }
             },
         );
@@ -496,13 +495,6 @@ impl Catchup {
     }
 }
 
-impl Node {
-    /// maximum number of items in this subtree, ignoring deletions
-    pub(super) fn capacity(&self) -> u64 {
-        1 << self.level
-    }
-}
-
 /// Iterator implementing traversal of the binary tree.
 /// Note: yields only the nodes without children and their global offset.
 struct ChildlessNodesIterator<'h, I>
@@ -546,7 +538,7 @@ where
         while let Some((offset, node_index)) = self.stack.pop() {
             let node = self.heap.get_ref(node_index);
             if let Some((l, r)) = node.children {
-                self.stack.push((offset + node.capacity() / 2, r));
+                self.stack.push((offset + (1 << node.level) / 2, r));
                 self.stack.push((offset, l));
             } else {
                 return Some((offset, node.clone()));
@@ -557,7 +549,7 @@ where
             let i = *root_index.borrow();
             let root = self.heap.get_ref(i);
             self.stack.push((self.root_offset, i));
-            self.root_offset += root.capacity();
+            self.root_offset += 1 << root.level;
             self.next() // this is guaranteed to be 1-level recursion
         } else {
             None
