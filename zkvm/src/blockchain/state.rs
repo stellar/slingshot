@@ -4,8 +4,9 @@ use serde::{Deserialize, Serialize};
 
 use super::block::{BlockHeader, BlockID};
 use super::errors::BlockchainError;
-use crate::utreexo::{self, Catchup, Forest, NodeHasher, WorkForest};
-use crate::{ContractID, MerkleTree, TxEntry, TxHeader, TxLog, VerifiedTx};
+use crate::merkle::{Hasher, MerkleTree};
+use crate::utreexo::{self, utreexo_hasher, Catchup, Forest, WorkForest};
+use crate::{ContractID, TxEntry, TxHeader, TxLog, VerifiedTx};
 
 /// State of the blockchain node.
 #[derive(Clone, Serialize, Deserialize)]
@@ -43,7 +44,7 @@ impl BlockchainState {
     where
         I: IntoIterator<Item = ContractID> + Clone,
     {
-        let hasher = NodeHasher::new();
+        let hasher = utreexo_hasher();
         let (utreexo, catchup) = Forest::new()
             .update(&hasher, |forest| {
                 for utxo in utxos.clone() {
@@ -88,8 +89,8 @@ impl BlockchainState {
 
         let mut work_forest = self.utreexo.work_forest();
         let mut utxo_proofs = utxo_proofs.into_iter();
+        let utxo_hasher = utreexo_hasher::<ContractID>();
         let mut txroot_builder = MerkleTree::build_root(b"ZkVM.txroot");
-        let hasher = NodeHasher::new();
         for vtx in verified_txs.into_iter() {
             // Check that tx header is consistent with the version / timestamp.
             check_tx_header(&vtx.header, block_header.timestamp_ms, block_header.version)?;
@@ -98,11 +99,11 @@ impl BlockchainState {
             txroot_builder.append(&vtx.id);
 
             // Apply tx to the state
-            apply_tx(&mut work_forest, &vtx.log, &mut utxo_proofs, &hasher)?;
+            apply_tx(&mut work_forest, &vtx.log, &mut utxo_proofs, &utxo_hasher)?;
         }
         let txroot = txroot_builder.root();
-        let (new_forest, new_catchup) = work_forest.normalize(&hasher);
-        let utxoroot = new_forest.root(&hasher);
+        let (new_forest, new_catchup) = work_forest.normalize(&utxo_hasher);
+        let utxoroot = new_forest.root(&utxo_hasher);
 
         // Check the txroot commitment
         if block_header.txroot != txroot {
@@ -163,19 +164,12 @@ impl<T: MempoolItem> Mempool<T> {
     /// Creates a new block header and a new blockchain state using the current set of transactions.
     /// Block header is accesible through the `tip` field on the new `BlockchainState` value.
     pub fn make_block(&self) -> Result<BlockchainState, BlockchainError> {
-        let txroot = self
-            .items
-            .iter()
-            .fold(
-                MerkleTree::build_root(b"ZkVM.txroot"),
-                |mut builder, item| {
-                    builder.append(&item.verified_tx().id);
-                    builder
-                },
-            )
-            .root();
+        let txroot = MerkleTree::root(
+            b"ZkVM.txroot",
+            self.items.iter().map(|tx| &tx.verified_tx().id),
+        );
 
-        let hasher = NodeHasher::<ContractID>::new();
+        let hasher = utreexo_hasher::<ContractID>();
         let (new_forest, new_catchup) = self.work_utreexo.normalize(&hasher);
         let utxoroot = new_forest.root(&hasher);
 
@@ -229,7 +223,7 @@ impl<T: MempoolItem> Mempool<T> {
             &mut self.work_utreexo,
             &vtx.log,
             proofs.iter(),
-            &utreexo::NodeHasher::new(),
+            &utreexo_hasher(),
         )
     }
 }
@@ -239,7 +233,7 @@ fn apply_tx<P>(
     work_forest: &mut WorkForest,
     txlog: &TxLog,
     utxo_proofs: impl IntoIterator<Item = P>,
-    hasher: &NodeHasher<ContractID>,
+    hasher: &Hasher<ContractID>,
 ) -> Result<(), BlockchainError>
 where
     P: Borrow<utreexo::Proof>,

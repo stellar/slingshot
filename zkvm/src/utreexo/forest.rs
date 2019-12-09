@@ -4,8 +4,9 @@ use std::collections::HashMap;
 use std::fmt;
 use std::mem;
 
-use super::path::{Directions, NodeHasher, Path, Position, Proof};
-use crate::merkle::{Hash, MerkleItem};
+use super::heap::{Heap, HeapIndex};
+use super::path::Proof;
+use crate::merkle::{Directions, Hash, Hasher, MerkleItem, Path, Position};
 
 /// Forest consists of a number of roots of merkle binary trees.
 #[derive(Clone, Serialize, Deserialize)]
@@ -76,7 +77,7 @@ impl Forest {
         &self,
         item: &M,
         proof: &Proof,
-        hasher: &NodeHasher<M>,
+        hasher: &Hasher<M>,
     ) -> Result<(), UtreexoError> {
         let path = match proof {
             Proof::Transient => return Err(UtreexoError::InvalidProof),
@@ -133,7 +134,7 @@ impl Forest {
     /// Returns a new state, along with a catchup structure.
     pub fn update<M: MerkleItem>(
         &self,
-        hasher: &NodeHasher<M>,
+        hasher: &Hasher<M>,
         closure: impl FnOnce(&mut WorkForest) -> Result<(), UtreexoError>,
     ) -> Result<(Self, Catchup), UtreexoError> {
         let mut wforest = self.work_forest();
@@ -144,7 +145,7 @@ impl Forest {
 
     /// Since each root is balanced, the top root is composed of n-1 pairs:
     /// `hash(R3, hash(R2, hash(R1, R0)))`
-    pub fn root<M: MerkleItem>(&self, hasher: &NodeHasher<M>) -> Hash {
+    pub fn root<M: MerkleItem>(&self, hasher: &Hasher<M>) -> Hash {
         self.roots_iter()
             .rev()
             .fold(None, |optional_hash, (_level, hash2)| {
@@ -172,7 +173,7 @@ impl Forest {
 
 impl WorkForest {
     /// Adds a new item to the tree, appending a node to the end.
-    pub fn insert<M: MerkleItem>(&mut self, item: &M, hasher: &NodeHasher<M>) {
+    pub fn insert<M: MerkleItem>(&mut self, item: &M, hasher: &Hasher<M>) {
         self.roots.push(self.heap.allocate(Node {
             level: 0,
             hash: hasher.leaf(item),
@@ -211,7 +212,7 @@ impl WorkForest {
         &mut self,
         item: &M,
         proof: P,
-        hasher: &NodeHasher<M>,
+        hasher: &Hasher<M>,
     ) -> Result<(), UtreexoError> {
         match proof.borrow() {
             Proof::Transient => self.delete_transient(item, hasher),
@@ -223,7 +224,7 @@ impl WorkForest {
     fn delete_transient<M: MerkleItem>(
         &mut self,
         item: &M,
-        hasher: &NodeHasher<M>,
+        hasher: &Hasher<M>,
     ) -> Result<(), UtreexoError> {
         let item_hash = hasher.leaf(item);
         let (index, node) = self
@@ -252,7 +253,7 @@ impl WorkForest {
         &mut self,
         item: &M,
         path: &Path,
-        hasher: &NodeHasher<M>,
+        hasher: &Hasher<M>,
     ) -> Result<(), UtreexoError> {
         // Determine the existing node which matches the proof, then verify the rest of the proof,
         // and mark the relevant nodes as modified.
@@ -376,7 +377,7 @@ impl WorkForest {
 
     /// Normalizes the forest into a minimal number of ordered perfect trees.
     /// Returns the new forest and a catchup structure.
-    pub fn normalize<M: MerkleItem>(&self, hasher: &NodeHasher<M>) -> (Forest, Catchup) {
+    pub fn normalize<M: MerkleItem>(&self, hasher: &Hasher<M>) -> (Forest, Catchup) {
         // Tree with modified nodes {d, b, 3, 6}, while {a, c} have pruned children:
         //
         //  d
@@ -489,7 +490,7 @@ impl Catchup {
         &self,
         item: &M,
         proof: Proof,
-        hasher: &NodeHasher<M>,
+        hasher: &Hasher<M>,
     ) -> Result<Proof, UtreexoError> {
         let mut path = match proof {
             // For the transient items `position` is irrelevant, so we may as well use 0.
@@ -638,91 +639,6 @@ fn find_root(roots: impl IntoIterator<Item = usize>, position: Position) -> Opti
         }
     }
     None
-}
-
-/// Clone-on-write heap implementation with the following key features:
-/// 1. No lifetimes - does not poison the APIs using it.
-/// 2. Compatible with cross-thread access (if you access this via Mutex/RwLock)
-///    because there are no smart pointers.
-#[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
-struct Heap<T: Clone> {
-    checkpoint: usize, // all items before this index are considered immutable and cloned by `make_mut`.
-    items: Vec<T>,
-}
-
-#[derive(Copy, Clone, PartialEq, Debug, Serialize, Deserialize)]
-struct HeapIndex(usize);
-
-struct HeapCheckpoint {
-    prev: usize,
-    curr: usize,
-}
-
-impl<T: Clone> Heap<T> {
-    /// Creates a new empty heap.
-    pub(super) fn new() -> Self {
-        Self {
-            checkpoint: 0,
-            items: Vec::new(),
-        }
-    }
-
-    /// Creates a checkpoint: remembers which items must remain unchanged until a rollback.
-    pub(super) fn checkpoint(&mut self) -> HeapCheckpoint {
-        let cp = HeapCheckpoint {
-            prev: self.checkpoint,
-            curr: self.items.len(),
-        };
-        self.checkpoint = cp.curr;
-        cp
-    }
-
-    /// Rolls back to the previous state.
-    /// Panics if the wrong checkpoint is used.
-    pub(super) fn rollback(&mut self, checkpoint: HeapCheckpoint) {
-        assert!(self.checkpoint == checkpoint.curr);
-        self.items.truncate(checkpoint.curr);
-        self.checkpoint = checkpoint.prev;
-    }
-
-    /// Commits existing changes and shifts checkpoint to the previous position.
-    pub(super) fn commit(&mut self, checkpoint: HeapCheckpoint) {
-        assert!(self.checkpoint == checkpoint.curr);
-        self.checkpoint = checkpoint.prev;
-    }
-
-    /// Adds an item to the heap.
-    pub(super) fn allocate(&mut self, item: T) -> HeapIndex {
-        self.items.push(item);
-        HeapIndex(self.items.len() - 1)
-    }
-
-    /// Returns an immutable borrow of the item at index.
-    pub(super) fn get_ref(&self, index: HeapIndex) -> &T {
-        &self.items[index.0]
-    }
-
-    /// Returns a mutable borrow of the item at index, or None if that
-    /// item was created before the checkpoint
-    pub(super) fn get_mut(&mut self, index: HeapIndex) -> Option<&mut T> {
-        if index.0 >= self.checkpoint {
-            Some(&mut self.items[index.0])
-        } else {
-            None
-        }
-    }
-
-    /// Returns a mutable borrow of the item at index.
-    /// If the item exists in the backing heap, it is automatically cloned and inserted in this heap.
-    /// The index is automatically updated to the new item in this case.
-    pub(super) fn make_mut(&mut self, index: &mut HeapIndex) -> &mut T {
-        if index.0 < self.checkpoint {
-            let item = self.items[index.0].clone();
-            self.items.push(item);
-            *index = HeapIndex(self.items.len() - 1);
-        }
-        &mut self.items[index.0]
-    }
 }
 
 impl fmt::Debug for Forest {

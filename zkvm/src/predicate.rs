@@ -15,7 +15,7 @@ use crate::encoding;
 use crate::encoding::Encodable;
 use crate::encoding::SliceReader;
 use crate::errors::VMError;
-use crate::merkle::{Hash, MerkleItem, MerkleNeighbor, MerkleTree};
+use crate::merkle::{Hash, Hasher, MerkleItem, MerkleTree, Path};
 use crate::program::{Program, ProgramItem};
 use crate::transcript::TranscriptProtocol;
 
@@ -61,8 +61,8 @@ pub struct CallProof {
     // Pure verification key
     pub verification_key: VerificationKey,
 
-    // List of left-right neighbors, excluding the root and leaf hash
-    pub neighbors: Vec<MerkleNeighbor>,
+    // Merkle path.
+    pub path: Path,
 }
 
 /// PredicateLeaf represents a leaf in the merkle tree of predicate's clauses.
@@ -144,8 +144,9 @@ impl Predicate {
         batch: &mut impl BatchVerification,
     ) {
         let key = &call_proof.verification_key;
-        let neighbors = &call_proof.neighbors;
-        let root = MerkleTree::compute_root_from_path(b"ZkVM.taproot", program_item, neighbors);
+        let root = &call_proof
+            .path
+            .compute_root(program_item, &Hasher::new(b"ZkVM.taproot"));
         let h = Self::commit_taproot(key, &root);
 
         // P == X + h1(X, M)*B -> 0 == -P + X + h1(X, M)*B
@@ -234,12 +235,14 @@ impl PredicateTree {
             PredicateLeaf::Blinding(_) => 2 * prog_index + 1,
             PredicateLeaf::Program(_) => 2 * prog_index,
         };
-        let tree = MerkleTree::build(b"ZkVM.taproot", &self.leaves);
-        let neighbors = tree.create_path(leaf_index)?;
+        // let tree = MerkleTree::build(b"ZkVM.taproot", &self.leaves);
+        // let path = tree.create_path(leaf_index).ok_or(VMError::BadArguments)?;
+        let path = Path::new(&self.leaves, leaf_index, &Hasher::new(b"ZkVM.taproot"))
+            .ok_or(VMError::BadArguments)?;
         let verification_key = self.key.clone();
         let call_proof = CallProof {
             verification_key,
-            neighbors,
+            path,
         };
         let program = self.leaves[leaf_index].clone().to_program()?;
         Ok((call_proof, program))
@@ -281,55 +284,20 @@ impl Encodable for CallProof {
     /// Serializes the call proof to a byte array.
     fn encode(&self, buf: &mut Vec<u8>) {
         encoding::write_point(self.verification_key.as_point(), buf);
-
-        let num_neighbors = self.neighbors.len();
-        let mut positions: u32 = 1 << num_neighbors;
-        for (i, n) in self.neighbors.iter().enumerate() {
-            match n {
-                MerkleNeighbor::Right(_) => {
-                    positions = positions | (1 << i);
-                }
-                _ => {}
-            }
-        }
-        encoding::write_u32(positions, buf);
-        for n in &self.neighbors {
-            match n {
-                MerkleNeighbor::Left(l) => encoding::write_bytes(l, buf),
-                MerkleNeighbor::Right(r) => encoding::write_bytes(r, buf),
-            }
-        }
+        self.path.encode(buf);
     }
     fn serialized_length(&self) -> usize {
-        // VerificationKey is a 32-byte array
-        // MerkleNeighbor is a 32-byte array
-        32 + 4 + self.neighbors.len() * 32
+        32 + self.path.serialized_length()
     }
 }
 
 impl CallProof {
     /// Decodes the call proof from bytes.
     pub fn decode<'a>(reader: &mut SliceReader<'a>) -> Result<Self, VMError> {
-        let verification_key =
-            VerificationKey::from_compressed(reader.read_point()?).ok_or(VMError::InvalidPoint)?;
-
-        let positions = reader.read_u32()?;
-        if positions == 0 {
-            return Err(VMError::FormatError);
-        }
-        let num_neighbors = (31 - positions.leading_zeros()) as usize;
-        let mut neighbors = Vec::with_capacity(num_neighbors);
-        for i in 0..num_neighbors {
-            let bytes = Hash(reader.read_u8x32()?);
-            neighbors.push(if positions & (1 << i) == 0 {
-                MerkleNeighbor::Left(bytes)
-            } else {
-                MerkleNeighbor::Right(bytes)
-            });
-        }
+        let point = VerificationKey::from_compressed(reader.read_point()?);
         Ok(CallProof {
-            verification_key,
-            neighbors,
+            verification_key: point.ok_or(VMError::InvalidPoint)?,
+            path: Path::decode(reader)?,
         })
     }
 
