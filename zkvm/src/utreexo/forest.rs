@@ -120,10 +120,10 @@ impl WorkForest {
 
     /// Performs multiple updates in a transactional fashion.
     /// If any update fails, all of the changes are effectively undone.
-    pub fn update(
-        &mut self,
-        closure: impl FnOnce(&mut Self) -> Result<(), UtreexoError>,
-    ) -> Result<&mut Self, UtreexoError> {
+    pub fn batch<F, E>(&mut self, closure: F) -> Result<&mut Self, E>
+    where
+        F: FnOnce(&mut Self) -> Result<(), E>,
+    {
         let prev_roots = self.roots.clone();
         let checkpoint = self.heap.checkpoint();
 

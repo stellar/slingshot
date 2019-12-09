@@ -45,16 +45,13 @@ impl BlockchainState {
         I: IntoIterator<Item = ContractID> + Clone,
     {
         let hasher = utreexo_hasher();
-        let (utreexo, catchup) = Forest::new()
-            .work_forest()
-            .update(|forest| {
-                for utxo in utxos.clone() {
-                    forest.insert(&utxo, &hasher);
-                }
-                Ok(())
-            })
-            .expect("The closure above should always succeed because it only does insertions.")
-            .normalize(&hasher);
+        let (utreexo, catchup) = {
+            let mut wf = Forest::new().work_forest();
+            for utxo in utxos.clone() {
+                wf.insert(&utxo, &hasher);
+            }
+            wf.normalize(&hasher)
+        };
 
         let proofs =
             utxos
@@ -221,12 +218,10 @@ impl<T: MempoolItem> Mempool<T> {
 
         check_tx_header(&vtx.header, self.timestamp_ms, self.state.tip.version)?;
 
-        apply_tx(
-            &mut self.work_utreexo,
-            &vtx.log,
-            proofs.iter(),
-            &utreexo_hasher(),
-        )
+        // Update block makes sure the that if half of tx fails, all changes are undone.
+        self.work_utreexo
+            .batch(|wf| apply_tx(wf, &vtx.log, proofs.iter(), &utreexo_hasher()))
+            .map(|_| ())
     }
 }
 

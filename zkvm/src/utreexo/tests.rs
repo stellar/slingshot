@@ -26,7 +26,7 @@ fn transient_items_utreexo() {
 
     let (_forest1, _catchup) = forest0
         .work_forest()
-        .update(|forest| {
+        .batch::<_, ()>(|forest| {
             forest.insert(&0, &hasher);
             forest.insert(&1, &hasher);
 
@@ -59,7 +59,7 @@ fn insert_to_utreexo() {
     let forest0 = Forest::new();
     let (forest1, catchup1) = forest0
         .work_forest()
-        .update(|forest| {
+        .batch::<_, ()>(|forest| {
             for i in 0..6 {
                 forest.insert(&i, &hasher);
             }
@@ -85,7 +85,7 @@ fn insert_to_utreexo() {
     // after the proofs were updated, deletions should succeed
     let _ = forest1
         .work_forest()
-        .update(|forest| {
+        .batch::<_, UtreexoError>(|forest| {
             for i in 0..6u64 {
                 forest.delete(&i, &proofs1[i as usize], &hasher)?;
             }
@@ -100,7 +100,7 @@ fn transaction_success() {
     let forest0 = Forest::new();
     let (forest1, catchup1) = forest0
         .work_forest()
-        .update(|forest| {
+        .batch::<_, ()>(|forest| {
             for i in 0..6 {
                 forest.insert(&i, &hasher);
             }
@@ -144,7 +144,7 @@ fn transaction_success() {
     //  |\  |\  |\  |
     //  x 1 2 3 4 5 6
 
-    match wf.update(|wf| {
+    match wf.batch::<_, ()>(|wf| {
         wf.insert(&7, &hasher);
         wf.insert(&8, &hasher);
         wf.delete(&7, &Proof::Transient, &hasher)
@@ -176,7 +176,7 @@ fn transaction_fail() {
     let forest0 = Forest::new();
     let (forest1, catchup1) = forest0
         .work_forest()
-        .update(|forest| {
+        .batch::<_, ()>(|forest| {
             for i in 0..6 {
                 forest.insert(&i, &hasher);
             }
@@ -214,7 +214,7 @@ fn transaction_fail() {
     //  |\  |\  |\  |
     //  x 1 2 3 4 5 6
 
-    match wf.update(|wf| {
+    match wf.batch(|wf| {
         wf.insert(&7, &hasher);
         wf.insert(&8, &hasher);
         wf.delete(&7, &Proof::Transient, &hasher)
@@ -248,7 +248,7 @@ fn insert_and_delete_utreexo() {
     let forest0 = Forest::new();
     let (forest1, catchup1) = forest0
         .work_forest()
-        .update(|forest| {
+        .batch::<_, ()>(|forest| {
             for i in 0..n {
                 forest.insert(&i, &hasher);
             }
@@ -285,7 +285,7 @@ fn insert_and_delete_utreexo() {
         let hasher = utreexo_hasher::<M>();
         let (forest2, catchup2) = forest
             .work_forest()
-            .update(|forest| {
+            .batch::<_, ()>(|forest| {
                 upd(forest);
                 Ok(())
             })

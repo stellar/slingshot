@@ -12,7 +12,7 @@ pub use self::forest::{Catchup, Forest, UtreexoError, WorkForest};
 pub use self::path::Proof;
 pub use super::merkle::Hasher;
 
-/// Utreexo-labeled hasher.
+/// Utreexo-labeled hasher for the merkle tree nodes.
 pub fn utreexo_hasher<T: super::merkle::MerkleItem>() -> Hasher<T> {
     Hasher::new(b"ZkVM.utreexo")
 }
