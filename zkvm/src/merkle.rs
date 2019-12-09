@@ -34,16 +34,7 @@ pub struct Hasher<M: MerkleItem> {
 }
 
 /// Merkle tree of hashes with a given size.
-pub struct MerkleTree {
-    size: usize,
-    root: MerkleNode,
-}
-
-enum MerkleNode {
-    Empty(Hash),
-    Leaf(Hash),
-    Node(Hash, Box<MerkleNode>, Box<MerkleNode>),
-}
+pub struct MerkleTree;
 
 /// Efficient builder of the merkle root.
 /// See `MerkleTree::build_root`
@@ -61,46 +52,6 @@ impl fmt::Debug for Hash {
 }
 
 impl MerkleTree {
-    /// Prepares a root builder to compute the root iteratively.
-    pub fn build_root<M: MerkleItem>(label: &'static [u8]) -> MerkleRootBuilder<M> {
-        MerkleRootBuilder {
-            hasher: Hasher::new(label),
-            roots: Vec::new(),
-        }
-    }
-
-    /// Constructs a new MerkleTree based on the input list of entries.
-    pub fn build<M: MerkleItem>(label: &'static [u8], list: &[M]) -> Self {
-        let root = Self::build_tree(&Hasher::new(label), list);
-        MerkleTree {
-            size: list.len(),
-            root,
-        }
-    }
-
-    /// Returns the root hash of the Merkle tree.
-    pub fn hash(&self) -> &Hash {
-        self.root.hash()
-    }
-
-    /// Builds the Merkle path of inclusion for the entry at the given index in the
-    /// Merkle tree.
-    pub fn create_path(&self, index: usize) -> Option<Path> {
-        if index >= self.size {
-            return None;
-        }
-        let mut result = Path::default();
-        self.root.subpath(index, self.size, &mut result)?;
-        Some(result)
-    }
-
-    /// Returns a root of an empty tree.
-    /// This is provided so the user does not have to fill in complex type annotations
-    /// when the empty container is untyped.
-    pub fn empty_root(label: &'static [u8]) -> Hash {
-        Hasher::<()>::new(label).empty()
-    }
-
     /// Builds and returns the root hash of a Merkle tree constructed from
     /// the supplied list.
     pub fn root<M, I>(label: &'static [u8], list: I) -> Hash
@@ -116,18 +67,19 @@ impl MerkleTree {
             .root()
     }
 
-    fn build_tree<M: MerkleItem>(hasher: &Hasher<M>, list: &[M]) -> MerkleNode {
-        match list.len() {
-            0 => MerkleNode::Empty(hasher.empty()),
-            1 => MerkleNode::Leaf(hasher.leaf(&list[0])),
-            n => {
-                let k = n.next_power_of_two() / 2;
-                let left = Self::build_tree(&hasher, &list[..k]);
-                let right = Self::build_tree(&hasher, &list[k..]);
-                let parent = hasher.intermediate(&left.hash(), &right.hash());
-                MerkleNode::Node(parent, Box::new(left), Box::new(right))
-            }
+    /// Prepares a root builder to compute the root iteratively.
+    pub fn build_root<M: MerkleItem>(label: &'static [u8]) -> MerkleRootBuilder<M> {
+        MerkleRootBuilder {
+            hasher: Hasher::new(label),
+            roots: Vec::new(),
         }
+    }
+
+    /// Returns a root of an empty tree.
+    /// This is provided so the user does not have to fill in complex type annotations
+    /// when the empty container is untyped.
+    pub fn empty_root(label: &'static [u8]) -> Hash {
+        Hasher::<()>::new(label).empty()
     }
 }
 
@@ -177,41 +129,12 @@ impl<M: MerkleItem> MerkleRootBuilder<M> {
     }
 }
 
+/// The only reason for this impl is to compute an empty hash and
+/// keep that implementation in one place (Hasher), generic over the item type:
+/// `Hasher::<()>::new(label).empty()`.
 impl MerkleItem for () {
     fn commit(&self, t: &mut Transcript) {
         t.append_message(b"", b"");
-    }
-}
-
-impl MerkleNode {
-    fn subpath(&self, index: usize, size: usize, result: &mut Path) -> Option<()> {
-        match self {
-            MerkleNode::Empty(_) => None,
-            MerkleNode::Leaf(_) => Some(()),
-            MerkleNode::Node(_, l, r) => {
-                let k = size.next_power_of_two() / 2;
-                // Note: path.position is not necessarily the same as the global index.
-                // See documentation for `Path::position`.
-                result.position = result.position << 1;
-                if index >= k {
-                    result.position = result.position | 1;
-                    result.neighbors.insert(0, *l.hash());
-                    r.subpath(index - k, size - k, result)
-                } else {
-                    result.neighbors.insert(0, *r.hash());
-                    l.subpath(index, k, result)
-                }
-            }
-        }
-    }
-
-    /// Returns the hash of a Merkle tree.
-    fn hash(&self) -> &Hash {
-        match self {
-            MerkleNode::Empty(h) => &h,
-            MerkleNode::Leaf(h) => &h,
-            MerkleNode::Node(h, _, _) => &h,
-        }
     }
 }
 
@@ -529,39 +452,34 @@ mod tests {
 
     macro_rules! assert_proof {
         ($num:ident, $idx:ident) => {
-            let label = b"test";
+            let hasher = Hasher::new(b"test");
             let (item, root, path) = {
                 let items = test_items(*$num as usize);
-                let tree = MerkleTree::build(label, &items);
-                let path = tree.create_path(*$idx as usize).unwrap();
-                (items[*$idx as usize].clone(), *tree.hash(), path)
+                let path = Path::new(&items, *$idx as usize, &hasher).unwrap();
+                let root = path.compute_root(&items[*$idx], &hasher);
+                (items[*$idx as usize].clone(), root, path)
             };
-            assert!(path.verify_root(&root, &item, &Hasher::new(label)));
+            assert!(path.verify_root(&root, &item, &hasher));
         };
     }
 
     macro_rules! assert_proof_err {
         ($num:ident, $idx:ident, $wrong_idx:ident) => {
-            let label = b"test";
+            let hasher = Hasher::new(b"test");
             let (item, root, path) = {
                 let items = test_items(*$num as usize);
-                let tree = MerkleTree::build(label, &items);
-                let path = tree.create_path(*$idx as usize).unwrap();
-                (
-                    items[*$wrong_idx as usize].clone(),
-                    tree.hash().clone(),
-                    path,
-                )
+                let path = Path::new(&items, *$idx as usize, &hasher).unwrap();
+                let root = path.compute_root(&items[*$idx], &hasher);
+                (items[*$wrong_idx as usize].clone(), root, path)
             };
-            assert!(path.verify_root(&root, &item, &Hasher::new(label)) == false);
+            assert!(path.verify_root(&root, &item, &hasher) == false);
         };
     }
 
     #[test]
     fn invalid_range() {
         let entries = test_items(5);
-        let root = MerkleTree::build(b"test", &entries);
-        assert!(root.create_path(7).is_none());
+        assert!(Path::new(&entries, 7, &Hasher::new(b"test")).is_none());
     }
 
     #[test]
