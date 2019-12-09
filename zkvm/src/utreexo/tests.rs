@@ -25,7 +25,8 @@ fn transient_items_utreexo() {
     let forest0 = Forest::new();
 
     let (_forest1, _catchup) = forest0
-        .update(&hasher, |forest| {
+        .work_forest()
+        .update(|forest| {
             forest.insert(&0, &hasher);
             forest.insert(&1, &hasher);
 
@@ -48,7 +49,8 @@ fn transient_items_utreexo() {
 
             Ok(())
         })
-        .unwrap();
+        .unwrap()
+        .normalize(&hasher);
 }
 
 #[test]
@@ -56,13 +58,15 @@ fn insert_to_utreexo() {
     let hasher = utreexo_hasher();
     let forest0 = Forest::new();
     let (forest1, catchup1) = forest0
-        .update(&hasher, |forest| {
+        .work_forest()
+        .update(|forest| {
             for i in 0..6 {
                 forest.insert(&i, &hasher);
             }
             Ok(())
         })
-        .expect("cannot fail");
+        .expect("cannot fail")
+        .normalize(&hasher);
 
     assert_eq!(
         forest1.root(&hasher),
@@ -80,7 +84,8 @@ fn insert_to_utreexo() {
 
     // after the proofs were updated, deletions should succeed
     let _ = forest1
-        .update(&hasher, |forest| {
+        .work_forest()
+        .update(|forest| {
             for i in 0..6u64 {
                 forest.delete(&i, &proofs1[i as usize], &hasher)?;
             }
@@ -94,13 +99,15 @@ fn transaction_success() {
     let hasher = utreexo_hasher();
     let forest0 = Forest::new();
     let (forest1, catchup1) = forest0
-        .update(&hasher, |forest| {
+        .work_forest()
+        .update(|forest| {
             for i in 0..6 {
                 forest.insert(&i, &hasher);
             }
             Ok(())
         })
-        .expect("cannot fail");
+        .expect("cannot fail")
+        .normalize(&hasher);
 
     // update the proofs
     let proofs1 = (0..6)
@@ -137,7 +144,7 @@ fn transaction_success() {
     //  |\  |\  |\  |
     //  x 1 2 3 4 5 6
 
-    match wf.update::<_, ()>(|wf| {
+    match wf.update(|wf| {
         wf.insert(&7, &hasher);
         wf.insert(&8, &hasher);
         wf.delete(&7, &Proof::Transient, &hasher)
@@ -168,13 +175,15 @@ fn transaction_fail() {
     let hasher = utreexo_hasher();
     let forest0 = Forest::new();
     let (forest1, catchup1) = forest0
-        .update(&hasher, |forest| {
+        .work_forest()
+        .update(|forest| {
             for i in 0..6 {
                 forest.insert(&i, &hasher);
             }
             Ok(())
         })
-        .expect("cannot fail");
+        .expect("cannot fail")
+        .normalize(&hasher);
 
     // update the proofs
     let proofs1 = (0..6)
@@ -205,14 +214,14 @@ fn transaction_fail() {
     //  |\  |\  |\  |
     //  x 1 2 3 4 5 6
 
-    match wf.update::<_, ()>(|wf| {
+    match wf.update(|wf| {
         wf.insert(&7, &hasher);
         wf.insert(&8, &hasher);
         wf.delete(&7, &Proof::Transient, &hasher)
             .expect("Should not fail.");
         wf.delete(&1, &proofs1[1], &hasher)
             .expect("Should not fail.");
-        Err(())
+        Err(UtreexoError::InvalidProof) // dummy error to fail the update batch
     }) {
         Err(_) => {}
         Ok(_) => {}
@@ -238,13 +247,15 @@ fn insert_and_delete_utreexo() {
     let hasher = utreexo_hasher();
     let forest0 = Forest::new();
     let (forest1, catchup1) = forest0
-        .update(&hasher, |forest| {
+        .work_forest()
+        .update(|forest| {
             for i in 0..n {
                 forest.insert(&i, &hasher);
             }
             Ok(())
         })
-        .expect("cannot fail");
+        .expect("cannot fail")
+        .normalize(&hasher);
 
     // update the proofs
     let proofs1 = (0..n)
@@ -258,10 +269,12 @@ fn insert_and_delete_utreexo() {
     // after the proofs were updated, deletions should succeed
 
     forest1
-        .verify(&0u64, &proofs1[0], &hasher)
+        .work_forest()
+        .delete(&0u64, &proofs1[0], &hasher)
         .expect("proof should be valid");
     forest1
-        .verify(&5u64, &proofs1[5], &hasher)
+        .work_forest()
+        .delete(&5u64, &proofs1[5], &hasher)
         .expect("proof should be valid");
 
     fn verify_update<M: MerkleItem>(
@@ -271,11 +284,13 @@ fn insert_and_delete_utreexo() {
     ) -> (Forest, Catchup) {
         let hasher = utreexo_hasher::<M>();
         let (forest2, catchup2) = forest
-            .update(&hasher, |forest| {
+            .work_forest()
+            .update(|forest| {
                 upd(forest);
                 Ok(())
             })
-            .unwrap();
+            .unwrap()
+            .normalize(&hasher);
 
         assert_eq!(
             forest2.root(&hasher),
@@ -291,7 +306,10 @@ fn insert_and_delete_utreexo() {
     //  a   b   c      ->        b   c      ->  b   c
     //  |\  |\  |\               |\  |\         |\  |\
     //  0 1 2 3 4 5          x 1 2 3 4 5        2 3 4 5 1
-    forest1.verify(&0u64, &proofs1[0], &hasher).unwrap();
+    forest1
+        .work_forest()
+        .delete(&0u64, &proofs1[0], &hasher)
+        .unwrap();
     let (_, _) = verify_update(&forest1, &[2, 3, 4, 5, 1], |forest| {
         forest.delete(&0u64, &proofs1[0], &hasher).unwrap();
     });
@@ -302,7 +320,10 @@ fn insert_and_delete_utreexo() {
     //  a   b   c      ->        b   c      ->  b   c
     //  |\  |\  |\               |\  |\         |\  |\
     //  0 1 2 3 4 5          0 x 2 3 4 5        2 3 4 5 0
-    forest1.verify(&1u64, &proofs1[1], &hasher).unwrap();
+    forest1
+        .work_forest()
+        .delete(&1u64, &proofs1[1], &hasher)
+        .unwrap();
     let (_, _) = verify_update(&forest1, &[2, 3, 4, 5, 0], |forest| {
         forest.delete(&1u64, &proofs1[1], &hasher).unwrap();
     });

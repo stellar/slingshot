@@ -6,7 +6,7 @@ use std::mem;
 
 use super::heap::{Heap, HeapIndex};
 use super::path::Proof;
-use crate::merkle::{Directions, Hash, Hasher, MerkleItem, Path, Position};
+use crate::merkle::{Directions, Hash, Hasher, MerkleItem, MerkleTree, Path, Position};
 
 /// Forest consists of a number of roots of merkle binary trees.
 #[derive(Clone, Serialize, Deserialize)]
@@ -72,46 +72,6 @@ impl Forest {
             .fold(0u64, |total, (level, _)| total + (1 << level))
     }
 
-    /// Verifies the item's proof of inclusion.
-    pub fn verify<M: MerkleItem>(
-        &self,
-        item: &M,
-        proof: &Proof,
-        hasher: &Hasher<M>,
-    ) -> Result<(), UtreexoError> {
-        let path = match proof {
-            Proof::Transient => return Err(UtreexoError::InvalidProof),
-            Proof::Committed(path) => path,
-        };
-
-        // 1. Locate the root under which the item.position is located.
-        let (_i, root_level) = find_root(self.roots_iter().map(|(l, _)| l), path.position)
-            .ok_or(UtreexoError::InvalidProof)?;
-
-        // 2. The proof should be of exact size from a leaf up to a tree root.
-        if path.neighbors.len() != root_level {
-            return Err(UtreexoError::InvalidProof);
-        }
-
-        // 3. Now, walk the merkle proof starting with the leaf,
-        //    creating the intermediate hashes until we hit the last neighbor.
-        let top_hash = path.iter().take(root_level).fold(
-            hasher.leaf(item),
-            |curr_hash, (side, neighbor_hash)| {
-                let (l, r) = side.order(&curr_hash, neighbor_hash);
-                hasher.intermediate(l, r)
-            },
-        );
-
-        // 4. Check if the computed root matches the stored root.
-        if Some(top_hash) != self.roots[root_level] {
-            // We haven't met the node we expected to meet, so the proof is invalid.
-            return Err(UtreexoError::InvalidProof);
-        }
-
-        Ok(())
-    }
-
     /// Lets use modify the utreexo and yields a new state of the utreexo,
     /// along with a catchup structure.
     pub fn work_forest(&self) -> WorkForest {
@@ -130,34 +90,10 @@ impl Forest {
         WorkForest { roots, heap }
     }
 
-    /// Lets user to modify the utreexo.
-    /// Returns a new state, along with a catchup structure.
-    pub fn update<M: MerkleItem>(
-        &self,
-        hasher: &Hasher<M>,
-        closure: impl FnOnce(&mut WorkForest) -> Result<(), UtreexoError>,
-    ) -> Result<(Self, Catchup), UtreexoError> {
-        let mut wforest = self.work_forest();
-        let _ = closure(&mut wforest)?;
-        let (next_forest, catchup) = wforest.normalize(&hasher);
-        Ok((next_forest, catchup))
-    }
-
     /// Since each root is balanced, the top root is composed of n-1 pairs:
     /// `hash(R3, hash(R2, hash(R1, R0)))`
     pub fn root<M: MerkleItem>(&self, hasher: &Hasher<M>) -> Hash {
-        self.roots_iter()
-            .rev()
-            .fold(None, |optional_hash, (_level, hash2)| {
-                if let Some(hash1) = optional_hash {
-                    // previous hash is of lower level, so it goes to the right
-                    Some(hasher.intermediate(&hash2, &hash1))
-                } else {
-                    // this is the first iteration - use node's hash as-is
-                    Some(hash2)
-                }
-            })
-            .unwrap_or(hasher.empty())
+        MerkleTree::connect_perfect_roots(self.roots.iter().filter_map(|r| *r), &hasher)
     }
 
     /// Returns an iterator over roots of the forest as (level, hash) pairs,
@@ -184,17 +120,17 @@ impl WorkForest {
 
     /// Performs multiple updates in a transactional fashion.
     /// If any update fails, all of the changes are effectively undone.
-    pub fn update<F, E>(&mut self, closure: F) -> Result<(), E>
-    where
-        F: FnOnce(&mut Self) -> Result<(), E>,
-    {
+    pub fn update(
+        &mut self,
+        closure: impl FnOnce(&mut Self) -> Result<(), UtreexoError>,
+    ) -> Result<&mut Self, UtreexoError> {
         let prev_roots = self.roots.clone();
         let checkpoint = self.heap.checkpoint();
 
         match closure(self) {
             Ok(_) => {
                 self.heap.commit(checkpoint);
-                Ok(())
+                Ok(self)
             }
             Err(e) => {
                 self.heap.rollback(checkpoint);

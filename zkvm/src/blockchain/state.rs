@@ -46,13 +46,15 @@ impl BlockchainState {
     {
         let hasher = utreexo_hasher();
         let (utreexo, catchup) = Forest::new()
-            .update(&hasher, |forest| {
+            .work_forest()
+            .update(|forest| {
                 for utxo in utxos.clone() {
                     forest.insert(&utxo, &hasher);
                 }
                 Ok(())
             })
-            .unwrap(); // safe to unwrap because we only insert, which never fails.
+            .expect("The closure above should always succeed because it only does insertions.")
+            .normalize(&hasher);
 
         let proofs =
             utxos

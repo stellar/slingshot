@@ -81,6 +81,26 @@ impl MerkleTree {
     pub fn empty_root(label: &'static [u8]) -> Hash {
         Hasher::<()>::new(label).empty()
     }
+
+    /// Connects roots of perfect binary trees, enumerated from low to high,
+    /// into a merkle root of an imperfect tree.
+    pub fn connect_perfect_roots<M: MerkleItem>(
+        roots: impl IntoIterator<Item = Hash>,
+        hasher: &Hasher<M>,
+    ) -> Hash {
+        roots
+            .into_iter()
+            .fold(None, |maybe_current, root| {
+                maybe_current
+                    .map(|curr| hasher.intermediate(&root, &curr))
+                    .or(Some(root))
+            })
+            .unwrap_or_else(|| {
+                // If no root was computed (the roots vector was empty),
+                // return a hash for the "empty" set.
+                hasher.empty()
+            })
+    }
 }
 
 impl<M: MerkleItem> MerkleRootBuilder<M> {
@@ -106,19 +126,7 @@ impl<M: MerkleItem> MerkleRootBuilder<M> {
 
     /// Compute the merkle root.
     pub fn root(&self) -> Hash {
-        let hasher = &self.hasher;
-        self.roots
-            .iter()
-            .fold(None, |maybe_current, maybe_root| {
-                maybe_current
-                    .map(|r| maybe_root.map(|l| hasher.intermediate(&l, &r)).unwrap_or(r))
-                    .or(*maybe_root)
-            })
-            .unwrap_or_else(|| {
-                // If no root was computed (the roots vector was empty),
-                // return a hash for the "empty" set.
-                hasher.empty()
-            })
+        MerkleTree::connect_perfect_roots(self.roots.iter().filter_map(|r| *r), &self.hasher)
     }
 
     /// Resets the builder to the clean state,
