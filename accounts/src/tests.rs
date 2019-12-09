@@ -290,7 +290,7 @@ fn process_block(
         .expect("We expect a valid block");
 
     // In a real node utxos will be indexed by ContractID, so lookup will be more efficient.
-    let hasher = utreexo::NodeHasher::new();
+    let hasher = utreexo::utreexo_hasher();
     for entry in vtxs.iter().flat_map(|vtx| vtx.log.iter()) {
         match entry {
             TxEntry::Input(contract_id) => {
