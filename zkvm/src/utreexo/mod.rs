@@ -1,8 +1,8 @@
 //! Implementation of a utxo accumulator inspired by Tadge Dryja's Utreexo design,
 //! with small differences in normalization algorithm.
 mod forest;
-mod path;
 mod heap;
+mod path;
 
 #[cfg(test)]
 mod tests;
