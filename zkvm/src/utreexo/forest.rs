@@ -5,7 +5,6 @@ use std::fmt;
 use std::mem;
 
 use super::heap::{Heap, HeapIndex};
-use super::path::Proof;
 use crate::merkle::{Directions, Hash, Hasher, MerkleItem, MerkleTree, Path, Position};
 
 /// Forest consists of a number of roots of merkle binary trees.
@@ -58,6 +57,17 @@ pub(super) struct Node {
     /// None: node is a leaf, or it has no children, only a hash (pruned subtree)
     /// Note that Rc is > 1 only when we are in a `WorkForest::update` block.
     children: Option<(HeapIndex, HeapIndex)>,
+}
+
+/// Proof of inclusion in the Utreexo accumulator.
+/// Transient items (those that were inserted before the forest is normalized)
+/// do not have merkle paths and therefore come with a special `Proof::Transient`.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum Proof {
+    /// Proof without a merkle path because the item was not committed to utreexo yet.
+    Transient,
+    /// Proof with a merkle path for an item that was stored in a normalized forest.
+    Committed(Path),
 }
 
 impl Forest {

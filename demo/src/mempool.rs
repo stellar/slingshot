@@ -31,7 +31,14 @@ pub fn estimated_memory_cost(mempool: &Mempool) -> usize {
 
     let utxoproofsbytes: usize = mempool
         .items()
-        .flat_map(|i| i.proofs.iter().map(|p| p.serialized_length()))
+        .flat_map(|i| i.proofs.iter().map(|p| utreexo_proof_memory_cost(p)))
         .sum();
     txbytes + utxoproofsbytes
+}
+
+fn utreexo_proof_memory_cost(proof: &utreexo::Proof) -> usize {
+    match proof {
+        utreexo::Proof::Transient => 1,
+        utreexo::Proof::Committed(path) => 1 + path.serialized_length(),
+    }
 }
