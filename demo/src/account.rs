@@ -171,7 +171,7 @@ impl Wallet {
 
     pub fn update_utxo_proofs(&mut self, catchup: &utreexo::Catchup) {
         // Catch up utxoproofs for all the confirmed utxos.
-        let hasher = utreexo::NodeHasher::new();
+        let hasher = utreexo::utreexo_hasher();
         let updated_proofs = self
             .utxos
             .iter()
