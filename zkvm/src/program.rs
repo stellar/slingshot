@@ -11,7 +11,16 @@ use core::borrow::Borrow;
 use merlin::Transcript;
 
 /// A builder type for assembling a sequence of `Instruction`s with chained method calls.
-/// E.g. `let prog = Program::new().push(...).input().push(...).output(1).to_vec()`.
+///
+/// Example:
+/// ```ascii
+/// let prog = Program::new()
+///            .push(...)
+///            .input()
+///            .push(...)
+///            .output(1)
+///            .to_vec()
+/// ```
 #[derive(Clone, PartialEq)]
 pub struct Program(Vec<Instruction>);
 
@@ -24,26 +33,56 @@ pub enum ProgramItem {
     Program(Program),
 }
 
+macro_rules! doc_expr {
+    ($opname:expr, $op:ident) => {
+        concat!(
+            "Adds [`",
+            $opname,
+            "`](crate::ops::Instruction::",
+            stringify!($op),
+            ") instruction."
+        )
+    };
+}
+
 macro_rules! def_op {
-    ($func_name:ident, $op:ident) => (
-           /// Adds a `$func_name` instruction.
-           pub fn $func_name(&mut self) -> &mut Program{
-             self.0.push(Instruction::$op);
-             self
+    ($func_name:ident, $op:ident, $opname:expr) => {
+        def_op_inner!($func_name, $op, doc_expr!($opname, $op));
+    };
+    ($func_name:ident, $op:ident, $arg_type:ty, $opname:expr) => {
+        def_op_inner!($func_name, $op, $arg_type, doc_expr!($opname, $op));
+    };
+    ($func_name:ident, $op:ident, $arg_type1:ty, $arg_type2:ty, $opname:expr) => {
+        def_op_inner!(
+            $func_name,
+            $op,
+            $arg_type1,
+            $arg_type2,
+            doc_expr!($opname, $op)
+        );
+    };
+}
+
+macro_rules! def_op_inner {
+    ($func_name:ident, $op:ident, $doc_expr:expr) => (
+        #[doc = $doc_expr]
+        pub fn $func_name(&mut self) -> &mut Program{
+            self.0.push(Instruction::$op);
+            self
         }
     );
-    ($func_name:ident, $op:ident, $type:ty) => (
-           /// Adds a `$func_name` instruction.
-           pub fn $func_name(&mut self, arg :$type) -> &mut Program{
-             self.0.push(Instruction::$op(arg));
-             self
+    ($func_name:ident, $op:ident, $arg_type:ty, $doc_expr:expr) => (
+        #[doc = $doc_expr]
+        pub fn $func_name(&mut self, arg :$arg_type) -> &mut Program {
+            self.0.push(Instruction::$op(arg));
+            self
         }
     );
-    ($func_name:ident, $op:ident, $type1:ty, $type2:ty) => (
-           /// Adds a `$func_name` instruction.
-           pub fn $func_name(&mut self, arg1: $type1, arg2: $type2) -> &mut Program{
-             self.0.push(Instruction::$op(arg1, arg2));
-             self
+    ($func_name:ident, $op:ident, $arg_type1:ty, $arg_type2:ty, $doc_expr:expr) => (
+        #[doc = $doc_expr]
+        pub fn $func_name(&mut self, arg1: $arg_type1, arg2: $arg_type2) -> &mut Program {
+            self.0.push(Instruction::$op(arg1, arg2));
+            self
         }
     );
 }
@@ -67,37 +106,6 @@ impl core::ops::Deref for Program {
 }
 
 impl Program {
-    def_op!(add, Add);
-    def_op!(alloc, Alloc, Option<ScalarWitness>);
-    def_op!(and, And);
-    def_op!(borrow, Borrow);
-    def_op!(call, Call);
-    def_op!(cloak, Cloak, usize, usize);
-    def_op!(r#const, Const);
-    def_op!(contract, Contract, usize);
-    def_op!(drop, Drop);
-    def_op!(dup, Dup, usize);
-    def_op!(eq, Eq);
-    def_op!(expr, Expr);
-    def_op!(input, Input);
-    def_op!(issue, Issue);
-    def_op!(log, Log);
-    def_op!(maxtime, Maxtime);
-    def_op!(mintime, Mintime);
-    def_op!(mul, Mul);
-    def_op!(neg, Neg);
-    def_op!(or, Or);
-    def_op!(output, Output, usize);
-    def_op!(range, Range);
-    def_op!(retire, Retire);
-    def_op!(roll, Roll, usize);
-    def_op!(sign_tx, Signtx);
-    def_op!(signid, Signid);
-    def_op!(signtag, Signtag);
-    def_op!(unblind, Unblind);
-    def_op!(var, Var);
-    def_op!(verify, Verify);
-
     /// Creates an empty `Program`.
     pub fn new() -> Self {
         Program(vec![])
@@ -119,11 +127,6 @@ impl Program {
         program
     }
 
-    /// Serializes a Program into a byte array.
-    pub fn to_bytes(&self) -> Vec<u8> {
-        self.encode_to_vec()
-    }
-
     /// Creates a program by parsing a bytecode slice.
     pub fn parse(data: &[u8]) -> Result<Self, VMError> {
         SliceReader::parse(data, |r| {
@@ -135,22 +138,54 @@ impl Program {
         })
     }
 
-    /// Converts the program to a plain vector of instructions.
-    pub fn to_vec(self) -> Vec<Instruction> {
-        self.0
-    }
-
-    /// Adds a `push` instruction with an immediate data that can be converted into `String`.
+    /// Adds a [`push:n:x`](crate::ops::Instruction::Push) instruction.
     pub fn push<T: Into<String>>(&mut self, data: T) -> &mut Program {
         self.0.push(Instruction::Push(data.into()));
         self
     }
 
-    /// Adds a `program` instruction with an immediate data that can be converted into `ProgramItem`.
+    /// Adds a [`program:n:x`](crate::ops::Instruction::Program) instruction.
     pub fn program<T: Into<ProgramItem>>(&mut self, prog: T) -> &mut Program {
         self.0.push(Instruction::Program(prog.into()));
         self
     }
+
+    def_op!(drop, Drop, "drop");
+    def_op!(dup, Dup, usize, "dup:k");
+    def_op!(roll, Roll, usize, "roll:k");
+    def_op!(r#const, Const, "const");
+    def_op!(var, Var, "var");
+    def_op!(alloc, Alloc, Option::<ScalarWitness>, "alloc");
+    def_op!(mintime, Mintime, "mintime");
+    def_op!(maxtime, Maxtime, "maxtime");
+    def_op!(expr, Expr, "expr");
+    def_op!(neg, Neg, "neg");
+    def_op!(add, Add, "add");
+    def_op!(mul, Mul, "mul");
+    def_op!(eq, Eq, "eq");
+    def_op!(range, Range, "range");
+    def_op!(and, And, "and");
+    def_op!(or, Or, "or");
+    def_op!(not, Not, "not");
+    def_op!(verify, Verify, "verify");
+
+    def_op!(unblind, Unblind, "unblind");
+
+    def_op!(issue, Issue, "issue");
+    def_op!(borrow, Borrow, "borrow");
+    def_op!(retire, Retire, "retire");
+
+    def_op!(cloak, Cloak, usize, usize, "cloak:m:n");
+    def_op!(input, Input, "input");
+    def_op!(output, Output, usize, "output:k");
+    def_op!(contract, Contract, usize, "contract:k");
+
+    def_op!(log, Log, "log");
+    def_op!(call, Call, "call");
+
+    def_op!(signtx, Signtx, "signtx");
+    def_op!(signid, Signid, "signid");
+    def_op!(signtag, Signtag, "signtag");
 
     /// Takes predicate tree and index of program in Merkle tree to verify
     /// the program's membership in that Merkle tree and call the program.
@@ -164,6 +199,16 @@ impl Program {
             .program(program)
             .call();
         Ok(self)
+    }
+
+    /// Serializes a Program into a byte array.
+    pub fn to_bytes(&self) -> Vec<u8> {
+        self.encode_to_vec()
+    }
+
+    /// Converts the program to a plain vector of instructions.
+    pub fn to_vec(self) -> Vec<Instruction> {
+        self.0
     }
 }
 

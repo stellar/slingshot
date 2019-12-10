@@ -58,7 +58,7 @@ fn test_state_machine() {
         let program = Program::build(|p| {
             p.push(initial_contract.clone())
                 .input()
-                .sign_tx()
+                .signtx()
                 .push(make_predicate(2u64))
                 .output(1);
         });
