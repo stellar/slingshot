@@ -1,6 +1,6 @@
 #![deny(missing_docs)]
 //! ZkVM (_zero-knowledge virtual machine_): a transaction format for a shared, multi-asset, cryptographic ledger.
-//! 
+//!
 //! * [ZkVM whitepaper](https://github.com/stellar/slingshot/blob/main/zkvm/docs/zkvm-design.md) — technology overview.
 //! * [ZkVM specification](https://github.com/stellar/slingshot/blob/main/zkvm/docs/zkvm-spec.md) — transaction validation rules.
 //! * [Blockchain specification](https://github.com/stellar/slingshot/blob/main/zkvm/docs/zkvm-blockchain.md) — blockchain state machine specification.

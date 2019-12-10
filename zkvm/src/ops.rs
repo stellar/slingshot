@@ -12,126 +12,125 @@ use core::mem;
 
 /// A decoded instruction.
 #[derive(Clone, PartialEq)]
-#[allow(missing_docs)]
 pub enum Instruction {
-    /// **push:n:x** → _data_
+    /// **push:_n_:_x_** → _data_
     ///
-    /// Pushes a binary string `x` containing `n` bytes. 
-    /// Immediate data `n` is encoded as LE-32
+    /// Pushes a _string_ `x` containing `n` bytes.
+    /// Immediate data `n` is encoded as _LE32_
     /// followed by `x` encoded as a sequence of `n` bytes.
     Push(String),
 
-    /// **program:n:x** → _program_
+    /// **program:_n_:_x_** → _program_
     ///
-    /// Pushes a program string `x` containing `n` bytes. 
-    /// Immediate data `n` is encoded as LE-32
-    /// followed by `x` encoded as a sequence of `n` bytes.
+    /// Pushes a _program_ `x` containing `n` bytes.
+    /// Immediate data `n` is encoded as _LE32_
+    /// followed by `x`, as a sequence of `n` bytes.
     Program(ProgramItem),
 
     /// _x_ **drop** → ø
     ///
-    /// Drops top item from the stack.
-    /// Fails if the item is not a copyable type.
+    /// Drops `x` from the stack.
+    ///
+    /// Fails if `x` is not a _copyable type_.
     Drop,
 
     /// _x(k) … x(0)_ **dup:_k_** → _x(k) ... x(0) x(k)_
     ///
     /// Copies k’th item from the top of the stack.
-    /// Immediate data `k` is encoded as LE-32.
+    /// Immediate data `k` is encoded as _LE32_.
     ///
     /// Fails if `x(k)` is not a _copyable type_.
-    Dup(usize),  // index of the item
+    Dup(usize),
 
     /// _x(k) x(k-1) ... x(0)_ **roll:_k_** → _x(k-1) ... x(0) x(k)_
     ///
     /// Looks past `k` items from the top, and moves the next item to the top of the stack.
-    /// Immediate data `k` is encoded as LE32.
+    /// Immediate data `k` is encoded as _LE32_.
     ///
     /// Note: `roll:0` is a no-op, `roll:1` swaps the top two items.
-    Roll(usize), // index of the item
+    Roll(usize),
 
     /// _a_ **const** → _expr_
-    /// 
+    ///
     /// 1. Pops a _scalar_ `a` from the stack.
     /// 2. Creates an _expression_ `expr` with weight `a` assigned to an R1CS constant `1`.
     /// 3. Pushes `expr` to the stack.
-    /// 
+    ///
     /// Fails if `a` is not a valid _scalar_.
     Const,
 
     /// _P_ **var** → _v_
-    /// 
+    ///
     /// 1. Pops a _point_ `P` from the stack.
     /// 2. Creates a _variable_ `v` from a _Pedersen commitment_ `P`.
     /// 3. Pushes `v` to the stack.
-    /// 
+    ///
     /// Fails if `P` is not a valid _point_.
     Var,
 
     /// **alloc** → _expr_
-    /// 
-    /// 1. Allocates a low-level variable in the constraint system and wraps it in the _expression_ with weight 1.
+    ///
+    /// 1. Allocates a low-level variable in the _constraint system_ and wraps it in the _expression_ with weight 1.
     /// 2. Pushes the resulting expression to the stack.
-    /// 
-    /// This is different from [`var`](Instruction::Var): the variable created by `alloc` is _not_
-    /// represented by an individual Pedersen commitment and therefore can be chosen freely when the transaction is constructed.
+    ///
+    /// This is different from `var`: the variable created by `alloc` is _not_ represented by an individual Pedersen commitment and therefore can be chosen freely when the transaction is constructed.
     Alloc(Option<ScalarWitness>),
 
     /// **mintime** → _expr_
-    /// 
+    ///
     /// Pushes an _expression_ `expr` corresponding to the _minimum time bound_ of the transaction.
-    /// 
-    /// The one-term expression represents time bound as a weight on the R1CS constant `1` (see [`const`](Instruction::Const)).
+    ///
+    /// The one-term expression represents time bound as a weight on the R1CS constant `1` (see `const`).
     Mintime,
-    
+
     /// **maxtime** → _expr_
-    /// 
+    ///
     /// Pushes an _expression_ `expr` corresponding to the _maximum time bound_ of the transaction.
-    /// 
-    /// The one-term expression represents time bound as a weight on the R1CS constant `1` (see [`const`](Instruction::Const)).
+    ///
+    /// The one-term expression represents time bound as a weight on the R1CS constant `1` (see `const`).
     Maxtime,
 
     /// _var_ **expr** → _ex_
-    /// 
+    ///
     /// 1. Pops a _variable_ `var`.
     /// 2. Allocates a high-level variable in the constraint system using its Pedersen commitment.
     /// 3. Pushes a single-term _expression_ with weight=1 to the stack: `expr = { (1, var) }`.
-    /// 
+    ///
     /// Fails if `var` is not a _variable type_.
     Expr,
 
     /// _ex1_ **neg** → _ex2_
-    /// 
+    ///
     /// 1. Pops an _expression_ `ex1`.
     /// 2. Negates the weights in the `ex1` producing new expression `ex2`.
     /// 3. Pushes `ex2` to the stack.
-    /// 
+    ///
     /// Fails if `ex1` is not an _expression type_.
     Neg,
 
     /// _ex1 ex2_ **add** → ex3_
-    /// 
+    ///
     /// 1. Pops two _expressions_ `ex2`, then `ex1`.
     /// 2. If both expressions are _constant expressions_:
     ///     1. Creates a new _constant expression_ `ex3` with the weight equal to the sum of weights in `ex1` and `ex2`.
     /// 3. Otherwise, creates a new expression `ex3` by concatenating terms in `ex1` and `ex2`.
     /// 4. Pushes `ex3` to the stack.
-    /// 
+    ///
     /// Fails if `ex1` and `ex2` are not both _expression types_.
     Add,
 
     /// _ex1 ex2_ **mul** → _ex3_
-    /// 
+    ///
     /// Multiplies two _expressions_ producing another _expression_ representing the result of multiplication.
-    /// 
+    ///
     /// This performs a _guaranteed optimization_: if one of the expressions `ex1` or `ex2` contains
     /// only one term and this term is for the variable representing the R1CS constant `1`
     /// (in other words, the statement is a cleartext constant),
     /// then the other expression is multiplied by that constant in-place without allocating a multiplier in the _constraint system_.
-    /// 
+    ///
     /// This optimization is _guaranteed_ because it affects the state of the constraint system:
     /// not performing it would make the existing proofs invalid.
-    /// 
+    ///
     /// 1. Pops two _expressions_ `ex2`, then `ex1`.
     /// 2. If either `ex1` or `ex2` is a _constant expression_:
     ///     1. The other expression is multiplied in place by the scalar from that expression.
@@ -141,64 +140,347 @@ pub enum Instruction {
     ///     2. Constrains the left wire to `ex1`, and the right wire to `ex2`.
     ///     3. Creates an _expression_ `ex3` with the output wire in its single term.
     ///     4. Pushes `ex3` to the stack.
-    /// 
+    ///
     /// Fails if `ex1` and `ex2` are not both _expression types_.
-    /// 
+    ///
     /// Note: if both `ex1` and `ex2` are _constant expressions_,
     /// the result does not depend on which one treated as a constant,
     /// and the resulting expression is also a constant expression.
     Mul,
 
     /// _ex1 ex2_ **eq** → _constraint_
-    /// 
+    ///
     /// 1. Pops two _expressions_ `ex2`, then `ex1`.
     /// 2. If both `ex1` or `ex2` are _constant expressions_:
     ///     1. Creates a _cleartext constraint_ with a boolean `true` if the weights are equal, `false` otherwise.
     /// 3. Otherwise:
     ///     1. Creates a _constraint_ that represents statement `ex1 - ex2 = 0`.
     /// 4. Pushes the constraint to the stack.
-    /// 
+    ///
     /// Fails if `ex1` and `ex2` are not both _expression types_.
     Eq,
 
     /// _expr_ **range** → _expr_
-    /// 
+    ///
     /// 1. Pops an _expression_ `expr`.
-    /// 2. Adds an 64-bit range proof for `expr` to the constraint system. (See [Cloak protocol](https://github.com/stellar/slingshot/blob/main/spacesuit/spec.md) for the range proof definition).
+    /// 2. Adds an 64-bit range proof for `expr` to the _constraint system_ (see _Cloak protocol_ for the range proof definition).
     /// 3. Pushes `expr` back to the stack.
-    /// 
+    ///
     /// Fails if `expr` is not an _expression type_.
     Range,
 
     /// _c1 c2_ **and** → _c3_
-    /// 
+    ///
     /// 1. Pops _constraints_ `c2`, then `c1`.
     /// 2. If either `c1` or `c2` is a _cleartext constraint_:
     ///     1. If the cleartext constraint is `false`, returns it; otherwise returns the other constraint.
     /// 3. Otherwise:
     ///     1. Creates a _conjunction constraint_ `c3` containing `c1` and `c2`.
     /// 3. Pushes `c3` to the stack.
-    /// 
-    /// No changes to the _constraint system_ are made until [`verify`](Instruction::Verify) is executed.
-    /// 
+    ///
+    /// No changes to the _constraint system_ are made until `verify` is executed.
+    ///
     /// Fails if `c1` and `c2` are not _constraints_.
     And,
+
+    /// _constraint1 constraint2_ **or** → _constraint3_
+    ///
+    /// 1. Pops _constraints_ `c2`, then `c1`.
+    /// 2. If either `c1` or `c2` is a _cleartext constraint_:
+    ///     1. If the cleartext constraint is `true`, returns it; otherwise returns the other constraint.
+    /// 3. Otherwise:
+    ///     1. Creates a _disjunction constraint_ `c3` containing `c1` and `c2`.
+    /// 3. Pushes `c3` to the stack.
+    ///
+    /// No changes to the _constraint system_ are made until `verify` is executed.
+    ///
+    /// Fails if `c1` and `c2` are not _constraints_.
     Or,
+
+    /// _constr1_ **not** → _constr2_
+    ///
+    /// 1. Pops _constraint_ `c1`.
+    /// 2. If `c1` is a _cleartext constraint_, returns its negation.
+    /// 3. Otherwise:
+    ///     1. Create two constraints:
+    ///        ```ascii
+    ///        x * y = 0
+    ///        x * w = 1-y
+    ///        ```
+    ///        where `w` is a free variable and `x` is the evaluation of constraint `c1`.
+    ///     2. Wrap the output `y` in a constraint `c2`.
+    ///     3. Push `c2` to the stack.
+    ///
+    /// This implements the boolean `not` trick from _Setty, Vu, Panpalia, Braun, Ali, Blumberg, Walfish (2012)_ and implemented in _libsnark_.
     Not,
+
+    /// _constr_ **verify** → ø
+    ///
+    /// 1. Pops _constraint_ `constr`.
+    /// 2. If `constr` is a _cleartext constraint_:
+    ///     1. If it is `true`, returns immediately.
+    ///     2. If it is `false`, fails execution.
+    /// 3. Otherwise, transforms the constraint `constr` recursively using the following rules:
+    ///     1. Replace conjunction of two _linear constraints_ `a` and `b` with a linear constraint `c` by combining both constraints with a random challenge `z`:
+    ///         ```ascii
+    ///         z = transcript.challenge_scalar(b"ZkVM.verify.and-challenge");
+    ///         c = a + z·b
+    ///         ```
+    ///     2. Replace disjunction of two _linear constraints_ `a` and `b` by constrainting an output `o` of a newly allocated multiplier `{r,l,o}` to zero, while adding constraints `r == a` and `l == b` to the constraint system.
+    ///         ```ascii
+    ///         r == a # added to CS
+    ///         l == b # added to CS
+    ///         o == 0 # replaces OR(a,b)
+    ///         ```
+    ///     3. Conjunctions and disjunctions of non-linear constraints are transformed via rules (1) and (2) using depth-first recursion.
+    /// 3. The resulting single linear constraint is added to the constraint system.
+    ///
+    /// Fails if `constr` is not a _constraint_.
     Verify,
+
+    /// _V v_ **unblind** → _V_
+    ///
+    /// 1. Pops _scalar_ `v`.
+    /// 2. Pops _point_ `V`.
+    /// 3. Verifies the _unblinding proof_ for the commitment `V` and scalar `v`, _deferring all point operations_).
+    /// 4. Pushes _point_ `V`.
+    ///
+    /// Fails if:
+    /// * `v` is not a valid _scalar_, or
+    /// * `V` is not a valid _point_, or
     Unblind,
+
+    /// _qty flv metadata pred_ **issue** → _contract_
+    ///
+    /// 1. Pops _point_ `pred`.
+    /// 2. Pops _string_ `metadata`.
+    /// 3. Pops _variable_ `flv` and commits it to the constraint system.
+    /// 4. Pops _variable_ `qty` and commits it to the constraint system.
+    /// 5. Creates a _value_ with variables `qty` and `flv` for quantity and flavor, respectively.
+    /// 6. Computes the _flavor_ scalar defined by the _predicate_ `pred` using the following _transcript-based_ protocol:
+    ///     ```ascii
+    ///     T = Transcript("ZkVM.issue")
+    ///     T.append("predicate", pred)
+    ///     T.append("metadata", metadata)
+    ///     flavor = T.challenge_scalar("flavor")
+    ///     ```
+    /// 6. Checks that the `flv` has unblinded commitment to `flavor`
+    ///    by _deferring the point operation_:
+    ///     ```ascii
+    ///     flv == flavor·B
+    ///     ```
+    /// 7. Adds a 64-bit range proof for the `qty` to the _constraint system_
+    ///    (see _Cloak protocol_ for the range proof definition).
+    /// 8. Adds an _issue entry_ to the _transaction log_.
+    /// 9. Creates a _contract_ with the value as the only _payload_,
+    ///    protected by the predicate `pred`, consuming _VM’s last anchor_
+    ///    and replacing it with this contract’s _ID_.
+    ///
+    /// The value is now issued into the contract that must be unlocked
+    /// using one of the contract instructions: `signtx`, `signid`, `signtag` or `call`.
+    ///
+    /// Fails if:
+    /// * `pred` is not a valid _point_,
+    /// * `flv` or `qty` are not _variable types_,
+    /// * VM’s _last anchor_ is not set.
     Issue,
+
+    /// _qty flv_ **borrow** → _–V +V_
+    ///
+    /// 1. Pops _variable_ `flv` and commits it to the constraint system.
+    /// 2. Pops _variable_ `qty` and commits it to the constraint system.
+    /// 3. Creates a _value_ `+V` with variables `qty` and `flv` for quantity and flavor, respectively.
+    /// 4. Adds a 64-bit range proof for `qty` variable to the _constraint system_ (see _Cloak protocol_ for the range proof definition).
+    /// 5. Creates _wide value_ `–V`, allocating a low-level variable `qty2` for the negated quantity and reusing the flavor variable `flv`.
+    /// 6. Adds a constraint `qty2 == -qty` to the constraint system.
+    /// 7. Pushes `–V`, then `+V` to the stack.
+    ///
+    /// The wide value `–V` is not a _portable type_, and can only be consumed by a `cloak` instruction
+    /// (where it is merged with appropriate positive quantity of the same flavor).
+    ///
+    /// Fails if `qty` and `flv` are not _variable types_.
     Borrow,
+
+    /// _value_ **retire** → ø
+    ///
+    /// 1. Pops a _value_ from the stack.
+    /// 2. Adds a _retirement_ entry to the _transaction log_.
+    ///
+    /// Fails if the value is not a _non-negative value type_.
     Retire,
-    Cloak(usize, usize), // M inputs, N outputs
+
+    /// _widevalues commitments_ **cloak:_m_:_n_** → _values_
+    ///
+    /// Merges and splits `m` _wide values_ into `n` _values_.
+    ///
+    /// 1. Pops `2·n` _points_ as pairs of _flavor_ and _quantity_ for each output value, flavor is popped first in each pair.
+    /// 2. Pops `m` _wide values_ as input values.
+    /// 3. Creates constraints and 64-bit range proofs for quantities per _Cloak protocol_.
+    /// 4. Pushes `n` _values_ to the stack, placing them in the same order as their corresponding commitments.
+    ///
+    /// Immediate data `m` and `n` are encoded as two _LE32_s.
+    Cloak(usize, usize),
+
+    /// _prevoutput_ **input** → _contract_
+    ///
+    /// 1. Pops a _string_ `prevoutput` representing the _unspent output structure_ from the stack.
+    /// 2. Constructs a _contract_ based on `prevoutput` and pushes it to the stack.
+    /// 3. Adds _input entry_ to the _transaction log_.
+    /// 4. Sets the _VM’s last anchor_ to the ratcheted _contract ID_:
+    ///     ```ascii
+    ///     T = Transcript("ZkVM.ratchet-anchor")
+    ///     T.append("old", contract_id)
+    ///     new_anchor = T.challenge_bytes("new")
+    ///     ```
+    ///
+    /// Fails if the `prevoutput` is not a _string_ with exact encoding of an _output structure_.
     Input,
-    Output(usize),   // payload count
-    Contract(usize), // payload count
+
+    /// _items... predicate_ **output:_k_** → ø
+    ///
+    /// 1. Pops `predicate` from the stack.
+    /// 2. Pops `k` _portable items_ from the stack.
+    /// 3. Creates a contract with the `k` items as a payload, the predicate `pred`, and anchor set to the _VM’s last anchor_.
+    /// 4. Adds an _output entry_ to the _transaction log_.
+    /// 5. Updates the _VM’s last anchor_ with the _contract ID_ of the new contract.
+    ///
+    /// Immediate data `k` is encoded as _LE32_.
+    ///
+    /// Fails if:
+    /// * VM’s _last anchor_ is not set,
+    /// * payload items are not _portable_.
+    Output(usize),
+
+    /// _items... pred_ **contract:_k_** → _contract_
+    ///
+    /// 1. Pops _predicate_ `pred` from the stack.
+    /// 2. Pops `k` _portable items_ from the stack.
+    /// 3. Creates a contract with the `k` items as a payload, the predicate `pred`, and anchor set to the _VM’s last anchor_.
+    /// 4. Pushes the contract onto the stack.
+    /// 5. Update the _VM’s last anchor_ with the _contract ID_ of the new contract.
+    ///
+    /// Immediate data `k` is encoded as _LE32_.
+    ///
+    /// Fails if:
+    /// * VM’s _last anchor_ is not set,
+    /// * payload items are not _portable_.
+    Contract(usize),
+
+    /// _data_ **log** → ø
+    ///
+    /// 1. Pops `data` from the stack.
+    /// 2. Adds _data entry_ with it to the _transaction log_.
+    ///
+    /// Fails if `data` is not a _string_.
     Log,
+
+    /// _contract(P) proof prog_ **call** → _results..._
+    ///
+    /// 1. Pops _program_ `prog`, the _call proof_ `proof`, and a _contract_ `contract`.
+    /// 2. Reads the _predicate_ `P` from the contract.
+    /// 3. Reads the signing key `X`, list of neighbors `neighbors`, and their positions `positions` from the _call proof_ `proof`.
+    /// 4. Uses the _program_ `prog`, `neighbors`, and `positions` to compute the Merkle root `M`.
+    /// 5. Forms a statement to verify a relation between `P`, `M`, and `X`:
+    ///     ```ascii
+    ///     0 == -P + X + h1(X, M)·G
+    ///     ```
+    /// 6. Adds the statement to the _deferred point operations_.
+    /// 7. Places the _payload_ on the stack (last item on top).
+    /// 8. Set the `prog` as current.
+    ///
+    /// Fails if:
+    /// 1. `prog` is not a _program_,
+    /// 2. or `proof` is not a _string_,
+    /// 3. or `contract` is not a _contract_.
     Call,
+
+    /// _contract(predicate, payload)_ **signtx** → _items..._
+    ///
+    /// 1. Pops the _contract_ from the stack.
+    /// 2. Adds the contract’s `predicate` as a _verification key_
+    ///    to the list of deferred keys for _transaction signature_
+    ///    check at the end of the VM execution.
+    /// 3. Places the `payload` on the stack (last item on top), discarding the contract.
+    ///
+    /// Note: the instruction never fails as the only check (signature verification)
+    /// is deferred until the end of VM execution.
     Signtx,
+
+    /// _contract(predicate, payload) prog sig_ **signid** → _items..._
+    ///
+    /// 1. Pop _string_ `sig`, _program_ `prog` and the _contract_ from the stack.
+    /// 2. Read the `predicate` from the contract.
+    /// 3. Place the `payload` on the stack (last item on top), discarding the contract.
+    /// 4. Instantiate the _transcript_:
+    ///     ```ascii
+    ///     T = Transcript("ZkVM.signid")
+    ///     ```
+    /// 5. Commit the _contract ID_ `contract.id` to the transcript:
+    ///     ```ascii
+    ///     T.append("contract", contract_id)
+    ///     ```
+    /// 6. Commit the program `prog` to the transcript:
+    ///     ```ascii
+    ///     T.append("prog", prog)
+    ///     ```
+    /// 7. Extract nonce commitment `R` and scalar `s` from a 64-byte string `sig`:
+    ///     ```ascii
+    ///     R = sig[ 0..32]
+    ///     s = sig[32..64]
+    ///     ```
+    /// 8. Perform the _signature protocol_ using the transcript `T`, public key `P = predicate` and the values `R` and `s`:
+    ///     ```ascii
+    ///     (s = dlog(R) + e·dlog(P))
+    ///     s·B  ==  R + c·P
+    ///     ```
+    /// 9. Add the statement to the list of _deferred point operations_.
+    /// 10. Set the `prog` as current.
+    ///
+    /// Fails if:
+    /// 1. `sig` is not a 64-byte long _string_,
+    /// 2. or `prog` is not a _program_,
+    /// 3. or `contract` is not a _contract_.
     Signid,
+
+    /// _contract(predicate, payload) prog sig_ **signtag** → _items... tag_
+    ///
+    /// 1. Pop _string_ `sig`, _program_ `prog` and the _contract_ from the stack.
+    /// 2. Read the `predicate` from the contract.
+    /// 3. Place the `payload` on the stack (last item on top), discarding the contract.
+    /// 4. Verifies that the top item is a _string_, and reads it as a `tag`. The item remains on the stack.
+    /// 5. Instantiate the _transcript_:
+    ///     ```ascii
+    ///     T = Transcript("ZkVM.signtag")
+    ///     ```
+    /// 6. Commit the `tag` to the transcript:
+    ///     ```ascii
+    ///     T.append("tag", tag)
+    ///     ```
+    /// 7. Commit the program `prog` to the transcript:
+    ///     ```ascii
+    ///     T.append("prog", prog)
+    ///     ```
+    /// 8. Extract nonce commitment `R` and scalar `s` from a 64-byte data `sig`:
+    ///     ```ascii
+    ///     R = sig[ 0..32]
+    ///     s = sig[32..64]
+    ///     ```
+    /// 9. Perform the _signature protocol_ using the transcript `T`, public key `P = predicate` and the values `R` and `s`:
+    ///     ```ascii
+    ///     (s = dlog(R) + e·dlog(P))
+    ///     s·B  ==  R + c·P
+    ///     ```
+    /// 10. Add the statement to the list of _deferred point operations_.
+    /// 11. Set the `prog` as current.
+    ///
+    /// Fails if:
+    /// 1. `sig` is not a 64-byte long _string_,
+    /// 2. or `prog` is not a _program_,
+    /// 3. or `contract` is not a _contract_,
+    /// 4. or last item in the `payload` (`tag`) is not a _string_.
     Signtag,
+
+    /// Unassigned opcode.
     Ext(u8),
 }
 

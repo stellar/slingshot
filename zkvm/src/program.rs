@@ -35,20 +35,32 @@ pub enum ProgramItem {
 
 macro_rules! doc_expr {
     ($opname:expr, $op:ident) => {
-        concat!("Adds [`", $opname, "`](crate::ops::Instruction::", stringify!($op), ") instruction.")
-    }
+        concat!(
+            "Adds [`",
+            $opname,
+            "`](crate::ops::Instruction::",
+            stringify!($op),
+            ") instruction."
+        )
+    };
 }
 
 macro_rules! def_op {
-    ($func_name:ident, $op:ident, $opname:expr) => (
+    ($func_name:ident, $op:ident, $opname:expr) => {
         def_op_inner!($func_name, $op, doc_expr!($opname, $op));
-    );
-    ($func_name:ident, $op:ident, $arg_type:ty, $opname:expr) => (
+    };
+    ($func_name:ident, $op:ident, $arg_type:ty, $opname:expr) => {
         def_op_inner!($func_name, $op, $arg_type, doc_expr!($opname, $op));
-    );
-    ($func_name:ident, $op:ident, $arg_type1:ty, $arg_type2:ty, $opname:expr) => (
-        def_op_inner!($func_name, $op, $arg_type1, $arg_type2, doc_expr!($opname, $op));
-    );
+    };
+    ($func_name:ident, $op:ident, $arg_type1:ty, $arg_type2:ty, $opname:expr) => {
+        def_op_inner!(
+            $func_name,
+            $op,
+            $arg_type1,
+            $arg_type2,
+            doc_expr!($opname, $op)
+        );
+    };
 }
 
 macro_rules! def_op_inner {
@@ -93,9 +105,7 @@ impl core::ops::Deref for Program {
     }
 }
 
-#[allow(missing_docs)]
 impl Program {
-
     /// Creates an empty `Program`.
     pub fn new() -> Self {
         Program(vec![])
@@ -169,15 +179,14 @@ impl Program {
     def_op!(input, Input, "input");
     def_op!(output, Output, usize, "output:k");
     def_op!(contract, Contract, usize, "contract:k");
-    
+
     def_op!(log, Log, "log");
     def_op!(call, Call, "call");
-    
+
     def_op!(signtx, Signtx, "signtx");
     def_op!(signid, Signid, "signid");
     def_op!(signtag, Signtag, "signtag");
-    
-    
+
     /// Takes predicate tree and index of program in Merkle tree to verify
     /// the program's membership in that Merkle tree and call the program.
     pub fn choose_call(
@@ -201,8 +210,6 @@ impl Program {
     pub fn to_vec(self) -> Vec<Instruction> {
         self.0
     }
-
-
 }
 
 impl Encodable for ProgramItem {
