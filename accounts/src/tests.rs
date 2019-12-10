@@ -151,7 +151,7 @@ fn basic_accounts_test() {
             for stored_utxo in spent_utxos.iter() {
                 p.push(stored_utxo.contract());
                 p.input();
-                p.sign_tx();
+                p.signtx();
             }
 
             let pmnt = payment_receiver.blinded_value();

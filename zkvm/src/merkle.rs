@@ -1,6 +1,5 @@
 use crate::encoding::{self, Encodable, SliceReader};
 use crate::errors::VMError;
-use core::borrow::Borrow;
 use core::marker::PhantomData;
 use merlin::Transcript;
 use serde::{Deserialize, Serialize};
@@ -61,7 +60,7 @@ impl MerkleTree {
     {
         list.into_iter()
             .fold(Self::build_root(label), |mut builder, item| {
-                builder.append(item.borrow());
+                builder.append(&item);
                 builder
             })
             .root()

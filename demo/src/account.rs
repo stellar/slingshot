@@ -346,7 +346,7 @@ impl Wallet {
             let program = zkvm::Program::build(|p| {
                 p.push(anchoring_utxo.contract_witness());
                 p.input();
-                p.sign_tx();
+                p.signtx();
 
                 let issuance_predicate =
                     zkvm::Predicate::Key(zkvm::VerificationKey::from_secret(&issuance_key));
@@ -358,7 +358,7 @@ impl Wallet {
                     .push(issuance_metadata) // stack: qty-var, flv-var, data
                     .push(issuance_predicate) // stack: qty-var, flv-var, data, flv-pred
                     .issue() // stack: issue-contract
-                    .sign_tx(); // stack: issued-value
+                    .signtx(); // stack: issued-value
 
                 let pmnt = payment_receiver.blinded_value();
                 p.push(pmnt.qty);
@@ -502,7 +502,7 @@ impl Wallet {
                 for stored_utxo in spent_utxos.iter() {
                     p.push(stored_utxo.contract_witness());
                     p.input();
-                    p.sign_tx();
+                    p.signtx();
                 }
 
                 let pmnt = payment_receiver.blinded_value();

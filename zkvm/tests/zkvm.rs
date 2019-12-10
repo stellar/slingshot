@@ -31,7 +31,7 @@ impl ProgramHelper for Program {
             .push(String::default()) // stack: qty-var, flv-var, data
             .push(issuance_pred) // stack: qty-var, flv-var, data, pred
             .issue() // stack: issue-contract
-            .sign_tx(); // stack: issued-value
+            .signtx(); // stack: issued-value
         self
     }
 
@@ -39,7 +39,7 @@ impl ProgramHelper for Program {
         let prev_output = make_output(qty, flv, pred);
         self.push(prev_output) // stack: input-data
             .input() // stack: input-contract
-            .sign_tx(); // stack: input-value
+            .signtx(); // stack: input-value
         self
     }
 
@@ -457,7 +457,7 @@ fn taproot_happy_path() {
     let prog = Program::build(|p| {
         p.push(prev_output)
             .input()
-            .sign_tx()
+            .signtx()
             .push(Predicate::Key(pk)) // send to the key
             .output(1);
     });

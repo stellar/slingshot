@@ -15,23 +15,29 @@ use crate::merkle::{Hash, MerkleItem, MerkleTree};
 use crate::transcript::TranscriptProtocol;
 use crate::verifier::Verifier;
 
-/// Transaction log. `TxLog` is a type alias for `Vec<TxEntry>`.
+/// Transaction log, a list of all effects of a transaction called [entries](TxEntry).
 pub type TxLog = Vec<TxEntry>;
 
-/// Transaction ID is a unique 32-byte identifier of a transaction
+/// Transaction ID is a unique 32-byte identifier of a transaction.
 #[derive(Copy, Clone, PartialEq, Debug, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct TxID(pub Hash);
 
-/// Entry in a transaction log
-#[allow(missing_docs)]
+/// Entry in a transaction log. All entries are hashed into a [transaction ID](TxID).
 #[derive(Clone, Debug)]
 pub enum TxEntry {
+    /// Transaction [header](self::TxHeader).
+    /// This entry is not present in the [transaction log](TxLog), but used only for computing a [TxID](TxID) hash.
     Header(TxHeader),
+    /// Asset issuance entry that consists of a _flavor commitment_ and a _quantity commitment_.
     Issue(CompressedRistretto, CompressedRistretto),
+    /// Asset retirement entry that consists of a _flavor commitment_ and a _quantity commitment_.
     Retire(CompressedRistretto, CompressedRistretto),
+    /// Input entry that signals that a contract was spent. Contains the [ID](crate::contract::ContractID) of a contract.
     Input(ContractID),
+    /// Output entry that signals that a contract was created. Contains the [Contract](crate::contract::Contract).
     Output(Contract),
+    /// Plain data entry created by [`log`](crate::ops::Instruction::Log) instruction. Contains an arbitrary binary string.
     Data(Vec<u8>),
 }
 

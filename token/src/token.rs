@@ -37,7 +37,7 @@ impl Token {
             .push(String::Opaque(self.metadata.clone())) // stack: qty-var, flv-var, data
             .push(self.issuance_predicate.clone()) // stack: qty-var, flv-var, data, flv-pred
             .issue() // stack: issue-contract
-            .sign_tx() // stack: issued-value
+            .signtx() // stack: issued-value
     }
 
     /// Adds instructions to a program to issue a given quantity
@@ -54,7 +54,7 @@ impl Token {
     /// Adds instructions to a program to retire a given UTXO.
     /// TBD: accept a qty/Token pairing to retire.
     pub fn retire<'a>(program: &'a mut Program, prev_output: Contract) -> &'a mut Program {
-        program.push(prev_output).input().sign_tx().retire()
+        program.push(prev_output).input().signtx().retire()
     }
 }
 
@@ -74,7 +74,7 @@ mod tests {
             payload: vec![],
             anchor: Anchor::from_raw_bytes([0u8; 32]),
         };
-        p.push(contract).input().sign_tx();
+        p.push(contract).input().signtx();
     }
 
     #[test]

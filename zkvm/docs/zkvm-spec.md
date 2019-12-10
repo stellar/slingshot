@@ -904,7 +904,7 @@ Code | Instruction                | Stack diagram                              |
 0x0c | [`add`](#add)              |     _expr1 expr2_ → _expr3_                |
 0x0d | [`mul`](#mul)              |     _expr1 expr2_ → _expr3_                | Potentially adds multiplier in [CS](#constraint-system)
 0x0e | [`eq`](#eq)                |     _expr1 expr2_ → _constraint_           | 
-0x0f | [`range:n`](#range)        |            _expr_ → _expr_                 | Modifies [CS](#constraint-system)
+0x0f | [`range`](#range)          |            _expr_ → _expr_                 | Modifies [CS](#constraint-system)
 0x10 | [`and`](#and)              | _constr1 constr2_ → _constr3_              |
 0x11 | [`or`](#or)                | _constr1 constr2_ → _constr3_              |
 0x12 | [`not`](#not)              |         _constr1_ → _constr2_              | Modifies [CS](#constraint-system)
@@ -1106,15 +1106,13 @@ Fails if `ex1` and `ex2` are not both [expression types](#expression-type).
 
 #### range
 
-_expr_ **range:_n_** → _expr_
+_expr_ **range** → _expr_
 
 1. Pops an [expression](#expression-type) `expr`.
-2. Adds an `n`-bit range proof for `expr` to the [constraint system](#constraint-system) (see [Cloak protocol](../../spacesuit/spec.md) for the range proof definition).
+2. Adds an 64-bit range proof for `expr` to the [constraint system](#constraint-system) (see [Cloak protocol](../../spacesuit/spec.md) for the range proof definition).
 3. Pushes `expr` back to the stack.
 
-Immediate data `n` is encoded as one byte.
-
-Fails if `expr` is not an [expression type](#expression-type) or if `n` is not in range [0, 64].
+Fails if `expr` is not an [expression type](#expression-type).
 
 #### and
 
