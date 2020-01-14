@@ -51,10 +51,10 @@ mod tests {
 
     #[test]
     fn range_proof_gadget() {
-        use rand::rngs::OsRng;
+        use rand::thread_rng;
         use rand::Rng;
 
-        let mut rng = OsRng::new().unwrap();
+        let mut rng = thread_rng();
         let m = 3; // number of values to test per `n`
 
         for n in [2, 10, 32, 63].iter() {
