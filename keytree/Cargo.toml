@@ -5,14 +5,14 @@ authors = ["Tess Rinearson <tess.rinearson@gmail.com>", "Oleg Andreev <oleganza@
 edition = "2018"
 
 [dependencies]
-curve25519-dalek = { version = "1.0.1", features = ["serde"] }
+curve25519-dalek = { version = "2", features = ["serde"] }
 serde = { version = "1.0", features=["derive"] }
-merlin = "1.0.1"
-rand = "0.6"
+merlin = "2"
+rand = "0.7"
 
 [dependencies.starsig]
 path = "../starsig"
 
 [dev-dependencies]
-rand_chacha = "0.1"
+rand_chacha = "0.2"
 hex = "^0.3"
