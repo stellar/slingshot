@@ -5,10 +5,10 @@ authors = ["Henry de Valence <hdevalence@hdevalence.ca>", "Cathie Yun <cathieyun
 
 [dependencies]
 failure = "0.1"
-merlin = "1.0.1"
-rand = "0.6"
+merlin = "2"
+rand = "0.7"
 subtle = "2"
-curve25519-dalek = { version = "1.0.1", features = ["serde"] }
+curve25519-dalek = { version = "2", features = ["serde"] }
 
 [dependencies.bulletproofs]
 git = "https://github.com/dalek-cryptography/bulletproofs"
