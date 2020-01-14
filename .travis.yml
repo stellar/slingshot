@@ -20,7 +20,7 @@ matrix:
     script:
       - go test -v ./slidechain/... -timeout 60m
   - language: rust
-    rust: nightly-2019-08-19
+    rust: nightly-2019-11-06
     # per https://levans.fr/rust_travis_cache.html
     cache:
       directories:
@@ -35,7 +35,7 @@ matrix:
     - cargo test
     - RUSTFLAGS="-C opt-level=0" cargo bench "DONOTMATCHANYBENCHMARK"
   - language: rust
-    rust: nightly-2019-08-19
+    rust: nightly-2019-11-06
     # per https://levans.fr/rust_travis_cache.html
     cache:
       directories:
@@ -50,7 +50,7 @@ matrix:
     - cargo test
     - RUSTFLAGS="-C opt-level=0" cargo bench "DONOTMATCHANYBENCHMARK"
   - language: rust
-    rust: nightly-2019-08-19
+    rust: nightly-2019-11-06
     # per https://levans.fr/rust_travis_cache.html
     cache:
       directories:
@@ -65,7 +65,7 @@ matrix:
     - cargo test
     - RUSTFLAGS="-C opt-level=0" cargo bench "DONOTMATCHANYBENCHMARK"
   - language: rust
-    rust: nightly-2019-08-19
+    rust: nightly-2019-11-06
     # per https://levans.fr/rust_travis_cache.html
     cache:
       directories:
@@ -80,7 +80,7 @@ matrix:
     - cargo test
     - RUSTFLAGS="-C opt-level=0" cargo bench "DONOTMATCHANYBENCHMARK"
   - language: rust
-    rust: nightly-2019-08-19
+    rust: nightly-2019-11-06
     # per https://levans.fr/rust_travis_cache.html
     cache:
       directories:
@@ -95,7 +95,7 @@ matrix:
     - cargo test
     - RUSTFLAGS="-C opt-level=0" cargo bench "DONOTMATCHANYBENCHMARK"
   - language: rust
-    rust: nightly-2019-08-19
+    rust: nightly-2019-11-06
     # per https://levans.fr/rust_travis_cache.html
     cache:
       directories:
