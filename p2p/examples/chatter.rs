@@ -37,7 +37,7 @@ fn main() {
             );
 
             // Begin the UI.
-            let interactive_loop = Console::spawn(node.clone());
+            let interactive_loop = Console::spawn(node);
 
             // Spawn the notifications loop
             let notifications_loop = {
