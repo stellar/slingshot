@@ -1,13 +1,13 @@
-use std::net::{IpAddr, Ipv4Addr};
-use rand::thread_rng;
 use curve25519_dalek::scalar::Scalar;
+use rand::thread_rng;
+use std::net::{IpAddr, Ipv4Addr};
 
 use tokio::io;
 use tokio::prelude::*;
 use tokio::task;
 
 use p2p::cybershake;
-use p2p::{Node, NodeHandle, PeerID, NodeConfig, NodeNotification};
+use p2p::{Node, NodeConfig, NodeHandle, NodeNotification, PeerID};
 
 fn main() {
     // Create the runtime.
@@ -72,7 +72,6 @@ fn main() {
         })
         .unwrap()
 }
-
 
 enum UserCommand {
     Nop,

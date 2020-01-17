@@ -1,7 +1,7 @@
 extern crate curve25519_dalek;
+extern crate futures;
 extern crate merlin;
 extern crate rand_core;
-extern crate futures;
 extern crate tokio;
 
 pub mod cybershake;

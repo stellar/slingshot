@@ -556,17 +556,14 @@ impl Node {
 
         // Do at most 5 full cycles - not 100% precise, but won't be too long if we somehow have a large dataset.
         for _ in 0..5 {
-            
             let mut updated = false;
 
             for (pid, peerstate) in self.peers.iter() {
-
                 self.peer_priorities.batch(|priorities| {
                     let priority = priorities.get(&pid).unwrap_or(LOW_PRIORITY);
                     for (i, paddr) in peerstate.peer_addrs.iter().enumerate() {
-                        updated = updated
-                            || priorities
-                                .insert(paddr.id, priority + (i as Priority) + 1);
+                        updated =
+                            updated || priorities.insert(paddr.id, priority + (i as Priority) + 1);
                     }
                 });
             }
