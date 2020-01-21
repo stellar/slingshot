@@ -18,6 +18,7 @@ mod db;
 mod handlers;
 mod mempool;
 mod names;
+mod net;
 mod schema;
 mod sidebar;
 mod user;
@@ -25,5 +26,6 @@ mod util;
 
 fn main() {
     db::prepare_db_if_needed();
-    handlers::launch_rocket_app();
+    let handle = net::launch_p2p();
+    handlers::launch_rocket_app(handle);
 }

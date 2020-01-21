@@ -140,7 +140,7 @@ impl PeerLink {
                         PeerEvent::Stopped => Err(None),
                     }
                 })
-                    .await;
+                .await;
 
                 // Second, handle the errors that occured before or after event processing.
                 if let Err(_maybe_err) = result {

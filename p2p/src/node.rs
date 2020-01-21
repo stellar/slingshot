@@ -293,7 +293,7 @@ impl Node {
 
             Ok(())
         }
-            .await;
+        .await;
         self.notify_on_error(result, |e| NodeNotification::InboundConnectionFailure(e))
             .await;
     }

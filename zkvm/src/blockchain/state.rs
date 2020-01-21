@@ -22,6 +22,7 @@ pub struct BlockchainState {
 }
 
 /// Implements a pool of unconfirmed (not-in-the-block) transactions.
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Mempool<T: MempoolItem> {
     state: BlockchainState,
     timestamp_ms: u64,

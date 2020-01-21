@@ -13,7 +13,10 @@ cargo install diesel_cli --no-default-features --features sqlite
 diesel database reset
 
 # Run the app
-cargo run
+ROCKET_PORT=8000 cargo run
+
+# To run additional nodes, let OS assign a random port:
+ROCKET_PORT=0 cargo run
 ```
 
 ## Data model
