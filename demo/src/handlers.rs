@@ -14,18 +14,27 @@ use rocket_contrib::templates::Template;
 use bulletproofs::BulletproofGens;
 use zkvm::utreexo;
 
+use p2p::Direction;
+
 use crate::account::{AccountRecord, Utxo, Wallet};
 use crate::asset::AssetRecord;
 use crate::blockchain::BlockRecord;
 use crate::db::{self, DBConnection};
 use crate::mempool::{self, Mempool, MempoolTx};
+use crate::net;
 use crate::schema;
 use crate::sidebar::Sidebar;
 use crate::user::User;
 use crate::util;
 
+use crate::net::P2PHandle;
+
 #[get("/")]
-fn network_status(dbconn: DBConnection, sidebar: Sidebar) -> Result<Template, NotFound<String>> {
+fn network_status(
+    dbconn: DBConnection,
+    sidebar: Sidebar,
+    p2p: State<Mutex<P2PHandle>>,
+) -> Result<Template, NotFound<String>> {
     use schema::block_records::dsl::*;
 
     let blk_record = block_records
@@ -33,9 +42,24 @@ fn network_status(dbconn: DBConnection, sidebar: Sidebar) -> Result<Template, No
         .first::<BlockRecord>(&dbconn.0)
         .map_err(|_| NotFound("Block not found".into()))?;
 
+    let mut p2p = p2p.lock().unwrap();
     let context = json!({
         "sidebar": sidebar.json,
         "network_status": blk_record.network_status_summary(),
+        "p2p": {
+            "listen_addr": p2p.listen_address().to_string(),
+            "peer_id": p2p.peer_id().to_string()
+        },
+        "peers": p2p.peers().into_iter().map(|peer_info| {
+            json!({
+                "direction": match peer_info.direction {
+                    Direction::Inbound => "Inbound",
+                    Direction::Outbound => "Outbound",
+                }.to_string(),
+                "address": peer_info.address.to_string(),
+                "id": peer_info.id.to_string(),
+            })
+        }).collect::<Vec<_>>()
     });
 
     Ok(Template::render("network/status", &context))
@@ -44,9 +68,7 @@ fn network_status(dbconn: DBConnection, sidebar: Sidebar) -> Result<Template, No
 #[get("/network/mempool")]
 fn network_mempool(mempool: State<Mutex<Mempool>>, sidebar: Sidebar) -> Template {
     // Add tx to the mempool so we can make blocks of multiple txs in the demo.
-    let mempool = mempool
-        .lock()
-        .expect("Threads haven't crashed holding the mutex lock");
+    let mempool = mempool.lock().unwrap();
 
     let context = json!({
         "sidebar": sidebar.json,
@@ -60,6 +82,27 @@ fn network_mempool(mempool: State<Mutex<Mempool>>, sidebar: Sidebar) -> Template
     Template::render("network/mempool", &context)
 }
 
+#[derive(FromForm)]
+struct ConnectPeerForm {
+    address: String,
+}
+
+#[post("/network/connect", data = "<form>")]
+fn network_connect_peer(
+    form: Form<ConnectPeerForm>,
+    p2p: State<Mutex<P2PHandle>>,
+) -> Result<Flash<Redirect>, Flash<Redirect>> {
+    let flash_error = |msg| Flash::error(Redirect::to(uri!(network_status)), msg);
+
+    let mut p2p = p2p.lock().unwrap();
+
+    p2p.connect(form.address.clone())
+        .map_err(|e| flash_error(e))?;
+
+    let msg = format!("Peer connected.");
+    Ok(Flash::success(Redirect::to(uri!(network_status)), msg))
+}
+
 #[post("/network/mempool/makeblock")]
 fn network_mempool_makeblock(
     dbconn: DBConnection,
@@ -68,9 +111,7 @@ fn network_mempool_makeblock(
     let back_url = uri!(network_mempool);
     let flash_error = |msg| Flash::error(Redirect::to(back_url.clone()), msg);
 
-    let mut mempool = mempool
-        .lock()
-        .expect("Threads haven't crashed holding the mutex lock");
+    let mut mempool = mempool.lock().unwrap();
 
     let timestamp_ms = util::current_timestamp_ms();
 
@@ -237,9 +278,7 @@ fn nodes_show(
     };
 
     // load mempool txs and annotate them.
-    let mempool = mempool
-        .lock()
-        .expect("Threads haven't crashed holding the mutex lock");
+    let mempool = mempool.lock().unwrap();
 
     let mut wallet_pending = acc_record.wallet();
     let pending_txs = mempool
@@ -384,9 +423,9 @@ fn pay(
     let txid = verified_tx.id;
 
     // Add tx to the mempool so we can make blocks of multiple txs in the demo.
+    let mut mempool = mempool.lock().unwrap();
+
     mempool
-        .lock()
-        .expect("Thread should have not crashed holding the unlocked mutex.")
         .append(MempoolTx {
             tx,
             verified_tx,
@@ -600,7 +639,7 @@ fn assets_create(
     // Add tx to the mempool so we can make blocks of multiple txs in the demo.
     mempool
         .lock()
-        .expect("Thread should have not crashed holding the unlocked mutex.")
+        .unwrap()
         .append(MempoolTx {
             tx,
             verified_tx,
@@ -673,17 +712,18 @@ fn prepare_mempool() -> Mempool {
     Mempool::new(blk_record.state(), timestamp_ms)
 }
 
-pub fn launch_rocket_app() {
+pub fn launch_rocket_app(p2p_handle: net::P2PHandle) {
     // TBD: make the gens size big enough
     let bp_gens = BulletproofGens::new(256, 1);
-    let mempool = Mutex::new(prepare_mempool());
+    let mempool = prepare_mempool();
 
     rocket::ignite()
         .attach(DBConnection::fairing())
         .attach(Template::fairing())
         .register(catchers![not_found])
-        .manage(mempool)
+        .manage(Mutex::new(mempool))
         .manage(bp_gens)
+        .manage(Mutex::new(p2p_handle))
         .mount("/static", StaticFiles::from("static"))
         .mount("/favicon.ico", StaticFiles::from("static"))
         .mount(
@@ -694,6 +734,7 @@ pub fn launch_rocket_app() {
                 network_mempool_makeblock,
                 network_blocks,
                 network_block_show,
+                network_connect_peer,
                 nodes_show,
                 nodes_create,
                 assets_show,

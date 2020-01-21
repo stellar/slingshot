@@ -30,6 +30,46 @@
       </tr>
     </tbody>
   </table-->
+
+  <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3">
+    <h2 class="h2">Connections</h2>
+  </div>
+
+  <table class="table table-bordered block-header">
+    <thead>
+      <tr>
+        <th width="15%">Direction</th>
+        <th width="25%">Address</th>
+        <th>Peer ID</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><b>Listening</b></td>
+        <td><code>{{p2p.listen_addr}}</code></td>
+        <td><code>{{p2p.peer_id}}</code></td>
+      <tr>
+      {% for peer in peers %}
+        <tr>
+          <td>{{peer.direction}}</td>
+          <td><code>{{peer.address}}</code></td>
+          <td><code>{{peer.id}}</code></td>
+        <tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+
+  <div>
+  <p>
+    <h4>Connect a peer</h4>
+  </p>
+  <form class="form-inline" action="/network/connect" method="POST">
+    <input type="text" class="form-control mb-2 mr-sm-2" id="connect-peer-addr" name="address" placeholder="xxx.xx.xx.xx:pppp">
+    <button type="submit" class="btn btn-primary mb-2">Connect</button>
+  </form>
+  </div>
+
 {% endblock main %}
 
 {% block page_script %}

@@ -15,7 +15,8 @@ curve25519-dalek = { version = "2", features = ["serde"] }
 serde = { version = "1.0", features=["derive"] }
 rand_chacha = "0.2"
 hex = "^0.3"
-
+futures = "0.3"
+tokio = {version = "0.2", features=["full","sync"]}
 
 [dependencies.bulletproofs]
 git = "https://github.com/dalek-cryptography/bulletproofs"
@@ -33,6 +34,9 @@ path = "../zkvm"
 
 [dependencies.accounts]
 path = "../accounts"
+
+[dependencies.p2p]
+path = "../p2p"
 
 [dependencies.rocket_contrib]
 version = "0.4.2"
