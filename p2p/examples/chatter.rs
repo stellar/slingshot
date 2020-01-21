@@ -108,7 +108,7 @@ impl Console {
                     let cmd = Console::parse_command(&line)?;
                     console.process_command(cmd).await
                 }
-                    .await;
+                .await;
 
                 match result {
                     Err(e) => {
