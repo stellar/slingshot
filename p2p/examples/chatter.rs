@@ -41,7 +41,6 @@ fn main() {
 
             // Spawn the notifications loop
             let notifications_loop = {
-                #[allow(unreachable_code)]
                 task::spawn_local(async move {
                     while let Some(notif) = notifications_channel.recv().await {
                         match notif {
@@ -60,7 +59,10 @@ fn main() {
                             NodeNotification::OutboundConnectionFailure(err) => {
                                 println!("\n=> Outbound connection failure: {:?}", err)
                             }
-                            NodeNotification::Shutdown => println!("\n=> Node did shutdown."),
+                            NodeNotification::Shutdown => {
+                                println!("\n=> Node did shutdown.");
+                                break;
+                            }
                         }
                     }
                     Result::<(), String>::Ok(())
