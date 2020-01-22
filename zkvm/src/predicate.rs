@@ -10,6 +10,7 @@ use curve25519_dalek::ristretto::CompressedRistretto;
 use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
 use musig::{BatchVerification, SingleVerifier, VerificationKey};
+use serde::{Deserialize, Serialize};
 
 use crate::encoding;
 use crate::encoding::Encodable;
@@ -20,7 +21,7 @@ use crate::program::{Program, ProgramItem};
 use crate::transcript::TranscriptProtocol;
 
 /// Represents a ZkVM predicate with its optional witness data.
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Deserialize, Serialize)]
 pub enum Predicate {
     /// Verifier's view on the predicate in a compressed form to defer decompression cost.
     Opaque(CompressedRistretto),
@@ -35,7 +36,7 @@ pub enum Predicate {
 }
 
 /// Represents a ZkVM predicate tree.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 pub struct PredicateTree {
     /// Vector of the programs and blinding factors, stored as Merkelized predicate leafs.
     leaves: Vec<PredicateLeaf>,
@@ -69,7 +70,7 @@ pub struct CallProof {
 /// For secrecy, each program is blinded via a dummy neighbour called the "blinding leaf".
 /// From the verifier's perspective, the hash of this node simply appears as part of a merkle proof,
 /// but from the prover's perspective, some leafs are dummy uniformly random nodes.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 pub enum PredicateLeaf {
     Program(ProgramItem),
     Blinding([u8; 32]),

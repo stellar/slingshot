@@ -1,6 +1,7 @@
 //! Arithmetic and conversion API for ScalarWitness.
 
 use curve25519_dalek::scalar::Scalar;
+use serde::{Deserialize, Serialize};
 use spacesuit::SignedInteger;
 
 use crate::encoding;
@@ -10,7 +11,7 @@ use std::ops::{Add, Mul, Neg, Sub};
 use std::u64;
 
 /// Represents a concrete kind of a number represented by a scalar.
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, Deserialize, Serialize)]
 pub enum ScalarWitness {
     /// `ScalarKind::Integer` represents a signed integer with 64-bit absolute value (think "i65")
     Integer(SignedInteger),

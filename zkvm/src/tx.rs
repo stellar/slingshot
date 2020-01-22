@@ -24,7 +24,7 @@ pub type TxLog = Vec<TxEntry>;
 pub struct TxID(pub Hash);
 
 /// Entry in a transaction log. All entries are hashed into a [transaction ID](TxID).
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub enum TxEntry {
     /// Transaction [header](self::TxHeader).
     /// This entry is not present in the [transaction log](TxLog), but used only for computing a [TxID](TxID) hash.
@@ -94,7 +94,7 @@ pub struct Tx {
 }
 
 /// Represents a verified transaction: a txid and a list of state updates.
-#[derive(Clone)]
+#[derive(Clone, Deserialize, Serialize)]
 pub struct VerifiedTx {
     /// Transaction header
     pub header: TxHeader,
