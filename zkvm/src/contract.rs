@@ -65,10 +65,10 @@ impl Encodable for Contract {
         }
     }
     /// Precise length of a serialized output
-    fn serialized_length(&self) -> usize {
+    fn encoded_length(&self) -> usize {
         let mut size = 32 + 32 + 4;
         for item in self.payload.iter() {
-            size += item.serialized_length();
+            size += item.encoded_length();
         }
         size
     }
@@ -164,13 +164,13 @@ impl Encodable for PortableItem {
             // String = 0x00 || LE32(len) || <bytes>
             PortableItem::String(d) => {
                 encoding::write_u8(STRING_TYPE, buf);
-                encoding::write_u32(d.serialized_length() as u32, buf);
+                encoding::write_u32(d.encoded_length() as u32, buf);
                 d.encode(buf);
             }
             // Program = 0x01 || LE32(len) || <bytes>
             PortableItem::Program(p) => {
                 encoding::write_u8(PROG_TYPE, buf);
-                encoding::write_u32(p.serialized_length() as u32, buf);
+                encoding::write_u32(p.encoded_length() as u32, buf);
                 p.encode(buf);
             }
             // Value = 0x02 || <32 bytes> || <32 bytes>
@@ -182,10 +182,10 @@ impl Encodable for PortableItem {
         }
     }
     /// Precise length of a serialized payload item
-    fn serialized_length(&self) -> usize {
+    fn encoded_length(&self) -> usize {
         match self {
-            PortableItem::String(d) => 1 + 4 + d.serialized_length(),
-            PortableItem::Program(p) => 1 + 4 + p.serialized_length(),
+            PortableItem::String(d) => 1 + 4 + d.encoded_length(),
+            PortableItem::Program(p) => 1 + 4 + p.encoded_length(),
             PortableItem::Value(_) => 1 + 64,
         }
     }

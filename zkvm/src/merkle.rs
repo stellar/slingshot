@@ -387,7 +387,7 @@ impl Encodable for Path {
         }
     }
 
-    fn serialized_length(&self) -> usize {
+    fn encoded_length(&self) -> usize {
         return 8 + 4 + 32 * self.neighbors.len();
     }
 }

@@ -81,7 +81,7 @@ impl Encodable for Predicate {
         encoding::write_point(&self.to_point(), prog);
     }
     /// Returns the number of bytes needed to serialize the Predicate.
-    fn serialized_length(&self) -> usize {
+    fn encoded_length(&self) -> usize {
         32
     }
 }
@@ -287,8 +287,8 @@ impl Encodable for CallProof {
         encoding::write_point(self.verification_key.as_point(), buf);
         self.path.encode(buf);
     }
-    fn serialized_length(&self) -> usize {
-        32 + self.path.serialized_length()
+    fn encoded_length(&self) -> usize {
+        32 + self.path.encoded_length()
     }
 }
 

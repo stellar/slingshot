@@ -280,7 +280,7 @@ impl Encodable for Commitment {
         encoding::write_point(&self.to_point(), buf);
     }
     /// Returns the number of bytes needed to serialize the Commitment.
-    fn serialized_length(&self) -> usize {
+    fn encoded_length(&self) -> usize {
         32
     }
 }

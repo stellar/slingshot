@@ -112,7 +112,7 @@ impl Encodable for TxHeader {
         encoding::write_u64(self.mintime_ms, buf);
         encoding::write_u64(self.maxtime_ms, buf);
     }
-    fn serialized_length(&self) -> usize {
+    fn encoded_length(&self) -> usize {
         8 * 3
     }
 }
@@ -148,13 +148,13 @@ impl Encodable for Tx {
     }
 
     /// Returns the size in bytes required to serialize the `Tx`.
-    fn serialized_length(&self) -> usize {
+    fn encoded_length(&self) -> usize {
         // header is 8 bytes * 3 fields = 24 bytes
         // program length is 4 bytes
         // program is self.program.len() bytes
         // signature is 64 bytes
         // proof is 14*32 + the ipp bytes
-        self.header.serialized_length() + 4 + self.program.len() + 64 + self.proof.serialized_size()
+        self.header.encoded_length() + 4 + self.program.len() + 64 + self.proof.serialized_size()
     }
 }
 impl Tx {
