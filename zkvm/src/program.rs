@@ -94,8 +94,8 @@ impl Encodable for Program {
             i.borrow().encode(buf);
         }
     }
-    fn serialized_length(&self) -> usize {
-        self.0.iter().map(|p| p.serialized_length()).sum()
+    fn encoded_length(&self) -> usize {
+        self.0.iter().map(|p| p.encoded_length()).sum()
     }
 }
 
@@ -222,9 +222,9 @@ impl Encodable for ProgramItem {
             }
         }
     }
-    fn serialized_length(&self) -> usize {
+    fn encoded_length(&self) -> usize {
         match self {
-            ProgramItem::Program(prog) => prog.serialized_length(),
+            ProgramItem::Program(prog) => prog.encoded_length(),
             ProgramItem::Bytecode(vec) => vec.len(),
         }
     }

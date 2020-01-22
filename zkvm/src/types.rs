@@ -199,13 +199,13 @@ impl Item {
 
 impl Encodable for String {
     /// Returns the number of bytes needed to serialize the String.
-    fn serialized_length(&self) -> usize {
+    fn encoded_length(&self) -> usize {
         match self {
             String::Opaque(data) => data.len(),
-            String::Predicate(predicate) => predicate.serialized_length(),
-            String::Commitment(commitment) => commitment.serialized_length(),
-            String::Scalar(scalar) => scalar.serialized_length(),
-            String::Output(output) => output.serialized_length(),
+            String::Predicate(predicate) => predicate.encoded_length(),
+            String::Commitment(commitment) => commitment.encoded_length(),
+            String::Scalar(scalar) => scalar.encoded_length(),
+            String::Output(output) => output.encoded_length(),
         }
     }
     /// Encodes the data item to an opaque bytestring.

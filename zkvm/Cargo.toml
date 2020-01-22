@@ -1,6 +1,6 @@
 [package]
 name = "zkvm"
-version = "0.0.0"
+version = "0.1.0"
 authors = ["Oleg Andreev <oleganza@gmail.com>"]
 edition = "2018"
 readme = "README.md"
