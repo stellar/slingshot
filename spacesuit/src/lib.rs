@@ -5,14 +5,6 @@
 //! See the [Cloak specification](https://github.com/interstellar/slingshot/blob/main/spacesuit/spec.md) for details.
 #![deny(missing_docs)]
 
-extern crate bulletproofs;
-extern crate core;
-extern crate curve25519_dalek;
-extern crate merlin;
-extern crate rand;
-extern crate serde;
-extern crate subtle;
-
 mod bit_range;
 mod cloak;
 mod mix;
@@ -21,11 +13,11 @@ mod shuffle;
 mod signed_integer;
 mod value;
 
-pub use bit_range::BitRange;
-pub use cloak::cloak;
-pub use range_proof::range_proof;
-pub use signed_integer::SignedInteger;
-pub use value::{AllocatedValue, CommittedValue, Value};
+pub use crate::bit_range::BitRange;
+pub use crate::cloak::cloak;
+pub use crate::range_proof::range_proof;
+pub use crate::signed_integer::SignedInteger;
+pub use crate::value::{AllocatedValue, CommittedValue, Value};
 
 // TBD: figure out if we need to export these at all
-pub use value::{ProverCommittable, VerifierCommittable};
+pub use crate::value::{ProverCommittable, VerifierCommittable};
