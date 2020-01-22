@@ -1,4 +1,4 @@
-use bit_range::BitRange;
+use crate::bit_range::BitRange;
 use bulletproofs::r1cs::{ConstraintSystem, LinearCombination, R1CSError};
 use curve25519_dalek::scalar::Scalar;
 

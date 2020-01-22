@@ -2,6 +2,7 @@
 name = "spacesuit"
 version = "0.1.0"
 authors = ["Henry de Valence <hdevalence@hdevalence.ca>", "Cathie Yun <cathieyun@gmail.com>", "Oleg Andreev <oleganza@gmail.com>"]
+edition = "2018"
 
 [dependencies]
 failure = "0.1"

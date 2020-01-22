@@ -1,8 +1,8 @@
+use crate::value::{AllocatedValue, Value};
 use bulletproofs::r1cs::{
     ConstraintSystem, R1CSError, RandomizableConstraintSystem, RandomizedConstraintSystem, Variable,
 };
 use core::cmp::{max, min};
-use value::{AllocatedValue, Value};
 
 /// Enforces that the output variables `y` are a valid reordering of the inputs variables `x`.
 pub fn scalar_shuffle<CS: RandomizedConstraintSystem>(
@@ -120,12 +120,12 @@ pub fn padded_shuffle<CS: RandomizableConstraintSystem>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::value::{ProverCommittable, VerifierCommittable};
     use bulletproofs::r1cs::{Prover, Verifier};
     use bulletproofs::{BulletproofGens, PedersenGens};
     use curve25519_dalek::ristretto::CompressedRistretto;
     use curve25519_dalek::scalar::Scalar;
     use merlin::Transcript;
-    use value::{ProverCommittable, VerifierCommittable};
 
     #[test]
     fn test_scalar_shuffle() {

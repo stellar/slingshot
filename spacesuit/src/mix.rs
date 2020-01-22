@@ -240,10 +240,10 @@ fn combine_by_flavor<CS: RandomizableConstraintSystem>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::value::{ProverCommittable, Value, VerifierCommittable};
     use bulletproofs::r1cs::{Prover, Verifier};
     use bulletproofs::{BulletproofGens, PedersenGens};
     use merlin::Transcript;
-    use value::{ProverCommittable, Value, VerifierCommittable};
 
     // Helper functions to make the tests easier to read
     fn yuan(q: u64) -> Value {

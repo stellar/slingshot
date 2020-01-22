@@ -1,8 +1,8 @@
+use crate::bit_range::BitRange;
+use crate::shuffle::{padded_shuffle, value_shuffle};
+use crate::value::AllocatedValue;
 use crate::{mix::k_mix, range_proof};
-use bit_range::BitRange;
 use bulletproofs::r1cs::{R1CSError, RandomizableConstraintSystem};
-use shuffle::{padded_shuffle, value_shuffle};
-use value::AllocatedValue;
 
 /// Enforces that the outputs are a valid rearrangement of the inputs, following the
 /// soundness and secrecy requirements in the [Cloak specification](../spec.md).
