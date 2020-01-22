@@ -1,5 +1,7 @@
 //! Definition of all instructions in ZkVM,
 //! their codes and decoding/encoding utility functions.
+use core::mem;
+use serde::{Deserialize, Serialize};
 
 use crate::encoding;
 use crate::encoding::Encodable;
@@ -8,10 +10,9 @@ use crate::errors::VMError;
 use crate::program::ProgramItem;
 use crate::scalar_witness::ScalarWitness;
 use crate::types::String;
-use core::mem;
 
 /// A decoded instruction.
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Deserialize, Serialize)]
 pub enum Instruction {
     /// **push:_n_:_x_** → _data_
     ///

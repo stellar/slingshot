@@ -9,6 +9,7 @@ use crate::types::String;
 
 use core::borrow::Borrow;
 use merlin::Transcript;
+use serde::{Deserialize, Serialize};
 
 /// A builder type for assembling a sequence of `Instruction`s with chained method calls.
 ///
@@ -21,11 +22,11 @@ use merlin::Transcript;
 ///            .output(1)
 ///            .to_vec()
 /// ```
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Deserialize, Serialize)]
 pub struct Program(Vec<Instruction>);
 
 /// Represents a view of a program.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 pub enum ProgramItem {
     /// `ProgramItem::Bytecode` represents the verifier's view - a Vector of bytecode-as-is.
     Bytecode(Vec<u8>),

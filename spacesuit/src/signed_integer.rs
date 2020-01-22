@@ -1,11 +1,12 @@
 //! Range-preserving arithmetic on signed integers with u64 absolute value.
 use core::ops::Neg;
 use curve25519_dalek::scalar::Scalar;
+use serde::{Deserialize, Serialize};
 use std::ops::{Add, Mul};
 use subtle::{Choice, ConditionallySelectable};
 
 /// Represents a signed integer with absolute value in the 64-bit range.
-#[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Deserialize, Serialize)]
 pub struct SignedInteger(i128);
 
 impl SignedInteger {

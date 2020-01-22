@@ -4,6 +4,7 @@
 use bulletproofs::{r1cs, r1cs::ConstraintSystem, PedersenGens};
 use curve25519_dalek::ristretto::CompressedRistretto;
 use curve25519_dalek::scalar::Scalar;
+use serde::{Deserialize, Serialize};
 use std::iter::FromIterator;
 use std::ops::{Add, Neg};
 use subtle::{ConditionallySelectable, ConstantTimeEq};
@@ -71,7 +72,7 @@ pub enum SecretConstraint {
 }
 
 /// Commitment is a represention of an _open_ or _closed_ Pedersen commitment.
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Deserialize, Serialize)]
 pub enum Commitment {
     /// Hides a secret value and its blinding factor in the Ristretto point.
     Closed(CompressedRistretto),
@@ -81,7 +82,7 @@ pub enum Commitment {
 }
 
 /// Prover's representation of the commitment secret: witness and blinding factor
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 pub struct CommitmentWitness {
     value: ScalarWitness,
     blinding: Scalar,

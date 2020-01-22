@@ -55,7 +55,7 @@ pub enum CopyableItem {
 }
 
 /// A data item.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 pub enum String {
     /// Opaque data item.
     Opaque(Vec<u8>),
@@ -76,7 +76,7 @@ pub enum String {
 /// Represents a value of an issued asset in the VM.
 /// Note: values do not necessarily have open commitments. Some can be reblinded,
 /// others can be passed-through to an output without going through `cloak` and the constraint system.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 pub struct Value {
     /// Commitment to value's quantity
     pub qty: Commitment,
