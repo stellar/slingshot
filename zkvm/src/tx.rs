@@ -16,7 +16,9 @@ use crate::transcript::TranscriptProtocol;
 use crate::verifier::Verifier;
 
 /// Transaction log, a list of all effects of a transaction called [entries](TxEntry).
-pub type TxLog = Vec<TxEntry>;
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct TxLog(Vec<TxEntry>);
 
 /// Transaction ID is a unique 32-byte identifier of a transaction.
 #[derive(Copy, Clone, PartialEq, Debug, Serialize, Deserialize)]
@@ -37,6 +39,8 @@ pub enum TxEntry {
     Input(ContractID),
     /// Output entry that signals that a contract was created. Contains the [Contract](crate::contract::Contract).
     Output(Contract),
+    /// Amount of fee being paid (transaction may have multiple fee entries).
+    Fee(u64),
     /// Plain data entry created by [`log`](crate::ops::Instruction::Log) instruction. Contains an arbitrary binary string.
     Data(Vec<u8>),
 }
@@ -231,6 +235,40 @@ impl TxEntry {
     }
 }
 
+impl TxLog {
+    /// Total amount of fees paid in the transaction
+    pub fn fee(&self) -> u64 {
+        self.0
+            .iter()
+            .map(|e| if let TxEntry::Fee(f) = e { *f } else { 0 })
+            .sum()
+    }
+
+    /// Adds an entry to the txlog.
+    pub fn push(&mut self, item: TxEntry) {
+        self.0.push(item);
+    }
+}
+
+impl From<Vec<TxEntry>> for TxLog {
+    fn from(v: Vec<TxEntry>) -> TxLog {
+        TxLog(v)
+    }
+}
+
+impl Into<Vec<TxEntry>> for TxLog {
+    fn into(self) -> Vec<TxEntry> {
+        self.0
+    }
+}
+
+impl core::ops::Deref for TxLog {
+    type Target = [TxEntry];
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
 impl MerkleItem for TxID {
     fn commit(&self, t: &mut Transcript) {
         t.append_message(b"txid", &self.0)
@@ -284,6 +322,9 @@ impl MerkleItem for TxEntry {
             }
             TxEntry::Output(contract) => {
                 t.append_message(b"output", contract.id().as_bytes());
+            }
+            TxEntry::Fee(fee) => {
+                t.append_u64(b"fee", *fee);
             }
             TxEntry::Data(data) => {
                 t.append_message(b"data", data);

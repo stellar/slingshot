@@ -101,7 +101,7 @@ where
             stack: Vec::new(),
             current_run: run,
             run_stack: Vec::new(),
-            txlog: vec![TxEntry::Header(header)],
+            txlog: vec![TxEntry::Header(header)].into(),
         }
     }
 
