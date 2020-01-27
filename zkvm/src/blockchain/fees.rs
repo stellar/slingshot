@@ -2,12 +2,12 @@
 use core::cmp::Ordering;
 
 /// Maximum amount of fee, which allows overflow-safe size-by-fee multiplication.
-pub const MAX_FEE: u64 = 1<<24;
+pub const MAX_FEE: u64 = 1 << 24;
 /// Maximum size of transaction which allows overflow-safe size-by-fee multiplication.
-pub const MAX_SIZE: u64 = 1<<24;
+pub const MAX_SIZE: u64 = 1 << 24;
 
 /// Fee rate is a ratio of the transaction fee to its size.
-#[derive(Copy,Clone,Debug)]
+#[derive(Copy, Clone, Debug)]
 pub struct FeeRate {
     fee: u64,
     size: u64,
@@ -17,8 +17,12 @@ impl FeeRate {
     /// Creates a new fee rate from a given fee and size.
     pub fn new(fee: u64, size: usize) -> Option<Self> {
         let size = size as u64;
-        if fee > MAX_FEE { return None; }
-        if size > MAX_SIZE { return None; }
+        if fee > MAX_FEE {
+            return None;
+        }
+        if size > MAX_SIZE {
+            return None;
+        }
         Some(FeeRate {
             fee,
             size: size as u64,
@@ -51,14 +55,14 @@ impl FeeRate {
 
 impl PartialEq for FeeRate {
     fn eq(&self, other: &Self) -> bool {
-        self.fee*other.size == self.size*other.fee
+        self.fee * other.size == self.size * other.fee
     }
 }
 impl Eq for FeeRate {}
 
 impl Ord for FeeRate {
     fn cmp(&self, other: &Self) -> Ordering {
-        (self.fee*other.size).cmp(&(self.size*other.fee))
+        (self.fee * other.size).cmp(&(self.size * other.fee))
     }
 }
 

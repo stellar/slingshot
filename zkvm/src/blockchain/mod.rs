@@ -2,8 +2,8 @@
 
 mod block;
 mod errors;
-mod state;
 mod fees;
+mod state;
 
 #[cfg(test)]
 mod tests;
