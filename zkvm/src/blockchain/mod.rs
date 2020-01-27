@@ -2,7 +2,6 @@
 
 mod block;
 mod errors;
-mod fees;
 mod state;
 
 #[cfg(test)]

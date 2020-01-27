@@ -72,6 +72,10 @@ pub enum VMError {
     #[fail(display = "Item is not a scalar.")]
     TypeNotScalar,
 
+    /// This error occurs when an instruction requires a u64 integer.
+    #[fail(display = "Item is not a LE64 integer.")]
+    TypeNotInt,
+
     /// This error occurs when an instruction requires a program item.
     #[fail(display = "Item is not a program item.")]
     TypeNotProgramItem,

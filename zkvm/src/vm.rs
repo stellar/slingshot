@@ -19,6 +19,7 @@ use crate::program::ProgramItem;
 use crate::scalar_witness::ScalarWitness;
 use crate::tx::{TxEntry, TxHeader, TxID, TxLog};
 use crate::types::*;
+use crate::fees;
 
 /// Current tx version determines which extension opcodes are treated as noops (see VM.extension flag).
 pub const CURRENT_VERSION: u64 = 1;
@@ -167,6 +168,7 @@ where
                 Instruction::Borrow => self.borrow()?,
                 Instruction::Retire => self.retire()?,
                 Instruction::Cloak(m, n) => self.cloak(m, n)?,
+                Instruction::Fee => self.fee()?,
                 Instruction::Input => self.input()?,
                 Instruction::Output(k) => self.output(k)?,
                 Instruction::Contract(k) => self.contract(k)?,
@@ -523,6 +525,29 @@ where
             self.push_item(v);
         }
 
+        Ok(())
+    }
+
+    // _value qty_ **fee** → ø
+    fn fee(&mut self) -> Result<(), VMError> {
+        let fee = self.pop_item()?.to_string()?.to_u64()?;
+        let val = self.pop_item()?.to_value()?;
+
+        // Qty == fee*B + 0*B_blinding
+        self.delegate.batch_verifier().append(
+            -Scalar::from(fee),
+            iter::once(Scalar::one()),
+            iter::once(val.qty.to_point().decompress()),
+        );
+
+        // Flv == 0*B + 0*B_blinding
+        self.delegate.batch_verifier().append(
+            fees::fee_flavor(),
+            iter::once(Scalar::one()),
+            iter::once(val.flv.to_point().decompress()),
+        );
+
+        self.txlog.push(TxEntry::Fee(fee));
         Ok(())
     }
 

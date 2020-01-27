@@ -1,4 +1,5 @@
 //! Fee mechanism.
+use curve25519_dalek::scalar::Scalar;
 use core::cmp::Ordering;
 
 /// Maximum amount of fee, which allows overflow-safe size-by-fee multiplication.
@@ -11,6 +12,11 @@ pub const MAX_SIZE: u64 = 1 << 24;
 pub struct FeeRate {
     fee: u64,
     size: u64,
+}
+
+/// Flavor of the asset used to pay the fees.
+pub fn fee_flavor() -> Scalar {
+    Scalar::zero()
 }
 
 impl FeeRate {
