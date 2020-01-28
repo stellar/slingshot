@@ -669,7 +669,7 @@ impl AccountRecord {
 
 impl AnnotatedTx {
     pub fn tx_details(&self, assets: &[AssetRecord]) -> JsonValue {
-        let (_txid, txlog) = self
+        let precomputed_tx = self
             .raw_tx
             .precompute()
             .expect("Our blockchain does not have invalid transactions.");
@@ -677,14 +677,14 @@ impl AnnotatedTx {
         json!({
             "block_height": self.block_height,
             "generic_tx": BlockRecord::tx_details(&self.raw_tx),
-            "inputs": &txlog.iter().enumerate().filter_map(|(i,e)| {
+            "inputs": &precomputed_tx.log.iter().enumerate().filter_map(|(i,e)| {
                 e.as_input().map(|cid| {
                     self.annotated_entry(i, cid, assets)
                 })
             })
             .collect::<Vec<_>>(),
 
-            "outputs": &txlog.iter().enumerate().filter_map(|(i,e)| {
+            "outputs": &precomputed_tx.log.iter().enumerate().filter_map(|(i,e)| {
                 e.as_output().map(|c| {
                     self.annotated_entry(i, c.id(), assets)
                 })

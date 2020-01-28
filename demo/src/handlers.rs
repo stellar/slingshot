@@ -284,12 +284,12 @@ fn nodes_show(
     let pending_txs = mempool
         .items()
         .filter_map(|item| {
-            let (_txid, txlog) = item
+            let ptx = item
                 .tx
                 .precompute()
                 .expect("Our mempool should not contain invalid transactions.");
 
-            wallet_pending.process_tx(&item.tx, &txlog, None)
+            wallet_pending.process_tx(&item.tx, &ptx.log, None)
         })
         .collect::<Vec<_>>();
 

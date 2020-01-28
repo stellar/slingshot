@@ -62,19 +62,19 @@ impl BlockRecord {
     }
 
     pub fn tx_details(tx: &Tx) -> JsonValue {
-        let (txid, txlog) = tx
+        let ptx = tx
             .precompute()
             .expect("Our blockchain should not contain invalid transactions.");
         json!({
-            "id": hex::encode(&txid),
+            "id": hex::encode(&ptx.id),
             "header": &util::to_json_value(&tx.header),
-            "inputs": &util::to_json_value(&txlog.iter().filter_map(|e| {
+            "inputs": &util::to_json_value(&ptx.log.iter().filter_map(|e| {
                 match e {
                     TxEntry::Input(cid) => Some(cid),
                     _ => None
                 }
             }).collect::<Vec<_>>()),
-            "outputs": &util::to_json_value(&txlog.iter().filter_map(|e| {
+            "outputs": &util::to_json_value(&ptx.log.iter().filter_map(|e| {
                 match e {
                     TxEntry::Output(c) => Some(c.id()),
                     _ => None

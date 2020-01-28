@@ -26,7 +26,7 @@ pub type Mempool = zkvm::blockchain::Mempool<MempoolTx>;
 pub fn estimated_memory_cost(mempool: &Mempool) -> usize {
     let txbytes: usize = mempool
         .items()
-        .map(|item| item.tx.serialized_length())
+        .map(|item| item.tx.encoded_length())
         .sum();
 
     let utxoproofsbytes: usize = mempool
@@ -39,6 +39,6 @@ pub fn estimated_memory_cost(mempool: &Mempool) -> usize {
 fn utreexo_proof_memory_cost(proof: &utreexo::Proof) -> usize {
     match proof {
         utreexo::Proof::Transient => 1,
-        utreexo::Proof::Committed(path) => 1 + path.serialized_length(),
+        utreexo::Proof::Committed(path) => 1 + path.encoded_length(),
     }
 }
