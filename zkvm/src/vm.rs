@@ -13,6 +13,7 @@ use crate::constraints::{Commitment, Constraint, Expression, Variable};
 use crate::contract::{Anchor, Contract, ContractID, PortableItem};
 use crate::encoding::SliceReader;
 use crate::errors::VMError;
+use crate::fees::{self, CheckedFee};
 use crate::ops::Instruction;
 use crate::predicate::{CallProof, Predicate};
 use crate::program::ProgramItem;
@@ -46,6 +47,9 @@ where
     current_run: D::RunType,
     run_stack: Vec<D::RunType>,
     txlog: TxLog,
+
+    // collect the total fee to check for overflow
+    total_fee: CheckedFee,
 }
 
 pub(crate) trait Delegate<CS: r1cs::RandomizableConstraintSystem> {
@@ -101,12 +105,13 @@ where
             stack: Vec::new(),
             current_run: run,
             run_stack: Vec::new(),
-            txlog: vec![TxEntry::Header(header)],
+            txlog: vec![TxEntry::Header(header)].into(),
+            total_fee: CheckedFee::zero(),
         }
     }
 
     /// Runs through the entire program and nested programs until completion.
-    pub fn run(mut self) -> Result<(TxID, TxLog), VMError> {
+    pub fn run(mut self) -> Result<(TxID, TxLog, CheckedFee), VMError> {
         loop {
             if !self.step()? {
                 break;
@@ -123,7 +128,7 @@ where
 
         let txid = TxID::from_log(&self.txlog[..]);
 
-        Ok((txid, self.txlog))
+        Ok((txid, self.txlog, self.total_fee))
     }
 
     fn finish_run(&mut self) -> bool {
@@ -167,6 +172,7 @@ where
                 Instruction::Borrow => self.borrow()?,
                 Instruction::Retire => self.retire()?,
                 Instruction::Cloak(m, n) => self.cloak(m, n)?,
+                Instruction::Fee => self.fee()?,
                 Instruction::Input => self.input()?,
                 Instruction::Output(k) => self.output(k)?,
                 Instruction::Contract(k) => self.contract(k)?,
@@ -523,6 +529,31 @@ where
             self.push_item(v);
         }
 
+        Ok(())
+    }
+
+    // _value qty_ **fee** → ø
+    fn fee(&mut self) -> Result<(), VMError> {
+        let fee = self.pop_item()?.to_string()?.to_u64()?;
+        let val = self.pop_item()?.to_value()?;
+
+        self.total_fee = self.total_fee.add(fee).ok_or(VMError::FeeTooHigh)?;
+
+        // Qty == fee*B + 0*B_blinding
+        self.delegate.batch_verifier().append(
+            -Scalar::from(fee),
+            iter::once(Scalar::one()),
+            iter::once(val.qty.to_point().decompress()),
+        );
+
+        // Flv == 0*B + 0*B_blinding
+        self.delegate.batch_verifier().append(
+            fees::fee_flavor(),
+            iter::once(Scalar::one()),
+            iter::once(val.flv.to_point().decompress()),
+        );
+
+        self.txlog.push(TxEntry::Fee(fee));
         Ok(())
     }
 

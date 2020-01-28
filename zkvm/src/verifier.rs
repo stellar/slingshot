@@ -9,10 +9,11 @@ use crate::constraints::Commitment;
 use crate::contract::ContractID;
 use crate::encoding::*;
 use crate::errors::VMError;
+use crate::fees::FeeRate;
 use crate::ops::Instruction;
 use crate::predicate::Predicate;
 use crate::program::ProgramItem;
-use crate::tx::{Tx, TxID, TxLog, VerifiedTx};
+use crate::tx::{PrecomputedTx, Tx, VerifiedTx};
 use crate::vm::{Delegate, VM};
 
 /// This is the entry point API for verifying a transaction.
@@ -88,7 +89,7 @@ impl<'t> Verifier<'t> {
     /// One obstacle towards that is relation between CS and the transcript: the CS
     /// only holds a &mut of the transcript that can only be parked in the lexical scope,
     /// but not in the struct. And we need CS instance both for building tx and for verifying.
-    pub(crate) fn precompute(tx: &Tx) -> Result<(TxID, TxLog), VMError> {
+    pub(crate) fn precompute(tx: &Tx) -> Result<PrecomputedTx, VMError> {
         let mut r1cs_transcript = Transcript::new(b"ZkVM.r1cs");
         let cs = r1cs::Verifier::new(&mut r1cs_transcript);
 
@@ -104,7 +105,14 @@ impl<'t> Verifier<'t> {
             &mut verifier,
         );
 
-        vm.run()
+        let (txid, txlog, fee) = vm.run()?;
+
+        Ok(PrecomputedTx {
+            header: tx.header,
+            id: txid,
+            log: txlog,
+            feerate: FeeRate::new(fee, tx.encoded_length()),
+        })
     }
 
     /// Verifies the `Tx` object by executing the VM and returns the `VerifiedTx`.
@@ -128,7 +136,7 @@ impl<'t> Verifier<'t> {
             &mut verifier,
         );
 
-        let (txid, txlog) = vm.run()?;
+        let (txid, txlog, fee) = vm.run()?;
 
         // Commit txid so that the proof is bound to the entire transaction, not just the constraint system.
         verifier
@@ -164,6 +172,7 @@ impl<'t> Verifier<'t> {
             header: tx.header,
             id: txid,
             log: txlog,
+            feerate: FeeRate::new(fee, tx.encoded_length()),
         })
     }
 }

@@ -322,6 +322,20 @@ pub enum Instruction {
     /// Immediate data `m` and `n` are encoded as two _LE32_s.
     Cloak(usize, usize),
 
+    /// _value qty_ **fee** → ø
+    ///
+    /// 1. Pops an 8-byte _string_ `qty` from the stack and decodes it as _LE64_ integer.
+    /// 2. Pops _value_ from the stack.
+    /// 3. Checks that value.qty is unblinded commitment to `qty` and value.flv is unblinded commitment to zero.
+    /// 4. Adds a _fee entry_ to the _transaction log_.
+    ///
+    /// The checks are performed with group elements directly, without any changes to a _constraint system_.
+    ///
+    /// Fails if:
+    /// * value.qty does not match unblinded `qty`,
+    /// * value.flv is not an unblinded commitment to 0.
+    Fee,
+
     /// _prevoutput_ **input** → _contract_
     ///
     /// 1. Pops a _string_ `prevoutput` representing the _unspent output structure_ from the stack.
@@ -539,25 +553,27 @@ pub enum Opcode {
     Retire = 0x17,
     /// A code for [Instruction::Cloak]
     Cloak = 0x18,
+    /// A code for [Instruction::Fee]
+    Fee = 0x19,
     /// A code for [Instruction::Input]
-    Input = 0x19,
+    Input = 0x1a,
     /// A code for [Instruction::Output]
-    Output = 0x1a,
+    Output = 0x1b,
     /// A code for [Instruction::Contract]
-    Contract = 0x1b,
+    Contract = 0x1c,
     /// A code for [Instruction::Log]
-    Log = 0x1c,
+    Log = 0x1d,
     /// A code for [Instruction::Call]
-    Call = 0x1d,
+    Call = 0x1e,
     /// A code for [Instruction::Signtx]
-    Signtx = 0x1e,
+    Signtx = 0x1f,
     /// A code for [Instruction::Signid]
-    Signid = 0x1f,
+    Signid = 0x20,
     /// A code for [Instruction::Signtag]
     Signtag = MAX_OPCODE,
 }
 
-const MAX_OPCODE: u8 = 0x20;
+const MAX_OPCODE: u8 = 0x21;
 
 impl Opcode {
     /// Converts the opcode to `u8`.
@@ -625,6 +641,7 @@ impl Encodable for Instruction {
                 encoding::write_u32(*m as u32, program);
                 encoding::write_u32(*n as u32, program);
             }
+            Instruction::Fee => write(Opcode::Fee),
             Instruction::Input => write(Opcode::Input),
             Instruction::Output(k) => {
                 write(Opcode::Output);
@@ -650,7 +667,6 @@ impl Encodable for Instruction {
             Instruction::Program(progitem) => 1 + 4 + progitem.encoded_length(),
             Instruction::Dup(_) => 1 + 4,
             Instruction::Roll(_) => 1 + 4,
-            Instruction::Range => 1,
             Instruction::Cloak(_, _) => 1 + 4 + 4,
             Instruction::Output(_) => 1 + 4,
             Instruction::Contract(_) => 1 + 4,
@@ -724,6 +740,7 @@ impl Instruction {
                 let n = program.read_size()?;
                 Ok(Instruction::Cloak(m, n))
             }
+            Opcode::Fee => Ok(Instruction::Fee),
             Opcode::Input => Ok(Instruction::Input),
             Opcode::Output => {
                 let k = program.read_size()?;

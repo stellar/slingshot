@@ -11,12 +11,15 @@ use crate::encoding;
 use crate::encoding::Encodable;
 use crate::encoding::SliceReader;
 use crate::errors::VMError;
+use crate::fees::FeeRate;
 use crate::merkle::{Hash, MerkleItem, MerkleTree};
 use crate::transcript::TranscriptProtocol;
 use crate::verifier::Verifier;
 
 /// Transaction log, a list of all effects of a transaction called [entries](TxEntry).
-pub type TxLog = Vec<TxEntry>;
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct TxLog(Vec<TxEntry>);
 
 /// Transaction ID is a unique 32-byte identifier of a transaction.
 #[derive(Copy, Clone, PartialEq, Debug, Serialize, Deserialize)]
@@ -37,6 +40,8 @@ pub enum TxEntry {
     Input(ContractID),
     /// Output entry that signals that a contract was created. Contains the [Contract](crate::contract::Contract).
     Output(Contract),
+    /// Amount of fee being paid (transaction may have multiple fee entries).
+    Fee(u64),
     /// Plain data entry created by [`log`](crate::ops::Instruction::Log) instruction. Contains an arbitrary binary string.
     Data(Vec<u8>),
 }
@@ -93,6 +98,22 @@ pub struct Tx {
     pub proof: R1CSProof,
 }
 
+/// Represents a precomputed, but not verified transaction.
+#[derive(Clone, Deserialize, Serialize)]
+pub struct PrecomputedTx {
+    /// Transaction header
+    pub header: TxHeader,
+
+    /// Transaction ID
+    pub id: TxID,
+
+    /// Transaction log: a list of changes to the blockchain state (UTXOs to delete/insert, etc.)
+    pub log: TxLog,
+
+    /// Fee rate of the transaction
+    pub feerate: FeeRate,
+}
+
 /// Represents a verified transaction: a txid and a list of state updates.
 #[derive(Clone, Deserialize, Serialize)]
 pub struct VerifiedTx {
@@ -104,6 +125,9 @@ pub struct VerifiedTx {
 
     /// Transaction log: a list of changes to the blockchain state (UTXOs to delete/insert, etc.)
     pub log: TxLog,
+
+    /// Fee rate of the transaction
+    pub feerate: FeeRate,
 }
 
 impl Encodable for TxHeader {
@@ -175,7 +199,7 @@ impl Tx {
     }
 
     /// Computes the TxID and TxLog without verifying the transaction.
-    pub fn precompute(&self) -> Result<(TxID, TxLog), VMError> {
+    pub fn precompute(&self) -> Result<PrecomputedTx, VMError> {
         Verifier::precompute(self)
     }
 
@@ -228,6 +252,40 @@ impl TxEntry {
             TxEntry::Output(c) => Some(c),
             _ => None,
         }
+    }
+}
+
+impl TxLog {
+    /// Total amount of fees paid in the transaction
+    pub fn fee(&self) -> u64 {
+        self.0
+            .iter()
+            .map(|e| if let TxEntry::Fee(f) = e { *f } else { 0 })
+            .sum()
+    }
+
+    /// Adds an entry to the txlog.
+    pub fn push(&mut self, item: TxEntry) {
+        self.0.push(item);
+    }
+}
+
+impl From<Vec<TxEntry>> for TxLog {
+    fn from(v: Vec<TxEntry>) -> TxLog {
+        TxLog(v)
+    }
+}
+
+impl Into<Vec<TxEntry>> for TxLog {
+    fn into(self) -> Vec<TxEntry> {
+        self.0
+    }
+}
+
+impl core::ops::Deref for TxLog {
+    type Target = [TxEntry];
+    fn deref(&self) -> &Self::Target {
+        &self.0
     }
 }
 
@@ -284,6 +342,9 @@ impl MerkleItem for TxEntry {
             }
             TxEntry::Output(contract) => {
                 t.append_message(b"output", contract.id().as_bytes());
+            }
+            TxEntry::Fee(fee) => {
+                t.append_u64(b"fee", *fee);
             }
             TxEntry::Data(data) => {
                 t.append_message(b"data", data);

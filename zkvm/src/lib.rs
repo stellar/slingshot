@@ -18,6 +18,7 @@ mod contract;
 mod debug;
 mod encoding;
 mod errors;
+mod fees;
 mod merkle;
 mod ops;
 mod predicate;

@@ -508,6 +508,7 @@ Output is a serialized [contract](#contract-type):
 UTXO stands for Unspent Transaction [Output](#output-structure).
 UTXO is uniquely identified by the [ID](#contract-id) of the contract represented by the output.
 
+
 ### Constraint system
 
 The constraint system is the part of the [VM state](#vm-state) that implements
@@ -615,6 +616,15 @@ Retire entry is added using [`retire`](#retire) instruction.
 T.append("retire.q", qty_commitment)
 T.append("retire.f", flavor_commitment)
 ```
+
+#### Fee entry
+
+Fee entry is added using [`fee`](#fee) instruction.
+
+```
+T.append("fee", LE64(fee))
+```
+
 
 #### Data entry
 
@@ -916,16 +926,17 @@ Code | Instruction                | Stack diagram                              |
 0x16 | [`borrow`](#borrow)        |         _qty flv_ → _–V +V_                | Modifies [CS](#constraint-system)
 0x17 | [`retire`](#retire)        |           _value_ → ø                      | Modifies [CS](#constraint-system), [tx log](#transaction-log)
 0x18 | [`cloak:m:n`](#cloak)      | _widevalues commitments_ → _values_        | Modifies [CS](#constraint-system)
+0x19 | [`fee`](#fee)              |       _value qty_ → ø                      | Modifies [tx log](#transaction-log)
  |                                |                                            |
  |     [**Contracts**](#contract-instructions)        |                        |
-0x19 | [`input`](#input)          |      _prevoutput_ → _contract_             | Modifies [tx log](#transaction-log)
-0x1a | [`output:k`](#output)      |   _items... pred_ → ø                      | Modifies [tx log](#transaction-log)
-0x1b | [`contract:k`](#contract)  |   _items... pred_ → _contract_             | 
-0x1c | [`log`](#log)              |            _data_ → ø                      | Modifies [tx log](#transaction-log)
-0x1d | [`call`](#call)            |_contract(P) proof prog_ → _results..._     | [Defers point operations](#deferred-point-operations)
-0x1e | [`signtx`](#signtx)        |        _contract_ → _results..._           | Modifies [deferred verification keys](#transaction-signature)
-0x1f | [`signid`](#signid)        |_contract prog sig_ → _results..._          | [Defers point operations](#deferred-point-operations)
-0x20 | [`signtag`](#signtag)      |_contract prog sig_ → _results..._          | [Defers point operations](#deferred-point-operations)
+0x1a | [`input`](#input)          |      _prevoutput_ → _contract_             | Modifies [tx log](#transaction-log)
+0x1b | [`output:k`](#output)      |   _items... pred_ → ø                      | Modifies [tx log](#transaction-log)
+0x1c | [`contract:k`](#contract)  |   _items... pred_ → _contract_             | 
+0x1d | [`log`](#log)              |            _data_ → ø                      | Modifies [tx log](#transaction-log)
+0x1e | [`call`](#call)            |_contract(P) proof prog_ → _results..._     | [Defers point operations](#deferred-point-operations)
+0x1f | [`signtx`](#signtx)        |        _contract_ → _results..._           | Modifies [deferred verification keys](#transaction-signature)
+0x20 | [`signid`](#signid)        |_contract prog sig_ → _results..._          | [Defers point operations](#deferred-point-operations)
+0x21 | [`signtag`](#signtag)      |_contract prog sig_ → _results..._          | [Defers point operations](#deferred-point-operations)
   —  | [`ext`](#ext)              |                 ø → ø                      | Fails if [extension flag](#vm-state) is not set.
 
 
@@ -1282,6 +1293,23 @@ Merges and splits `m` [wide values](#wide-value-type) into `n` [values](#value-t
 4. Pushes `n` [values](#value-type) to the stack, placing them in the same order as their corresponding commitments.
 
 Immediate data `m` and `n` are encoded as two [LE32](#le32)s.
+
+
+#### fee
+
+_value qty_ **fee** → ø
+
+1. Pops an 8-byte [string](#string-type) `qty` from the stack and decodes it as [LE64](#le64) integer.
+2. Pops [value](#value-type) from the stack.
+3. Checks that value.qty is unblinded commitment to `qty` and value.flv is unblinded commitment to zero.
+4. Adds a [fee entry](#fee-entry) to the [transaction log](#transaction-log).
+
+The checks are performed with group elements directly, without any changes to a [constraint system](#constraint-system).
+
+Fails if:
+* value.qty does not match unblinded `qty`,
+* value.flv is not an unblinded commitment to 0.
+
 
 
 ### Contract instructions

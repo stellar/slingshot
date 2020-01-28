@@ -52,6 +52,7 @@ impl String {
             String::Commitment(commitment) => write!(f, "push:{:?}", commitment),
             String::Scalar(scalar_witness) => write!(f, "push:{:?}", scalar_witness),
             String::Output(contract) => write!(f, "push:{:?}", contract),
+            String::Int(n) => write!(f, "push:{:?}", n),
         }
     }
 }
@@ -117,6 +118,7 @@ impl Instruction {
             Instruction::Borrow => write!(f, "borrow"),
             Instruction::Retire => write!(f, "retire"),
             Instruction::Cloak(m, n) => write!(f, "cloak:{}:{}", m, n),
+            Instruction::Fee => write!(f, "fee"),
             Instruction::Input => write!(f, "input"),
             Instruction::Output(k) => write!(f, "output:{}", k),
             Instruction::Contract(k) => write!(f, "contract:{}", k),

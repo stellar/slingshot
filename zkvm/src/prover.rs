@@ -15,6 +15,7 @@ use crate::predicate::Predicate;
 use crate::program::{Program, ProgramItem};
 use crate::tx::{TxHeader, UnsignedTx};
 use crate::vm::{Delegate, VM};
+
 /// This is the entry point API for creating a transaction.
 /// Prover passes the list of instructions through the VM,
 /// creates an aggregated transaction signature (for `signtx` instruction),
@@ -106,7 +107,7 @@ impl<'t, 'g> Prover<'t, 'g> {
             &mut prover,
         );
 
-        let (txid, txlog) = vm.run()?;
+        let (txid, txlog, _fee) = vm.run()?;
 
         // Commit txid so that the proof is bound to the entire transaction, not just the constraint system.
         prover.cs.transcript().append_message(b"ZkVM.txid", &txid.0);
