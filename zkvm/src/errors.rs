@@ -124,13 +124,6 @@ pub enum VMError {
     #[fail(display = "Deferred batch signature verification failed")]
     BatchSignatureVerificationFailed,
 
-    /// This error occurs when a MuSig signature share fails to verify
-    #[fail(display = "Share #{:?} failed to verify correctly", pubkey)]
-    MuSigShareError {
-        /// The pubkey corresponding to the MuSig share that failed to verify correctly
-        pubkey: [u8; 32],
-    },
-
     /// This error occurs when R1CS proof verification failed.
     #[fail(display = "R1CS proof is invalid")]
     InvalidR1CSProof,
@@ -170,4 +163,8 @@ pub enum VMError {
     /// This error occurs when a false cleartext constraint is verified.
     #[fail(display = "Cleartext constraint is false")]
     CleartextConstraintFalse,
+
+    /// This error occurs when tx attempts to add a fee beyond the limit.
+    #[fail(display = "Fee is too high")]
+    FeeTooHigh,
 }

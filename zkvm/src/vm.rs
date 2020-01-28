@@ -13,13 +13,13 @@ use crate::constraints::{Commitment, Constraint, Expression, Variable};
 use crate::contract::{Anchor, Contract, ContractID, PortableItem};
 use crate::encoding::SliceReader;
 use crate::errors::VMError;
+use crate::fees::{self, CheckedFee};
 use crate::ops::Instruction;
 use crate::predicate::{CallProof, Predicate};
 use crate::program::ProgramItem;
 use crate::scalar_witness::ScalarWitness;
 use crate::tx::{TxEntry, TxHeader, TxID, TxLog};
 use crate::types::*;
-use crate::fees;
 
 /// Current tx version determines which extension opcodes are treated as noops (see VM.extension flag).
 pub const CURRENT_VERSION: u64 = 1;
@@ -47,6 +47,9 @@ where
     current_run: D::RunType,
     run_stack: Vec<D::RunType>,
     txlog: TxLog,
+
+    // collect the total fee to check for overflow
+    total_fee: CheckedFee,
 }
 
 pub(crate) trait Delegate<CS: r1cs::RandomizableConstraintSystem> {
@@ -103,11 +106,12 @@ where
             current_run: run,
             run_stack: Vec::new(),
             txlog: vec![TxEntry::Header(header)].into(),
+            total_fee: CheckedFee::zero(),
         }
     }
 
     /// Runs through the entire program and nested programs until completion.
-    pub fn run(mut self) -> Result<(TxID, TxLog), VMError> {
+    pub fn run(mut self) -> Result<(TxID, TxLog, CheckedFee), VMError> {
         loop {
             if !self.step()? {
                 break;
@@ -124,7 +128,7 @@ where
 
         let txid = TxID::from_log(&self.txlog[..]);
 
-        Ok((txid, self.txlog))
+        Ok((txid, self.txlog, self.total_fee))
     }
 
     fn finish_run(&mut self) -> bool {
@@ -532,6 +536,8 @@ where
     fn fee(&mut self) -> Result<(), VMError> {
         let fee = self.pop_item()?.to_string()?.to_u64()?;
         let val = self.pop_item()?.to_value()?;
+
+        self.total_fee = self.total_fee.add(fee).ok_or(VMError::FeeTooHigh)?;
 
         // Qty == fee*B + 0*B_blinding
         self.delegate.batch_verifier().append(

@@ -1,14 +1,18 @@
 //! Fee mechanism.
-use curve25519_dalek::scalar::Scalar;
 use core::cmp::Ordering;
+use curve25519_dalek::scalar::Scalar;
+use serde::{Deserialize, Serialize};
 
 /// Maximum amount of fee, which allows overflow-safe size-by-fee multiplication.
 pub const MAX_FEE: u64 = 1 << 24;
-/// Maximum size of transaction which allows overflow-safe size-by-fee multiplication.
-pub const MAX_SIZE: u64 = 1 << 24;
+
+#[derive(Copy, Clone, Debug)]
+pub struct CheckedFee {
+    inner: u64,
+}
 
 /// Fee rate is a ratio of the transaction fee to its size.
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, Serialize, Deserialize)]
 pub struct FeeRate {
     fee: u64,
     size: u64,
@@ -21,18 +25,11 @@ pub fn fee_flavor() -> Scalar {
 
 impl FeeRate {
     /// Creates a new fee rate from a given fee and size.
-    pub fn new(fee: u64, size: usize) -> Option<Self> {
-        let size = size as u64;
-        if fee > MAX_FEE {
-            return None;
-        }
-        if size > MAX_SIZE {
-            return None;
-        }
-        Some(FeeRate {
-            fee,
+    pub fn new(fee: CheckedFee, size: usize) -> Self {
+        FeeRate {
+            fee: fee.inner,
             size: size as u64,
-        })
+        }
     }
 
     /// Combines the fee rate with another fee rate, adding up the fees and sizes.
@@ -56,6 +53,27 @@ impl FeeRate {
     /// Returns the size component of the feerate.
     pub fn size(&self) -> usize {
         self.size as usize
+    }
+}
+
+impl CheckedFee {
+    pub const fn zero() -> Self {
+        CheckedFee { inner: 0 }
+    }
+
+    pub fn new(fee: u64) -> Option<Self> {
+        CheckedFee::zero().add(fee)
+    }
+
+    pub fn add(mut self, fee: u64) -> Option<Self> {
+        if fee > MAX_FEE {
+            return None;
+        }
+        if self.inner + fee > MAX_FEE {
+            return None;
+        }
+        self.inner += fee;
+        Some(self)
     }
 }
 

@@ -8,7 +8,7 @@ use spacesuit::SignedInteger;
 
 use crate::constraints::{Commitment, Constraint, Expression, Variable};
 use crate::contract::{Contract, PortableItem};
-use crate::encoding::{self,Encodable,SliceReader};
+use crate::encoding::{self, Encodable, SliceReader};
 use crate::errors::VMError;
 use crate::predicate::Predicate;
 use crate::program::ProgramItem;

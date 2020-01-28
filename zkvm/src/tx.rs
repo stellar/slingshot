@@ -11,6 +11,7 @@ use crate::encoding;
 use crate::encoding::Encodable;
 use crate::encoding::SliceReader;
 use crate::errors::VMError;
+use crate::fees::FeeRate;
 use crate::merkle::{Hash, MerkleItem, MerkleTree};
 use crate::transcript::TranscriptProtocol;
 use crate::verifier::Verifier;
@@ -97,6 +98,22 @@ pub struct Tx {
     pub proof: R1CSProof,
 }
 
+/// Represents a precomputed, but not verified transaction.
+#[derive(Clone, Deserialize, Serialize)]
+pub struct PrecomputedTx {
+    /// Transaction header
+    pub header: TxHeader,
+
+    /// Transaction ID
+    pub id: TxID,
+
+    /// Transaction log: a list of changes to the blockchain state (UTXOs to delete/insert, etc.)
+    pub log: TxLog,
+
+    /// Fee rate of the transaction
+    pub feerate: FeeRate,
+}
+
 /// Represents a verified transaction: a txid and a list of state updates.
 #[derive(Clone, Deserialize, Serialize)]
 pub struct VerifiedTx {
@@ -108,6 +125,9 @@ pub struct VerifiedTx {
 
     /// Transaction log: a list of changes to the blockchain state (UTXOs to delete/insert, etc.)
     pub log: TxLog,
+
+    /// Fee rate of the transaction
+    pub feerate: FeeRate,
 }
 
 impl Encodable for TxHeader {
@@ -179,7 +199,7 @@ impl Tx {
     }
 
     /// Computes the TxID and TxLog without verifying the transaction.
-    pub fn precompute(&self) -> Result<(TxID, TxLog), VMError> {
+    pub fn precompute(&self) -> Result<PrecomputedTx, VMError> {
         Verifier::precompute(self)
     }
 
