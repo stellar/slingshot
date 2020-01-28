@@ -24,10 +24,7 @@ pub type Mempool = zkvm::blockchain::Mempool<MempoolTx>;
 
 // Estimated cost of a memory occupied by transactions in the mempool.
 pub fn estimated_memory_cost(mempool: &Mempool) -> usize {
-    let txbytes: usize = mempool
-        .items()
-        .map(|item| item.tx.encoded_length())
-        .sum();
+    let txbytes: usize = mempool.items().map(|item| item.tx.encoded_length()).sum();
 
     let utxoproofsbytes: usize = mempool
         .items()
