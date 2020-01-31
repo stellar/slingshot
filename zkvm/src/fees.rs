@@ -12,7 +12,7 @@ pub struct CheckedFee {
 }
 
 /// Fee rate is a ratio of the transaction fee to its size.
-#[derive(Copy, Clone, Debug, Serialize, Deserialize)]
+#[derive(Copy, Clone, Default, Debug, Serialize, Deserialize)]
 pub struct FeeRate {
     fee: u64,
     size: u64,
@@ -24,6 +24,11 @@ pub fn fee_flavor() -> Scalar {
 }
 
 impl FeeRate {
+    /// Creates a new zero feerate
+    pub fn zero() -> Self {
+        FeeRate::default()
+    }
+
     /// Creates a new fee rate from a given fee and size.
     pub fn new(fee: CheckedFee, size: usize) -> Self {
         FeeRate {

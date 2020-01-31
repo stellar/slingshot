@@ -36,6 +36,7 @@ pub use self::constraints::{Commitment, CommitmentWitness, Constraint, Expressio
 pub use self::contract::{Anchor, Contract, ContractID, PortableItem};
 pub use self::encoding::Encodable;
 pub use self::errors::VMError;
+pub use self::fees::FeeRate;
 pub use self::merkle::{Hash, MerkleItem, MerkleTree};
 pub use self::ops::{Instruction, Opcode};
 pub use self::predicate::{Predicate, PredicateTree};

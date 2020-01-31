@@ -2,6 +2,7 @@
 
 mod block;
 mod errors;
+mod mempool;
 mod state;
 
 #[cfg(test)]

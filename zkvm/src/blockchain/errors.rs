@@ -31,4 +31,8 @@ pub enum BlockchainError {
     /// Occurs when utreexo operation failed.
     #[fail(display = "Utreexo operation failed.")]
     UtreexoError(UtreexoError),
+
+    /// Occurs when a transaction attempts to spend a non-existent unconfirmed output.
+    #[fail(display = "Transaction attempts to spend a non-existent unconfirmed output.")]
+    InvalidUnconfirmedOutput,
 }
