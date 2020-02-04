@@ -115,7 +115,7 @@ enum Output<Tx: MempoolTx> {
     Unspent,
 
     /// Child transaction and an index in child.inputs list.
-    Spent(Ref<Tx>, usize),
+    Spent(WeakRef<Tx>, usize),
 }
 
 type Ref<Tx> = Rc<RefCell<Node<Tx>>>;
@@ -184,9 +184,25 @@ where
         .unwrap_or(FeeRate::zero())
     }
 
+    /// The fee paid by an incoming tx must cover with the minimum feerate both
+    /// the size of the incoming tx and the size of the evicted tx:
+    ///
+    /// `new_fee > min_feerate * (evicted_size + new_size)`
+    ///
+    /// This method returns the effective feerate of the lowest-priority tx,
+    /// which also contains the total size that must be accounted for.
+    ///
+    /// This is equivalent to:
+    ///
+    /// `new_fee*evicted_size > min_fee * (evicted_size + new_size)`
+    ///
+    pub fn is_feerate_sufficient(feerate: FeeRate, min_feerate: FeeRate) -> bool {
+        let evicted_size = min_feerate.size() as u64;
+        feerate.fee() * evicted_size >= min_feerate.fee() * (evicted_size + (feerate.size() as u64))
+    }
+
     /// Adds a tx and evicts others, if needed.
-    /// TBD: change this to be used through Peerpool.
-    pub fn TEMP_add(
+    pub fn try_append(
         &mut self,
         peer_id: PeerID,
         tx: Tx,
@@ -261,45 +277,29 @@ where
             return;
         }
 
-        let txref = self.ordered_txs.remove(0);
+        let lowest = self.ordered_txs.remove(0);
+        let (needs_reorder, total_evicted) = Self::evict_tx(&lowest, &mut self.utxos, evicted_txs);
+        self.current_size -= total_evicted;
 
-        // We need to make sure Rc holds the last item, so we can return it via Extend.
-        // Here is where they are stored:
-        //
-        // - inputs
-        // - outputs
-        // - utxos hashmap
-        // - ordered list
-        //
-        // Now let's prove that all the references are removed from all these locations.
-        //
-        // 1. Ref<Tx> is a private type that is never returned from this module.
-        // 2. In this module, you can find all the occurences of `clone_txref` to see that
-        //    the txref is only stored in the connected inputs and outputs, and the utxos hashmap.
-        // 3. Unique Ref<Tx> is created and pushed to ordered_txs in one place: .append().
-        // 4. Here we pop Ref<Tx> from the ordered list and intend this to be the sole reference.
-        // 5. We clean up hashmap by iterating over all outputs of this tx and remove each
-
-        // Process all children recursively, marking them as evicted,
-        // and marking their parents' total feerate as invalidated.
-        // Then, when we sort
+        if needs_reorder {
+            self.order_transactions();
+        }
     }
 
-    /// The fee paid by an incoming tx must cover with the minimum feerate both
-    /// the size of the incoming tx and the size of the evicted tx:
-    ///
-    /// `new_fee > min_feerate * (evicted_size + new_size)`
-    ///
-    /// This method returns the effective feerate of the lowest-priority tx,
-    /// which also contains the total size that must be accounted for.
-    ///
-    /// This is equivalent to:
-    ///
-    /// `new_fee*evicted_size > min_fee * (evicted_size + new_size)`
-    ///
-    fn is_feerate_sufficient(feerate: FeeRate, min_feerate: FeeRate) -> bool {
-        let evicted_size = min_feerate.size() as u64;
-        feerate.fee() * evicted_size >= min_feerate.fee() * (evicted_size + (feerate.size() as u64))
+    /// Evicts tx and its subchildren recursively, updating the utxomap accordingly.
+    /// Returns a flag indicating that we need to reorder txs, and the total number of bytes evicted.
+    fn evict_tx(
+        txref: &Ref<Tx>,
+        utxos: &mut UtxoMap<Tx>,
+        evicted_txs: &mut impl core::iter::Extend<Tx>,
+    ) -> (bool, usize) {
+        // 1. immediately mark the node as evicted, taking its Tx out of it.
+        // 2. for each input: restore utxos as unspent.
+        // 3. for each input: if unconfirmed and non-evicted, invalidate feerate and set the reorder flag.
+        // 4. recursively evict children.
+        // 5. for each output: remove utxo records.
+
+        unimplemented!()
     }
 }
 
@@ -325,28 +325,30 @@ impl<Tx: MempoolTx> Node<Tx> {
         let mut result_feerate = self.self_feerate();
         for output in self.outputs.iter() {
             if let Output::Spent(childtx, _) = output {
-                // The discount is a simplification that allows us to recursively add up descendants' feerates
-                // without opening a risk of overcounting in case of diamond-shaped graphs.
-                // This comes with a slight unfairness to users where a child of two parents
-                // is not contributing fully to the lower-fee parent.
-                // However, in common case this discount has no effect since the child spends only one parent.
-                let unconfirmed_parents = childtx
-                    .borrow()
-                    .inputs
-                    .iter()
-                    .filter(|i| {
-                        if let Input::Unconfirmed(_, _, _) = i {
-                            true
-                        } else {
-                            false
-                        }
-                    })
-                    .count();
-                let child_feerate = childtx
-                    .borrow()
-                    .effective_feerate()
-                    .discount(unconfirmed_parents);
-                result_feerate = result_feerate.combine(child_feerate);
+                if let Some(childtx) = childtx.upgrade() {
+                    // The discount is a simplification that allows us to recursively add up descendants' feerates
+                    // without opening a risk of overcounting in case of diamond-shaped graphs.
+                    // This comes with a slight unfairness to users where a child of two parents
+                    // is not contributing fully to the lower-fee parent.
+                    // However, in common case this discount has no effect since the child spends only one parent.
+                    let unconfirmed_parents = childtx
+                        .borrow()
+                        .inputs
+                        .iter()
+                        .filter(|i| {
+                            if let Input::Unconfirmed(_, _, _) = i {
+                                true
+                            } else {
+                                false
+                            }
+                        })
+                        .count();
+                    let child_feerate = childtx
+                        .borrow()
+                        .effective_feerate()
+                        .discount(unconfirmed_parents);
+                    result_feerate = result_feerate.combine(child_feerate);
+                }
             }
         }
         result_feerate
@@ -365,40 +367,6 @@ impl<Tx: MempoolTx> UtxoStatus<Tx> {
         }
     }
 }
-
-// impl<Tx: MempoolTx> Ref<Tx> {
-//     fn borrow(&self) -> cell::Ref<Node<Tx>> {
-//         self.inner.borrow()
-//     }
-
-//     fn borrow_mut(&self) -> cell::RefMut<Node<Tx>> {
-//         self.inner.borrow_mut()
-//     }
-
-//     // We call this method clone_txref to let you easily
-//     // identify all the callsites where Ref<Tx> is stored.
-//     fn clone_txref(&self) -> Self {
-//         Ref {
-//             inner: self.inner.clone(),
-//         }
-//     }
-
-//     // // Removes all back references from parent to children recursively,
-//     // // and also the linkedlist references.
-//     // // The only references remaining are forward references from children to parents,
-//     // // that are auto-destroyed in reverse order when children are dropped.
-//     // fn unlink(&self) {
-//     //     for out in self.borrow().outputs.iter() {
-//     //         if let Output::Spent(child, _) = out {
-//     //             child.unlink()
-//     //         }
-//     //     }
-//     //     let mut tx = self.borrow_mut();
-//     //     for out in tx.outputs.iter_mut() {
-//     //         *out = Output::Unspent;
-//     //     }
-//     // }
-// }
 
 enum ViewResult<T> {
     None,
@@ -527,6 +495,8 @@ impl<'a, 'b: 'a, Tx: MempoolTx> UtxoView<'a, 'b, Tx> {
         //    its child. If it's in the back, we should not link.
         // 2. For each input we should store a "spent" status into the UtxoView.
         // 3. for each output we should store an "unspent" status into the utxoview.
+
+        // 1. link to the parents if they are in the same pool.
         for (input_index, cid) in new_ref.borrow().tx.txlog().inputs().enumerate() {
             // if the spent output is unconfirmed in the front of the view - modify it to link.
             if let Some(UtxoStatus::UnconfirmedUnspent(srctx, output_index, _depth)) =
@@ -534,12 +504,14 @@ impl<'a, 'b: 'a, Tx: MempoolTx> UtxoView<'a, 'b, Tx> {
             {
                 if let Some(srctx) = srctx.upgrade() {
                     let mut srctx = srctx.borrow_mut();
-                    srctx.outputs[*output_index] = Output::Spent(Rc::clone(&new_ref), input_index);
+                    srctx.outputs[*output_index] =
+                        Output::Spent(Rc::downgrade(&new_ref), input_index);
                     srctx.cached_total_feerate.set(None);
                 }
             }
         }
 
+        // 2. mark spent utxos as spent
         for (input_status, cid) in new_ref
             .borrow()
             .inputs
@@ -553,6 +525,7 @@ impl<'a, 'b: 'a, Tx: MempoolTx> UtxoView<'a, 'b, Tx> {
             self.set(*cid, status);
         }
 
+        // 3. add outputs as unspent.
         for (i, cid) in new_ref
             .borrow()
             .tx
