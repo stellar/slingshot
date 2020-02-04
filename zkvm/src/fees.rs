@@ -38,15 +38,25 @@ impl FeeRate {
     }
 
     /// Combines the fee rate with another fee rate, adding up the fees and sizes.
-    pub fn combine(&self, other: FeeRate) -> Self {
+    pub fn combine(self, other: FeeRate) -> Self {
         FeeRate {
             fee: self.fee + other.fee,
             size: self.size + other.size,
         }
     }
 
+    /// Discounts the fee and the size by a given factor.
+    /// E.g. feerate 100/1200 discounted by 2 gives 50/600.
+    /// Same ratio, but lower weight when combined with other feerates.
+    pub fn discount(mut self, parts: usize) -> Self {
+        let parts = parts as u64;
+        self.fee /= parts;
+        self.size /= parts;
+        self
+    }
+
     /// Converts the fee rate to a floating point number.
-    pub fn to_f64(&self) -> f64 {
+    pub fn to_f64(self) -> f64 {
         (self.fee as f64) / (self.size as f64)
     }
 
