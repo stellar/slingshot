@@ -17,19 +17,22 @@
 //! In this implementation we are implementing a CPFP strategy
 //! to make prioritization more accurate and allow users "unstuck" their transactions.
 //!
-use crate::ContractID; //, TxEntry, TxHeader, TxLog, VerifiedTx};
-use crate::FeeRate;
-use crate::VerifiedTx;
 use core::cell::{Cell, RefCell};
+use core::cmp::Ordering;
 use core::hash::Hash;
+
 use std::collections::HashMap;
 use std::rc::{Rc, Weak};
+use std::time::Instant;
 
 use super::errors::BlockchainError;
 use super::state::{check_tx_header, BlockchainState};
 use crate::merkle::Hasher;
 use crate::tx::TxLog;
 use crate::utreexo;
+use crate::ContractID; //, TxEntry, TxHeader, TxLog, VerifiedTx};
+use crate::FeeRate;
+use crate::VerifiedTx;
 
 /// Trait for the items in the mempool.
 pub trait MempoolTx {
@@ -90,8 +93,10 @@ struct Peerpool<Tx: MempoolTx> {
 
 #[derive(Debug)]
 struct Node<Tx: MempoolTx> {
+    // Actual transaction object managed by the mempool.
     tx: Tx,
-
+    //
+    seen_at: Instant,
     // Cached total feerate. None when it needs to be recomputed.
     cached_total_feerate: Cell<Option<FeeRate>>,
     // List of input statuses corresponding to tx inputs.
@@ -238,6 +243,7 @@ where
             tx,
             &self.state.utreexo,
             self.max_depth,
+            Instant::now(),
             &utreexo::utreexo_hasher(),
         )?;
 
@@ -265,7 +271,7 @@ where
 
     fn order_transactions(&mut self) {
         self.ordered_txs
-            .sort_by_key(|txref| txref.borrow().effective_feerate());
+            .sort_unstable_by(|a, b| a.borrow().cmp(&b.borrow()));
     }
 
     /// Evicts the lowest tx and returns true if the mempool needs to be re-sorted.
@@ -306,6 +312,10 @@ where
 impl<Tx: MempoolTx> Node<Tx> {
     fn self_feerate(&self) -> FeeRate {
         self.tx.feerate()
+    }
+
+    fn into_ref(self) -> Ref<Tx> {
+        Rc::new(RefCell::new(self))
     }
 
     fn effective_feerate(&self) -> FeeRate {
@@ -354,8 +364,14 @@ impl<Tx: MempoolTx> Node<Tx> {
         result_feerate
     }
 
-    fn into_ref(self) -> Ref<Tx> {
-        Rc::new(RefCell::new(self))
+    // Compares tx priorities. The Ordering::Less indicates that the transaction has lower priority.
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.effective_feerate()
+            .cmp(&other.effective_feerate())
+            .then_with(|| {
+                // newer txs -> lower priority
+                self.seen_at.cmp(&other.seen_at).reverse()
+            })
     }
 }
 
@@ -423,6 +439,7 @@ impl<'a, 'b: 'a, Tx: MempoolTx> UtxoView<'a, 'b, Tx> {
         tx: Tx,
         utreexo: &utreexo::Forest,
         max_depth: Depth,
+        seen_at: Instant,
         hasher: &Hasher<ContractID>,
     ) -> Result<Ref<Tx>, BlockchainError> {
         let mut utreexo_proofs = tx.utreexo_proofs().iter();
@@ -483,6 +500,7 @@ impl<'a, 'b: 'a, Tx: MempoolTx> UtxoView<'a, 'b, Tx> {
             .collect::<Vec<_>>();
 
         let new_ref = Node {
+            seen_at,
             cached_total_feerate: Cell::new(Some(tx.feerate())),
             inputs,
             outputs,
