@@ -29,10 +29,36 @@ use super::errors::BlockchainError;
 use super::state::{check_tx_header, BlockchainState};
 use crate::merkle::Hasher;
 use crate::tx::TxLog;
-use crate::utreexo;
+use crate::utreexo::{self, UtreexoError};
 use crate::ContractID; //, TxEntry, TxHeader, TxLog, VerifiedTx};
 use crate::FeeRate;
 use crate::VerifiedTx;
+
+/// Mempool error conditions.
+#[derive(Debug, Fail)]
+pub enum MempoolError {
+    /// Occurs when a blockchain check failed.
+    #[fail(display = "Blockchain check failed.")]
+    BlockchainError(BlockchainError),
+
+    /// Occurs when utreexo operation failed.
+    #[fail(display = "Utreexo operation failed.")]
+    UtreexoError(UtreexoError),
+
+    /// Occurs when a transaction attempts to spend a non-existent unconfirmed output.
+    #[fail(display = "Transaction attempts to spend a non-existent unconfirmed output.")]
+    InvalidUnconfirmedOutput,
+
+    /// Occurs when a transaction does not have a competitive fee and cannot be included in mempool.
+    #[fail(
+        display = "Transaction has low fee relative to all the other transactions in the mempool."
+    )]
+    LowFee,
+
+    /// Occurs when a transaction spends too long chain of unconfirmed outputs, making it expensive to handle.
+    #[fail(display = "Transaction spends too long chain of unconfirmed outputs.")]
+    TooDeep,
+}
 
 /// Trait for the items in the mempool.
 pub trait MempoolTx {
@@ -212,11 +238,11 @@ where
         peer_id: PeerID,
         tx: Tx,
         evicted_txs: &mut impl core::iter::Extend<Tx>,
-    ) -> Result<(), BlockchainError> {
+    ) -> Result<(), MempoolError> {
         if self.current_size >= self.max_size {
             if !Self::is_feerate_sufficient(tx.feerate(), self.min_feerate()) {
                 // TODO: insert into a peer pool.
-                return Err(BlockchainError::MempoolRejectedLowFee);
+                return Err(MempoolError::LowFee);
             }
         }
         self.append(tx)?;
@@ -227,7 +253,7 @@ where
     /// Add a transaction.
     /// Fails if the transaction attempts to spend a non-existent output.
     /// Does not check the feerate and does not compact the mempool.
-    fn append(&mut self, tx: Tx) -> Result<(), BlockchainError> {
+    fn append(&mut self, tx: Tx) -> Result<(), MempoolError> {
         check_tx_header(
             &tx.verified_tx().header,
             self.timestamp_ms,
@@ -441,7 +467,7 @@ impl<'a, 'b: 'a, Tx: MempoolTx> UtxoView<'a, 'b, Tx> {
         max_depth: Depth,
         seen_at: Instant,
         hasher: &Hasher<ContractID>,
-    ) -> Result<Ref<Tx>, BlockchainError> {
+    ) -> Result<Ref<Tx>, MempoolError> {
         let mut utreexo_proofs = tx.utreexo_proofs().iter();
 
         // Start by collecting the inputs and do not perform any mutations until we check all of them.
@@ -449,9 +475,7 @@ impl<'a, 'b: 'a, Tx: MempoolTx> UtxoView<'a, 'b, Tx> {
             .txlog()
             .inputs()
             .map(|cid| {
-                let utxoproof = utreexo_proofs
-                    .next()
-                    .ok_or(BlockchainError::UtreexoProofMissing)?;
+                let utxoproof = utreexo_proofs.next().ok_or(UtreexoError::InvalidProof)?;
 
                 match (self.get(cid).into_option(), utxoproof) {
                     (Some(UtxoStatus::UnconfirmedUnspent(srctx, i, depth)), _proof) => {
@@ -459,18 +483,18 @@ impl<'a, 'b: 'a, Tx: MempoolTx> UtxoView<'a, 'b, Tx> {
                             Some(srctx) => {
                                 Ok(Input::Unconfirmed(Rc::downgrade(&srctx), *i, *depth))
                             }
-                            None => Err(BlockchainError::InvalidUnconfirmedOutput),
+                            None => Err(MempoolError::InvalidUnconfirmedOutput),
                         }
                     }
-                    (Some(_), _proof) => Err(BlockchainError::InvalidUnconfirmedOutput),
+                    (Some(_), _proof) => Err(MempoolError::InvalidUnconfirmedOutput),
                     (None, utreexo::Proof::Committed(path)) => {
                         // check the path
-                        utreexo
-                            .verify(cid, path, hasher)
-                            .map_err(|e| BlockchainError::UtreexoError(e))?;
+                        utreexo.verify(cid, path, hasher)?;
                         Ok(Input::Confirmed)
                     }
-                    (None, utreexo::Proof::Transient) => Err(BlockchainError::UtreexoProofMissing),
+                    (None, utreexo::Proof::Transient) => {
+                        Err(MempoolError::UtreexoError(UtreexoError::InvalidProof))
+                    }
                 }
             })
             .collect::<Result<Vec<_>, _>>()?;
@@ -490,7 +514,7 @@ impl<'a, 'b: 'a, Tx: MempoolTx> UtxoView<'a, 'b, Tx> {
             .unwrap_or(0);
 
         if max_spent_depth > max_depth {
-            return Err(BlockchainError::MempoolRejectedTooDeep);
+            return Err(MempoolError::TooDeep);
         }
 
         let outputs = tx
@@ -559,5 +583,17 @@ impl<'a, 'b: 'a, Tx: MempoolTx> UtxoView<'a, 'b, Tx> {
         }
 
         Ok(new_ref)
+    }
+}
+
+impl From<BlockchainError> for MempoolError {
+    fn from(err: BlockchainError) -> Self {
+        MempoolError::BlockchainError(err)
+    }
+}
+
+impl From<UtreexoError> for MempoolError {
+    fn from(err: UtreexoError) -> Self {
+        MempoolError::UtreexoError(err)
     }
 }

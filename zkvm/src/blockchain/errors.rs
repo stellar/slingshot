@@ -31,20 +31,6 @@ pub enum BlockchainError {
     /// Occurs when utreexo operation failed.
     #[fail(display = "Utreexo operation failed.")]
     UtreexoError(UtreexoError),
-
-    /// Occurs when a transaction attempts to spend a non-existent unconfirmed output.
-    #[fail(display = "Transaction attempts to spend a non-existent unconfirmed output.")]
-    InvalidUnconfirmedOutput,
-
-    /// Occurs when a transaction does not have a competitive fee and cannot be included in mempool.
-    #[fail(
-        display = "Transaction has low fee relative to all the other transactions in the mempool."
-    )]
-    MempoolRejectedLowFee,
-
-    /// Occurs when a transaction spends too long chain of unconfirmed outputs, making it expensive to handle.
-    #[fail(display = "Transaction spends too long chain of unconfirmed outputs.")]
-    MempoolRejectedTooDeep,
 }
 
 // TODO: add mempool error enum.
