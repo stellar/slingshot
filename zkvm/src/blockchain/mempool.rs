@@ -121,7 +121,7 @@ struct Peerpool<Tx: MempoolTx> {
 struct Node<Tx: MempoolTx> {
     // Actual transaction object managed by the mempool.
     tx: Tx,
-    //
+    // 
     seen_at: Instant,
     // Cached total feerate. None when it needs to be recomputed.
     cached_total_feerate: Cell<Option<FeeRate>>,
@@ -149,8 +149,8 @@ enum Output<Tx: MempoolTx> {
     Spent(WeakRef<Tx>, usize),
 }
 
-type Ref<Tx> = Rc<RefCell<Node<Tx>>>;
-type WeakRef<Tx> = Weak<RefCell<Node<Tx>>>;
+type Ref<Tx> = Rc<RefCell<Option<Node<Tx>>>>;
+type WeakRef<Tx> = Weak<RefCell<Option<Node<Tx>>>>;
 
 /// Map of the utxo statuses from the contract ID to the spent/unspent status
 /// of utxo and a reference to the relevant tx in the mempool.
@@ -210,9 +210,9 @@ where
         } else {
             self.ordered_txs
                 .first()
-                .map(|r| r.borrow().effective_feerate())
+                .and_then(|r| r.borrow().as_ref().map(|x| x.effective_feerate()))
         }
-        .unwrap_or(FeeRate::zero())
+        .unwrap_or_default()
     }
 
     /// The fee paid by an incoming tx must cover with the minimum feerate both
@@ -297,7 +297,9 @@ where
 
     fn order_transactions(&mut self) {
         self.ordered_txs
-            .sort_unstable_by(|a, b| a.borrow().cmp(&b.borrow()));
+            .sort_unstable_by(|a, b| {
+                Node::optional_cmp(&a.borrow(),&b.borrow())
+            });
     }
 
     /// Evicts the lowest tx and returns true if the mempool needs to be re-sorted.
@@ -341,7 +343,7 @@ impl<Tx: MempoolTx> Node<Tx> {
     }
 
     fn into_ref(self) -> Ref<Tx> {
-        Rc::new(RefCell::new(self))
+        Rc::new(RefCell::new(Some(self)))
     }
 
     fn effective_feerate(&self) -> FeeRate {
@@ -362,13 +364,14 @@ impl<Tx: MempoolTx> Node<Tx> {
         for output in self.outputs.iter() {
             if let Output::Spent(childtx, _) = output {
                 if let Some(childtx) = childtx.upgrade() {
+                    let childtx = childtx.borrow();
+                    if let Some(childtx) = childtx.as_ref() {
                     // The discount is a simplification that allows us to recursively add up descendants' feerates
                     // without opening a risk of overcounting in case of diamond-shaped graphs.
                     // This comes with a slight unfairness to users where a child of two parents
                     // is not contributing fully to the lower-fee parent.
                     // However, in common case this discount has no effect since the child spends only one parent.
                     let unconfirmed_parents = childtx
-                        .borrow()
                         .inputs
                         .iter()
                         .filter(|i| {
@@ -380,10 +383,10 @@ impl<Tx: MempoolTx> Node<Tx> {
                         })
                         .count();
                     let child_feerate = childtx
-                        .borrow()
                         .effective_feerate()
                         .discount(unconfirmed_parents);
                     result_feerate = result_feerate.combine(child_feerate);
+                }
                 }
             }
         }
@@ -398,6 +401,15 @@ impl<Tx: MempoolTx> Node<Tx> {
                 // newer txs -> lower priority
                 self.seen_at.cmp(&other.seen_at).reverse()
             })
+    }
+
+    fn optional_cmp(a: &Option<Self>, b: &Option<Self>) -> Ordering {
+        match (a,b) {
+            (None, None) => Ordering::Equal,
+            (Some(_), None) => Ordering::Greater,
+            (None, Some(_)) => Ordering::Less,
+            (Some(a),Some(b)) => a.cmp(b)
+        }
     }
 }
 
@@ -539,16 +551,18 @@ impl<'a, 'b: 'a, Tx: MempoolTx> UtxoView<'a, 'b, Tx> {
         // 3. for each output we should store an "unspent" status into the utxoview.
 
         // 1. link to the parents if they are in the same pool.
-        for (input_index, cid) in new_ref.borrow().tx.txlog().inputs().enumerate() {
+        for (input_index, cid) in new_ref.borrow().as_ref().unwrap().tx.txlog().inputs().enumerate() {
             // if the spent output is unconfirmed in the front of the view - modify it to link.
             if let Some(UtxoStatus::UnconfirmedUnspent(srctx, output_index, _depth)) =
                 self.get(cid).front_value()
             {
                 if let Some(srctx) = srctx.upgrade() {
                     let mut srctx = srctx.borrow_mut();
-                    srctx.outputs[*output_index] =
-                        Output::Spent(Rc::downgrade(&new_ref), input_index);
-                    srctx.cached_total_feerate.set(None);
+                    if let Some(srctx) = srctx.as_mut() {
+                        srctx.outputs[*output_index] =
+                            Output::Spent(Rc::downgrade(&new_ref), input_index);
+                        srctx.cached_total_feerate.set(None);
+                    }
                 }
             }
         }
@@ -556,9 +570,11 @@ impl<'a, 'b: 'a, Tx: MempoolTx> UtxoView<'a, 'b, Tx> {
         // 2. mark spent utxos as spent
         for (input_status, cid) in new_ref
             .borrow()
+            .as_ref()
+            .unwrap()
             .inputs
             .iter()
-            .zip(new_ref.borrow().tx.txlog().inputs())
+            .zip(new_ref.borrow().as_ref().unwrap().tx.txlog().inputs())
         {
             let status = match input_status {
                 Input::Confirmed => UtxoStatus::ConfirmedSpent,
@@ -570,6 +586,8 @@ impl<'a, 'b: 'a, Tx: MempoolTx> UtxoView<'a, 'b, Tx> {
         // 3. add outputs as unspent.
         for (i, cid) in new_ref
             .borrow()
+            .as_ref()
+            .unwrap()
             .tx
             .txlog()
             .outputs()
