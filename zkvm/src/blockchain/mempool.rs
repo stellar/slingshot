@@ -5,21 +5,54 @@
 //! What if transaction does not pay high enough fee? At best it’s not going to be relayed anywhere.
 //! At worst, it’s going to be relayed and dropped by some nodes, and relayed again by others, etc.
 //!
-//! There are three ways out of this scenario:
+//! This situation poses two problems:
+//! 1. Denial of service risk: low-fee transactions that barely make it to the mempool
+//!    can get re-relayed many times over, consuming bandwidth of the network,
+//!    while the same fee is amortized over all the relay cycles, lowering the cost of attack.
+//! 2. Stuck transactions: as nodes reject double-spend attempts, user may have to wait indefinitely
+//!    until his low-fee transaction is either completely forgotten or finally published in a block.
 //!
-//! 1. Simply wait longer until the transaction gets published.
-//!    Once a year, when everyone goes on vacation, the network gets less loaded and your transaction may get its slot.
-//! 2. Replace the transaction with another one, with a higher fee. This is known as "replace-by-fee" (RBF).
+//! There are two ways to address stuck transactions:
+//!
+//! 1. Replace the transaction with another one, with a higher fee. This is known as "replace-by-fee" (RBF).
 //!    This has a practical downside: one need to re-communicate blinding factors with the recipient when making an alternative tx.
-//! 3. Create a chained transaction that pays a higher fee to cover for itself and for the parent.
-//!    This is known as "child pays for parent" (CPFP).
+//!    So in this implementation we do not support RBF at all.
+//! 2. Create a chained transaction that pays a higher fee to cover for itself and for the parent.
+//!    This is known as "child pays for parent" (CPFP). This is implemented here.
 //!
-//! In this implementation we are implementing a CPFP strategy
-//! to make prioritization more accurate and allow users "unstuck" their transactions.
+//! The DoS risk is primarily limited by requiring transactions pay not only for themselves, but also for
+//! the cost of relaying the transactions that are being evicted. The evicted transaction is now unlikely to be mined,
+//! so the cost of relaying it must be covered by some other transaction.
+//! 
+//! There is an additional problem, though. After the mempool is partially cleared by a newly published block,
+//! the previously evicted transaction may come back and will be relayed once again.
+//! At first glance, it is not a problem because someone's transaction that cause the eviction has already paid for the first relay.
+//! However, for the creator of the transaction potentially unlimited number of relays comes at a constant (low) cost.
+//! This means, the network may have to relay twice as much traffic due to such bouncing transactions,
+//! and the actual users of the network may need to pay twice as much.
+//! 
+//! To address this issue, we need to efficiently remember the evicted transaction. Then, to accept it again,
+//! we require it to have the effective feerate = minimum feerate + flat feerate. If the transaction pays by itself,
+//! it is fine to accept it again. The only transaction likely to return again and again is the one paying a very low fee,
+//! so the bump by flat feerate would force it to be paid via CPFP (parked and wait for a higher-paying child).
 //!
+//! How do we "efficiently remember" evicted transactions? We will use a pair of bloom filters: one to
+//! remember all the previously evicted tx IDs ("tx filter"), another one for all the outputs
+//! that were spent by the evicted tx ("spends filter").
+//! When a new transaction attempts to spend an output marked in the filter:
+//! 1. If the transaction also exists in the tx filter, then it is the resurrection of a previously evicted transaction,
+//!    and the usual rule with extra flat fee applies (low probablity squared that it's a false positive and we punish a legitimate tx). 
+//! 2. If the transaction does not exist in the tx filter, it is likely a double spend of a previously evicted tx,
+//!    and we outright reject it. There is a low chance (<1%) of false positive reported by the spends filter, but
+//!    if this node does not relay a legitimate transaction, other >99% nodes will since
+//!    all nodes initialize filters with random keys.
+//! Both filters are reset every 24h.
+
 use core::cell::{Cell, RefCell};
-use core::cmp::Ordering;
+use core::cmp::{max,Ordering};
 use core::hash::Hash;
+use core::mem;
+use core::ops::{Deref, DerefMut};
 
 use std::collections::HashMap;
 use std::rc::{Rc, Weak};
@@ -77,11 +110,28 @@ pub trait MempoolTx {
     }
 }
 
+/// Configuration of the mempool
+pub struct Config {
+    /// Maximum size of mempool in bytes
+    pub max_size: usize,
+
+    /// Maximum size of peerpool in bytes (to fit a few transaction)
+    pub max_peerpool_size: usize,
+
+    /// Maximum depth of unconfirmed transactions allowed.
+    /// 0 means node only allows spending confirmed outputs.
+    pub max_depth: usize,
+
+    /// Minimum feerate required when the mempool is empty.
+    /// Transactions paying less than this are not relayed.
+    pub flat_feerate: FeeRate,
+}
+
 /// Main API to the memory pool.
 pub struct Mempool2<Tx, PeerID>
 where
     Tx: MempoolTx,
-    PeerID: Hash + Eq,
+    PeerID: Hash + Eq + Clone,
 {
     /// Current blockchain state.
     state: BlockchainState,
@@ -93,35 +143,28 @@ where
     /// Note: this list is not ordered while mempool is under max_size and
     /// re-sorted every several insertions.
     ordered_txs: Vec<Ref<Tx>>,
-
-    /// Temporarily parked transactions
-    peer_pools: HashMap<PeerID, Peerpool<Tx>>,
-
-    /// Total size of the mempool in bytes.
+    peerpools: HashMap<PeerID, Peerpool<Tx>>,
     current_size: usize,
-
-    /// Maximum allowed size of the mempool in bytes (per FeeRate.size() of individual txs).
     max_size: usize,
-
-    /// Maximum allowed depth of the mempool (0 = can only spend confirmed outputs).
-    max_depth: usize,
-
-    /// Current timestamp.
+    max_peerpool_size: usize,
+    max_depth: usize, // 0 means can only spend confirmed outputs
     timestamp_ms: u64,
+    flat_feerate: FeeRate,
+    hasher: Hasher<ContractID>,
 }
 
 struct Peerpool<Tx: MempoolTx> {
     utxos: UtxoMap<Tx>,
     lru: Vec<Ref<Tx>>,
-    max_size: usize,
     current_size: usize,
 }
 
+/// Node in the tx graph.
 #[derive(Debug)]
 struct Node<Tx: MempoolTx> {
     // Actual transaction object managed by the mempool.
     tx: Tx,
-    // 
+    //
     seen_at: Instant,
     // Cached total feerate. None when it needs to be recomputed.
     cached_total_feerate: Cell<Option<FeeRate>>,
@@ -134,10 +177,10 @@ struct Node<Tx: MempoolTx> {
 #[derive(Debug)]
 enum Input<Tx: MempoolTx> {
     /// Input is marked as confirmed - we don't really care where in utreexo it is.
+    /// This is also used by peerpool when spending an output from the main pool, to avoid mutating updates.
     Confirmed,
     /// Parent tx and an index in parent.outputs list.
-    /// Normally, the
-    Unconfirmed(WeakRef<Tx>, usize, Depth),
+    Unconfirmed(Ref<Tx>, Index, Depth),
 }
 
 #[derive(Debug)]
@@ -146,7 +189,8 @@ enum Output<Tx: MempoolTx> {
     Unspent,
 
     /// Child transaction and an index in child.inputs list.
-    Spent(WeakRef<Tx>, usize),
+    /// Normally, the weakref is dropped at the same time as the strong ref, during eviction.
+    Spent(WeakRef<Tx>, Index),
 }
 
 type Ref<Tx> = Rc<RefCell<Option<Node<Tx>>>>;
@@ -155,33 +199,32 @@ type WeakRef<Tx> = Weak<RefCell<Option<Node<Tx>>>>;
 /// Map of the utxo statuses from the contract ID to the spent/unspent status
 /// of utxo and a reference to the relevant tx in the mempool.
 type UtxoMap<Tx> = HashMap<ContractID, UtxoStatus<Tx>>;
-
-/// Depth of the unconfirmed tx.
-/// Mempool does not allow deep chains of unconfirmed spends to minimize DoS risk for recursive operations.
 type Depth = usize;
+type Index = usize;
 
 /// Status of the utxo cached by the mempool
 enum UtxoStatus<Tx: MempoolTx> {
-    /// unspent output originating from the i'th output in the given unconfirmed tx.
-    /// if the tx is dropped, this is considered a nonexisted output.
-    UnconfirmedUnspent(WeakRef<Tx>, usize, Depth),
+    /// Output is unspent and exists in the utreexo accumulator
+    Confirmed,
 
-    /// unconfirmed output is spent by another unconfirmed tx
-    UnconfirmedSpent,
+    /// Output is unspent and is located in the i'th output in the given unconfirmed tx.
+    Unconfirmed(Ref<Tx>, Index, Depth),
 
-    /// spent output stored in utreexo
-    ConfirmedSpent,
+    /// Output is marked as spent
+    Spent,
 }
 
 impl<Tx, PeerID> Mempool2<Tx, PeerID>
 where
     Tx: MempoolTx,
-    PeerID: Hash + Eq,
+    PeerID: Hash + Eq + Clone,
 {
     /// Creates a new mempool with the given size limit and the current timestamp.
     pub fn new(
         max_size: usize,
+        max_peerpool_size: usize,
         max_depth: Depth,
+        flat_feerate: FeeRate,
         state: BlockchainState,
         timestamp_ms: u64,
     ) -> Self {
@@ -189,11 +232,14 @@ where
             state,
             utxos: HashMap::new(),
             ordered_txs: Vec::with_capacity(max_size / 2000),
-            peer_pools: HashMap::new(),
+            peerpools: HashMap::new(),
             current_size: 0,
             max_size,
+            max_peerpool_size,
             max_depth,
             timestamp_ms,
+            flat_feerate: flat_feerate.normalize(),
+            hasher: utreexo::utreexo_hasher()
         }
     }
 
@@ -205,14 +251,12 @@ where
     /// This method returns the effective feerate of the lowest-priority tx,
     /// which also contains the total size that must be accounted for.
     pub fn min_feerate(&self) -> FeeRate {
-        if self.current_size < self.max_size {
-            None
-        } else {
-            self.ordered_txs
+        let actual_min_feerate = self.ordered_txs
                 .first()
                 .and_then(|r| r.borrow().as_ref().map(|x| x.effective_feerate()))
-        }
-        .unwrap_or_default()
+                .unwrap_or_default();
+
+        max(actual_min_feerate, self.flat_feerate)
     }
 
     /// The fee paid by an incoming tx must cover with the minimum feerate both
@@ -235,14 +279,13 @@ where
     /// Adds a tx and evicts others, if needed.
     pub fn try_append(
         &mut self,
-        peer_id: PeerID,
         tx: Tx,
+        peer_id: PeerID,
         evicted_txs: &mut impl core::iter::Extend<Tx>,
     ) -> Result<(), MempoolError> {
-        if self.current_size >= self.max_size {
+        if self.is_full() {
             if !Self::is_feerate_sufficient(tx.feerate(), self.min_feerate()) {
-                // TODO: insert into a peer pool.
-                return Err(MempoolError::LowFee);
+                return self.park_for_peer(tx, peer_id);
             }
         }
         self.append(tx)?;
@@ -250,7 +293,41 @@ where
         Ok(())
     }
 
-    /// Add a transaction.
+    /// Forgets peer and removes all associated parked transactions.
+    pub fn forget_peer(&mut self, peer_id: PeerID) {
+        self.peerpools.remove(&peer_id);
+    }
+
+    /// Add a transaction to mempool.
+    /// Fails if the transaction attempts to spend a non-existent output.
+    /// Does not check the feerate and does not compact the mempool.
+    fn park_for_peer(&mut self, tx: Tx, peer_id: PeerID) -> Result<(), MempoolError> {
+        check_tx_header(
+            &tx.verified_tx().header,
+            self.timestamp_ms,
+            self.state.tip.version,
+        )?;
+
+        let max_depth = self.max_depth;
+        let newtx = self.peerpool_view(&peer_id).apply_tx(
+            tx,
+            max_depth,
+            Instant::now(),
+        )?;
+
+        let pool = self.peerpools.entry(peer_id.clone()).or_default();
+
+        // Park the tx
+        pool.lru.push(newtx);
+
+        // Find txs that become eligible for upgrade into the mempool
+        // and move them there.
+
+
+        return Err(MempoolError::LowFee);
+    }
+
+    /// Add a transaction to mempool.
     /// Fails if the transaction attempts to spend a non-existent output.
     /// Does not check the feerate and does not compact the mempool.
     fn append(&mut self, tx: Tx) -> Result<(), MempoolError> {
@@ -260,20 +337,17 @@ where
             self.state.tip.version,
         )?;
 
-        let mut utxo_view = UtxoView {
-            utxomap: &mut self.utxos,
-            backing: None,
-        };
         let tx_size = tx.feerate().size();
-        let newtx = utxo_view.apply_tx(
+        let max_depth = self.max_depth;
+        let newtx = self.mempool_view().apply_tx(
             tx,
-            &self.state.utreexo,
-            self.max_depth,
+            max_depth,
             Instant::now(),
-            &utreexo::utreexo_hasher(),
         )?;
 
         self.ordered_txs.push(newtx);
+        self.order_transactions();
+
         self.current_size += tx_size;
 
         Ok(())
@@ -282,24 +356,18 @@ where
     /// Removes the lowest-feerate transactions to reduce the size of the mempool to the maximum allowed.
     /// User may provide a buffer that implements Extend to collect and inspect all evicted transactions.
     fn compact(&mut self, evicted_txs: &mut impl core::iter::Extend<Tx>) {
-        // if we are not full, don't do anything, not even re-sort the list.
-        if self.current_size < self.max_size {
-            return;
-        }
-
-        self.order_transactions();
-
-        // keep evicting items until we are 95% full.
-        while self.current_size * 100 > self.max_size * 95 {
+        while self.is_full() {
             self.evict_lowest(evicted_txs);
         }
     }
 
+    fn is_full(&self) -> bool {
+        self.current_size > self.max_size
+    }
+
     fn order_transactions(&mut self) {
         self.ordered_txs
-            .sort_unstable_by(|a, b| {
-                Node::optional_cmp(&a.borrow(),&b.borrow())
-            });
+            .sort_unstable_by(|a, b| Node::optional_cmp(&a.borrow(), &b.borrow()));
     }
 
     /// Evicts the lowest tx and returns true if the mempool needs to be re-sorted.
@@ -312,7 +380,7 @@ where
         }
 
         let lowest = self.ordered_txs.remove(0);
-        let (needs_reorder, total_evicted) = Self::evict_tx(&lowest, &mut self.utxos, evicted_txs);
+        let (needs_reorder, total_evicted) = self.mempool_view().evict_tx(&lowest, evicted_txs);
         self.current_size -= total_evicted;
 
         if needs_reorder {
@@ -320,30 +388,44 @@ where
         }
     }
 
-    /// Evicts tx and its subchildren recursively, updating the utxomap accordingly.
-    /// Returns a flag indicating that we need to reorder txs, and the total number of bytes evicted.
-    fn evict_tx(
-        txref: &Ref<Tx>,
-        utxos: &mut UtxoMap<Tx>,
-        evicted_txs: &mut impl core::iter::Extend<Tx>,
-    ) -> (bool, usize) {
-        // 1. immediately mark the node as evicted, taking its Tx out of it.
-        // 2. for each input: restore utxos as unspent.
-        // 3. for each input: if unconfirmed and non-evicted, invalidate feerate and set the reorder flag.
-        // 4. recursively evict children.
-        // 5. for each output: remove utxo records.
+    fn mempool_view(&mut self) -> MempoolView<'_, Tx> {
+        MempoolView {
+            map: &mut self.utxos,
+            utreexo: &self.state.utreexo,
+            hasher: &self.hasher,
+        }
+    }
 
-        unimplemented!()
+    fn peerpool_view(&mut self, peer_id: &PeerID) -> PeerView<'_, Tx> {
+        let pool = self.peerpools.entry(peer_id.clone()).or_default();
+        PeerView {
+            peermap: &mut pool.utxos,
+            mainmap: &self.utxos,
+            utreexo: &self.state.utreexo,
+            hasher: &self.hasher,
+        }
     }
 }
 
-impl<Tx: MempoolTx> Node<Tx> {
-    fn self_feerate(&self) -> FeeRate {
-        self.tx.feerate()
+impl<Tx: MempoolTx> Default for Peerpool<Tx> {
+    fn default() -> Self {
+        Peerpool {
+            utxos: UtxoMap::new(),
+            lru: Vec::new(),
+            current_size: 0,
+        }
     }
+}
+
+
+impl<Tx: MempoolTx> Node<Tx> {
 
     fn into_ref(self) -> Ref<Tx> {
         Rc::new(RefCell::new(Some(self)))
+    }
+
+    fn self_feerate(&self) -> FeeRate {
+        self.tx.feerate()
     }
 
     fn effective_feerate(&self) -> FeeRate {
@@ -358,39 +440,50 @@ impl<Tx: MempoolTx> Node<Tx> {
         })
     }
 
+    /// The discount is a simplification that allows us to recursively add up descendants' feerates
+    /// without opening a risk of overcounting in case of diamond-shaped graphs.
+    /// This comes with a slight unfairness to users where a child of two parents
+    /// is not contributing fully to the lower-fee parent.
+    /// However, in common case this discount has no effect since the child spends only one parent.
+    fn discounted_effective_feerate(&self) -> FeeRate {
+        let unconfirmed_parents = self
+            .inputs
+            .iter()
+            .filter(|i| {
+                if let Input::Unconfirmed(_, _, _) = i {
+                    true
+                } else {
+                    false
+                }
+            })
+            .count();
+        self.effective_feerate().discount(unconfirmed_parents)
+    }
+
     fn compute_total_feerate(&self) -> FeeRate {
         // go through all children and get their effective feerate and divide it by the number of parents
         let mut result_feerate = self.self_feerate();
         for output in self.outputs.iter() {
-            if let Output::Spent(childtx, _) = output {
-                if let Some(childtx) = childtx.upgrade() {
-                    let childtx = childtx.borrow();
-                    if let Some(childtx) = childtx.as_ref() {
-                    // The discount is a simplification that allows us to recursively add up descendants' feerates
-                    // without opening a risk of overcounting in case of diamond-shaped graphs.
-                    // This comes with a slight unfairness to users where a child of two parents
-                    // is not contributing fully to the lower-fee parent.
-                    // However, in common case this discount has no effect since the child spends only one parent.
-                    let unconfirmed_parents = childtx
-                        .inputs
-                        .iter()
-                        .filter(|i| {
-                            if let Input::Unconfirmed(_, _, _) = i {
-                                true
-                            } else {
-                                false
-                            }
-                        })
-                        .count();
-                    let child_feerate = childtx
-                        .effective_feerate()
-                        .discount(unconfirmed_parents);
-                    result_feerate = result_feerate.combine(child_feerate);
-                }
+            if let Output::Spent(childref, _) = output {
+                if let Some(maybe_child) = childref.upgrade() {
+                    if let Some(childtx) = maybe_child.borrow().as_ref() {
+                        result_feerate = result_feerate.combine(childtx.discounted_effective_feerate());
+                    }
                 }
             }
         }
         result_feerate
+    }
+
+    fn invalidate_cached_feerate(&self) {
+        self.cached_total_feerate.set(None);
+        for inp in self.inputs.iter() {
+            if let Input::Unconfirmed(srcref, _, _) = inp {
+                if let Some(srctx) = srcref.borrow().as_ref() {
+                    srctx.invalidate_cached_feerate();
+                }
+            }
+        }
     }
 
     // Compares tx priorities. The Ordering::Less indicates that the transaction has lower priority.
@@ -403,116 +496,59 @@ impl<Tx: MempoolTx> Node<Tx> {
             })
     }
 
+    // Comparing optional nodes to account for eviction.
+    // Evicted nodes naturally have lower priority.
     fn optional_cmp(a: &Option<Self>, b: &Option<Self>) -> Ordering {
-        match (a,b) {
+        match (a, b) {
             (None, None) => Ordering::Equal,
             (Some(_), None) => Ordering::Greater,
             (None, Some(_)) => Ordering::Less,
-            (Some(a),Some(b)) => a.cmp(b)
+            (Some(a), Some(b)) => a.cmp(b),
         }
     }
 }
 
-impl<Tx: MempoolTx> UtxoStatus<Tx> {
-    fn is_unconfirmed_spent(&self) -> bool {
-        match self {
-            UtxoStatus::UnconfirmedSpent => true,
-            _ => false,
-        }
-    }
-}
 
-enum ViewResult<T> {
-    None,
-    Front(T),
-    Backing(T),
-}
 
-impl<T> ViewResult<T> {
-    fn into_option(self) -> Option<T> {
-        match self {
-            ViewResult::None => None,
-            ViewResult::Front(x) => Some(x),
-            ViewResult::Backing(x) => Some(x),
-        }
-    }
+trait UtxoViewTrait<Tx: MempoolTx> {
+    /// Returns the status of the utxo for the given contract ID and a utreexo proof.
+    /// If the utxo status is not cached within the view,
+    /// utreexo proof is used to retrieve it from utreexo.
+    fn get(&self, contract_id: &ContractID, proof: &utreexo::Proof) -> Result<UtxoStatus<Tx>, MempoolError>;
 
-    fn front_value(self) -> Option<T> {
-        match self {
-            ViewResult::Front(x) => Some(x),
-            _ => None,
-        }
-    }
-}
+    /// Stores the status of the utxo in the view.
+    fn set(&mut self, contract_id: ContractID, status: UtxoStatus<Tx>);
 
-struct UtxoView<'a, 'b: 'a, Tx: MempoolTx> {
-    utxomap: &'a mut UtxoMap<Tx>,
-    backing: Option<&'b UtxoMap<Tx>>,
-}
-
-impl<'a, 'b: 'a, Tx: MempoolTx> UtxoView<'a, 'b, Tx> {
-    fn get(&self, contract_id: &ContractID) -> ViewResult<&UtxoStatus<Tx>> {
-        let front = self.utxomap.get(contract_id);
-        if let Some(x) = front {
-            ViewResult::Front(x)
-        } else if let Some(x) = self.backing.and_then(|b| b.get(contract_id)) {
-            ViewResult::Backing(x)
-        } else {
-            ViewResult::None
-        }
-    }
-
-    fn set(&mut self, contract_id: ContractID, status: UtxoStatus<Tx>) -> Option<UtxoStatus<Tx>> {
-        // If backing is None and we are storing UnconfirmedSpent, we simply remove the existing item.
-        // In such case we are operating on the root storage, where we don't even need to store the spent status of the utxos.
-        if self.backing.is_none() && status.is_unconfirmed_spent() {
-            return self.utxomap.remove(&contract_id);
-        }
-        self.utxomap.insert(contract_id, status)
-    }
+    /// Removes the stored status
+    fn remove(&mut self, contract_id: &ContractID);
 
     /// Attempts to apply transaction changes
     fn apply_tx(
         &mut self,
         tx: Tx,
-        utreexo: &utreexo::Forest,
         max_depth: Depth,
         seen_at: Instant,
-        hasher: &Hasher<ContractID>,
     ) -> Result<Ref<Tx>, MempoolError> {
         let mut utreexo_proofs = tx.utreexo_proofs().iter();
 
-        // Start by collecting the inputs and do not perform any mutations until we check all of them.
+        // Start by collecting the inputs statuses and failing early if any output is spent or does not exist. 
+        // Important: do not perform any mutations until we check all of them.
         let inputs = tx
             .txlog()
             .inputs()
             .map(|cid| {
                 let utxoproof = utreexo_proofs.next().ok_or(UtreexoError::InvalidProof)?;
 
-                match (self.get(cid).into_option(), utxoproof) {
-                    (Some(UtxoStatus::UnconfirmedUnspent(srctx, i, depth)), _proof) => {
-                        match srctx.upgrade() {
-                            Some(srctx) => {
-                                Ok(Input::Unconfirmed(Rc::downgrade(&srctx), *i, *depth))
-                            }
-                            None => Err(MempoolError::InvalidUnconfirmedOutput),
-                        }
-                    }
-                    (Some(_), _proof) => Err(MempoolError::InvalidUnconfirmedOutput),
-                    (None, utreexo::Proof::Committed(path)) => {
-                        // check the path
-                        utreexo.verify(cid, path, hasher)?;
-                        Ok(Input::Confirmed)
-                    }
-                    (None, utreexo::Proof::Transient) => {
-                        Err(MempoolError::UtreexoError(UtreexoError::InvalidProof))
-                    }
+                match self.get(cid, utxoproof)? {
+                    UtxoStatus::Confirmed => Ok(Input::Confirmed),
+                    UtxoStatus::Unconfirmed(srctx, i, depth) => Ok(Input::Unconfirmed(srctx, i, depth)),
+                    UtxoStatus::Spent => Err(MempoolError::InvalidUnconfirmedOutput),
                 }
             })
             .collect::<Result<Vec<_>, _>>()?;
 
-        // if this is 0, then we only spend confirmed outputs.
-        // unconfirmed start with 1.
+        // If this is 0, then we only spend confirmed outputs.
+        // unconfirmed ones start with 1.
         let max_spent_depth = inputs
             .iter()
             .map(|inp| {
@@ -541,66 +577,196 @@ impl<'a, 'b: 'a, Tx: MempoolTx> UtxoView<'a, 'b, Tx> {
             inputs,
             outputs,
             tx,
-        }
-        .into_ref();
+        }.into_ref();
 
-        // At this point the spending was checked, so we can do mutating changes.
-        // 1. If we are spending an unconfirmed tx in the front of the view - we can link it back to
-        //    its child. If it's in the back, we should not link.
-        // 2. For each input we should store a "spent" status into the UtxoView.
-        // 3. for each output we should store an "unspent" status into the utxoview.
+        {
+            // we cannot have &Node before we pack it into a Ref,
+            // so we borrow it afterwards.
+            let _dummy = new_ref.borrow();
+            let new_node = _dummy
+                .as_ref()
+                .expect("we just created it above, so it's safe to unwrap");
 
-        // 1. link to the parents if they are in the same pool.
-        for (input_index, cid) in new_ref.borrow().as_ref().unwrap().tx.txlog().inputs().enumerate() {
-            // if the spent output is unconfirmed in the front of the view - modify it to link.
-            if let Some(UtxoStatus::UnconfirmedUnspent(srctx, output_index, _depth)) =
-                self.get(cid).front_value()
+            // At this point the spending was checked, so we can do mutating changes.
+
+            // 1. link parents to the children (if the weakref to the parent is not nil)
+            // 2. mark spent utxos as spent
+            for (input_index, (input_status, cid)) in new_node
+                .inputs
+                .iter()
+                .zip(new_node.tx.txlog().inputs())
+                .enumerate()
             {
-                if let Some(srctx) = srctx.upgrade() {
-                    let mut srctx = srctx.borrow_mut();
-                    if let Some(srctx) = srctx.as_mut() {
-                        srctx.outputs[*output_index] =
-                            Output::Spent(Rc::downgrade(&new_ref), input_index);
-                        srctx.cached_total_feerate.set(None);
+                if let Input::Unconfirmed(srcref, output_index, _depth) = input_status {
+                    if let Some(srctx) = srcref.borrow_mut().as_mut() {
+                        srctx.outputs[*output_index] = Output::Spent(Rc::downgrade(&new_ref), input_index);
+                        srctx.invalidate_cached_feerate();
                     }
+                }
+                self.set(*cid, UtxoStatus::Spent);
+            }
+
+            // 3. add outputs as unspent.
+            for (i, cid) in new_node
+                .tx
+                .txlog()
+                .outputs()
+                .map(|c| c.id())
+                .enumerate()
+            {
+                self.set(
+                    cid,
+                    UtxoStatus::Unconfirmed(new_ref.clone(), i, max_spent_depth + 1),
+                );
+            }
+        }
+
+        Ok(new_ref)
+    }
+
+    /// Evicts tx and its subchildren recursively, updating the utxomap accordingly.
+    /// Returns a flag indicating if we need to reorder txs, and the total number of bytes evicted.
+    fn evict_tx(
+        &mut self,
+        txref: &Ref<Tx>,
+        evicted_txs: &mut impl core::iter::Extend<Tx>,
+    ) -> (bool, usize) {
+        // 1. immediately mark the node as evicted, taking its Tx out of it.
+        // 2. for each input: restore utxos as unspent.
+        // 3. for each input: if unconfirmed and non-evicted, invalidate feerate and set the reorder flag.
+        // 4. recursively evict children.
+        // 5. for each output: remove utxo records.
+
+        // TODO: if we evict a tx that's depended upon by some child parked in the peerpool - 
+        // maybe put it there, or update the peerpool?
+
+        let node: Node<Tx> = match txref.borrow_mut().take() {
+            Some(node) => node,
+            None => return (false, 0) // node is already evicted.
+        };
+        
+        let mut should_reorder = false;
+
+        for (inp, cid) in node.inputs.into_iter().zip(node.tx.txlog().inputs()) {
+            match inp {
+                Input::Confirmed => {
+                    // remove the Spent status in the view that shadowed the Utreexo state
+                    self.remove(cid);
+                }
+                Input::Unconfirmed(srcref, i, depth) => {
+                    if let Some(src) = srcref.borrow_mut().as_mut() {
+                        should_reorder = true;
+                        src.invalidate_cached_feerate();
+                        src.outputs[i] = Output::Unspent;
+                    }
+                    self.set(*cid, UtxoStatus::Unconfirmed(srcref, i, depth));
                 }
             }
         }
 
-        // 2. mark spent utxos as spent
-        for (input_status, cid) in new_ref
-            .borrow()
-            .as_ref()
-            .unwrap()
-            .inputs
-            .iter()
-            .zip(new_ref.borrow().as_ref().unwrap().tx.txlog().inputs())
-        {
-            let status = match input_status {
-                Input::Confirmed => UtxoStatus::ConfirmedSpent,
-                Input::Unconfirmed(_, _, _) => UtxoStatus::UnconfirmedSpent,
-            };
-            self.set(*cid, status);
-        }
+        let mut evicted_size = node.tx.feerate().size();
 
-        // 3. add outputs as unspent.
-        for (i, cid) in new_ref
-            .borrow()
-            .as_ref()
-            .unwrap()
-            .tx
-            .txlog()
-            .outputs()
-            .map(|c| c.id())
-            .enumerate()
-        {
-            self.set(
-                cid,
-                UtxoStatus::UnconfirmedUnspent(Rc::downgrade(&new_ref), i, max_spent_depth + 1),
-            );
+        for (out,cid) in node.outputs.into_iter().zip(node.tx.txlog().outputs().map(|c| c.id() )) {
+            if let Output::Spent(childweakref, _) = out {
+                if let Some(childref) = childweakref.upgrade() {
+                    let (reorder, size) = self.evict_tx(&childref, evicted_txs);
+                    should_reorder = should_reorder || reorder;
+                    evicted_size += size;
+                }
+            }
+            // the output was marked as unspent during eviction of the child, and we simply remove it here.
+            self.remove(&cid);
         }
+        evicted_txs.extend(Some(node.tx));
+        (should_reorder, evicted_size)
+    }
+}
 
-        Ok(new_ref)
+/// View into the state of utxos.
+struct MempoolView<'a, Tx: MempoolTx> {
+    map: &'a mut UtxoMap<Tx>,
+    utreexo: &'a utreexo::Forest,
+    hasher: &'a Hasher<ContractID>,
+}
+
+/// Peer's view has its own R/W map backed by the readonly main map.
+/// The peer's map shadows the main mempool map.
+struct PeerView<'a, Tx: MempoolTx> {
+    peermap: &'a mut UtxoMap<Tx>,
+    mainmap: &'a UtxoMap<Tx>,
+    utreexo: &'a utreexo::Forest,
+    hasher: &'a Hasher<ContractID>,
+}
+
+impl<'a, Tx: MempoolTx> UtxoViewTrait<Tx> for MempoolView<'a, Tx> {
+
+    fn get(&self, contract_id: &ContractID, proof: &utreexo::Proof) -> Result<UtxoStatus<Tx>, MempoolError> {
+        if let Some(status) = self.map.get(contract_id) {
+            Ok(status.clone())
+        } else if let utreexo::Proof::Committed(path) = proof {
+            self.utreexo.verify(contract_id, path, &self.hasher)?;
+            Ok(UtxoStatus::Confirmed)
+        } else {
+            Err(MempoolError::InvalidUnconfirmedOutput)
+        }
+    }
+
+    fn remove(&mut self, contract_id: &ContractID) {
+        self.map.remove(contract_id);
+    }
+
+    /// Stores the status of the utxo in the view.
+    fn set(&mut self, contract_id: ContractID, status: UtxoStatus<Tx>) {
+        // if we mark the unconfirmed output as spent, simply remove it from the map to avoid wasting space.
+        // this way we'll only store spent flags for confirmed and unspent flags for unconfirmed, while
+        // forgetting all intermediately consumed outputs.
+        if let UtxoStatus::Spent = status {
+            if let Some(UtxoStatus::Unconfirmed(_,_,_)) = self.map.get(&contract_id) {
+                self.map.remove(&contract_id);
+                return;
+            }
+        }
+        self.map.insert(contract_id, status);
+    }
+}
+
+impl<'a, Tx: MempoolTx> UtxoViewTrait<Tx> for PeerView<'a, Tx> {
+    fn get(&self, contract_id: &ContractID, proof: &utreexo::Proof) -> Result<UtxoStatus<Tx>, MempoolError> {
+        if let Some(status) = self.peermap.get(contract_id) {
+            Ok(status.clone())
+        } else if let Some(status) = self.mainmap.get(contract_id) {
+            // treat mainpool outputs as confirmed so we don't modify them
+            Ok(match status {
+                UtxoStatus::Confirmed => UtxoStatus::Confirmed,
+                UtxoStatus::Spent => UtxoStatus::Spent,
+                UtxoStatus::Unconfirmed(_txref, _i, _d) => UtxoStatus::Confirmed,
+            })
+        } else if let utreexo::Proof::Committed(path) = proof {
+            self.utreexo.verify(contract_id, path, &self.hasher)?;
+            Ok(UtxoStatus::Confirmed)
+        } else {
+            Err(MempoolError::InvalidUnconfirmedOutput)
+        }
+    }
+
+    fn remove(&mut self, contract_id: &ContractID) {
+        self.peermap.remove(contract_id);
+    }
+
+    fn set(&mut self, contract_id: ContractID, status: UtxoStatus<Tx>) {
+        self.peermap.insert(contract_id, status);
+    }
+}
+
+
+// We are implementing the Clone manually because `#[derive(Clone)]` adds Clone bounds on `Tx`
+impl<Tx:MempoolTx> Clone for UtxoStatus<Tx> {
+    fn clone(&self) -> Self {
+        match self {
+            UtxoStatus::Confirmed => UtxoStatus::Confirmed,
+            UtxoStatus::Spent => UtxoStatus::Spent,
+            UtxoStatus::Unconfirmed(txref, i, d) => UtxoStatus::Unconfirmed(txref.clone(), *i, *d),
+        }
     }
 }
 

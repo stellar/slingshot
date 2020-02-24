@@ -45,6 +45,20 @@ impl FeeRate {
         }
     }
 
+    /// Normalizes feerate by dividing the fee by size rounding it down.
+    pub fn normalize(mut self) -> Self {
+        self.fee /= self.size;
+        self.size = 1;
+        self
+    }
+
+    /// Multiplies the feerate and returns a normalized feerate (with size=1).
+    pub fn mul(mut self, f: f64) -> Self {
+        self.fee =  ((self.fee as f64 * f) / self.size as f64).round() as u64;
+        self.size = 1;
+        self
+    }
+
     /// Discounts the fee and the size by a given factor.
     /// E.g. feerate 100/1200 discounted by 2 gives 50/600.
     /// Same ratio, but lower weight when combined with other feerates.
