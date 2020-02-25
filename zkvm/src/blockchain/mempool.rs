@@ -63,7 +63,7 @@ use super::state::{check_tx_header, BlockchainState};
 use crate::merkle::Hasher;
 use crate::tx::TxLog;
 use crate::utreexo::{self, UtreexoError};
-use crate::ContractID; //, TxEntry, TxHeader, TxLog, VerifiedTx};
+use crate::ContractID;
 use crate::FeeRate;
 use crate::VerifiedTx;
 
@@ -110,12 +110,13 @@ pub trait MempoolTx {
     }
 }
 
-/// Configuration of the mempool
+/// Configuration of the mempool.
+#[derive(Clone,Debug)]
 pub struct Config {
     /// Maximum size of mempool in bytes
     pub max_size: usize,
 
-    /// Maximum size of peerpool in bytes (to fit a few transaction)
+    /// Maximum size of peerpool in bytes (to fit <100 transactions)
     pub max_peerpool_size: usize,
 
     /// Maximum depth of unconfirmed transactions allowed.
@@ -145,11 +146,7 @@ where
     ordered_txs: Vec<Ref<Tx>>,
     peerpools: HashMap<PeerID, Peerpool<Tx>>,
     current_size: usize,
-    max_size: usize,
-    max_peerpool_size: usize,
-    max_depth: usize, // 0 means can only spend confirmed outputs
-    timestamp_ms: u64,
-    flat_feerate: FeeRate,
+    config: Config,
     hasher: Hasher<ContractID>,
 }
 
@@ -221,24 +218,17 @@ where
 {
     /// Creates a new mempool with the given size limit and the current timestamp.
     pub fn new(
-        max_size: usize,
-        max_peerpool_size: usize,
-        max_depth: Depth,
-        flat_feerate: FeeRate,
         state: BlockchainState,
-        timestamp_ms: u64,
+        mut config: Config,
     ) -> Self {
+        config.flat_feerate = config.flat_feerate.normalize();
         Mempool2 {
             state,
             utxos: HashMap::new(),
-            ordered_txs: Vec::with_capacity(max_size / 2000),
+            ordered_txs: Vec::with_capacity(config.max_size / 2000),
             peerpools: HashMap::new(),
             current_size: 0,
-            max_size,
-            max_peerpool_size,
-            max_depth,
-            timestamp_ms,
-            flat_feerate: flat_feerate.normalize(),
+            config,
             hasher: utreexo::utreexo_hasher()
         }
     }
@@ -256,7 +246,11 @@ where
                 .and_then(|r| r.borrow().as_ref().map(|x| x.effective_feerate()))
                 .unwrap_or_default();
 
-        max(actual_min_feerate, self.flat_feerate)
+        if self.is_full() {
+            max(actual_min_feerate, self.config.flat_feerate)
+        } else {
+            self.config.flat_feerate
+        }
     }
 
     /// The fee paid by an incoming tx must cover with the minimum feerate both
@@ -272,7 +266,10 @@ where
     /// `new_fee*evicted_size > min_fee * (evicted_size + new_size)`
     ///
     pub fn is_feerate_sufficient(feerate: FeeRate, min_feerate: FeeRate) -> bool {
-        let evicted_size = min_feerate.size() as u64;
+        let mut evicted_size = min_feerate.size() as u64;
+        if evicted_size == 1 { // special case when we have a normalized fee.
+            evicted_size = 0;
+        }
         feerate.fee() * evicted_size >= min_feerate.fee() * (evicted_size + (feerate.size() as u64))
     }
 
@@ -283,10 +280,12 @@ where
         peer_id: PeerID,
         evicted_txs: &mut impl core::iter::Extend<Tx>,
     ) -> Result<(), MempoolError> {
-        if self.is_full() {
-            if !Self::is_feerate_sufficient(tx.feerate(), self.min_feerate()) {
-                return self.park_for_peer(tx, peer_id);
-            }
+        // TODO: check if the tx must be applied to a peerpool,
+        // then add it there - it will otherwise fail in the main pool.
+
+        if !Self::is_feerate_sufficient(tx.feerate(), self.min_feerate()) {
+            // TODO: try to add to peerpool
+            return Err(MempoolError::LowFee);
         }
         self.append(tx)?;
         self.compact(evicted_txs);
@@ -304,11 +303,11 @@ where
     fn park_for_peer(&mut self, tx: Tx, peer_id: PeerID) -> Result<(), MempoolError> {
         check_tx_header(
             &tx.verified_tx().header,
-            self.timestamp_ms,
+            self.state.tip.timestamp_ms,
             self.state.tip.version,
         )?;
 
-        let max_depth = self.max_depth;
+        let max_depth = self.config.max_depth;
         let newtx = self.peerpool_view(&peer_id).apply_tx(
             tx,
             max_depth,
@@ -333,12 +332,12 @@ where
     fn append(&mut self, tx: Tx) -> Result<(), MempoolError> {
         check_tx_header(
             &tx.verified_tx().header,
-            self.timestamp_ms,
+            self.state.tip.timestamp_ms,
             self.state.tip.version,
         )?;
 
         let tx_size = tx.feerate().size();
-        let max_depth = self.max_depth;
+        let max_depth = self.config.max_depth;
         let newtx = self.mempool_view().apply_tx(
             tx,
             max_depth,
@@ -362,7 +361,7 @@ where
     }
 
     fn is_full(&self) -> bool {
-        self.current_size > self.max_size
+        self.current_size > self.config.max_size
     }
 
     fn order_transactions(&mut self) {
