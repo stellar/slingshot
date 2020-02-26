@@ -74,7 +74,11 @@ pub enum VMError {
 
     /// This error occurs when an instruction requires a u64 integer.
     #[fail(display = "Item is not a LE64 integer.")]
-    TypeNotInt,
+    TypeNotU64,
+
+    /// This error occurs when an instruction requires a u32 integer.
+    #[fail(display = "Item is not a LE32 integer.")]
+    TypeNotU32,
 
     /// This error occurs when an instruction requires a program item.
     #[fail(display = "Item is not a program item.")]
