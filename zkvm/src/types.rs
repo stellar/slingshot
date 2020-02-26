@@ -1,10 +1,9 @@
 //! Core ZkVM stack types: data, variables, values, contracts etc.
 
-use bulletproofs::r1cs;
 use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
 use serde::{Deserialize, Serialize};
-use spacesuit::SignedInteger;
+use spacesuit::{self, SignedInteger};
 
 use crate::constraints::{Commitment, Constraint, Expression, Variable};
 use crate::contract::{Contract, PortableItem};
@@ -102,11 +101,7 @@ pub struct ClearValue {
 
 /// A wide value type (for negative values created by `borrow`).
 #[derive(Debug)]
-pub struct WideValue {
-    pub(crate) r1cs_qty: r1cs::Variable,
-    pub(crate) r1cs_flv: r1cs::Variable,
-    pub(crate) witness: Option<(SignedInteger, Scalar)>,
-}
+pub struct WideValue(pub(crate) spacesuit::AllocatedValue);
 
 impl Item {
     /// Downcasts item to `String` type.
