@@ -926,7 +926,7 @@ Code | Instruction                | Stack diagram                              |
 0x16 | [`borrow`](#borrow)        |         _qty flv_ → _–V +V_                | Modifies [CS](#constraint-system)
 0x17 | [`retire`](#retire)        |           _value_ → ø                      | Modifies [CS](#constraint-system), [tx log](#transaction-log)
 0x18 | [`cloak:m:n`](#cloak)      | _widevalues commitments_ → _values_        | Modifies [CS](#constraint-system)
-0x19 | [`fee`](#fee)              |       _value qty_ → ø                      | Modifies [tx log](#transaction-log)
+0x19 | [`fee`](#fee)              |             _qty_ → _widevalue_            | Modifies [CS](#constraint-system), [tx log](#transaction-log)
  |                                |                                            |
  |     [**Contracts**](#contract-instructions)        |                        |
 0x1a | [`input`](#input)          |      _prevoutput_ → _contract_             | Modifies [tx log](#transaction-log)
@@ -1297,18 +1297,17 @@ Immediate data `m` and `n` are encoded as two [LE32](#le32)s.
 
 #### fee
 
-_value qty_ **fee** → ø
+_qty_ **fee** → _widevalue_
 
-1. Pops an 8-byte [string](#string-type) `qty` from the stack and decodes it as [LE64](#le64) integer.
-2. Pops [value](#value-type) from the stack.
-3. Checks that value.qty is unblinded commitment to `qty` and value.flv is unblinded commitment to zero.
-4. Adds a [fee entry](#fee-entry) to the [transaction log](#transaction-log).
-
-The checks are performed with group elements directly, without any changes to a [constraint system](#constraint-system).
+1. Pops an 4-byte [string](#string-type) `qty` from the stack and decodes it as [LE32](#le64) integer.
+2. Checks that `qty` is less or equal to `2^24`.
+3. Pushes [wide value](#wide-value-type) `–V`, with quantity variable constrained to `-qty` and with flavor constrained to 0.
+   Both variables are allocated from a single multiplier.
+4. Adds a [fee entry](#fee-entry) to the [transaction log](#transaction-log) with the quantity `qty`.
 
 Fails if:
-* value.qty does not match unblinded `qty`,
-* value.flv is not an unblinded commitment to 0.
+* `qty` is exceeding `2^24`.
+
 
 
 

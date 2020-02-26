@@ -13,7 +13,7 @@ use crate::constraints::{Commitment, Constraint, Expression, Variable};
 use crate::contract::{Anchor, Contract, ContractID, PortableItem};
 use crate::encoding::SliceReader;
 use crate::errors::VMError;
-use crate::fees::{self, CheckedFee};
+use crate::fees::{fee_flavor, CheckedFee};
 use crate::ops::Instruction;
 use crate::predicate::{CallProof, Predicate};
 use crate::program::ProgramItem;
@@ -534,24 +534,28 @@ where
 
     // _value qty_ **fee** → ø
     fn fee(&mut self) -> Result<(), VMError> {
-        let fee = self.pop_item()?.to_string()?.to_u64()?;
-        let val = self.pop_item()?.to_value()?;
-
+        let fee = self.pop_item()?.to_string()?.to_u32()? as u64;
+        let fee_scalar = Scalar::from(fee);
         self.total_fee = self.total_fee.add(fee).ok_or(VMError::FeeTooHigh)?;
 
-        // Qty == fee*B + 0*B_blinding
-        self.delegate.batch_verifier().append(
-            -Scalar::from(fee),
-            iter::once(Scalar::one()),
-            iter::once(val.qty.to_point().decompress()),
-        );
+        let v = spacesuit::Value {
+            q: -spacesuit::SignedInteger::from(fee),
+            f: fee_flavor(),
+        };
 
-        // Flv == 0*B + 0*B_blinding
-        self.delegate.batch_verifier().append(
-            fees::fee_flavor(),
-            iter::once(Scalar::one()),
-            iter::once(val.flv.to_point().decompress()),
-        );
+        let av = v
+            .allocate(self.delegate.cs())
+            .map_err(|e| VMError::R1CSError(e))?;
+
+        self.delegate.cs().constrain(av.q + fee_scalar);
+        self.delegate.cs().constrain(av.f - fee_flavor());
+
+        let wide_value = WideValue {
+            r1cs_qty: av.q,
+            r1cs_flv: av.f,
+            witness: av.assignment.map(|v| (v.q, v.f)),
+        };
+        self.push_item(wide_value);
 
         self.txlog.push(TxEntry::Fee(fee));
         Ok(())

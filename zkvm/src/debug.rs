@@ -52,7 +52,8 @@ impl String {
             String::Commitment(commitment) => write!(f, "push:{:?}", commitment),
             String::Scalar(scalar_witness) => write!(f, "push:{:?}", scalar_witness),
             String::Output(contract) => write!(f, "push:{:?}", contract),
-            String::Int(n) => write!(f, "push:{:?}", n),
+            String::U64(n) => write!(f, "push:{:?}", n),
+            String::U32(n) => write!(f, "push:{:?}", n),
         }
     }
 }

@@ -72,7 +72,10 @@ pub enum String {
     Output(Box<Contract>),
 
     /// A u64 integer.
-    Int(u64),
+    U64(u64),
+
+    /// A u32 integer.
+    U32(u32),
 }
 
 /// Represents a value of an issued asset in the VM.
@@ -208,7 +211,8 @@ impl Encodable for String {
             String::Commitment(commitment) => commitment.encoded_length(),
             String::Scalar(scalar) => scalar.encoded_length(),
             String::Output(output) => output.encoded_length(),
-            String::Int(_) => 8,
+            String::U64(_) => 8,
+            String::U32(_) => 4,
         }
     }
     /// Encodes the data item to an opaque bytestring.
@@ -219,7 +223,8 @@ impl Encodable for String {
             String::Commitment(commitment) => commitment.encode(buf),
             String::Scalar(scalar) => scalar.encode(buf),
             String::Output(contract) => contract.encode(buf),
-            String::Int(n) => encoding::write_u64(*n, buf),
+            String::U64(n) => encoding::write_u64(*n, buf),
+            String::U32(n) => encoding::write_u32(*n, buf),
         };
     }
 }
@@ -287,8 +292,20 @@ impl String {
                 let n = SliceReader::parse(&data, |r| r.read_u64())?;
                 Ok(n)
             }
-            String::Int(n) => Ok(n),
-            _ => Err(VMError::TypeNotInt),
+            String::U64(n) => Ok(n),
+            _ => Err(VMError::TypeNotU64),
+        }
+    }
+
+    /// Downcast the data item to a `u32` type.
+    pub fn to_u32(self) -> Result<u32, VMError> {
+        match self {
+            String::Opaque(data) => {
+                let n = SliceReader::parse(&data, |r| r.read_u32())?;
+                Ok(n)
+            }
+            String::U32(n) => Ok(n),
+            _ => Err(VMError::TypeNotU32),
         }
     }
 }
