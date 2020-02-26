@@ -54,7 +54,7 @@ impl FeeRate {
 
     /// Multiplies the feerate and returns a normalized feerate (with size=1).
     pub fn mul(mut self, f: f64) -> Self {
-        self.fee =  ((self.fee as f64 * f) / self.size as f64).round() as u64;
+        self.fee = ((self.fee as f64 * f) / self.size as f64).round() as u64;
         self.size = 1;
         self
     }
