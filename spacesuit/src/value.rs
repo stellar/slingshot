@@ -32,7 +32,28 @@ pub struct AllocatedValue {
     /// R1CS variable representing the flavor
     pub f: Variable,
     /// Secret assignment to the above variables
-    pub assignment: Option<Value>,
+    pub assignment: ValueAssignment,
+}
+
+/// Secret or cleartext assignment for `AllocatedValue`.
+/// Cleartext assignment is used to avoid creating an expensive rangeproof;
+/// in such case, the variables are directly constrained to a cleartext Value.
+#[derive(Copy, Clone, Debug)]
+pub enum ValueAssignment {
+    /// Assignment to a secret Value
+    Secret(Option<Value>),
+    /// Assignment to a cleartext Value
+    Cleartext(Value),
+}
+
+impl ValueAssignment {
+    /// Converts assignment to a plain `Option<Value>`.
+    pub fn to_option(self) -> Option<Value> {
+        match self {
+            ValueAssignment::Secret(v) => v,
+            ValueAssignment::Cleartext(v) => Some(v),
+        }
+    }
 }
 
 impl Value {
@@ -52,7 +73,7 @@ impl Value {
         Ok(AllocatedValue {
             q: q_var,
             f: f_var,
-            assignment: Some(*self),
+            assignment: ValueAssignment::Secret(Some(*self)),
         })
     }
 }
@@ -67,7 +88,7 @@ impl AllocatedValue {
         Ok(Self {
             q,
             f,
-            assignment: None,
+            assignment: ValueAssignment::Secret(None),
         })
     }
 
@@ -103,7 +124,7 @@ impl ProverCommittable for Value {
         let vars = AllocatedValue {
             q: q_var,
             f: f_var,
-            assignment: Some(*self),
+            assignment: ValueAssignment::Secret(Some(*self)),
         };
         (commitments, vars)
     }
@@ -134,7 +155,7 @@ impl VerifierCommittable for CommittedValue {
         AllocatedValue {
             q: verifier.commit(self.q),
             f: verifier.commit(self.f),
-            assignment: None,
+            assignment: ValueAssignment::Secret(None),
         }
     }
 }

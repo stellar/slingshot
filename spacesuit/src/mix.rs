@@ -111,7 +111,10 @@ fn make_intermediate_values<CS: RandomizableConstraintSystem>(
     ),
     R1CSError,
 > {
-    let collected_inputs: Option<Vec<_>> = inputs.iter().map(|input| input.assignment).collect();
+    let collected_inputs: Option<Vec<_>> = inputs
+        .iter()
+        .map(|input| input.assignment.to_option())
+        .collect();
     match collected_inputs {
         Some(input_values) => {
             let (mix_in, mix_in_values) = order_by_flavor(&input_values, cs)?;
@@ -613,12 +616,12 @@ mod tests {
         let (allocated_mid, allocated_output) = combine_by_flavor(&inputs, &mut prover_cs).unwrap();
         let mid = allocated_mid
             .iter()
-            .map(|allocated| allocated.assignment)
+            .map(|allocated| allocated.assignment.to_option())
             .collect::<Option<Vec<Value>>>()
             .expect("should be a value");
         let output = allocated_output
             .iter()
-            .map(|allocated| allocated.assignment)
+            .map(|allocated| allocated.assignment.to_option())
             .collect::<Option<Vec<Value>>>()
             .expect("should be a value");
 

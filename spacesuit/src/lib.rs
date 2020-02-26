@@ -17,7 +17,7 @@ pub use crate::bit_range::BitRange;
 pub use crate::cloak::cloak;
 pub use crate::range_proof::range_proof;
 pub use crate::signed_integer::SignedInteger;
-pub use crate::value::{AllocatedValue, CommittedValue, Value};
+pub use crate::value::{AllocatedValue, CommittedValue, Value, ValueAssignment};
 
 // TBD: figure out if we need to export these at all
 pub use crate::value::{ProverCommittable, VerifierCommittable};

@@ -700,7 +700,9 @@ where
         Ok(spacesuit::AllocatedValue {
             q: self.delegate.commit_variable(&value.qty)?.1,
             f: self.delegate.commit_variable(&value.flv)?.1,
-            assignment: value.assignment()?.map(|(q, f)| spacesuit::Value { q, f }),
+            assignment: spacesuit::ValueAssignment::Secret(
+                value.assignment()?.map(|(q, f)| spacesuit::Value { q, f }),
+            ),
         })
     }
 
@@ -708,10 +710,9 @@ where
         spacesuit::AllocatedValue {
             q: walue.r1cs_qty,
             f: walue.r1cs_flv,
-            assignment: match walue.witness {
-                None => None,
-                Some(w) => Some(spacesuit::Value { q: w.0, f: w.1 }),
-            },
+            assignment: spacesuit::ValueAssignment::Secret(
+                walue.witness.map(|w| spacesuit::Value { q: w.0, f: w.1 }),
+            ),
         }
     }
 

@@ -1,6 +1,6 @@
 use crate::bit_range::BitRange;
 use crate::shuffle::{padded_shuffle, value_shuffle};
-use crate::value::AllocatedValue;
+use crate::value::{AllocatedValue, ValueAssignment};
 use crate::{mix::k_mix, range_proof};
 use bulletproofs::r1cs::{R1CSError, RandomizableConstraintSystem};
 
@@ -34,13 +34,18 @@ pub fn cloak<CS: RandomizableConstraintSystem>(
 
     // Range Proof
     // Check that each of the quantities in `outputs` lies in [0, 2^64).
+    // If the assignment is not secret, instead of a rangeproof,
+    // constrain the value to its assignment.
     for output in outputs {
-        range_proof(
-            cs,
-            output.q.into(),
-            output.assignment.map(|v| v.q),
-            BitRange::max(),
-        )?;
+        match output.assignment {
+            ValueAssignment::Cleartext(v) => {
+                cs.constrain(output.q - v.q.to_scalar());
+                cs.constrain(output.f - v.f);
+            }
+            ValueAssignment::Secret(v) => {
+                range_proof(cs, output.q.into(), v.map(|v| v.q), BitRange::max())?
+            }
+        }
     }
 
     Ok(())
