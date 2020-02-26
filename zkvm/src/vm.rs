@@ -417,14 +417,14 @@ where
             qty: qty.commitment.clone(),
             flv: flv.commitment,
         };
-        let wide_value = WideValue {
-            r1cs_qty: neg_qty_var,
-            r1cs_flv: flv_var,
-            witness: match (neg_qty_assignment, flv_assignment) {
-                (Some(q), Some(f)) => Some((q, f)),
+        let wide_value = WideValue(spacesuit::AllocatedValue {
+            q: neg_qty_var,
+            f: flv_var,
+            assignment: match (neg_qty_assignment, flv_assignment) {
+                (Some(q), Some(f)) => Some(spacesuit::Value { q, f }),
                 _ => None,
             },
-        };
+        });
         self.push_item(wide_value);
         self.push_item(value);
         Ok(())
@@ -515,10 +515,8 @@ where
             let item = self.pop_item()?;
             let walue = self.item_to_wide_value(item)?;
 
-            let cloak_value = self.wide_value_to_cloak_value(&walue);
-
             // insert in the same order as they are on stack (the deepest item will be at index 0)
-            cloak_ins.insert(0, cloak_value);
+            cloak_ins.insert(0, walue.0);
         }
 
         spacesuit::cloak(self.delegate.cs(), cloak_ins, cloak_outs)
@@ -550,12 +548,7 @@ where
         self.delegate.cs().constrain(av.q + fee_scalar);
         self.delegate.cs().constrain(av.f - fee_flavor());
 
-        let wide_value = WideValue {
-            r1cs_qty: av.q,
-            r1cs_flv: av.f,
-            witness: av.assignment.map(|v| (v.q, v.f)),
-        };
-        self.push_item(wide_value);
+        self.push_item(WideValue(av));
 
         self.txlog.push(TxEntry::Fee(fee));
         Ok(())
@@ -708,24 +701,9 @@ where
         })
     }
 
-    fn wide_value_to_cloak_value(&mut self, walue: &WideValue) -> spacesuit::AllocatedValue {
-        spacesuit::AllocatedValue {
-            q: walue.r1cs_qty,
-            f: walue.r1cs_flv,
-            assignment: match walue.witness {
-                None => None,
-                Some(w) => Some(spacesuit::Value { q: w.0, f: w.1 }),
-            },
-        }
-    }
-
     fn item_to_wide_value(&mut self, item: Item) -> Result<WideValue, VMError> {
         match item {
-            Item::Value(value) => Ok(WideValue {
-                r1cs_qty: self.delegate.commit_variable(&value.qty)?.1,
-                r1cs_flv: self.delegate.commit_variable(&value.flv)?.1,
-                witness: value.assignment()?,
-            }),
+            Item::Value(value) => Ok(WideValue(self.value_to_cloak_value(&value)?)),
             Item::WideValue(w) => Ok(w),
             _ => Err(VMError::TypeNotWideValue),
         }
