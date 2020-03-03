@@ -61,7 +61,7 @@ use std::time::Instant;
 use super::errors::BlockchainError;
 use super::state::{check_tx_header, BlockchainState};
 use crate::merkle::Hasher;
-use crate::tx::TxLog;
+use crate::tx::{Tx,TxHeader,TxLog,TxID};
 use crate::utreexo::{self, UtreexoError};
 use crate::ContractID;
 use crate::FeeRate;
@@ -94,19 +94,18 @@ pub enum MempoolError {
 }
 
 /// Trait for the items in the mempool.
-pub trait MempoolTx {
-    /// Returns a reference to a verified transaction
-    fn verified_tx(&self) -> &VerifiedTx;
+#[derive(Clone,Debug)]
+struct MempoolTx {
+    id: TxID,
+    rawtx: Tx,
+    utreexo_proofs: Vec<utreexo::Proof>,
+    txlog: TxLog,
+    feerate: FeeRate,
+}
 
-    /// Returns a collection of Utreexo proofs for the transaction.
-    fn utreexo_proofs(&self) -> &[utreexo::Proof];
-
-    fn txlog(&self) -> &TxLog {
-        &self.verified_tx().log
-    }
-
-    fn feerate(&self) -> FeeRate {
-        self.verified_tx().feerate
+impl MempoolTx {
+    fn header(&self) -> &TxHeader {
+        &self.rawtx.header
     }
 }
 
@@ -129,91 +128,84 @@ pub struct Config {
 }
 
 /// Main API to the memory pool.
-pub struct Mempool2<Tx, PeerID>
+pub struct Mempool2<PeerID>
 where
-    Tx: MempoolTx,
     PeerID: Hash + Eq + Clone,
 {
     /// Current blockchain state.
     state: BlockchainState,
 
     /// State of available outputs.
-    utxos: UtxoMap<Tx>,
+    utxos: UtxoMap,
 
-    /// Transactions ordered by feerate from the lowest to the highest.
-    /// Note: this list is not ordered while mempool is under max_size and
-    /// re-sorted every several insertions.
-    ordered_txs: Vec<Ref<Tx>>,
-    peerpools: HashMap<PeerID, Peerpool<Tx>>,
+    /// Sorted in topological order
+    txs: Vec<Rc<Node>>,
+    peerpools: HashMap<PeerID, Peerpool>,
     current_size: usize,
     config: Config,
     hasher: Hasher<ContractID>,
 }
 
-struct Peerpool<Tx: MempoolTx> {
-    utxos: UtxoMap<Tx>,
-    lru: Vec<Ref<Tx>>,
+struct Peerpool {
+    utxos: UtxoMap,
+    lru: Vec<Rc<Node>>,
     current_size: usize,
 }
 
 /// Node in the tx graph.
 #[derive(Debug)]
-struct Node<Tx: MempoolTx> {
+struct Node {
     // Actual transaction object managed by the mempool.
-    tx: Tx,
-    //
+    tx: RefCell<Option<MempoolTx>>,
+    // The first time the tx was seen
     seen_at: Instant,
     // Cached total feerate. None when it needs to be recomputed.
     cached_total_feerate: Cell<Option<FeeRate>>,
     // List of input statuses corresponding to tx inputs.
-    inputs: Vec<Input<Tx>>,
+    inputs: Vec<RefCell<Input>>,
     // List of output statuses corresponding to tx outputs.
-    outputs: Vec<Output<Tx>>,
+    outputs: Vec<RefCell<Output>>,
 }
 
 #[derive(Debug)]
-enum Input<Tx: MempoolTx> {
+enum Input {
     /// Input is marked as confirmed - we don't really care where in utreexo it is.
     /// This is also used by peerpool when spending an output from the main pool, to avoid mutating updates.
     Confirmed,
     /// Parent tx and an index in parent.outputs list.
-    Unconfirmed(Ref<Tx>, Index, Depth),
+    Unconfirmed(Rc<Node>, Index, Depth),
 }
 
 #[derive(Debug)]
-enum Output<Tx: MempoolTx> {
+enum Output {
     /// Currently unoccupied output.
     Unspent,
 
     /// Child transaction and an index in child.inputs list.
     /// Normally, the weakref is dropped at the same time as the strong ref, during eviction.
-    Spent(WeakRef<Tx>, Index),
+    Spent(Weak<Node>, Index),
 }
-
-type Ref<Tx> = Rc<RefCell<Option<Node<Tx>>>>;
-type WeakRef<Tx> = Weak<RefCell<Option<Node<Tx>>>>;
 
 /// Map of the utxo statuses from the contract ID to the spent/unspent status
 /// of utxo and a reference to the relevant tx in the mempool.
-type UtxoMap<Tx> = HashMap<ContractID, UtxoStatus<Tx>>;
+type UtxoMap = HashMap<ContractID, UtxoStatus>;
 type Depth = usize;
 type Index = usize;
 
 /// Status of the utxo cached by the mempool
-enum UtxoStatus<Tx: MempoolTx> {
+enum UtxoStatus {
     /// Output is unspent and exists in the utreexo accumulator
     Confirmed,
 
     /// Output is unspent and is located in the i'th output in the given unconfirmed tx.
-    Unconfirmed(Ref<Tx>, Index, Depth),
+    Unconfirmed(Rc<Node>, Index, Depth),
 
     /// Output is marked as spent
     Spent,
 }
 
-impl<Tx, PeerID> Mempool2<Tx, PeerID>
+impl<PeerID> Mempool2<PeerID>
 where
-    Tx: MempoolTx,
     PeerID: Hash + Eq + Clone,
 {
     /// Creates a new mempool with the given size limit and the current timestamp.
@@ -275,9 +267,9 @@ where
     /// Adds a tx and evicts others, if needed.
     pub fn try_append(
         &mut self,
-        tx: Tx,
+        tx: MempoolTx,
         peer_id: PeerID,
-        evicted_txs: &mut impl core::iter::Extend<Tx>,
+        evicted_txs: &mut impl core::iter::Extend<MempoolTx>,
     ) -> Result<(), MempoolError> {
         // TODO: check if the tx must be applied to a peerpool,
         // then add it there - it will otherwise fail in the main pool.
@@ -299,7 +291,7 @@ where
     /// Add a transaction to mempool.
     /// Fails if the transaction attempts to spend a non-existent output.
     /// Does not check the feerate and does not compact the mempool.
-    fn park_for_peer(&mut self, tx: Tx, peer_id: PeerID) -> Result<(), MempoolError> {
+    fn park_for_peer(&mut self, tx: MempoolTx, peer_id: PeerID) -> Result<(), MempoolError> {
         check_tx_header(
             &tx.verified_tx().header,
             self.state.tip.timestamp_ms,
@@ -325,7 +317,7 @@ where
     /// Add a transaction to mempool.
     /// Fails if the transaction attempts to spend a non-existent output.
     /// Does not check the feerate and does not compact the mempool.
-    fn append(&mut self, tx: Tx) -> Result<(), MempoolError> {
+    fn append(&mut self, tx: MempoolTx) -> Result<(), MempoolError> {
         check_tx_header(
             &tx.verified_tx().header,
             self.state.tip.timestamp_ms,
@@ -348,7 +340,7 @@ where
 
     /// Removes the lowest-feerate transactions to reduce the size of the mempool to the maximum allowed.
     /// User may provide a buffer that implements Extend to collect and inspect all evicted transactions.
-    fn compact(&mut self, evicted_txs: &mut impl core::iter::Extend<Tx>) {
+    fn compact(&mut self, evicted_txs: &mut impl core::iter::Extend<MempoolTx>) {
         while self.is_full() {
             self.evict_lowest(evicted_txs);
         }
@@ -367,7 +359,7 @@ where
     /// If we evict a single tx or a simple chain of parents and children, then this returns false.
     /// However, if there is a non-trivial graph, some adjacent tx may need their feerates recomputed,
     /// so we need to re-sort the list.
-    fn evict_lowest(&mut self, evicted_txs: &mut impl core::iter::Extend<Tx>) {
+    fn evict_lowest(&mut self, evicted_txs: &mut impl core::iter::Extend<MempoolTx>) {
         if self.ordered_txs.len() == 0 {
             return;
         }
@@ -381,7 +373,7 @@ where
         }
     }
 
-    fn mempool_view(&mut self) -> MempoolView<'_, Tx> {
+    fn mempool_view(&mut self) -> MempoolView<'_> {
         MempoolView {
             map: &mut self.utxos,
             utreexo: &self.state.utreexo,
@@ -389,7 +381,7 @@ where
         }
     }
 
-    fn peerpool_view(&mut self, peer_id: &PeerID) -> PeerView<'_, Tx> {
+    fn peerpool_view(&mut self, peer_id: &PeerID) -> PeerView<'_> {
         let pool = self.peerpools.entry(peer_id.clone()).or_default();
         PeerView {
             peermap: &mut pool.utxos,
@@ -400,7 +392,7 @@ where
     }
 }
 
-impl<Tx: MempoolTx> Default for Peerpool<Tx> {
+impl Default for Peerpool {
     fn default() -> Self {
         Peerpool {
             utxos: UtxoMap::new(),
@@ -410,10 +402,7 @@ impl<Tx: MempoolTx> Default for Peerpool<Tx> {
     }
 }
 
-impl<Tx: MempoolTx> Node<Tx> {
-    fn into_ref(self) -> Ref<Tx> {
-        Rc::new(RefCell::new(Some(self)))
-    }
+impl Node {
 
     fn self_feerate(&self) -> FeeRate {
         self.tx.feerate()
@@ -500,7 +489,7 @@ impl<Tx: MempoolTx> Node<Tx> {
     }
 }
 
-trait UtxoViewTrait<Tx: MempoolTx> {
+trait UtxoViewTrait {
     /// Returns the status of the utxo for the given contract ID and a utreexo proof.
     /// If the utxo status is not cached within the view,
     /// utreexo proof is used to retrieve it from utreexo.
@@ -508,10 +497,10 @@ trait UtxoViewTrait<Tx: MempoolTx> {
         &self,
         contract_id: &ContractID,
         proof: &utreexo::Proof,
-    ) -> Result<UtxoStatus<Tx>, MempoolError>;
+    ) -> Result<UtxoStatus, MempoolError>;
 
     /// Stores the status of the utxo in the view.
-    fn set(&mut self, contract_id: ContractID, status: UtxoStatus<Tx>);
+    fn set(&mut self, contract_id: ContractID, status: UtxoStatus);
 
     /// Removes the stored status
     fn remove(&mut self, contract_id: &ContractID);
@@ -522,7 +511,7 @@ trait UtxoViewTrait<Tx: MempoolTx> {
         tx: Tx,
         max_depth: Depth,
         seen_at: Instant,
-    ) -> Result<Ref<Tx>, MempoolError> {
+    ) -> Result<Rc<Node>, MempoolError> {
         let mut utreexo_proofs = tx.utreexo_proofs().iter();
 
         // Start by collecting the inputs statuses and failing early if any output is spent or does not exist.
@@ -567,14 +556,13 @@ trait UtxoViewTrait<Tx: MempoolTx> {
             .map(|_| Output::Unspent)
             .collect::<Vec<_>>();
 
-        let new_ref = Node {
+        let new_ref = Rc::new(Node {
             seen_at,
-            cached_total_feerate: Cell::new(Some(tx.feerate())),
+            cached_total_feerate: Cell::new(Some(tx.feerate)),
             inputs,
             outputs,
             tx,
-        }
-        .into_ref();
+        });
 
         {
             // we cannot have &Node before we pack it into a Ref,
@@ -620,8 +608,8 @@ trait UtxoViewTrait<Tx: MempoolTx> {
     /// Returns a flag indicating if we need to reorder txs, and the total number of bytes evicted.
     fn evict_tx(
         &mut self,
-        txref: &Ref<Tx>,
-        evicted_txs: &mut impl core::iter::Extend<Tx>,
+        txref: &Rc<Node>,
+        evicted_txs: &mut impl core::iter::Extend<MempoolTx>,
     ) -> (bool, usize) {
         // 1. immediately mark the node as evicted, taking its Tx out of it.
         // 2. for each input: restore utxos as unspent.
@@ -632,7 +620,7 @@ trait UtxoViewTrait<Tx: MempoolTx> {
         // TODO: if we evict a tx that's depended upon by some child parked in the peerpool -
         // maybe put it there, or update the peerpool?
 
-        let node: Node<Tx> = match txref.borrow_mut().take() {
+        let node: Node = match txref.borrow_mut().take() {
             Some(node) => node,
             None => return (false, 0), // node is already evicted.
         };
@@ -679,27 +667,27 @@ trait UtxoViewTrait<Tx: MempoolTx> {
 }
 
 /// View into the state of utxos.
-struct MempoolView<'a, Tx: MempoolTx> {
-    map: &'a mut UtxoMap<Tx>,
+struct MempoolView<'a> {
+    map: &'a mut UtxoMap,
     utreexo: &'a utreexo::Forest,
     hasher: &'a Hasher<ContractID>,
 }
 
 /// Peer's view has its own R/W map backed by the readonly main map.
 /// The peer's map shadows the main mempool map.
-struct PeerView<'a, Tx: MempoolTx> {
-    peermap: &'a mut UtxoMap<Tx>,
-    mainmap: &'a UtxoMap<Tx>,
+struct PeerView<'a> {
+    peermap: &'a mut UtxoMap,
+    mainmap: &'a UtxoMap,
     utreexo: &'a utreexo::Forest,
     hasher: &'a Hasher<ContractID>,
 }
 
-impl<'a, Tx: MempoolTx> UtxoViewTrait<Tx> for MempoolView<'a, Tx> {
+impl<'a> UtxoViewTrait for MempoolView<'a> {
     fn get(
         &self,
         contract_id: &ContractID,
         proof: &utreexo::Proof,
-    ) -> Result<UtxoStatus<Tx>, MempoolError> {
+    ) -> Result<UtxoStatus, MempoolError> {
         if let Some(status) = self.map.get(contract_id) {
             Ok(status.clone())
         } else if let utreexo::Proof::Committed(path) = proof {
@@ -715,7 +703,7 @@ impl<'a, Tx: MempoolTx> UtxoViewTrait<Tx> for MempoolView<'a, Tx> {
     }
 
     /// Stores the status of the utxo in the view.
-    fn set(&mut self, contract_id: ContractID, status: UtxoStatus<Tx>) {
+    fn set(&mut self, contract_id: ContractID, status: UtxoStatus) {
         // if we mark the unconfirmed output as spent, simply remove it from the map to avoid wasting space.
         // this way we'll only store spent flags for confirmed and unspent flags for unconfirmed, while
         // forgetting all intermediately consumed outputs.
@@ -729,12 +717,12 @@ impl<'a, Tx: MempoolTx> UtxoViewTrait<Tx> for MempoolView<'a, Tx> {
     }
 }
 
-impl<'a, Tx: MempoolTx> UtxoViewTrait<Tx> for PeerView<'a, Tx> {
+impl<'a> UtxoViewTrait for PeerView<'a> {
     fn get(
         &self,
         contract_id: &ContractID,
         proof: &utreexo::Proof,
-    ) -> Result<UtxoStatus<Tx>, MempoolError> {
+    ) -> Result<UtxoStatus, MempoolError> {
         if let Some(status) = self.peermap.get(contract_id) {
             Ok(status.clone())
         } else if let Some(status) = self.mainmap.get(contract_id) {
@@ -756,13 +744,13 @@ impl<'a, Tx: MempoolTx> UtxoViewTrait<Tx> for PeerView<'a, Tx> {
         self.peermap.remove(contract_id);
     }
 
-    fn set(&mut self, contract_id: ContractID, status: UtxoStatus<Tx>) {
+    fn set(&mut self, contract_id: ContractID, status: UtxoStatus) {
         self.peermap.insert(contract_id, status);
     }
 }
 
 // We are implementing the Clone manually because `#[derive(Clone)]` adds Clone bounds on `Tx`
-impl<Tx: MempoolTx> Clone for UtxoStatus<Tx> {
+impl Clone for UtxoStatus {
     fn clone(&self) -> Self {
         match self {
             UtxoStatus::Confirmed => UtxoStatus::Confirmed,
