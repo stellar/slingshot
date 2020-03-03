@@ -128,6 +128,15 @@ Mempool always keeps transactions sorted in topological order.
 Mempools are synchronized among peers, by sending the missing transactions to each other.
 Duplicates are silently rejected.
 
+
+### Peerpool
+
+A small buffer of transactions maintained per peer, used to park transactions with insufficient feerate,
+in order to wait for [children](#child) ([CPFP](#cpfp)) that make the parent’s [effective feerate](#effective-feerate) sufficient.
+
+Transactions in the peerpool are not relayed, and are dropped when the peer disconnects.
+
+
 ### Eviction filter
 
 Bloom filter that contains the evicted transactions and output IDs spent by them.
@@ -147,40 +156,71 @@ Other nodes have a different randomized state of bloom filter, so they are likel
 
 Filter is reset every 24 hours in order to keep false positive rate low.
 
-### Peerpool
-
-A small buffer of transactions maintained per peer, used to park transactions with insufficient feerate,
-in order to wait for [children](#child) ([CPFP](#cpfp)) that make the parent’s [effective feerate](#effective-feerate) sufficient.
-
-Transactions in the peerpool are not relayed, and are dropped when the peer disconnects.
-
 
 ## Procedures
 
-### Accept transaction
+### Accept to mempool
 
-1. It is validated statelessly per ZkVM rules. The peer may be deprioritized or banned if it relays an statelessly invalid transaction.
-2. Timestamp is checked w.r.t. to the last block timestamp. Transactions must use generous time bounds to account for clock differences. This simplifies validation logic, as we don't need to allow windowing or check for self-consistency of unconfirmed tx chains.
-3. If the tx can be applied to the peerpool, it is parked there. Effective feerates are recalculated for all ancestors. If any tx now has a sufficient effective feerate to enter the mempool, it is moved there. Children are tested and included recursively. If any tx fails to apply to main pool (double spend), it and its children are evicted from peer pool.
-4. If the tx can be applied to the main pool, it is applied there. Peer pools are not updated at this point and may contain double-spends, but those have no effect because they are filtered out when a new tx enters peerpool.
-5. If the mempool is not full, it must pay the **minimum flat feerate** (configured by the peer).
-6. If the mempool is full, it must pay for the evicted tx: `min_feerate * (evicted_tx_size + new_tx_size)`.
-7. If the `tx.maxtime` is less than mempool time +24h, an additional flat feerate is required on top of the above. This is because such transaction is more likely to expire and become invalid (unlike unbounded ones), while the network has spent bandwidth on relaying it.
-8. If the tx ID is found in a bloom filter: it is treated as resurrected, and must pay the fee as calculated above, but increased by _flat feerate_. If it does not pay sufficiently, it is parked in the peerpool until CPFP happens, or the filter is reset.
-9. If the tx spends an output marked in the bloom filter, but its ID is not found: it is rejected as double-spend (we don't support replace-by-fee). If a regular transaction triggers false positive in the filter (<1% risk), it is not accepted or relayed by this node, but other >99% nodes may relay it, since all nodes initialize their filters with random seeds.
+**Transaction is validated statelessly per ZkVM rules.** The peer may be deprioritized or banned if it relays a statelessly invalid transaction.
+
+**Time bounds are checked against to the tip block timestamp.**
+Transactions must use generous time bounds to account for clock differences.
+This simplifies validation logic, as we don't need to allow windowing or check for self-consistency of unconfirmed tx chains.
+
+**Transaction is checked against [eviction filter](#eviction-filter).**
+If it is a double-spend, it is rejected.
+If it is coming back after eviction, a [required feerate](#required-feerate) is increased by [flat feerate](#flat-feerate).
+
+**If transaction expires soon** (`tx.maxtime` is less than tip timestamp + 24 hours), an additional [flat feerate](#flat-feerate) is required on top of the above.
+This is because such transaction is more likely to expire and become invalid (unlike unbounded ones), while the network will have spent bandwidth on relaying it.
+
+**Transaction feerate is checked** against the [required feerate](#required-feerate).
+If it is insufficient, transaction is [accepted to peerpool](#accept-to-peerpool) or discarded.
+
+**Transaction is applied to the mempool state.**
+If any output is already spent, transaction is discarded.
+If any output is missing, transaction is [accepted to peerpool](#accept-to-peerpool) or discarded.
+If transaction’s depth is higher than [maximum depth](#maximum-depth), reject transaction.
+
+Once transaction is added to the mempool state, [effective feerates](#effective-feerate) of its [ancestors](#parent) are recomputed.
+
+**If the mempool size exceeds the maximum size**, a transaction with the lowest effective feerate is evicted, together with all its [descendants](#child).
+The procedure repeats until the mempool size is lower than the maximum size.
+
+**Add to the [eviction filter](#eviction-filter)** IDs of the evicted transactions and the IDs of the outputs they were spending.
 
 
-### TBD.
+### Accept to peerpool
 
+If transaction’s depth is higher than [maximum depth](#maximum-depth), reject transaction.
+
+Check if transaction spends inputs correctly. If any output is spent or does not exist, reject transaction.
+
+Recompute effective feerates of ancestors of the newly inserted transaction.
+If any passes the required feerate (considering eviction filter and maxtime),
+move it and all its descendants with higher effective feerate than the parent’s to the mempool.
+
+While the peerpool size exceeds the maximum, remove the oldest (FIFO) transaction and all its descendants.
+
+
+### Relaying transactions
+
+A node periodically announces a set of its transactions to all the neighbours by transmitting a list of recently received transaction IDs.
+
+When a list of IDs is received from a peer, node detects IDs that are missing in its mempool and remembers them (per peer).
+
+Periodically, node sends out requests for transactions. It goes in round-robin, and collects lists of transactions, avoiding request for the transactions it already assigned per node.
+Then, requests are sent out to all peers.
+
+Note: this makes it very hard to avoid receiving orphan transactions.
 
 ## Notes
 
 The above design contains several design decisions worth pointing out:
 
-1. **Transactions are always valid at all levels.** Orphan txs are not allowed and must be sorted out at a transport level. In the future, if we use UDP, we may implement a separate buffer in peer pools for that purpose. Similarly, the transactions are sorted in topological order, so they can be relayed in topological order.
-2. **Double spends are not allowed at any level.** This is, obviously, a hard rule for the blockchain, but it also means the replace-by-fee (RBF) is not allowed in mempools. The rationale is that child-pays-for-parent (CPFP) needs to be supported anyway, and replacing confidential transactions requires update of all blinding factors, which normally means another round of communication between the wallets. Also, handling fees when RBF happens across eviction and preventing subtle DoS scenarios is trickier than simply disallow RBF. **Do not** consider this design choice as an endorsement of 0-confirmation transactions; those do not become more secure because this policy is strictly focused on protecting the node itself and does not offer any security to other nodes.
-3. **Single-mode relay with peerpools.** Transactions are assumed to be simply relayed in topological order, one by one. There is no separate "package relay" for CPFP. Txs with insufficient fees are parked in a per-peer buffer until a higher-paying child arrives.
-4. **Discounted child feerate.** To simplify a [NP-complete task](https://freedom-to-tinker.com/2014/10/27/bitcoin-mining-is-np-hard/) of calculating an optimal subset of tx graph, effective feerate of a parent is computed by simply combining feerates of children. In case a child has several parents, we prevent overcounting by splitting its feerate among all parents. For the most cases it does not treat txs unfairly, but allows adding up feerates in a straightforward manner.
+1. **Double spends are not allowed at any level.** This is, obviously, a hard rule for the blockchain, but it also means the replace-by-fee (RBF) is not allowed in mempools. The rationale is that child-pays-for-parent (CPFP) needs to be supported anyway, and replacing confidential transactions requires update of all blinding factors, which normally means another round of communication between the wallets. Also, handling fees when RBF happens across eviction and preventing subtle DoS scenarios is trickier than simply disallow RBF. **Do not** consider this design choice as an endorsement of 0-confirmation transactions; those do not become more secure because this policy is strictly focused on protecting the node itself and does not offer any security to other nodes.
+2. **Single-mode relay with peerpools.** Transactions are assumed to be simply relayed in topological order, one by one. There is no separate "package relay" for CPFP. Txs with insufficient fees are parked in a per-peer buffer until a higher-paying child arrives.
+3. **Discounted child feerate.** To simplify a [NP-complete task](https://freedom-to-tinker.com/2014/10/27/bitcoin-mining-is-np-hard/) of calculating an optimal subset of tx graph, effective feerate of a parent is computed by simply combining feerates of children. In case a child has several parents, we prevent overcounting by splitting its feerate among all parents. For the most cases it does not treat txs unfairly, but allows adding up feerates in a straightforward manner.
 
 
 
