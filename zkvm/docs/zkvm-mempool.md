@@ -167,6 +167,22 @@ Filter is reset every 24 hours in order to keep false positive rate low.
 
 ## Procedures
 
+### Relaying transactions
+
+A node periodically announces a set of its transactions to all the neighbours by transmitting a list of recently received transaction IDs.
+
+When a list of IDs is received from a peer, node detects IDs that are missing in its mempool and remembers them (per peer).
+
+Periodically, node sends out requests for transactions. It goes in round-robin, and collects lists of transactions,
+avoiding request for the transactions it already assigned per node. Then, requests are sent out to all peers.
+
+Transactions arrive in random order, therefore some of them may be [orphans](#orphan).
+Orphans are parked separately and indexed by the input Contract ID.
+When an appropriate output is added, a corresponding orphan transaction is attempted again. 
+If it's still missing another parent, it is parked as an orphan again.
+
+
+
 ### Accept to mempool
 
 **Transaction is validated statelessly per ZkVM rules.** The peer may be deprioritized or banned if it relays a statelessly invalid transaction.
@@ -211,14 +227,6 @@ move it and all its descendants with higher effective feerate than the parent’
 While the peerpool size exceeds the maximum, remove the oldest (FIFO) transaction and all its descendants.
 
 
-### Relaying transactions
-
-A node periodically announces a set of its transactions to all the neighbours by transmitting a list of recently received transaction IDs.
-
-When a list of IDs is received from a peer, node detects IDs that are missing in its mempool and remembers them (per peer).
-
-Periodically, node sends out requests for transactions. It goes in round-robin, and collects lists of transactions, avoiding request for the transactions it already assigned per node.
-Then, requests are sent out to all peers.
 
 ## Notes
 
