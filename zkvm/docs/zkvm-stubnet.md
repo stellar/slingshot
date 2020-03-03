@@ -77,14 +77,14 @@ When receiving an [`Inventory`](#inventory) message:
 3. If the tip matches, the list of mempool transactions is remembered per-peer and filtered down against already present transactions, so it only contains transactions that the node does not have, but the peer does have.
 4. Bump the timestamp of the inventory for the peer.
 
-Periodically (every 2 seconds):
+Periodically, every 2 seconds:
 
 1. The peers who requested inventory are sent a new [`Inventory`](#inventory) message.
 2. **If the target tip does not match the current state,** the node requests missing blocks using [`GetBlocks`](#getblocks) from the peers evenly (e.g. 1 block from each peer).
 3. **If the target tip is the latest**, the node walks all peers in round-robin and constructs lists of [short IDs](#short-id) to request from each peer, keeping track of already used IDs. Once all requests are constructed, the [`GetMempoolTxs`](#getmempooltxs) messages are sent out to respective peers.
 4. For peers who have not send inventory for over a minute, we send [`GetInventory`](#getinventory) again.
 
-Periodically (every 60 seconds):
+Periodically, every 60 seconds:
 
 1. Set a new random [short ID](#short-id) nonce.
 2. Clear all the short IDs stored per peer.
