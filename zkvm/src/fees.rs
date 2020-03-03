@@ -46,9 +46,17 @@ impl FeeRate {
     }
 
     /// Normalizes feerate by dividing the fee by size rounding it down.
+    /// Yields a fee amount per 1 byte of size.
     pub fn normalize(mut self) -> Self {
         self.fee /= self.size;
         self.size = 1;
+        self
+    }
+
+    /// Increases the feerate by the given feerate, without changing the underlying size.
+    /// (Meaning the feerate added in normalized form, as amount of fee per 1 byte.)
+    pub fn increase_by(mut self, other: Self) -> Self {
+        self.fee += (other.fee * self.size) / other.size;
         self
     }
 
