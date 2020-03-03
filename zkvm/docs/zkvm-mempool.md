@@ -64,6 +64,15 @@ Transaction that produced an output spent in a given transaction, which is a par
 
 Transaction that spends an output produced by a given transaction, which is its [parent](#parent).
 
+### Orphan
+
+Transaction that spends an output that does not exist.
+
+Orphans may be received because requests for transactions are spread evenly among the peers and can arrive in random order.
+This offers a better use of bandwidth and simpler synchronization logic, but requires the node
+to track orphan transactions separately in [peerpools](#peerpool).
+
+
 ### RBF
 
 "Replace by Fee". A policy that permits replacing one transaction by another, conflicting with it (spending one or more of the same outputs), if another pays a higher [feerate](#feerate).
@@ -116,6 +125,12 @@ For a given transaction and its feerate `R`, the required feerate is computed as
 2. If transaction is present in [eviction filter](#eviction-filter), increase `M` by an extra [flat feerate](#flat-feerate), without changing the `M.size`: `M = M.fee + M.size*flat_fee / M.size`
 3. The required absolute [effective fee](#fee) (not the _feerate_) is: `M * (M.size + R.size)`.
 
+### Peerpool
+
+A small buffer of transactions maintained per peer, used to park transactions with insufficient feerate (waiting for higher-paying [children](#child)) or [orphans](#orphan), waiting for [parents](#parent).
+
+Transactions in the peerpool are not relayed, and are dropped when the peer disconnects.
+
 
 ### Mempool
 
@@ -128,13 +143,6 @@ Mempool always keeps transactions sorted in topological order.
 Mempools are synchronized among peers, by sending the missing transactions to each other.
 Duplicates are silently rejected.
 
-
-### Peerpool
-
-A small buffer of transactions maintained per peer, used to park transactions with insufficient feerate,
-in order to wait for [children](#child) ([CPFP](#cpfp)) that make the parent’s [effective feerate](#effective-feerate) sufficient.
-
-Transactions in the peerpool are not relayed, and are dropped when the peer disconnects.
 
 
 ### Eviction filter
@@ -211,8 +219,6 @@ When a list of IDs is received from a peer, node detects IDs that are missing in
 
 Periodically, node sends out requests for transactions. It goes in round-robin, and collects lists of transactions, avoiding request for the transactions it already assigned per node.
 Then, requests are sent out to all peers.
-
-Note: this makes it very hard to avoid receiving orphan transactions.
 
 ## Notes
 
