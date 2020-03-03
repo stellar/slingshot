@@ -12,7 +12,7 @@ pub struct CheckedFee {
 }
 
 /// Fee rate is a ratio of the transaction fee to its size.
-#[derive(Copy, Clone, Debug, Serialize, Deserialize)]
+#[derive(Copy, Clone, Default, Debug, Serialize, Deserialize)]
 pub struct FeeRate {
     fee: u64,
     size: u64,
@@ -24,6 +24,11 @@ pub fn fee_flavor() -> Scalar {
 }
 
 impl FeeRate {
+    /// Creates a new zero feerate
+    pub fn zero() -> Self {
+        FeeRate::default()
+    }
+
     /// Creates a new fee rate from a given fee and size.
     pub fn new(fee: CheckedFee, size: usize) -> Self {
         FeeRate {
@@ -33,15 +38,47 @@ impl FeeRate {
     }
 
     /// Combines the fee rate with another fee rate, adding up the fees and sizes.
-    pub fn combine(&self, other: FeeRate) -> Self {
+    pub fn combine(self, other: FeeRate) -> Self {
         FeeRate {
             fee: self.fee + other.fee,
             size: self.size + other.size,
         }
     }
 
+    /// Normalizes feerate by dividing the fee by size rounding it down.
+    /// Yields a fee amount per 1 byte of size.
+    pub fn normalize(mut self) -> Self {
+        self.fee /= self.size;
+        self.size = 1;
+        self
+    }
+
+    /// Increases the feerate by the given feerate, without changing the underlying size.
+    /// (Meaning the feerate added in normalized form, as amount of fee per 1 byte.)
+    pub fn increase_by(mut self, other: Self) -> Self {
+        self.fee += (other.fee * self.size) / other.size;
+        self
+    }
+
+    /// Multiplies the feerate and returns a normalized feerate (with size=1).
+    pub fn mul(mut self, f: f64) -> Self {
+        self.fee = ((self.fee as f64 * f) / self.size as f64).round() as u64;
+        self.size = 1;
+        self
+    }
+
+    /// Discounts the fee and the size by a given factor.
+    /// E.g. feerate 100/1200 discounted by 2 gives 50/600.
+    /// Same ratio, but lower weight when combined with other feerates.
+    pub fn discount(mut self, parts: usize) -> Self {
+        let parts = parts as u64;
+        self.fee /= parts;
+        self.size /= parts;
+        self
+    }
+
     /// Converts the fee rate to a floating point number.
-    pub fn to_f64(&self) -> f64 {
+    pub fn to_f64(self) -> f64 {
         (self.fee as f64) / (self.size as f64)
     }
 

@@ -83,7 +83,7 @@ pub struct UnsignedTx {
 }
 
 /// Instance of a transaction that contains all necessary data to validate it.
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Tx {
     /// Header metadata
     pub header: TxHeader,
@@ -267,6 +267,22 @@ impl TxLog {
     /// Adds an entry to the txlog.
     pub fn push(&mut self, item: TxEntry) {
         self.0.push(item);
+    }
+
+    /// Iterator over the input entries
+    pub fn inputs(&self) -> impl Iterator<Item = &ContractID> {
+        self.0.iter().filter_map(|entry| match entry {
+            TxEntry::Input(contract_id) => Some(contract_id),
+            _ => None,
+        })
+    }
+
+    /// Iterator over the output entries
+    pub fn outputs(&self) -> impl Iterator<Item = &Contract> {
+        self.0.iter().filter_map(|entry| match entry {
+            TxEntry::Output(contract) => Some(contract),
+            _ => None,
+        })
     }
 }
 

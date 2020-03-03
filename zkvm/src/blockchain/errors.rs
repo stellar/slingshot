@@ -32,3 +32,5 @@ pub enum BlockchainError {
     #[fail(display = "Utreexo operation failed.")]
     UtreexoError(UtreexoError),
 }
+
+// TODO: add mempool error enum.

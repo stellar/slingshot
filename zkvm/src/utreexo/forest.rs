@@ -82,6 +82,25 @@ impl Forest {
             .fold(0u64, |total, (level, _)| total + (1 << level))
     }
 
+    /// Verifies that the given item and a path belong to the forest.
+    pub fn verify<M: MerkleItem>(
+        &self,
+        item: &M,
+        path: &Path,
+        hasher: &Hasher<M>,
+    ) -> Result<(), UtreexoError> {
+        let computed_root = path.compute_root(item, hasher);
+        if let Some((_i, level)) =
+            find_root(self.roots_iter().map(|(level, _)| level), path.position)
+        {
+            // unwrap won't fail because `find_root` returns level for the actually existing root.
+            if self.roots[level].unwrap() == computed_root {
+                return Ok(());
+            }
+        }
+        Err(UtreexoError::InvalidProof)
+    }
+
     /// Lets use modify the utreexo and yields a new state of the utreexo,
     /// along with a catchup structure.
     pub fn work_forest(&self) -> WorkForest {

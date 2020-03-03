@@ -263,7 +263,7 @@ where
 }
 
 /// Checks the tx header for consistency with the block header.
-fn check_tx_header(
+pub fn check_tx_header(
     tx_header: &TxHeader,
     timestamp_ms: u64,
     block_version: u64,

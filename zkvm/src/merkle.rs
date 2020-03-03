@@ -392,7 +392,7 @@ impl Encodable for Path {
     }
 }
 
-/// Simialr to Path, but does not contain neighbors - only left/right directions
+/// Similar to Path, but does not contain neighbors - only left/right directions
 /// as indicated by the bits in the `position`.
 #[derive(Copy, Clone, PartialEq, Debug)]
 pub struct Directions {
