@@ -49,8 +49,23 @@ See also [BIP-152](https://github.com/bitcoin/bips/blob/master/bip-0152.mediawik
 
 ## Protocol
 
+The node maintains the following state:
+
+1. Blockchain state and mempool.
+2. Target tip.
+3. Current nonce for [short IDs](#short-id)
+4. States of connected peers.
+5. Configuration parameter `max_msg_size` that limits amount of data to be sent or received.
+
+Each peer has the following state:
+
+1. Peer's tip.
+2. Flag: waiting for inventory.
+3. List of short IDs that are missing in the mempool, along with their nonce.
+4. Timestamp of the last inventory received.
+
 Upon receiving an inbound connection, or making an outbound connection, a node sends [`GetInventory`](#getinventory) to the peer
-with the same random nonce across all peers (so responses contain comparable [short IDs](#short-id)).
+with the same random nonce across all peers (so responses contain comparable [short IDs](#short-id)). The random nonce is rotated every minute.
 
 When receiving a [`GetInventory`](#getinventory) message, the peer is marked as "waiting for inventory".
 Required delay allows avoiding resource exhaustion with repeated request and probing the state of the node.
@@ -60,20 +75,38 @@ When receiving an [`Inventory`](#inventory) message:
 1. Peer's tip is remembered per-peer.
 2. If the tip block header is higher than the current target one, it is verified and remembered as a new target one.
 3. If the tip matches, the list of mempool transactions is remembered per-peer and filtered down against already present transactions, so it only contains transactions that the node does not have, but the peer does have.
+4. Bump the timestamp of the inventory for the peer.
 
-Periodically (every 1-2 seconds):
+Periodically (every 2 seconds):
 
 1. The peers who requested inventory are sent a new [`Inventory`](#inventory) message.
 2. **If the target tip does not match the current state,** the node requests missing blocks using [`GetBlocks`](#getblocks) from the peers evenly (e.g. 1 block from each peer).
 3. **If the target tip is the latest**, the node walks all peers in round-robin and constructs lists of [short IDs](#short-id) to request from each peer, keeping track of already used IDs. Once all requests are constructed, the [`GetMempoolTxs`](#getmempooltxs) messages are sent out to respective peers.
+4. For peers who have not send inventory for over a minute, we send [`GetInventory`](#getinventory) again.
+
+Periodically (every 60 seconds):
+
+1. Set a new random [short ID](#short-id) nonce.
+2. Clear all the short IDs stored per peer.
+
+When [`GetBlocks`](#getblocks) message is received,
+we reply immediately with the blocks requested using [`Blocks`](#blocks) message, 
+limiting the list to the `max_msg_size`.
 
 When [`Blocks`](#blocks) message is received:
-1. Direct descendant is verified and advances the state. Orphan blocks from other peers are tried to be applied.
+1. If the block is a direct descendant: 
+    1. It is verified and advances the state. 
+    2. Orphan blocks from other peers are tried to be applied.
+    3. Duplicates or conflicting transactions are removed from mempool.
+    4. Missing block is sent unsolicited to the peers who have `tip` set to one less than the current block and latest message timestamp less than 10 seconds ago.
+       This ensures that blocks propagate quickly among live nodes while not spending bandwidth too aggressively. Lagging nodes would request missing blocks at their pace.
 2. Earlier blocks are discarded.
 3. Orphan blocks are stored in a LRU buffer per peer.
 
-When [`MempoolTxs`](#mempooltxs) message is received: if tip matches the current state, transactions are applied to the mempool.
-Otherwise, the message is discarded as stale.
+When [`MempoolTxs`](#mempooltxs) message is received: 
+
+1. If the tip matches the current state, transactions are applied to the mempool.
+2. Otherwise, the message is discarded as stale.
 
 
 ## Messages
@@ -91,13 +124,15 @@ struct GetInventory {
 
 ### `Inventory`
 
-Sends the inventory of a node back to the peer who requested it with [`GetInventory`](#getinventory) message. Contains the block tip and the contents of mempool as a list of [short IDs](#short-id).
+Sends the inventory of a node back to the peer who requested it with [`GetInventory`](#getinventory) message.
+Contains the block tip and the contents of mempool as a list of [short IDs](#short-id).
 
 ```
 struct Inventory {
     version: u64,
     tip_header: BlockHeader,
     stubnet_signature: starsig::Signature,
+    shortid_nonce: u64,
     mempool: Vec<ShortID>
 }
 ```
