@@ -5,12 +5,12 @@ use std::fmt;
 use std::mem;
 
 use super::heap::{Heap, HeapIndex};
-use crate::merkle::{Directions, Hash, Hasher, MerkleItem, MerkleTree, Path, Position};
+use zkvm::merkle::{Directions, Hash, Hasher, MerkleItem, MerkleTree, Path, Position};
 
 /// Forest consists of a number of roots of merkle binary trees.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Forest {
-    #[serde(with = "crate::serialization::array64")]
+    #[serde(with = "array64")]
     pub(super) roots: [Option<Hash>; 64], // roots of the trees for levels 0 to 63
 }
 
@@ -480,10 +480,7 @@ impl Catchup {
 
         // Construct a new directions object.
         // We cannot take it from path because it does not have all neighbors yet.
-        let directions = Directions {
-            position: path.position,
-            depth: self.forest.heap.get_ref(root_index).level,
-        };
+        let directions = Directions::new(path.position, self.forest.heap.get_ref(root_index).level);
 
         path.neighbors = directions
             .rev()
@@ -634,5 +631,102 @@ impl Node {
                 .debug_fmt(heap, f, &(indent.to_owned() + "    "))?;
         }
         Ok(())
+    }
+}
+
+/// Serde adaptor for 64-item array
+mod array64 {
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+    pub fn serialize<T, S>(value: &[T; 64], serializer: S) -> Result<S::Ok, S::Error>
+    where
+        T: Serialize + Clone,
+        S: Serializer,
+    {
+        value.to_vec().serialize(serializer)
+    }
+
+    pub fn deserialize<'de, D, T>(deserializer: D) -> Result<[T; 64], D::Error>
+    where
+        D: Deserializer<'de>,
+        T: Deserialize<'de> + Default,
+    {
+        let mut vec = Vec::<T>::deserialize(deserializer)?;
+        if vec.len() != 64 {
+            return Err(serde::de::Error::invalid_length(
+                vec.len(),
+                &"a 64-item array",
+            ));
+        }
+        let mut buf: [T; 64] = [
+            T::default(),
+            T::default(),
+            T::default(),
+            T::default(),
+            T::default(),
+            T::default(),
+            T::default(),
+            T::default(),
+            T::default(),
+            T::default(),
+            T::default(),
+            T::default(),
+            T::default(),
+            T::default(),
+            T::default(),
+            T::default(),
+            T::default(),
+            T::default(),
+            T::default(),
+            T::default(),
+            T::default(),
+            T::default(),
+            T::default(),
+            T::default(),
+            T::default(),
+            T::default(),
+            T::default(),
+            T::default(),
+            T::default(),
+            T::default(),
+            T::default(),
+            T::default(),
+            T::default(),
+            T::default(),
+            T::default(),
+            T::default(),
+            T::default(),
+            T::default(),
+            T::default(),
+            T::default(),
+            T::default(),
+            T::default(),
+            T::default(),
+            T::default(),
+            T::default(),
+            T::default(),
+            T::default(),
+            T::default(),
+            T::default(),
+            T::default(),
+            T::default(),
+            T::default(),
+            T::default(),
+            T::default(),
+            T::default(),
+            T::default(),
+            T::default(),
+            T::default(),
+            T::default(),
+            T::default(),
+            T::default(),
+            T::default(),
+            T::default(),
+            T::default(),
+        ];
+        for i in 0..64 {
+            buf[63 - i] = vec.pop().unwrap();
+        }
+        Ok(buf)
     }
 }

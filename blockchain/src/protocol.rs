@@ -2,30 +2,21 @@
 //! This is an implementation of a p2p protocol to synchronize mempool transactions
 //! and blocks.
 
-use super::super::utreexo;
-use super::super::Tx;
-use super::block::{BlockHeader, BlockID};
-use super::shortid::{self, ShortID};
 use async_trait::async_trait;
 use core::convert::AsRef;
-use musig::Signature;
 use serde::{Deserialize, Serialize};
+use starsig::Signature;
+
+use super::block::{Block, BlockHeader, BlockID, BlockTx};
+use super::shortid::{self, ShortID};
+use super::utreexo;
+use zkvm::Tx;
 
 /// Stubnet signed block header.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SignedBlockHeader {
     pub header: BlockHeader,
     pub signature: Signature,
-}
-
-pub struct BlockTx {
-    proofs: Vec<utreexo::Proof>,
-    tx: Tx,
-}
-
-pub struct Block {
-    header: BlockHeader,
-    txs: Vec<BlockTx>,
 }
 
 /// Storage interface to retrieve blocks

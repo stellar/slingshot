@@ -92,7 +92,11 @@ mod tests {
         let t = Transform::new(0u64, &[42u8]);
         let id_foo = t.apply(b"foo");
         let id_bar = t.apply(b"bar");
-        assert_eq!(id_foo.to_bytes(), [0, 0, 0, 0, 0, 0]);
-        //assert_eq!(id_bar.to_bytes(), [0,0,0,0,0,0]);
+        assert_eq!(id_foo.to_bytes(), [0x50, 0x74, 0x5c, 0xd8, 0x7d, 0xd7]);
+        assert_eq!(id_bar.to_bytes(), [0x5a, 0x48, 0x9e, 0xb8, 0x6e, 0x61]);
+        let id_foo2 = ShortID::from_bytes(&[0x50, 0x74, 0x5c, 0xd8, 0x7d, 0xd7]).unwrap();
+        assert_eq!(id_foo2.to_bytes(), [0x50, 0x74, 0x5c, 0xd8, 0x7d, 0xd7]);
+        let id_foo3 = ShortID::from_u64(0xdead_d77d_d85c_7450); // top 2 bytes are zeroed.
+        assert_eq!(id_foo3.to_bytes(), [0x50, 0x74, 0x5c, 0xd8, 0x7d, 0xd7]);
     }
 }

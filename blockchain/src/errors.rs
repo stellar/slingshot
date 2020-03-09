@@ -1,5 +1,5 @@
-use crate::errors::VMError;
 use crate::utreexo::UtreexoError;
+use zkvm::VMError;
 
 /// Blockchain state machine error conditions.
 #[derive(Debug, Fail)]

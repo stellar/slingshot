@@ -4,9 +4,8 @@ use serde::{Deserialize, Serialize};
 
 use super::block::{BlockHeader, BlockID};
 use super::errors::BlockchainError;
-use crate::merkle::{Hasher, MerkleTree};
 use crate::utreexo::{self, utreexo_hasher, Catchup, Forest, WorkForest};
-use crate::{ContractID, TxEntry, TxHeader, TxLog, VerifiedTx};
+use zkvm::{ContractID, Hasher, MerkleTree, TxEntry, TxHeader, TxLog, VerifiedTx};
 
 /// State of the blockchain node.
 #[derive(Clone, Serialize, Deserialize)]
