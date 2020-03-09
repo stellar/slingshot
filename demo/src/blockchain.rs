@@ -3,9 +3,9 @@
 
 use super::schema::*;
 use super::util;
-use zkvm::{Tx, TxEntry};
-use blockchain::{BlockHeader, BlockchainState};
 use blockchain::utreexo;
+use blockchain::{BlockHeader, BlockchainState};
+use zkvm::{Tx, TxEntry};
 
 use serde_json::Value as JsonValue;
 

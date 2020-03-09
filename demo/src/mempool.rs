@@ -1,5 +1,5 @@
-use blockchain::{self,MempoolItem};
 use blockchain::utreexo;
+use blockchain::{self, MempoolItem};
 use zkvm::{Encodable, Tx, VerifiedTx};
 
 /// Mempool item
