@@ -9,7 +9,7 @@ use accounts::{Account, Receiver, ReceiverWitness};
 use keytree::Xprv;
 use musig::Multisignature;
 
-use zkvm::utreexo;
+use blockchain::utreexo;
 use zkvm::{Anchor, ClearValue, Contract, ContractID, Tx, TxEntry, TxLog, VerifiedTx};
 
 use crate::asset::AssetRecord;
@@ -321,7 +321,7 @@ impl Wallet {
         (
             zkvm::Tx,
             zkvm::TxID,
-            Vec<zkvm::utreexo::Proof>,
+            Vec<utreexo::Proof>,
             accounts::ReceiverReply,
         ),
         &'static str,
@@ -475,7 +475,7 @@ impl Wallet {
         (
             zkvm::Tx,
             zkvm::TxID,
-            Vec<zkvm::utreexo::Proof>,
+            Vec<utreexo::Proof>,
             accounts::ReceiverReply,
         ),
         &'static str,

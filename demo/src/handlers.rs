@@ -12,7 +12,7 @@ use rocket_contrib::serve::StaticFiles;
 use rocket_contrib::templates::Template;
 
 use bulletproofs::BulletproofGens;
-use zkvm::utreexo;
+use blockchain::utreexo;
 
 use p2p::Direction;
 

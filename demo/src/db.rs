@@ -4,7 +4,8 @@ use std::env;
 use diesel::prelude::*;
 use diesel::sqlite::SqliteConnection;
 
-use zkvm::{Anchor, BlockchainState};
+use zkvm::Anchor;
+use blockchain::BlockchainState;
 
 use crate::account::{AccountRecord, Wallet};
 use crate::asset::{self, AssetRecord};

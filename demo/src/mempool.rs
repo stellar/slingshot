@@ -1,5 +1,5 @@
-use zkvm::blockchain::MempoolItem;
-use zkvm::utreexo;
+use blockchain::{self,MempoolItem};
+use blockchain::utreexo;
 use zkvm::{Encodable, Tx, VerifiedTx};
 
 /// Mempool item
@@ -20,7 +20,7 @@ impl MempoolItem for MempoolTx {
 }
 
 /// Our concrete instance of mempool
-pub type Mempool = zkvm::blockchain::Mempool<MempoolTx>;
+pub type Mempool = blockchain::Mempool<MempoolTx>;
 
 // Estimated cost of a memory occupied by transactions in the mempool.
 pub fn estimated_memory_cost(mempool: &Mempool) -> usize {
