@@ -31,6 +31,7 @@ pub struct BlockHeader {
 }
 
 /// Transaction annotated with Utreexo proofs.
+#[derive(Clone, Serialize, Deserialize)]
 pub struct BlockTx {
     /// Utreexo proofs.
     pub proofs: Vec<utreexo::Proof>,
@@ -39,6 +40,7 @@ pub struct BlockTx {
 }
 
 /// Block is a block header + a list of transactions.
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Block {
     /// Header data
     header: BlockHeader,

@@ -8,10 +8,12 @@
 //! Based on [BIP-152](https://github.com/bitcoin/bips/blob/master/bip-0152.mediawiki).
 
 use core::hash::Hasher;
+use serde::{Deserialize, Serialize};
 use siphasher::sip::SipHasher;
 
 /// Short ID definition
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(transparent)]
 pub struct ShortID {
     inner: u64,
 }
