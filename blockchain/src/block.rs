@@ -30,15 +30,6 @@ pub struct BlockHeader {
     pub ext: Vec<u8>,
 }
 
-/// Transaction annotated with Utreexo proofs.
-#[derive(Clone, Serialize, Deserialize)]
-pub struct BlockTx {
-    /// Utreexo proofs.
-    pub proofs: Vec<utreexo::Proof>,
-    /// ZkVM transaction.
-    pub tx: Tx,
-}
-
 /// Block is a block header + a list of transactions.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Block {
@@ -46,6 +37,15 @@ pub struct Block {
     header: BlockHeader,
     /// List of txs in a block.
     txs: Vec<BlockTx>,
+}
+
+/// Transaction annotated with Utreexo proofs.
+#[derive(Clone, Serialize, Deserialize)]
+pub struct BlockTx {
+    /// Utreexo proofs.
+    pub proofs: Vec<utreexo::Proof>,
+    /// ZkVM transaction.
+    pub tx: Tx,
 }
 
 impl BlockHeader {
