@@ -506,7 +506,7 @@ fn taproot_program_path() {
 }
 
 #[test]
-fn programs_cannot_be_copied_or_dropped() {
+fn programs_cannot_be_copied() {
     let prog = Program::build(|p| {
         p.program(Program::build(|inner| {
             inner.verify();
@@ -518,22 +518,10 @@ fn programs_cannot_be_copied_or_dropped() {
         build_and_verify(prog, &vec![]),
         Err(VMError::TypeNotCopyable)
     );
-
-    let prog = Program::build(|p| {
-        p.program(Program::build(|inner| {
-            inner.verify();
-        })) // some arbitrary program
-        .drop();
-    });
-
-    assert_eq!(
-        build_and_verify(prog, &vec![]),
-        Err(VMError::TypeNotCopyable)
-    );
 }
 
 #[test]
-fn expressions_cannot_be_copied_or_dropped() {
+fn expressions_cannot_be_copied() {
     let prog = Program::build(|p| {
         p.mintime() // some arbitrary expression
             .dup(0);
@@ -543,37 +531,15 @@ fn expressions_cannot_be_copied_or_dropped() {
         build_and_verify(prog, &vec![]),
         Err(VMError::TypeNotCopyable)
     );
-
-    let prog = Program::build(|p| {
-        p.mintime() // some arbitrary expression
-            .drop();
-    });
-
-    assert_eq!(
-        build_and_verify(prog, &vec![]),
-        Err(VMError::TypeNotCopyable)
-    );
 }
 
 #[test]
-fn constraints_cannot_be_copied_or_dropped() {
+fn constraints_cannot_be_copied() {
     let prog = Program::build(|p| {
         p.mintime()
             .mintime()
             .eq() // some arbitrary constraint
             .dup(0);
-    });
-
-    assert_eq!(
-        build_and_verify(prog, &vec![]),
-        Err(VMError::TypeNotCopyable)
-    );
-
-    let prog = Program::build(|p| {
-        p.mintime()
-            .mintime()
-            .eq() // some arbitrary constraint
-            .drop();
     });
 
     assert_eq!(
