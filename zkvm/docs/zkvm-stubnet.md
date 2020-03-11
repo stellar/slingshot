@@ -80,7 +80,7 @@ When receiving an [`Inventory`](#inventory) message:
 Periodically, every 2 seconds:
 
 1. The peers who have `needs_inventory=true` are sent a new [`Inventory`](#inventory) message.
-2. **If the target tip does not match the current state,** the node requests missing blocks using [`GetBlocks`](#getblocks) from the peers evenly (e.g. 1 block from each peer).
+2. **If the target tip does not match the current state,** the node requests the next block using [`GetBlock`](#getblock) from the random peer.
 3. **If the target tip is the latest**, the node walks all peers in round-robin and constructs lists of [short IDs](#short-id) to request from each peer, keeping track of already used IDs. Once all requests are constructed, the [`GetMempoolTxs`](#getmempooltxs) messages are sent out to respective peers.
 4. For peers who have not sent inventory for over a minute, we send [`GetInventory`](#getinventory) again.
 
@@ -89,9 +89,8 @@ Periodically, every 60 seconds:
 1. Set a new random [short ID](#short-id) nonce.
 2. Clear all the short IDs stored per peer.
 
-When [`GetBlocks`](#getblocks) message is received,
-we reply immediately with the blocks requested using [`Blocks`](#blocks) message, 
-limiting the list to the `max_msg_size`.
+When [`GetBlock`](#getblock) message is received,
+we reply immediately with the block requested using [`Block`](#block) message.
 
 When [`Blocks`](#blocks) message is received:
 1. If the block is a direct descendant: 
@@ -130,31 +129,32 @@ Contains the block tip and the contents of mempool as a list of [short IDs](#sho
 ```
 struct Inventory {
     version: u64,
-    tip_header: BlockHeader,
-    stubnet_signature: starsig::Signature,
+    tip: BlockHeader,
+    tip_signature: starsig::Signature,
     shortid_nonce: u64,
-    mempool: Vec<ShortID>
+    shortid_list: Vec<u8>,
 }
 ```
 
-### `GetBlocks`
+### `GetBlock`
 
-Requests a list of blocks after a given tip. Specifies both the height and the ID for quick lookup and consistency check.
+Requests a block at a given height.
 
 ```
-struct GetBlocks {
-    tip: BlockID,
+struct GetBlock {
     height: u64,
 }
 ```
 
-### `Blocks`
+### `Block`
 
-Sends a list of blocks requested with [`GetBlocks`](#getblocks) message.
+Sends a block requested with [`GetBlock`](#getblock) message.
 
 ```
-struct Blocks {
-    blocks: Vec<Block>
+struct Block {
+    header: BlockHeader,
+    signature: starsig::Signature,
+    txs: Vec<BlockTx>,
 }
 ```
 

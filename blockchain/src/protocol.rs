@@ -7,11 +7,11 @@ use core::convert::AsRef;
 use core::hash::Hash;
 use rand::{thread_rng, Rng};
 use serde::{Deserialize, Serialize};
-use starsig::Signature;
+use starsig::{Signature, VerificationKey};
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
-use super::block::{Block, BlockHeader, BlockID, BlockTx};
+use super::block::{BlockHeader, BlockID};
 use super::shortid::{self, ShortID};
 use super::state::Mempool;
 use super::utreexo;
@@ -19,13 +19,6 @@ use zkvm::Tx;
 
 const CURRENT_VERSION: u64 = 0;
 const SHORTID_NONCE_TTL: usize = 50;
-
-/// Stubnet signed block header.
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct SignedBlockHeader {
-    pub header: BlockHeader,
-    pub signature: Signature,
-}
 
 #[async_trait]
 pub trait Network {
@@ -40,15 +33,13 @@ pub trait Network {
 
 pub trait Storage {
     /// Returns the signed tip of the blockchain
-    fn signed_tip(&self) -> SignedBlockHeader;
+    fn tip(&self) -> (BlockHeader, Signature);
+
+    /// Returns a block header signature at a given height.
+    fn block_signature_at_height(&self, height: u64) -> Signature;
 
     /// Returns a block at a given height
     fn block_at_height(&self, height: u64) -> BlockHeader;
-
-    /// Returns a tip of the blockchain
-    fn tip(&self) -> BlockHeader {
-        self.signed_tip().header
-    }
 }
 
 pub enum ProtocolError {
@@ -56,28 +47,28 @@ pub enum ProtocolError {
 }
 
 pub struct Node<N: Network, S: Storage> {
+    network_pubkey: VerificationKey,
     network: N,
     storage: S,
     target_tip: BlockHeader,
     peers: HashMap<N::PeerIdentifier, PeerInfo>,
     shortid_nonce: u64,
     shortid_nonce_ttl: usize,
-    orphan_blocks_lru: Vec<Block>,
     // TBD: add mempool in here
 }
 
 impl<N: Network, S: Storage> Node<N, S> {
     /// Create a new node.
-    pub fn new(network: N, storage: S) -> Self {
-        let tip = storage.tip();
+    pub fn new(network_pubkey: VerificationKey, network: N, storage: S) -> Self {
+        let tip = storage.tip().0;
         Node {
+            network_pubkey,
             network,
             storage,
             target_tip: tip,
             peers: HashMap::new(),
             shortid_nonce: thread_rng().gen::<u64>(),
             shortid_nonce_ttl: SHORTID_NONCE_TTL,
-            orphan_blocks_lru: Vec::with_capacity(100),
         }
     }
 
@@ -90,8 +81,8 @@ impl<N: Network, S: Storage> Node<N, S> {
         match message {
             Message::GetInventory(msg) => self.process_inventory_request(pid, msg).await?,
             Message::Inventory(msg) => self.receive_inventory(pid, msg).await,
-            Message::GetBlocks(msg) => self.send_blocks(pid, msg).await,
-            Message::Blocks(msg) => self.receive_blocks(pid, msg).await,
+            Message::GetBlock(msg) => self.send_block(pid, msg).await,
+            Message::Block(msg) => self.receive_block(pid, msg).await,
             Message::GetMempoolTxs(msg) => self.send_txs(pid, msg).await,
             Message::MempoolTxs(msg) => self.receive_txs(pid, msg).await,
         }
@@ -102,13 +93,16 @@ impl<N: Network, S: Storage> Node<N, S> {
     pub async fn synchronize(&mut self) {
         self.rotate_shortid_nonce_if_needed();
 
+        let (tip_header, tip_signature) = self.storage.tip();
+
         for (pid, peer) in self.peers.iter().filter(|(_, p)| p.needs_our_inventory) {
             self.network
                 .send(
                     pid.clone(),
                     Message::Inventory(Inventory {
                         version: CURRENT_VERSION,
-                        tip: self.storage.signed_tip(),
+                        tip: tip_header.clone(),
+                        tip_signature: tip_signature.clone(),
                         shortid_nonce: peer.their_short_id_nonce,
                         shortid_list: self
                             .mempool_inventory_for_peer(pid, peer.their_short_id_nonce),
@@ -121,7 +115,7 @@ impl<N: Network, S: Storage> Node<N, S> {
             peer.needs_our_inventory = false;
         }
 
-        if self.target_tip.id() != self.storage.tip().id() {
+        if self.target_tip.id() != self.storage.tip().0.id() {
             self.synchronize_chain().await;
         } else {
             self.synchronize_mempool().await;
@@ -167,10 +161,7 @@ impl<N: Network, S: Storage> Node<N, S> {
 }
 
 impl<N: Network, S: Storage> Node<N, S> {
-    async fn synchronize_chain(&mut self) {
-        // 2. **If the target tip does not match the current state,** the node requests missing blocks
-        //    using [`GetBlocks`](#getblocks) from the peers evenly (e.g. 1 block from each peer).
-    }
+    async fn synchronize_chain(&mut self) {}
 
     async fn synchronize_mempool(&mut self) {
         // 3. **If the target tip is the latest**, the node walks all peers in round-robin and constructs lists of [short IDs](#short-id) to request from each peer,
@@ -207,11 +198,11 @@ impl<N: Network, S: Storage> Node<N, S> {
 
     async fn receive_inventory(&mut self, pid: N::PeerIdentifier, inventory: Inventory) {}
 
-    async fn receive_blocks(&mut self, pid: N::PeerIdentifier, blocks: Blocks) {}
+    async fn receive_block(&mut self, pid: N::PeerIdentifier, block_msg: Block) {}
 
     async fn receive_txs(&mut self, pid: N::PeerIdentifier, request: MempoolTxs) {}
 
-    async fn send_blocks(&mut self, pid: N::PeerIdentifier, request: GetBlocks) {}
+    async fn send_block(&mut self, pid: N::PeerIdentifier, request: GetBlock) {}
 
     async fn send_txs(&mut self, pid: N::PeerIdentifier, request: GetMempoolTxs) {}
 
@@ -239,8 +230,8 @@ impl<N: Network, S: Storage> Node<N, S> {
 pub enum Message {
     GetInventory(GetInventory),
     Inventory(Inventory),
-    GetBlocks(GetBlocks),
-    Blocks(Blocks),
+    GetBlock(GetBlock),
+    Block(Block),
     GetMempoolTxs(GetMempoolTxs),
     MempoolTxs(MempoolTxs),
 }
@@ -254,20 +245,31 @@ pub struct GetInventory {
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Inventory {
     version: u64,
-    tip: SignedBlockHeader,
+    tip: BlockHeader,
+    tip_signature: Signature,
     shortid_nonce: u64,
     shortid_list: Vec<u8>,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
-pub struct GetBlocks {
-    tip: BlockID,
+pub struct GetBlock {
     height: u64,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
-pub struct Blocks {
-    blocks: Vec<Block>,
+pub struct Block {
+    header: BlockHeader,
+    signature: Signature,
+    txs: Vec<BlockTx>,
+}
+
+/// Transaction annotated with Utreexo proofs.
+#[derive(Clone, Serialize, Deserialize)]
+pub struct BlockTx {
+    /// Utreexo proofs.
+    pub proofs: Vec<utreexo::Proof>,
+    /// ZkVM transaction.
+    pub tx: Tx,
 }
 
 #[derive(Clone, Serialize, Deserialize)]

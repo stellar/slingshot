@@ -1,8 +1,7 @@
 use merlin::Transcript;
 use serde::{Deserialize, Serialize};
 
-use super::utreexo;
-use zkvm::{Hash, MerkleTree, Tx};
+use zkvm::{Hash, MerkleTree};
 
 /// Identifier of the block, computed as a hash of the `BlockHeader`.
 #[derive(Clone, Copy, PartialEq, Default, Debug)]
@@ -28,24 +27,6 @@ pub struct BlockHeader {
     pub utxoroot: Hash,
     /// Extra data for the future extensions.
     pub ext: Vec<u8>,
-}
-
-/// Block is a block header + a list of transactions.
-#[derive(Clone, Serialize, Deserialize)]
-pub struct Block {
-    /// Header data
-    header: BlockHeader,
-    /// List of txs in a block.
-    txs: Vec<BlockTx>,
-}
-
-/// Transaction annotated with Utreexo proofs.
-#[derive(Clone, Serialize, Deserialize)]
-pub struct BlockTx {
-    /// Utreexo proofs.
-    pub proofs: Vec<utreexo::Proof>,
-    /// ZkVM transaction.
-    pub tx: Tx,
 }
 
 impl BlockHeader {
