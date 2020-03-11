@@ -7,7 +7,7 @@ use core::convert::AsRef;
 use core::hash::Hash;
 use rand::{thread_rng, Rng};
 use serde::{Deserialize, Serialize};
-use starsig::{Signature, VerificationKey};
+use starsig::{Signature, SigningKey, VerificationKey};
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
@@ -15,6 +15,7 @@ use super::block::{BlockHeader, BlockID};
 use super::shortid::{self, ShortID};
 use super::state::Mempool;
 use super::utreexo;
+use merlin::Transcript;
 use zkvm::Tx;
 
 const CURRENT_VERSION: u64 = 0;
@@ -35,15 +36,14 @@ pub trait Storage {
     /// Returns the signed tip of the blockchain
     fn tip(&self) -> (BlockHeader, Signature);
 
-    /// Returns a block header signature at a given height.
-    fn block_signature_at_height(&self, height: u64) -> Signature;
-
     /// Returns a block at a given height
-    fn block_at_height(&self, height: u64) -> BlockHeader;
+    fn block_at_height(&self, height: u64) -> Option<Block>;
 }
 
 pub enum ProtocolError {
     IncompatibleVersion,
+    BlockNotFound(u64),
+    InvalidBlockSignature,
 }
 
 pub struct Node<N: Network, S: Storage> {
@@ -81,8 +81,8 @@ impl<N: Network, S: Storage> Node<N, S> {
         match message {
             Message::GetInventory(msg) => self.process_inventory_request(pid, msg).await?,
             Message::Inventory(msg) => self.receive_inventory(pid, msg).await,
-            Message::GetBlock(msg) => self.send_block(pid, msg).await,
-            Message::Block(msg) => self.receive_block(pid, msg).await,
+            Message::GetBlock(msg) => self.send_block(pid, msg).await?,
+            Message::Block(msg) => self.receive_block(pid, msg).await?,
             Message::GetMempoolTxs(msg) => self.send_txs(pid, msg).await,
             Message::MempoolTxs(msg) => self.receive_txs(pid, msg).await,
         }
@@ -198,11 +198,37 @@ impl<N: Network, S: Storage> Node<N, S> {
 
     async fn receive_inventory(&mut self, pid: N::PeerIdentifier, inventory: Inventory) {}
 
-    async fn receive_block(&mut self, pid: N::PeerIdentifier, block_msg: Block) {}
+    async fn receive_block(
+        &mut self,
+        pid: N::PeerIdentifier,
+        block_msg: Block,
+    ) -> Result<(), ProtocolError> {
+        // Check the block signature.
+        if !verify_block_signature(&block_msg.header, &block_msg.signature, self.network_pubkey) {
+            return Err(ProtocolError::InvalidBlockSignature);
+        }
+
+        // Check the block self-consistency, then verify transactions, then apply changes.
+
+        // If block applied well, remove conflicting transactions from mempool.\\
+
+        Ok(())
+    }
 
     async fn receive_txs(&mut self, pid: N::PeerIdentifier, request: MempoolTxs) {}
 
-    async fn send_block(&mut self, pid: N::PeerIdentifier, request: GetBlock) {}
+    async fn send_block(
+        &mut self,
+        pid: N::PeerIdentifier,
+        request: GetBlock,
+    ) -> Result<(), ProtocolError> {
+        let block = self
+            .storage
+            .block_at_height(request.height)
+            .ok_or(ProtocolError::BlockNotFound(request.height))?;
+        self.network.send(pid, Message::Block(block)).await;
+        Ok(())
+    }
 
     async fn send_txs(&mut self, pid: N::PeerIdentifier, request: GetMempoolTxs) {}
 
@@ -223,6 +249,23 @@ impl<N: Network, S: Storage> Node<N, S> {
         // TBD: list txs in mempool and convert them into short ids.
         unimplemented!()
     }
+}
+
+/// Signs a block.
+fn create_block_signature(header: &BlockHeader, privkey: SigningKey) -> Signature {
+    let mut t = Transcript::new(b"ZkVM.stubnet1");
+    t.append_message(b"block_id", &header.id());
+    Signature::sign(&mut t, privkey)
+}
+
+fn verify_block_signature(
+    header: &BlockHeader,
+    signature: &Signature,
+    pubkey: VerificationKey,
+) -> bool {
+    let mut t = Transcript::new(b"ZkVM.stubnet1");
+    t.append_message(b"block_id", &header.id());
+    signature.verify(&mut t, pubkey).is_ok()
 }
 
 /// Enumeration of all protocol messages

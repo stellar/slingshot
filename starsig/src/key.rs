@@ -3,6 +3,9 @@ use curve25519_dalek::ristretto::{CompressedRistretto, RistrettoPoint};
 use curve25519_dalek::scalar::Scalar;
 use serde::{Deserialize, Serialize};
 
+/// Signing key (aka "privkey") is a type alias for the scalar in Ristretto255 group.
+pub type SigningKey = Scalar;
+
 /// Verification key (aka "pubkey") is a wrapper type around a Ristretto point
 /// that lets the verifier to check the signature.
 #[derive(Copy, Clone, PartialEq, Eq, Default, Debug, Serialize, Deserialize)]
