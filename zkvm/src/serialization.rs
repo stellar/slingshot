@@ -1,5 +1,7 @@
 //! Utilities to support serialization needs
 
+/// Implements `serde::Serialize` and `serde::Deserialize` for a tuple-struct that wraps `[u8;32]`.
+#[macro_export]
 macro_rules! serialize_bytes32 {
     ($type_name:ident) => {
         impl serde::Serialize for $type_name {
@@ -46,101 +48,4 @@ macro_rules! serialize_bytes32 {
             }
         }
     };
-}
-
-/// Serde adaptor for 64-item array
-pub mod array64 {
-    use serde::{Deserialize, Deserializer, Serialize, Serializer};
-
-    pub fn serialize<T, S>(value: &[T; 64], serializer: S) -> Result<S::Ok, S::Error>
-    where
-        T: Serialize + Clone,
-        S: Serializer,
-    {
-        value.to_vec().serialize(serializer)
-    }
-
-    pub fn deserialize<'de, D, T>(deserializer: D) -> Result<[T; 64], D::Error>
-    where
-        D: Deserializer<'de>,
-        T: Deserialize<'de> + Default,
-    {
-        let mut vec = Vec::<T>::deserialize(deserializer)?;
-        if vec.len() != 64 {
-            return Err(serde::de::Error::invalid_length(
-                vec.len(),
-                &"a 64-item array",
-            ));
-        }
-        let mut buf: [T; 64] = [
-            T::default(),
-            T::default(),
-            T::default(),
-            T::default(),
-            T::default(),
-            T::default(),
-            T::default(),
-            T::default(),
-            T::default(),
-            T::default(),
-            T::default(),
-            T::default(),
-            T::default(),
-            T::default(),
-            T::default(),
-            T::default(),
-            T::default(),
-            T::default(),
-            T::default(),
-            T::default(),
-            T::default(),
-            T::default(),
-            T::default(),
-            T::default(),
-            T::default(),
-            T::default(),
-            T::default(),
-            T::default(),
-            T::default(),
-            T::default(),
-            T::default(),
-            T::default(),
-            T::default(),
-            T::default(),
-            T::default(),
-            T::default(),
-            T::default(),
-            T::default(),
-            T::default(),
-            T::default(),
-            T::default(),
-            T::default(),
-            T::default(),
-            T::default(),
-            T::default(),
-            T::default(),
-            T::default(),
-            T::default(),
-            T::default(),
-            T::default(),
-            T::default(),
-            T::default(),
-            T::default(),
-            T::default(),
-            T::default(),
-            T::default(),
-            T::default(),
-            T::default(),
-            T::default(),
-            T::default(),
-            T::default(),
-            T::default(),
-            T::default(),
-            T::default(),
-        ];
-        for i in 0..64 {
-            buf[63 - i] = vec.pop().unwrap();
-        }
-        Ok(buf)
-    }
 }

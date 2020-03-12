@@ -7,8 +7,7 @@ use curve25519_dalek::scalar::Scalar;
 use keytree::Xprv;
 use musig::{Multisignature, Signature};
 
-use zkvm::blockchain::{BlockHeader, BlockchainState, Mempool, MempoolItem};
-use zkvm::utreexo;
+use blockchain::{utreexo, BlockHeader, BlockchainState, Mempool, MempoolItem};
 use zkvm::{
     Anchor, ClearValue, Contract, ContractID, Program, Prover, TxEntry, TxHeader, VerifiedTx,
 };

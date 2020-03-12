@@ -1,13 +1,12 @@
-use bulletproofs::BulletproofGens;
 use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
-use musig::{Multisignature, Signature};
 use rand::RngCore;
+use zkvm::bulletproofs::BulletproofGens;
 
 use super::*;
-use crate::{
-    utreexo, Anchor, Commitment, Contract, ContractID, PortableItem, Predicate, Program, Prover,
-    String, TxHeader, Value, VerificationKey, VerifiedTx,
+use zkvm::{
+    Anchor, Commitment, Contract, ContractID, Multisignature, PortableItem, Predicate, Program,
+    Prover, Signature, String, TxHeader, Value, VerificationKey, VerifiedTx,
 };
 
 fn make_predicate(privkey: u64) -> Predicate {

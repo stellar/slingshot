@@ -1,7 +1,7 @@
 use merlin::Transcript;
 use serde::{Deserialize, Serialize};
 
-use crate::{Hash, MerkleTree};
+use zkvm::{Hash, MerkleTree};
 
 /// Identifier of the block, computed as a hash of the `BlockHeader`.
 #[derive(Clone, Copy, PartialEq, Default, Debug)]

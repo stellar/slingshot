@@ -27,6 +27,9 @@ path = "../musig"
 [dependencies.zkvm]
 path = "../zkvm"
 
+[dev-dependencies.blockchain]
+path = "../blockchain"
+
 [dev-dependencies]
 rand_chacha = "0.2"
 hex = "^0.3"

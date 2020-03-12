@@ -62,7 +62,7 @@
 
   <div>
   <p>
-    <h4>Connect a peer</h4>
+    <h4>Add connection</h4>
   </p>
   <form class="form-inline" action="/network/connect" method="POST">
     <input type="text" class="form-control mb-2 mr-sm-2" id="connect-peer-addr" name="address" placeholder="xxx.xx.xx.xx:pppp">

@@ -1,3 +1,4 @@
+//! API for operations on merkle binary trees.
 use crate::encoding::{self, Encodable, SliceReader};
 use crate::errors::VMError;
 use core::marker::PhantomData;
@@ -246,6 +247,7 @@ pub struct Path {
     pub neighbors: Vec<Hash>,
 }
 
+/// Side of the neighbour produced by the `Directions` iterator.
 #[derive(Copy, Clone, PartialEq, Debug)]
 pub enum Side {
     /// Indicates that the item is to the left of its neighbor.
@@ -359,6 +361,9 @@ impl Path {
 
 // zkvm-specific impl
 impl Path {
+    /// Decodes Path from a byte slice. First 8 bytes is a LE64-encoded position,
+    /// followed by 4 bytes of LE32-encoded number of neighbours,
+    /// than the 32-byte neighbour hashes.
     pub fn decode<'a>(reader: &mut SliceReader<'a>) -> Result<Self, VMError> {
         let position = reader.read_u64()?;
         let neighbors_len = reader.read_u32()? as usize;
@@ -392,12 +397,19 @@ impl Encodable for Path {
     }
 }
 
-/// Simialr to Path, but does not contain neighbors - only left/right directions
+/// Similar to `Path`, but does not contain neighbors - only left/right directions
 /// as indicated by the bits in the `position`.
 #[derive(Copy, Clone, PartialEq, Debug)]
 pub struct Directions {
-    pub position: Position,
-    pub depth: usize,
+    position: Position,
+    depth: usize,
+}
+
+impl Directions {
+    /// Creates a new directions object for a specified item’s position and depth.
+    pub fn new(position: Position, depth: usize) -> Self {
+        Self { position, depth }
+    }
 }
 
 impl ExactSizeIterator for Directions {

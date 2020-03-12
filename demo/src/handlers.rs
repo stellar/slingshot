@@ -11,8 +11,8 @@ use rocket::{Request, State};
 use rocket_contrib::serve::StaticFiles;
 use rocket_contrib::templates::Template;
 
+use blockchain::utreexo;
 use bulletproofs::BulletproofGens;
-use zkvm::utreexo;
 
 use p2p::Direction;
 

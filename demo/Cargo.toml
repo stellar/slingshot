@@ -32,6 +32,9 @@ path = "../musig"
 [dependencies.zkvm]
 path = "../zkvm"
 
+[dependencies.blockchain]
+path = "../blockchain"
+
 [dependencies.accounts]
 path = "../accounts"
 

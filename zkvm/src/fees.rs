@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 /// Maximum amount of fee, which allows overflow-safe size-by-fee multiplication.
 pub const MAX_FEE: u64 = 1 << 24;
 
+/// Fee checked to be less or equal to `MAX_FEE`.
 #[derive(Copy, Clone, Debug)]
 pub struct CheckedFee {
     inner: u64,
@@ -57,14 +58,17 @@ impl FeeRate {
 }
 
 impl CheckedFee {
+    /// Creates a zero fee.
     pub const fn zero() -> Self {
         CheckedFee { inner: 0 }
     }
 
+    /// Creates a fee checked to be ≤ `MAX_FEE`.
     pub fn new(fee: u64) -> Option<Self> {
         CheckedFee::zero().add(fee)
     }
 
+    /// Adds a fee and checks the result for being within `MAX_FEE`.
     pub fn add(mut self, fee: u64) -> Option<Self> {
         if fee > MAX_FEE {
             return None;
