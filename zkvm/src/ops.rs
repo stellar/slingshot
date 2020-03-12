@@ -32,7 +32,7 @@ pub enum Instruction {
     ///
     /// Drops `x` from the stack.
     ///
-    /// Fails if `x` is not a _copyable type_.
+    /// Fails if `x` is not a _droppable type_.
     Drop,
 
     /// _x(k) … x(0)_ **dup:_k_** → _x(k) ... x(0) x(k)_
@@ -322,18 +322,15 @@ pub enum Instruction {
     /// Immediate data `m` and `n` are encoded as two _LE32_s.
     Cloak(usize, usize),
 
-    /// _value qty_ **fee** → ø
+    /// _qty_ **fee** → _widevalue_
     ///
-    /// 1. Pops an 8-byte _string_ `qty` from the stack and decodes it as _LE64_ integer.
-    /// 2. Pops _value_ from the stack.
-    /// 3. Checks that value.qty is unblinded commitment to `qty` and value.flv is unblinded commitment to zero.
-    /// 4. Adds a _fee entry_ to the _transaction log_.
+    /// 1. Pops an 4-byte _string_ `qty` from the stack and decodes it as _LE32_ integer.
+    /// 2. Checks that `qty`  and accumulated fee is less or equal to `2^24`.
+    /// 3. Pushes _wide value_ `–V`, with quantity variable constrained to `-qty` and with flavor constrained to 0.
+    ///    Both variables are allocated from a single multiplier.
+    /// 4. Adds a _fee entry_ to the _transaction log_ with the quantity `qty`.
     ///
-    /// The checks are performed with group elements directly, without any changes to a _constraint system_.
-    ///
-    /// Fails if:
-    /// * value.qty does not match unblinded `qty`,
-    /// * value.flv is not an unblinded commitment to 0.
+    /// Fails if the resulting amount of fees is exceeding `2^24`.
     Fee,
 
     /// _prevoutput_ **input** → _contract_

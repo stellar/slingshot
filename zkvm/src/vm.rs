@@ -199,7 +199,7 @@ where
     }
 
     fn drop(&mut self) -> Result<(), VMError> {
-        let _dropped = self.pop_item()?.to_copyable()?;
+        let _dropped = self.pop_item()?.to_droppable()?;
         Ok(())
     }
 

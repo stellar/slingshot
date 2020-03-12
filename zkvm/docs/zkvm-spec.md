@@ -9,6 +9,7 @@ ZkVM defines a procedural representation for blockchain transactions and the rul
     * [Concepts](#concepts)
 * [Types](#types)
     * [Copyable types](#copyable-types)
+    * [Droppable types](#droppable-types)
     * [Linear types](#linear-types)
     * [Portable types](#portable-types)
     * [String](#string-type)
@@ -146,11 +147,11 @@ transaction’s applicability to the blockchain.
 
 The items on the ZkVM stack are typed. The available types fall into two 
 categories: [copyable types](#copyable-types) and [linear types](#linear-types).
-
+All copyable types, and some linear types are [droppable](#droppable-types).
 
 ### Copyable types
 
-Copyable types can be freely copied with [`dup`](#dup) or destroyed with [`drop`](#drop):
+Copyable types can be freely copied with [`dup`](#dup).
 
 * [String](#string-type)
 * [Variable](#variable-type)
@@ -158,6 +159,19 @@ Copyable types can be freely copied with [`dup`](#dup) or destroyed with [`drop`
 Note: the [program](#program-type) is not copyable to avoid denial-of-service attacks
 via repeated execution of the same program that can be scaled exponentially while
 growing the transaction size only linearly.
+For the same reason, [expressions](#expression-type) and [constraints](#constraint-type) are
+not copyable either.
+
+
+### Droppable types
+
+Droppable types can be destroyed with [`drop`](#drop):
+
+* [String](#string-type)
+* [Program](#program-type)
+* [Variable](#variable-type)
+* [Expression](#expression-type)
+* [Constraint](#constraint-type)
 
 
 ### Linear types
@@ -967,7 +981,7 @@ _x_ **drop** → ø
 
 Drops `x` from the stack.
 
-Fails if `x` is not a [copyable type](#copyable-types).
+Fails if `x` is not a [droppable type](#droppable-types).
 
 
 #### dup
@@ -1300,13 +1314,12 @@ Immediate data `m` and `n` are encoded as two [LE32](#le32)s.
 _qty_ **fee** → _widevalue_
 
 1. Pops an 4-byte [string](#string-type) `qty` from the stack and decodes it as [LE32](#le64) integer.
-2. Checks that `qty` is less or equal to `2^24`.
+2. Checks that `qty`  and accumulated fee is less or equal to `2^24`.
 3. Pushes [wide value](#wide-value-type) `–V`, with quantity variable constrained to `-qty` and with flavor constrained to 0.
    Both variables are allocated from a single multiplier.
 4. Adds a [fee entry](#fee-entry) to the [transaction log](#transaction-log) with the quantity `qty`.
 
-Fails if:
-* `qty` is exceeding `2^24`.
+Fails if the resulting amount of fees is exceeding `2^24`.
 
 
 

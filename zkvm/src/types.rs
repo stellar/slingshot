@@ -42,7 +42,7 @@ pub enum Item {
     Constraint(Constraint),
 }
 
-/// An item on a VM stack that can be copied and dropped.
+/// An item on a VM stack that can be copied.
 #[derive(Clone, Debug)]
 pub enum CopyableItem {
     /// A data item: a text string, a commitment or a scalar
@@ -50,6 +50,25 @@ pub enum CopyableItem {
 
     /// A variable type.
     Variable(Variable),
+}
+
+/// An item on a VM stack that can be dropped.
+#[derive(Clone, Debug)]
+pub enum DroppableItem {
+    /// A data item: a text string, a commitment or a scalar
+    String(String),
+
+    /// A program item: a bytecode string for `call`/`delegate` instructions
+    Program(ProgramItem),
+
+    /// A variable type.
+    Variable(Variable),
+
+    /// An expression type.
+    Expression(Expression),
+
+    /// A constraint type.
+    Constraint(Constraint),
 }
 
 /// A data item.
@@ -178,21 +197,24 @@ impl Item {
         }
     }
 
-    /// Downcasts item to a copyable type.
-    pub fn to_copyable(self) -> Result<CopyableItem, VMError> {
-        match self {
-            Item::String(x) => Ok(CopyableItem::String(x)),
-            Item::Variable(x) => Ok(CopyableItem::Variable(x)),
-            _ => Err(VMError::TypeNotCopyable),
-        }
-    }
-
     /// Copies a copyable type when it's given as a reference.
     pub fn dup_copyable(&self) -> Result<CopyableItem, VMError> {
         match self {
             Item::String(x) => Ok(CopyableItem::String(x.clone())),
             Item::Variable(x) => Ok(CopyableItem::Variable(x.clone())),
             _ => Err(VMError::TypeNotCopyable),
+        }
+    }
+
+    /// Downcasts item to a droppable type.
+    pub fn to_droppable(self) -> Result<DroppableItem, VMError> {
+        match self {
+            Item::String(x) => Ok(DroppableItem::String(x)),
+            Item::Program(x) => Ok(DroppableItem::Program(x)),
+            Item::Variable(x) => Ok(DroppableItem::Variable(x)),
+            Item::Expression(x) => Ok(DroppableItem::Expression(x)),
+            Item::Constraint(x) => Ok(DroppableItem::Constraint(x)),
+            _ => Err(VMError::TypeNotDroppable),
         }
     }
 }
