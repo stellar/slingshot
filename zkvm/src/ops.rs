@@ -325,13 +325,12 @@ pub enum Instruction {
     /// _qty_ **fee** → _widevalue_
     ///
     /// 1. Pops an 4-byte _string_ `qty` from the stack and decodes it as _LE32_ integer.
-    /// 2. Checks that `qty` is less or equal to `2^24`.
+    /// 2. Checks that `qty`  and accumulated fee is less or equal to `2^24`.
     /// 3. Pushes _wide value_ `–V`, with quantity variable constrained to `-qty` and with flavor constrained to 0.
     ///    Both variables are allocated from a single multiplier.
     /// 4. Adds a _fee entry_ to the _transaction log_ with the quantity `qty`.
     ///
-    /// Fails if:
-    /// * `qty` is exceeding `2^24`.
+    /// Fails if the resulting amount of fees is exceeding `2^24`.
     Fee,
 
     /// _prevoutput_ **input** → _contract_

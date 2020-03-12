@@ -1314,13 +1314,12 @@ Immediate data `m` and `n` are encoded as two [LE32](#le32)s.
 _qty_ **fee** → _widevalue_
 
 1. Pops an 4-byte [string](#string-type) `qty` from the stack and decodes it as [LE32](#le64) integer.
-2. Checks that `qty` is less or equal to `2^24`.
+2. Checks that `qty`  and accumulated fee is less or equal to `2^24`.
 3. Pushes [wide value](#wide-value-type) `–V`, with quantity variable constrained to `-qty` and with flavor constrained to 0.
    Both variables are allocated from a single multiplier.
 4. Adds a [fee entry](#fee-entry) to the [transaction log](#transaction-log) with the quantity `qty`.
 
-Fails if:
-* `qty` is exceeding `2^24`.
+Fails if the resulting amount of fees is exceeding `2^24`.
 
 
 
