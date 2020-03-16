@@ -21,7 +21,7 @@ use crate::verifier::Verifier;
 #[serde(transparent)]
 pub struct TxLog(Vec<TxEntry>);
 
-/// Transaction ID is a unique 32-byte identifier of a transaction.
+/// Transaction ID is a unique 32-byte identifier of a transaction effects represented by `TxLog`.
 #[derive(Copy, Clone, PartialEq, Debug, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct TxID(pub Hash);

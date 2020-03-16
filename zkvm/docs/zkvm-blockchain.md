@@ -82,6 +82,20 @@ T.append("ext", ext)
 blockid = T.challenge_bytes("id")
 ```
 
+## Transaction encoding
+
+TBD: describe transaction encoding.
+
+## Transaction witness hash
+
+Transaction witness hash commits to the raw transaction: the transaction header, utreexo proofs, tx program, signature and a constraint system proof.
+
+```
+T = Transcript("ZkVM.tx_witness_hash")
+T.append_message("tx", encoded_tx)
+result = T.challenge_bytes("hash")  // 32 bytes
+```
+
 ## Contract ID merkle leaf
 
 [Contract ID](zkvm-spec.md#contract-id) is hashed as a [merkle leaf hash](utreexo.md#merkle-root) for the Utreexo as follows:
@@ -329,11 +343,12 @@ Procedure:
 ## Compute txroot
 
 Input:
-- Ordered list `txids` of [transaction IDs](zkvm-spec.md#transaction-id).
+- Ordered list of block transactions.
 
 Output:
 - [Merkle root hash](zkvm-spec.md#merkle-binary-tree) of the transaction list.
 
 Procedure:
-1. Create a [transcript](zkvm-spec.md#transcript) `T` with label `transaction_ids`.
-2. Return `MerkleHash(T, txids)` using the label `txid` for each transaction ID in the list.
+1. Create a [transcript](zkvm-spec.md#transcript) `T` with label `ZkVM.txroot`.
+2. For each transaction, compute [witness hash](#transaction-witness-hash) `w`.
+3. Return `MerkleHash(T, {w})` hashing the witness hash with `T.append_message("txwit", w)`.

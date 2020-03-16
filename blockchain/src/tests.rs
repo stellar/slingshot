@@ -81,6 +81,11 @@ fn test_state_machine() {
         utx.sign(sig)
     };
 
+    let block_tx = BlockTx {
+        tx: tx.clone(),
+        proofs: proofs.clone(),
+    };
+
     let vtx = tx.verify(&bp_gens).expect("Tx should be valid");
 
     let mut mempool = Mempool::new(state.clone(), 42);
@@ -92,13 +97,13 @@ fn test_state_machine() {
         })
         .expect("Tx must be valid");
 
-    let future_state = mempool
+    let (future_state, _catchup) = mempool
         .make_block()
         .expect("Block must be created successfully");
 
     // Apply the block to the state
-    let new_state = state
-        .apply_block(future_state.tip, &[vtx], proofs.iter())
+    let (new_state, _catchup, _vtxs) = state
+        .apply_block(future_state.tip, &[block_tx], &bp_gens)
         .expect("Block application should succeed.");
 
     let hasher = utreexo::utreexo_hasher::<ContractID>();

@@ -1,12 +1,19 @@
 use merlin::Transcript;
 use serde::{Deserialize, Serialize};
+use zkvm::encoding;
+use zkvm::{Encodable, Hash, MerkleItem, MerkleTree, Tx};
 
-use zkvm::{Hash, MerkleTree};
+use super::utreexo::{self, Proof};
 
 /// Identifier of the block, computed as a hash of the `BlockHeader`.
 #[derive(Clone, Copy, PartialEq, Default, Debug)]
 pub struct BlockID(pub [u8; 32]);
 serialize_bytes32!(BlockID);
+
+/// Witness hash of the transaction that commits to all signatures and proofs.
+#[derive(Clone, Copy, PartialEq, Default, Debug)]
+pub struct WitnessHash(pub [u8; 32]);
+serialize_bytes32!(WitnessHash);
 
 /// BlockHeader contains the metadata for the block of transactions,
 /// committing to them, but not containing the actual transactions.
@@ -21,12 +28,21 @@ pub struct BlockHeader {
     /// Integer timestamp of the block in milliseconds since the Unix epoch:
     /// 00:00:00 UTC Jan 1, 1970.
     pub timestamp_ms: u64,
-    /// 32-byte Merkle root of the transactions in the block.
+    /// 32-byte Merkle root of the transaction witness hashes (`BlockTx::witness_hash`) in the block.
     pub txroot: Hash,
     /// 32-byte Merkle root of the Utreexo state.
     pub utxoroot: Hash,
     /// Extra data for the future extensions.
     pub ext: Vec<u8>,
+}
+
+/// Transaction annotated with Utreexo proofs.
+#[derive(Clone, Serialize, Deserialize)]
+pub struct BlockTx {
+    /// ZkVM transaction.
+    pub tx: Tx,
+    /// Utreexo proofs.
+    pub proofs: Vec<utreexo::Proof>,
 }
 
 impl BlockHeader {
@@ -57,6 +73,66 @@ impl BlockHeader {
             utxoroot,
             ext: Vec::new(),
         }
+    }
+}
+
+impl BlockTx {
+    /// Hash of the witness data (tx program, r1cs proof, signature, utreexo proofs)
+    pub fn witness_hash(&self) -> WitnessHash {
+        let mut t = Transcript::new(b"ZkVM.tx_witness_hash");
+        t.append_message(b"tx", &self.encode_to_vec());
+        let mut result = [0u8; 32];
+        t.challenge_bytes(b"hash", &mut result);
+        WitnessHash(result)
+    }
+}
+
+impl Encodable for BlockTx {
+    fn encode(&self, buf: &mut Vec<u8>) {
+        self.tx.encode(buf);
+        encoding::write_size(self.proofs.len(), buf);
+        for proof in self.proofs.iter() {
+            match proof {
+                Proof::Transient => encoding::write_u8(0, buf),
+                Proof::Committed(path) => {
+                    encoding::write_u8(1, buf);
+                    path.encode(buf);
+                }
+            }
+        }
+    }
+
+    /// Returns the size in bytes required to serialize the `Tx`.
+    fn encoded_length(&self) -> usize {
+        self.tx.encoded_length()
+            + 4
+            + self
+                .proofs
+                .iter()
+                .map(|proof| match proof {
+                    Proof::Transient => 1,
+                    Proof::Committed(path) => 1 + path.encoded_length(),
+                })
+                .sum::<usize>()
+    }
+}
+
+impl MerkleItem for WitnessHash {
+    fn commit(&self, t: &mut Transcript) {
+        t.append_message(b"txwit", &self.0);
+    }
+}
+
+impl AsRef<[u8]> for WitnessHash {
+    fn as_ref(&self) -> &[u8] {
+        &self.0
+    }
+}
+
+impl core::ops::Deref for WitnessHash {
+    type Target = [u8];
+    fn deref(&self) -> &Self::Target {
+        &self.0
     }
 }
 
