@@ -268,6 +268,22 @@ impl TxLog {
     pub fn push(&mut self, item: TxEntry) {
         self.0.push(item);
     }
+
+    /// Iterator over the input entries
+    pub fn inputs(&self) -> impl Iterator<Item = &ContractID> {
+        self.0.iter().filter_map(|entry| match entry {
+            TxEntry::Input(contract_id) => Some(contract_id),
+            _ => None,
+        })
+    }
+
+    /// Iterator over the output entries
+    pub fn outputs(&self) -> impl Iterator<Item = &Contract> {
+        self.0.iter().filter_map(|entry| match entry {
+            TxEntry::Output(contract) => Some(contract),
+            _ => None,
+        })
+    }
 }
 
 impl From<Vec<TxEntry>> for TxLog {

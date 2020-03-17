@@ -92,7 +92,7 @@ Periodically, every 60 seconds:
 When [`GetBlock`](#getblock) message is received,
 we reply immediately with the block requested using [`Block`](#block) message.
 
-When [`Blocks`](#blocks) message is received:
+When [`Block`](#block) message is received:
 1. If the block is a direct descendant: 
     1. It is verified and advances the state. 
     2. Orphan blocks from other peers are tried to be applied.

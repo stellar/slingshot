@@ -146,6 +146,10 @@ fn transaction_success() {
     wf.delete(&Item(0), &proofs1[0], &hasher)
         .expect("Should not fail.");
 
+    forest1
+        .verify(&Item(1), &proofs1[1].as_path().unwrap(), &hasher)
+        .expect("Should not fail.");
+
     //  d
     //  |\
     //  a   b   c   new
