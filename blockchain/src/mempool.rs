@@ -3,7 +3,7 @@ use core::mem;
 use serde::{Deserialize, Serialize};
 
 use zkvm::bulletproofs::BulletproofGens;
-use zkvm::{ContractID, MerkleTree, TxEntry, TxID, TxLog, VerifiedTx};
+use zkvm::{ContractID, MerkleTree, Tx, TxEntry, TxID, TxLog, VerifiedTx};
 
 use super::block::{BlockHeader, BlockTx};
 use super::errors::BlockchainError;
@@ -40,6 +40,21 @@ impl MempoolEntry {
     /// Returns the block tx.
     pub fn block_tx(&self) -> &BlockTx {
         &self.block_tx
+    }
+
+    /// Returns the raw VM tx.
+    pub fn tx(&self) -> &Tx {
+        &self.block_tx.tx
+    }
+
+    /// Returns the verified transaction.
+    pub fn verified_tx(&self) -> &VerifiedTx {
+        &self.verified_tx
+    }
+
+    /// Returns the verified transaction.
+    pub fn utxo_proofs(&self) -> &[utreexo::Proof] {
+        &self.block_tx.proofs
     }
 }
 
