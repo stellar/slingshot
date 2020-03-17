@@ -177,6 +177,7 @@ impl Program {
     def_op!(retire, Retire, "retire");
 
     def_op!(cloak, Cloak, usize, usize, "cloak:m:n");
+    def_op!(fee, Fee, "fee");
     def_op!(input, Input, "input");
     def_op!(output, Output, usize, "output:k");
     def_op!(contract, Contract, usize, "contract:k");
