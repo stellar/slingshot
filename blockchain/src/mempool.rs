@@ -1,34 +1,49 @@
-//! Mempool
-use core::borrow::Borrow;
+//! Super-simple mempool implementation.
 use core::mem;
 use serde::{Deserialize, Serialize};
 
-use crate::utreexo::{self, utreexo_hasher, Catchup, WorkForest};
-use zkvm::{ContractID, Hasher, MerkleTree, TxEntry, TxHeader, TxLog, VerifiedTx};
+use zkvm::bulletproofs::BulletproofGens;
+use zkvm::{ContractID, MerkleTree, TxEntry, TxID, TxLog, VerifiedTx};
 
-use super::block::BlockHeader;
+use super::block::{BlockHeader, BlockTx};
 use super::errors::BlockchainError;
-use super::state::BlockchainState;
+use super::state::{check_tx_header, BlockchainState};
+use super::utreexo::{self, utreexo_hasher, Catchup};
 
 /// Implements a pool of unconfirmed (not-in-the-block) transactions.
 #[derive(Clone, Serialize, Deserialize)]
-pub struct Mempool<T: MempoolItem> {
+pub struct Mempool {
     state: BlockchainState,
     timestamp_ms: u64,
     work_utreexo: utreexo::WorkForest,
-    items: Vec<T>,
+    entries: Vec<MempoolEntry>,
 }
 
-/// Trait for the items in the mempool.
-pub trait MempoolItem {
-    /// Returns a reference to a verified transaction
-    fn verified_tx(&self) -> &VerifiedTx;
-
-    /// Returns a collection of Utreexo proofs for the transaction.
-    fn utreexo_proofs(&self) -> &[utreexo::Proof];
+/// Tx item stored in the mempool
+#[derive(Clone, Serialize, Deserialize)]
+pub struct MempoolEntry {
+    block_tx: BlockTx,
+    verified_tx: VerifiedTx,
 }
 
-impl<T: MempoolItem> Mempool<T> {
+impl MempoolEntry {
+    /// Returns transaction log.
+    pub fn txlog(&self) -> &TxLog {
+        &self.verified_tx.log
+    }
+
+    /// Returns transaction ID.
+    pub fn txid(&self) -> TxID {
+        self.verified_tx.id
+    }
+
+    /// Returns the block tx.
+    pub fn block_tx(&self) -> &BlockTx {
+        &self.block_tx
+    }
+}
+
+impl Mempool {
     /// Creates an empty mempool at a given state.
     pub fn new(state: BlockchainState, timestamp_ms: u64) -> Self {
         let work_utreexo = state.utreexo.work_forest();
@@ -36,18 +51,18 @@ impl<T: MempoolItem> Mempool<T> {
             state,
             timestamp_ms,
             work_utreexo,
-            items: Vec::new(),
+            entries: Vec::new(),
         }
     }
 
     /// Returns a list of transactions.
-    pub fn items(&self) -> impl Iterator<Item = &T> {
-        self.items.iter()
+    pub fn entries(&self) -> impl Iterator<Item = &MempoolEntry> {
+        self.entries.iter()
     }
 
     /// Returns the size of the mempool in number of transactions.
     pub fn len(&self) -> usize {
-        self.items.len()
+        self.entries.len()
     }
 
     /// Updates timestamp and re-applies txs to filter out the outdated ones.
@@ -57,10 +72,36 @@ impl<T: MempoolItem> Mempool<T> {
     }
 
     /// Adds transaction to the mempool and verifies it.
-    pub fn append(&mut self, item: T) -> Result<(), BlockchainError> {
-        self.apply_item(&item)?;
-        self.items.push(item);
-        Ok(())
+    /// Returns the reference to the stored mempool entry.
+    pub fn append(
+        &mut self,
+        block_tx: BlockTx,
+        bp_gens: &BulletproofGens,
+    ) -> Result<&MempoolEntry, BlockchainError> {
+        // 1. Check the header
+        check_tx_header(
+            &block_tx.tx.header,
+            self.timestamp_ms,
+            self.state.tip.version,
+        )?;
+
+        // 2. Verify the tx
+        let verified_tx = block_tx
+            .tx
+            .verify(bp_gens)
+            .map_err(|e| BlockchainError::TxValidation(e))?;
+
+        // 3. Apply to the state
+        self.apply_tx(&verified_tx.log, &block_tx.proofs)?;
+
+        // 4. Save in the list
+        self.entries.push(MempoolEntry {
+            block_tx,
+            verified_tx,
+        });
+
+        // 5. Return the reference to the entry we've just added.
+        Ok(self.entries.last().unwrap())
     }
 
     /// Creates a new block header and a new blockchain state using the current set of transactions.
@@ -68,7 +109,7 @@ impl<T: MempoolItem> Mempool<T> {
     pub fn make_block(&self) -> Result<(BlockchainState, Catchup), BlockchainError> {
         let txroot = MerkleTree::root(
             b"ZkVM.txroot",
-            self.items.iter().map(|tx| &tx.verified_tx().id),
+            self.entries.iter().map(|mtx| mtx.block_tx.witness_hash()),
         );
 
         let hasher = utreexo_hasher::<ContractID>();
@@ -98,96 +139,54 @@ impl<T: MempoolItem> Mempool<T> {
         self.work_utreexo = self.state.utreexo.work_forest();
 
         // extract old
-        let old_items = mem::replace(&mut self.items, Vec::new());
+        let old_entries = mem::replace(&mut self.entries, Vec::new());
 
-        for item in old_items.into_iter() {
-            match self.apply_item(&item) {
-                Ok(_) => {
-                    // still valid - put back to mempool
-                    self.items.push(item);
-                }
-                Err(_) => {
-                    // tx kicked out of the mempool
-                }
+        for entry in old_entries.into_iter() {
+            let result = check_tx_header(
+                &entry.block_tx.tx.header,
+                self.timestamp_ms,
+                self.state.tip.version,
+            )
+            .and_then(|_| self.apply_tx(&entry.verified_tx.log, &entry.block_tx.proofs));
+            if result.is_ok() {
+                // put the entry back into the mempool if it's still valid
+                self.entries.push(entry);
             }
         }
     }
 
-    fn apply_item(&mut self, item: &T) -> Result<(), BlockchainError> {
-        let vtx = item.verified_tx();
-        let proofs = item.utreexo_proofs();
-
-        check_tx_header(&vtx.header, self.timestamp_ms, self.state.tip.version)?;
-
+    fn apply_tx(
+        &mut self,
+        txlog: &TxLog,
+        utxo_proofs: &[utreexo::Proof],
+    ) -> Result<(), BlockchainError> {
         // Update block makes sure the that if half of tx fails, all changes are undone.
         self.work_utreexo
-            .batch(|wf| apply_tx(wf, &vtx.log, proofs.iter(), &utreexo_hasher()))
+            .batch(|wf| {
+                let hasher = utreexo_hasher();
+                let mut utxo_proofs = utxo_proofs.iter();
+
+                for logentry in txlog.iter() {
+                    match logentry {
+                        // Remove item from the UTXO set
+                        TxEntry::Input(contract_id) => {
+                            let proof = utxo_proofs
+                                .next()
+                                .ok_or(BlockchainError::UtreexoProofMissing)?;
+
+                            wf.delete(contract_id, proof, &hasher)
+                                .map_err(|e| BlockchainError::UtreexoError(e))?;
+                        }
+                        // Add item to the UTXO set
+                        TxEntry::Output(contract) => {
+                            wf.insert(&contract.id(), &hasher);
+                        }
+                        // Ignore all other log entries
+                        _ => {}
+                    }
+                }
+                Ok(())
+            })
             .map(|_| ())
     }
-}
-
-/// Applies transaction to the Utreexo forest
-fn apply_tx<P>(
-    work_forest: &mut WorkForest,
-    txlog: &TxLog,
-    utxo_proofs: impl IntoIterator<Item = P>,
-    hasher: &Hasher<ContractID>,
-) -> Result<(), BlockchainError>
-where
-    P: Borrow<utreexo::Proof>,
-{
-    let mut utxo_proofs = utxo_proofs.into_iter();
-
-    for entry in txlog.iter() {
-        match entry {
-            // Remove item from the UTXO set
-            TxEntry::Input(contract_id) => {
-                let proof = utxo_proofs
-                    .next()
-                    .ok_or(BlockchainError::UtreexoProofMissing)?;
-
-                work_forest
-                    .delete(contract_id, proof.borrow(), &hasher)
-                    .map_err(|e| BlockchainError::UtreexoError(e))?;
-            }
-            // Add item to the UTXO set
-            TxEntry::Output(contract) => {
-                work_forest.insert(&contract.id(), &hasher);
-            }
-            // Ignore all other log items
-            _ => {}
-        }
-    }
-
-    Ok(())
-}
-
-/// Checks the tx header for consistency with the block header.
-fn check_tx_header(
-    tx_header: &TxHeader,
-    timestamp_ms: u64,
-    block_version: u64,
-) -> Result<(), BlockchainError> {
-    check(
-        timestamp_ms >= tx_header.mintime_ms,
-        BlockchainError::BadTxTimestamp,
-    )?;
-    check(
-        timestamp_ms <= tx_header.maxtime_ms,
-        BlockchainError::BadTxTimestamp,
-    )?;
-    if block_version == 1 {
-        check(tx_header.version == 1, BlockchainError::BadTxVersion)?;
-    } else {
-        // future block versions permit higher tx versions
-    }
-    Ok(())
-}
-
-#[inline]
-fn check<E>(cond: bool, err: E) -> Result<(), E> {
-    if !cond {
-        return Err(err);
-    }
-    Ok(())
 }

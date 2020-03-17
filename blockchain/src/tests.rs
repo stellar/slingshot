@@ -6,7 +6,7 @@ use zkvm::bulletproofs::BulletproofGens;
 use super::*;
 use zkvm::{
     Anchor, Commitment, Contract, ContractID, Multisignature, PortableItem, Predicate, Program,
-    Prover, Signature, String, TxHeader, Value, VerificationKey, VerifiedTx,
+    Prover, Signature, String, TxHeader, Value, VerificationKey,
 };
 
 fn make_predicate(privkey: u64) -> Predicate {
@@ -28,21 +28,6 @@ fn make_nonce_contract(privkey: u64, qty: u64) -> Contract {
             flv: Commitment::unblinded(nonce_flavor()),
         })],
         anchor: Anchor::from_raw_bytes(anchor_bytes),
-    }
-}
-
-struct MempoolTx {
-    vtx: VerifiedTx,
-    proofs: Vec<utreexo::Proof>,
-}
-
-impl MempoolItem for MempoolTx {
-    fn verified_tx(&self) -> &VerifiedTx {
-        &self.vtx
-    }
-
-    fn utreexo_proofs(&self) -> &[utreexo::Proof] {
-        &self.proofs
     }
 }
 
@@ -86,15 +71,10 @@ fn test_state_machine() {
         proofs: proofs.clone(),
     };
 
-    let vtx = tx.verify(&bp_gens).expect("Tx should be valid");
-
     let mut mempool = Mempool::new(state.clone(), 42);
 
     mempool
-        .append(MempoolTx {
-            vtx: vtx.clone(),
-            proofs: proofs.clone(),
-        })
+        .append(block_tx.clone(), &bp_gens)
         .expect("Tx must be valid");
 
     let (future_state, _catchup) = mempool
