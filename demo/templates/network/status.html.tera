@@ -22,15 +22,6 @@
   <div id="utreexo" style="height:400px;width:100%">
   </div>
 
-  <!--table class="table table-bordered block-header">
-    <tbody>
-      <tr>
-        <th>Catchup</th>
-        <td><pre><code>{{network_status.state.catchup | json_encode(pretty=true)}}</code></pre></td>
-      </tr>
-    </tbody>
-  </table-->
-
   <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3">
     <h2 class="h2">Connections</h2>
   </div>
