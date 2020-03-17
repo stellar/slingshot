@@ -6,7 +6,7 @@ use zkvm::bulletproofs::BulletproofGens;
 use super::*;
 use zkvm::{
     Anchor, Commitment, Contract, ContractID, Multisignature, PortableItem, Predicate, Program,
-    Prover, Signature, String, TxHeader, Value, VerificationKey, VerifiedTx,
+    Prover, Signature, String, TxHeader, Value, VerificationKey,
 };
 
 fn make_predicate(privkey: u64) -> Predicate {
@@ -28,21 +28,6 @@ fn make_nonce_contract(privkey: u64, qty: u64) -> Contract {
             flv: Commitment::unblinded(nonce_flavor()),
         })],
         anchor: Anchor::from_raw_bytes(anchor_bytes),
-    }
-}
-
-struct MempoolTx {
-    vtx: VerifiedTx,
-    proofs: Vec<utreexo::Proof>,
-}
-
-impl MempoolItem for MempoolTx {
-    fn verified_tx(&self) -> &VerifiedTx {
-        &self.vtx
-    }
-
-    fn utreexo_proofs(&self) -> &[utreexo::Proof] {
-        &self.proofs
     }
 }
 
@@ -81,24 +66,24 @@ fn test_state_machine() {
         utx.sign(sig)
     };
 
-    let vtx = tx.verify(&bp_gens).expect("Tx should be valid");
+    let block_tx = BlockTx {
+        tx: tx.clone(),
+        proofs: proofs.clone(),
+    };
 
     let mut mempool = Mempool::new(state.clone(), 42);
 
     mempool
-        .append(MempoolTx {
-            vtx: vtx.clone(),
-            proofs: proofs.clone(),
-        })
+        .append(block_tx.clone(), &bp_gens)
         .expect("Tx must be valid");
 
-    let future_state = mempool
+    let (future_state, _catchup) = mempool
         .make_block()
         .expect("Block must be created successfully");
 
     // Apply the block to the state
-    let new_state = state
-        .apply_block(future_state.tip, &[vtx], proofs.iter())
+    let (new_state, _catchup, _vtxs) = state
+        .apply_block(future_state.tip, &[block_tx], &bp_gens)
         .expect("Block application should succeed.");
 
     let hasher = utreexo::utreexo_hasher::<ContractID>();

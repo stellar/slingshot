@@ -12,6 +12,7 @@ use rocket_contrib::serve::StaticFiles;
 use rocket_contrib::templates::Template;
 
 use blockchain::utreexo;
+use blockchain::BlockTx;
 use bulletproofs::BulletproofGens;
 
 use p2p::Direction;
@@ -20,7 +21,7 @@ use crate::account::{AccountRecord, Utxo, Wallet};
 use crate::asset::AssetRecord;
 use crate::blockchain::BlockRecord;
 use crate::db::{self, DBConnection};
-use crate::mempool::{self, Mempool, MempoolTx};
+use crate::mempool::{self, Mempool};
 use crate::net;
 use crate::schema;
 use crate::sidebar::Sidebar;
@@ -75,8 +76,8 @@ fn network_mempool(mempool: State<Mutex<Mempool>>, sidebar: Sidebar) -> Template
         "mempool_timestamp": util::current_timestamp_ms(),
         "mempool_len": mempool.len(),
         "mempool_size_kb": (mempool::estimated_memory_cost(&mempool) as f64) / 1024.0,
-        "mempool_txs": mempool.items().map(|item| {
-            BlockRecord::tx_details(&item.tx)
+        "mempool_txs": mempool.entries().map(|entry| {
+            BlockRecord::tx_details(&entry.tx())
         }).collect::<Vec<_>>(),
     });
     Template::render("network/mempool", &context)
@@ -116,21 +117,21 @@ fn network_mempool_makeblock(
     let timestamp_ms = util::current_timestamp_ms();
 
     let txs = mempool
-        .items()
-        .map(|item| item.tx.clone())
+        .entries()
+        .map(|entry| entry.tx().clone())
         .collect::<Vec<_>>();
 
     let verified_txs = mempool
-        .items()
-        .map(|item| item.verified_tx.clone())
+        .entries()
+        .map(|entry| entry.verified_tx().clone())
         .collect::<Vec<_>>();
 
     let proofs = mempool
-        .items()
-        .flat_map(|i| i.proofs.iter().cloned())
+        .entries()
+        .flat_map(|e| e.utxo_proofs().iter().cloned())
         .collect::<Vec<_>>();
 
-    let new_state = mempool
+    let (new_state, catchup) = mempool
         .make_block()
         .expect("Mempool::make_block should succeed");
 
@@ -161,12 +162,7 @@ fn network_mempool_makeblock(
 
             for rec in recs.into_iter() {
                 let mut wallet = rec.wallet();
-                wallet.process_block(
-                    &verified_txs,
-                    &txs,
-                    new_state.tip.height,
-                    &new_state.catchup,
-                );
+                wallet.process_block(&verified_txs, &txs, new_state.tip.height, &catchup);
                 let rec = AccountRecord::new(&wallet);
                 diesel::update(account_records.filter(owner_id.eq(&rec.owner_id)))
                     .filter(alias.eq(&rec.alias))
@@ -282,15 +278,8 @@ fn nodes_show(
 
     let mut wallet_pending = acc_record.wallet();
     let pending_txs = mempool
-        .items()
-        .filter_map(|item| {
-            let ptx = item
-                .tx
-                .precompute()
-                .expect("Our mempool should not contain invalid transactions.");
-
-            wallet_pending.process_tx(&item.tx, &ptx.log, None)
-        })
+        .entries()
+        .filter_map(|entry| wallet_pending.process_tx(&entry.tx(), &entry.txlog(), None))
         .collect::<Vec<_>>();
 
     let balances = wallet_pending.balances(&assets);
@@ -416,22 +405,20 @@ fn pay(
     // Note: at this point, recipient saves the unconfirmed utxo,
     // but since we are doing the exchange in one call, we'll skip it for now.
 
-    let verified_tx = tx
-        .verify(&bp_gens)
-        .expect("We just formed a tx and it must be valid");
-
-    let txid = verified_tx.id;
-
     // Add tx to the mempool so we can make blocks of multiple txs in the demo.
     let mut mempool = mempool.lock().unwrap();
 
-    mempool
-        .append(MempoolTx {
-            tx,
-            verified_tx,
-            proofs,
-        })
+    let entry = mempool
+        .append(
+            BlockTx {
+                tx: tx.clone(),
+                proofs,
+            },
+            &bp_gens,
+        )
         .map_err(|msg| flash_error(msg.to_string()))?;
+
+    let txid = entry.txid();
 
     // Save everything in a single DB transaction.
     dbconn
@@ -630,22 +617,20 @@ fn assets_create(
     // Note: at this point, recipient saves the unconfirmed utxo,
     // but since we are doing the exchange in one call, we'll skip it for now.
 
-    let verified_tx = tx
-        .verify(&bp_gens)
-        .expect("We just formed a tx and it must be valid");
-
-    let txid = verified_tx.id;
-
     // Add tx to the mempool so we can make blocks of multiple txs in the demo.
-    mempool
-        .lock()
-        .unwrap()
-        .append(MempoolTx {
-            tx,
-            verified_tx,
-            proofs,
-        })
+
+    let mut mempool = mempool.lock().unwrap();
+    let entry = mempool
+        .append(
+            BlockTx {
+                tx: tx.clone(),
+                proofs,
+            },
+            &bp_gens,
+        )
         .map_err(|msg| flash_error(msg.to_string()))?;
+
+    let txid = entry.txid();
 
     // Save everything in a single DB transaction.
     dbconn

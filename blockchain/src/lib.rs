@@ -11,6 +11,7 @@ extern crate starsig;
 
 mod block;
 mod errors;
+mod mempool;
 mod protocol;
 mod shortid;
 mod state;
@@ -21,5 +22,6 @@ mod tests;
 
 pub use self::block::*;
 pub use self::errors::*;
+pub use self::mempool::*;
 pub use self::protocol::*;
 pub use self::state::*;

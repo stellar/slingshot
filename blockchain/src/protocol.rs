@@ -11,9 +11,9 @@ use starsig::{Signature, SigningKey, VerificationKey};
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
-use super::block::{BlockHeader, BlockID};
+use super::block::{BlockHeader, BlockID, BlockTx};
+use super::mempool::Mempool;
 use super::shortid::{self, ShortID};
-use super::state::Mempool;
 use super::utreexo;
 use merlin::Transcript;
 use zkvm::Tx;
@@ -304,15 +304,6 @@ pub struct Block {
     header: BlockHeader,
     signature: Signature,
     txs: Vec<BlockTx>,
-}
-
-/// Transaction annotated with Utreexo proofs.
-#[derive(Clone, Serialize, Deserialize)]
-pub struct BlockTx {
-    /// Utreexo proofs.
-    pub proofs: Vec<utreexo::Proof>,
-    /// ZkVM transaction.
-    pub tx: Tx,
 }
 
 #[derive(Clone, Serialize, Deserialize)]

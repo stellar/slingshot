@@ -18,15 +18,6 @@ pub trait MerkleItem: Sized {
     fn commit(&self, t: &mut Transcript);
 }
 
-impl<T> MerkleItem for &T
-where
-    T: MerkleItem,
-{
-    fn commit(&self, t: &mut Transcript) {
-        T::commit(*self, t)
-    }
-}
-
 /// Precomputed hash instance.
 pub struct Hasher<M: MerkleItem> {
     t: Transcript,
@@ -143,6 +134,15 @@ impl<M: MerkleItem> MerkleRootBuilder<M> {
 impl MerkleItem for () {
     fn commit(&self, t: &mut Transcript) {
         t.append_message(b"", b"");
+    }
+}
+
+impl<T> MerkleItem for &T
+where
+    T: MerkleItem,
+{
+    fn commit(&self, t: &mut Transcript) {
+        T::commit(*self, t)
     }
 }
 
