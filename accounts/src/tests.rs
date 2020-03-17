@@ -7,27 +7,12 @@ use curve25519_dalek::scalar::Scalar;
 use keytree::Xprv;
 use musig::{Multisignature, Signature};
 
-use blockchain::{utreexo, BlockHeader, BlockTx, BlockchainState, Mempool, MempoolItem};
+use blockchain::{utreexo, BlockHeader, BlockTx, BlockchainState, Mempool};
 use zkvm::{
     Anchor, ClearValue, Contract, ContractID, Program, Prover, TxEntry, TxHeader, VerifiedTx,
 };
 
 use crate::{Account, ReceiverReply, ReceiverWitness};
-
-struct MempoolTx {
-    vtx: VerifiedTx,
-    proofs: Vec<utreexo::Proof>,
-}
-
-impl MempoolItem for MempoolTx {
-    fn verified_tx(&self) -> &VerifiedTx {
-        &self.vtx
-    }
-
-    fn utreexo_proofs(&self) -> &[utreexo::Proof] {
-        &self.proofs
-    }
-}
 
 /// The complete state of the user node: their wallet and their blockchain state.
 #[derive(Clone)]
@@ -250,24 +235,30 @@ fn basic_accounts_test() {
 
     let block_tx = BlockTx {
         tx: tx.clone(),
-        proofs: utxo_proofs.clone()
+        proofs: utxo_proofs.clone(),
     };
-    let vtx = tx.verify(&bp_gens).expect("Tx should be valid");
-    let mut mempool = Mempool::<MempoolTx>::new(network_state.clone(), 42);
+    let mut mempool = Mempool::new(network_state.clone(), 42);
     mempool
-        .append(MempoolTx {
-            vtx: vtx.clone(),
-            proofs: utxo_proofs,
-        })
+        .append(block_tx.clone(), &bp_gens)
         .expect("Tx must be valid");
 
-    let future_state = mempool
+    let (future_state, _catchup) = mempool
         .make_block()
         .expect("Block must be created successfully");
 
     // 9. Alice and Bob process the incoming block:
-    process_block(&mut alice, future_state.tip.clone(), vec![block_tx], &bp_gens);
-    process_block(&mut bob, future_state.tip.clone(), vec![block_tx], &bp_gens);
+    process_block(
+        &mut alice,
+        future_state.tip.clone(),
+        &vec![block_tx.clone()],
+        &bp_gens,
+    );
+    process_block(
+        &mut bob,
+        future_state.tip.clone(),
+        &vec![block_tx.clone()],
+        &bp_gens,
+    );
 }
 
 /// Processes a block
@@ -316,8 +307,7 @@ fn process_block(
                     .position(|utxo| utxo.contract_id() == cid)
                 {
                     let pending_utxo = node.wallet.pending_utxos.remove(i);
-                    let proof = new_state
-                        .catchup
+                    let proof = catchup
                         .update_proof(&cid, utreexo::Proof::Transient, &hasher)
                         .unwrap();
                     node.wallet.utxos.push(pending_utxo.to_confirmed(proof));
@@ -332,9 +322,7 @@ fn process_block(
         .wallet
         .utxos
         .iter()
-        .map(|utxo| {
-            catchup.update_proof(&utxo.contract_id(), utxo.proof.clone(), &hasher)
-        })
+        .map(|utxo| catchup.update_proof(&utxo.contract_id(), utxo.proof.clone(), &hasher))
         .collect::<Result<Vec<_>, _>>()
         .unwrap();
 
