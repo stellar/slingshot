@@ -8,6 +8,7 @@ use core::hash::Hash;
 use rand::{thread_rng, Rng};
 use serde::{Deserialize, Serialize};
 use starsig::{Signature, SigningKey, VerificationKey};
+use std::collections::hash_map::RandomState;
 use std::collections::{HashMap, HashSet};
 use std::time::{Duration, Instant};
 
@@ -44,6 +45,11 @@ pub trait Storage {
     /// Default implementation calls `tip().0.height`.
     fn tip_height(&self) -> u64 {
         self.tip().0.height
+    }
+
+    /// Returns ID of the current tip.
+    fn tip_id(&self) -> BlockID {
+        self.tip().0.id()
     }
 
     /// Returns the signed tip of the blockchain
@@ -106,9 +112,9 @@ impl<N: Network, S: Storage> Node<N, S> {
             Message::GetInventory(request) => self.process_inventory_request(pid, request).await?,
             Message::Inventory(inventory) => self.receive_inventory(pid, inventory).await?,
             Message::GetBlock(request) => self.send_block(pid, request).await?,
-            Message::Block(block_msg) => self.receive_block(pid, block_msg).await?,
+            Message::Block(block_msg) => self.receive_block(pid, block_msg)?,
             Message::GetMempoolTxs(request) => self.send_txs(pid, request).await,
-            Message::MempoolTxs(request) => self.receive_txs(pid, request).await,
+            Message::MempoolTxs(request) => self.receive_txs(pid, request).await?,
         }
         Ok(())
     }
@@ -135,7 +141,7 @@ impl<N: Network, S: Storage> Node<N, S> {
             peer.needs_our_inventory = false;
         }
 
-        if self.target_tip.id() != self.storage.tip().0.id() {
+        if self.target_tip.id() != self.storage.tip_id() {
             self.synchronize_chain().await;
         } else {
             self.synchronize_mempool().await;
@@ -177,6 +183,24 @@ impl<N: Network, S: Storage> Node<N, S> {
     /// Called when a peer disconnects.
     pub async fn peer_diconnected(&mut self, pid: N::PeerIdentifier) {
         self.peers.remove(&pid);
+    }
+
+    /// Creates and signs a block.
+    /// The block is not applied immediately.
+    pub fn create_block(&self, signing_key: &SigningKey) -> Block {
+        // TODO:
+        // 1. update timestamp to max(current, prev + 1ms)
+        // 2. update mempool to throw out all now-invalid txs
+        // 3. compute txroot and new utreexo root
+        // 4. sign the blockheader
+        // 5. pack up transactions in a Block message
+        unimplemented!()
+    }
+
+    /// Apply block manually to the Node.
+    /// Internally it is processed as if sent by node to itself.
+    pub fn apply_block(&mut self, block: Block) -> Result<(), BlockchainError> {
+        self.receive_block(self.network.self_id(), block)
     }
 }
 
@@ -320,7 +344,7 @@ impl<N: Network, S: Storage> Node<N, S> {
         Ok(())
     }
 
-    async fn receive_block(
+    fn receive_block(
         &mut self,
         pid: N::PeerIdentifier,
         block_msg: Block,
@@ -353,11 +377,50 @@ impl<N: Network, S: Storage> Node<N, S> {
     }
 
     async fn send_txs(&mut self, pid: N::PeerIdentifier, request: GetMempoolTxs) {
-        unimplemented!()
+        use core::iter::FromIterator;
+
+        let mut shortener = shortid::Transform::new(request.shortid_nonce, pid.as_ref());
+        let requested_shortids =
+            HashSet::<_, RandomState>::from_iter(ShortID::scan(&request.shortid_list));
+
+        let mut response = MempoolTxs {
+            tip: self.storage.tip_id(),
+            txs: Vec::with_capacity(request.shortid_list.len() / shortid::SHORTID_LEN),
+        };
+
+        for entry in self.mempool.entries() {
+            let id = shortener.apply(entry.txid().as_ref());
+            if requested_shortids.contains(&id) {
+                response.txs.push(entry.block_tx().clone());
+            }
+        }
+
+        self.network.send(pid, Message::MempoolTxs(response)).await;
     }
 
-    async fn receive_txs(&mut self, pid: N::PeerIdentifier, request: MempoolTxs) {
-        unimplemented!()
+    async fn receive_txs(
+        &mut self,
+        pid: N::PeerIdentifier,
+        request: MempoolTxs,
+    ) -> Result<(), BlockchainError> {
+        if request.tip != self.storage.tip_id() {
+            return Err(BlockchainError::StaleMempoolState(request.tip));
+        }
+
+        for tx in request.txs.into_iter() {
+            let result = self.mempool.append(tx, &self.bp_gens);
+            if let Err(err) = result {
+                if let BlockchainError::UtreexoError(_) = err {
+                    // ignore tx and process the rest
+                    // FIXME: we need specifically a "duplicate tx" error so we reject tx w/o banning a node.
+                } else {
+                    // stop processing all remaining txs - the node is sending us garbage.
+                    return Err(err);
+                }
+            }
+        }
+
+        Ok(())
     }
 
     fn rotate_shortid_nonce_if_needed(&mut self) {

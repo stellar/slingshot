@@ -1,4 +1,5 @@
 use crate::utreexo::UtreexoError;
+use crate::BlockID;
 use zkvm::VMError;
 
 /// Blockchain state machine error conditions.
@@ -47,4 +48,8 @@ pub enum BlockchainError {
     /// Received block is either too old or an orphan.
     #[fail(display = "Block at height {} is not relevant", _0)]
     BlockNotRelevant(u64),
+
+    /// Received block is either too old or an orphan.
+    #[fail(display = "Received mempool txs at an irrelevant state")]
+    StaleMempoolState(BlockID),
 }

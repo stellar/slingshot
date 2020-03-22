@@ -67,6 +67,13 @@ impl ShortID {
         }
     }
 
+    /// Converts a slice of bytes into iterator of short ids.
+    pub fn scan<'a>(bytes: &'a [u8]) -> impl Iterator<Item = ShortID> + 'a {
+        bytes
+            .chunks_exact(SHORTID_LEN)
+            .filter_map(|slice| Self::from_bytes(slice))
+    }
+
     fn from_u64(int: u64) -> Self {
         ShortID {
             inner: int & 0xffff_ffff_ffff,
