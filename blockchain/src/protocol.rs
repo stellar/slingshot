@@ -190,6 +190,9 @@ impl<N: Network, S: Storage> Node<N, S> {
     pub fn create_block(&self, signing_key: &SigningKey) -> Block {
         // TODO:
         // 1. update timestamp to max(current, prev + 1ms)
+        //      Note: we don't need to do that if all tx.maxtime's are 1-2 blocks away.
+        //      TODO: rethink whether we actually need the maxtime at all. It is not needed for relative timelocks in paychans,
+        //      and it is not helping with clearing up the mempool spam.
         // 2. update mempool to throw out all now-invalid txs
         // 3. compute txroot and new utreexo root
         // 4. sign the blockheader
