@@ -31,4 +31,20 @@ pub enum BlockchainError {
     /// Occurs when utreexo operation failed.
     #[fail(display = "Utreexo operation failed.")]
     UtreexoError(UtreexoError),
+
+    /// Block signature is invalid.
+    #[fail(display = "Block signature is invalid.")]
+    InvalidBlockSignature,
+
+    /// Incompatible protocol version.
+    #[fail(display = "Incompatible protocol version.")]
+    IncompatibleVersion,
+
+    /// Block not found.
+    #[fail(display = "Block not found at a height {}", _0)]
+    BlockNotFound(u64),
+
+    /// Received block is either too old or an orphan.
+    #[fail(display = "Block at height {} is not relevant", _0)]
+    BlockNotRelevant(u64),
 }

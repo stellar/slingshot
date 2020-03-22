@@ -11,11 +11,14 @@ use core::hash::Hasher;
 use serde::{Deserialize, Serialize};
 use siphasher::sip::SipHasher;
 
+/// Length of the short ID in bytes.
+pub const SHORTID_LEN: usize = 6;
+
 /// Short ID definition
-#[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct ShortID {
-    inner: u64,
+    inner: u64, // guaranteed to have zeroed high 16 bits
 }
 
 /// Hasher that produces `ID`s
@@ -42,6 +45,7 @@ impl ShortID {
         }
     }
 
+    /// Converts ShortID to a 6-byte array.
     pub fn to_bytes(self) -> [u8; 6] {
         [
             (self.inner & 0xff) as u8,
@@ -51,6 +55,16 @@ impl ShortID {
             ((self.inner >> 32) & 0xff) as u8,
             ((self.inner >> 40) & 0xff) as u8,
         ]
+    }
+
+    /// Reads short id from a byte buffer.
+    /// Returns `None` if the buffer is too short.
+    pub fn at_position(offset: usize, buf: &[u8]) -> Option<ShortID> {
+        if buf.len() >= (offset + 1) * SHORTID_LEN {
+            Self::from_bytes(&buf[offset * SHORTID_LEN..][..6])
+        } else {
+            None
+        }
     }
 
     fn from_u64(int: u64) -> Self {

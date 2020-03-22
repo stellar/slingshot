@@ -83,7 +83,14 @@ impl Mempool {
     /// Updates timestamp and re-applies txs to filter out the outdated ones.
     pub fn update_timestamp(&mut self, timestamp_ms: u64) {
         self.timestamp_ms = timestamp_ms;
-        self.update_mempool();
+        self.update_mempool(None);
+    }
+
+    /// Updates the state of the blockchain and removes conflicting transactions.
+    pub fn update_state(&mut self, state: BlockchainState, catchup: &Catchup) {
+        self.timestamp_ms = state.tip.timestamp_ms;
+        self.state = state;
+        self.update_mempool(Some(catchup));
     }
 
     /// Adds transaction to the mempool and verifies it.
@@ -107,7 +114,7 @@ impl Mempool {
             .map_err(|e| BlockchainError::TxValidation(e))?;
 
         // 3. Apply to the state
-        self.apply_tx(&verified_tx.log, &block_tx.proofs)?;
+        self.apply_tx(&verified_tx.log, &block_tx.proofs, None)?;
 
         // 4. Save in the list
         self.entries.push(MempoolEntry {
@@ -149,7 +156,7 @@ impl Mempool {
         Ok((new_state, new_catchup))
     }
 
-    fn update_mempool(&mut self) {
+    fn update_mempool(&mut self, catchup: Option<&Catchup>) {
         // reset the utreexo to the original state
         self.work_utreexo = self.state.utreexo.work_forest();
 
@@ -162,7 +169,7 @@ impl Mempool {
                 self.timestamp_ms,
                 self.state.tip.version,
             )
-            .and_then(|_| self.apply_tx(&entry.verified_tx.log, &entry.block_tx.proofs));
+            .and_then(|_| self.apply_tx(&entry.verified_tx.log, &entry.block_tx.proofs, catchup));
             if result.is_ok() {
                 // put the entry back into the mempool if it's still valid
                 self.entries.push(entry);
@@ -174,6 +181,7 @@ impl Mempool {
         &mut self,
         txlog: &TxLog,
         utxo_proofs: &[utreexo::Proof],
+        catchup: Option<&Catchup>,
     ) -> Result<(), BlockchainError> {
         // Update block makes sure the that if half of tx fails, all changes are undone.
         self.work_utreexo
@@ -188,6 +196,15 @@ impl Mempool {
                             let proof = utxo_proofs
                                 .next()
                                 .ok_or(BlockchainError::UtreexoProofMissing)?;
+
+                            let updated_proof = match catchup {
+                                Some(c) => Some(
+                                    c.update_proof(contract_id, proof.clone(), &hasher)
+                                        .map_err(|e| BlockchainError::UtreexoError(e))?,
+                                ),
+                                None => None,
+                            };
+                            let proof = updated_proof.as_ref().unwrap_or(proof);
 
                             wf.delete(contract_id, proof, &hasher)
                                 .map_err(|e| BlockchainError::UtreexoError(e))?;

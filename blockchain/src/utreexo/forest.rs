@@ -468,12 +468,19 @@ impl Catchup {
         proof: Proof,
         hasher: &Hasher<M>,
     ) -> Result<Proof, UtreexoError> {
-        let mut path = match proof {
-            // For the transient items `position` is irrelevant, so we may as well use 0.
-            Proof::Transient => Path::default(),
-            Proof::Committed(path) => path,
-        };
+        Ok(match proof {
+            Proof::Transient => Proof::Transient,
+            Proof::Committed(path) => Proof::Committed(self.update_path(item, path, hasher)?),
+        })
+    }
 
+    /// Updates the path
+    pub fn update_path<M: MerkleItem>(
+        &self,
+        item: &M,
+        mut path: Path,
+        hasher: &Hasher<M>,
+    ) -> Result<Path, UtreexoError> {
         // 1. Climb up the merkle path until we find an existing node or nothing.
         let leaf_hash = hasher.leaf(item);
         let (midlevel, maybe_offset, _midhash) = path.iter().fold(
@@ -528,7 +535,7 @@ impl Catchup {
             )
             .0;
 
-        Ok(Proof::Committed(path))
+        Ok(path)
     }
 }
 
