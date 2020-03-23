@@ -2,15 +2,19 @@
 //! This is an implementation of a p2p protocol to synchronize
 //! mempool transactions and blocks.
 
-use async_trait::async_trait;
 use core::convert::AsRef;
 use core::hash::Hash;
+use std::collections::hash_map::RandomState;
+use std::collections::{HashMap, HashSet};
+use std::time::Instant;
+
+use async_trait::async_trait;
 use rand::{thread_rng, Rng};
 use serde::{Deserialize, Serialize};
 use starsig::{Signature, SigningKey, VerificationKey};
-use std::collections::hash_map::RandomState;
-use std::collections::{HashMap, HashSet};
-use std::time::{Duration, Instant};
+use merlin::Transcript;
+use zkvm::bulletproofs::BulletproofGens;
+use zkvm::VerifiedTx;
 
 use super::block::{BlockHeader, BlockID, BlockTx};
 use super::errors::BlockchainError;
@@ -18,9 +22,6 @@ use super::mempool::Mempool;
 use super::shortid::{self, ShortID};
 use super::state::BlockchainState;
 use super::utreexo;
-use merlin::Transcript;
-use zkvm::bulletproofs::BulletproofGens;
-use zkvm::{Tx, VerifiedTx};
 
 const CURRENT_VERSION: u64 = 0;
 const SHORTID_NONCE_TTL: usize = 50; // number of sync cycles
@@ -112,9 +113,9 @@ impl<N: Network, S: Storage> Node<N, S> {
             Message::GetInventory(request) => self.process_inventory_request(pid, request).await?,
             Message::Inventory(inventory) => self.receive_inventory(pid, inventory).await?,
             Message::GetBlock(request) => self.send_block(pid, request).await?,
-            Message::Block(block_msg) => self.receive_block(pid, block_msg)?,
+            Message::Block(block_msg) => self.receive_block(block_msg)?,
             Message::GetMempoolTxs(request) => self.send_txs(pid, request).await,
-            Message::MempoolTxs(request) => self.receive_txs(pid, request).await?,
+            Message::MempoolTxs(request) => self.receive_txs(request).await?,
         }
         Ok(())
     }
@@ -372,7 +373,6 @@ impl<N: Network, S: Storage> Node<N, S> {
 
     fn receive_block(
         &mut self,
-        pid: N::PeerIdentifier,
         block_msg: Block,
     ) -> Result<(), BlockchainError> {
         // Quick check: is this actually a block that we want?
@@ -426,7 +426,6 @@ impl<N: Network, S: Storage> Node<N, S> {
 
     async fn receive_txs(
         &mut self,
-        pid: N::PeerIdentifier,
         request: MempoolTxs,
     ) -> Result<(), BlockchainError> {
         if request.tip != self.storage.tip_id() {
@@ -470,15 +469,6 @@ impl<N: Network, S: Storage> Node<N, S> {
             result.extend_from_slice(&shortid.to_bytes()[..]);
         }
         result
-    }
-
-    fn ban<T>(
-        &mut self,
-        pid: N::PeerIdentifier,
-        error: BlockchainError,
-    ) -> Result<T, BlockchainError> {
-        // TODO: mark the peer as banned, remove from the list
-        Err(error)
     }
 }
 
