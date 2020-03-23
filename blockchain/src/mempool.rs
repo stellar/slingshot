@@ -198,16 +198,14 @@ impl Mempool {
                                 .ok_or(BlockchainError::UtreexoProofMissing)?;
 
                             let updated_proof = match catchup {
-                                Some(c) => Some(
-                                    c.update_proof(contract_id, proof.clone(), &hasher)
-                                        .map_err(|e| BlockchainError::UtreexoError(e))?,
-                                ),
+                                Some(c) => {
+                                    Some(c.update_proof(contract_id, proof.clone(), &hasher)?)
+                                }
                                 None => None,
                             };
                             let proof = updated_proof.as_ref().unwrap_or(proof);
 
-                            wf.delete(contract_id, proof, &hasher)
-                                .map_err(|e| BlockchainError::UtreexoError(e))?;
+                            wf.delete(contract_id, proof, &hasher)?;
                         }
                         // Add item to the UTXO set
                         TxEntry::Output(contract) => {

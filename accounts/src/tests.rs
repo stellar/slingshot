@@ -8,9 +8,7 @@ use keytree::Xprv;
 use musig::{Multisignature, Signature};
 
 use blockchain::{utreexo, BlockHeader, BlockTx, BlockchainState, Mempool};
-use zkvm::{
-    Anchor, ClearValue, Contract, ContractID, Program, Prover, TxEntry, TxHeader, VerifiedTx,
-};
+use zkvm::{Anchor, ClearValue, Contract, ContractID, Program, Prover, TxEntry, TxHeader};
 
 use crate::{Account, ReceiverReply, ReceiverWitness};
 
@@ -242,9 +240,7 @@ fn basic_accounts_test() {
         .append(block_tx.clone(), &bp_gens)
         .expect("Tx must be valid");
 
-    let (future_state, _catchup) = mempool
-        .make_block()
-        .expect("Block must be created successfully");
+    let (future_state, _catchup) = mempool.make_block();
 
     // 9. Alice and Bob process the incoming block:
     process_block(

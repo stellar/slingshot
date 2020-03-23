@@ -9,10 +9,10 @@ use std::collections::{HashMap, HashSet};
 use std::time::Instant;
 
 use async_trait::async_trait;
+use merlin::Transcript;
 use rand::{thread_rng, Rng};
 use serde::{Deserialize, Serialize};
 use starsig::{Signature, SigningKey, VerificationKey};
-use merlin::Transcript;
 use zkvm::bulletproofs::BulletproofGens;
 use zkvm::VerifiedTx;
 
@@ -371,10 +371,7 @@ impl<N: Network, S: Storage> Node<N, S> {
         Ok(())
     }
 
-    fn receive_block(
-        &mut self,
-        block_msg: Block,
-    ) -> Result<(), BlockchainError> {
+    fn receive_block(&mut self, block_msg: Block) -> Result<(), BlockchainError> {
         // Quick check: is this actually a block that we want?
         if block_msg.header.height != self.storage.tip_height() + 1 {
             // Silently ignore the irrelevant block - maybe we received it too late.
@@ -424,10 +421,7 @@ impl<N: Network, S: Storage> Node<N, S> {
         self.network.send(pid, Message::MempoolTxs(response)).await;
     }
 
-    async fn receive_txs(
-        &mut self,
-        request: MempoolTxs,
-    ) -> Result<(), BlockchainError> {
+    async fn receive_txs(&mut self, request: MempoolTxs) -> Result<(), BlockchainError> {
         if request.tip != self.storage.tip_id() {
             return Err(BlockchainError::StaleMempoolState(request.tip));
         }

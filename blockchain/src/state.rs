@@ -94,9 +94,7 @@ impl BlockchainState {
                             .next()
                             .ok_or(BlockchainError::UtreexoProofMissing)?;
 
-                        work_forest
-                            .delete(contract_id, proof, &utxo_hasher)
-                            .map_err(|e| BlockchainError::UtreexoError(e))?;
+                        work_forest.delete(contract_id, proof, &utxo_hasher)?;
                     }
                     // Add item to the UTXO set
                     TxEntry::Output(contract) => {

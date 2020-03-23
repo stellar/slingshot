@@ -77,9 +77,7 @@ fn test_state_machine() {
         .append(block_tx.clone(), &bp_gens)
         .expect("Tx must be valid");
 
-    let (future_state, _catchup) = mempool
-        .make_block()
-        .expect("Block must be created successfully");
+    let (future_state, _catchup) = mempool.make_block();
 
     // Apply the block to the state
     let (new_state, _catchup, _vtxs) = state

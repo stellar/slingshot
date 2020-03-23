@@ -53,3 +53,9 @@ pub enum BlockchainError {
     #[fail(display = "Received mempool txs at an irrelevant state")]
     StaleMempoolState(BlockID),
 }
+
+impl From<UtreexoError> for BlockchainError {
+    fn from(e: UtreexoError) -> BlockchainError {
+        BlockchainError::UtreexoError(e)
+    }
+}
