@@ -185,25 +185,47 @@ impl<N: Network, S: Storage> Node<N, S> {
         self.peers.remove(&pid);
     }
 
-    /// Creates and signs a block.
-    /// The block is not applied immediately.
-    pub fn create_block(&self, signing_key: &SigningKey) -> Block {
-        // TODO:
-        // 1. update timestamp to max(current, prev + 1ms)
-        //      Note: we don't need to do that if all tx.maxtime's are 1-2 blocks away.
-        //      TODO: rethink whether we actually need the maxtime at all. It is not needed for relative timelocks in paychans,
-        //      and it is not helping with clearing up the mempool spam.
-        // 2. update mempool to throw out all now-invalid txs
-        // 3. compute txroot and new utreexo root
-        // 4. sign the blockheader
-        // 5. pack up transactions in a Block message
-        unimplemented!()
-    }
+    /// Creates and signs block, and updates the state.
+    /// The API makes sure that the node state is update with the new block,
+    /// so the user cannot accidentally sign two conflicting blocks.
+    /// Obviously, a multi-party signing, SCP or any other decentralized consensus algorithm
+    /// would have a different API.
+    pub fn create_block(&mut self, timestamp_ms: u64, signing_key: SigningKey) {
+        // Note: we don't need to do that if all tx.maxtime's are 1-2 blocks away.
+        // TODO: rethink whether we actually need the maxtime at all. It is not needed for relative timelocks in paychans,
+        // and it is not helping with clearing up the mempool spam.
+        let timestamp_ms = core::cmp::max(timestamp_ms, self.storage.tip().0.timestamp_ms);
+        self.mempool.update_timestamp(timestamp_ms);
 
-    /// Apply block manually to the Node.
-    /// Internally it is processed as if sent by node to itself.
-    pub fn apply_block(&mut self, block: Block) -> Result<(), BlockchainError> {
-        self.receive_block(self.network.self_id(), block)
+        // Note: we currently assume that the entire mempool is converted into a block,
+        // so we convert all the entries into the transactions.
+        let (new_state, catchup) = self.mempool.make_block();
+
+        let signature = create_block_signature(&new_state.tip, signing_key);
+
+        let block = Block {
+            header: new_state.tip.clone(),
+            signature,
+            txs: self
+                .mempool
+                .entries()
+                .map(|e| e.block_tx())
+                .cloned()
+                .collect::<Vec<_>>(),
+        };
+
+        let vtxs = self
+            .mempool
+            .entries()
+            .map(|e| e.verified_tx())
+            .cloned()
+            .collect::<Vec<_>>();
+
+        // Update the mempool
+        self.mempool.update_state(new_state.clone(), &catchup);
+
+        // Store the block
+        self.storage.store_block(block, new_state, catchup, vtxs);
     }
 }
 
@@ -233,7 +255,7 @@ impl<N: Network, S: Storage> Node<N, S> {
 
         let current_nonce = self.shortid_nonce;
         let mut assigned_shortids = HashSet::new();
-        let mut shortener =
+        let shortener =
             shortid::Transform::new(self.shortid_nonce, self.network.self_id().as_ref());
 
         // First, add all the mempool entries to the assigned set
@@ -322,11 +344,12 @@ impl<N: Network, S: Storage> Node<N, S> {
             if !verify_block_signature(&tip, &tip_signature, self.network_pubkey) {
                 return Err(BlockchainError::InvalidBlockSignature);
             }
-            self.target_tip = tip;
+            self.target_tip = tip.clone();
         }
 
         // store the inventory until we figure out what we are missing per-peer in `synchronize_mempool`.
         self.peers.get_mut(&pid).map(|peer| {
+            peer.tip = Some(tip);
             peer.shortid_nonce = shortid_nonce;
             peer.shortid_list = shortid_list;
         });
@@ -382,7 +405,7 @@ impl<N: Network, S: Storage> Node<N, S> {
     async fn send_txs(&mut self, pid: N::PeerIdentifier, request: GetMempoolTxs) {
         use core::iter::FromIterator;
 
-        let mut shortener = shortid::Transform::new(request.shortid_nonce, pid.as_ref());
+        let shortener = shortid::Transform::new(request.shortid_nonce, pid.as_ref());
         let requested_shortids =
             HashSet::<_, RandomState>::from_iter(ShortID::scan(&request.shortid_list));
 

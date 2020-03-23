@@ -128,7 +128,7 @@ impl Mempool {
 
     /// Creates a new block header and a new blockchain state using the current set of transactions.
     /// Block header is accesible through the `tip` field on the new `BlockchainState` value.
-    pub fn make_block(&self) -> Result<(BlockchainState, Catchup), BlockchainError> {
+    pub fn make_block(&self) -> (BlockchainState, Catchup) {
         let txroot = MerkleTree::root(
             b"ZkVM.txroot",
             self.entries.iter().map(|mtx| mtx.block_tx.witness_hash()),
@@ -153,7 +153,7 @@ impl Mempool {
             utreexo: new_forest,
         };
 
-        Ok((new_state, new_catchup))
+        (new_state, new_catchup)
     }
 
     fn update_mempool(&mut self, catchup: Option<&Catchup>) {
