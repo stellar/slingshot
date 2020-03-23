@@ -23,7 +23,7 @@ pub enum BlockchainError {
 
     /// Occurs when ZkVM failed executing the transaction.
     #[fail(display = "Transaction validation failed in ZkVM.")]
-    TxValidation(VMError),
+    VMError(VMError),
 
     /// Occurs when utreexo proof is missing.
     #[fail(display = "Utreexo proof is missing.")]
@@ -57,5 +57,11 @@ pub enum BlockchainError {
 impl From<UtreexoError> for BlockchainError {
     fn from(e: UtreexoError) -> BlockchainError {
         BlockchainError::UtreexoError(e)
+    }
+}
+
+impl From<VMError> for BlockchainError {
+    fn from(e: VMError) -> BlockchainError {
+        BlockchainError::VMError(e)
     }
 }

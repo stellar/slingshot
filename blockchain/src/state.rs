@@ -80,8 +80,7 @@ impl BlockchainState {
             // TODO: this is a great place to do batch verification of signatures and bulletproofs.
             let verified_tx = block_tx
                 .tx
-                .verify(bp_gens)
-                .map_err(|e| BlockchainError::TxValidation(e))?;
+                .verify(bp_gens)?;
 
             let mut utreexo_proofs = block_tx.proofs.iter();
 
