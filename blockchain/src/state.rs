@@ -78,9 +78,7 @@ impl BlockchainState {
         let mut verified_txs = Vec::with_capacity(block_txs.len());
         for block_tx in block_txs.iter() {
             // TODO: this is a great place to do batch verification of signatures and bulletproofs.
-            let verified_tx = block_tx
-                .tx
-                .verify(bp_gens)?;
+            let verified_tx = block_tx.tx.verify(bp_gens)?;
 
             let mut utreexo_proofs = block_tx.proofs.iter();
 

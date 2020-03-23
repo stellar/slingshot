@@ -108,9 +108,7 @@ impl Mempool {
         )?;
 
         // 2. Verify the tx
-        let verified_tx = block_tx
-            .tx
-            .verify(bp_gens)?;
+        let verified_tx = block_tx.tx.verify(bp_gens)?;
 
         // 3. Apply to the state
         self.apply_tx(&verified_tx.log, &block_tx.proofs, None)?;
