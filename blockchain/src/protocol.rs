@@ -14,7 +14,7 @@ use rand::{thread_rng, Rng};
 use serde::{Deserialize, Serialize};
 use starsig::{Signature, SigningKey, VerificationKey};
 use zkvm::bulletproofs::BulletproofGens;
-use zkvm::VerifiedTx;
+use zkvm::{ContractID, VerifiedTx};
 
 use super::block::{BlockHeader, BlockID, BlockTx};
 use super::errors::BlockchainError;
@@ -27,7 +27,7 @@ const CURRENT_VERSION: u64 = 0;
 const SHORTID_NONCE_TTL: usize = 50; // number of sync cycles
 
 #[async_trait]
-pub trait Network {
+pub trait Delegate {
     type PeerIdentifier: Clone + AsRef<[u8]> + Eq + Hash;
 
     /// ID of our node.
@@ -37,11 +37,9 @@ pub trait Network {
     async fn send(&mut self, peer: Self::PeerIdentifier, message: Message);
 
     /// Asks the network to disconnect the peer.
-    /// Will receive `disconnect()` call as a result.
+    /// Will receive `peer_diconnected()` call as a result.
     async fn disconnect(&mut self, peer: Self::PeerIdentifier);
-}
 
-pub trait Storage {
     /// Returns current height of the chain.
     /// Default implementation calls `tip().0.height`.
     fn tip_height(&self) -> u64 {
@@ -62,7 +60,8 @@ pub trait Storage {
     /// Blockchain state
     fn blockchain_state(&self) -> &BlockchainState;
 
-    /// Stores the new block and an updated state.
+    /// Stores a new block and an updated state.
+    /// Guaranteed to be called monotonically for blocks with height=2, then 3, etc.
     fn store_block(
         &mut self,
         block: Block,
@@ -72,27 +71,25 @@ pub trait Storage {
     );
 }
 
-pub struct Node<N: Network, S: Storage> {
+pub struct Node<D: Delegate> {
     network_pubkey: VerificationKey,
-    network: N,
-    storage: S,
+    delegate: D,
     target_tip: BlockHeader,
-    peers: HashMap<N::PeerIdentifier, PeerInfo>,
+    peers: HashMap<D::PeerIdentifier, PeerInfo>,
     shortid_nonce: u64,
     shortid_nonce_ttl: usize,
     mempool: Mempool,
     bp_gens: BulletproofGens,
 }
 
-impl<N: Network, S: Storage> Node<N, S> {
+impl<D: Delegate> Node<D> {
     /// Create a new node.
-    pub fn new(network_pubkey: VerificationKey, network: N, storage: S) -> Self {
-        let state = storage.blockchain_state().clone();
+    pub fn new(network_pubkey: VerificationKey, delegate: D) -> Self {
+        let state = delegate.blockchain_state().clone();
         let tip = state.tip.clone();
         Node {
             network_pubkey,
-            network,
-            storage,
+            delegate,
             mempool: Mempool::new(state, tip.timestamp_ms),
             target_tip: tip,
             bp_gens: BulletproofGens::new(256, 1),
@@ -102,10 +99,24 @@ impl<N: Network, S: Storage> Node<N, S> {
         }
     }
 
+    /// Creates a new network.
+    pub fn new_network<I>(
+        network_signing_key: SigningKey,
+        timestamp_ms: u64,
+        utxos: I,
+    ) -> (BlockchainState, Signature, Vec<utreexo::Proof>)
+    where
+        I: IntoIterator<Item = ContractID> + Clone,
+    {
+        let (state, proofs) = BlockchainState::make_initial(timestamp_ms, utxos);
+        let signature = create_block_signature(&state.tip, network_signing_key);
+        (state, signature, proofs)
+    }
+
     /// Called when a node receives a message from the peer.
     pub async fn process_message(
         &mut self,
-        pid: N::PeerIdentifier,
+        pid: D::PeerIdentifier,
         message: Message,
     ) -> Result<(), BlockchainError> {
         // TODO: represent ban scenarios with subcategory of errors and ban here.
@@ -124,7 +135,7 @@ impl<N: Network, S: Storage> Node<N, S> {
     pub async fn synchronize(&mut self) {
         self.rotate_shortid_nonce_if_needed();
 
-        let (tip_header, tip_signature) = self.storage.tip();
+        let (tip_header, tip_signature) = self.delegate.tip();
 
         for (pid, peer) in self.peers.iter().filter(|(_, p)| p.needs_our_inventory) {
             let msg = Message::Inventory(Inventory {
@@ -135,14 +146,14 @@ impl<N: Network, S: Storage> Node<N, S> {
                 shortid_list: self
                     .mempool_inventory_for_peer(pid.clone(), peer.their_short_id_nonce),
             });
-            self.network.send(pid.clone(), msg).await;
+            self.delegate.send(pid.clone(), msg).await;
         }
 
         for (_pid, peer) in self.peers.iter_mut() {
             peer.needs_our_inventory = false;
         }
 
-        if self.target_tip.id() != self.storage.tip_id() {
+        if self.target_tip.id() != self.delegate.tip_id() {
             self.synchronize_chain().await;
         } else {
             self.synchronize_mempool().await;
@@ -165,7 +176,7 @@ impl<N: Network, S: Storage> Node<N, S> {
     }
 
     /// Called when a peer connects.
-    pub async fn peer_connected(&mut self, pid: N::PeerIdentifier) {
+    pub async fn peer_connected(&mut self, pid: D::PeerIdentifier) {
         self.peers.insert(
             pid.clone(),
             PeerInfo {
@@ -182,7 +193,7 @@ impl<N: Network, S: Storage> Node<N, S> {
     }
 
     /// Called when a peer disconnects.
-    pub async fn peer_diconnected(&mut self, pid: N::PeerIdentifier) {
+    pub async fn peer_diconnected(&mut self, pid: D::PeerIdentifier) {
         self.peers.remove(&pid);
     }
 
@@ -195,7 +206,7 @@ impl<N: Network, S: Storage> Node<N, S> {
         // Note: we don't need to do that if all tx.maxtime's are 1-2 blocks away.
         // TODO: rethink whether we actually need the maxtime at all. It is not needed for relative timelocks in paychans,
         // and it is not helping with clearing up the mempool spam.
-        let timestamp_ms = core::cmp::max(timestamp_ms, self.storage.tip().0.timestamp_ms);
+        let timestamp_ms = core::cmp::max(timestamp_ms, self.delegate.tip().0.timestamp_ms);
         self.mempool.update_timestamp(timestamp_ms);
 
         // Note: we currently assume that the entire mempool is converted into a block,
@@ -226,11 +237,11 @@ impl<N: Network, S: Storage> Node<N, S> {
         self.mempool.update_state(new_state.clone(), &catchup);
 
         // Store the block
-        self.storage.store_block(block, new_state, catchup, vtxs);
+        self.delegate.store_block(block, new_state, catchup, vtxs);
     }
 }
 
-impl<N: Network, S: Storage> Node<N, S> {
+impl<D: Delegate> Node<D> {
     async fn synchronize_chain(&mut self) {
         use rand::seq::IteratorRandom;
 
@@ -239,11 +250,11 @@ impl<N: Network, S: Storage> Node<N, S> {
         // but spreads the load on the network that prioritizes synchronizing
         // recent transactions and blocks.
         if let Some((pid, _peer)) = self.peers.iter().choose(&mut thread_rng()) {
-            self.network
+            self.delegate
                 .send(
                     pid.clone(),
                     Message::GetBlock(GetBlock {
-                        height: self.storage.tip_height() + 1,
+                        height: self.delegate.tip_height() + 1,
                     }),
                 )
                 .await;
@@ -257,7 +268,7 @@ impl<N: Network, S: Storage> Node<N, S> {
         let current_nonce = self.shortid_nonce;
         let mut assigned_shortids = HashSet::new();
         let shortener =
-            shortid::Transform::new(self.shortid_nonce, self.network.self_id().as_ref());
+            shortid::Transform::new(self.shortid_nonce, self.delegate.self_id().as_ref());
 
         // First, add all the mempool entries to the assigned set
         // FIXME: keep this set around and update per-tx, so we don't recalculate it on every sync.
@@ -290,13 +301,13 @@ impl<N: Network, S: Storage> Node<N, S> {
         }
 
         for (pid, req) in requests.into_iter() {
-            self.network.send(pid, Message::GetMempoolTxs(req)).await;
+            self.delegate.send(pid, Message::GetMempoolTxs(req)).await;
         }
     }
 
     async fn process_inventory_request(
         &mut self,
-        pid: N::PeerIdentifier,
+        pid: D::PeerIdentifier,
         request: GetInventory,
     ) -> Result<(), BlockchainError> {
         // FIXME: check the version across all messages
@@ -310,8 +321,8 @@ impl<N: Network, S: Storage> Node<N, S> {
         Ok(())
     }
 
-    async fn request_inventory(&mut self, pid: N::PeerIdentifier) {
-        self.network
+    async fn request_inventory(&mut self, pid: D::PeerIdentifier) {
+        self.delegate
             .send(
                 pid,
                 Message::GetInventory(GetInventory {
@@ -324,7 +335,7 @@ impl<N: Network, S: Storage> Node<N, S> {
 
     async fn receive_inventory(
         &mut self,
-        pid: N::PeerIdentifier,
+        pid: D::PeerIdentifier,
         inventory: Inventory,
     ) -> Result<(), BlockchainError> {
         let Inventory {
@@ -360,20 +371,20 @@ impl<N: Network, S: Storage> Node<N, S> {
 
     async fn send_block(
         &mut self,
-        pid: N::PeerIdentifier,
+        pid: D::PeerIdentifier,
         request: GetBlock,
     ) -> Result<(), BlockchainError> {
         let block = self
-            .storage
+            .delegate
             .block_at_height(request.height)
             .ok_or(BlockchainError::BlockNotFound(request.height))?;
-        self.network.send(pid, Message::Block(block)).await;
+        self.delegate.send(pid, Message::Block(block)).await;
         Ok(())
     }
 
     fn receive_block(&mut self, block_msg: Block) -> Result<(), BlockchainError> {
         // Quick check: is this actually a block that we want?
-        if block_msg.header.height != self.storage.tip_height() + 1 {
+        if block_msg.header.height != self.delegate.tip_height() + 1 {
             // Silently ignore the irrelevant block - maybe we received it too late.
             return Err(BlockchainError::BlockNotRelevant(block_msg.header.height));
         }
@@ -385,7 +396,7 @@ impl<N: Network, S: Storage> Node<N, S> {
 
         // Now the block header is authenticated, so we can do a more expensive validation.
 
-        let state = self.storage.blockchain_state();
+        let state = self.delegate.blockchain_state();
         let (new_state, catchup, vtxs) =
             state.apply_block(block_msg.header.clone(), &block_msg.txs, &self.bp_gens)?;
 
@@ -393,13 +404,13 @@ impl<N: Network, S: Storage> Node<N, S> {
         self.mempool.update_state(new_state.clone(), &catchup);
 
         // Store the block
-        self.storage
+        self.delegate
             .store_block(block_msg, new_state, catchup, vtxs);
 
         Ok(())
     }
 
-    async fn send_txs(&mut self, pid: N::PeerIdentifier, request: GetMempoolTxs) {
+    async fn send_txs(&mut self, pid: D::PeerIdentifier, request: GetMempoolTxs) {
         use core::iter::FromIterator;
 
         let shortener = shortid::Transform::new(request.shortid_nonce, pid.as_ref());
@@ -407,7 +418,7 @@ impl<N: Network, S: Storage> Node<N, S> {
             HashSet::<_, RandomState>::from_iter(ShortID::scan(&request.shortid_list));
 
         let mut response = MempoolTxs {
-            tip: self.storage.tip_id(),
+            tip: self.delegate.tip_id(),
             txs: Vec::with_capacity(request.shortid_list.len() / shortid::SHORTID_LEN),
         };
 
@@ -418,11 +429,11 @@ impl<N: Network, S: Storage> Node<N, S> {
             }
         }
 
-        self.network.send(pid, Message::MempoolTxs(response)).await;
+        self.delegate.send(pid, Message::MempoolTxs(response)).await;
     }
 
     async fn receive_txs(&mut self, request: MempoolTxs) -> Result<(), BlockchainError> {
-        if request.tip != self.storage.tip_id() {
+        if request.tip != self.delegate.tip_id() {
             return Err(BlockchainError::StaleMempoolState(request.tip));
         }
 
@@ -455,7 +466,7 @@ impl<N: Network, S: Storage> Node<N, S> {
         }
     }
 
-    fn mempool_inventory_for_peer(&self, pid: N::PeerIdentifier, nonce: u64) -> Vec<u8> {
+    fn mempool_inventory_for_peer(&self, pid: D::PeerIdentifier, nonce: u64) -> Vec<u8> {
         let mut result = Vec::with_capacity(self.mempool.len() * shortid::SHORTID_LEN);
         let shortener = shortid::Transform::new(nonce, &pid.as_ref());
         for entry in self.mempool.entries() {
@@ -526,9 +537,9 @@ pub struct GetBlock {
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Block {
-    header: BlockHeader,
-    signature: Signature,
-    txs: Vec<BlockTx>,
+    pub(crate) header: BlockHeader,
+    pub(crate) signature: Signature,
+    pub(crate) txs: Vec<BlockTx>,
 }
 
 #[derive(Clone, Serialize, Deserialize)]

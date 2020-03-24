@@ -6,7 +6,7 @@ use zkvm::bulletproofs::BulletproofGens;
 use super::*;
 use zkvm::{
     Anchor, Commitment, Contract, ContractID, Multisignature, PortableItem, Predicate, Program,
-    Prover, Signature, String, TxHeader, Value, VerificationKey,
+    Prover, Signature, String, TxHeader, Value, VerificationKey, VerifiedTx,
 };
 
 fn make_predicate(privkey: u64) -> Predicate {
@@ -89,4 +89,72 @@ fn test_state_machine() {
         new_state.utreexo.root(&hasher),
         future_state.utreexo.root(&hasher)
     );
+}
+
+#[test]
+fn test_p2p_protocol() {
+    use async_trait::async_trait;
+    use starsig::{Signature, SigningKey, VerificationKey};
+    use std::cell::RefCell;
+    use std::sync::{Arc, Mutex, Weak};
+
+    struct MockNode {
+        state: BlockchainState,
+        tip_sig: Signature,
+        blocks: Vec<Block>, // i=0 -> height=1, etc
+        id: [u8; 32],
+        net: Weak<Mutex<MockNetwork>>,
+    }
+
+    struct MockNetwork {
+        peers: Vec<Node<MockNode>>,
+    }
+
+    #[async_trait]
+    impl Delegate for MockNode {
+        type PeerIdentifier = [u8; 32];
+
+        /// ID of our node.
+        fn self_id(&self) -> Self::PeerIdentifier {
+            self.id
+        }
+
+        /// Send a message to a given peer.
+        async fn send(&mut self, peer: Self::PeerIdentifier, message: Message) {
+            // self.net.upgrade().expect().
+        }
+
+        async fn disconnect(&mut self, peer: Self::PeerIdentifier) {}
+
+        /// Returns the signed tip of the blockchain
+        fn tip(&self) -> (BlockHeader, Signature) {
+            (self.state.tip.clone(), self.tip_sig.clone())
+        }
+
+        /// Returns a block at a given height
+        fn block_at_height(&self, height: u64) -> Option<Block> {
+            if height < 1 {
+                return None;
+            }
+            self.blocks.get((height - 1) as usize).map(|b| b.clone())
+        }
+
+        /// Blockchain state
+        fn blockchain_state(&self) -> &BlockchainState {
+            &self.state
+        }
+
+        /// Stores the new block and an updated state.
+        fn store_block(
+            &mut self,
+            block: Block,
+            new_state: BlockchainState,
+            _catchup: utreexo::Catchup,
+            _vtxs: Vec<VerifiedTx>,
+        ) {
+            // TODO: update all proofs in the wallet with a catchup structure.
+            self.blocks.push(block);
+            self.state = new_state;
+        }
+    }
 }
