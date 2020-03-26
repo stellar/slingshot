@@ -83,7 +83,7 @@ pub struct UnsignedTx {
 }
 
 /// Instance of a transaction that contains all necessary data to validate it.
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Tx {
     /// Header metadata
     pub header: TxHeader,
@@ -99,7 +99,7 @@ pub struct Tx {
 }
 
 /// Represents a precomputed, but not verified transaction.
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct PrecomputedTx {
     /// Transaction header
     pub header: TxHeader,
@@ -115,7 +115,7 @@ pub struct PrecomputedTx {
 }
 
 /// Represents a verified transaction: a txid and a list of state updates.
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct VerifiedTx {
     /// Transaction header
     pub header: TxHeader,
