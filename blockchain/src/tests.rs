@@ -93,21 +93,22 @@ fn test_state_machine() {
 
 #[test]
 fn test_p2p_protocol() {
+    use futures_executor::block_on;
     use async_trait::async_trait;
     use starsig::{Signature, SigningKey, VerificationKey};
     use std::cell::RefCell;
-    use std::sync::{Arc, Mutex, Weak};
+    use std::sync::{Arc, Mutex};
+    use super::protocol::*;
 
     struct MockNode {
-        state: BlockchainState,
-        tip_sig: Signature,
-        blocks: Vec<Block>, // i=0 -> height=1, etc
         id: [u8; 32],
-        net: Weak<Mutex<MockNetwork>>,
+        state: BlockchainState,
+        blocks: Vec<Block>, // i=0 -> height=1, etc
+        mailbox: Arc<Mutex<Mailbox>>,
     }
 
-    struct MockNetwork {
-        peers: Vec<Node<MockNode>>,
+    struct Mailbox {
+        msgs: Vec<([u8; 32], Message)>,
     }
 
     #[async_trait]
@@ -121,14 +122,12 @@ fn test_p2p_protocol() {
 
         /// Send a message to a given peer.
         async fn send(&mut self, peer: Self::PeerIdentifier, message: Message) {
-            // self.net.upgrade().expect().
+            self.mailbox.lock().unwrap().msgs.push((peer,message));
         }
-
-        async fn disconnect(&mut self, peer: Self::PeerIdentifier) {}
 
         /// Returns the signed tip of the blockchain
         fn tip(&self) -> (BlockHeader, Signature) {
-            (self.state.tip.clone(), self.tip_sig.clone())
+            (self.state.tip.clone(), self.blocks[0].signature.clone())
         }
 
         /// Returns a block at a given height
@@ -157,4 +156,45 @@ fn test_p2p_protocol() {
             self.state = new_state;
         }
     }
+
+    let bp_gens = BulletproofGens::new(256, 1);
+    let network_signing_key = Scalar::from(9000u64);
+    let network_pubkey = VerificationKey::from_secret(&network_signing_key);
+
+    let wallet_privkey = Scalar::from(1u64);
+    let initial_contract = make_nonce_contract(1, 100);
+    let (state, block_sig, proofs) =
+        Node::<MockNode>::new_network(network_signing_key, 0, vec![initial_contract.id()]);
+
+    let mailbox = Arc::new(Mutex::new(Mailbox { msgs: Vec::new() }));
+
+    let mut nodes = (0..3u8)
+        .map(|i| MockNode {
+            id: [i; 32],
+            state: state.clone(),
+            blocks: vec![Block {
+                header: state.tip.clone(),
+                signature: block_sig.clone(),
+                txs: Vec::new(),
+            }],
+            mailbox: Arc::clone(&mailbox),
+        })
+        .map(|mock| Node::new(network_pubkey, mock));
+
+    // Now all the nodes have the same state and can make transactions.
+    let mut node0 = nodes.next().unwrap();
+    let mut node1 = nodes.next().unwrap();
+    let mut node2 = nodes.next().unwrap();
+
+    // connect all the peers to each other
+    block_on(node0.peer_connected(node1.id()));
+    block_on(node1.peer_connected(node0.id()));
+
+    block_on(node2.peer_connected(node1.id()));
+    block_on(node1.peer_connected(node2.id()));
+
+    block_on(node2.peer_connected(node0.id()));
+    block_on(node0.peer_connected(node2.id()));
+
+    // TODO: process mailbox
 }

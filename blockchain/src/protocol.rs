@@ -36,10 +36,6 @@ pub trait Delegate {
     /// Send a message to a given peer.
     async fn send(&mut self, peer: Self::PeerIdentifier, message: Message);
 
-    /// Asks the network to disconnect the peer.
-    /// Will receive `peer_diconnected()` call as a result.
-    async fn disconnect(&mut self, peer: Self::PeerIdentifier);
-
     /// Returns current height of the chain.
     /// Default implementation calls `tip().0.height`.
     fn tip_height(&self) -> u64 {
@@ -238,6 +234,11 @@ impl<D: Delegate> Node<D> {
 
         // Store the block
         self.delegate.store_block(block, new_state, catchup, vtxs);
+    }
+
+    /// Returns the ID of this node.
+    pub fn id(&self) -> D::PeerIdentifier {
+        self.delegate.self_id()
     }
 }
 
