@@ -93,27 +93,43 @@ fn test_state_machine() {
 
 #[test]
 fn test_p2p_protocol() {
-    use futures_executor::block_on;
+    use super::protocol::*;
     use async_trait::async_trait;
+    use futures_executor::block_on;
     use starsig::{Signature, SigningKey, VerificationKey};
     use std::cell::RefCell;
     use std::sync::{Arc, Mutex};
-    use super::protocol::*;
+
+    type PID = [u8; 1];
 
     struct MockNode {
-        id: [u8; 32],
+        id: PID,
         state: BlockchainState,
         blocks: Vec<Block>, // i=0 -> height=1, etc
         mailbox: Arc<Mutex<Mailbox>>,
     }
 
     struct Mailbox {
-        msgs: Vec<([u8; 32], Message)>,
+        msgs: Vec<(PID, Message)>,
+    }
+
+    impl Mailbox {
+        fn process(
+            &mut self,
+            nodes: &mut [&mut Node<MockNode>],
+        ) -> Vec<(PID, Result<(), BlockchainError>)> {
+            let mut r = Vec::new();
+            while let Some((pid, msg)) = self.msgs.pop() {
+                let result = block_on(nodes[pid[0] as usize].process_message(pid, msg));
+                r.push((pid, result));
+            }
+            r
+        }
     }
 
     #[async_trait]
     impl Delegate for MockNode {
-        type PeerIdentifier = [u8; 32];
+        type PeerIdentifier = PID;
 
         /// ID of our node.
         fn self_id(&self) -> Self::PeerIdentifier {
@@ -122,7 +138,7 @@ fn test_p2p_protocol() {
 
         /// Send a message to a given peer.
         async fn send(&mut self, peer: Self::PeerIdentifier, message: Message) {
-            self.mailbox.lock().unwrap().msgs.push((peer,message));
+            self.mailbox.lock().unwrap().msgs.push((peer, message));
         }
 
         /// Returns the signed tip of the blockchain
@@ -168,9 +184,9 @@ fn test_p2p_protocol() {
 
     let mailbox = Arc::new(Mutex::new(Mailbox { msgs: Vec::new() }));
 
-    let mut nodes = (0..3u8)
-        .map(|i| MockNode {
-            id: [i; 32],
+    let mut nodes = (0..3)
+        .map(|pid| MockNode {
+            id: [pid],
             state: state.clone(),
             blocks: vec![Block {
                 header: state.tip.clone(),
@@ -196,5 +212,9 @@ fn test_p2p_protocol() {
     block_on(node2.peer_connected(node0.id()));
     block_on(node0.peer_connected(node2.id()));
 
-    // TODO: process mailbox
+    let results = mailbox
+        .lock()
+        .unwrap()
+        .process(&mut [&mut node0, &mut node1, &mut node2]);
+    assert!(results.into_iter().all(|(pid, r)| r.is_ok()));
 }
