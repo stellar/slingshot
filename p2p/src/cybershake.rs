@@ -435,37 +435,53 @@ fn encode_u64le(i: u64) -> [u8; 8] {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rand::thread_rng;
-    use tokio::net::{TcpStream, TcpListener};
+    use rand::rngs::StdRng;
+    use rand::{thread_rng, SeedableRng};
+    use tokio::net::{TcpListener, TcpStream};
 
     #[tokio::test]
     async fn test() {
-        let bob_private_key = PrivateKey::from(Scalar::from_bits([1u8; 32]));
-        let alice_private_key = PrivateKey::from(Scalar::from_bits([2u8; 32]));
         let mut alice_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let mut bob_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let alice_addr = alice_listener.local_addr().unwrap();
+        let bob_addr = alice_listener.local_addr().unwrap();
 
-        let alice_writer = TcpStream::connect(bob_listener.local_addr().unwrap()).await.unwrap();
-        let bob_writer = TcpStream::connect(alice_listener.local_addr().unwrap()).await.unwrap();
-        let (alice_reader, _) = alice_listener.accept().await.unwrap();
-        let (bob_reader, _) = bob_listener.accept().await.unwrap();
+        tokio::spawn(async move {
+            let alice_private_key = PrivateKey::from(Scalar::from(1u8));
+            let (alice_reader, _) = alice_listener.accept().await.unwrap();
+            let alice_writer = TcpStream::connect(bob_addr).await.unwrap();
+            let mut rng = StdRng::from_entropy();
+            let (_, mut alice_out, mut alice_inc) =
+                cybershake(&alice_private_key, alice_reader, alice_writer, 64, &mut rng)
+                    .await
+                    .unwrap();
 
-        let mut alice_rng = thread_rng();
-        let mut bob_rng = thread_rng();
+            // Alice send message to bob
+            let alice_message: Vec<u8> = "Hello, Bob".bytes().collect();
+            alice_out.send_message(&alice_message).await.unwrap();
 
-        let (_, mut bob_out, mut alice_inc)  = cybershake(&alice_private_key, alice_reader, bob_writer, 64, &mut alice_rng).await.unwrap();
-        let (_, mut alice_out, mut bob_inc)  = cybershake(&bob_private_key, bob_reader, alice_writer, 64, &mut bob_rng).await.unwrap();
+            // Then Alice receive message from bob
+            let alice_rec = alice_inc.receive_message().await.unwrap();
+            assert_eq!("Hello, Alice", String::from_utf8(alice_rec).unwrap());
+        });
 
-        let alice_message = "Hello, Bob";
-        let alice_message_bytes: Vec<u8> = alice_message.bytes().collect();
-        alice_out.send_message(&alice_message_bytes).await.unwrap();
-        let bob_rec = bob_inc.receive_message().await.unwrap();
-        assert_eq!(alice_message, String::from_utf8(bob_rec).unwrap());
+        tokio::spawn(async move {
+            let bob_private_key = PrivateKey::from(Scalar::from(1u8));
+            let (bob_reader, _) = bob_listener.accept().await.unwrap();
+            let bob_writer = TcpStream::connect(alice_addr).await.unwrap();
+            let mut rng = StdRng::from_entropy();
+            let (_, mut bob_out, mut bob_inc) =
+                cybershake(&bob_private_key, bob_reader, bob_writer, 64, &mut rng)
+                    .await
+                    .unwrap();
 
-        let bob_message = "Hello, Alice";
-        let bob_message_bytes: Vec<u8> = bob_message.bytes().collect();
-        bob_out.send_message(&bob_message_bytes).await.unwrap();
-        let alice_rec = alice_inc.receive_message().await.unwrap();
-        assert_eq!(bob_message, String::from_utf8(alice_rec).unwrap());
+            // Bob receive message from Alice
+            let bob_rec = bob_inc.receive_message().await.unwrap();
+            assert_eq!("Hello, Bob", String::from_utf8(bob_rec).unwrap());
+
+            // Then bob send message to Alice
+            let bob_message: Vec<u8> = "Hello, Alice".bytes().collect();
+            bob_out.send_message(&bob_message).await.unwrap();
+        });
     }
 }
