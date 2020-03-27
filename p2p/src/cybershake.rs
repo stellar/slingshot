@@ -435,10 +435,10 @@ fn encode_u64le(i: u64) -> [u8; 8] {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tokio::net::{TcpListener, TcpStream};
     use futures::{StreamExt, TryStreamExt};
-    use rand::{thread_rng, SeedableRng};
     use rand::rngs::StdRng;
+    use rand::{thread_rng, SeedableRng};
+    use tokio::net::{TcpListener, TcpStream};
 
     #[tokio::test]
     async fn test() {
@@ -470,7 +470,7 @@ mod tests {
             assert_eq!("Hello, Alice", String::from_utf8(alice_rec).unwrap());
         });
 
-        let bob = tokio::spawn(async move{
+        let bob = tokio::spawn(async move {
             let bob_writer = TcpStream::connect(alice_addr).await.unwrap();
             let (bob_reader, _) = bob_listener.accept().await.unwrap();
             let mut rng = StdRng::from_entropy();
