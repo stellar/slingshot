@@ -432,11 +432,28 @@ fn encode_u64le(i: u64) -> [u8; 8] {
     buf
 }
 
-// #[cfg(test)]
-// mod tests {
-//     use rand::thread_rng;
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rand::thread_rng;
+    use tokio::net::{TcpStream, TcpListener};
 
-//     let mut alice = Vec::<u8>::new(); // data sent by alice
-//     let mut bob = Vec::<u8>::new(); // data sent by bob
+    #[tokio::test]
+    async fn test() {
+        let private = PrivateKey {
+            secret: Scalar::from_bits([0u8; 32]),
+            pubkey: PublicKey { point: CompressedRistretto([0u8; 32]) }
+        };
+        let mut listener = TcpListener::bind("127.0.0.1:8080").await.unwrap();
 
-// }
+        let reader = TcpStream::connect("127.0.0.1:8080").await.unwrap();
+        let (mut writer, _) = listener.accept().await.unwrap();
+
+        let mut rng = thread_rng();
+        let (key, mut out, mut inc)  = cybershake(&private, reader, writer, 64, &mut rng).await.unwrap();
+        out.send_message(&[0u8; 32]).await.unwrap();
+
+        let res = inc.receive_message().await.unwrap();
+        assert_eq!(res, vec![0u8; 32]);
+    }
+}
