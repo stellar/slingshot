@@ -440,20 +440,32 @@ mod tests {
 
     #[tokio::test]
     async fn test() {
-        let private = PrivateKey {
-            secret: Scalar::from_bits([0u8; 32]),
-            pubkey: PublicKey { point: CompressedRistretto([0u8; 32]) }
-        };
-        let mut listener = TcpListener::bind("127.0.0.1:8080").await.unwrap();
+        let bob_private_key = PrivateKey::from(Scalar::from_bits([1u8; 32]));
+        let alice_private_key = PrivateKey::from(Scalar::from_bits([2u8; 32]));
+        let mut alice_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let mut bob_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
 
-        let reader = TcpStream::connect("127.0.0.1:8080").await.unwrap();
-        let (mut writer, _) = listener.accept().await.unwrap();
+        let alice_writer = TcpStream::connect(bob_listener.local_addr().unwrap()).await.unwrap();
+        let bob_writer = TcpStream::connect(alice_listener.local_addr().unwrap()).await.unwrap();
+        let (alice_reader, _) = alice_listener.accept().await.unwrap();
+        let (bob_reader, _) = bob_listener.accept().await.unwrap();
 
-        let mut rng = thread_rng();
-        let (key, mut out, mut inc)  = cybershake(&private, reader, writer, 64, &mut rng).await.unwrap();
-        out.send_message(&[0u8; 32]).await.unwrap();
+        let mut alice_rng = thread_rng();
+        let mut bob_rng = thread_rng();
 
-        let res = inc.receive_message().await.unwrap();
-        assert_eq!(res, vec![0u8; 32]);
+        let (_, mut bob_out, mut alice_inc)  = cybershake(&alice_private_key, alice_reader, bob_writer, 64, &mut alice_rng).await.unwrap();
+        let (_, mut alice_out, mut bob_inc)  = cybershake(&bob_private_key, bob_reader, alice_writer, 64, &mut bob_rng).await.unwrap();
+
+        let alice_message = "Hello, Bob";
+        let alice_message_bytes: Vec<u8> = alice_message.bytes().collect();
+        alice_out.send_message(&alice_message_bytes).await.unwrap();
+        let bob_rec = bob_inc.receive_message().await.unwrap();
+        assert_eq!(alice_message, String::from_utf8(bob_rec).unwrap());
+
+        let bob_message = "Hello, Alice";
+        let bob_message_bytes: Vec<u8> = bob_message.bytes().collect();
+        bob_out.send_message(&bob_message_bytes).await.unwrap();
+        let alice_rec = alice_inc.receive_message().await.unwrap();
+        assert_eq!(bob_message, String::from_utf8(alice_rec).unwrap());
     }
 }
