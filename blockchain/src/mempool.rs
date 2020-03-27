@@ -95,6 +95,8 @@ impl Mempool {
 
     /// Adds transaction to the mempool and verifies it.
     /// Returns the reference to the stored mempool entry.
+    /// TODO: when a duplicate is applied, ignore it and return its entry.
+    ///
     pub fn append(
         &mut self,
         block_tx: BlockTx,

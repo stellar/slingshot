@@ -109,6 +109,7 @@ fn test_p2p_protocol() {
         mailbox: Arc<Mutex<Mailbox>>,
     }
 
+    #[derive(Debug)]
     struct Mailbox {
         msgs: Vec<(PID, Message)>,
     }
@@ -120,6 +121,7 @@ fn test_p2p_protocol() {
         ) -> Vec<(PID, Result<(), BlockchainError>)> {
             let mut r = Vec::new();
             while let Some((pid, msg)) = self.msgs.pop() {
+                dbg!((pid, &msg));
                 let result = block_on(nodes[pid[0] as usize].process_message(pid, msg));
                 r.push((pid, result));
             }

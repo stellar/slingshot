@@ -37,7 +37,7 @@ pub struct BlockHeader {
 }
 
 /// Transaction annotated with Utreexo proofs.
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct BlockTx {
     /// ZkVM transaction.
     pub tx: Tx,

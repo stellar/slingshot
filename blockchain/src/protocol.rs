@@ -506,7 +506,7 @@ fn verify_block_signature(
 }
 
 /// Enumeration of all protocol messages
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum Message {
     GetInventory(GetInventory),
     Inventory(Inventory),
@@ -516,13 +516,13 @@ pub enum Message {
     MempoolTxs(MempoolTxs),
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct GetInventory {
     version: u64,
     shortid_nonce: u64,
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Inventory {
     version: u64,
     tip: BlockHeader,
@@ -531,25 +531,25 @@ pub struct Inventory {
     shortid_list: Vec<u8>,
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct GetBlock {
     height: u64,
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Block {
     pub(crate) header: BlockHeader,
     pub(crate) signature: Signature,
     pub(crate) txs: Vec<BlockTx>,
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct GetMempoolTxs {
     shortid_nonce: u64,
     shortid_list: Vec<u8>,
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct MempoolTxs {
     tip: BlockID,
     txs: Vec<BlockTx>,
