@@ -46,7 +46,10 @@ use merlin::Transcript; // TODO: change for raw Strobe.
 use tokio::io;
 use tokio::prelude::*;
 
+use futures::task::{Context, Poll};
 use serde::{Deserialize, Serialize};
+use std::io::{Read, Write};
+use std::pin::Pin;
 
 /// The current version of the protocol is 0.
 /// In the future we may add more versions, version bits or whatever.
@@ -68,19 +71,19 @@ pub struct PublicKey {
 /// An endpoint for sending messages to remote party.
 /// All messages are ordered and encryption key is ratcheted after each sent message.
 pub struct Outgoing<W: io::AsyncWrite + Unpin> {
-    writer: W,
+    writer: Pin<Box<W>>,
     seq: u64,
     kdf: Transcript,
+    buffer: Vec<u8>,
 }
 
 /// An endpoint for receiving messages from a remote party.
 /// All messages are ordered and encryption key is ratcheted after each received message.
 /// Recipient's incoming.seq corresponds to the sender's outgoing.seq.
 pub struct Incoming<R: io::AsyncRead + Unpin> {
-    reader: R,
+    reader: Pin<Box<R>>,
     seq: u64,
     kdf: Transcript,
-    message_maxlen: usize,
 }
 
 /// Kinds of failures that may happen during the handshake.
@@ -108,7 +111,6 @@ pub async fn cybershake<R, W, RNG>(
     local_identity: &PrivateKey,
     mut reader: R,
     mut writer: W,
-    message_maxlen: usize,
     rng: &mut RNG,
 ) -> Result<(PublicKey, Outgoing<W>, Incoming<R>), Error>
 where
@@ -172,15 +174,15 @@ where
     // Now we prepare endpoints for reading and writing messages,
     // but don't give them to the user until we authenticate the connection.
     let mut outgoing = Outgoing {
-        writer,
+        writer: Box::pin(writer),
         seq: 0,
         kdf: kdf_outgoing,
+        buffer: Vec::with_capacity(4096),
     };
     let mut incoming = Incoming {
-        reader,
+        reader: Box::pin(reader),
         seq: 0,
         kdf: kdf_incoming,
-        message_maxlen,
     };
 
     // In order to authenticate the session, we send our first encrypted message
@@ -235,7 +237,7 @@ impl<W: AsyncWrite + Unpin> Outgoing<W> {
 
         // Write the length prefix and the ciphertext.
         self.writer
-            .write(&encode_u64le(ciphertext.len() as u64)[..])
+            .write(&encode_u16le(ciphertext.len() as u16)[..])
             .await?;
         self.writer.write(&ciphertext[..]).await?;
         self.writer.flush().await?;
@@ -243,23 +245,97 @@ impl<W: AsyncWrite + Unpin> Outgoing<W> {
     }
 }
 
+impl<W: AsyncWrite + Unpin> Outgoing<W> {
+    pub fn flush_buffer(&mut self, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        self.kdf.append_u64(b"seq", self.seq);
+        let mut key = [0u8; 32];
+        self.kdf.challenge_bytes(b"key", &mut key);
+
+        let ad = encode_u64le(self.seq);
+
+        let ciphertext = Aes128PmacSiv::new(GenericArray::clone_from_slice(&key))
+            .encrypt(&[&ad], &self.buffer)
+            .map_err(|_| unimplemented!())
+            .unwrap();
+
+        self.seq += 1;
+
+        match self
+            .writer
+            .as_mut()
+            .poll_write(cx, &encode_u16le(ciphertext.len() as u16)[..])
+        {
+            Poll::Ready(Err(e)) => return Poll::Ready(Err(e)),
+            Poll::Pending => return Poll::Pending,
+            Poll::Ready(Ok(_)) => {}
+        }
+
+        match self.writer.as_mut().poll_write(cx, &ciphertext) {
+            Poll::Ready(Ok(n)) => {} // TODO: what doing if n < buffer length?
+            Poll::Ready(Err(err)) => return Poll::Ready(Err(err)),
+            Poll::Pending => return Poll::Pending,
+        }
+        self.buffer.clear();
+        Poll::Ready(Ok(()))
+    }
+
+    fn flush_write(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
+        match self.flush_buffer(cx) {
+            Poll::Pending => Poll::Pending,
+            Poll::Ready(Ok(())) => self.writer.as_mut().poll_flush(cx),
+            Poll::Ready(Err(e)) => Poll::Ready(Err(e)),
+        }
+    }
+}
+
+impl<W: AsyncWrite + Unpin> AsyncWrite for Outgoing<W> {
+    fn poll_write(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &[u8],
+    ) -> Poll<Result<usize, io::Error>> {
+        let mut me = self.get_mut();
+
+        if me.buffer.len() + buf.len() > 4096 {
+            let size_to_write = me.buffer.len() + buf.len() - 4096;
+            Write::write(&mut me.buffer, &buf[..size_to_write]);
+            me.flush_write(cx);
+            Write::write(&mut me.buffer, &buf[size_to_write..]);
+        } else {
+            Write::write(&mut me.buffer, buf);
+        }
+        Poll::Ready(Ok(buf.len()))
+    }
+
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
+        self.get_mut().flush_write(cx)
+    }
+
+    fn poll_shutdown(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Result<(), io::Error>> {
+        match self.as_mut().flush_buffer(cx) {
+            Poll::Pending => Poll::Pending,
+            Poll::Ready(Ok(())) => self.writer.as_mut().poll_shutdown(cx),
+            Poll::Ready(Err(e)) => Poll::Ready(Err(e)),
+        }
+    }
+}
+
 impl<W: AsyncRead + Unpin> Incoming<W> {
     pub async fn receive_message(&mut self) -> Result<Vec<u8>, Error> {
-        let mut lenbuf = [0u8; 8];
+        let mut lenbuf = [0u8; 2];
         let seq = self.seq;
         self.seq += 1;
         self.reader.read_exact(&mut lenbuf[..]).await?;
-        let len = LittleEndian::read_u64(&lenbuf) as usize;
+        let len = LittleEndian::read_u16(&lenbuf) as usize;
 
         // length must include IV prefix (16 bytes)
         if len < 16 {
             return Err(Error::ProtocolError);
         }
         // Check the message length and fail before changing any of the remaining state.
-        if (len - 16) > self.message_maxlen {
-            return Err(Error::MessageTooLong(len - 16));
-        }
-
         let mut ciphertext = Vec::with_capacity(len);
         ciphertext.resize(len, 0u8);
         self.reader.read_exact(&mut ciphertext[..]).await?;
@@ -279,12 +355,70 @@ impl<W: AsyncRead + Unpin> Incoming<W> {
 
     /// Converts to the Stream
     pub fn into_stream(self) -> impl futures::stream::Stream<Item = Result<Vec<u8>, Error>> {
-        futures::stream::unfold(self, |mut src| {
-            async move {
-                let res = src.receive_message().await;
-                Some((res, src))
-            }
+        futures::stream::unfold(self, |mut src| async move {
+            let res = src.receive_message().await;
+            Some((res, src))
         })
+    }
+}
+
+impl<W: AsyncRead + Unpin> AsyncRead for Incoming<W> {
+    fn poll_read(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut [u8],
+    ) -> Poll<Result<usize, io::Error>> {
+        let me = self.get_mut();
+
+        let mut lenbuf = [0u8; 2];
+        match me.reader.as_mut().poll_read(cx, &mut lenbuf[..]) {
+            Poll::Ready(Ok(0)) => {
+                return Poll::Ready(Err(io::Error::new(io::ErrorKind::WriteZero, "")))
+            }
+            Poll::Ready(Ok(n)) => assert_eq!(n, 2), // TODO: what doing if n < message length?
+            Poll::Ready(Err(e)) => return Poll::Ready(Err(e)),
+            Poll::Pending => return Poll::Pending,
+        }
+        let seq = me.seq;
+        me.seq += 1;
+        let len = LittleEndian::read_u16(&lenbuf) as usize;
+
+        // length must include IV prefix (16 bytes)
+        if len < 16 {
+            dbg!(len);
+            return Poll::Ready(Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "protocol error",
+            )));
+        }
+
+        let mut ciphertext = Vec::with_capacity(len);
+        ciphertext.resize(len, 0u8);
+        match me.reader.as_mut().poll_read(cx, &mut ciphertext[..]) {
+            Poll::Ready(Ok(n)) => assert_eq!(n, len), // TODO: what doing if n < message length?
+            Poll::Ready(Err(e)) => return Poll::Ready(Err(e)),
+            Poll::Pending => unimplemented!(),
+        }
+
+        me.kdf.append_u64(b"seq", seq);
+        let mut key = [0u8; 32];
+        me.kdf.challenge_bytes(b"key", &mut key);
+
+        let ad = encode_u64le(seq);
+
+        let mut plaintext = match Aes128PmacSiv::new(GenericArray::clone_from_slice(&key))
+            .decrypt(&[&ad], &ciphertext)
+        {
+            Ok(text) => text,
+            Err(_) => {
+                return Poll::Ready(Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "protocol error",
+                )))
+            }
+        };
+
+        Poll::Ready(Read::read(&mut &plaintext[..], &mut buf[..]))
     }
 }
 
@@ -432,6 +566,12 @@ fn encode_u64le(i: u64) -> [u8; 8] {
     buf
 }
 
+fn encode_u16le(i: u16) -> [u8; 2] {
+    let mut buf = [0u8; 2];
+    LittleEndian::write_u16(&mut buf, i);
+    buf
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -455,7 +595,7 @@ mod tests {
             let alice_writer = TcpStream::connect(bob_addr).await.unwrap();
             let mut rng = StdRng::from_entropy();
             let (received_key, mut alice_out, mut alice_inc) =
-                cybershake(&alice_private_key, alice_reader, alice_writer, 64, &mut rng)
+                cybershake(&alice_private_key, alice_reader, alice_writer, &mut rng)
                     .await
                     .unwrap();
 
@@ -475,7 +615,7 @@ mod tests {
             let (bob_reader, _) = bob_listener.accept().await.unwrap();
             let mut rng = StdRng::from_entropy();
             let (received_key, mut bob_out, mut bob_inc) =
-                cybershake(&bob_private_key, bob_reader, bob_writer, 64, &mut rng)
+                cybershake(&bob_private_key, bob_reader, bob_writer, &mut rng)
                     .await
                     .unwrap();
 
@@ -488,6 +628,66 @@ mod tests {
             // Then bob send message to Alice
             let bob_message: Vec<u8> = "Hello, Alice".bytes().collect();
             bob_out.send_message(&bob_message).await.unwrap();
+        });
+
+        assert!(alice.await.is_ok());
+        assert!(bob.await.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test2() {
+        let alice_private_key = PrivateKey::from(Scalar::from(1u8));
+        let bob_private_key = PrivateKey::from(Scalar::from(2u8));
+
+        let mut alice_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let mut bob_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let alice_addr = alice_listener.local_addr().unwrap();
+        let bob_addr = bob_listener.local_addr().unwrap();
+
+        let alice = tokio::spawn(async move {
+            let (alice_reader, _) = alice_listener.accept().await.unwrap();
+            let alice_writer = TcpStream::connect(bob_addr).await.unwrap();
+            let mut rng = StdRng::from_entropy();
+            let (received_key, mut alice_out, mut alice_inc) =
+                cybershake(&alice_private_key, alice_reader, alice_writer, &mut rng)
+                    .await
+                    .unwrap();
+
+            assert_eq!(received_key, bob_private_key.to_public_key());
+
+            // Alice send message to bob
+            let alice_message: Vec<u8> = "Hello, Bob".bytes().collect();
+            alice_out.write(&alice_message).await.unwrap();
+            alice_out.flush().await.unwrap();
+
+            // Then Alice receive message from bob
+            let mut buf = vec![0u8; 4096];
+            let message_len = alice_inc.read(&mut buf).await.unwrap();
+            buf.truncate(message_len);
+            assert_eq!("Hello, Alice", String::from_utf8(buf).unwrap());
+        });
+
+        let bob = tokio::spawn(async move {
+            let bob_writer = TcpStream::connect(alice_addr).await.unwrap();
+            let (bob_reader, _) = bob_listener.accept().await.unwrap();
+            let mut rng = StdRng::from_entropy();
+            let (received_key, mut bob_out, mut bob_inc) =
+                cybershake(&bob_private_key, bob_reader, bob_writer, &mut rng)
+                    .await
+                    .unwrap();
+
+            assert_eq!(received_key, alice_private_key.to_public_key());
+
+            // Bob receive message from Alice
+            let mut buf = vec![0u8; 4096];
+            let message_len = bob_inc.read(&mut buf).await.unwrap();
+            buf.truncate(message_len);
+            assert_eq!("Hello, Bob", String::from_utf8(buf).unwrap());
+
+            // Then bob send message to Alice
+            let bob_message: Vec<u8> = "Hello, Alice".bytes().collect();
+            bob_out.write(&bob_message).await.unwrap();
+            bob_out.flush().await.unwrap();
         });
 
         assert!(alice.await.is_ok());

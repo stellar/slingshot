@@ -88,7 +88,7 @@ impl PeerLink {
         let w = io::BufWriter::new(w);
 
         let (id_pubkey, mut outgoing, incoming) =
-            cybershake::cybershake(host_identity, r, w, 1000_000, rng).await?;
+            cybershake::cybershake(host_identity, r, w, rng).await?;
 
         let id = PeerID(id_pubkey);
         let retid = id.clone();
