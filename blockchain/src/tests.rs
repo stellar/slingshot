@@ -9,15 +9,15 @@ use zkvm::{
     Prover, Signature, String, TxHeader, Value, VerificationKey, VerifiedTx,
 };
 
-fn make_predicate(privkey: u64) -> Predicate {
-    Predicate::Key(VerificationKey::from_secret(&Scalar::from(privkey)))
+fn make_predicate(privkey: impl Into<Scalar>) -> Predicate {
+    Predicate::Key(VerificationKey::from_secret(&privkey.into()))
 }
 
 fn nonce_flavor() -> Scalar {
     Value::issue_flavor(&make_predicate(0u64), String::default())
 }
 
-fn make_nonce_contract(privkey: u64, qty: u64) -> Contract {
+fn make_nonce_contract(privkey: impl Into<Scalar>, qty: u64) -> Contract {
     let mut anchor_bytes = [0u8; 32];
     rand::thread_rng().fill_bytes(&mut anchor_bytes);
 
@@ -30,20 +30,24 @@ fn make_nonce_contract(privkey: u64, qty: u64) -> Contract {
         anchor: Anchor::from_raw_bytes(anchor_bytes),
     }
 }
+#[derive(Clone, Debug)]
+struct UTXO {
+    pub contract: Contract,
+    pub proof: utreexo::Proof,
+    pub privkey: Scalar,
+}
 
-#[test]
-fn test_state_machine() {
-    let bp_gens = BulletproofGens::new(256, 1);
-    let privkey = Scalar::from(1u64);
-    let initial_contract = make_nonce_contract(1, 100);
-    let (state, proofs) = BlockchainState::make_initial(0u64, vec![initial_contract.id()]);
-
+/// Makes a tx that simply moves funds from one utxo to another.
+fn dummy_tx(utxo: UTXO, bp_gens: &BulletproofGens) -> (BlockTx, UTXO) {
+    let privkey = utxo.privkey;
+    let utreexo_proof = utxo.proof;
+    let contract = utxo.contract;
     let tx = {
         let program = Program::build(|p| {
-            p.push(initial_contract.clone())
+            p.push(contract)
                 .input()
                 .signtx()
-                .push(make_predicate(2u64))
+                .push(make_predicate(privkey))
                 .output(1);
         });
         let header = TxHeader {
@@ -68,8 +72,38 @@ fn test_state_machine() {
 
     let block_tx = BlockTx {
         tx: tx.clone(),
-        proofs: proofs.clone(),
+        proofs: vec![utreexo_proof],
     };
+
+    let utxo = UTXO {
+        contract: tx
+            .precompute()
+            .unwrap()
+            .log
+            .outputs()
+            .next()
+            .unwrap()
+            .clone(),
+        proof: utreexo::Proof::Transient,
+        privkey: privkey,
+    };
+
+    (block_tx, utxo)
+}
+
+#[test]
+fn test_state_machine() {
+    let bp_gens = BulletproofGens::new(256, 1);
+    let privkey = Scalar::from(1u64);
+    let initial_contract = make_nonce_contract(1u64, 100);
+    let (state, proofs) = BlockchainState::make_initial(0u64, vec![initial_contract.id()]);
+
+    let utxo = UTXO {
+        contract: initial_contract.clone(),
+        proof: proofs[0].clone(),
+        privkey,
+    };
+    let block_tx = dummy_tx(utxo, &bp_gens).0;
 
     let mut mempool = Mempool::new(state.clone(), 42);
 
@@ -111,7 +145,7 @@ fn test_p2p_protocol() {
 
     #[derive(Debug)]
     struct Mailbox {
-        msgs: Vec<(PID, Message)>,
+        msgs: Vec<(PID, PID, Message)>, // from, to, message
     }
 
     impl Mailbox {
@@ -120,10 +154,10 @@ fn test_p2p_protocol() {
             nodes: &mut [&mut Node<MockNode>],
         ) -> Vec<(PID, Result<(), BlockchainError>)> {
             let mut r = Vec::new();
-            while let Some((pid, msg)) = self.msgs.pop() {
-                dbg!((pid, &msg));
-                let result = block_on(nodes[pid[0] as usize].process_message(pid, msg));
-                r.push((pid, result));
+            while let Some((pid_from, pid_to, msg)) = self.msgs.pop() {
+                //dbg!((pid_from, pid_to, &msg));
+                let result = block_on(nodes[pid_to[0] as usize].process_message(pid_from, msg));
+                r.push((pid_to, result));
             }
             r
         }
@@ -139,8 +173,12 @@ fn test_p2p_protocol() {
         }
 
         /// Send a message to a given peer.
-        async fn send(&mut self, peer: Self::PeerIdentifier, message: Message) {
-            self.mailbox.lock().unwrap().msgs.push((peer, message));
+        async fn send(&mut self, pid_to: Self::PeerIdentifier, message: Message) {
+            self.mailbox
+                .lock()
+                .unwrap()
+                .msgs
+                .push((self.id, pid_to, message));
         }
 
         /// Returns the signed tip of the blockchain
@@ -180,9 +218,15 @@ fn test_p2p_protocol() {
     let network_pubkey = VerificationKey::from_secret(&network_signing_key);
 
     let wallet_privkey = Scalar::from(1u64);
-    let initial_contract = make_nonce_contract(1, 100);
+    let initial_contract = make_nonce_contract(1u64, 100);
     let (state, block_sig, proofs) =
         Node::<MockNode>::new_network(network_signing_key, 0, vec![initial_contract.id()]);
+
+    let utxo0 = UTXO {
+        contract: initial_contract.clone(),
+        proof: proofs[0].clone(),
+        privkey: wallet_privkey,
+    };
 
     let mailbox = Arc::new(Mutex::new(Mailbox { msgs: Vec::new() }));
 
@@ -200,9 +244,9 @@ fn test_p2p_protocol() {
         .map(|mock| Node::new(network_pubkey, mock));
 
     // Now all the nodes have the same state and can make transactions.
-    let mut node0 = nodes.next().unwrap();
-    let mut node1 = nodes.next().unwrap();
-    let mut node2 = nodes.next().unwrap();
+    let mut node0 = nodes.next().unwrap().set_inventory_interval(0);
+    let mut node1 = nodes.next().unwrap().set_inventory_interval(0);
+    let mut node2 = nodes.next().unwrap().set_inventory_interval(0);
 
     // connect all the peers to each other
     block_on(node0.peer_connected(node1.id()));
@@ -218,5 +262,38 @@ fn test_p2p_protocol() {
         .lock()
         .unwrap()
         .process(&mut [&mut node0, &mut node1, &mut node2]);
-    assert!(results.into_iter().all(|(pid, r)| r.is_ok()));
+    assert!(results.into_iter().all(|(_pid, r)| r.is_ok()));
+
+    block_on(node0.synchronize());
+    block_on(node1.synchronize());
+    block_on(node2.synchronize());
+
+    let results = mailbox
+        .lock()
+        .unwrap()
+        .process(&mut [&mut node0, &mut node1, &mut node2]);
+    assert!(results.into_iter().all(|(_pid, r)| r.is_ok()));
+
+    let (tx1, utxo1) = dummy_tx(utxo0, &bp_gens);
+
+    node0.submit_tx(tx1).unwrap();
+
+    // send out requests for inventory
+    block_on(node1.synchronize());
+    block_on(node2.synchronize());
+
+    let results = mailbox
+        .lock()
+        .unwrap()
+        .process(&mut [&mut node0, &mut node1, &mut node2]);
+    assert!(results.into_iter().all(|(_pid, r)| r.is_ok()));
+
+    // send back the inventory
+    block_on(node0.synchronize());
+
+    let results = mailbox
+        .lock()
+        .unwrap()
+        .process(&mut [&mut node0, &mut node1, &mut node2]);
+    assert!(results.into_iter().all(|(_pid, r)| r.is_ok()));
 }

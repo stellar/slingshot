@@ -95,8 +95,9 @@ impl Mempool {
 
     /// Adds transaction to the mempool and verifies it.
     /// Returns the reference to the stored mempool entry.
-    /// TODO: when a duplicate is applied, ignore it and return its entry.
-    ///
+    /// If a duplicate is detected (by TxID), no changes are made and the corresponding entry
+    /// is returned to the caller.
+    /// FIXME: If tx is double-spending, detect it before doing the expensive r1cs validation.
     pub fn append(
         &mut self,
         block_tx: BlockTx,
@@ -111,6 +112,15 @@ impl Mempool {
 
         // 2. Verify the tx
         let verified_tx = block_tx.tx.verify(bp_gens)?;
+
+        // TODO: use a faster way to index existing transactions and do this check before expensive r1cs verification.
+        if let Some(existing_entry_index) = self
+            .entries
+            .iter()
+            .position(|entry| entry.verified_tx.id == verified_tx.id)
+        {
+            return Ok(&self.entries[existing_entry_index]);
+        }
 
         // 3. Apply to the state
         self.apply_tx(&verified_tx.log, &block_tx.proofs, None)?;

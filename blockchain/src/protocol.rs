@@ -76,6 +76,7 @@ pub struct Node<D: Delegate> {
     shortid_nonce_ttl: usize,
     mempool: Mempool,
     bp_gens: BulletproofGens,
+    inventory_interval_secs: u64,
 }
 
 impl<D: Delegate> Node<D> {
@@ -92,7 +93,15 @@ impl<D: Delegate> Node<D> {
             peers: HashMap::new(),
             shortid_nonce: thread_rng().gen::<u64>(),
             shortid_nonce_ttl: SHORTID_NONCE_TTL,
+            inventory_interval_secs: 60,
         }
+    }
+
+    /// Sets the interval (in seconds) to request inventory from the peers.
+    /// If set to zero, the inventory is requested on every invocation of `synchronize`.
+    pub fn set_inventory_interval(mut self, secs: u64) -> Self {
+        self.inventory_interval_secs = secs;
+        self
     }
 
     /// Creates a new network.
@@ -157,12 +166,12 @@ impl<D: Delegate> Node<D> {
 
         // For peers who have not sent inventory for over a minute, we request inventory again.
         let now = Instant::now();
-        let interval_secs = 60;
+        let interval_secs = self.inventory_interval_secs;
         let invpids: Vec<_> = self
             .peers
             .iter()
             .filter(|(_, peer)| {
-                now.duration_since(peer.last_inventory_received).as_secs() > interval_secs
+                now.duration_since(peer.last_inventory_received).as_secs() >= interval_secs
             })
             .map(|(pid, _)| pid.clone())
             .collect();
@@ -191,6 +200,12 @@ impl<D: Delegate> Node<D> {
     /// Called when a peer disconnects.
     pub async fn peer_diconnected(&mut self, pid: D::PeerIdentifier) {
         self.peers.remove(&pid);
+    }
+
+    /// Adds transaction to the mempool.
+    pub fn submit_tx(&mut self, tx: BlockTx) -> Result<(), BlockchainError> {
+        let _ = self.mempool.append(tx, &self.bp_gens)?;
+        Ok(())
     }
 
     /// Creates and signs block, and updates the state.
@@ -442,10 +457,10 @@ impl<D: Delegate> Node<D> {
             let result = self.mempool.append(tx, &self.bp_gens);
             if let Err(err) = result {
                 if let BlockchainError::UtreexoError(_) = err {
-                    // ignore tx and process the rest
-                    // FIXME: we need specifically a "duplicate tx" error so we reject tx w/o banning a node.
+                    // Two nodes may have sent us double-spends, w/o being aware of them.
+                    // that's not their fault.
                 } else {
-                    // stop processing all remaining txs - the node is sending us garbage.
+                    // Stop processing all remaining txs - the node is sending us garbage.
                     return Err(err);
                 }
             }
