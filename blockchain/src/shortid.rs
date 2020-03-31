@@ -8,18 +8,24 @@
 //! Based on [BIP-152](https://github.com/bitcoin/bips/blob/master/bip-0152.mediawiki).
 
 use core::hash::Hasher;
+use core::ops::Index;
 use serde::{Deserialize, Serialize};
 use siphasher::sip::SipHasher;
+use std::fmt;
 
 /// Length of the short ID in bytes.
 pub const SHORTID_LEN: usize = 6;
 
 /// Short ID definition
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct ShortID {
     inner: u64, // guaranteed to have zeroed high 16 bits
 }
+
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct ShortIDVec(pub Vec<u8>);
 
 /// Hasher that produces `ID`s
 #[derive(Copy, Clone, Debug)]
@@ -81,6 +87,28 @@ impl ShortID {
     }
 }
 
+impl ShortIDVec {
+    /// Iterates the short ids in the buffer.
+    pub fn iter<'a>(&'a self) -> impl Iterator<Item = ShortID> + 'a {
+        ShortID::scan(&self.0)
+    }
+
+    /// Number of short ids in the list.
+    pub fn len(&self) -> usize {
+        self.0.len() / SHORTID_LEN
+    }
+
+    /// Clears the list without changing its capacity.
+    pub fn clear(&mut self) {
+        self.0.clear()
+    }
+
+    /// Reads a short id at a given index.
+    pub fn get(&self, offset: usize) -> Option<ShortID> {
+        ShortID::at_position(offset, &self.0)
+    }
+}
+
 impl Transform {
     /// Creates a new Short ID hasher from a nonce and a context string.
     pub fn new(nonce: u64, context: &[u8]) -> Self {
@@ -104,6 +132,18 @@ fn read_le64(slice: &[u8]) -> u64 {
         .iter()
         .enumerate()
         .fold(0u64, |r, (i, b)| r + ((*b as u64) << (i * 8)))
+}
+
+impl fmt::Debug for ShortID {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:x?}", self.inner)
+    }
+}
+
+impl fmt::Debug for ShortIDVec {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        ShortID::scan(&self.0).collect::<Vec<_>>().fmt(f)
+    }
 }
 
 #[cfg(test)]

@@ -130,11 +130,24 @@ fn test_p2p_protocol() {
     use super::protocol::*;
     use async_trait::async_trait;
     use futures_executor::block_on;
-    use starsig::{Signature, SigningKey, VerificationKey};
-    use std::cell::RefCell;
+    use starsig::{Signature, VerificationKey};
+    use std::fmt;
     use std::sync::{Arc, Mutex};
 
-    type PID = [u8; 1];
+    #[derive(Copy, Clone, Eq, PartialEq, Hash)]
+    struct PID(u8);
+
+    impl fmt::Debug for PID {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            write!(f, "Peer#{}", self.0)
+        }
+    }
+
+    impl AsRef<[u8]> for PID {
+        fn as_ref(&self) -> &[u8] {
+            core::slice::from_ref(&self.0)
+        }
+    }
 
     struct MockNode {
         id: PID,
@@ -156,7 +169,7 @@ fn test_p2p_protocol() {
             let mut r = Vec::new();
             while let Some((pid_from, pid_to, msg)) = self.msgs.pop() {
                 //dbg!((pid_from, pid_to, &msg));
-                let result = block_on(nodes[pid_to[0] as usize].process_message(pid_from, msg));
+                let result = block_on(nodes[pid_to.0 as usize].process_message(pid_from, msg));
                 r.push((pid_to, result));
             }
             r
@@ -232,7 +245,7 @@ fn test_p2p_protocol() {
 
     let mut nodes = (0..3)
         .map(|pid| MockNode {
-            id: [pid],
+            id: PID(pid),
             state: state.clone(),
             blocks: vec![Block {
                 header: state.tip.clone(),
@@ -296,4 +309,9 @@ fn test_p2p_protocol() {
         .unwrap()
         .process(&mut [&mut node0, &mut node1, &mut node2]);
     assert!(results.into_iter().all(|(_pid, r)| r.is_ok()));
+
+    block_on(node1.synchronize());
+    block_on(node2.synchronize());
+
+    dbg!(&mailbox);
 }

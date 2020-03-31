@@ -19,7 +19,7 @@ use zkvm::{ContractID, VerifiedTx};
 use super::block::{BlockHeader, BlockID, BlockTx};
 use super::errors::BlockchainError;
 use super::mempool::Mempool;
-use super::shortid::{self, ShortID};
+use super::shortid::{self, ShortID, ShortIDVec};
 use super::state::BlockchainState;
 use super::utreexo;
 
@@ -189,7 +189,7 @@ impl<D: Delegate> Node<D> {
                 needs_our_inventory: false,
                 their_short_id_nonce: 0,
                 shortid_nonce: self.shortid_nonce,
-                shortid_list: Vec::new(),
+                shortid_list: ShortIDVec(Vec::new()),
                 last_inventory_received: Instant::now(),
             },
         );
@@ -297,16 +297,18 @@ impl<D: Delegate> Node<D> {
         for offset in 0..1_000_000 {
             let mut done = true;
             for (pid, peer) in self.peers.iter_mut() {
-                if let Some(id) = ShortID::at_position(offset, &peer.shortid_list) {
+                if let Some(id) = peer.shortid_list.get(offset) {
                     done = false;
                     if assigned_shortids.insert(id) {
                         let req = requests
                             .entry(pid.clone())
                             .or_insert_with(|| GetMempoolTxs {
                                 shortid_nonce: current_nonce,
-                                shortid_list: Vec::with_capacity(10 * shortid::SHORTID_LEN),
+                                shortid_list: ShortIDVec(Vec::with_capacity(
+                                    10 * shortid::SHORTID_LEN,
+                                )),
                             });
-                        req.shortid_list.extend_from_slice(&id.to_bytes()[..]);
+                        req.shortid_list.0.extend_from_slice(&id.to_bytes()[..]);
                     }
                 }
             }
@@ -430,12 +432,11 @@ impl<D: Delegate> Node<D> {
         use core::iter::FromIterator;
 
         let shortener = shortid::Transform::new(request.shortid_nonce, pid.as_ref());
-        let requested_shortids =
-            HashSet::<_, RandomState>::from_iter(ShortID::scan(&request.shortid_list));
+        let requested_shortids = HashSet::<_, RandomState>::from_iter(request.shortid_list.iter());
 
         let mut response = MempoolTxs {
             tip: self.delegate.tip_id(),
-            txs: Vec::with_capacity(request.shortid_list.len() / shortid::SHORTID_LEN),
+            txs: Vec::with_capacity(request.shortid_list.len()),
         };
 
         for entry in self.mempool.entries() {
@@ -482,14 +483,14 @@ impl<D: Delegate> Node<D> {
         }
     }
 
-    fn mempool_inventory_for_peer(&self, pid: D::PeerIdentifier, nonce: u64) -> Vec<u8> {
+    fn mempool_inventory_for_peer(&self, pid: D::PeerIdentifier, nonce: u64) -> ShortIDVec {
         let mut result = Vec::with_capacity(self.mempool.len() * shortid::SHORTID_LEN);
         let shortener = shortid::Transform::new(nonce, &pid.as_ref());
         for entry in self.mempool.entries() {
             let shortid = shortener.apply(&entry.txid());
             result.extend_from_slice(&shortid.to_bytes()[..]);
         }
-        result
+        ShortIDVec(result)
     }
 }
 
@@ -499,7 +500,7 @@ struct PeerInfo {
     needs_our_inventory: bool,
     their_short_id_nonce: u64,
     shortid_nonce: u64,
-    shortid_list: Vec<u8>,
+    shortid_list: ShortIDVec,
     last_inventory_received: Instant,
 }
 
@@ -543,7 +544,7 @@ pub struct Inventory {
     tip: BlockHeader,
     tip_signature: Signature,
     shortid_nonce: u64,
-    shortid_list: Vec<u8>,
+    shortid_list: ShortIDVec,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -561,7 +562,7 @@ pub struct Block {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct GetMempoolTxs {
     shortid_nonce: u64,
-    shortid_list: Vec<u8>,
+    shortid_list: ShortIDVec,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

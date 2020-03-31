@@ -1,17 +1,18 @@
 use merlin::Transcript;
 use serde::{Deserialize, Serialize};
+use std::fmt;
 use zkvm::encoding;
 use zkvm::{Encodable, Hash, MerkleItem, MerkleTree, Tx};
 
 use super::utreexo::{self, Proof};
 
 /// Identifier of the block, computed as a hash of the `BlockHeader`.
-#[derive(Clone, Copy, PartialEq, Default, Debug)]
+#[derive(Clone, Copy, PartialEq, Default)]
 pub struct BlockID(pub [u8; 32]);
 serialize_bytes32!(BlockID);
 
 /// Witness hash of the transaction that commits to all signatures and proofs.
-#[derive(Clone, Copy, PartialEq, Default, Debug)]
+#[derive(Clone, Copy, PartialEq, Default)]
 pub struct WitnessHash(pub [u8; 32]);
 serialize_bytes32!(WitnessHash);
 
@@ -146,5 +147,21 @@ impl core::ops::Deref for BlockID {
     type Target = [u8];
     fn deref(&self) -> &Self::Target {
         &self.0
+    }
+}
+
+impl fmt::Debug for BlockID {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "BlockID({})", hex::encode(&self.0))
+        // Without hex crate we'd do this, but it outputs comma-separated numbers: [aa, 11, 5a, ...]
+        // write!(f, "{:x?}", &self.0)
+    }
+}
+
+impl fmt::Debug for WitnessHash {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "WitnessHash({})", hex::encode(&self.0))
+        // Without hex crate we'd do this, but it outputs comma-separated numbers: [aa, 11, 5a, ...]
+        // write!(f, "{:x?}", &self.0)
     }
 }
