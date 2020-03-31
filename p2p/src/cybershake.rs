@@ -54,7 +54,8 @@ use std::pin::Pin;
 /// The current version of the protocol is 0.
 /// In the future we may add more versions, version bits or whatever.
 const ONLY_SUPPORTED_VERSION: u64 = 0;
-const BUF_SIZE: u16 = 4096;
+const PLAINTEXT_BUF_SIZE: u16 = 4096;
+const CIPHERTEXT_BUF_SIZE: u16 = PLAINTEXT_BUF_SIZE + 16; // 16 - auth tag
 
 /// Private key for encrypting and authenticating connection.
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
@@ -187,8 +188,8 @@ where
         writer: Box::pin(writer),
         seq: 0,
         kdf: kdf_outgoing,
-        plaintext_buf: Vec::with_capacity(BUF_SIZE as usize),
-        ciphertext_buf: Vec::with_capacity(BUF_SIZE as usize + 2), // 2 - length of buffer
+        plaintext_buf: Vec::with_capacity(PLAINTEXT_BUF_SIZE as usize),
+        ciphertext_buf: Vec::with_capacity(CIPHERTEXT_BUF_SIZE as usize + 2), // 2 - length of buffer
         plaintext_needs_flushing: false,
         ciphertext_sent: 0,
     };
@@ -196,8 +197,8 @@ where
         reader: Box::pin(reader),
         seq: 0,
         kdf: kdf_incoming,
-        ciphertext_buf: vec![0u8; BUF_SIZE as usize],
-        plaintext_buf: vec![0u8; BUF_SIZE as usize], // TODO: allow user redefine this parameter
+        ciphertext_buf: vec![0u8; CIPHERTEXT_BUF_SIZE as usize],
+        plaintext_buf: vec![0u8; PLAINTEXT_BUF_SIZE as usize], // TODO: allow user redefine this parameter
         plaintext_read: 0,
         need_to_get: 0,
         ciphertext_read: 0,
@@ -241,13 +242,16 @@ where
 
 impl<W: AsyncWrite + Unpin> Outgoing<W> {
     pub async fn send_message(&mut self, msg: &[u8]) -> Result<(), Error> {
-        match self.write(msg).await {
-            Ok(_) => {}
-            Err(e) => match e.kind() {
-                io::ErrorKind::InvalidData => return Err(Error::ProtocolError),
-                _ => return Err(Error::IoError(e))
-            }
-        };
+        let mut written = 0;
+        while written != msg.len() {
+            match self.write(&msg[written..]).await {
+                Ok(n) => written += n,
+                Err(e) => match e.kind() {
+                    io::ErrorKind::InvalidData => return Err(Error::ProtocolError),
+                    _ => return Err(Error::IoError(e))
+                }
+            };
+        }
         self.flush().await.map_err(|e| Error::IoError(e))?;
         Ok(())
     }
@@ -279,27 +283,27 @@ impl<W: AsyncWrite + Unpin> Outgoing<W> {
     }
 
     pub fn flush_write(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
-        match self
-            .writer
-            .as_mut()
-            .poll_write(cx, &self.ciphertext_buf[self.ciphertext_sent..])
-        {
-            Poll::Pending => return Poll::Pending,
-            Poll::Ready(Ok(n)) => {
-                self.ciphertext_sent += n;
-                if self.ciphertext_sent == self.ciphertext_buf.len() {
-                    self.ciphertext_sent = 0;
-                    self.ciphertext_buf.clear();
-                    if self.plaintext_needs_flushing {
-                        self.cipher_buf();
-                        self.plaintext_needs_flushing = false;
+        loop {
+            match self
+                .writer
+                .as_mut()
+                .poll_write(cx, &self.ciphertext_buf[self.ciphertext_sent..])
+            {
+                Poll::Pending => return Poll::Pending,
+                Poll::Ready(Ok(n)) => {
+                    self.ciphertext_sent += n;
+                    if self.ciphertext_sent == self.ciphertext_buf.len() {
+                        self.ciphertext_sent = 0;
+                        self.ciphertext_buf.clear();
+                        if self.plaintext_needs_flushing {
+                            self.cipher_buf();
+                            self.plaintext_needs_flushing = false;
+                        }
+                        return Poll::Ready(Ok(()))
                     }
-                    Poll::Ready(Ok(()))
-                } else {
-                    Poll::Pending
                 }
+                Poll::Ready(Err(e)) => return Poll::Ready(Err(e)),
             }
-            Poll::Ready(Err(e)) => Poll::Ready(Err(e)),
         }
     }
 }
@@ -320,12 +324,26 @@ impl<W: AsyncWrite + Unpin> AsyncWrite for Outgoing<W> {
             }
         }
 
-        if me.plaintext_buf.len() + buf.len() > BUF_SIZE as usize {
-            let size_to_write = me.plaintext_buf.len() + buf.len() - 4096;
+        if me.plaintext_buf.len() + buf.len() > PLAINTEXT_BUF_SIZE as usize {
+            // plaintext_buf has BUF_SIZE size, so subtract with overflow will be never.
+            let size_to_write = PLAINTEXT_BUF_SIZE as usize - me.plaintext_buf.len();
             if let Err(err) = Write::write(&mut me.plaintext_buf, &buf[..size_to_write]) {
                 return Poll::Ready(Err(err));
             }
+            if !me.ciphertext_buf.is_empty() {
+                me.plaintext_needs_flushing = true;
+                match me.flush_write(cx) {
+                    Poll::Pending => return Poll::Pending,
+                    Poll::Ready(Err(e)) => return Poll::Ready(Err(e)),
+                    Poll::Ready(Ok(())) => {}
+                }
+            }
             me.cipher_buf();
+            match me.flush_write(cx) {
+                Poll::Pending => return Poll::Pending,
+                Poll::Ready(Err(e)) => return Poll::Ready(Err(e)),
+                Poll::Ready(Ok(())) => {}
+            }
             Poll::Ready(Ok(size_to_write))
         } else {
             Poll::Ready(Write::write(&mut me.plaintext_buf, buf))
@@ -435,10 +453,7 @@ impl<W: AsyncRead + Unpin> AsyncRead for Incoming<W> {
                         me.ciphertext_read += n as u16;
                         match me.ciphertext_read {
                             0 => {
-                                return Poll::Ready(Err(io::Error::new(
-                                    io::ErrorKind::WriteZero,
-                                    "unexpected end of stream",
-                                )))
+                                return Poll::Ready(Ok(0));
                             }
                             1 => continue,
                             2 => {
@@ -641,7 +656,7 @@ mod tests {
     use tokio::net::{TcpListener, TcpStream};
 
     #[tokio::test]
-    async fn test() {
+    async fn light_message_top_level_function() {
         let alice_private_key = PrivateKey::from(Scalar::from(1u8));
         let bob_private_key = PrivateKey::from(Scalar::from(2u8));
 
@@ -695,7 +710,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test2() {
+    async fn light_message_poll_function() {
         let alice_private_key = PrivateKey::from(Scalar::from(1u8));
         let bob_private_key = PrivateKey::from(Scalar::from(2u8));
 
@@ -748,6 +763,58 @@ mod tests {
             let bob_message: Vec<u8> = "Hello, Alice".bytes().collect();
             bob_out.write(&bob_message).await.unwrap();
             bob_out.flush().await.unwrap();
+        });
+
+        assert!(alice.await.is_ok());
+        assert!(bob.await.is_ok());
+    }
+
+    #[tokio::test]
+    async fn large_message() {
+        let alice_private_key = PrivateKey::from(Scalar::from(1u8));
+        let bob_private_key = PrivateKey::from(Scalar::from(2u8));
+
+        let mut alice_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let mut bob_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let alice_addr = alice_listener.local_addr().unwrap();
+        let bob_addr = bob_listener.local_addr().unwrap();
+
+        let alice = tokio::spawn(async move {
+            let (alice_reader, _) = alice_listener.accept().await.unwrap();
+            let alice_writer = TcpStream::connect(bob_addr).await.unwrap();
+            let mut rng = StdRng::from_entropy();
+            let (received_key, mut alice_out, mut alice_inc) =
+                cybershake(&alice_private_key, alice_reader, alice_writer, &mut rng)
+                    .await
+                    .unwrap();
+
+            // Alice send message to bob
+            let alice_message: Vec<u8> = vec![10u8; 6000];
+            alice_out.send_message(&alice_message).await.unwrap();
+        });
+
+        let bob = tokio::spawn(async move {
+            let bob_writer = TcpStream::connect(alice_addr).await.unwrap();
+            let (bob_reader, _) = bob_listener.accept().await.unwrap();
+            let mut rng = StdRng::from_entropy();
+            let (received_key, mut bob_out, mut bob_inc) =
+                cybershake(&bob_private_key, bob_reader, bob_writer, &mut rng)
+                    .await
+                    .unwrap();
+
+            // Bob receive message from Alice
+            let mut buf = vec![0u8; 9000];
+            let mut read = 0;
+            loop {
+                let message_len = bob_inc.read(&mut buf[read..]).await.unwrap();
+                read += message_len;
+                if message_len == 0 {
+                    break;
+                }
+            }
+            buf.truncate(read);
+
+            assert_eq!(vec![10u8; 6000], buf);
         });
 
         assert!(alice.await.is_ok());
