@@ -1,7 +1,9 @@
+use core::borrow::BorrowMut;
 use bulletproofs::r1cs::{ConstraintSystem, Prover, R1CSError, Variable, Verifier};
 use curve25519_dalek::ristretto::CompressedRistretto;
 use curve25519_dalek::scalar::Scalar;
 use rand::{CryptoRng, Rng};
+use merlin::Transcript;
 
 use crate::signed_integer::SignedInteger;
 
@@ -87,13 +89,13 @@ pub trait ProverCommittable {
     type Output;
 
     /// Commits the type to a constraint system.
-    fn commit<R: Rng + CryptoRng>(&self, prover: &mut Prover, rng: &mut R) -> Self::Output;
+    fn commit<T: BorrowMut<Transcript>, R: Rng + CryptoRng>(&self, prover: &mut Prover<T>, rng: &mut R) -> Self::Output;
 }
 
 impl ProverCommittable for Value {
     type Output = (CommittedValue, AllocatedValue);
 
-    fn commit<R: Rng + CryptoRng>(&self, prover: &mut Prover, rng: &mut R) -> Self::Output {
+    fn commit<T: BorrowMut<Transcript>, R: Rng + CryptoRng>(&self, prover: &mut Prover<T>, rng: &mut R) -> Self::Output {
         let (q_commit, q_var) = prover.commit(self.q.into(), Scalar::random(rng));
         let (f_commit, f_var) = prover.commit(self.f, Scalar::random(rng));
         let commitments = CommittedValue {
@@ -112,7 +114,7 @@ impl ProverCommittable for Value {
 impl ProverCommittable for Vec<Value> {
     type Output = (Vec<CommittedValue>, Vec<AllocatedValue>);
 
-    fn commit<R: Rng + CryptoRng>(&self, prover: &mut Prover, rng: &mut R) -> Self::Output {
+    fn commit<T: BorrowMut<Transcript>, R: Rng + CryptoRng>(&self, prover: &mut Prover<T>, rng: &mut R) -> Self::Output {
         self.iter().map(|value| value.commit(prover, rng)).unzip()
     }
 }
@@ -124,13 +126,13 @@ pub trait VerifierCommittable {
     type Output;
 
     /// Commits the type to a constraint system.
-    fn commit(&self, verifier: &mut Verifier) -> Self::Output;
+    fn commit<T: BorrowMut<Transcript>>(&self, verifier: &mut Verifier<T>) -> Self::Output;
 }
 
 impl VerifierCommittable for CommittedValue {
     type Output = AllocatedValue;
 
-    fn commit(&self, verifier: &mut Verifier) -> Self::Output {
+    fn commit<T: BorrowMut<Transcript>>(&self, verifier: &mut Verifier<T>) -> Self::Output {
         AllocatedValue {
             q: verifier.commit(self.q),
             f: verifier.commit(self.f),
@@ -142,7 +144,7 @@ impl VerifierCommittable for CommittedValue {
 impl VerifierCommittable for Vec<CommittedValue> {
     type Output = Vec<AllocatedValue>;
 
-    fn commit(&self, verifier: &mut Verifier) -> Self::Output {
+    fn commit<T: BorrowMut<Transcript>>(&self, verifier: &mut Verifier<T>) -> Self::Output {
         self.iter().map(|value| value.commit(verifier)).collect()
     }
 }
