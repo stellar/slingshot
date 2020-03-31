@@ -6,6 +6,7 @@ use core::convert::AsRef;
 use core::hash::Hash;
 use std::collections::hash_map::RandomState;
 use std::collections::{HashMap, HashSet};
+use std::fmt::Debug;
 use std::time::Instant;
 
 use async_trait::async_trait;
@@ -19,7 +20,7 @@ use zkvm::{ContractID, VerifiedTx};
 use super::block::{BlockHeader, BlockID, BlockTx};
 use super::errors::BlockchainError;
 use super::mempool::Mempool;
-use super::shortid::{self, ShortID, ShortIDVec};
+use super::shortid::{self, ShortIDVec};
 use super::state::BlockchainState;
 use super::utreexo;
 
@@ -28,7 +29,7 @@ const SHORTID_NONCE_TTL: usize = 50; // number of sync cycles
 
 #[async_trait]
 pub trait Delegate {
-    type PeerIdentifier: Clone + AsRef<[u8]> + Eq + Hash;
+    type PeerIdentifier: Clone + AsRef<[u8]> + Eq + Hash + Debug;
 
     /// ID of our node.
     fn self_id(&self) -> Self::PeerIdentifier;
@@ -304,9 +305,7 @@ impl<D: Delegate> Node<D> {
                             .entry(pid.clone())
                             .or_insert_with(|| GetMempoolTxs {
                                 shortid_nonce: current_nonce,
-                                shortid_list: ShortIDVec(Vec::with_capacity(
-                                    10 * shortid::SHORTID_LEN,
-                                )),
+                                shortid_list: ShortIDVec::with_capacity(10),
                             });
                         req.shortid_list.0.extend_from_slice(&id.to_bytes()[..]);
                     }
@@ -484,13 +483,13 @@ impl<D: Delegate> Node<D> {
     }
 
     fn mempool_inventory_for_peer(&self, pid: D::PeerIdentifier, nonce: u64) -> ShortIDVec {
-        let mut result = Vec::with_capacity(self.mempool.len() * shortid::SHORTID_LEN);
+        let mut result = ShortIDVec::with_capacity(self.mempool.len());
         let shortener = shortid::Transform::new(nonce, &pid.as_ref());
         for entry in self.mempool.entries() {
             let shortid = shortener.apply(&entry.txid());
-            result.extend_from_slice(&shortid.to_bytes()[..]);
+            result.push(shortid);
         }
-        ShortIDVec(result)
+        result
     }
 }
 

@@ -8,13 +8,12 @@
 //! Based on [BIP-152](https://github.com/bitcoin/bips/blob/master/bip-0152.mediawiki).
 
 use core::hash::Hasher;
-use core::ops::Index;
 use serde::{Deserialize, Serialize};
 use siphasher::sip::SipHasher;
 use std::fmt;
 
 /// Length of the short ID in bytes.
-pub const SHORTID_LEN: usize = 6;
+const SHORTID_LEN: usize = 6;
 
 /// Short ID definition
 #[derive(Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -88,6 +87,16 @@ impl ShortID {
 }
 
 impl ShortIDVec {
+    /// Creates a new buffer with a given capacity.
+    pub fn with_capacity(cap: usize) -> Self {
+        Self(Vec::with_capacity(10 * SHORTID_LEN))
+    }
+
+    /// Adds an ID to the list
+    pub fn push(&mut self, shortid: ShortID) {
+        self.0.extend_from_slice(&shortid.to_bytes()[..]);
+    }
+
     /// Iterates the short ids in the buffer.
     pub fn iter<'a>(&'a self) -> impl Iterator<Item = ShortID> + 'a {
         ShortID::scan(&self.0)

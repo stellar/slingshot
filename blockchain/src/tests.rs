@@ -132,7 +132,7 @@ fn test_p2p_protocol() {
     use futures_executor::block_on;
     use starsig::{Signature, VerificationKey};
     use std::fmt;
-    use std::sync::{Arc, Mutex};
+    use std::sync::mpsc::{channel, Receiver, Sender};
 
     #[derive(Copy, Clone, Eq, PartialEq, Hash)]
     struct PID(u8);
@@ -152,27 +152,32 @@ fn test_p2p_protocol() {
     struct MockNode {
         id: PID,
         state: BlockchainState,
-        blocks: Vec<Block>, // i=0 -> height=1, etc
-        mailbox: Arc<Mutex<Mailbox>>,
+        blocks: Vec<Block>,                   // i=0 -> height=1, etc
+        mailbox: Sender<(PID, PID, Message)>, // from, to, msg
     }
 
     #[derive(Debug)]
     struct Mailbox {
-        msgs: Vec<(PID, PID, Message)>, // from, to, message
+        rx: Receiver<(PID, PID, Message)>, // from, to, msg
     }
 
     impl Mailbox {
         fn process(
-            &mut self,
+            &self,
             nodes: &mut [&mut Node<MockNode>],
         ) -> Vec<(PID, Result<(), BlockchainError>)> {
             let mut r = Vec::new();
-            while let Some((pid_from, pid_to, msg)) = self.msgs.pop() {
-                //dbg!((pid_from, pid_to, &msg));
+            while let Ok((pid_from, pid_to, msg)) = self.rx.try_recv() {
+                dbg!((pid_from, pid_to, &msg));
                 let result = block_on(nodes[pid_to.0 as usize].process_message(pid_from, msg));
                 r.push((pid_to, result));
             }
             r
+        }
+
+        fn process_must_succeed(&self, nodes: &mut [&mut Node<MockNode>]) {
+            let results = self.process(nodes);
+            assert!(results.into_iter().all(|(_pid, r)| r.is_ok()));
         }
     }
 
@@ -187,11 +192,7 @@ fn test_p2p_protocol() {
 
         /// Send a message to a given peer.
         async fn send(&mut self, pid_to: Self::PeerIdentifier, message: Message) {
-            self.mailbox
-                .lock()
-                .unwrap()
-                .msgs
-                .push((self.id, pid_to, message));
+            self.mailbox.send((self.id, pid_to, message)).unwrap();
         }
 
         /// Returns the signed tip of the blockchain
@@ -241,7 +242,8 @@ fn test_p2p_protocol() {
         privkey: wallet_privkey,
     };
 
-    let mailbox = Arc::new(Mutex::new(Mailbox { msgs: Vec::new() }));
+    let (mailbox_tx, mailbox_rx) = channel();
+    let mailbox = Mailbox { rx: mailbox_rx };
 
     let mut nodes = (0..3)
         .map(|pid| MockNode {
@@ -252,7 +254,7 @@ fn test_p2p_protocol() {
                 signature: block_sig.clone(),
                 txs: Vec::new(),
             }],
-            mailbox: Arc::clone(&mailbox),
+            mailbox: mailbox_tx.clone(),
         })
         .map(|mock| Node::new(network_pubkey, mock));
 
@@ -271,21 +273,13 @@ fn test_p2p_protocol() {
     block_on(node2.peer_connected(node0.id()));
     block_on(node0.peer_connected(node2.id()));
 
-    let results = mailbox
-        .lock()
-        .unwrap()
-        .process(&mut [&mut node0, &mut node1, &mut node2]);
-    assert!(results.into_iter().all(|(_pid, r)| r.is_ok()));
+    mailbox.process_must_succeed(&mut [&mut node0, &mut node1, &mut node2]);
 
     block_on(node0.synchronize());
     block_on(node1.synchronize());
     block_on(node2.synchronize());
 
-    let results = mailbox
-        .lock()
-        .unwrap()
-        .process(&mut [&mut node0, &mut node1, &mut node2]);
-    assert!(results.into_iter().all(|(_pid, r)| r.is_ok()));
+    mailbox.process_must_succeed(&mut [&mut node0, &mut node1, &mut node2]);
 
     let (tx1, utxo1) = dummy_tx(utxo0, &bp_gens);
 
@@ -295,23 +289,28 @@ fn test_p2p_protocol() {
     block_on(node1.synchronize());
     block_on(node2.synchronize());
 
-    let results = mailbox
-        .lock()
-        .unwrap()
-        .process(&mut [&mut node0, &mut node1, &mut node2]);
-    assert!(results.into_iter().all(|(_pid, r)| r.is_ok()));
+    mailbox.process_must_succeed(&mut [&mut node0, &mut node1, &mut node2]);
 
     // send back the inventory
     block_on(node0.synchronize());
 
-    let results = mailbox
-        .lock()
-        .unwrap()
-        .process(&mut [&mut node0, &mut node1, &mut node2]);
-    assert!(results.into_iter().all(|(_pid, r)| r.is_ok()));
+    mailbox.process_must_succeed(&mut [&mut node0, &mut node1, &mut node2]);
 
     block_on(node1.synchronize());
     block_on(node2.synchronize());
 
-    dbg!(&mailbox);
+    mailbox.process_must_succeed(&mut [&mut node0, &mut node1, &mut node2]);
+
+    block_on(node0.synchronize());
+    block_on(node1.synchronize());
+    block_on(node2.synchronize());
+
+    mailbox.process_must_succeed(&mut [&mut node0, &mut node1, &mut node2]);
+
+    block_on(node0.synchronize());
+    block_on(node1.synchronize());
+    block_on(node2.synchronize());
+
+    mailbox.process_must_succeed(&mut [&mut node0, &mut node1, &mut node2]);
+
 }
