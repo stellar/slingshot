@@ -202,7 +202,7 @@ where
         plaintext_read: 0,
         need_to_get: 0,
         ciphertext_read: 0,
-        plaintext_length: 0
+        plaintext_length: 0,
     };
 
     // In order to authenticate the session, we send our first encrypted message
@@ -240,7 +240,18 @@ where
     Ok((received_remote_identity, outgoing, incoming))
 }
 
+macro_rules! ready {
+    ($($tokens:tt)*) => {
+        match $($tokens)* {
+            Poll::Pending => return Poll::Pending,
+            Poll::Ready(Ok(n)) => { n }
+            Poll::Ready(Err(e)) => return Poll::Ready(Err(e)),
+        }
+    };
+}
+
 impl<W: AsyncWrite + Unpin> Outgoing<W> {
+    /// Send a message with any length.
     pub async fn send_message(&mut self, msg: &[u8]) -> Result<(), Error> {
         let mut written = 0;
         while written != msg.len() {
@@ -248,8 +259,8 @@ impl<W: AsyncWrite + Unpin> Outgoing<W> {
                 Ok(n) => written += n,
                 Err(e) => match e.kind() {
                     io::ErrorKind::InvalidData => return Err(Error::ProtocolError),
-                    _ => return Err(Error::IoError(e))
-                }
+                    _ => return Err(Error::IoError(e)),
+                },
             };
         }
         self.flush().await.map_err(|e| Error::IoError(e))?;
@@ -271,38 +282,36 @@ impl<W: AsyncWrite + Unpin> Outgoing<W> {
             .encrypt(&[&ad], &self.plaintext_buf)
             .map_err(|_| unimplemented!())
             .unwrap();
+
+        // Write length of the message.
         Write::write(
             &mut self.ciphertext_buf,
             &encode_u16le(ciphertext.len() as u16)[..],
         )
-        .unwrap(); // TODO: remove unwrap?
-        Write::write(&mut self.ciphertext_buf, &ciphertext).unwrap(); // TODO: remove unwrap?
+        .unwrap();
+        // Write a message.
+        Write::write(&mut self.ciphertext_buf, &ciphertext).unwrap();
 
         self.plaintext_buf.clear();
         self.seq += 1;
     }
 
-    pub fn flush_write(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
+    pub fn flush_write(&mut self, cx: &mut Context) -> Poll<Result<(), io::Error>> {
         loop {
-            match self
+            let poll = self
                 .writer
                 .as_mut()
-                .poll_write(cx, &self.ciphertext_buf[self.ciphertext_sent..])
-            {
-                Poll::Pending => return Poll::Pending,
-                Poll::Ready(Ok(n)) => {
-                    self.ciphertext_sent += n;
-                    if self.ciphertext_sent == self.ciphertext_buf.len() {
-                        self.ciphertext_sent = 0;
-                        self.ciphertext_buf.clear();
-                        if self.plaintext_needs_flushing {
-                            self.cipher_buf();
-                            self.plaintext_needs_flushing = false;
-                        }
-                        return Poll::Ready(Ok(()))
-                    }
+                .poll_write(cx, &self.ciphertext_buf[self.ciphertext_sent..]);
+            let n = ready!(poll);
+            self.ciphertext_sent += n;
+            if self.ciphertext_sent == self.ciphertext_buf.len() {
+                self.ciphertext_sent = 0;
+                self.ciphertext_buf.clear();
+                if self.plaintext_needs_flushing {
+                    self.cipher_buf();
+                    self.plaintext_needs_flushing = false;
                 }
-                Poll::Ready(Err(e)) => return Poll::Ready(Err(e)),
+                return Poll::Ready(Ok(()));
             }
         }
     }
@@ -317,11 +326,7 @@ impl<W: AsyncWrite + Unpin> AsyncWrite for Outgoing<W> {
         let me = self.get_mut();
 
         if me.plaintext_needs_flushing {
-            match me.flush_write(cx) {
-                Poll::Pending => return Poll::Pending,
-                Poll::Ready(Err(e)) => return Poll::Ready(Err(e)),
-                Poll::Ready(Ok(())) => {}
-            }
+            ready!(me.flush_write(cx));
         }
 
         if me.plaintext_buf.len() + buf.len() > PLAINTEXT_BUF_SIZE as usize {
@@ -332,18 +337,10 @@ impl<W: AsyncWrite + Unpin> AsyncWrite for Outgoing<W> {
             }
             if !me.ciphertext_buf.is_empty() {
                 me.plaintext_needs_flushing = true;
-                match me.flush_write(cx) {
-                    Poll::Pending => return Poll::Pending,
-                    Poll::Ready(Err(e)) => return Poll::Ready(Err(e)),
-                    Poll::Ready(Ok(())) => {}
-                }
+                ready!(me.flush_write(cx));
             }
             me.cipher_buf();
-            match me.flush_write(cx) {
-                Poll::Pending => return Poll::Pending,
-                Poll::Ready(Err(e)) => return Poll::Ready(Err(e)),
-                Poll::Ready(Ok(())) => {}
-            }
+            ready!(me.flush_write(cx));
             Poll::Ready(Ok(size_to_write))
         } else {
             Poll::Ready(Write::write(&mut me.plaintext_buf, buf))
@@ -374,11 +371,9 @@ impl<W: AsyncRead + Unpin> Incoming<W> {
     pub async fn receive_message(&mut self) -> Result<Vec<u8>, Error> {
         let mut buf = vec![0u8; 4096];
 
-        let len = self.read(&mut buf).await.map_err(|e| {
-            match e.kind() {
-                io::ErrorKind::InvalidData => Error::ProtocolError,
-                _ => Error::IoError(e)
-            }
+        let len = self.read(&mut buf).await.map_err(|e| match e.kind() {
+            io::ErrorKind::InvalidData => Error::ProtocolError,
+            _ => Error::IoError(e),
         })?;
         buf.truncate(len);
 
@@ -411,12 +406,18 @@ impl<W: AsyncRead + Unpin> Incoming<W> {
             Ok(text) => text,
             Err(_) => unimplemented!(),
         };
-        Read::read(&mut plaintext.as_slice(), &mut self.plaintext_buf[..plaintext.len()]);
+        Read::read(
+            &mut plaintext.as_slice(),
+            &mut self.plaintext_buf[..plaintext.len()],
+        );
         self.plaintext_length = plaintext.len();
     }
 
     fn read_buffer(&mut self, buf: &mut [u8]) -> Result<usize, io::Error> {
-        match Read::read(&mut &self.plaintext_buf[self.plaintext_read..self.plaintext_length], buf) {
+        match Read::read(
+            &mut &self.plaintext_buf[self.plaintext_read..self.plaintext_length],
+            buf,
+        ) {
             Ok(n) => {
                 self.plaintext_read += n;
                 if self.plaintext_read == self.plaintext_length {
@@ -444,55 +445,48 @@ impl<W: AsyncRead + Unpin> AsyncRead for Incoming<W> {
 
         if me.need_to_get == 0 {
             loop {
-                match me
+                let poll = me
                     .reader
                     .as_mut()
-                    .poll_read(cx, &mut me.ciphertext_buf[me.ciphertext_read as usize..2])
-                {
-                    Poll::Ready(Ok(n)) => {
-                        me.ciphertext_read += n as u16;
-                        match me.ciphertext_read {
-                            0 => {
-                                return Poll::Ready(Ok(0));
-                            }
-                            1 => continue,
-                            2 => {
-                                me.ciphertext_read = 0;
-                                me.need_to_get = LittleEndian::read_u16(&me.ciphertext_buf[..2]);
-                                if me.need_to_get < 16 {
-                                    return Poll::Ready(Err(io::Error::new(
-                                        io::ErrorKind::InvalidData,
-                                        format!("length prefix: {} < 16", me.need_to_get),
-                                    )));
-                                }
-                                break;
-                            }
-                            _ => unreachable!(),
+                    .poll_read(cx, &mut me.ciphertext_buf[me.ciphertext_read as usize..2]);
+                let n = ready!(poll);
+                if n == 0 {
+                    return Poll::Ready(Ok(0)); // TODO: Error?
+                }
+                me.ciphertext_read += n as u16;
+                match me.ciphertext_read {
+                    1 => continue,
+                    2 => {
+                        me.ciphertext_read = 0;
+                        me.need_to_get = LittleEndian::read_u16(&me.ciphertext_buf[..2]);
+                        if me.need_to_get < 16 {
+                            return Poll::Ready(Err(io::Error::new(
+                                io::ErrorKind::InvalidData,
+                                format!("length prefix: {} < 16", me.need_to_get),
+                            )));
                         }
+                        break;
                     }
-                    Poll::Ready(Err(e)) => return Poll::Ready(Err(e)),
-                    Poll::Pending => return Poll::Pending,
+                    _ => unreachable!(),
                 }
             }
         }
 
         loop {
-            match me.reader.as_mut().poll_read(
+            let poll = me.reader.as_mut().poll_read(
                 cx,
                 &mut me.ciphertext_buf[me.ciphertext_read as usize..me.need_to_get as usize],
-            ) {
-                Poll::Pending => return Poll::Pending,
-                Poll::Ready(Err(e)) => return Poll::Ready(Err(e)),
-                Poll::Ready(Ok(0)) => return Poll::Ready(Ok(0)),
-                Poll::Ready(Ok(n)) => {
-                    me.ciphertext_read += n as u16;
-                    if me.ciphertext_read == me.need_to_get {
-                        me.decipher_buf();
-                        me.ciphertext_read = 0;
-                        me.need_to_get = 0;
-                        return Poll::Ready(me.read_buffer(buf));
-                    }
-                }
+            );
+            let n = ready!(poll);
+            if n == 0 {
+                return Poll::Ready(Ok(0)); // TODO: Error?
+            }
+            me.ciphertext_read += n as u16;
+            if me.ciphertext_read == me.need_to_get {
+                me.decipher_buf();
+                me.ciphertext_read = 0;
+                me.need_to_get = 0;
+                return Poll::Ready(me.read_buffer(buf));
             }
         }
     }
