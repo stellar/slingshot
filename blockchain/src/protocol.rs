@@ -248,6 +248,8 @@ impl<D: Delegate> Node<D> {
         // Update the mempool
         self.mempool.update_state(new_state.clone(), &catchup);
 
+        self.target_tip = new_state.tip.clone();
+
         // Store the block
         self.delegate.store_block(block, new_state, catchup, vtxs);
     }

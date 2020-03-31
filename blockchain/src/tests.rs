@@ -313,4 +313,25 @@ fn test_p2p_protocol() {
 
     mailbox.process_must_succeed(&mut [&mut node0, &mut node1, &mut node2]);
 
+    node0.create_block(1u64, network_signing_key);
+
+    dbg!("creating a block 2");
+
+    block_on(node0.synchronize());
+    block_on(node1.synchronize());
+    block_on(node2.synchronize());
+
+    mailbox.process_must_succeed(&mut [&mut node0, &mut node1, &mut node2]);
+
+    block_on(node0.synchronize());
+    block_on(node1.synchronize());
+    block_on(node2.synchronize());
+
+    mailbox.process_must_succeed(&mut [&mut node0, &mut node1, &mut node2]);
+
+    block_on(node0.synchronize());
+    block_on(node1.synchronize());
+    block_on(node2.synchronize());
+
+    mailbox.process_must_succeed(&mut [&mut node0, &mut node1, &mut node2]);
 }
