@@ -23,7 +23,7 @@ use crate::vm::{Delegate, VM};
 /// to be applied to the blockchain state.
 pub struct Verifier<'t> {
     signtx_items: Vec<(VerificationKey, ContractID)>,
-    cs: r1cs::Verifier<'t>,
+    cs: r1cs::Verifier<&'t mut Transcript>,
     batch: musig::BatchVerifier<rand::rngs::ThreadRng>,
 }
 
@@ -33,7 +33,7 @@ pub struct VerifierRun {
     offset: usize,
 }
 
-impl<'t> Delegate<r1cs::Verifier<'t>> for Verifier<'t> {
+impl<'t> Delegate<r1cs::Verifier<&'t mut Transcript>> for Verifier<'t> {
     type RunType = VerifierRun;
     type BatchVerifier = musig::BatchVerifier<rand::rngs::ThreadRng>;
 
@@ -73,7 +73,7 @@ impl<'t> Delegate<r1cs::Verifier<'t>> for Verifier<'t> {
         Ok(VerifierRun::new(prog.to_bytecode()?))
     }
 
-    fn cs(&mut self) -> &mut r1cs::Verifier<'t> {
+    fn cs(&mut self) -> &mut r1cs::Verifier<&'t mut Transcript> {
         &mut self.cs
     }
 
