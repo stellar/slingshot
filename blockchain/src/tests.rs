@@ -2,11 +2,12 @@ use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
 use rand::RngCore;
 use zkvm::bulletproofs::BulletproofGens;
+use zkvm::VerifiedTx;
 
 use super::*;
 use zkvm::{
     Anchor, Commitment, Contract, ContractID, Multisignature, PortableItem, Predicate, Program,
-    Prover, Signature, String, TxHeader, Value, VerificationKey, VerifiedTx,
+    Prover, Signature, String, TxHeader, Value, VerificationKey,
 };
 
 fn make_predicate(privkey: impl Into<Scalar>) -> Predicate {
@@ -170,6 +171,9 @@ fn test_p2p_protocol() {
             while let Ok((pid_from, pid_to, msg)) = self.rx.try_recv() {
                 dbg!((pid_from, pid_to, &msg));
                 let result = block_on(nodes[pid_to.0 as usize].process_message(pid_from, msg));
+                if let Err(e) = result {
+                    panic!("Message processing failed: {:?}", e);
+                }
                 r.push((pid_to, result));
             }
             r
@@ -197,7 +201,8 @@ fn test_p2p_protocol() {
 
         /// Returns the signed tip of the blockchain
         fn tip(&self) -> (BlockHeader, Signature) {
-            (self.state.tip.clone(), self.blocks[0].signature.clone())
+            let last_block = self.blocks.last().unwrap();
+            (last_block.header.clone(), last_block.signature)
         }
 
         /// Returns a block at a given height
@@ -222,6 +227,7 @@ fn test_p2p_protocol() {
             _vtxs: Vec<VerifiedTx>,
         ) {
             // TODO: update all proofs in the wallet with a catchup structure.
+            assert!(block.header.height == self.state.tip.height + 1);
             self.blocks.push(block);
             self.state = new_state;
         }

@@ -21,9 +21,9 @@ use crate::vm::{Delegate, VM};
 /// verifies an aggregated transaction signature (see `signtx` instruction),
 /// verifies a R1CS proof and returns a `VerifiedTx` with the log of changes
 /// to be applied to the blockchain state.
-pub struct Verifier<'t> {
+pub struct Verifier {
     signtx_items: Vec<(VerificationKey, ContractID)>,
-    cs: r1cs::Verifier<&'t mut Transcript>,
+    cs: r1cs::Verifier<Transcript>,
     batch: musig::BatchVerifier<rand::rngs::ThreadRng>,
 }
 
@@ -33,7 +33,7 @@ pub struct VerifierRun {
     offset: usize,
 }
 
-impl<'t> Delegate<r1cs::Verifier<&'t mut Transcript>> for Verifier<'t> {
+impl Delegate<r1cs::Verifier<Transcript>> for Verifier {
     type RunType = VerifierRun;
     type BatchVerifier = musig::BatchVerifier<rand::rngs::ThreadRng>;
 
@@ -73,7 +73,7 @@ impl<'t> Delegate<r1cs::Verifier<&'t mut Transcript>> for Verifier<'t> {
         Ok(VerifierRun::new(prog.to_bytecode()?))
     }
 
-    fn cs(&mut self) -> &mut r1cs::Verifier<&'t mut Transcript> {
+    fn cs(&mut self) -> &mut r1cs::Verifier<Transcript> {
         &mut self.cs
     }
 
@@ -82,7 +82,7 @@ impl<'t> Delegate<r1cs::Verifier<&'t mut Transcript>> for Verifier<'t> {
     }
 }
 
-impl<'t> Verifier<'t> {
+impl Verifier {
     /// Precomputes the TxID and TxLog.
     /// This is a private API until we have a nicer composable API with precomputed tx.
     /// See public API `Tx::precompute() that wraps with method`
@@ -90,8 +90,7 @@ impl<'t> Verifier<'t> {
     /// only holds a &mut of the transcript that can only be parked in the lexical scope,
     /// but not in the struct. And we need CS instance both for building tx and for verifying.
     pub(crate) fn precompute(tx: &Tx) -> Result<PrecomputedTx, VMError> {
-        let mut r1cs_transcript = Transcript::new(b"ZkVM.r1cs");
-        let cs = r1cs::Verifier::new(&mut r1cs_transcript);
+        let cs = r1cs::Verifier::new(Transcript::new(b"ZkVM.r1cs"));
 
         let mut verifier = Verifier {
             signtx_items: Vec::new(),
@@ -105,57 +104,52 @@ impl<'t> Verifier<'t> {
             &mut verifier,
         );
 
-        let (txid, txlog, fee) = vm.run()?;
+        let (id, log, fee) = vm.run()?;
 
         Ok(PrecomputedTx {
             header: tx.header,
-            id: txid,
-            log: txlog,
+            id,
+            log,
             feerate: FeeRate::new(fee, tx.encoded_length()),
+            signature: tx.signature.clone(),
+            proof: tx.proof.clone(),
+            verifier,
         })
     }
 
     /// Verifies the `Tx` object by executing the VM and returns the `VerifiedTx`.
     /// Returns an error if the program is malformed or any of the proofs are not valid.
-    pub fn verify_tx(tx: &Tx, bp_gens: &BulletproofGens) -> Result<VerifiedTx, VMError> {
-        // TBD: provide this as a precomputed object to avoid
-        // creating secondary point per each tx verification
+    pub fn verify_tx(
+        verifiable_tx: PrecomputedTx,
+        bp_gens: &BulletproofGens,
+    ) -> Result<VerifiedTx, VMError> {
         let pc_gens = PedersenGens::default();
-        let mut r1cs_transcript = Transcript::new(b"ZkVM.r1cs");
-        let cs = r1cs::Verifier::new(&mut r1cs_transcript);
 
-        let mut verifier = Verifier {
-            signtx_items: Vec::new(),
-            cs: cs,
-            batch: musig::BatchVerifier::new(rand::thread_rng()),
-        };
-
-        let vm = VM::new(
-            tx.header,
-            VerifierRun::new(tx.program.clone()),
-            &mut verifier,
-        );
-
-        let (txid, txlog, fee) = vm.run()?;
+        let PrecomputedTx {
+            header,
+            id,
+            log,
+            feerate,
+            signature,
+            proof,
+            mut verifier,
+        } = verifiable_tx;
 
         // Commit txid so that the proof is bound to the entire transaction, not just the constraint system.
-        verifier
-            .cs
-            .transcript()
-            .append_message(b"ZkVM.txid", &txid.0);
+        verifier.cs.transcript().append_message(b"ZkVM.txid", &id);
 
         // Verify the R1CS proof
         verifier
             .cs
-            .verify(&tx.proof, &pc_gens, bp_gens)
+            .verify(&proof, &pc_gens, bp_gens)
             .map_err(|_| VMError::InvalidR1CSProof)?;
 
         // Verify the signatures over txid
         let mut signtx_transcript = Transcript::new(b"ZkVM.signtx");
-        signtx_transcript.append_message(b"txid", &txid.0);
+        signtx_transcript.append_message(b"txid", &id);
 
         if verifier.signtx_items.len() != 0 {
-            tx.signature.verify_multi_batched(
+            signature.verify_multi_batched(
                 &mut signtx_transcript,
                 verifier.signtx_items,
                 &mut verifier.batch,
@@ -169,10 +163,10 @@ impl<'t> Verifier<'t> {
             .map_err(|_| VMError::BatchSignatureVerificationFailed)?;
 
         Ok(VerifiedTx {
-            header: tx.header,
-            id: txid,
-            log: txlog,
-            feerate: FeeRate::new(fee, tx.encoded_length()),
+            header,
+            id,
+            log,
+            feerate,
         })
     }
 }
