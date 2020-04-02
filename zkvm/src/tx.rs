@@ -1,6 +1,5 @@
 use bulletproofs::r1cs::R1CSProof;
 use bulletproofs::BulletproofGens;
-use core::borrow::Borrow;
 use curve25519_dalek::ristretto::CompressedRistretto;
 use merlin::Transcript;
 use musig::{Signature, VerificationKey};
@@ -99,7 +98,6 @@ pub struct Tx {
 }
 
 /// Represents a precomputed, but not verified transaction.
-#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct PrecomputedTx {
     /// Transaction header
     pub header: TxHeader,
@@ -112,6 +110,15 @@ pub struct PrecomputedTx {
 
     /// Fee rate of the transaction
     pub feerate: FeeRate,
+
+    /// Verifier to continue verification of the transaction
+    pub(crate) verifier: Verifier,
+
+    /// Schnorr signature
+    pub(crate) signature: Signature,
+
+    /// R1CS proof
+    pub(crate) proof: R1CSProof,
 }
 
 /// Represents a verified transaction: a txid and a list of state updates.
@@ -206,22 +213,7 @@ impl Tx {
     /// Performs stateless verification of the transaction:
     /// logic, signatures and ZK R1CS proof.
     pub fn verify(&self, bp_gens: &BulletproofGens) -> Result<VerifiedTx, VMError> {
-        Verifier::verify_tx(self, bp_gens)
-    }
-
-    /// Verifies a batch of transactions, typically coming from a Block.
-    pub fn verify_batch<T>(
-        txs: impl IntoIterator<Item = T>,
-        bp_gens: &BulletproofGens,
-    ) -> Result<Vec<VerifiedTx>, VMError>
-    where
-        T: Borrow<Self>,
-    {
-        // TODO: implement and adopt a batch verification API for R1CS proofs.
-
-        txs.into_iter()
-            .map(|tx| tx.borrow().verify(bp_gens))
-            .collect()
+        self.precompute()?.verify(bp_gens)
     }
 
     /// Serializes the tx into a byte array.
@@ -234,6 +226,25 @@ impl Tx {
     /// Returns an error if the byte slice cannot be parsed into a `Tx`.
     pub fn from_bytes(slice: &[u8]) -> Result<Tx, VMError> {
         SliceReader::parse(slice, |r| Self::decode(r))
+    }
+}
+
+impl PrecomputedTx {
+    /// Completes verification of the transaction,
+    /// performing expensive checks of the R1CS proof, Schnorr signatures
+    /// and other Ristretto255 operations.
+    pub fn verify(self, bp_gens: &BulletproofGens) -> Result<VerifiedTx, VMError> {
+        Verifier::verify_tx(self, bp_gens)
+    }
+
+    /// Verifies a batch of transactions, typically coming from a Block.
+    pub fn verify_batch(
+        txs: impl IntoIterator<Item = Self>,
+        bp_gens: &BulletproofGens,
+    ) -> Result<Vec<VerifiedTx>, VMError> {
+        // TODO: implement and adopt a batch verification API for R1CS proofs.
+
+        txs.into_iter().map(|tx| tx.verify(bp_gens)).collect()
     }
 }
 

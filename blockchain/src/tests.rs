@@ -2,11 +2,12 @@ use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
 use rand::RngCore;
 use zkvm::bulletproofs::BulletproofGens;
+use zkvm::VerifiedTx;
 
 use super::*;
 use zkvm::{
     Anchor, Commitment, Contract, ContractID, Multisignature, PortableItem, Predicate, Program,
-    Prover, Signature, String, TxHeader, Value, VerificationKey, VerifiedTx,
+    Prover, Signature, String, TxHeader, Value, VerificationKey,
 };
 
 fn make_predicate(privkey: impl Into<Scalar>) -> Predicate {
