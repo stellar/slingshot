@@ -2,6 +2,7 @@ use core::iter;
 use curve25519_dalek::constants::RISTRETTO_BASEPOINT_POINT;
 use curve25519_dalek::ristretto::CompressedRistretto;
 use curve25519_dalek::scalar::Scalar;
+use std::fmt;
 
 use merlin::Transcript;
 
@@ -11,7 +12,7 @@ use super::key::VerificationKey;
 use super::transcript::TranscriptProtocol;
 
 /// A Schnorr signature.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Signature {
     /// Signature using nonce, message, and private key
     pub s: Scalar,
@@ -130,5 +131,18 @@ impl Signature {
         let mut t = Transcript::new(b"Starsig.sign_message");
         t.append_message(label, message);
         t
+    }
+}
+
+impl fmt::Debug for Signature {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "Signature({}{})",
+            hex::encode(&self.s.as_bytes()),
+            hex::encode(&self.R.as_bytes())
+        )
+        // Without hex crate we'd do this, but it outputs comma-separated numbers: [aa, 11, 5a, ...]
+        // write!(f, "{:x?}", &self.0)
     }
 }

@@ -1,4 +1,5 @@
 use crate::utreexo::UtreexoError;
+use crate::BlockID;
 use zkvm::VMError;
 
 /// Blockchain state machine error conditions.
@@ -22,7 +23,7 @@ pub enum BlockchainError {
 
     /// Occurs when ZkVM failed executing the transaction.
     #[fail(display = "Transaction validation failed in ZkVM.")]
-    TxValidation(VMError),
+    VMError(VMError),
 
     /// Occurs when utreexo proof is missing.
     #[fail(display = "Utreexo proof is missing.")]
@@ -31,4 +32,36 @@ pub enum BlockchainError {
     /// Occurs when utreexo operation failed.
     #[fail(display = "Utreexo operation failed.")]
     UtreexoError(UtreexoError),
+
+    /// Block signature is invalid.
+    #[fail(display = "Block signature is invalid.")]
+    InvalidBlockSignature,
+
+    /// Incompatible protocol version.
+    #[fail(display = "Incompatible protocol version.")]
+    IncompatibleVersion,
+
+    /// Block not found.
+    #[fail(display = "Block not found at a height {}", _0)]
+    BlockNotFound(u64),
+
+    /// Received block is either too old or an orphan.
+    #[fail(display = "Block at height {} is not relevant", _0)]
+    BlockNotRelevant(u64),
+
+    /// Received block is either too old or an orphan.
+    #[fail(display = "Received mempool txs at an irrelevant state")]
+    StaleMempoolState(BlockID),
+}
+
+impl From<UtreexoError> for BlockchainError {
+    fn from(e: UtreexoError) -> BlockchainError {
+        BlockchainError::UtreexoError(e)
+    }
+}
+
+impl From<VMError> for BlockchainError {
+    fn from(e: VMError) -> BlockchainError {
+        BlockchainError::VMError(e)
+    }
 }
