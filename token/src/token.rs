@@ -65,7 +65,7 @@ mod tests {
     use merlin::Transcript;
     use zkvm::{
         Anchor, Contract, Multisignature, Predicate, Program, Prover, Signature, Tx, TxEntry,
-        TxHeader, TxID, TxLog, VMError, VerificationKey, Verifier,
+        TxHeader, TxID, TxLog, VMError, VerificationKey,
     };
 
     fn add_dummy_input(p: &mut Program, dummy_key: &Scalar) {
@@ -98,7 +98,7 @@ mod tests {
 
         // Verify tx
         let bp_gens = BulletproofGens::new(256, 1);
-        assert!(Verifier::verify_tx(&tx, &bp_gens).is_ok());
+        assert!(tx.verify(&bp_gens).is_ok());
     }
 
     #[test]
@@ -130,7 +130,7 @@ mod tests {
 
         // Verify tx
         let bp_gens = BulletproofGens::new(256, 1);
-        assert!(Verifier::verify_tx(&tx, &bp_gens).is_ok());
+        assert!(tx.verify(&bp_gens).is_ok());
     }
 
     // Helper functions

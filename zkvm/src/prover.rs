@@ -20,10 +20,10 @@ use crate::vm::{Delegate, VM};
 /// Prover passes the list of instructions through the VM,
 /// creates an aggregated transaction signature (for `signtx` instruction),
 /// creates a R1CS proof and returns a complete `Tx` object that can be published.
-pub struct Prover<'t, 'g> {
+pub struct Prover<'g> {
     // TBD: use Multikey as a witness thing
     signtx_items: Vec<(VerificationKey, ContractID)>,
-    cs: r1cs::Prover<'g, &'t mut Transcript>,
+    cs: r1cs::Prover<'g, Transcript>,
     batch: musig::BatchVerifier<rand::rngs::ThreadRng>,
 }
 
@@ -31,7 +31,7 @@ pub(crate) struct ProverRun {
     program: VecDeque<Instruction>,
 }
 
-impl<'t, 'g> Delegate<r1cs::Prover<'g, &'t mut Transcript>> for Prover<'t, 'g> {
+impl<'t, 'g> Delegate<r1cs::Prover<'g, Transcript>> for Prover<'g> {
     type RunType = ProverRun;
     type BatchVerifier = musig::BatchVerifier<rand::rngs::ThreadRng>;
 
@@ -66,7 +66,7 @@ impl<'t, 'g> Delegate<r1cs::Prover<'g, &'t mut Transcript>> for Prover<'t, 'g> {
         })
     }
 
-    fn cs(&mut self) -> &mut r1cs::Prover<'g, &'t mut Transcript> {
+    fn cs(&mut self) -> &mut r1cs::Prover<'g, Transcript> {
         &mut self.cs
     }
 
@@ -75,7 +75,7 @@ impl<'t, 'g> Delegate<r1cs::Prover<'g, &'t mut Transcript>> for Prover<'t, 'g> {
     }
 }
 
-impl<'t, 'g> Prover<'t, 'g> {
+impl<'g> Prover<'g> {
     /// Builds a transaction with a given list of instructions and a `TxHeader`.
     /// Returns a transaction `Tx` along with its ID (`TxID`) and a transaction log (`TxLog`).
     /// Fails if the input program is malformed, or some witness data is missing.
@@ -85,9 +85,8 @@ impl<'t, 'g> Prover<'t, 'g> {
         bp_gens: &BulletproofGens,
     ) -> Result<UnsignedTx, VMError> {
         // Prepare the constraint system
-        let mut r1cs_transcript = Transcript::new(b"ZkVM.r1cs");
         let pc_gens = PedersenGens::default();
-        let cs = r1cs::Prover::new(&pc_gens, &mut r1cs_transcript);
+        let cs = r1cs::Prover::new(&pc_gens, Transcript::new(b"ZkVM.r1cs"));
 
         // Serialize the tx program
         let mut bytecode = Vec::new();
