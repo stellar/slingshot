@@ -279,11 +279,9 @@ impl<W: AsyncRead + Unpin> Incoming<W> {
 
     /// Converts to the Stream
     pub fn into_stream(self) -> impl futures::stream::Stream<Item = Result<Vec<u8>, Error>> {
-        futures::stream::unfold(self, |mut src| {
-            async move {
-                let res = src.receive_message().await;
-                Some((res, src))
-            }
+        futures::stream::unfold(self, |mut src| async move {
+            let res = src.receive_message().await;
+            Some((res, src))
         })
     }
 }

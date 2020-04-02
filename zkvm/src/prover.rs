@@ -23,7 +23,7 @@ use crate::vm::{Delegate, VM};
 pub struct Prover<'t, 'g> {
     // TBD: use Multikey as a witness thing
     signtx_items: Vec<(VerificationKey, ContractID)>,
-    cs: r1cs::Prover<'t, 'g>,
+    cs: r1cs::Prover<'g, &'t mut Transcript>,
     batch: musig::BatchVerifier<rand::rngs::ThreadRng>,
 }
 
@@ -31,7 +31,7 @@ pub(crate) struct ProverRun {
     program: VecDeque<Instruction>,
 }
 
-impl<'t, 'g> Delegate<r1cs::Prover<'t, 'g>> for Prover<'t, 'g> {
+impl<'t, 'g> Delegate<r1cs::Prover<'g, &'t mut Transcript>> for Prover<'t, 'g> {
     type RunType = ProverRun;
     type BatchVerifier = musig::BatchVerifier<rand::rngs::ThreadRng>;
 
@@ -66,7 +66,7 @@ impl<'t, 'g> Delegate<r1cs::Prover<'t, 'g>> for Prover<'t, 'g> {
         })
     }
 
-    fn cs(&mut self) -> &mut r1cs::Prover<'t, 'g> {
+    fn cs(&mut self) -> &mut r1cs::Prover<'g, &'t mut Transcript> {
         &mut self.cs
     }
 
