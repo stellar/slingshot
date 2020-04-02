@@ -12,7 +12,7 @@ use super::key::VerificationKey;
 use super::transcript::TranscriptProtocol;
 
 /// A Schnorr signature.
-#[derive(Clone)]
+#[derive(Copy, Clone)]
 pub struct Signature {
     /// Signature using nonce, message, and private key
     pub s: Scalar,
