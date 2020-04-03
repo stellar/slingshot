@@ -187,11 +187,11 @@ impl fmt::Debug for Tx {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "Tx(v{}, [{:x},{:x}]){{\n",
+            "Tx(v{}, [{:x},{:x}]) {{\n",
             self.header.version, self.header.mintime_ms, self.header.maxtime_ms
         )?;
         match Program::parse(&self.program) {
-            Ok(p) => write!(f, "    {:?}\n", p)?,
+            Ok(p) => write!(f, "    Program({:?})\n", p)?,
             Err(e) => write!(
                 f,
                 "    InvalidProgram({})->{:?}\n",
@@ -213,7 +213,7 @@ impl fmt::Debug for VerifiedTx {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "VerifiedTx(v{}, [{:x},{:x}]){{\n",
+            "VerifiedTx(v{}, [{:x},{:x}]) {{\n",
             self.header.version, self.header.mintime_ms, self.header.maxtime_ms
         )?;
         write!(f, "    {:?}\n", &self.id)?;
