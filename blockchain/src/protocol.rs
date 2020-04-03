@@ -80,6 +80,16 @@ pub struct Node<D: Delegate> {
     inventory_interval_secs: u64,
 }
 
+/// Status of the peer.
+struct PeerInfo {
+    tip: Option<BlockHeader>,
+    needs_our_inventory: bool,
+    their_short_id_nonce: u64,
+    shortid_nonce: u64,
+    shortid_list: ShortIDVec,
+    last_inventory_received: Instant,
+}
+
 impl<D: Delegate> Node<D> {
     /// Create a new node.
     pub fn new(network_pubkey: VerificationKey, delegate: D) -> Self {
@@ -268,12 +278,17 @@ impl<D: Delegate> Node<D> {
         // This is highly inefficient from the point of view of the node,
         // but spreads the load on the network that prioritizes synchronizing
         // recent transactions and blocks.
-        if let Some((pid, _peer)) = self.peers.iter().choose(&mut thread_rng()) {
+        // TODO: find the peers that may have the block.
+        let height_needed = self.delegate.tip_height() + 1;
+        let relevant_peers = self.peers.iter().filter(|(pid, peer)| {
+            peer.tip.as_ref().map(|h| h.height).unwrap_or(0) >= height_needed
+        });
+        if let Some((pid, _peer)) = relevant_peers.choose(&mut thread_rng()) {
             self.delegate
                 .send(
                     pid.clone(),
                     Message::GetBlock(GetBlock {
-                        height: self.delegate.tip_height() + 1,
+                        height: height_needed,
                     }),
                 )
                 .await;
@@ -299,7 +314,12 @@ impl<D: Delegate> Node<D> {
         let mut requests = HashMap::new();
         for offset in 0..1_000_000 {
             let mut done = true;
-            for (pid, peer) in self.peers.iter_mut() {
+            let current_height = self.delegate.tip_height();
+            let uptodate_peers = self
+                .peers
+                .iter_mut()
+                .filter(|(_, p)| p.tip.as_ref().map(|t| t.height).unwrap_or(0) == current_height);
+            for (pid, peer) in uptodate_peers {
                 if let Some(id) = peer.shortid_list.get(offset) {
                     done = false;
                     if assigned_shortids.insert(id) {
@@ -493,16 +513,6 @@ impl<D: Delegate> Node<D> {
         }
         result
     }
-}
-
-/// Status of the peer.
-struct PeerInfo {
-    tip: Option<BlockHeader>,
-    needs_our_inventory: bool,
-    their_short_id_nonce: u64,
-    shortid_nonce: u64,
-    shortid_list: ShortIDVec,
-    last_inventory_received: Instant,
 }
 
 /// Signs a block.

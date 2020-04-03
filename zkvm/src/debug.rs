@@ -14,6 +14,7 @@ use crate::encoding::SliceReader;
 use crate::ops::Instruction;
 use crate::predicate::Predicate;
 use crate::program::Program;
+use crate::tx::{Tx, TxID, VerifiedTx};
 use crate::types::{String, Value};
 
 impl fmt::Debug for Program {
@@ -173,5 +174,53 @@ impl fmt::Debug for Commitment {
             Commitment::Closed(point) => write!(f, "0x{}", hex::encode(&point.as_bytes())),
             Commitment::Open(cw) => write!(f, "{:?}", cw),
         }
+    }
+}
+
+impl fmt::Debug for TxID {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "TxID({})", hex::encode(&self))
+    }
+}
+
+impl fmt::Debug for Tx {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "Tx(v{}, [{:x},{:x}]) {{\n",
+            self.header.version, self.header.mintime_ms, self.header.maxtime_ms
+        )?;
+        match Program::parse(&self.program) {
+            Ok(p) => write!(f, "    Program({:?})\n", p)?,
+            Err(e) => write!(
+                f,
+                "    InvalidProgram({})->{:?}\n",
+                hex::encode(&self.program),
+                e
+            )?,
+        }
+        write!(
+            f,
+            "    {:?}\n    R1CSProof({})\n",
+            &self.signature,
+            hex::encode(self.proof.to_bytes())
+        )?;
+        write!(f, "}}")
+    }
+}
+
+impl fmt::Debug for VerifiedTx {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "VerifiedTx(v{}, [{:x},{:x}]) {{\n",
+            self.header.version, self.header.mintime_ms, self.header.maxtime_ms
+        )?;
+        write!(f, "    {:?}\n", &self.id)?;
+        write!(f, "    Fee rate: {:?}\n", &self.feerate)?;
+        for entry in self.log.iter() {
+            write!(f, "    {:?}\n", entry)?;
+        }
+        write!(f, "}}")
     }
 }
