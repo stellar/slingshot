@@ -21,7 +21,7 @@ use crate::verifier::Verifier;
 pub struct TxLog(Vec<TxEntry>);
 
 /// Transaction ID is a unique 32-byte identifier of a transaction effects represented by `TxLog`.
-#[derive(Copy, Clone, PartialEq, Debug, Serialize, Deserialize)]
+#[derive(Copy, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct TxID(pub Hash);
 
@@ -82,7 +82,7 @@ pub struct UnsignedTx {
 }
 
 /// Instance of a transaction that contains all necessary data to validate it.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Tx {
     /// Header metadata
     pub header: TxHeader,
@@ -122,7 +122,7 @@ pub struct PrecomputedTx {
 }
 
 /// Represents a verified transaction: a txid and a list of state updates.
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 pub struct VerifiedTx {
     /// Transaction header
     pub header: TxHeader,
