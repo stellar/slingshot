@@ -118,8 +118,8 @@ pub enum Error {
 /// If you need to verify the identity per local policy or certificates, use the returned public key.
 pub async fn cybershake<R, W, RNG>(
     local_identity: &PrivateKey,
-    mut reader: R,
-    mut writer: W,
+    mut reader: Pin<Box<R>>,
+    mut writer: Pin<Box<W>>,
     rng: &mut RNG,
 ) -> Result<(PublicKey, Outgoing<W>, Incoming<R>), Error>
 where
@@ -183,7 +183,7 @@ where
     // Now we prepare endpoints for reading and writing messages,
     // but don't give them to the user until we authenticate the connection.
     let mut outgoing = Outgoing {
-        writer: Box::pin(writer),
+        writer,
         seq: 0,
         kdf: kdf_outgoing,
         buf: Vec::with_capacity(CIPHERTEXT_BUF_SIZE as usize),
@@ -191,7 +191,7 @@ where
         ciphertext_sent: 0,
     };
     let mut incoming = Incoming {
-        reader: Box::pin(reader),
+        reader,
         seq: 0,
         kdf: kdf_incoming,
         plaintext_read: 0,
@@ -651,7 +651,7 @@ mod tests {
             let alice_writer = TcpStream::connect(bob_addr).await.unwrap();
             let mut rng = StdRng::from_entropy();
             let (received_key, mut alice_out, mut alice_inc) =
-                cybershake(&alice_private_key, alice_reader, alice_writer, &mut rng)
+                cybershake(&alice_private_key, Box::pin(alice_reader), Box::pin(alice_writer), &mut rng)
                     .await
                     .unwrap();
 
@@ -671,7 +671,7 @@ mod tests {
             let (bob_reader, _) = bob_listener.accept().await.unwrap();
             let mut rng = StdRng::from_entropy();
             let (received_key, mut bob_out, mut bob_inc) =
-                cybershake(&bob_private_key, bob_reader, bob_writer, &mut rng)
+                cybershake(&bob_private_key, Box::pin(bob_reader), Box::pin(bob_writer), &mut rng)
                     .await
                     .unwrap();
 
@@ -705,7 +705,7 @@ mod tests {
             let alice_writer = TcpStream::connect(bob_addr).await.unwrap();
             let mut rng = StdRng::from_entropy();
             let (received_key, mut alice_out, mut alice_inc) =
-                cybershake(&alice_private_key, alice_reader, alice_writer, &mut rng)
+                cybershake(&alice_private_key, Box::pin(alice_reader), Box::pin(alice_writer), &mut rng)
                     .await
                     .unwrap();
 
@@ -728,7 +728,7 @@ mod tests {
             let (bob_reader, _) = bob_listener.accept().await.unwrap();
             let mut rng = StdRng::from_entropy();
             let (received_key, mut bob_out, mut bob_inc) =
-                cybershake(&bob_private_key, bob_reader, bob_writer, &mut rng)
+                cybershake(&bob_private_key, Box::pin(bob_reader), Box::pin(bob_writer), &mut rng)
                     .await
                     .unwrap();
 
@@ -765,7 +765,7 @@ mod tests {
             let alice_writer = TcpStream::connect(bob_addr).await.unwrap();
             let mut rng = StdRng::from_entropy();
             let (_, mut alice_out, _) =
-                cybershake(&alice_private_key, alice_reader, alice_writer, &mut rng)
+                cybershake(&alice_private_key, Box::pin(alice_reader), Box::pin(alice_writer), &mut rng)
                     .await
                     .unwrap();
 
@@ -779,7 +779,7 @@ mod tests {
             let (bob_reader, _) = bob_listener.accept().await.unwrap();
             let mut rng = StdRng::from_entropy();
             let (_, _, mut bob_inc) =
-                cybershake(&bob_private_key, bob_reader, bob_writer, &mut rng)
+                cybershake(&bob_private_key, Box::pin(bob_reader), Box::pin(bob_writer), &mut rng)
                     .await
                     .unwrap();
 
