@@ -296,7 +296,7 @@ impl<W: AsyncWrite + Unpin> Outgoing<W> {
         self.seq += 1;
     }
 
-    pub fn flush_write(&mut self, cx: &mut Context) -> Poll<Result<(), io::Error>> {
+    fn flush_pending_ciphertext(&mut self, cx: &mut Context) -> Poll<Result<(), io::Error>> {
         loop {
             let poll = self
                 .writer
@@ -326,7 +326,7 @@ impl<W: AsyncWrite + Unpin> AsyncWrite for Outgoing<W> {
         let me = self.get_mut();
 
         if me.plaintext_needs_flushing {
-            ready!(me.flush_write(cx));
+            ready!(me.flush_pending_ciphertext(cx));
         }
 
         if me.plaintext_buf.len() + buf.len() > PLAINTEXT_BUF_SIZE as usize {
@@ -337,10 +337,10 @@ impl<W: AsyncWrite + Unpin> AsyncWrite for Outgoing<W> {
             }
             if !me.ciphertext_buf.is_empty() {
                 me.plaintext_needs_flushing = true;
-                ready!(me.flush_write(cx));
+                ready!(me.flush_pending_ciphertext(cx));
             }
             me.cipher_buf();
-            ready!(me.flush_write(cx));
+            ready!(me.flush_pending_ciphertext(cx));
             Poll::Ready(Ok(size_to_write))
         } else {
             Poll::Ready(Write::write(&mut me.plaintext_buf, buf))
@@ -359,7 +359,7 @@ impl<W: AsyncWrite + Unpin> AsyncWrite for Outgoing<W> {
                 me.cipher_buf();
             }
         }
-        me.flush_write(cx)
+        me.flush_pending_ciphertext(cx)
     }
 
     fn poll_shutdown(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
