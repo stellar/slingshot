@@ -337,12 +337,10 @@ impl<W: AsyncWrite + Unpin> AsyncWrite for Outgoing<W> {
 
         ready!(me.flush_pending_ciphertext(cx));
 
-        if me.buf.len() + buf.len() > PLAINTEXT_BUF_SIZE as usize {
+        if me.buf.len() + buf.len() >= PLAINTEXT_BUF_SIZE as usize {
             // plaintext_buf has BUF_SIZE size, so subtract with overflow will be never.
             let size_to_write = PLAINTEXT_BUF_SIZE as usize - me.buf.len();
-            if let Err(err) = Write::write(&mut me.buf, &buf[..size_to_write]) {
-                return Poll::Ready(Err(err));
-            }
+            me.buf.extend_from_slice(&buf[..size_to_write]);
             me.cipher_buf();
             ready!(me.flush_pending_ciphertext(cx));
             Poll::Ready(Ok(size_to_write))
