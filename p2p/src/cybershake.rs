@@ -363,8 +363,13 @@ impl<W: AsyncWrite + Unpin> AsyncWrite for Outgoing<W> {
         me.flush_pending_ciphertext(cx)
     }
 
-    fn poll_shutdown(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
-        unimplemented!()
+    fn poll_shutdown(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
+        let me = self.get_mut();
+        if let WriteStage::ReadPlaintext = me.stage {
+            me.cipher_buf();
+        }
+        ready!(me.flush_pending_ciphertext(cx));
+        me.writer.as_mut().poll_shutdown(cx)
     }
 }
 
@@ -728,7 +733,7 @@ mod tests {
             // Alice send message to bob
             let alice_message: Vec<u8> = "Hello, Bob".bytes().collect();
             alice_out.write(&alice_message).await.unwrap();
-            alice_out.flush().await.unwrap();
+            alice_out.shutdown().await.unwrap();
 
             // Then Alice receive message from bob
             let mut buf = vec![0u8; 4096];
