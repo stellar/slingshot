@@ -295,6 +295,9 @@ impl<W: AsyncWrite + Unpin> Outgoing<W> {
     }
 
     fn flush_pending_ciphertext(&mut self, cx: &mut Context) -> Poll<Result<(), io::Error>> {
+        if let WriteStage::ReadPlaintext = self.stage {
+            return Poll::Ready(Ok(()));
+        }
         if let WriteStage::WriteLength = self.stage {
             while self.ciphertext_sent != 2 {
                 let poll = self
@@ -332,9 +335,7 @@ impl<W: AsyncWrite + Unpin> AsyncWrite for Outgoing<W> {
     ) -> Poll<Result<usize, io::Error>> {
         let me = self.get_mut();
 
-        if let WriteStage::WriteCiphertext | WriteStage::WriteLength = me.stage {
-            ready!(me.flush_pending_ciphertext(cx));
-        }
+        ready!(me.flush_pending_ciphertext(cx));
 
         if me.buf.len() + buf.len() > PLAINTEXT_BUF_SIZE as usize {
             // plaintext_buf has BUF_SIZE size, so subtract with overflow will be never.
