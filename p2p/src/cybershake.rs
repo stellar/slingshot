@@ -77,8 +77,15 @@ pub struct Outgoing<W: io::AsyncWrite + Unpin> {
     seq: u64,
     kdf: Transcript,
     buf: Vec<u8>,
-    flushing: bool,
+    stage: WriteStage,
+    ciphertext_length: [u8; 2],
     ciphertext_sent: usize,
+}
+
+enum WriteStage {
+    ReadPlaintext,
+    WriteLength,
+    WriteCiphertext
 }
 
 /// An endpoint for receiving messages from a remote party.
@@ -187,8 +194,9 @@ where
         seq: 0,
         kdf: kdf_outgoing,
         buf: Vec::with_capacity(CIPHERTEXT_BUF_SIZE as usize),
-        flushing: false,
         ciphertext_sent: 0,
+        stage: WriteStage::ReadPlaintext,
+        ciphertext_length: [0; 2],
     };
     let mut incoming = Incoming {
         reader,
@@ -268,43 +276,51 @@ impl<W: AsyncWrite + Unpin> Outgoing<W> {
 
 impl<W: AsyncWrite + Unpin> Outgoing<W> {
     fn cipher_buf(&mut self) {
-        self.flushing = true;
         self.kdf.append_u64(b"seq", self.seq);
         let mut key = [0u8; 32];
         self.kdf.challenge_bytes(b"key", &mut key);
 
         let ad = encode_u64le(self.seq);
 
-        let ciphertext = Aes128PmacSiv::new(GenericArray::clone_from_slice(&key))
-            .encrypt(&[&ad], &self.buf)
+        Aes128PmacSiv::new(GenericArray::clone_from_slice(&key))
+            .encrypt_in_place(&[&ad], &mut self.buf)
             .map_err(|_| unimplemented!())
             .unwrap();
 
-        self.buf.clear();
-
         // Write length of the message.
-        Write::write(&mut self.buf, &encode_u16le(ciphertext.len() as u16)[..]).unwrap();
-        // Write a message.
-        Write::write(&mut self.buf, &ciphertext).unwrap();
+        Write::write(&mut &mut self.ciphertext_length[..], &encode_u16le(self.buf.len() as u16)[..]).unwrap();
 
         self.seq += 1;
+        self.stage = WriteStage::WriteLength;
     }
 
     fn flush_pending_ciphertext(&mut self, cx: &mut Context) -> Poll<Result<(), io::Error>> {
-        loop {
+        if let WriteStage::WriteLength = self.stage {
+            while self.ciphertext_sent != 2 {
+                let poll = self
+                    .writer
+                    .as_mut()
+                    .poll_write(cx, &self.ciphertext_length);
+                let n = ready!(poll);
+                self.ciphertext_sent += n;
+            }
+            self.ciphertext_sent = 0;
+            self.stage = WriteStage::WriteCiphertext;
+        }
+        while self.ciphertext_sent < self.buf.len() {
             let poll = self
                 .writer
                 .as_mut()
                 .poll_write(cx, &self.buf[self.ciphertext_sent..]);
             let n = ready!(poll);
             self.ciphertext_sent += n;
-            if self.ciphertext_sent == self.buf.len() {
-                self.ciphertext_sent = 0;
-                self.flushing = false;
-                self.buf.clear();
-                return Poll::Ready(Ok(()));
-            }
         }
+        if self.ciphertext_sent > 0 {
+            self.ciphertext_sent = 0;
+            self.stage = WriteStage::ReadPlaintext;
+            self.buf.clear();
+        }
+        Poll::Ready(Ok(()))
     }
 }
 
@@ -316,7 +332,7 @@ impl<W: AsyncWrite + Unpin> AsyncWrite for Outgoing<W> {
     ) -> Poll<Result<usize, io::Error>> {
         let me = self.get_mut();
 
-        if me.flushing {
+        if let WriteStage::WriteCiphertext | WriteStage::WriteLength = me.stage {
             ready!(me.flush_pending_ciphertext(cx));
         }
 
@@ -327,9 +343,7 @@ impl<W: AsyncWrite + Unpin> AsyncWrite for Outgoing<W> {
                 return Poll::Ready(Err(err));
             }
             me.cipher_buf();
-            if let Poll::Ready(Err(e)) = me.flush_pending_ciphertext(cx) {
-                return Poll::Ready(Err(e));
-            }
+            ready!(me.flush_pending_ciphertext(cx));
             Poll::Ready(Ok(size_to_write))
         } else {
             Poll::Ready(Write::write(&mut me.buf, buf))
