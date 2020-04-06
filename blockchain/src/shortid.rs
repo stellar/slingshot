@@ -10,13 +10,21 @@
 use core::hash::Hasher;
 use serde::{Deserialize, Serialize};
 use siphasher::sip::SipHasher;
+use std::fmt;
+
+/// Length of the short ID in bytes.
+const SHORTID_LEN: usize = 6;
 
 /// Short ID definition
-#[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct ShortID {
-    inner: u64,
+    inner: u64, // guaranteed to have zeroed high 16 bits
 }
+
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct ShortIDVec(pub Vec<u8>);
 
 /// Hasher that produces `ID`s
 #[derive(Copy, Clone, Debug)]
@@ -42,6 +50,7 @@ impl ShortID {
         }
     }
 
+    /// Converts ShortID to a 6-byte array.
     pub fn to_bytes(self) -> [u8; 6] {
         [
             (self.inner & 0xff) as u8,
@@ -53,10 +62,59 @@ impl ShortID {
         ]
     }
 
+    /// Reads short id from a byte buffer.
+    /// Returns `None` if the buffer is too short.
+    pub fn at_position(offset: usize, buf: &[u8]) -> Option<ShortID> {
+        if buf.len() >= (offset + 1) * SHORTID_LEN {
+            Self::from_bytes(&buf[offset * SHORTID_LEN..][..6])
+        } else {
+            None
+        }
+    }
+
+    /// Converts a slice of bytes into iterator of short ids.
+    pub fn scan<'a>(bytes: &'a [u8]) -> impl Iterator<Item = ShortID> + 'a {
+        bytes
+            .chunks_exact(SHORTID_LEN)
+            .filter_map(|slice| Self::from_bytes(slice))
+    }
+
     fn from_u64(int: u64) -> Self {
         ShortID {
             inner: int & 0xffff_ffff_ffff,
         }
+    }
+}
+
+impl ShortIDVec {
+    /// Creates a new buffer with a given capacity.
+    pub fn with_capacity(cap: usize) -> Self {
+        Self(Vec::with_capacity(10 * SHORTID_LEN))
+    }
+
+    /// Adds an ID to the list
+    pub fn push(&mut self, shortid: ShortID) {
+        self.0.extend_from_slice(&shortid.to_bytes()[..]);
+    }
+
+    /// Iterates the short ids in the buffer.
+    pub fn iter<'a>(&'a self) -> impl Iterator<Item = ShortID> + 'a {
+        ShortID::scan(&self.0)
+    }
+
+    /// Number of short ids in the list.
+    pub fn len(&self) -> usize {
+        self.0.len() / SHORTID_LEN
+    }
+
+    /// Clears the list without changing its capacity.
+    pub fn clear(&mut self) {
+        self.0.clear()
+    }
+
+    /// Reads a short id at a given index.
+    pub fn get(&self, offset: usize) -> Option<ShortID> {
+        ShortID::at_position(offset, &self.0)
     }
 }
 
@@ -83,6 +141,18 @@ fn read_le64(slice: &[u8]) -> u64 {
         .iter()
         .enumerate()
         .fold(0u64, |r, (i, b)| r + ((*b as u64) << (i * 8)))
+}
+
+impl fmt::Debug for ShortID {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:x?}", self.inner)
+    }
+}
+
+impl fmt::Debug for ShortIDVec {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        ShortID::scan(&self.0).collect::<Vec<_>>().fmt(f)
+    }
 }
 
 #[cfg(test)]

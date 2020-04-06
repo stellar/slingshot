@@ -79,11 +79,12 @@ fn call_mix_gadget<CS: RandomizableConstraintSystem>(
     // For each of the `k-1` mix gadget calls, constrain A, B, C, D:
     for (((A, B), C), D) in
         // A = (first_in||mix_mid)[i]
-        iter::once(&first_in).chain(mix_mid.iter())
+        iter::once(&first_in)
+        .chain(mix_mid.iter())
         // B = mix_in[i+1]
         .zip(mix_in.iter().skip(1))
         // C = mix_out[i]
-        .zip(mix_out.iter().take(k-1))
+        .zip(mix_out.iter().take(k - 1))
         // D = (mix_mid||last_out)[i]
         .zip(mix_mid.iter().chain(iter::once(&last_out)))
     {

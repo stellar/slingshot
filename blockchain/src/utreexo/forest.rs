@@ -468,12 +468,27 @@ impl Catchup {
         proof: Proof,
         hasher: &Hasher<M>,
     ) -> Result<Proof, UtreexoError> {
-        let mut path = match proof {
-            // For the transient items `position` is irrelevant, so we may as well use 0.
-            Proof::Transient => Path::default(),
-            Proof::Committed(path) => path,
-        };
+        Ok(match proof {
+            // if the proof was transient, it may be updated (if item got committed),
+            // or may remain transient (if it did not).
+            Proof::Transient => self
+                .update_path(item, Path::default(), hasher)
+                .map_or(Proof::Transient, |path| Proof::Committed(path)),
+            // if the proof was committed and we fail to update it, it means it was invalid.
+            Proof::Committed(path) => Proof::Committed(
+                self.update_path(item, path, hasher)
+                    .ok_or(UtreexoError::InvalidProof)?,
+            ),
+        })
+    }
 
+    /// Returns an updated path. Returns None if the item pointed to by a path was not committed.
+    fn update_path<M: MerkleItem>(
+        &self,
+        item: &M,
+        mut path: Path,
+        hasher: &Hasher<M>,
+    ) -> Option<Path> {
         // 1. Climb up the merkle path until we find an existing node or nothing.
         let leaf_hash = hasher.leaf(item);
         let (midlevel, maybe_offset, _midhash) = path.iter().fold(
@@ -492,7 +507,7 @@ impl Catchup {
         );
 
         // Fail early if we did not find any catchup point.
-        let position_offset = maybe_offset.ok_or(UtreexoError::InvalidProof)?;
+        let position_offset = maybe_offset?;
 
         // Adjust the absolute position:
         // keep the lowest (level+1) bits and add the stored position offset for the stored subtree
@@ -503,10 +518,8 @@ impl Catchup {
         path.neighbors.truncate(midlevel);
 
         // Find the root to which the updated position belongs
-        let root_index =
-            self.forest.roots[find_root(self.forest.roots_iter().map(|r| r.level), path.position)
-                .ok_or(UtreexoError::InvalidProof)?
-                .0];
+        let root_index = self.forest.roots
+            [find_root(self.forest.roots_iter().map(|r| r.level), path.position)?.0];
 
         // Construct a new directions object.
         // We cannot take it from path because it does not have all neighbors yet.
@@ -528,7 +541,7 @@ impl Catchup {
             )
             .0;
 
-        Ok(Proof::Committed(path))
+        Some(path)
     }
 }
 

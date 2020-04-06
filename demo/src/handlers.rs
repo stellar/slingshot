@@ -131,9 +131,7 @@ fn network_mempool_makeblock(
         .flat_map(|e| e.utxo_proofs().iter().cloned())
         .collect::<Vec<_>>();
 
-    let (new_state, catchup) = mempool
-        .make_block()
-        .expect("Mempool::make_block should succeed");
+    let (new_state, catchup) = mempool.make_block();
 
     let new_block_record = BlockRecord {
         height: new_state.tip.height as i32,
