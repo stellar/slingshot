@@ -78,10 +78,7 @@ impl BlockchainState {
         let mut verified_txs = Vec::with_capacity(block_txs.len());
         for block_tx in block_txs.iter() {
             // TODO: this is a great place to do batch verification of signatures and bulletproofs.
-            let verified_tx = block_tx
-                .tx
-                .verify(bp_gens)
-                .map_err(|e| BlockchainError::TxValidation(e))?;
+            let verified_tx = block_tx.tx.verify(bp_gens)?;
 
             let mut utreexo_proofs = block_tx.proofs.iter();
 
@@ -94,9 +91,7 @@ impl BlockchainState {
                             .next()
                             .ok_or(BlockchainError::UtreexoProofMissing)?;
 
-                        work_forest
-                            .delete(contract_id, proof, &utxo_hasher)
-                            .map_err(|e| BlockchainError::UtreexoError(e))?;
+                        work_forest.delete(contract_id, proof, &utxo_hasher)?;
                     }
                     // Add item to the UTXO set
                     TxEntry::Output(contract) => {

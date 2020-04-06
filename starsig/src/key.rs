@@ -22,7 +22,7 @@ impl VerificationKey {
 
     /// Constructs a VerificationKey from a private key.
     pub fn from_secret_decompressed(privkey: &Scalar) -> RistrettoPoint {
-        (privkey * RISTRETTO_BASEPOINT_POINT)
+        privkey * RISTRETTO_BASEPOINT_POINT
     }
 
     /// Creates new key from a compressed form, remembers the compressed point.

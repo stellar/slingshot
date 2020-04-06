@@ -7,7 +7,7 @@ use rand::Rng;
 
 use zkvm::{
     Anchor, Commitment, Contract, PortableItem, Predicate, PredicateTree, Program, Prover, String,
-    TxHeader, TxID, VMError, Value, Verifier,
+    TxHeader, TxID, VMError, Value,
 };
 
 // TODO(vniu): move builder convenience functions into separate crate,
@@ -156,7 +156,7 @@ fn build_and_verify(program: Program, keys: &Vec<Scalar>) -> Result<TxID, VMErro
     // Verify tx
     let bp_gens = BulletproofGens::new(256, 1);
 
-    let vtx = Verifier::verify_tx(&tx, &bp_gens)?;
+    let vtx = tx.verify(&bp_gens)?;
     Ok(vtx.id)
 }
 
