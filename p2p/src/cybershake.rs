@@ -388,14 +388,23 @@ impl<W: AsyncRead + Unpin> Incoming<W> {
 
         let ad = encode_u64le(seq);
 
-        let plaintext = match Aes128PmacSiv::new(GenericArray::clone_from_slice(&key))
-            .decrypt(&[&ad], &self.buf[..self.ciphertext_length as usize])
-        {
-            Ok(text) => text,
-            Err(_) => unimplemented!(),
-        };
-        Read::read(&mut plaintext.as_slice(), &mut self.buf).unwrap();
-        self.plaintext_length = plaintext.len();
+        let siv_tag = GenericArray::clone_from_slice(&self.buf.as_slice()[..16]);
+        Aes128PmacSiv::new(GenericArray::clone_from_slice(&key))
+            .decrypt_in_place_detached(
+                &[&ad],
+                &mut self.buf.as_mut_slice()[16..self.ciphertext_length as usize],
+                &siv_tag,
+            )
+            .unwrap();
+
+        let pt_len = self.ciphertext_length as usize - 16;
+
+        for i in 0..pt_len {
+            let byte = self.buf.as_slice()[i + 16];
+            self.buf.as_mut_slice()[i] = byte;
+        }
+
+        self.plaintext_length = pt_len;
         self.ciphertext_length = 0;
         self.ciphertext_read = 0;
     }
