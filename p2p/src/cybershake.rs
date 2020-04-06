@@ -56,6 +56,7 @@ use std::pin::Pin;
 const ONLY_SUPPORTED_VERSION: u64 = 0;
 const PLAINTEXT_BUF_SIZE: u16 = 4096;
 const CIPHERTEXT_BUF_SIZE: u16 = PLAINTEXT_BUF_SIZE + 16; // 16 - auth tag
+const TEXT_START_POSITION: usize = 2 + 16; // 2 - length prefix, 16 - auth tag
 
 /// Private key for encrypting and authenticating connection.
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
@@ -77,15 +78,8 @@ pub struct Outgoing<W: io::AsyncWrite + Unpin> {
     seq: u64,
     kdf: Transcript,
     buf: Vec<u8>,
-    stage: WriteStage,
-    ciphertext_length: [u8; 2],
+    flushing: bool,
     ciphertext_sent: usize,
-}
-
-enum WriteStage {
-    ReadPlaintext,
-    WriteLength,
-    WriteCiphertext,
 }
 
 /// An endpoint for receiving messages from a remote party.
@@ -189,14 +183,15 @@ where
 
     // Now we prepare endpoints for reading and writing messages,
     // but don't give them to the user until we authenticate the connection.
+    let mut out_buf = Vec::with_capacity(CIPHERTEXT_BUF_SIZE as usize + 2); // 2 - length prefix
+    out_buf.extend_from_slice(&[0; TEXT_START_POSITION]);
     let mut outgoing = Outgoing {
         writer,
         seq: 0,
         kdf: kdf_outgoing,
-        buf: Vec::with_capacity(CIPHERTEXT_BUF_SIZE as usize),
+        buf: out_buf,
+        flushing: false,
         ciphertext_sent: 0,
-        stage: WriteStage::ReadPlaintext,
-        ciphertext_length: [0; 2],
     };
     let mut incoming = Incoming {
         reader,
@@ -282,34 +277,22 @@ impl<W: AsyncWrite + Unpin> Outgoing<W> {
 
         let ad = encode_u64le(self.seq);
 
-        Aes128PmacSiv::new(GenericArray::clone_from_slice(&key))
-            .encrypt_in_place(&[&ad], &mut self.buf)
+        let tag = Aes128PmacSiv::new(GenericArray::clone_from_slice(&key))
+            .encrypt_in_place_detached(&[&ad], &mut self.buf[TEXT_START_POSITION..])
             .map_err(|_| unimplemented!())
             .unwrap();
 
-        // Write length of the message.
-        Write::write(
-            &mut &mut self.ciphertext_length[..],
-            &encode_u16le(self.buf.len() as u16)[..],
-        )
-        .unwrap();
+        let buf_len = (self.buf.len() - 2) as u16;
+        LittleEndian::write_u16(&mut self.buf[..2], buf_len);
+        self.buf.as_mut_slice()[2..TEXT_START_POSITION].copy_from_slice(tag.as_slice());
 
         self.seq += 1;
-        self.stage = WriteStage::WriteLength;
+        self.flushing = true;
     }
 
     fn flush_pending_ciphertext(&mut self, cx: &mut Context) -> Poll<Result<(), io::Error>> {
-        if let WriteStage::ReadPlaintext = self.stage {
+        if !self.flushing {
             return Poll::Ready(Ok(()));
-        }
-        if let WriteStage::WriteLength = self.stage {
-            while self.ciphertext_sent != 2 {
-                let poll = self.writer.as_mut().poll_write(cx, &self.ciphertext_length);
-                let n = ready!(poll);
-                self.ciphertext_sent += n;
-            }
-            self.ciphertext_sent = 0;
-            self.stage = WriteStage::WriteCiphertext;
         }
         while self.ciphertext_sent < self.buf.len() {
             let poll = self
@@ -319,11 +302,9 @@ impl<W: AsyncWrite + Unpin> Outgoing<W> {
             let n = ready!(poll);
             self.ciphertext_sent += n;
         }
-        if self.ciphertext_sent > 0 {
-            self.ciphertext_sent = 0;
-            self.stage = WriteStage::ReadPlaintext;
-            self.buf.clear();
-        }
+        self.ciphertext_sent = 0;
+        self.flushing = false;
+        self.buf.truncate(TEXT_START_POSITION);
         Poll::Ready(Ok(()))
     }
 }
@@ -338,15 +319,16 @@ impl<W: AsyncWrite + Unpin> AsyncWrite for Outgoing<W> {
 
         ready!(me.flush_pending_ciphertext(cx));
 
-        if me.buf.len() + buf.len() >= PLAINTEXT_BUF_SIZE as usize {
+        if me.buf.len() + buf.len() >= PLAINTEXT_BUF_SIZE as usize + 2 {
             // plaintext_buf has BUF_SIZE size, so subtract with overflow will be never.
-            let size_to_write = PLAINTEXT_BUF_SIZE as usize - me.buf.len();
+            let size_to_write = PLAINTEXT_BUF_SIZE as usize + 2 - me.buf.len();
             me.buf.extend_from_slice(&buf[..size_to_write]);
             me.cipher_buf();
             ready!(me.flush_pending_ciphertext(cx));
             Poll::Ready(Ok(size_to_write))
         } else {
-            Poll::Ready(Write::write(&mut me.buf, buf))
+            me.buf.extend_from_slice(buf);
+            Poll::Ready(Ok(buf.len()))
         }
     }
 
@@ -365,7 +347,7 @@ impl<W: AsyncWrite + Unpin> AsyncWrite for Outgoing<W> {
 
     fn poll_shutdown(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
         let me = self.get_mut();
-        if let WriteStage::ReadPlaintext = me.stage {
+        if !me.flushing {
             me.cipher_buf();
         }
         ready!(me.flush_pending_ciphertext(cx));
