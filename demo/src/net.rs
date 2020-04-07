@@ -106,7 +106,7 @@ pub fn launch_p2p() -> P2PHandle {
                         println!("p2p: Peer disconnected: {}", pid)
                     }
                     NodeNotification::MessageReceived(pid, msg) => {
-                        println!("p2p: Received: `{}` from {}", msg, pid)
+                        println!("p2p: Received: `{:?}` from {}", msg, pid)
                     }
                     NodeNotification::InboundConnectionFailure(err) => {
                         println!("p2p: Inbound connection failure: {:?}", err)
