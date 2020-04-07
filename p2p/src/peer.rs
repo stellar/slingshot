@@ -32,10 +32,11 @@ pub struct PeerAddr {
 pub enum PeerMessage {
     // Upon connection, a peer tells its listening port for dialing in, if it's available.
     Hello(u16),
-    // A plain message.
-    Data(String),
     // A list of known peers.
     Peers(Vec<PeerAddr>),
+    // An underlying message.
+    // TODO: change this to a Bytes buffer or generic type, to avoid unnecessary copying.
+    Data(Vec<u8>),
 }
 
 /// Interface for communication with the peer.

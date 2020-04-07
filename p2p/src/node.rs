@@ -73,7 +73,7 @@ struct PeerState {
 pub enum NodeNotification {
     PeerAdded(PeerID),
     PeerDisconnected(PeerID),
-    MessageReceived(PeerID, String),
+    MessageReceived(PeerID, Vec<u8>),
     InboundConnectionFailure(cybershake::Error),
     OutboundConnectionFailure(cybershake::Error),
     /// Node has finished running.
@@ -93,7 +93,7 @@ pub struct PeerInfo {
 enum NodeMessage {
     ConnectPeer(net::TcpStream, Option<PeerID>),
     RemovePeer(PeerID),
-    Broadcast(String),
+    Broadcast(Vec<u8>),
     CountPeers(Reply<usize>),
     ListPeers(Reply<Vec<PeerInfo>>),
 }
@@ -209,7 +209,7 @@ impl NodeHandle {
     }
 
     /// Broadcasts a message to all peers.
-    pub async fn broadcast(&mut self, msg: String) {
+    pub async fn broadcast(&mut self, msg: Vec<u8>) {
         self.send_internal(NodeMessage::Broadcast(msg)).await
     }
 
@@ -433,7 +433,7 @@ impl Node {
             .count()
     }
 
-    async fn broadcast(&mut self, msg: String) {
+    async fn broadcast(&mut self, msg: Vec<u8>) {
         for (_id, peer_link) in self.peers.iter_mut() {
             peer_link.link.send(PeerMessage::Data(msg.clone())).await;
         }

@@ -50,9 +50,11 @@ fn main() {
                             NodeNotification::PeerDisconnected(pid) => {
                                 println!("\n=> Peer disconnected: {}", pid)
                             }
-                            NodeNotification::MessageReceived(pid, msg) => {
-                                println!("\n=> Received: `{}` from {}", msg, pid)
-                            }
+                            NodeNotification::MessageReceived(pid, msg) => println!(
+                                "\n=> Received: `{}` from {}",
+                                String::from_utf8_lossy(&msg).into_owned(),
+                                pid
+                            ),
                             NodeNotification::InboundConnectionFailure(err) => {
                                 println!("\n=> Inbound connection failure: {:?}", err)
                             }
@@ -146,7 +148,7 @@ impl Console {
             }
             UserCommand::Broadcast(msg) => {
                 println!("=> Broadcasting: {:?}", &msg);
-                self.node.broadcast(msg).await;
+                self.node.broadcast(msg.as_bytes().to_vec()).await;
             }
             UserCommand::ListPeers => {
                 let peer_infos = self.node.list_peers().await;
