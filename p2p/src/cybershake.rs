@@ -48,7 +48,6 @@ use tokio::prelude::*;
 
 use futures::task::{Context, Poll};
 use serde::{Deserialize, Serialize};
-use std::io::{Read, Write};
 use std::pin::Pin;
 
 /// The current version of the protocol is 0.
@@ -90,10 +89,13 @@ pub struct Incoming<R: io::AsyncRead + Unpin> {
     seq: u64,
     kdf: Transcript,
     buf: Vec<u8>,
-    plaintext_read: usize,
-    ciphertext_read: u16,
-    ciphertext_length: u16,
-    plaintext_length: usize,
+    state: ReadState,
+}
+
+enum ReadState {
+    Len(usize),
+    ReadCt(usize, usize),
+    ReadPt(usize, usize),
 }
 
 /// Kinds of failures that may happen during the handshake.
@@ -197,11 +199,8 @@ where
         reader,
         seq: 0,
         kdf: kdf_incoming,
-        plaintext_read: 0,
-        ciphertext_read: 0,
-        ciphertext_length: 0,
-        plaintext_length: 0,
         buf: vec![0u8; CIPHERTEXT_BUF_SIZE as usize], // TODO: allow user redefine this parameter
+        state: ReadState::Len(0),
     };
 
     // In order to authenticate the session, we send our first encrypted message
@@ -279,8 +278,7 @@ impl<W: AsyncWrite + Unpin> Outgoing<W> {
 
         let tag = Aes128PmacSiv::new(GenericArray::clone_from_slice(&key))
             .encrypt_in_place_detached(&[&ad], &mut self.buf[TEXT_START_POSITION..])
-            .map_err(|_| unimplemented!())
-            .unwrap();
+            .expect("never fails because we have just one header");
 
         let buf_len = (self.buf.len() - 2) as u16;
         LittleEndian::write_u16(&mut self.buf[..2], buf_len);
@@ -335,12 +333,10 @@ impl<W: AsyncWrite + Unpin> AsyncWrite for Outgoing<W> {
 
     fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
         let me = self.get_mut();
-        if me.buf.len() == 0 {
-            return Poll::Ready(Err(io::Error::new(
-                io::ErrorKind::WriteZero,
-                "attempt to write empty message",
-            )));
-        } else {
+        if !me.flushing {
+            if me.buf.len() == 0 {
+                return Poll::Ready(Ok(()));
+            }
             me.cipher_buf();
         }
         me.flush_pending_ciphertext(cx)
@@ -379,7 +375,7 @@ impl<W: AsyncRead + Unpin> Incoming<W> {
 }
 
 impl<W: AsyncRead + Unpin> Incoming<W> {
-    fn decipher_buf(&mut self) {
+    fn decipher_buf(&mut self, ciphertext_length: usize) -> usize {
         let seq = self.seq;
         self.seq += 1;
 
@@ -393,38 +389,29 @@ impl<W: AsyncRead + Unpin> Incoming<W> {
         Aes128PmacSiv::new(GenericArray::clone_from_slice(&key))
             .decrypt_in_place_detached(
                 &[&ad],
-                &mut self.buf.as_mut_slice()[16..self.ciphertext_length as usize],
+                &mut self.buf.as_mut_slice()[16..ciphertext_length as usize],
                 &siv_tag,
             )
             .unwrap();
 
-        let pt_len = self.ciphertext_length as usize - 16;
+        let pt_len = ciphertext_length as usize - 16;
 
         for i in 0..pt_len {
             let byte = self.buf.as_slice()[i + 16];
             self.buf.as_mut_slice()[i] = byte;
         }
 
-        self.plaintext_length = pt_len;
-        self.ciphertext_length = 0;
-        self.ciphertext_read = 0;
+        pt_len
     }
 
-    fn read_buffer(&mut self, buf: &mut [u8]) -> Result<usize, io::Error> {
-        match Read::read(
-            &mut &self.buf[self.plaintext_read..self.plaintext_length],
-            buf,
-        ) {
-            Ok(n) => {
-                self.plaintext_read += n;
-                if self.plaintext_read == self.plaintext_length {
-                    self.plaintext_read = 0;
-                    self.plaintext_length = 0;
-                }
-                Ok(n)
-            }
-            Err(e) => Err(e),
-        }
+    fn read_buffer(&mut self, buf: &mut [u8], len: usize, read: usize) -> usize {
+        let not_read = len - read;
+        let must_read = usize::min(buf.len(), not_read);
+        let read_to = read + must_read;
+
+        buf[..must_read].copy_from_slice(&self.buf[read..read_to]);
+
+        must_read
     }
 }
 
@@ -436,58 +423,51 @@ impl<W: AsyncRead + Unpin> AsyncRead for Incoming<W> {
     ) -> Poll<Result<usize, io::Error>> {
         let me = self.get_mut();
 
-        if me.plaintext_length != 0 {
-            return Poll::Ready(me.read_buffer(buf));
-        }
-
-        if me.ciphertext_length == 0 {
-            loop {
-                let poll = me
-                    .reader
-                    .as_mut()
-                    .poll_read(cx, &mut me.buf[me.ciphertext_read as usize..2]);
-                let n = ready!(poll);
-                if n == 0 {
-                    return Poll::Ready(Ok(0));
-                }
-                me.ciphertext_read += n as u16;
-                match me.ciphertext_read {
-                    1 => continue,
-                    2 => {
-                        me.ciphertext_read = 0;
-                        me.ciphertext_length = LittleEndian::read_u16(&me.buf[..2]);
-                        if me.ciphertext_length < 16 {
+        loop {
+            match me.state {
+                ReadState::Len(mut now_read) => {
+                    let poll = me.reader.as_mut().poll_read(cx, &mut me.buf[now_read..2]);
+                    let n = ready!(poll);
+                    if n == 0 {
+                        return Poll::Ready(Ok(0));
+                    }
+                    now_read += n;
+                    me.state = ReadState::Len(now_read);
+                    if now_read == 2 {
+                        let length = LittleEndian::read_u16(&me.buf[..2]) as usize;
+                        if length < 16 {
                             return Poll::Ready(Err(io::Error::new(
                                 io::ErrorKind::InvalidData,
-                                format!("length prefix: {} < 16", me.ciphertext_length),
+                                format!("length prefix: {} < 16", length),
                             )));
                         }
-                        break;
+                        me.state = ReadState::ReadCt(length, 0);
                     }
-                    _ => unreachable!(),
                 }
-            }
-        }
-
-        loop {
-            let poll = me.reader.as_mut().poll_read(
-                cx,
-                &mut me.buf[me.ciphertext_read as usize..me.ciphertext_length as usize],
-            );
-            let n = ready!(poll);
-            if n == 0 {
-                return Poll::Ready(Err(io::Error::new(
-                    io::ErrorKind::WouldBlock,
-                    format!(
-                        "Expected length {}, but found {}.",
-                        me.ciphertext_length, me.ciphertext_read
-                    ),
-                )));
-            }
-            me.ciphertext_read += n as u16;
-            if me.ciphertext_read == me.ciphertext_length {
-                me.decipher_buf();
-                return Poll::Ready(me.read_buffer(buf));
+                ReadState::ReadCt(len, mut now_read) => {
+                    let poll = me.reader.as_mut().poll_read(cx, &mut me.buf[now_read..len]);
+                    let n = ready!(poll);
+                    if n == 0 {
+                        return Poll::Ready(Err(io::Error::new(
+                            io::ErrorKind::WouldBlock,
+                            format!("Expected length {}, but found {}.", len, now_read),
+                        )));
+                    }
+                    now_read += n;
+                    if now_read == len {
+                        let ct_len = me.decipher_buf(len);
+                        me.state = ReadState::ReadPt(ct_len, 0);
+                    } else {
+                        me.state = ReadState::ReadCt(len, now_read);
+                    }
+                }
+                ReadState::ReadPt(len, now_read) => {
+                    let read = me.read_buffer(buf, len, now_read);
+                    if read + now_read == len {
+                        me.state = ReadState::Len(0);
+                    }
+                    return Poll::Ready(Ok(read));
+                }
             }
         }
     }
@@ -648,9 +628,9 @@ mod tests {
     use super::*;
     use rand::rngs::StdRng;
     use rand::SeedableRng;
-    use tokio::net::{TcpListener, TcpStream};
-    use tokio::io::BufWriter;
     use tokio::io::BufReader;
+    use tokio::io::BufWriter;
+    use tokio::net::{TcpListener, TcpStream};
 
     #[tokio::test]
     async fn light_message_top_level_function() {
