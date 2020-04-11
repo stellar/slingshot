@@ -107,9 +107,6 @@ pub enum Error {
     /// Point failed to decode correctly.
     ProtocolError,
 
-    /// Received message is declared too large - not reading.
-    MessageTooLong(usize),
-
     /// Version used by remote peer is not supported.
     UnsupportedVersion,
 }
@@ -352,14 +349,11 @@ impl<W: AsyncWrite + Unpin> AsyncWrite for Outgoing<W> {
     }
 }
 
-impl<W: AsyncRead + Unpin> Incoming<W> {
+impl<R: AsyncRead + Unpin> Incoming<R> {
     pub async fn receive_message(&mut self) -> Result<Vec<u8>, Error> {
         let mut buf = vec![0u8; 4096];
 
-        let len = self.read(&mut buf).await.map_err(|e| match e.kind() {
-            io::ErrorKind::InvalidData => Error::ProtocolError,
-            _ => Error::IoError(e),
-        })?;
+        let len = self.read(&mut buf).await?;
         buf.truncate(len);
 
         Ok(buf)
@@ -374,8 +368,8 @@ impl<W: AsyncRead + Unpin> Incoming<W> {
     }
 }
 
-impl<W: AsyncRead + Unpin> Incoming<W> {
-    fn decipher_buf(&mut self, ciphertext_length: usize) -> usize {
+impl<R: AsyncRead + Unpin> Incoming<R> {
+    fn decipher_buf(&mut self, ciphertext_length: usize) -> Result<usize, io::Error> {
         let seq = self.seq;
         self.seq += 1;
 
@@ -392,16 +386,16 @@ impl<W: AsyncRead + Unpin> Incoming<W> {
                 &mut self.buf.as_mut_slice()[16..ciphertext_length as usize],
                 &siv_tag,
             )
-            .unwrap();
+            .map_err(|_| {
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "An error was occured when try to decipher data.",
+                )
+            })?;
 
         let pt_len = ciphertext_length as usize - 16;
 
-        for i in 0..pt_len {
-            let byte = self.buf.as_slice()[i + 16];
-            self.buf.as_mut_slice()[i] = byte;
-        }
-
-        pt_len
+        Ok(pt_len)
     }
 
     fn read_buffer(&mut self, buf: &mut [u8], len: usize, read: usize) -> usize {
@@ -409,13 +403,13 @@ impl<W: AsyncRead + Unpin> Incoming<W> {
         let must_read = usize::min(buf.len(), not_read);
         let read_to = read + must_read;
 
-        buf[..must_read].copy_from_slice(&self.buf[read..read_to]);
+        buf[..must_read].copy_from_slice(&self.buf[16 + read..16 + read_to]);
 
         must_read
     }
 }
 
-impl<W: AsyncRead + Unpin> AsyncRead for Incoming<W> {
+impl<R: AsyncRead + Unpin> AsyncRead for Incoming<R> {
     fn poll_read(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -455,8 +449,10 @@ impl<W: AsyncRead + Unpin> AsyncRead for Incoming<W> {
                     }
                     now_read += n;
                     if now_read == len {
-                        let ct_len = me.decipher_buf(len);
-                        me.state = ReadState::ReadPt(ct_len, 0);
+                        match me.decipher_buf(len) {
+                            Ok(ct_len) => me.state = ReadState::ReadPt(ct_len, 0),
+                            Err(e) => return Poll::Ready(Err(e)),
+                        }
                     } else {
                         me.state = ReadState::ReadCt(len, now_read);
                     }
@@ -614,12 +610,6 @@ fn challenge_scalar(label: &'static [u8], transcript: &mut Transcript) -> Scalar
 fn encode_u64le(i: u64) -> [u8; 8] {
     let mut buf = [0u8; 8];
     LittleEndian::write_u64(&mut buf, i);
-    buf
-}
-
-fn encode_u16le(i: u16) -> [u8; 2] {
-    let mut buf = [0u8; 2];
-    LittleEndian::write_u16(&mut buf, i);
     buf
 }
 
