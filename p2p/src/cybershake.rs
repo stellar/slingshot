@@ -53,8 +53,8 @@ use std::pin::Pin;
 /// The current version of the protocol is 0.
 /// In the future we may add more versions, version bits or whatever.
 const ONLY_SUPPORTED_VERSION: u64 = 0;
-const PLAINTEXT_BUF_SIZE: u16 = 4096;
-const CIPHERTEXT_BUF_SIZE: u16 = PLAINTEXT_BUF_SIZE + 16; // 16 - auth tag
+const PLAINTEXT_BUF_SIZE: usize = 4096;
+const CIPHERTEXT_BUF_SIZE: usize = PLAINTEXT_BUF_SIZE + 16; // 16 - auth tag
 const TEXT_START_POSITION: usize = 2 + 16; // 2 - length prefix, 16 - auth tag
 
 /// Private key for encrypting and authenticating connection.
@@ -250,17 +250,10 @@ impl<W: AsyncWrite + Unpin> Outgoing<W> {
     pub async fn send_message(&mut self, msg: &[u8]) -> Result<(), Error> {
         let mut written = 0;
         while written != msg.len() {
-            match self.write(&msg[written..]).await {
-                Ok(n) => written += n,
-                Err(e) => {
-                    return match e.kind() {
-                        io::ErrorKind::InvalidData => Err(Error::ProtocolError),
-                        _ => Err(Error::IoError(e)),
-                    }
-                }
-            };
+            let n = self.write(&msg[written..]).await?;
+            written += n;
         }
-        self.flush().await.map_err(|e| Error::IoError(e))?;
+        self.flush().await?;
         Ok(())
     }
 }
@@ -315,9 +308,9 @@ impl<W: AsyncWrite + Unpin> AsyncWrite for Outgoing<W> {
 
         ready!(me.flush_pending_ciphertext(cx));
 
-        if me.buf.len() + buf.len() >= PLAINTEXT_BUF_SIZE as usize + 2 {
+        if me.buf.len() + buf.len() >= PLAINTEXT_BUF_SIZE + 2 {
             // plaintext_buf has BUF_SIZE size, so subtract with overflow will be never.
-            let size_to_write = PLAINTEXT_BUF_SIZE as usize + 2 - me.buf.len();
+            let size_to_write = PLAINTEXT_BUF_SIZE + 2 - me.buf.len();
             me.buf.extend_from_slice(&buf[..size_to_write]);
             me.cipher_buf();
             ready!(me.flush_pending_ciphertext(cx));
@@ -331,7 +324,7 @@ impl<W: AsyncWrite + Unpin> AsyncWrite for Outgoing<W> {
     fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
         let me = self.get_mut();
         if !me.flushing {
-            if me.buf.len() == 0 {
+            if me.buf.is_empty() {
                 return Poll::Ready(Ok(()));
             }
             me.cipher_buf();
@@ -379,11 +372,11 @@ impl<R: AsyncRead + Unpin> Incoming<R> {
 
         let ad = encode_u64le(seq);
 
-        let siv_tag = GenericArray::clone_from_slice(&self.buf.as_slice()[..16]);
+        let siv_tag = GenericArray::clone_from_slice(&self.buf[..16]);
         Aes128PmacSiv::new(GenericArray::clone_from_slice(&key))
             .decrypt_in_place_detached(
                 &[&ad],
-                &mut self.buf.as_mut_slice()[16..ciphertext_length as usize],
+                &mut self.buf[16..ciphertext_length],
                 &siv_tag,
             )
             .map_err(|_| {
@@ -393,7 +386,7 @@ impl<R: AsyncRead + Unpin> Incoming<R> {
                 )
             })?;
 
-        let pt_len = ciphertext_length as usize - 16;
+        let pt_len = ciphertext_length - 16;
 
         Ok(pt_len)
     }
