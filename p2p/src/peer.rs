@@ -85,11 +85,11 @@ impl PeerLink {
         RNG: RngCore + CryptoRng,
     {
         let (r, w) = io::split(socket);
-        let r = io::BufReader::new(r);
-        let w = io::BufWriter::new(w);
+        let r = Box::pin(io::BufReader::new(r));
+        let w = Box::pin(io::BufWriter::new(w));
 
         let (id_pubkey, mut outgoing, incoming) =
-            cybershake::cybershake(host_identity, r, w, 1000_000, rng).await?;
+            cybershake::cybershake(host_identity, r, w, rng).await?;
 
         let id = PeerID(id_pubkey);
         let retid = id.clone();
