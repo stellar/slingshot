@@ -53,9 +53,11 @@ use std::pin::Pin;
 /// The current version of the protocol is 0.
 /// In the future we may add more versions, version bits or whatever.
 const ONLY_SUPPORTED_VERSION: u64 = 0;
-const PLAINTEXT_BUF_SIZE: usize = 4096;
-const CIPHERTEXT_BUF_SIZE: usize = PLAINTEXT_BUF_SIZE + 16; // 16 - auth tag
-const TEXT_START_POSITION: usize = 2 + 16; // 2 - length prefix, 16 - auth tag
+const PT_BUF_SIZE: usize = 4096;
+const CT_LEN_SIZE: usize = 2; // 16-bit length prefix for ciphertext chunks
+const CT_TAG_SIZE: usize = 16; // 128-bit auth tag
+const CT_SIZE: usize = CT_TAG_SIZE + PT_BUF_SIZE;
+const PT_OFFSET: usize = CT_LEN_SIZE + CT_TAG_SIZE; // offset of the plaintext in the outgoing buffer
 
 /// Private key for encrypting and authenticating connection.
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
@@ -182,8 +184,8 @@ where
 
     // Now we prepare endpoints for reading and writing messages,
     // but don't give them to the user until we authenticate the connection.
-    let mut out_buf = Vec::with_capacity(CIPHERTEXT_BUF_SIZE as usize + 2); // 2 - length prefix
-    out_buf.extend_from_slice(&[0; TEXT_START_POSITION]);
+    let mut out_buf = Vec::with_capacity(CT_SIZE as usize + CT_LEN_SIZE);
+    out_buf.extend_from_slice(&[0; PT_OFFSET]);
     let mut outgoing = Outgoing {
         writer,
         seq: 0,
@@ -196,7 +198,7 @@ where
         reader,
         seq: 0,
         kdf: kdf_incoming,
-        buf: vec![0u8; CIPHERTEXT_BUF_SIZE as usize], // TODO: allow user redefine this parameter
+        buf: vec![0u8; CT_SIZE as usize], // TODO: allow user redefine this parameter
         state: ReadState::Len(0),
     };
 
@@ -246,19 +248,6 @@ macro_rules! ready {
 }
 
 impl<W: AsyncWrite + Unpin> Outgoing<W> {
-    /// Send a message with any length.
-    pub async fn send_message(&mut self, msg: &[u8]) -> Result<(), Error> {
-        let mut written = 0;
-        while written != msg.len() {
-            let n = self.write(&msg[written..]).await?;
-            written += n;
-        }
-        self.flush().await?;
-        Ok(())
-    }
-}
-
-impl<W: AsyncWrite + Unpin> Outgoing<W> {
     fn cipher_buf(&mut self) {
         self.kdf.append_u64(b"seq", self.seq);
         let mut key = [0u8; 32];
@@ -267,12 +256,12 @@ impl<W: AsyncWrite + Unpin> Outgoing<W> {
         let ad = encode_u64le(self.seq);
 
         let tag = Aes128PmacSiv::new(GenericArray::clone_from_slice(&key))
-            .encrypt_in_place_detached(&[&ad], &mut self.buf[TEXT_START_POSITION..])
+            .encrypt_in_place_detached(&[&ad], &mut self.buf[PT_OFFSET..])
             .expect("never fails because we have just one header");
 
         let buf_len = (self.buf.len() - 2) as u16;
         LittleEndian::write_u16(&mut self.buf[..2], buf_len);
-        self.buf.as_mut_slice()[2..TEXT_START_POSITION].copy_from_slice(tag.as_slice());
+        self.buf.as_mut_slice()[CT_LEN_SIZE..PT_OFFSET].copy_from_slice(tag.as_slice());
 
         self.seq += 1;
         self.flushing = true;
@@ -293,7 +282,7 @@ impl<W: AsyncWrite + Unpin> Outgoing<W> {
         ready!(self.writer.as_mut().poll_flush(cx));
         self.ciphertext_sent = 0;
         self.flushing = false;
-        self.buf.truncate(TEXT_START_POSITION);
+        self.buf.truncate(PT_OFFSET);
         Poll::Ready(Ok(()))
     }
 }
@@ -308,9 +297,9 @@ impl<W: AsyncWrite + Unpin> AsyncWrite for Outgoing<W> {
 
         ready!(me.flush_pending_ciphertext(cx));
 
-        if me.buf.len() + buf.len() >= PLAINTEXT_BUF_SIZE + 2 {
+        if me.buf.len() + buf.len() >= PT_BUF_SIZE + CT_LEN_SIZE {
             // plaintext_buf has BUF_SIZE size, so subtract with overflow will be never.
-            let size_to_write = PLAINTEXT_BUF_SIZE + 2 - me.buf.len();
+            let size_to_write = PT_BUF_SIZE + CT_LEN_SIZE - me.buf.len();
             me.buf.extend_from_slice(&buf[..size_to_write]);
             me.cipher_buf();
             ready!(me.flush_pending_ciphertext(cx));
@@ -342,17 +331,37 @@ impl<W: AsyncWrite + Unpin> AsyncWrite for Outgoing<W> {
     }
 }
 
+impl<W: AsyncWrite + Unpin> Outgoing<W> {
+    /// Send a message of any length.
+    /// This is a temporary. We'll replace this with Tokio Codecs.
+    pub async fn send_message(&mut self, msg: &[u8]) -> Result<(), Error> {
+        let mut msglenprefix = [0u8; 4];
+        LittleEndian::write_u32(&mut msglenprefix, msg.len() as u32);
+        self.write(&msglenprefix[..]).await?;
+        self.write(msg).await?;
+        self.flush().await?;
+        Ok(())
+    }
+}
+
 impl<R: AsyncRead + Unpin> Incoming<R> {
+    /// Receive a message from the remote end.
+    /// This is a temporary. We'll replace this with Tokio Codecs.
     pub async fn receive_message(&mut self) -> Result<Vec<u8>, Error> {
-        let mut buf = vec![0u8; 4096];
-
-        let len = self.read(&mut buf).await?;
-        buf.truncate(len);
-
+        let mut msglenprefix = [0u8; 4];
+        let _ = self.read_exact(&mut msglenprefix).await?;
+        let n = LittleEndian::read_u32(&msglenprefix) as usize;
+        // arbitrary 10Mb limit until we provide Tokio Codecs-based interface and push this decision to custom types.
+        if n > 10_000_000 {
+            return Err(Error::ProtocolError);
+        }
+        let mut buf = Vec::with_capacity(n);
+        buf.resize(n, 0);
+        self.read_exact(&mut buf).await?;
         Ok(buf)
     }
 
-    /// Converts to the Stream
+    /// Provides a Stream of messages.
     pub fn into_stream(self) -> impl futures::stream::Stream<Item = Result<Vec<u8>, Error>> {
         futures::stream::unfold(self, |mut src| async move {
             let res = src.receive_message().await;
@@ -374,11 +383,7 @@ impl<R: AsyncRead + Unpin> Incoming<R> {
 
         let siv_tag = GenericArray::clone_from_slice(&self.buf[..16]);
         Aes128PmacSiv::new(GenericArray::clone_from_slice(&key))
-            .decrypt_in_place_detached(
-                &[&ad],
-                &mut self.buf[16..ciphertext_length],
-                &siv_tag,
-            )
+            .decrypt_in_place_detached(&[&ad], &mut self.buf[16..ciphertext_length], &siv_tag)
             .map_err(|_| {
                 io::Error::new(
                     io::ErrorKind::InvalidData,
