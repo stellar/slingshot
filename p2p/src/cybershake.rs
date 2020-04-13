@@ -53,9 +53,11 @@ use std::pin::Pin;
 /// The current version of the protocol is 0.
 /// In the future we may add more versions, version bits or whatever.
 const ONLY_SUPPORTED_VERSION: u64 = 0;
-const PLAINTEXT_BUF_SIZE: usize = 4096;
-const CIPHERTEXT_BUF_SIZE: usize = PLAINTEXT_BUF_SIZE + 16; // 16 - auth tag
-const TEXT_START_POSITION: usize = 2 + 16; // 2 - length prefix, 16 - auth tag
+const PT_BUF_SIZE: usize = 4096;
+const CT_LEN_SIZE: usize = 2; // 16-bit length prefix for ciphertext chunks
+const CT_TAG_SIZE: usize = 16; // 128-bit auth tag
+const CT_SIZE: usize = CT_TAG_SIZE + PT_BUF_SIZE;
+const PT_OFFSET: usize = CT_LEN_SIZE + CT_TAG_SIZE; // offset of the plaintext in the outgoing buffer
 
 /// Private key for encrypting and authenticating connection.
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
@@ -120,7 +122,7 @@ pub async fn cybershake<R, W, RNG>(
     local_identity: &PrivateKey,
     mut reader: Pin<Box<R>>,
     mut writer: Pin<Box<W>>,
-    rng: &mut RNG,
+    mut rng: RNG,
 ) -> Result<(PublicKey, Outgoing<W>, Incoming<R>), Error>
 where
     R: io::AsyncRead + Unpin,
@@ -133,14 +135,14 @@ where
     let mut keygen_rng = Transcript::new(b"Cybershake.randomness")
         .build_rng()
         .rekey_with_witness_bytes(b"local_privkey", local_identity.as_secret_bytes())
-        .finalize(rng);
+        .finalize(&mut rng);
 
     let local_ephemeral = PrivateKey::from(Scalar::random(&mut keygen_rng));
 
     const SALT_LEN: usize = 16;
     let mut local_salt = [0u8; SALT_LEN];
     keygen_rng.fill_bytes(&mut local_salt[..]);
-    let local_blinded_identity = local_identity.blind(&local_salt);
+    let local_blinded_identity = local_identity.blind(&local_salt[..]);
 
     // Now we send our first, unencrypted, message:
     //
@@ -182,8 +184,8 @@ where
 
     // Now we prepare endpoints for reading and writing messages,
     // but don't give them to the user until we authenticate the connection.
-    let mut out_buf = Vec::with_capacity(CIPHERTEXT_BUF_SIZE as usize + 2); // 2 - length prefix
-    out_buf.extend_from_slice(&[0; TEXT_START_POSITION]);
+    let mut out_buf = Vec::with_capacity(CT_SIZE as usize + CT_LEN_SIZE);
+    out_buf.extend_from_slice(&[0; PT_OFFSET]);
     let mut outgoing = Outgoing {
         writer,
         seq: 0,
@@ -196,29 +198,23 @@ where
         reader,
         seq: 0,
         kdf: kdf_incoming,
-        buf: vec![0u8; CIPHERTEXT_BUF_SIZE as usize], // TODO: allow user redefine this parameter
+        buf: vec![0u8; CT_SIZE as usize], // TODO: allow user redefine this parameter
         state: ReadState::Len(0),
     };
 
     // In order to authenticate the session, we send our first encrypted message
-    // in which we show the salt and the root key.
+    // in which we show the salt and the root pubkey.
     // If the transmission was successful (authenticated decryption succeeded),
     // we check the blinded key and then let user continue using the session.
 
     // Prepare and send the message: salt and local identity pubkey.
-    let msg_len = SALT_LEN + 32;
-    let mut local_salt_and_id = Vec::<u8>::with_capacity(msg_len);
-    local_salt_and_id.extend_from_slice(&local_salt[..]);
-    local_salt_and_id.extend_from_slice(local_identity.pubkey.as_bytes());
-    outgoing.send_message(&local_salt_and_id).await?;
+    outgoing.write_all(&local_salt[..]).await?;
+    outgoing.write_all(local_identity.pubkey.as_bytes()).await?;
+    outgoing.flush().await?;
 
     // Receive the message from another end: their salt and their identity pubkey.
-    let remote_salt_and_id = incoming.receive_message().await?;
-    if remote_salt_and_id.len() != msg_len {
-        return Err(Error::ProtocolError);
-    }
-    let mut remote_salt = [0u8; SALT_LEN];
-    remote_salt[..].copy_from_slice(&remote_salt_and_id[0..SALT_LEN]);
+    let mut remote_salt_and_id = [0u8; SALT_LEN + 32];
+    incoming.read_exact(&mut remote_salt_and_id).await?;
     let received_remote_identity =
         PublicKey::read_from(&mut &remote_salt_and_id[SALT_LEN..]).await?;
 
@@ -226,8 +222,9 @@ where
     // Here we check that the remote party has sent us the correct identity key
     // matching the blinded key they used for X3DH.
     let received_remote_id_blinded = received_remote_identity
-        .blind(&remote_salt)
+        .blind(&remote_salt_and_id[0..SALT_LEN])
         .ok_or(Error::ProtocolError)?;
+
     if received_remote_id_blinded != remote_blinded_identity {
         return Err(Error::ProtocolError);
     }
@@ -246,19 +243,6 @@ macro_rules! ready {
 }
 
 impl<W: AsyncWrite + Unpin> Outgoing<W> {
-    /// Send a message with any length.
-    pub async fn send_message(&mut self, msg: &[u8]) -> Result<(), Error> {
-        let mut written = 0;
-        while written != msg.len() {
-            let n = self.write(&msg[written..]).await?;
-            written += n;
-        }
-        self.flush().await?;
-        Ok(())
-    }
-}
-
-impl<W: AsyncWrite + Unpin> Outgoing<W> {
     fn cipher_buf(&mut self) {
         self.kdf.append_u64(b"seq", self.seq);
         let mut key = [0u8; 32];
@@ -267,12 +251,12 @@ impl<W: AsyncWrite + Unpin> Outgoing<W> {
         let ad = encode_u64le(self.seq);
 
         let tag = Aes128PmacSiv::new(GenericArray::clone_from_slice(&key))
-            .encrypt_in_place_detached(&[&ad], &mut self.buf[TEXT_START_POSITION..])
+            .encrypt_in_place_detached(&[&ad], &mut self.buf[PT_OFFSET..])
             .expect("never fails because we have just one header");
 
-        let buf_len = (self.buf.len() - 2) as u16;
-        LittleEndian::write_u16(&mut self.buf[..2], buf_len);
-        self.buf.as_mut_slice()[2..TEXT_START_POSITION].copy_from_slice(tag.as_slice());
+        let ct_len = (self.buf.len() - 2) as u16;
+        LittleEndian::write_u16(&mut self.buf[..2], ct_len);
+        self.buf.as_mut_slice()[CT_LEN_SIZE..PT_OFFSET].copy_from_slice(tag.as_slice());
 
         self.seq += 1;
         self.flushing = true;
@@ -293,7 +277,7 @@ impl<W: AsyncWrite + Unpin> Outgoing<W> {
         ready!(self.writer.as_mut().poll_flush(cx));
         self.ciphertext_sent = 0;
         self.flushing = false;
-        self.buf.truncate(TEXT_START_POSITION);
+        self.buf.truncate(PT_OFFSET);
         Poll::Ready(Ok(()))
     }
 }
@@ -308,9 +292,9 @@ impl<W: AsyncWrite + Unpin> AsyncWrite for Outgoing<W> {
 
         ready!(me.flush_pending_ciphertext(cx));
 
-        if me.buf.len() + buf.len() >= PLAINTEXT_BUF_SIZE + 2 {
+        if me.buf.len() + buf.len() >= PT_BUF_SIZE + CT_LEN_SIZE {
             // plaintext_buf has BUF_SIZE size, so subtract with overflow will be never.
-            let size_to_write = PLAINTEXT_BUF_SIZE + 2 - me.buf.len();
+            let size_to_write = PT_BUF_SIZE + CT_LEN_SIZE - me.buf.len();
             me.buf.extend_from_slice(&buf[..size_to_write]);
             me.cipher_buf();
             ready!(me.flush_pending_ciphertext(cx));
@@ -342,17 +326,37 @@ impl<W: AsyncWrite + Unpin> AsyncWrite for Outgoing<W> {
     }
 }
 
+impl<W: AsyncWrite + Unpin> Outgoing<W> {
+    /// Send a message of any length.
+    /// This is a temporary. We'll replace this with Tokio Codecs.
+    pub async fn send_message(&mut self, msg: &[u8]) -> Result<(), Error> {
+        let mut msglenprefix = [0u8; 4];
+        LittleEndian::write_u32(&mut msglenprefix, msg.len() as u32);
+        self.write_all(&msglenprefix[..]).await?;
+        self.write_all(&msg).await?;
+        self.flush().await?;
+        Ok(())
+    }
+}
+
 impl<R: AsyncRead + Unpin> Incoming<R> {
+    /// Receive a message from the remote end.
+    /// This is a temporary. We'll replace this with Tokio Codecs.
     pub async fn receive_message(&mut self) -> Result<Vec<u8>, Error> {
-        let mut buf = vec![0u8; 4096];
-
-        let len = self.read(&mut buf).await?;
-        buf.truncate(len);
-
+        let mut msglenprefix = [0u8; 4];
+        let _ = self.read_exact(&mut msglenprefix).await?;
+        let n = LittleEndian::read_u32(&msglenprefix) as usize;
+        // arbitrary 10Mb limit until we provide Tokio Codecs-based interface and push this decision to custom types.
+        if n > 10_000_000 {
+            return Err(Error::ProtocolError);
+        }
+        let mut buf = Vec::with_capacity(n);
+        buf.resize(n, 0);
+        self.read_exact(&mut buf).await?;
         Ok(buf)
     }
 
-    /// Converts to the Stream
+    /// Provides a Stream of messages.
     pub fn into_stream(self) -> impl futures::stream::Stream<Item = Result<Vec<u8>, Error>> {
         futures::stream::unfold(self, |mut src| async move {
             let res = src.receive_message().await;
@@ -374,11 +378,7 @@ impl<R: AsyncRead + Unpin> Incoming<R> {
 
         let siv_tag = GenericArray::clone_from_slice(&self.buf[..16]);
         Aes128PmacSiv::new(GenericArray::clone_from_slice(&key))
-            .decrypt_in_place_detached(
-                &[&ad],
-                &mut self.buf[16..ciphertext_length],
-                &siv_tag,
-            )
+            .decrypt_in_place_detached(&[&ad], &mut self.buf[16..ciphertext_length], &siv_tag)
             .map_err(|_| {
                 io::Error::new(
                     io::ErrorKind::InvalidData,
@@ -389,16 +389,6 @@ impl<R: AsyncRead + Unpin> Incoming<R> {
         let pt_len = ciphertext_length - 16;
 
         Ok(pt_len)
-    }
-
-    fn read_buffer(&mut self, buf: &mut [u8], len: usize, read: usize) -> usize {
-        let not_read = len - read;
-        let must_read = usize::min(buf.len(), not_read);
-        let read_to = read + must_read;
-
-        buf[..must_read].copy_from_slice(&self.buf[16 + read..16 + read_to]);
-
-        must_read
     }
 }
 
@@ -412,15 +402,18 @@ impl<R: AsyncRead + Unpin> AsyncRead for Incoming<R> {
 
         loop {
             match me.state {
-                ReadState::Len(mut now_read) => {
-                    let poll = me.reader.as_mut().poll_read(cx, &mut me.buf[now_read..2]);
+                ReadState::Len(mut already_read) => {
+                    let poll = me
+                        .reader
+                        .as_mut()
+                        .poll_read(cx, &mut me.buf[already_read..2]);
                     let n = ready!(poll);
                     if n == 0 {
                         return Poll::Ready(Ok(0));
                     }
-                    now_read += n;
-                    me.state = ReadState::Len(now_read);
-                    if now_read == 2 {
+                    already_read += n;
+                    me.state = ReadState::Len(already_read);
+                    if already_read == 2 {
                         let length = LittleEndian::read_u16(&me.buf[..2]) as usize;
                         if length < 16 {
                             return Poll::Ready(Err(io::Error::new(
@@ -428,34 +421,41 @@ impl<R: AsyncRead + Unpin> AsyncRead for Incoming<R> {
                                 format!("length prefix: {} < 16", length),
                             )));
                         }
+                        me.buf.resize(length, 0);
                         me.state = ReadState::ReadCt(length, 0);
                     }
                 }
-                ReadState::ReadCt(len, mut now_read) => {
-                    let poll = me.reader.as_mut().poll_read(cx, &mut me.buf[now_read..len]);
+                ReadState::ReadCt(len, mut already_read) => {
+                    let poll = me
+                        .reader
+                        .as_mut()
+                        .poll_read(cx, &mut me.buf[already_read..len]);
                     let n = ready!(poll);
                     if n == 0 {
                         return Poll::Ready(Err(io::Error::new(
                             io::ErrorKind::WouldBlock,
-                            format!("Expected length {}, but found {}.", len, now_read),
+                            format!("Expected length {}, but found {}.", len, already_read),
                         )));
                     }
-                    now_read += n;
-                    if now_read == len {
+                    already_read += n;
+                    if already_read == len {
                         match me.decipher_buf(len) {
-                            Ok(ct_len) => me.state = ReadState::ReadPt(ct_len, 0),
+                            Ok(pt_len) => me.state = ReadState::ReadPt(pt_len, 0),
                             Err(e) => return Poll::Ready(Err(e)),
                         }
                     } else {
-                        me.state = ReadState::ReadCt(len, now_read);
+                        me.state = ReadState::ReadCt(len, already_read);
                     }
                 }
-                ReadState::ReadPt(len, now_read) => {
-                    let read = me.read_buffer(buf, len, now_read);
-                    if read + now_read == len {
+                ReadState::ReadPt(pt_len, already_read) => {
+                    let read_now = usize::min(buf.len(), pt_len - already_read);
+                    buf[..read_now]
+                        .copy_from_slice(&me.buf[CT_TAG_SIZE + already_read..][..read_now]);
+                    me.state = ReadState::ReadPt(pt_len, already_read + read_now);
+                    if already_read + read_now == pt_len {
                         me.state = ReadState::Len(0);
                     }
-                    return Poll::Ready(Ok(read));
+                    return Poll::Ready(Ok(read_now));
                 }
             }
         }
@@ -556,7 +556,7 @@ impl PrivateKey {
     }
 
     /// Blinds the private key.
-    fn blind(&self, salt: &[u8; 16]) -> Self {
+    fn blind(&self, salt: &[u8]) -> Self {
         PrivateKey::from(self.secret + keyblinding_factor(&self.pubkey.point, salt))
     }
 }
@@ -573,7 +573,7 @@ impl PublicKey {
     }
 
     /// Blinds the public key.
-    fn blind(&self, salt: &[u8; 16]) -> Option<Self> {
+    fn blind(&self, salt: &[u8]) -> Option<Self> {
         self.point.decompress().map(|p| {
             PublicKey::from(p + keyblinding_factor(&self.point, salt) * RISTRETTO_BASEPOINT_POINT)
         })
@@ -587,7 +587,7 @@ impl PublicKey {
     }
 }
 
-fn keyblinding_factor(pubkey: &CompressedRistretto, salt: &[u8; 16]) -> Scalar {
+fn keyblinding_factor(pubkey: &CompressedRistretto, salt: &[u8]) -> Scalar {
     let mut t = Transcript::new(b"Cybershake.keyblinding");
     t.append_message(b"key", pubkey.as_bytes());
     t.append_message(b"salt", &salt[..]);
@@ -611,8 +611,6 @@ mod tests {
     use super::*;
     use rand::rngs::StdRng;
     use rand::SeedableRng;
-    use tokio::io::BufReader;
-    use tokio::io::BufWriter;
     use tokio::net::{TcpListener, TcpStream};
 
     #[tokio::test]
@@ -628,12 +626,11 @@ mod tests {
         let alice = tokio::spawn(async move {
             let (alice_reader, _) = alice_listener.accept().await.unwrap();
             let alice_writer = TcpStream::connect(bob_addr).await.unwrap();
-            let mut rng = StdRng::from_entropy();
             let (received_key, mut alice_out, mut alice_inc) = cybershake(
                 &alice_private_key,
                 Box::pin(alice_reader),
                 Box::pin(alice_writer),
-                &mut rng,
+                StdRng::from_entropy(),
             )
             .await
             .unwrap();
@@ -652,12 +649,11 @@ mod tests {
         let bob = tokio::spawn(async move {
             let bob_writer = TcpStream::connect(alice_addr).await.unwrap();
             let (bob_reader, _) = bob_listener.accept().await.unwrap();
-            let mut rng = StdRng::from_entropy();
             let (received_key, mut bob_out, mut bob_inc) = cybershake(
                 &bob_private_key,
                 Box::pin(bob_reader),
                 Box::pin(bob_writer),
-                &mut rng,
+                StdRng::from_entropy(),
             )
             .await
             .unwrap();
@@ -690,12 +686,11 @@ mod tests {
         let alice = tokio::spawn(async move {
             let (alice_reader, _) = alice_listener.accept().await.unwrap();
             let alice_writer = TcpStream::connect(bob_addr).await.unwrap();
-            let mut rng = StdRng::from_entropy();
             let (received_key, mut alice_out, mut alice_inc) = cybershake(
                 &alice_private_key,
                 Box::pin(alice_reader),
                 Box::pin(alice_writer),
-                &mut rng,
+                StdRng::from_entropy(),
             )
             .await
             .unwrap();
@@ -717,12 +712,11 @@ mod tests {
         let bob = tokio::spawn(async move {
             let bob_writer = TcpStream::connect(alice_addr).await.unwrap();
             let (bob_reader, _) = bob_listener.accept().await.unwrap();
-            let mut rng = StdRng::from_entropy();
             let (received_key, mut bob_out, mut bob_inc) = cybershake(
                 &bob_private_key,
                 Box::pin(bob_reader),
                 Box::pin(bob_writer),
-                &mut rng,
+                StdRng::from_entropy(),
             )
             .await
             .unwrap();
@@ -747,8 +741,8 @@ mod tests {
 
     #[tokio::test]
     async fn large_message() {
-        let alice_private_key = PrivateKey::from(Scalar::from(1u8));
-        let bob_private_key = PrivateKey::from(Scalar::from(2u8));
+        let alice_private_key = PrivateKey::from(Scalar::from(1u64));
+        let bob_private_key = PrivateKey::from(Scalar::from(2u64));
 
         let mut alice_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let mut bob_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -756,17 +750,21 @@ mod tests {
         let bob_addr = bob_listener.local_addr().unwrap();
 
         let alice = tokio::spawn(async move {
-            let (alice_reader, _) = alice_listener.accept().await.unwrap();
-            let alice_writer = TcpStream::connect(bob_addr).await.unwrap();
-            let mut rng = StdRng::from_entropy();
+            let (alice_reader, _) = alice_listener
+                .accept()
+                .await
+                .expect("alice: listener.accept");
+            let alice_writer = TcpStream::connect(bob_addr)
+                .await
+                .expect("alice: connect to bob");
             let (_, mut alice_out, _) = cybershake(
                 &alice_private_key,
                 Box::pin(alice_reader),
                 Box::pin(alice_writer),
-                &mut rng,
+                StdRng::from_entropy(),
             )
             .await
-            .unwrap();
+            .expect("alice: should handshake correctly");
 
             // Alice send message to bob
             let alice_message: Vec<u8> = vec![10u8; 6000];
@@ -774,89 +772,25 @@ mod tests {
         });
 
         let bob = tokio::spawn(async move {
-            let bob_writer = TcpStream::connect(alice_addr).await.unwrap();
-            let (bob_reader, _) = bob_listener.accept().await.unwrap();
-            let mut rng = StdRng::from_entropy();
+            let bob_writer = TcpStream::connect(alice_addr)
+                .await
+                .expect("bob: connect to alice");
+            let (bob_reader, _) = bob_listener.accept().await.expect("bob: listener.accept");
             let (_, _, mut bob_inc) = cybershake(
                 &bob_private_key,
                 Box::pin(bob_reader),
                 Box::pin(bob_writer),
-                &mut rng,
+                StdRng::from_entropy(),
             )
             .await
-            .unwrap();
+            .expect("bob: should handshake correctly");
 
             // Bob receive message from Alice
-            let mut buf = vec![0u8; 9000];
-            let mut read = 0;
-            loop {
-                let message_len = bob_inc.read(&mut buf[read..]).await.unwrap();
-                read += message_len;
-                if message_len == 0 {
-                    break;
-                }
-            }
-            buf.truncate(read);
-
-            assert_eq!(vec![10u8; 6000], buf);
-        });
-
-        assert!(alice.await.is_ok());
-        assert!(bob.await.is_ok());
-    }
-
-    #[tokio::test]
-    async fn half_socket() {
-        let alice_private_key = PrivateKey::from(Scalar::from(1u8));
-        let bob_private_key = PrivateKey::from(Scalar::from(2u8));
-
-        let mut alice_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let alice_addr = alice_listener.local_addr().unwrap();
-
-        let alice = tokio::spawn(async move {
-            let (alice_stream, _) = alice_listener.accept().await.unwrap();
-            let mut rng = StdRng::from_entropy();
-            let (alice_reader, alice_writer) = tokio::io::split(alice_stream);
-            let (_, mut alice_out, _) = cybershake(
-                &alice_private_key,
-                Box::pin(BufReader::new(alice_reader)),
-                Box::pin(BufWriter::new(alice_writer)),
-                &mut rng,
-            )
-            .await
-            .unwrap();
-
-            // Alice send message to bob
-            let alice_message: Vec<u8> = vec![10u8; 6000];
-            alice_out.send_message(&alice_message).await.unwrap();
-        });
-
-        let bob = tokio::spawn(async move {
-            let bob_stream = TcpStream::connect(alice_addr).await.unwrap();
-            let (bob_reader, bob_writer) = tokio::io::split(bob_stream);
-            let mut rng = StdRng::from_entropy();
-            let (_, _, mut bob_inc) = cybershake(
-                &bob_private_key,
-                Box::pin(bob_reader),
-                Box::pin(bob_writer),
-                &mut rng,
-            )
-            .await
-            .unwrap();
-
-            // Bob receive message from Alice
-            let mut buf = vec![0u8; 9000];
-            let mut read = 0;
-            loop {
-                let message_len = bob_inc.read(&mut buf[read..]).await.unwrap();
-                read += message_len;
-                if message_len == 0 {
-                    break;
-                }
-            }
-            buf.truncate(read);
-
-            assert_eq!(vec![10u8; 6000], buf);
+            let msg = bob_inc
+                .receive_message()
+                .await
+                .expect("bob should receive msg");
+            assert_eq!(vec![10u8; 6000], msg);
         });
 
         assert!(alice.await.is_ok());
