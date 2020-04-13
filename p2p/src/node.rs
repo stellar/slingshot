@@ -8,6 +8,7 @@ use futures::future::FutureExt;
 use futures::select;
 use futures::stream::StreamExt;
 
+use tokio::io;
 use tokio::net;
 use tokio::prelude::*;
 use tokio::sync;
@@ -74,8 +75,8 @@ pub enum NodeNotification {
     PeerAdded(PeerID),
     PeerDisconnected(PeerID),
     MessageReceived(PeerID, Vec<u8>),
-    InboundConnectionFailure(cybershake::Error),
-    OutboundConnectionFailure(cybershake::Error),
+    InboundConnectionFailure(io::Error),
+    OutboundConnectionFailure(io::Error),
     /// Node has finished running.
     Shutdown,
 }
@@ -314,7 +315,7 @@ impl Node {
         stream: net::TcpStream,
         expected_pid: Option<PeerID>,
         min_priority: Priority,
-    ) -> Result<(), cybershake::Error> {
+    ) -> Result<(), io::Error> {
         let addr = stream.peer_addr()?;
 
         let peer_link = PeerLink::spawn(
@@ -335,9 +336,9 @@ impl Node {
     async fn connect_to_peer_addr(
         &mut self,
         peer_addr: &PeerAddr,
-    ) -> Result<(), cybershake::Error> {
+    ) -> Result<(), io::Error> {
         if peer_addr.addr.ip().is_unspecified() {
-            return Err(cybershake::Error::ProtocolError);
+            return Err(io::Error::ProtocolError);
         }
         // TODO: add short timeout to avoid hanging for too long waiting to be accepted.
         let stream = net::TcpStream::connect(&peer_addr.addr).await?;

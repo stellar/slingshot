@@ -78,7 +78,7 @@ impl PeerLink {
         mut notifications_channel: sync::mpsc::Sender<N>,
         socket: S,
         rng: &mut RNG,
-    ) -> Result<Self, cybershake::Error>
+    ) -> Result<Self, io::Error>
     where
         S: AsyncRead + AsyncWrite + Unpin + 'static,
         N: From<PeerNotification> + 'static,
@@ -104,7 +104,7 @@ impl PeerLink {
 
         enum PeerEvent {
             Send(PeerMessage),
-            Receive(Result<Vec<u8>, cybershake::Error>),
+            Receive(Result<Vec<u8>, io::Error>),
             Stopped,
         }
 
