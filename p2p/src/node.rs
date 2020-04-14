@@ -337,8 +337,9 @@ impl Node {
         &mut self,
         peer_addr: &PeerAddr,
     ) -> Result<(), io::Error> {
-        if peer_addr.addr.ip().is_unspecified() {
-            return Err(io::Error::ProtocolError);
+        let ip = peer_addr.addr.ip();
+        if ip.is_unspecified() {
+            return Err(io::Error::new(io::ErrorKind::Other, format!("{} is unspecified.", ip)));
         }
         // TODO: add short timeout to avoid hanging for too long waiting to be accepted.
         let stream = net::TcpStream::connect(&peer_addr.addr).await?;

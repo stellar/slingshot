@@ -212,12 +212,12 @@ where
     // matching the blinded key they used for X3DH.
     let received_remote_id_blinded = received_remote_identity
         .blind(&remote_salt_and_id[0..SALT_LEN])
-        .ok_or_else(|| {
+        .ok_or(
                 io::Error::new(
                     io::ErrorKind::InvalidData,
                     "Failed to decode Ristretto point",
                 )
-        })?;
+        )?;
 
     if received_remote_id_blinded != remote_blinded_identity {
         return Err(io::Error::new(
