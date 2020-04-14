@@ -337,7 +337,7 @@ impl Node {
         peer_addr: &PeerAddr,
     ) -> Result<(), cybershake::Error> {
         if peer_addr.addr.ip().is_unspecified() {
-            return Err(cybershake::Error::ProtocolError);
+            return Err(cybershake::Error::new_io(io::ErrorKind::AddrNotAvailable, peer_addr.addr.ip().to_string()));
         }
         // TODO: add short timeout to avoid hanging for too long waiting to be accepted.
         let stream = net::TcpStream::connect(&peer_addr.addr).await?;
