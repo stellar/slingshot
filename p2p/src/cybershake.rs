@@ -149,9 +149,9 @@ where
     let remote_version = LittleEndian::read_u64(&remote_version_buf);
     if remote_version != ONLY_SUPPORTED_VERSION {
         return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "Incompatible cybershake version",
-            ));
+            io::ErrorKind::InvalidData,
+            "Incompatible cybershake version",
+        ));
     }
     let remote_blinded_identity = PublicKey::read_from(&mut reader).await?;
     let remote_ephemeral = PublicKey::read_from(&mut reader).await?;
@@ -212,18 +212,18 @@ where
     // matching the blinded key they used for X3DH.
     let received_remote_id_blinded = received_remote_identity
         .blind(&remote_salt_and_id[0..SALT_LEN])
-        .ok_or(
-                io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    "Failed to decode Ristretto point",
-                )
-        )?;
+        .ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                "Failed to decode Ristretto point",
+            )
+        })?;
 
     if received_remote_id_blinded != remote_blinded_identity {
         return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "Remote identity key mismatch",
-            ));
+            io::ErrorKind::InvalidData,
+            "Remote identity key mismatch",
+        ));
     }
 
     Ok((received_remote_identity, outgoing, incoming))
@@ -345,11 +345,10 @@ impl<R: AsyncRead + Unpin> Incoming<R> {
         let n = LittleEndian::read_u32(&msglenprefix) as usize;
         // arbitrary 10Mb limit until we provide Tokio Codecs-based interface and push this decision to custom types.
         if n > 10_000_000 {
-            return Err(
-                io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    "Message too big",
-                ));
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "Message too big",
+            ));
         }
         let mut buf = Vec::with_capacity(n);
         buf.resize(n, 0);

@@ -333,13 +333,13 @@ impl Node {
         Ok(())
     }
 
-    async fn connect_to_peer_addr(
-        &mut self,
-        peer_addr: &PeerAddr,
-    ) -> Result<(), io::Error> {
+    async fn connect_to_peer_addr(&mut self, peer_addr: &PeerAddr) -> Result<(), io::Error> {
         let ip = peer_addr.addr.ip();
         if ip.is_unspecified() {
-            return Err(io::Error::new(io::ErrorKind::Other, format!("{} is unspecified.", ip)));
+            return Err(io::Error::new(
+                io::ErrorKind::Other,
+                format!("{} is unspecified.", ip),
+            ));
         }
         // TODO: add short timeout to avoid hanging for too long waiting to be accepted.
         let stream = net::TcpStream::connect(&peer_addr.addr).await?;
