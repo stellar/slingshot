@@ -78,7 +78,7 @@ impl PeerLink {
         mut notifications_channel: sync::mpsc::Sender<N>,
         socket: S,
         rng: &mut RNG,
-    ) -> Result<Self, cybershake::Error>
+    ) -> Result<Self, io::Error>
     where
         S: AsyncRead + AsyncWrite + Unpin + 'static,
         N: From<PeerNotification> + 'static,
@@ -96,7 +96,10 @@ impl PeerLink {
 
         if let Some(expected_pid) = expected_peer_id {
             if id != expected_pid {
-                return Err(cybershake::Error::ProtocolError);
+                return Err(io::Error::new(
+                    io::ErrorKind::Other,
+                    "Remote and expected id do not match.",
+                ));
             }
         }
 
@@ -104,7 +107,7 @@ impl PeerLink {
 
         enum PeerEvent {
             Send(PeerMessage),
-            Receive(Result<Vec<u8>, cybershake::Error>),
+            Receive(Result<Vec<u8>, io::Error>),
             Stopped,
         }
 
@@ -130,8 +133,12 @@ impl PeerLink {
                         }
                         PeerEvent::Receive(msg) => {
                             let msg = msg.map_err(Some)?;
-                            let msg = bincode::deserialize(&msg)
-                                .map_err(|_e| Some(cybershake::Error::ProtocolError))?;
+                            let msg = bincode::deserialize(&msg).map_err(|_e| {
+                                Some(io::Error::new(
+                                    io::ErrorKind::InvalidData,
+                                    "Cannot deserialize message.",
+                                ))
+                            })?;
 
                             notifications_channel
                                 .send(PeerNotification::Received(id.clone(), msg).into())

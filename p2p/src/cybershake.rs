@@ -28,7 +28,6 @@
 //!
 //! ## TODO
 //!
-//! * Streaming API to send larger portions of data wrapped in async streams.
 //! * Add custom header to be sent in the first encrypted frame:
 //!   users can put the protocol version there, certificate info etc.
 
@@ -100,19 +99,6 @@ enum ReadState {
     ReadPt(usize, usize),
 }
 
-/// Kinds of failures that may happen during the handshake.
-#[derive(Debug)]
-pub enum Error {
-    /// I/O error (connection closed, not enough data, etc).
-    IoError(io::Error),
-
-    /// Point failed to decode correctly.
-    ProtocolError,
-
-    /// Version used by remote peer is not supported.
-    UnsupportedVersion,
-}
-
 /// Performs the key exchange with a remote end using byte-oriented read- and write- interfaces
 /// (e.g. TcpSocket halves).
 /// Returns the identity key of the remote peer, along with read- and write- interfaces
@@ -123,7 +109,7 @@ pub async fn cybershake<R, W, RNG>(
     mut reader: Pin<Box<R>>,
     mut writer: Pin<Box<W>>,
     mut rng: RNG,
-) -> Result<(PublicKey, Outgoing<W>, Incoming<R>), Error>
+) -> Result<(PublicKey, Outgoing<W>, Incoming<R>), io::Error>
 where
     R: io::AsyncRead + Unpin,
     W: io::AsyncWrite + Unpin,
@@ -162,7 +148,10 @@ where
     reader.read_exact(&mut remote_version_buf[..]).await?;
     let remote_version = LittleEndian::read_u64(&remote_version_buf);
     if remote_version != ONLY_SUPPORTED_VERSION {
-        return Err(Error::UnsupportedVersion);
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "Incompatible cybershake version",
+        ));
     }
     let remote_blinded_identity = PublicKey::read_from(&mut reader).await?;
     let remote_ephemeral = PublicKey::read_from(&mut reader).await?;
@@ -223,10 +212,18 @@ where
     // matching the blinded key they used for X3DH.
     let received_remote_id_blinded = received_remote_identity
         .blind(&remote_salt_and_id[0..SALT_LEN])
-        .ok_or(Error::ProtocolError)?;
+        .ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                "Failed to decode Ristretto point",
+            )
+        })?;
 
     if received_remote_id_blinded != remote_blinded_identity {
-        return Err(Error::ProtocolError);
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "Remote identity key mismatch",
+        ));
     }
 
     Ok((received_remote_identity, outgoing, incoming))
@@ -329,7 +326,7 @@ impl<W: AsyncWrite + Unpin> AsyncWrite for Outgoing<W> {
 impl<W: AsyncWrite + Unpin> Outgoing<W> {
     /// Send a message of any length.
     /// This is a temporary. We'll replace this with Tokio Codecs.
-    pub async fn send_message(&mut self, msg: &[u8]) -> Result<(), Error> {
+    pub async fn send_message(&mut self, msg: &[u8]) -> Result<(), io::Error> {
         let mut msglenprefix = [0u8; 4];
         LittleEndian::write_u32(&mut msglenprefix, msg.len() as u32);
         self.write_all(&msglenprefix[..]).await?;
@@ -342,13 +339,16 @@ impl<W: AsyncWrite + Unpin> Outgoing<W> {
 impl<R: AsyncRead + Unpin> Incoming<R> {
     /// Receive a message from the remote end.
     /// This is a temporary. We'll replace this with Tokio Codecs.
-    pub async fn receive_message(&mut self) -> Result<Vec<u8>, Error> {
+    pub async fn receive_message(&mut self) -> Result<Vec<u8>, io::Error> {
         let mut msglenprefix = [0u8; 4];
         let _ = self.read_exact(&mut msglenprefix).await?;
         let n = LittleEndian::read_u32(&msglenprefix) as usize;
         // arbitrary 10Mb limit until we provide Tokio Codecs-based interface and push this decision to custom types.
         if n > 10_000_000 {
-            return Err(Error::ProtocolError);
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "Message too big",
+            ));
         }
         let mut buf = Vec::with_capacity(n);
         buf.resize(n, 0);
@@ -357,7 +357,7 @@ impl<R: AsyncRead + Unpin> Incoming<R> {
     }
 
     /// Provides a Stream of messages.
-    pub fn into_stream(self) -> impl futures::stream::Stream<Item = Result<Vec<u8>, Error>> {
+    pub fn into_stream(self) -> impl futures::stream::Stream<Item = Result<Vec<u8>, io::Error>> {
         futures::stream::unfold(self, |mut src| async move {
             let res = src.receive_message().await;
             Some((res, src))
@@ -479,7 +479,7 @@ fn cybershake_x3dh(
     eph1: &PrivateKey,
     id2: &PublicKey,
     eph2: &PublicKey,
-) -> Result<Transcript, Error> {
+) -> Result<Transcript, io::Error> {
     let mut t = Transcript::new(b"Cybershake.X3DH");
     let keep_order = id1.pubkey.as_bytes() < id2.as_bytes();
     {
@@ -505,17 +505,16 @@ fn cybershake_x3dh(
             .chain(iter::once(&(eph1.as_scalar() * y))),
         iter::once(eph2.as_point().decompress()).chain(iter::once(id2.as_point().decompress())),
     )
-    .ok_or(Error::ProtocolError)?;
+    .ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            "Failed to decode some of the Ristretto elements",
+        )
+    })?;
 
     t.append_message(b"x3dh", shared_secret.compress().as_bytes());
 
     Ok(t)
-}
-
-impl From<io::Error> for Error {
-    fn from(error: io::Error) -> Self {
-        Error::IoError(error)
-    }
 }
 
 impl From<Scalar> for PrivateKey {
@@ -580,7 +579,7 @@ impl PublicKey {
     }
 
     /// Reads pubkey from a reader.
-    async fn read_from<R: AsyncRead + Unpin>(reader: &mut R) -> Result<Self, Error> {
+    async fn read_from<R: AsyncRead + Unpin>(reader: &mut R) -> Result<Self, io::Error> {
         let mut buf = [0u8; 32];
         reader.read_exact(&mut buf[..]).await?;
         Ok(Self::from(CompressedRistretto(buf)))
