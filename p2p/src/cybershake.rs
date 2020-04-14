@@ -113,7 +113,7 @@ pub enum Error {
 impl Error {
     pub fn new_io<E>(kind: io::ErrorKind, data: E) -> Self
     where
-        E: Into<Box<dyn std::error::Error + Send + Sync>>
+        E: Into<Box<dyn std::error::Error + Send + Sync>>,
     {
         Error::IoError(io::Error::new(kind, data))
     }
@@ -229,10 +229,16 @@ where
     // matching the blinded key they used for X3DH.
     let received_remote_id_blinded = received_remote_identity
         .blind(&remote_salt_and_id[0..SALT_LEN])
-        .ok_or(Error::new_io(io::ErrorKind::InvalidData, "Cannot blind key"))?;
+        .ok_or(Error::new_io(
+            io::ErrorKind::InvalidData,
+            "Cannot blind key",
+        ))?;
 
     if received_remote_id_blinded != remote_blinded_identity {
-        return Err(Error::new_io(io::ErrorKind::InvalidData, "Uncorrected blinded key."));
+        return Err(Error::new_io(
+            io::ErrorKind::InvalidData,
+            "Uncorrected blinded key.",
+        ));
     }
 
     Ok((received_remote_identity, outgoing, incoming))
@@ -354,7 +360,10 @@ impl<R: AsyncRead + Unpin> Incoming<R> {
         let n = LittleEndian::read_u32(&msglenprefix) as usize;
         // arbitrary 10Mb limit until we provide Tokio Codecs-based interface and push this decision to custom types.
         if n > 10_000_000 {
-            return Err(Error::new_io(io::ErrorKind::InvalidInput, format!("The size {} is bigger than allowed {}", n, 10_000_000)));
+            return Err(Error::new_io(
+                io::ErrorKind::InvalidInput,
+                format!("The size {} is bigger than allowed {}", n, 10_000_000),
+            ));
         }
         let mut buf = Vec::with_capacity(n);
         buf.resize(n, 0);
@@ -511,7 +520,10 @@ fn cybershake_x3dh(
             .chain(iter::once(&(eph1.as_scalar() * y))),
         iter::once(eph2.as_point().decompress()).chain(iter::once(id2.as_point().decompress())),
     )
-    .ok_or(Error::new_io(io::ErrorKind::InvalidData, "Cannot get shared secret."))?;
+    .ok_or(Error::new_io(
+        io::ErrorKind::InvalidData,
+        "Cannot get shared secret.",
+    ))?;
 
     t.append_message(b"x3dh", shared_secret.compress().as_bytes());
 

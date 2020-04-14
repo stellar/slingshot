@@ -96,7 +96,10 @@ impl PeerLink {
 
         if let Some(expected_pid) = expected_peer_id {
             if id != expected_pid {
-                return Err(cybershake::Error::new_io(io::ErrorKind::Other, "Remote and expected id do not match."));
+                return Err(cybershake::Error::new_io(
+                    io::ErrorKind::Other,
+                    "Remote and expected id do not match.",
+                ));
             }
         }
 
@@ -130,8 +133,12 @@ impl PeerLink {
                         }
                         PeerEvent::Receive(msg) => {
                             let msg = msg.map_err(Some)?;
-                            let msg = bincode::deserialize(&msg)
-                                .map_err(|_e| Some(cybershake::Error::new_io(io::ErrorKind::InvalidData, "Cannot deserialize message.")))?;
+                            let msg = bincode::deserialize(&msg).map_err(|_e| {
+                                Some(cybershake::Error::new_io(
+                                    io::ErrorKind::InvalidData,
+                                    "Cannot deserialize message.",
+                                ))
+                            })?;
 
                             notifications_channel
                                 .send(PeerNotification::Received(id.clone(), msg).into())
