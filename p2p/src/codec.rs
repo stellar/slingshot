@@ -15,12 +15,13 @@ impl Encoder<PeerMessage> for MessageEncoder {
     fn encode(&mut self, item: PeerMessage, dst: &mut BytesMut) -> Result<(), Self::Error> {
         match item {
             PeerMessage::Hello(u) => {
-                dst.put_u8(0);
-                dst.put_u64(2);
+                dst.put_u8(0); // Message type
+                const HELLO_MESSAGE_LEN: u64 = 2;
+                dst.put_u64(HELLO_MESSAGE_LEN);
                 dst.put_u16(u);
             }
             PeerMessage::Peers(p) => {
-                dst.put_u8(1);
+                dst.put_u8(1); // Message type
                 let body = p.into_iter().fold(BytesMut::new(), |mut bytes, peer| {
                     encode_peer_addr(peer, &mut bytes);
                     bytes
@@ -29,7 +30,7 @@ impl Encoder<PeerMessage> for MessageEncoder {
                 dst.put(body.as_ref());
             }
             PeerMessage::Data(data) => {
-                dst.put_u8(2);
+                dst.put_u8(2); // Message type
                 dst.put_u64(data.len() as u64);
                 dst.put(data.as_slice());
             }
