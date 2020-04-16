@@ -45,10 +45,10 @@ use merlin::Transcript; // TODO: change for raw Strobe.
 use tokio::io;
 use tokio::prelude::*;
 
+use futures::io::Error;
 use futures::task::{Context, Poll};
 use serde::{Deserialize, Serialize};
 use std::pin::Pin;
-use futures::io::Error;
 
 /// The current version of the protocol is 0.
 /// In the future we may add more versions, version bits or whatever.
@@ -182,7 +182,7 @@ where
         kdf: kdf_outgoing,
         buf: out_buf,
         flushing: false,
-        ciphertext_sent: 0
+        ciphertext_sent: 0,
     };
     let mut incoming = Incoming {
         reader,
@@ -697,7 +697,10 @@ mod tests {
             let mut len = 0;
             let mut buf = vec![0; 4096];
             loop {
-                let read = bob_inc.read(&mut buf).await.expect("bob should receive msg");
+                let read = bob_inc
+                    .read(&mut buf)
+                    .await
+                    .expect("bob should receive msg");
                 len += read;
                 if read == 0 {
                     break;

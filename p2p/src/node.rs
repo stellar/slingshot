@@ -16,10 +16,10 @@ use tokio::time;
 
 use rand::thread_rng;
 
+use crate::codec::{MessageDecoder, MessageEncoder};
 use crate::cybershake;
 use crate::peer::{PeerAddr, PeerID, PeerLink, PeerMessage, PeerNotification};
 use crate::priority::{Priority, PriorityTable, HIGH_PRIORITY, LOW_PRIORITY};
-use crate::codec::{MessageEncoder, MessageDecoder};
 
 type Reply<T> = sync::oneshot::Sender<T>;
 

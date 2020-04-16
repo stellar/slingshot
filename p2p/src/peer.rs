@@ -16,8 +16,8 @@ use curve25519_dalek::ristretto::CompressedRistretto;
 use rand_core::{CryptoRng, RngCore};
 
 use crate::cybershake;
-use tokio_util::codec::{Encoder, Decoder, FramedRead, FramedWrite};
 use futures::SinkExt;
+use tokio_util::codec::{Decoder, Encoder, FramedRead, FramedWrite};
 
 /// Identifier of the peer.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -135,9 +135,7 @@ impl PeerLink {
                 // First, handle successful events (think of this as Result::async_map)
                 let result: Result<(), Option<_>> = (async {
                     match event {
-                        PeerEvent::Send(msg) => {
-                            outgoing.send(msg).await.map_err(Some)
-                        }
+                        PeerEvent::Send(msg) => outgoing.send(msg).await.map_err(Some),
                         PeerEvent::Receive(msg) => {
                             let msg = msg.map_err(Some)?;
 
