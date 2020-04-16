@@ -10,7 +10,6 @@ use futures::stream::StreamExt;
 
 use tokio::io;
 use tokio::net;
-use tokio::prelude::*;
 use tokio::sync;
 use tokio::task;
 use tokio::time;
@@ -20,6 +19,7 @@ use rand::thread_rng;
 use crate::cybershake;
 use crate::peer::{PeerAddr, PeerID, PeerLink, PeerMessage, PeerNotification};
 use crate::priority::{Priority, PriorityTable, HIGH_PRIORITY, LOW_PRIORITY};
+use crate::codec::{MessageEncoder, MessageDecoder};
 
 type Reply<T> = sync::oneshot::Sender<T>;
 
@@ -281,6 +281,8 @@ impl Node {
                 self.peer_notification_channel.clone(),
                 stream,
                 &mut thread_rng(),
+                MessageEncoder::new(),
+                MessageDecoder::new(),
             )
             .await?;
 
@@ -324,6 +326,8 @@ impl Node {
             self.peer_notification_channel.clone(),
             stream,
             &mut thread_rng(),
+            MessageEncoder::new(),
+            MessageDecoder::new(),
         )
         .await?;
 

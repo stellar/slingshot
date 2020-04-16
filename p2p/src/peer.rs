@@ -16,21 +16,21 @@ use curve25519_dalek::ristretto::CompressedRistretto;
 use rand_core::{CryptoRng, RngCore};
 
 use crate::cybershake;
-use tokio_util::codec::BytesCodec;
-use crate::codec::{MessageEncoder, MessageDecoder};
+use tokio_util::codec::{Encoder, Decoder, FramedRead, FramedWrite};
+use futures::SinkExt;
 
 /// Identifier of the peer.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct PeerID(cybershake::PublicKey);
+pub struct PeerID(pub cybershake::PublicKey);
 
-#[derive(Clone, Debug, Hash, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Hash, Serialize, Deserialize)]
 pub struct PeerAddr {
     pub id: PeerID,
     pub addr: SocketAddr,
 }
 
 /// Various kinds of messages that peers can send and receive between each other.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum PeerMessage {
     // Upon connection, a peer tells its listening port for dialing in, if it's available.
     Hello(u16),
@@ -74,24 +74,31 @@ impl PeerLink {
     /// Spawns a peer task that will send notifications to a provided channel.
     /// Returns a PeerLink through which commands can be sent.
     ///
-    pub async fn spawn<S, N, RNG>(
+    pub async fn spawn<S, N, RNG, E, D>(
         host_identity: &cybershake::PrivateKey,
         expected_peer_id: Option<PeerID>,
         mut notifications_channel: sync::mpsc::Sender<N>,
         socket: S,
         rng: &mut RNG,
+        encoder: E,
+        decoder: D,
     ) -> Result<Self, io::Error>
     where
         S: AsyncRead + AsyncWrite + Unpin + 'static,
         N: From<PeerNotification> + 'static,
         RNG: RngCore + CryptoRng,
+        E: Encoder<PeerMessage, Error = io::Error> + Unpin + 'static,
+        D: Decoder<Item = PeerMessage, Error = io::Error> + Unpin + 'static,
     {
         let (r, w) = io::split(socket);
         let r = Box::pin(io::BufReader::new(r));
         let w = Box::pin(io::BufWriter::new(w));
 
-        let (id_pubkey, mut outgoing, incoming) =
-            cybershake::cybershake(host_identity, r, w, rng, MessageEncoder::new(), MessageDecoder::new()).await?;
+        let (id_pubkey, outgoing, incoming) =
+            cybershake::cybershake(host_identity, r, w, rng).await?;
+
+        let mut outgoing = FramedWrite::new(outgoing, encoder);
+        let incoming = FramedRead::new(incoming, decoder);
 
         let id = PeerID(id_pubkey);
         let retid = id.clone();
@@ -109,7 +116,7 @@ impl PeerLink {
 
         enum PeerEvent {
             Send(PeerMessage),
-            Receive(Result<Vec<u8>, io::Error>),
+            Receive(Result<PeerMessage, io::Error>),
             Stopped,
         }
 
@@ -129,18 +136,10 @@ impl PeerLink {
                 let result: Result<(), Option<_>> = (async {
                     match event {
                         PeerEvent::Send(msg) => {
-                            let bytes = bincode::serialize(&msg)
-                                .expect("bincode serialization should work");
-                            outgoing.send_message(unimplemented!()).await.map_err(Some)
+                            outgoing.send(msg).await.map_err(Some)
                         }
                         PeerEvent::Receive(msg) => {
                             let msg = msg.map_err(Some)?;
-                            let msg = bincode::deserialize(&msg).map_err(|_e| {
-                                Some(io::Error::new(
-                                    io::ErrorKind::InvalidData,
-                                    "Cannot deserialize message.",
-                                ))
-                            })?;
 
                             notifications_channel
                                 .send(PeerNotification::Received(id.clone(), msg).into())
