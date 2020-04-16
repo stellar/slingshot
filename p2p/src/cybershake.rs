@@ -47,7 +47,6 @@ use tokio::prelude::*;
 
 use futures::io::Error;
 use futures::task::{Context, Poll};
-use serde::{Deserialize, Serialize};
 use std::pin::Pin;
 
 /// The current version of the protocol is 0.
@@ -67,7 +66,7 @@ pub struct PrivateKey {
 }
 
 /// Public key for authenticating connection.
-#[derive(Copy, Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub struct PublicKey {
     point: CompressedRistretto,
 }

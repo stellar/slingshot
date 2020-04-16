@@ -6,7 +6,6 @@ use futures::stream::StreamExt;
 use std::hash::{Hash, Hasher};
 use std::net::SocketAddr;
 
-use serde::{Deserialize, Serialize};
 use tokio::io;
 use tokio::prelude::*;
 use tokio::sync;
@@ -20,17 +19,17 @@ use futures::SinkExt;
 use tokio_util::codec::{Decoder, Encoder, FramedRead, FramedWrite};
 
 /// Identifier of the peer.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct PeerID(pub cybershake::PublicKey);
 
-#[derive(Clone, Debug, PartialEq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Hash)]
 pub struct PeerAddr {
     pub id: PeerID,
     pub addr: SocketAddr,
 }
 
 /// Various kinds of messages that peers can send and receive between each other.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum PeerMessage {
     // Upon connection, a peer tells its listening port for dialing in, if it's available.
     Hello(u16),
