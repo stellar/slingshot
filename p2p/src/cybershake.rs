@@ -48,6 +48,10 @@ use tokio::prelude::*;
 use futures::task::{Context, Poll};
 use serde::{Deserialize, Serialize};
 use std::pin::Pin;
+use tokio_util::codec::{Encoder, Decoder, BytesCodec, FramedRead};
+use bytes::{BytesMut, BufMut};
+use futures::io::Error;
+use std::marker::PhantomData;
 
 /// The current version of the protocol is 0.
 /// In the future we may add more versions, version bits or whatever.
@@ -73,13 +77,15 @@ pub struct PublicKey {
 
 /// An endpoint for sending messages to remote party.
 /// All messages are ordered and encryption key is ratcheted after each sent message.
-pub struct Outgoing<W: io::AsyncWrite + Unpin> {
+pub struct Outgoing<W: io::AsyncWrite + Unpin, Item, E: Encoder<Item>> {
     writer: Pin<Box<W>>,
     seq: u64,
     kdf: Transcript,
     buf: Vec<u8>,
     flushing: bool,
     ciphertext_sent: usize,
+    encoder: E,
+    _marker: PhantomData<Item>
 }
 
 /// An endpoint for receiving messages from a remote party.
@@ -104,16 +110,22 @@ enum ReadState {
 /// Returns the identity key of the remote peer, along with read- and write- interfaces
 /// that perform encryption and authentication behind the scenes.
 /// If you need to verify the identity per local policy or certificates, use the returned public key.
-pub async fn cybershake<R, W, RNG>(
+pub async fn cybershake<R, W, RNG, E, D, EItem, DItem>(
     local_identity: &PrivateKey,
     mut reader: Pin<Box<R>>,
     mut writer: Pin<Box<W>>,
     mut rng: RNG,
-) -> Result<(PublicKey, Outgoing<W>, Incoming<R>), io::Error>
+    encoder: E,
+    decoder: D,
+) -> Result<(PublicKey, Outgoing<W, EItem, E>, FramedRead<Incoming<R>, D>), io::Error>
 where
     R: io::AsyncRead + Unpin,
     W: io::AsyncWrite + Unpin,
     RNG: RngCore + CryptoRng,
+    E: Encoder<EItem, Error = io::Error> + Unpin,
+    D: Decoder<Item = DItem, Error = io::Error> + Unpin,
+    EItem: Unpin,
+    DItem: Unpin,
 {
     // We are going to need an additional ephemeral D-H key,
     // and a salt for blinding the reusable identity key.
@@ -182,6 +194,8 @@ where
         buf: out_buf,
         flushing: false,
         ciphertext_sent: 0,
+        encoder,
+        _marker: PhantomData
     };
     let mut incoming = Incoming {
         reader,
@@ -226,7 +240,7 @@ where
         ));
     }
 
-    Ok((received_remote_identity, outgoing, incoming))
+    Ok((received_remote_identity, outgoing, FramedRead::new(incoming, decoder)))
 }
 
 macro_rules! ready {
@@ -239,7 +253,7 @@ macro_rules! ready {
     };
 }
 
-impl<W: AsyncWrite + Unpin> Outgoing<W> {
+impl<W: AsyncWrite + Unpin, Item, E: Encoder<Item>> Outgoing<W, Item, E> {
     fn cipher_buf(&mut self) {
         self.kdf.append_u64(b"seq", self.seq);
         let mut key = [0u8; 32];
@@ -279,7 +293,7 @@ impl<W: AsyncWrite + Unpin> Outgoing<W> {
     }
 }
 
-impl<W: AsyncWrite + Unpin> AsyncWrite for Outgoing<W> {
+impl<W: AsyncWrite + Unpin, Item: Unpin, E: Encoder<Item> + Unpin> AsyncWrite for Outgoing<W, Item, E> {
     fn poll_write(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -323,45 +337,15 @@ impl<W: AsyncWrite + Unpin> AsyncWrite for Outgoing<W> {
     }
 }
 
-impl<W: AsyncWrite + Unpin> Outgoing<W> {
+impl<W: AsyncWrite + Unpin, Item: Unpin, E: Encoder<Item, Error = io::Error> + Unpin> Outgoing<W, Item, E> {
     /// Send a message of any length.
     /// This is a temporary. We'll replace this with Tokio Codecs.
-    pub async fn send_message(&mut self, msg: &[u8]) -> Result<(), io::Error> {
-        let mut msglenprefix = [0u8; 4];
-        LittleEndian::write_u32(&mut msglenprefix, msg.len() as u32);
-        self.write_all(&msglenprefix[..]).await?;
-        self.write_all(&msg).await?;
+    pub async fn send_message(&mut self, msg: Item) -> Result<(), io::Error> {
+        let mut buf = BytesMut::new();
+        self.encoder.encode(msg, &mut buf)?;
+        self.write_all(&buf).await?;
         self.flush().await?;
         Ok(())
-    }
-}
-
-impl<R: AsyncRead + Unpin> Incoming<R> {
-    /// Receive a message from the remote end.
-    /// This is a temporary. We'll replace this with Tokio Codecs.
-    pub async fn receive_message(&mut self) -> Result<Vec<u8>, io::Error> {
-        let mut msglenprefix = [0u8; 4];
-        let _ = self.read_exact(&mut msglenprefix).await?;
-        let n = LittleEndian::read_u32(&msglenprefix) as usize;
-        // arbitrary 10Mb limit until we provide Tokio Codecs-based interface and push this decision to custom types.
-        if n > 10_000_000 {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "Message too big",
-            ));
-        }
-        let mut buf = Vec::with_capacity(n);
-        buf.resize(n, 0);
-        self.read_exact(&mut buf).await?;
-        Ok(buf)
-    }
-
-    /// Provides a Stream of messages.
-    pub fn into_stream(self) -> impl futures::stream::Stream<Item = Result<Vec<u8>, io::Error>> {
-        futures::stream::unfold(self, |mut src| async move {
-            let res = src.receive_message().await;
-            Some((res, src))
-        })
     }
 }
 
@@ -611,6 +595,9 @@ mod tests {
     use rand::rngs::StdRng;
     use rand::SeedableRng;
     use tokio::net::{TcpListener, TcpStream};
+    use bytes::Bytes;
+    use crate::codec::{MessageEncoder, MessageDecoder};
+    use futures::StreamExt;
 
     #[tokio::test]
     async fn light_message_top_level_function() {
@@ -630,6 +617,8 @@ mod tests {
                 Box::pin(alice_reader),
                 Box::pin(alice_writer),
                 StdRng::from_entropy(),
+                MessageEncoder::new(),
+                MessageDecoder::new(),
             )
             .await
             .unwrap();
@@ -637,11 +626,11 @@ mod tests {
             assert_eq!(received_key, bob_private_key.to_public_key());
 
             // Alice send message to bob
-            let alice_message: Vec<u8> = "Hello, Bob".bytes().collect();
-            alice_out.send_message(&alice_message).await.unwrap();
+            let alice_message: Vec<u8> = b"Hello, Bob".to_vec();
+            alice_out.send_message(alice_message).await.unwrap();
 
             // Then Alice receive message from bob
-            let alice_rec = alice_inc.receive_message().await.unwrap();
+            let alice_rec = alice_inc.next().await.unwrap().unwrap();
             assert_eq!("Hello, Alice", String::from_utf8(alice_rec).unwrap());
         });
 
@@ -653,6 +642,8 @@ mod tests {
                 Box::pin(bob_reader),
                 Box::pin(bob_writer),
                 StdRng::from_entropy(),
+                MessageEncoder::new(),
+                MessageDecoder::new(),
             )
             .await
             .unwrap();
@@ -660,12 +651,12 @@ mod tests {
             assert_eq!(received_key, alice_private_key.to_public_key());
 
             // Bob receive message from Alice
-            let bob_rec = bob_inc.receive_message().await.unwrap();
+            let bob_rec = bob_inc.next().await.unwrap().unwrap();
             assert_eq!("Hello, Bob", String::from_utf8(bob_rec).unwrap());
 
             // Then bob send message to Alice
-            let bob_message: Vec<u8> = "Hello, Alice".bytes().collect();
-            bob_out.send_message(&bob_message).await.unwrap();
+            let bob_message: Vec<u8> = b"Hello, Alice".to_vec();
+            bob_out.send_message(bob_message).await.unwrap();
         });
 
         assert!(alice.await.is_ok());
@@ -690,6 +681,8 @@ mod tests {
                 Box::pin(alice_reader),
                 Box::pin(alice_writer),
                 StdRng::from_entropy(),
+                MessageEncoder::new(),
+                MessageDecoder::new(),
             )
             .await
             .unwrap();
@@ -703,7 +696,7 @@ mod tests {
 
             // Then Alice receive message from bob
             let mut buf = vec![0u8; 4096];
-            let message_len = alice_inc.read(&mut buf).await.unwrap();
+            let message_len = alice_inc.get_mut().read(&mut buf).await.unwrap();
             buf.truncate(message_len);
             assert_eq!("Hello, Alice", String::from_utf8(buf).unwrap());
         });
@@ -716,6 +709,8 @@ mod tests {
                 Box::pin(bob_reader),
                 Box::pin(bob_writer),
                 StdRng::from_entropy(),
+                MessageEncoder::new(),
+                MessageDecoder::new(),
             )
             .await
             .unwrap();
@@ -724,7 +719,7 @@ mod tests {
 
             // Bob receive message from Alice
             let mut buf = vec![0u8; 4096];
-            let message_len = bob_inc.read(&mut buf).await.unwrap();
+            let message_len = bob_inc.get_mut().read(&mut buf).await.unwrap();
             buf.truncate(message_len);
             assert_eq!("Hello, Bob", String::from_utf8(buf).unwrap());
 
@@ -761,13 +756,15 @@ mod tests {
                 Box::pin(alice_reader),
                 Box::pin(alice_writer),
                 StdRng::from_entropy(),
+                MessageEncoder::new(),
+                MessageDecoder::new(),
             )
             .await
             .expect("alice: should handshake correctly");
 
             // Alice send message to bob
             let alice_message: Vec<u8> = vec![10u8; 6000];
-            alice_out.send_message(&alice_message).await.unwrap();
+            alice_out.send_message(alice_message).await.unwrap();
         });
 
         let bob = tokio::spawn(async move {
@@ -780,14 +777,17 @@ mod tests {
                 Box::pin(bob_reader),
                 Box::pin(bob_writer),
                 StdRng::from_entropy(),
+                MessageEncoder::new(),
+                MessageDecoder::new(),
             )
             .await
             .expect("bob: should handshake correctly");
 
             // Bob receive message from Alice
             let msg = bob_inc
-                .receive_message()
+                .next()
                 .await
+                .expect("bob should receive msg")
                 .expect("bob should receive msg");
             assert_eq!(vec![10u8; 6000], msg);
         });

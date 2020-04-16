@@ -18,5 +18,7 @@ bincode = "1"
 hex = "^0.3"
 futures = "0.3"
 tokio = {version = "0.2", features=["full","sync"]}
+tokio-util = {version = "0.3.1", features=["codec"]}
+bytes = "0.5.4"
 miscreant = "0.5"
 rand = "0.7"

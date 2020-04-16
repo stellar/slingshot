@@ -16,6 +16,8 @@ use curve25519_dalek::ristretto::CompressedRistretto;
 use rand_core::{CryptoRng, RngCore};
 
 use crate::cybershake;
+use tokio_util::codec::BytesCodec;
+use crate::codec::{MessageEncoder, MessageDecoder};
 
 /// Identifier of the peer.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -89,7 +91,7 @@ impl PeerLink {
         let w = Box::pin(io::BufWriter::new(w));
 
         let (id_pubkey, mut outgoing, incoming) =
-            cybershake::cybershake(host_identity, r, w, rng).await?;
+            cybershake::cybershake(host_identity, r, w, rng, MessageEncoder::new(), MessageDecoder::new()).await?;
 
         let id = PeerID(id_pubkey);
         let retid = id.clone();
@@ -117,7 +119,7 @@ impl PeerLink {
                 .map(PeerEvent::Send)
                 // when the owner drops the PeerLink, we'll get the Stopped event.
                 .chain(futures::stream::once(async { PeerEvent::Stopped })),
-            incoming.into_stream().map(PeerEvent::Receive),
+            incoming.map(PeerEvent::Receive),
         )
         .boxed_local();
 
@@ -129,7 +131,7 @@ impl PeerLink {
                         PeerEvent::Send(msg) => {
                             let bytes = bincode::serialize(&msg)
                                 .expect("bincode serialization should work");
-                            outgoing.send_message(&bytes).await.map_err(Some)
+                            outgoing.send_message(unimplemented!()).await.map_err(Some)
                         }
                         PeerEvent::Receive(msg) => {
                             let msg = msg.map_err(Some)?;

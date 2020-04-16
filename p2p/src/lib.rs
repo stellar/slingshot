@@ -8,6 +8,7 @@ pub mod cybershake;
 mod node;
 mod peer;
 mod priority;
+mod codec;
 
 pub use self::node::{Direction, Node, NodeConfig, NodeHandle, NodeNotification, PeerInfo};
 pub use self::peer::{PeerID, PeerLink, PeerMessage, PeerNotification};
