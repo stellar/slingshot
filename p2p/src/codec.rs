@@ -219,7 +219,7 @@ fn read_ipv6_addr(buf: &mut BytesMut) -> Result<SocketAddr, io::Error> {
 fn check_length(buf: &mut BytesMut, len: usize, label: &str) -> Result<(), io::Error> {
     if buf.len() < len {
         Err(io::Error::new(
-            io::ErrorKind::InvalidData,
+            io::ErrorKind::UnexpectedEof,
             format!(
                 "Expected {} bytes for {}`, but found {}",
                 len,
