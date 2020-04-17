@@ -169,12 +169,7 @@ fn encode_peer_addr(peer: PeerAddr, buf: &mut BytesMut) {
 
 fn decode_peer_addr(buf: &mut BytesMut) -> Result<PeerAddr, io::Error> {
     let addr = read_socket_addr(buf)?;
-    if buf.len() < 32 {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            format!("Must be 32 bytes for key, but found {}", buf.len()),
-        ));
-    }
+    check_length(buf, 32, "peer id")?;
     let key = buf.split_to(32);
     let id = PeerID(PublicKey::from(CompressedRistretto::from_slice(
         key.as_ref(),
@@ -183,7 +178,7 @@ fn decode_peer_addr(buf: &mut BytesMut) -> Result<PeerAddr, io::Error> {
 }
 
 fn read_socket_addr(buf: &mut BytesMut) -> Result<SocketAddr, io::Error> {
-    // We check if !buf.is_empty() in MessageDecoder::decode, so it have at least 1 byte
+    check_length(buf, 1, "socket addr")?;
     let ipv = buf.get_u8();
     match ipv {
         4 => read_ipv4_addr(buf),
@@ -197,16 +192,7 @@ fn read_socket_addr(buf: &mut BytesMut) -> Result<SocketAddr, io::Error> {
 
 const IPV4_LENGTH: usize = 4 + 2;
 fn read_ipv4_addr(buf: &mut BytesMut) -> Result<SocketAddr, io::Error> {
-    if buf.len() < IPV4_LENGTH {
-        return Err(io::Error::new(
-            io::ErrorKind::UnexpectedEof,
-            format!(
-                "must be {} bytes for peer ipv4 addr, but found {}",
-                IPV4_LENGTH,
-                buf.len()
-            ),
-        ));
-    }
+    check_length(buf, IPV4_LENGTH, "ipv4")?;
 
     let ip = buf.get_u32();
     let port = buf.get_u16();
@@ -217,16 +203,7 @@ fn read_ipv4_addr(buf: &mut BytesMut) -> Result<SocketAddr, io::Error> {
 
 const IPV6_LENGTH: usize = 16 + 2 + 4 + 4;
 fn read_ipv6_addr(buf: &mut BytesMut) -> Result<SocketAddr, io::Error> {
-    if buf.len() < IPV6_LENGTH {
-        return Err(io::Error::new(
-            io::ErrorKind::UnexpectedEof,
-            format!(
-                "must be {} bytes for peer ipv6 addr, but found {}",
-                IPV6_LENGTH,
-                buf.len()
-            ),
-        ));
-    }
+    check_length(buf, IPV6_LENGTH, "ipv6")?;
 
     let ip = buf.get_u128();
     let port = buf.get_u16();
@@ -237,6 +214,22 @@ fn read_ipv6_addr(buf: &mut BytesMut) -> Result<SocketAddr, io::Error> {
     Ok(SocketAddr::V6(SocketAddrV6::new(
         ip, port, flowinfo, scope_id,
     )))
+}
+
+fn check_length(buf: &mut BytesMut, len: usize, label: &str) -> Result<(), io::Error> {
+    if buf.len() < len {
+        Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!(
+                "Expected {} bytes for {}`, but found {}",
+                len,
+                label,
+                buf.len()
+            ),
+        ))
+    } else {
+        Ok(())
+    }
 }
 
 #[cfg(test)]
