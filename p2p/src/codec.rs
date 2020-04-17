@@ -22,12 +22,12 @@ impl Encoder<PeerMessage> for MessageEncoder {
             }
             PeerMessage::Peers(p) => {
                 dst.put_u8(1); // Message type
-                let body = p.into_iter().fold(BytesMut::new(), |mut bytes, peer| {
-                    encode_peer_addr(peer, &mut bytes);
-                    bytes
+                dst.put_u64(0); // We put here length after
+                p.into_iter().for_each(|peer| {
+                    encode_peer_addr(peer, dst);
                 });
-                dst.put_u64(body.len() as u64);
-                dst.put(body.as_ref());
+                let body_len = dst.len() - 9;
+                dst[1..9].copy_from_slice(&body_len.to_be_bytes()[..])
             }
             PeerMessage::Data(data) => {
                 dst.put_u8(2); // Message type
@@ -37,24 +37,6 @@ impl Encoder<PeerMessage> for MessageEncoder {
         }
         Ok(())
     }
-}
-
-fn encode_peer_addr(peer: PeerAddr, buf: &mut BytesMut) {
-    match peer.addr {
-        SocketAddr::V4(d) => {
-            buf.put_u8(4);
-            buf.put(&d.ip().octets()[..]);
-            buf.put_u16(d.port());
-        }
-        SocketAddr::V6(d) => {
-            buf.put_u8(6);
-            buf.put(&d.ip().octets()[..]);
-            buf.put_u16(d.port());
-            buf.put_u32(d.flowinfo());
-            buf.put_u32(d.scope_id())
-        }
-    }
-    buf.put(peer.id.0.as_bytes());
 }
 
 impl MessageEncoder {
@@ -142,7 +124,8 @@ fn read_message_body(
         1 => {
             let mut peers = vec![];
             let mut peers_bytes = src.split_to(len);
-            while let Some(peer) = decode_peer_addr(&mut peers_bytes)? {
+            while !peers_bytes.is_empty() {
+                let peer = decode_peer_addr(&mut peers_bytes)?;
                 peers.push(peer);
             }
             Ok(PeerMessage::Peers(peers))
@@ -155,19 +138,38 @@ fn read_message_body(
     }
 }
 
-fn decode_peer_addr(buf: &mut BytesMut) -> Result<Option<PeerAddr>, io::Error> {
-    if buf.is_empty() {
-        return Ok(None);
+fn encode_peer_addr(peer: PeerAddr, buf: &mut BytesMut) {
+    match peer.addr {
+        SocketAddr::V4(d) => {
+            buf.put_u8(4);
+            buf.put(&d.ip().octets()[..]);
+            buf.put_u16(d.port());
+        }
+        SocketAddr::V6(d) => {
+            buf.put_u8(6);
+            buf.put(&d.ip().octets()[..]);
+            buf.put_u16(d.port());
+            buf.put_u32(d.flowinfo());
+            buf.put_u32(d.scope_id())
+        }
     }
+    buf.put(peer.id.0.as_bytes());
+}
+
+fn decode_peer_addr(buf: &mut BytesMut) -> Result<PeerAddr, io::Error> {
     let addr = read_socket_addr(buf)?;
+    if buf.len() < 32 {
+        return Err(io::Error::new(io::ErrorKind::InvalidData, format!("Must be 32 bytes for key, but found {}", buf.len())));
+    }
     let key = buf.split_to(32);
     let id = PeerID(PublicKey::from(CompressedRistretto::from_slice(
         key.as_ref(),
     )));
-    Ok(Some(PeerAddr { id, addr }))
+    Ok(PeerAddr { id, addr })
 }
 
 fn read_socket_addr(buf: &mut BytesMut) -> Result<SocketAddr, io::Error> {
+    // We check if !buf.is_empty() in MessageDecoder::decode, so it have at least 1 byte
     let ipv = buf.get_u8();
     match ipv {
         4 => read_ipv4_addr(buf),
@@ -181,12 +183,12 @@ fn read_socket_addr(buf: &mut BytesMut) -> Result<SocketAddr, io::Error> {
 
 const IPV4_LENGTH: usize = 4 + 2;
 fn read_ipv4_addr(buf: &mut BytesMut) -> Result<SocketAddr, io::Error> {
-    if buf.len() < IPV4_LENGTH + 32 {
+    if buf.len() < IPV4_LENGTH {
         return Err(io::Error::new(
             io::ErrorKind::UnexpectedEof,
             format!(
                 "must be {} bytes for peer ipv4 addr, but found {}",
-                IPV4_LENGTH + 32,
+                IPV4_LENGTH,
                 buf.len()
             ),
         ));
@@ -201,12 +203,12 @@ fn read_ipv4_addr(buf: &mut BytesMut) -> Result<SocketAddr, io::Error> {
 
 const IPV6_LENGTH: usize = 16 + 2 + 4 + 4;
 fn read_ipv6_addr(buf: &mut BytesMut) -> Result<SocketAddr, io::Error> {
-    if buf.len() < IPV6_LENGTH + 32 {
+    if buf.len() < IPV6_LENGTH {
         return Err(io::Error::new(
             io::ErrorKind::UnexpectedEof,
             format!(
                 "must be {} bytes for peer ipv6 addr, but found {}",
-                IPV6_LENGTH + 32,
+                IPV6_LENGTH,
                 buf.len()
             ),
         ));
