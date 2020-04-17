@@ -6,6 +6,7 @@ use curve25519_dalek::ristretto::CompressedRistretto;
 use std::io;
 use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
 use tokio_util::codec::{Decoder, Encoder};
+use std::convert::TryFrom;
 
 pub struct MessageEncoder;
 
@@ -16,22 +17,23 @@ impl Encoder<PeerMessage> for MessageEncoder {
         match item {
             PeerMessage::Hello(u) => {
                 dst.put_u8(0); // Message type
-                const HELLO_MESSAGE_LEN: u64 = 2;
-                dst.put_u64(HELLO_MESSAGE_LEN);
+                const HELLO_MESSAGE_LEN: u32 = 2;
+                dst.put_u32(HELLO_MESSAGE_LEN);
                 dst.put_u16(u);
             }
             PeerMessage::Peers(p) => {
                 dst.put_u8(1); // Message type
-                dst.put_u64(0); // We put here length after
+                dst.put_u32(0); // We put here length after
                 p.into_iter().for_each(|peer| {
                     encode_peer_addr(peer, dst);
                 });
-                let body_len = dst.len() - 9;
-                dst[1..9].copy_from_slice(&body_len.to_be_bytes()[..])
+                let body_len = (dst.len() - 5) as u32;
+                dst[1..5].copy_from_slice(&body_len.to_be_bytes()[..])
             }
             PeerMessage::Data(data) => {
                 dst.put_u8(2); // Message type
-                dst.put_u64(data.len() as u64);
+                let len = u32::try_from(data.len()).map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, format!("Max length {} but try to put {} bytes", u32::max_value(), data.len())))?;
+                dst.put_u32(len);
                 dst.put(data.as_slice());
             }
         }
@@ -87,10 +89,10 @@ impl Decoder for MessageDecoder {
                 self.decode(src)
             }
             DecodeState::Len(m_type) => {
-                if src.len() < 8 {
+                if src.len() < 4 {
                     return Ok(None);
                 }
-                let len = src.get_u64() as usize;
+                let len = src.get_u32() as usize;
                 self.state = DecodeState::Body(m_type, len);
                 self.decode(src)
             }
