@@ -18,17 +18,17 @@ impl Encoder<PeerMessage> for MessageEncoder {
             PeerMessage::Hello(u) => {
                 dst.put_u8(0); // Message type
                 const HELLO_MESSAGE_LEN: u32 = 2;
-                dst.put_u32(HELLO_MESSAGE_LEN);
-                dst.put_u16(u);
+                dst.put_u32_le(HELLO_MESSAGE_LEN);
+                dst.put_u16_le(u);
             }
             PeerMessage::Peers(p) => {
                 dst.put_u8(1); // Message type
-                dst.put_u32(0); // We put here length after
+                dst.put_u32_le(0); // We put here length after
                 p.into_iter().for_each(|peer| {
                     encode_peer_addr(peer, dst);
                 });
                 let body_len = (dst.len() - 5) as u32;
-                dst[1..5].copy_from_slice(&body_len.to_be_bytes()[..])
+                dst[1..5].copy_from_slice(&body_len.to_le_bytes()[..])
             }
             PeerMessage::Data(data) => {
                 dst.put_u8(2); // Message type
@@ -42,7 +42,7 @@ impl Encoder<PeerMessage> for MessageEncoder {
                         ),
                     )
                 })?;
-                dst.put_u32(len);
+                dst.put_u32_le(len);
                 dst.put(data.as_slice());
             }
         }
@@ -101,7 +101,7 @@ impl Decoder for MessageDecoder {
                 if src.len() < 4 {
                     return Ok(None);
                 }
-                let len = src.get_u32() as usize;
+                let len = src.get_u32_le() as usize;
                 self.state = DecodeState::Body(m_type, len);
                 self.decode(src)
             }
@@ -129,7 +129,7 @@ fn read_message_body(
                     format!("Invalid length for hello message: {}", len),
                 ));
             }
-            let data = src.get_u16();
+            let data = src.get_u16_le();
             Ok(PeerMessage::Hello(data))
         }
         1 => {
@@ -154,14 +154,14 @@ fn encode_peer_addr(peer: PeerAddr, buf: &mut BytesMut) {
         SocketAddr::V4(d) => {
             buf.put_u8(4);
             buf.put(&d.ip().octets()[..]);
-            buf.put_u16(d.port());
+            buf.put_u16_le(d.port());
         }
         SocketAddr::V6(d) => {
             buf.put_u8(6);
             buf.put(&d.ip().octets()[..]);
-            buf.put_u16(d.port());
-            buf.put_u32(d.flowinfo());
-            buf.put_u32(d.scope_id())
+            buf.put_u16_le(d.port());
+            buf.put_u32_le(d.flowinfo());
+            buf.put_u32_le(d.scope_id())
         }
     }
     buf.put(peer.id.0.as_bytes());
@@ -194,8 +194,8 @@ const IPV4_LENGTH: usize = 4 + 2;
 fn read_ipv4_addr(buf: &mut BytesMut) -> Result<SocketAddr, io::Error> {
     check_length(buf, IPV4_LENGTH, "ipv4")?;
 
-    let ip = buf.get_u32();
-    let port = buf.get_u16();
+    let ip = buf.get_u32_le();
+    let port = buf.get_u16_le();
     let ip = Ipv4Addr::from(ip);
 
     Ok(SocketAddr::V4(SocketAddrV4::new(ip, port)))
@@ -206,9 +206,9 @@ fn read_ipv6_addr(buf: &mut BytesMut) -> Result<SocketAddr, io::Error> {
     check_length(buf, IPV6_LENGTH, "ipv6")?;
 
     let ip = buf.get_u128();
-    let port = buf.get_u16();
-    let flowinfo = buf.get_u32();
-    let scope_id = buf.get_u32();
+    let port = buf.get_u16_le();
+    let flowinfo = buf.get_u32_le();
+    let scope_id = buf.get_u32_le();
     let ip = Ipv6Addr::from(ip);
 
     Ok(SocketAddr::V6(SocketAddrV6::new(
