@@ -3,10 +3,10 @@ use crate::peer::PeerAddr;
 use crate::{PeerID, PeerMessage};
 use bytes::{Buf, BufMut, BytesMut};
 use curve25519_dalek::ristretto::CompressedRistretto;
+use std::convert::TryFrom;
 use std::io;
 use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
 use tokio_util::codec::{Decoder, Encoder};
-use std::convert::TryFrom;
 
 pub struct MessageEncoder;
 
@@ -32,7 +32,16 @@ impl Encoder<PeerMessage> for MessageEncoder {
             }
             PeerMessage::Data(data) => {
                 dst.put_u8(2); // Message type
-                let len = u32::try_from(data.len()).map_err(|_| io::Error::new(io::ErrorKind::InvalidInput, format!("Max length {} but try to put {} bytes", u32::max_value(), data.len())))?;
+                let len = u32::try_from(data.len()).map_err(|_| {
+                    io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        format!(
+                            "Max length {} but try to put {} bytes",
+                            u32::max_value(),
+                            data.len()
+                        ),
+                    )
+                })?;
                 dst.put_u32(len);
                 dst.put(data.as_slice());
             }
@@ -161,7 +170,10 @@ fn encode_peer_addr(peer: PeerAddr, buf: &mut BytesMut) {
 fn decode_peer_addr(buf: &mut BytesMut) -> Result<PeerAddr, io::Error> {
     let addr = read_socket_addr(buf)?;
     if buf.len() < 32 {
-        return Err(io::Error::new(io::ErrorKind::InvalidData, format!("Must be 32 bytes for key, but found {}", buf.len())));
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("Must be 32 bytes for key, but found {}", buf.len()),
+        ));
     }
     let key = buf.split_to(32);
     let id = PeerID(PublicKey::from(CompressedRistretto::from_slice(
