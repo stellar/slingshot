@@ -6,7 +6,6 @@ use futures::stream::StreamExt;
 use std::hash::{Hash, Hasher};
 use std::net::SocketAddr;
 
-use serde::{Deserialize, Serialize};
 use tokio::io;
 use tokio::prelude::*;
 use tokio::sync;
@@ -16,19 +15,21 @@ use curve25519_dalek::ristretto::CompressedRistretto;
 use rand_core::{CryptoRng, RngCore};
 
 use crate::cybershake;
+use futures::SinkExt;
+use tokio_util::codec::{Decoder, Encoder, FramedRead, FramedWrite};
 
 /// Identifier of the peer.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct PeerID(cybershake::PublicKey);
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct PeerID(pub cybershake::PublicKey);
 
-#[derive(Clone, Debug, Hash, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Hash)]
 pub struct PeerAddr {
     pub id: PeerID,
     pub addr: SocketAddr,
 }
 
 /// Various kinds of messages that peers can send and receive between each other.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum PeerMessage {
     // Upon connection, a peer tells its listening port for dialing in, if it's available.
     Hello(u16),
@@ -72,24 +73,31 @@ impl PeerLink {
     /// Spawns a peer task that will send notifications to a provided channel.
     /// Returns a PeerLink through which commands can be sent.
     ///
-    pub async fn spawn<S, N, RNG>(
+    pub async fn spawn<S, N, RNG, E, D>(
         host_identity: &cybershake::PrivateKey,
         expected_peer_id: Option<PeerID>,
         mut notifications_channel: sync::mpsc::Sender<N>,
         socket: S,
         rng: &mut RNG,
+        encoder: E,
+        decoder: D,
     ) -> Result<Self, io::Error>
     where
         S: AsyncRead + AsyncWrite + Unpin + 'static,
         N: From<PeerNotification> + 'static,
         RNG: RngCore + CryptoRng,
+        E: Encoder<PeerMessage, Error = io::Error> + Unpin + 'static,
+        D: Decoder<Item = PeerMessage, Error = io::Error> + Unpin + 'static,
     {
         let (r, w) = io::split(socket);
         let r = Box::pin(io::BufReader::new(r));
         let w = Box::pin(io::BufWriter::new(w));
 
-        let (id_pubkey, mut outgoing, incoming) =
+        let (id_pubkey, outgoing, incoming) =
             cybershake::cybershake(host_identity, r, w, rng).await?;
+
+        let mut outgoing = FramedWrite::new(outgoing, encoder);
+        let incoming = FramedRead::new(incoming, decoder);
 
         let id = PeerID(id_pubkey);
         let retid = id.clone();
@@ -107,7 +115,7 @@ impl PeerLink {
 
         enum PeerEvent {
             Send(PeerMessage),
-            Receive(Result<Vec<u8>, io::Error>),
+            Receive(Result<PeerMessage, io::Error>),
             Stopped,
         }
 
@@ -117,7 +125,7 @@ impl PeerLink {
                 .map(PeerEvent::Send)
                 // when the owner drops the PeerLink, we'll get the Stopped event.
                 .chain(futures::stream::once(async { PeerEvent::Stopped })),
-            incoming.into_stream().map(PeerEvent::Receive),
+            incoming.map(PeerEvent::Receive),
         )
         .boxed_local();
 
@@ -126,19 +134,9 @@ impl PeerLink {
                 // First, handle successful events (think of this as Result::async_map)
                 let result: Result<(), Option<_>> = (async {
                     match event {
-                        PeerEvent::Send(msg) => {
-                            let bytes = bincode::serialize(&msg)
-                                .expect("bincode serialization should work");
-                            outgoing.send_message(&bytes).await.map_err(Some)
-                        }
+                        PeerEvent::Send(msg) => outgoing.send(msg).await.map_err(Some),
                         PeerEvent::Receive(msg) => {
                             let msg = msg.map_err(Some)?;
-                            let msg = bincode::deserialize(&msg).map_err(|_e| {
-                                Some(io::Error::new(
-                                    io::ErrorKind::InvalidData,
-                                    "Cannot deserialize message.",
-                                ))
-                            })?;
 
                             notifications_channel
                                 .send(PeerNotification::Received(id.clone(), msg).into())
