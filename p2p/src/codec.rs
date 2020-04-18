@@ -221,7 +221,7 @@ fn check_length(buf: &mut BytesMut, len: usize, label: &str) -> Result<(), io::E
         Err(io::Error::new(
             io::ErrorKind::UnexpectedEof,
             format!(
-                "Expected {} bytes for {}`, but found {}",
+                "Expected {} bytes for {}, but found {}",
                 len,
                 label,
                 buf.len()
