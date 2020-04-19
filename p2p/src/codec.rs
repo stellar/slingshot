@@ -1,5 +1,5 @@
 use crate::cybershake::PublicKey;
-use crate::peer::PeerAddr;
+use crate::peer::{CustomMessage, PeerAddr};
 use crate::{PeerID, PeerMessage};
 use bytes::{Buf, BufMut, BytesMut};
 use curve25519_dalek::ristretto::CompressedRistretto;
@@ -10,10 +10,14 @@ use tokio_util::codec::{Decoder, Encoder};
 
 pub struct MessageEncoder;
 
-impl Encoder<PeerMessage> for MessageEncoder {
+impl Encoder<PeerMessage<Vec<u8>>> for MessageEncoder {
     type Error = io::Error;
 
-    fn encode(&mut self, item: PeerMessage, dst: &mut BytesMut) -> Result<(), Self::Error> {
+    fn encode(
+        &mut self,
+        item: PeerMessage<Vec<u8>>,
+        dst: &mut BytesMut,
+    ) -> Result<(), Self::Error> {
         match item {
             PeerMessage::Hello(u) => {
                 dst.put_u8(0); // Message type
@@ -32,18 +36,15 @@ impl Encoder<PeerMessage> for MessageEncoder {
             }
             PeerMessage::Data(data) => {
                 dst.put_u8(2); // Message type
-                let len = u32::try_from(data.len()).map_err(|_| {
+                dst.put_u32_le(0); // We put here length after
+                data.encode(dst).map_err(|e| {
                     io::Error::new(
-                        io::ErrorKind::InvalidInput,
-                        format!(
-                            "Max length {} but try to put {} bytes",
-                            u32::max_value(),
-                            data.len()
-                        ),
+                        io::ErrorKind::InvalidData,
+                        format!("An error occured when encode body: {}", e),
                     )
                 })?;
-                dst.put_u32_le(len);
-                dst.put(data.as_slice());
+                let body_len = (dst.len() - 5) as u32;
+                dst[1..5].copy_from_slice(&body_len.to_le_bytes()[..])
             }
         }
         Ok(())
@@ -75,7 +76,7 @@ enum DecodeState {
 }
 
 impl Decoder for MessageDecoder {
-    type Item = PeerMessage;
+    type Item = PeerMessage<Vec<u8>>;
     type Error = io::Error;
 
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
@@ -116,11 +117,11 @@ impl Decoder for MessageDecoder {
     }
 }
 
-fn read_message_body(
+fn read_message_body<T: CustomMessage>(
     message_type: u8,
     len: usize,
     src: &mut BytesMut,
-) -> Result<PeerMessage, io::Error> {
+) -> Result<PeerMessage<T>, io::Error> {
     match message_type {
         0 => {
             if len != 2 {
@@ -141,7 +142,13 @@ fn read_message_body(
             }
             Ok(PeerMessage::Peers(peers))
         }
-        2 => Ok(PeerMessage::Data(src.split_to(len).to_vec())),
+        2 => match T::decode(src.as_ref()) {
+            Ok(data) => Ok(PeerMessage::Data(data)),
+            Err(e) => Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("An error occured when decode body: {}", e),
+            )),
+        },
         m => Err(io::Error::new(
             io::ErrorKind::InvalidData,
             format!("Unknown message type: {}", m),
@@ -263,6 +270,21 @@ mod tests {
                 addr: SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::from([20; 4]), 40)),
             },
         ]);
+        let mut bytes = BytesMut::new();
+        MessageEncoder::new()
+            .encode(msg.clone(), &mut bytes)
+            .expect("Must be encoded");
+        let res = MessageDecoder::new()
+            .decode(&mut bytes)
+            .expect("Message must be decoded without errors")
+            .expect("message must be encoded to end");
+
+        assert_eq!(msg, res);
+    }
+
+    #[test]
+    fn code_custom() {
+        let msg = PeerMessage::Data(vec![1, 2, 3, 4, 5, 6]);
         let mut bytes = BytesMut::new();
         MessageEncoder::new()
             .encode(msg.clone(), &mut bytes)

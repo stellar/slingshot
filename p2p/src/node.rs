@@ -453,7 +453,7 @@ impl Node {
         reply.send(self.peer_infos()).unwrap_or(())
     }
 
-    async fn send_to_peer(&mut self, pid: &PeerID, msg: PeerMessage) {
+    async fn send_to_peer(&mut self, pid: &PeerID, msg: PeerMessage<Vec<u8>>) {
         if let Some(peer) = self.peers.get_mut(&pid) {
             peer.link.send(msg).await;
         }

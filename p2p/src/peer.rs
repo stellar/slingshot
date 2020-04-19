@@ -15,7 +15,10 @@ use curve25519_dalek::ristretto::CompressedRistretto;
 use rand_core::{CryptoRng, RngCore};
 
 use crate::cybershake;
+use bytes::{BufMut, BytesMut};
 use futures::SinkExt;
+use std::convert::Infallible;
+use std::fmt::Display;
 use tokio_util::codec::{Decoder, Encoder, FramedRead, FramedWrite};
 
 /// Identifier of the peer.
@@ -30,27 +33,49 @@ pub struct PeerAddr {
 
 /// Various kinds of messages that peers can send and receive between each other.
 #[derive(Clone, Debug, PartialEq)]
-pub enum PeerMessage {
+pub enum PeerMessage<T: CustomMessage> {
     // Upon connection, a peer tells its listening port for dialing in, if it's available.
     Hello(u16),
     // A list of known peers.
     Peers(Vec<PeerAddr>),
     // An underlying message.
-    // TODO: change this to a Bytes buffer or generic type, to avoid unnecessary copying.
-    Data(Vec<u8>),
+    Data(T),
+}
+
+pub trait CustomMessage {
+    type Error: Display;
+    fn decode(src: &[u8]) -> Result<Self, Self::Error>
+    where
+        Self: Sized;
+    fn encode(self, dst: &mut BytesMut) -> Result<(), Self::Error>;
+}
+
+impl CustomMessage for Vec<u8> {
+    type Error = Infallible;
+
+    fn decode(src: &[u8]) -> Result<Self, Self::Error>
+    where
+        Self: Sized,
+    {
+        Ok(Self::from(src))
+    }
+
+    fn encode(self, dst: &mut BytesMut) -> Result<(), Self::Error> {
+        Ok(dst.put(self.as_slice()))
+    }
 }
 
 /// Interface for communication with the peer.
 pub struct PeerLink {
     peer_id: PeerID,
-    channel: sync::mpsc::Sender<PeerMessage>,
+    channel: sync::mpsc::Sender<PeerMessage<Vec<u8>>>,
 }
 
 /// Notifications that we receive from the peer.
 #[derive(Clone, Debug)]
 pub enum PeerNotification {
     /// Received a message from a peer
-    Received(PeerID, PeerMessage),
+    Received(PeerID, PeerMessage<Vec<u8>>),
     /// Peer got disconnected. This message is not sent if the peer was stopped by the host.
     Disconnected(PeerID),
 }
@@ -62,7 +87,7 @@ impl PeerLink {
     }
 
     /// Sends a message to the peer.
-    pub async fn send(&mut self, msg: PeerMessage) -> () {
+    pub async fn send(&mut self, msg: PeerMessage<Vec<u8>>) -> () {
         // We intentionally ignore the error because it's only returned if the recipient has disconnected,
         // but even Ok is of no guarantee that the message will be delivered, so we simply ignore the error entirely.
         // Specifically, in this implementation, Node's task does not stop until all senders disappear,
@@ -86,8 +111,8 @@ impl PeerLink {
         S: AsyncRead + AsyncWrite + Unpin + 'static,
         N: From<PeerNotification> + 'static,
         RNG: RngCore + CryptoRng,
-        E: Encoder<PeerMessage, Error = io::Error> + Unpin + 'static,
-        D: Decoder<Item = PeerMessage, Error = io::Error> + Unpin + 'static,
+        E: Encoder<PeerMessage<Vec<u8>>, Error = io::Error> + Unpin + 'static,
+        D: Decoder<Item = PeerMessage<Vec<u8>>, Error = io::Error> + Unpin + 'static,
     {
         let (r, w) = io::split(socket);
         let r = Box::pin(io::BufReader::new(r));
@@ -111,11 +136,11 @@ impl PeerLink {
             }
         }
 
-        let (cmd_sender, cmd_receiver) = sync::mpsc::channel::<PeerMessage>(100);
+        let (cmd_sender, cmd_receiver) = sync::mpsc::channel::<PeerMessage<Vec<u8>>>(100);
 
         enum PeerEvent {
-            Send(PeerMessage),
-            Receive(Result<PeerMessage, io::Error>),
+            Send(PeerMessage<Vec<u8>>),
+            Receive(Result<PeerMessage<Vec<u8>>, io::Error>),
             Stopped,
         }
 
