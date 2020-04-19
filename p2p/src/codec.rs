@@ -69,6 +69,7 @@ impl MessageDecoder {
     }
 }
 
+#[derive(Debug, PartialEq)]
 enum DecodeState {
     MessageType,
     Len(u8),
@@ -142,12 +143,15 @@ fn read_message_body<T: CustomMessage>(
             }
             Ok(PeerMessage::Peers(peers))
         }
-        2 => match T::decode(src.as_ref()) {
-            Ok(data) => Ok(PeerMessage::Data(data)),
-            Err(e) => Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!("An error occured when decode body: {}", e),
-            )),
+        2 => {
+            let src = src.split_to(len);
+            match T::decode(src.as_ref()) {
+                Ok(data) => Ok(PeerMessage::Data(data)),
+                Err(e) => Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!("An error occured when decode body: {}", e),
+                )),
+            }
         },
         m => Err(io::Error::new(
             io::ErrorKind::InvalidData,
@@ -286,14 +290,20 @@ mod tests {
     fn code_custom() {
         let msg = PeerMessage::Data(vec![1, 2, 3, 4, 5, 6]);
         let mut bytes = BytesMut::new();
-        MessageEncoder::new()
+
+        let mut encoder = MessageEncoder::new();
+        let mut decoder = MessageDecoder::new();
+
+        encoder
             .encode(msg.clone(), &mut bytes)
             .expect("Must be encoded");
-        let res = MessageDecoder::new()
+        let res = decoder
             .decode(&mut bytes)
             .expect("Message must be decoded without errors")
             .expect("message must be encoded to end");
 
         assert_eq!(msg, res);
+        assert_eq!(decoder.state, DecodeState::MessageType);
+        assert!(bytes.is_empty())
     }
 }
