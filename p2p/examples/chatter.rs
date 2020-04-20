@@ -87,11 +87,11 @@ enum UserCommand {
 }
 
 pub struct Console {
-    node: NodeHandle,
+    node: NodeHandle<Vec<u8>>,
 }
 
 impl Console {
-    pub fn spawn(node: NodeHandle) -> task::JoinHandle<Result<(), String>> {
+    pub fn spawn(node: NodeHandle<Vec<u8>>) -> task::JoinHandle<Result<(), String>> {
         task::spawn_local(async move {
             let mut stdin = io::BufReader::new(io::stdin());
             let mut console = Console { node };

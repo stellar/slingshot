@@ -66,28 +66,28 @@ impl CustomMessage for Vec<u8> {
 }
 
 /// Interface for communication with the peer.
-pub struct PeerLink {
+pub struct PeerLink<Custom: CustomMessage> {
     peer_id: PeerID,
-    channel: sync::mpsc::Sender<PeerMessage<Vec<u8>>>,
+    channel: sync::mpsc::Sender<PeerMessage<Custom>>,
 }
 
 /// Notifications that we receive from the peer.
 #[derive(Clone, Debug)]
-pub enum PeerNotification {
+pub enum PeerNotification<Custom: CustomMessage> {
     /// Received a message from a peer
-    Received(PeerID, PeerMessage<Vec<u8>>),
+    Received(PeerID, PeerMessage<Custom>),
     /// Peer got disconnected. This message is not sent if the peer was stopped by the host.
     Disconnected(PeerID),
 }
 
-impl PeerLink {
+impl<Custom: CustomMessage + 'static> PeerLink<Custom> {
     /// Returns the ID of the peer.
     pub fn id(&self) -> &PeerID {
         &self.peer_id
     }
 
     /// Sends a message to the peer.
-    pub async fn send(&mut self, msg: PeerMessage<Vec<u8>>) -> () {
+    pub async fn send(&mut self, msg: PeerMessage<Custom>) -> () {
         // We intentionally ignore the error because it's only returned if the recipient has disconnected,
         // but even Ok is of no guarantee that the message will be delivered, so we simply ignore the error entirely.
         // Specifically, in this implementation, Node's task does not stop until all senders disappear,
@@ -109,10 +109,10 @@ impl PeerLink {
     ) -> Result<Self, io::Error>
     where
         S: AsyncRead + AsyncWrite + Unpin + 'static,
-        N: From<PeerNotification> + 'static,
+        N: From<PeerNotification<Custom>> + 'static,
         RNG: RngCore + CryptoRng,
-        E: Encoder<PeerMessage<Vec<u8>>, Error = io::Error> + Unpin + 'static,
-        D: Decoder<Item = PeerMessage<Vec<u8>>, Error = io::Error> + Unpin + 'static,
+        E: Encoder<PeerMessage<Custom>, Error = io::Error> + Unpin + 'static,
+        D: Decoder<Item = PeerMessage<Custom>, Error = io::Error> + Unpin + 'static,
     {
         let (r, w) = io::split(socket);
         let r = Box::pin(io::BufReader::new(r));
@@ -136,11 +136,11 @@ impl PeerLink {
             }
         }
 
-        let (cmd_sender, cmd_receiver) = sync::mpsc::channel::<PeerMessage<Vec<u8>>>(100);
+        let (cmd_sender, cmd_receiver) = sync::mpsc::channel::<PeerMessage<Custom>>(100);
 
-        enum PeerEvent {
-            Send(PeerMessage<Vec<u8>>),
-            Receive(Result<PeerMessage<Vec<u8>>, io::Error>),
+        enum PeerEvent<Custom: CustomMessage> {
+            Send(PeerMessage<Custom>),
+            Receive(Result<PeerMessage<Custom>, io::Error>),
             Stopped,
         }
 

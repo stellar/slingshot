@@ -5,19 +5,18 @@ use bytes::{Buf, BufMut, BytesMut};
 use curve25519_dalek::ristretto::CompressedRistretto;
 use std::convert::TryFrom;
 use std::io;
+use std::marker::PhantomData;
 use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
 use tokio_util::codec::{Decoder, Encoder};
 
-pub struct MessageEncoder;
+pub struct MessageEncoder<T: CustomMessage> {
+    marker: PhantomData<T>,
+}
 
-impl Encoder<PeerMessage<Vec<u8>>> for MessageEncoder {
+impl<T: CustomMessage> Encoder<PeerMessage<T>> for MessageEncoder<T> {
     type Error = io::Error;
 
-    fn encode(
-        &mut self,
-        item: PeerMessage<Vec<u8>>,
-        dst: &mut BytesMut,
-    ) -> Result<(), Self::Error> {
+    fn encode(&mut self, item: PeerMessage<T>, dst: &mut BytesMut) -> Result<(), Self::Error> {
         match item {
             PeerMessage::Hello(u) => {
                 dst.put_u8(0); // Message type
@@ -51,20 +50,24 @@ impl Encoder<PeerMessage<Vec<u8>>> for MessageEncoder {
     }
 }
 
-impl MessageEncoder {
+impl<T: CustomMessage> MessageEncoder<T> {
     pub fn new() -> Self {
-        Self {}
+        Self {
+            marker: PhantomData,
+        }
     }
 }
 
-pub struct MessageDecoder {
+pub struct MessageDecoder<T: CustomMessage> {
     state: DecodeState,
+    marker: PhantomData<T>,
 }
 
-impl MessageDecoder {
+impl<T: CustomMessage> MessageDecoder<T> {
     pub fn new() -> Self {
         MessageDecoder {
             state: DecodeState::MessageType,
+            marker: PhantomData,
         }
     }
 }
@@ -76,8 +79,8 @@ enum DecodeState {
     Body(u8, usize),
 }
 
-impl Decoder for MessageDecoder {
-    type Item = PeerMessage<Vec<u8>>;
+impl<T: CustomMessage> Decoder for MessageDecoder<T> {
+    type Item = PeerMessage<T>;
     type Error = io::Error;
 
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
@@ -249,7 +252,7 @@ mod tests {
 
     #[test]
     fn code_hello() {
-        let msg = PeerMessage::Hello(20);
+        let msg = PeerMessage::<Vec<u8>>::Hello(20);
         let mut bytes = BytesMut::new();
         MessageEncoder::new()
             .encode(msg.clone(), &mut bytes)
@@ -264,7 +267,7 @@ mod tests {
 
     #[test]
     fn code_peers() {
-        let msg = PeerMessage::Peers(vec![
+        let msg = PeerMessage::<Vec<u8>>::Peers(vec![
             PeerAddr {
                 id: PeerID(PublicKey::from(CompressedRistretto([0u8; 32]))),
                 addr: SocketAddr::V6(SocketAddrV6::new(Ipv6Addr::from([30; 16]), 40, 12, 24)),
