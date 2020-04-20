@@ -144,15 +144,15 @@ fn read_message_body<T: CustomMessage>(
             Ok(PeerMessage::Peers(peers))
         }
         2 => {
-            let src = src.split_to(len);
-            match T::decode(src.as_ref()) {
+            let body = src.split_to(len);
+            match T::decode(&mut body.freeze()) {
                 Ok(data) => Ok(PeerMessage::Data(data)),
                 Err(e) => Err(io::Error::new(
                     io::ErrorKind::InvalidData,
                     format!("An error occured when decode body: {}", e),
                 )),
             }
-        },
+        }
         m => Err(io::Error::new(
             io::ErrorKind::InvalidData,
             format!("Unknown message type: {}", m),

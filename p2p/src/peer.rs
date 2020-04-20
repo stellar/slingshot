@@ -15,7 +15,7 @@ use curve25519_dalek::ristretto::CompressedRistretto;
 use rand_core::{CryptoRng, RngCore};
 
 use crate::cybershake;
-use bytes::{BufMut, BytesMut};
+use bytes::{BufMut, Bytes, BytesMut};
 use futures::SinkExt;
 use std::convert::Infallible;
 use std::fmt::Display;
@@ -44,7 +44,7 @@ pub enum PeerMessage<T: CustomMessage> {
 
 pub trait CustomMessage {
     type Error: Display;
-    fn decode(src: &[u8]) -> Result<Self, Self::Error>
+    fn decode(src: &mut Bytes) -> Result<Self, Self::Error>
     where
         Self: Sized;
     fn encode(self, dst: &mut BytesMut) -> Result<(), Self::Error>;
@@ -53,11 +53,11 @@ pub trait CustomMessage {
 impl CustomMessage for Vec<u8> {
     type Error = Infallible;
 
-    fn decode(src: &[u8]) -> Result<Self, Self::Error>
+    fn decode(src: &mut Bytes) -> Result<Self, Self::Error>
     where
         Self: Sized,
     {
-        Ok(Self::from(src))
+        Ok(Self::from(src.as_ref()))
     }
 
     fn encode(self, dst: &mut BytesMut) -> Result<(), Self::Error> {
