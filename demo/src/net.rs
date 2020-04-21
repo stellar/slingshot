@@ -13,7 +13,7 @@ use rand::thread_rng;
 
 /// Handle to interact with the p2p networking stack.
 pub struct P2PHandle {
-    node_handle: Option<NodeHandle>,
+    node_handle: Option<NodeHandle<Vec<u8>>>,
     tokio_handle: tokio::runtime::Handle,
 }
 
