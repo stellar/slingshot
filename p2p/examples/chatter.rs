@@ -26,7 +26,7 @@ fn main() {
                 heartbeat_interval_sec: 3600,
             };
 
-            let (node, mut notifications_channel) = Node::spawn(host_privkey, config)
+            let (node, mut notifications_channel) = Node::<Message>::spawn(host_privkey, config)
                 .await
                 .expect("Should bind normally.");
 
@@ -87,11 +87,11 @@ enum UserCommand {
 }
 
 pub struct Console {
-    node: NodeHandle<Vec<u8>>,
+    node: NodeHandle<Message>,
 }
 
 impl Console {
-    pub fn spawn(node: NodeHandle<Vec<u8>>) -> task::JoinHandle<Result<(), String>> {
+    pub fn spawn(node: NodeHandle<Message>) -> task::JoinHandle<Result<(), String>> {
         task::spawn_local(async move {
             let mut stdin = io::BufReader::new(io::stdin());
             let mut console = Console { node };
@@ -148,7 +148,7 @@ impl Console {
             }
             UserCommand::Broadcast(msg) => {
                 println!("=> Broadcasting: {:?}", &msg);
-                self.node.broadcast(msg.as_bytes().to_vec()).await;
+                self.node.broadcast(Message(msg.as_bytes().to_vec())).await;
             }
             UserCommand::ListPeers => {
                 let peer_infos = self.node.list_peers().await;
@@ -209,15 +209,27 @@ impl Console {
 use p2p::reexport::{BufMut, Bytes, BytesMut};
 use p2p::CustomMessage;
 use std::convert::Infallible;
+use std::ops::Deref;
 
-impl CustomMessage for Vec<u8> {
+#[derive(Debug, Clone)]
+pub struct Message(pub Vec<u8>);
+
+impl Deref for Message {
+    type Target = Vec<u8>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl CustomMessage for Message {
     type Error = Infallible;
 
     fn decode(src: &mut Bytes) -> Result<Self, Self::Error>
     where
         Self: Sized,
     {
-        Ok(Self::from(src.as_ref()))
+        Ok(Self(Vec::from(src.as_ref())))
     }
 
     fn encode(self, dst: &mut BytesMut) -> Result<(), Self::Error> {

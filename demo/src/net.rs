@@ -13,7 +13,7 @@ use rand::thread_rng;
 
 /// Handle to interact with the p2p networking stack.
 pub struct P2PHandle {
-    node_handle: Option<NodeHandle<Vec<u8>>>,
+    node_handle: Option<NodeHandle<Message>>,
     tokio_handle: tokio::runtime::Handle,
 }
 
@@ -129,17 +129,20 @@ use p2p::reexport::{BufMut, Bytes, BytesMut};
 use p2p::CustomMessage;
 use std::convert::Infallible;
 
-impl CustomMessage for Vec<u8> {
+#[derive(Debug, Clone)]
+struct Message(pub Vec<u8>);
+
+impl CustomMessage for Message {
     type Error = Infallible;
 
     fn decode(src: &mut Bytes) -> Result<Self, Self::Error>
     where
         Self: Sized,
     {
-        Ok(Self::from(src.as_ref()))
+        Ok(Self(Vec::from(src.as_ref())))
     }
 
     fn encode(self, dst: &mut BytesMut) -> Result<(), Self::Error> {
-        Ok(dst.put(self.as_slice()))
+        Ok(dst.put(self.0.as_slice()))
     }
 }
