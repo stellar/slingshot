@@ -10,7 +10,6 @@ extern crate zkvm;
 extern crate starsig;
 
 mod block;
-mod codec;
 mod errors;
 mod mempool;
 mod protocol;
