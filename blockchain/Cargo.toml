@@ -29,9 +29,6 @@ path = "../zkvm"
 [dependencies.starsig]
 path = "../starsig"
 
-[dependencies.p2p]
-path = "../p2p"
-
 [dev-dependencies]
 criterion = "0.2"
 serde_json = "1.0"
