@@ -125,8 +125,8 @@ pub fn launch_p2p() -> P2PHandle {
     receiver.recv().unwrap()
 }
 
+use p2p::reexport::{BufMut, Bytes, BytesMut};
 use p2p::CustomMessage;
-use p2p::reexport::{Bytes, BytesMut, BufMut};
 use std::convert::Infallible;
 
 impl CustomMessage for Vec<u8> {

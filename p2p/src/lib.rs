@@ -15,5 +15,5 @@ pub use self::peer::{CustomMessage, PeerID, PeerLink, PeerMessage, PeerNotificat
 pub use self::priority::Priority;
 
 pub mod reexport {
-    pub use bytes::{BytesMut, Bytes, BufMut, Buf};
+    pub use bytes::{Buf, BufMut, Bytes, BytesMut};
 }
