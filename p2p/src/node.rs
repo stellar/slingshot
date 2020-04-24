@@ -17,9 +17,9 @@ use tokio::time;
 use rand::thread_rng;
 
 use crate::codec::{MessageDecoder, MessageEncoder};
-use crate::cybershake;
 use crate::peer::{PeerAddr, PeerID, PeerLink, PeerMessage, PeerNotification};
 use crate::priority::{Priority, PriorityTable, HIGH_PRIORITY, LOW_PRIORITY};
+use crate::{cybershake, CustomMessage};
 
 type Reply<T> = sync::oneshot::Sender<T>;
 
@@ -27,10 +27,10 @@ type Reply<T> = sync::oneshot::Sender<T>;
 /// This is a handle that can be copied to send messages to the node from different tasks.
 /// When the handle is dropped, the Node is shut down.
 #[derive(Clone)]
-pub struct NodeHandle {
+pub struct NodeHandle<Custom: CustomMessage> {
     peer_id: PeerID,
     socket_address: SocketAddr,
-    channel: sync::mpsc::Sender<NodeMessage>,
+    channel: sync::mpsc::Sender<NodeMessage<Custom>>,
 }
 
 pub struct NodeConfig {
@@ -41,15 +41,15 @@ pub struct NodeConfig {
     pub heartbeat_interval_sec: u64,
 }
 
-pub struct Node {
+pub struct Node<Custom: CustomMessage> {
     listener: net::TcpListener,
     cybershake_identity: cybershake::PrivateKey,
-    peer_notification_channel: sync::mpsc::Sender<PeerNotification>,
-    peers: HashMap<PeerID, PeerState>,
+    peer_notification_channel: sync::mpsc::Sender<PeerNotification<Custom>>,
+    peers: HashMap<PeerID, PeerState<Custom>>,
     config: NodeConfig,
     inbound_semaphore: sync::Semaphore,
     peer_priorities: PriorityTable<PeerID>, // priorities of peers
-    notifications_channel: sync::mpsc::Sender<NodeNotification>,
+    notifications_channel: sync::mpsc::Sender<NodeNotification<Custom>>,
 }
 
 /// Direction of connection
@@ -60,8 +60,8 @@ pub enum Direction {
 }
 
 /// State of the peer
-struct PeerState {
-    link: PeerLink,
+struct PeerState<T: CustomMessage> {
+    link: PeerLink<T>,
     listening_addr: Option<SocketAddr>,
     socket_addr: SocketAddr,
     direction: Direction,
@@ -71,10 +71,10 @@ struct PeerState {
 }
 
 #[derive(Debug)]
-pub enum NodeNotification {
+pub enum NodeNotification<Custom: CustomMessage> {
     PeerAdded(PeerID),
     PeerDisconnected(PeerID),
-    MessageReceived(PeerID, Vec<u8>),
+    MessageReceived(PeerID, Custom),
     InboundConnectionFailure(io::Error),
     OutboundConnectionFailure(io::Error),
     /// Node has finished running.
@@ -91,10 +91,10 @@ pub struct PeerInfo {
 }
 
 /// Internal representation of messages sent by `NodeHandle` to `Node`.
-enum NodeMessage {
+enum NodeMessage<Custom: CustomMessage> {
     ConnectPeer(net::TcpStream, Option<PeerID>),
     RemovePeer(PeerID),
-    Broadcast(Vec<u8>),
+    Broadcast(Custom),
     CountPeers(Reply<usize>),
     ListPeers(Reply<Vec<PeerInfo>>),
 }
@@ -105,13 +105,22 @@ impl NodeConfig {
     }
 }
 
-impl Node {
+impl<Custom> Node<Custom>
+where
+    Custom: CustomMessage + Clone + Unpin + 'static,
+{
     /// Creates a node and returns a handle for communicating with it.
     /// TODO: add the listening loop and avoid doing .accept when we are out of inbound slots.
     pub async fn spawn(
         cybershake_identity: cybershake::PrivateKey,
         config: NodeConfig,
-    ) -> Result<(NodeHandle, sync::mpsc::Receiver<NodeNotification>), io::Error> {
+    ) -> Result<
+        (
+            NodeHandle<Custom>,
+            sync::mpsc::Receiver<NodeNotification<Custom>>,
+        ),
+        io::Error,
+    > {
         // Prepare listening socket.
         let listener = net::TcpListener::bind(config.listen_addr()).await?;
         let mut local_addr = listener.local_addr()?;
@@ -121,9 +130,9 @@ impl Node {
 
         let inbound_semaphore = sync::Semaphore::new(config.inbound_limit);
 
-        let (cmd_sender, mut cmd_receiver) = sync::mpsc::channel::<NodeMessage>(100);
-        let (peer_sender, mut peer_receiver) = sync::mpsc::channel::<PeerNotification>(100);
-        let (notif_sender, notif_receiver) = sync::mpsc::channel::<NodeNotification>(100);
+        let (cmd_sender, mut cmd_receiver) = sync::mpsc::channel::<NodeMessage<Custom>>(100);
+        let (peer_sender, mut peer_receiver) = sync::mpsc::channel::<PeerNotification<Custom>>(100);
+        let (notif_sender, notif_receiver) = sync::mpsc::channel::<NodeNotification<Custom>>(100);
 
         let mut node = Node {
             cybershake_identity,
@@ -176,7 +185,7 @@ impl Node {
     }
 }
 
-impl NodeHandle {
+impl<Custom: CustomMessage> NodeHandle<Custom> {
     /// Attempts to open a connection to a peer.
     /// Returns error if cannot establish the connection.
     /// If connection is established, returns Ok(), but can fail later to perform handshake -
@@ -210,7 +219,7 @@ impl NodeHandle {
     }
 
     /// Broadcasts a message to all peers.
-    pub async fn broadcast(&mut self, msg: Vec<u8>) {
+    pub async fn broadcast(&mut self, msg: Custom) {
         self.send_internal(NodeMessage::Broadcast(msg)).await
     }
 
@@ -229,7 +238,7 @@ impl NodeHandle {
     }
 
     /// Implements sending a message to a node over a channel
-    async fn send_internal(&mut self, msg: NodeMessage) {
+    async fn send_internal(&mut self, msg: NodeMessage<Custom>) {
         // We intentionally ignore the error because it's only returned if the recipient has disconnected,
         // but even Ok is of no guarantee that the message will be delivered, so we simply ignore the error entirely.
         // Specifically, in this implementation, Node's task does not stop until all senders disappear,
@@ -238,9 +247,12 @@ impl NodeHandle {
     }
 }
 
-impl Node {
+impl<Custom> Node<Custom>
+where
+    Custom: CustomMessage + Clone + Unpin + 'static,
+{
     /// Handles the command and returns false if it needs to shutdown.
-    async fn handle_command(&mut self, msg: NodeMessage) {
+    async fn handle_command(&mut self, msg: NodeMessage<Custom>) {
         match msg {
             NodeMessage::ConnectPeer(stream, expected_pid) => {
                 self.connect_peer_or_notify(stream, expected_pid, HIGH_PRIORITY)
@@ -356,7 +368,7 @@ impl Node {
 
     async fn register_peer(
         &mut self,
-        peer_link: PeerLink,
+        peer_link: PeerLink<Custom>,
         addr: SocketAddr,
         direction: Direction,
         min_priority: Priority,
@@ -439,7 +451,7 @@ impl Node {
             .count()
     }
 
-    async fn broadcast(&mut self, msg: Vec<u8>) {
+    async fn broadcast(&mut self, msg: Custom) {
         for (_id, peer_link) in self.peers.iter_mut() {
             peer_link.link.send(PeerMessage::Data(msg.clone())).await;
         }
@@ -453,13 +465,13 @@ impl Node {
         reply.send(self.peer_infos()).unwrap_or(())
     }
 
-    async fn send_to_peer(&mut self, pid: &PeerID, msg: PeerMessage) {
+    async fn send_to_peer(&mut self, pid: &PeerID, msg: PeerMessage<Custom>) {
         if let Some(peer) = self.peers.get_mut(&pid) {
             peer.link.send(msg).await;
         }
     }
 
-    async fn handle_peer_notification(&mut self, notif: PeerNotification) {
+    async fn handle_peer_notification(&mut self, notif: PeerNotification<Custom>) {
         let (id, peermsg) = match notif {
             PeerNotification::Received(id, peermsg) => (id, peermsg),
             PeerNotification::Disconnected(id) => {
@@ -583,14 +595,14 @@ impl Node {
     async fn notify_on_error<E>(
         &mut self,
         result: Result<(), E>,
-        mapper: impl FnOnce(E) -> NodeNotification,
+        mapper: impl FnOnce(E) -> NodeNotification<Custom>,
     ) -> () {
         if let Err(e) = result {
             self.notify(mapper(e)).await;
         }
     }
 
-    async fn notify(&mut self, notif: NodeNotification) {
+    async fn notify(&mut self, notif: NodeNotification<Custom>) {
         let _ = self.notifications_channel.send(notif).await.unwrap_or(());
     }
 

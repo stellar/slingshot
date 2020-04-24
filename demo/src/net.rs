@@ -13,7 +13,7 @@ use rand::thread_rng;
 
 /// Handle to interact with the p2p networking stack.
 pub struct P2PHandle {
-    node_handle: Option<NodeHandle>,
+    node_handle: Option<NodeHandle<Message>>,
     tokio_handle: tokio::runtime::Handle,
 }
 
@@ -123,4 +123,26 @@ pub fn launch_p2p() -> P2PHandle {
         })
     });
     receiver.recv().unwrap()
+}
+
+use p2p::reexport::{BufMut, Bytes, BytesMut};
+use p2p::CustomMessage;
+use std::convert::Infallible;
+
+#[derive(Debug, Clone)]
+struct Message(pub Vec<u8>);
+
+impl CustomMessage for Message {
+    type Error = Infallible;
+
+    fn decode(src: &mut Bytes) -> Result<Self, Self::Error>
+    where
+        Self: Sized,
+    {
+        Ok(Self(Vec::from(src.as_ref())))
+    }
+
+    fn encode(self, dst: &mut BytesMut) -> Result<(), Self::Error> {
+        Ok(dst.put(self.0.as_slice()))
+    }
 }
