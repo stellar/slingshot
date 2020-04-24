@@ -50,21 +50,6 @@ pub trait CustomMessage {
     fn encode(self, dst: &mut BytesMut) -> Result<(), Self::Error>;
 }
 
-impl CustomMessage for Vec<u8> {
-    type Error = Infallible;
-
-    fn decode(src: &mut Bytes) -> Result<Self, Self::Error>
-    where
-        Self: Sized,
-    {
-        Ok(Self::from(src.as_ref()))
-    }
-
-    fn encode(self, dst: &mut BytesMut) -> Result<(), Self::Error> {
-        Ok(dst.put(self.as_slice()))
-    }
-}
-
 /// Interface for communication with the peer.
 pub struct PeerLink<Custom: CustomMessage> {
     peer_id: PeerID,

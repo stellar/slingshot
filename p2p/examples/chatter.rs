@@ -205,3 +205,22 @@ impl Console {
         }
     }
 }
+
+use p2p::CustomMessage;
+use p2p::reexport::{Bytes, BytesMut, BufMut};
+use std::convert::Infallible;
+
+impl CustomMessage for Vec<u8> {
+    type Error = Infallible;
+
+    fn decode(src: &mut Bytes) -> Result<Self, Self::Error>
+    where
+        Self: Sized,
+    {
+        Ok(Self::from(src.as_ref()))
+    }
+
+    fn encode(self, dst: &mut BytesMut) -> Result<(), Self::Error> {
+        Ok(dst.put(self.as_slice()))
+    }
+}
