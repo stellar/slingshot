@@ -1,4 +1,3 @@
-use byteorder::{ByteOrder, LittleEndian};
 use core::mem;
 
 pub enum WriteError {
@@ -23,17 +22,13 @@ pub trait Writer {
     /// Writes a LE32-encoded integer.
     #[inline]
     fn write_u32(&mut self, label: &'static [u8], x: u32) -> Result<(), WriteError> {
-        let mut buf = [0u8; 4];
-        LittleEndian::write_u32(&mut buf, x);
-        self.write(label, &buf)
+        self.write(label, &x.to_le_bytes())
     }
 
     /// Writes a LE64-encoded integer.
     #[inline]
     fn write_u64(&mut self, label: &'static [u8], x: u64) -> Result<(), WriteError> {
-        let mut buf = [0u8; 8];
-        LittleEndian::write_u64(&mut buf, x);
-        self.write(label, &buf)
+        self.write(label, &x.to_le_bytes())
     }
 }
 
@@ -41,6 +36,12 @@ impl Writer for Vec<u8> {
     #[inline]
     fn write(&mut self, _label: &'static [u8], src: &[u8]) -> Result<(), WriteError> {
         self.extend_from_slice(src);
+        Ok(())
+    }
+
+    #[inline]
+    fn write_u8(&mut self, _label: &'static [u8], x: u8) -> Result<(), WriteError> {
+        self.push(x);
         Ok(())
     }
 

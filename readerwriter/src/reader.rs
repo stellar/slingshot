@@ -1,5 +1,3 @@
-use byteorder::{ByteOrder, LittleEndian};
-
 /// Error kinds returns by the reader.
 #[derive(Debug, Clone, PartialEq)]
 pub enum ReadError {
@@ -59,7 +57,7 @@ pub trait Reader {
     fn read_u32(&mut self) -> Result<u32, ReadError> {
         let mut buf = [0u8; 4];
         self.read(&mut buf)?;
-        Ok(LittleEndian::read_u32(&buf))
+        Ok(u32::from_le_bytes(buf))
     }
 
     /// Reads an 8-byte LE64 integer.
@@ -67,7 +65,7 @@ pub trait Reader {
     fn read_u64(&mut self) -> Result<u64, ReadError> {
         let mut buf = [0u8; 8];
         self.read(&mut buf)?;
-        Ok(LittleEndian::read_u64(&buf))
+        Ok(u64::from_le_bytes(buf))
     }
 
     /// Reads a 32-byte string.
