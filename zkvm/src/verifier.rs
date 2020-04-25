@@ -64,11 +64,7 @@ impl Delegate<r1cs::Verifier<Transcript>> for Verifier {
         }
         let mut reader = &run.program[run.offset..];
         let instr = Instruction::parse(&mut reader)?;
-        let remainder = reader.remaining_bytes();
-        // let (instr, remainder) = (&run.program[run.offset..]).read_all::<_,_,VMError>(|r| {
-        //     Ok((Instruction::parse(r)?, r.skip_trailing_bytes()))
-        // })?;
-        run.offset = run.program.len() - remainder;
+        run.offset = run.program.len() - reader.remaining_bytes();
         Ok(Some(instr))
     }
 
