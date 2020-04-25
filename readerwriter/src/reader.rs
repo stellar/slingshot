@@ -89,7 +89,7 @@ impl Reader for &[u8] {
     #[inline]
     fn read(&mut self, dst: &mut [u8]) -> Result<(), ReadError> {
         let n = dst.len();
-        if self.len() >= n {
+        if n <= self.len() {
             let (a, b) = self.split_at(n);
             if n == 1 {
                 dst[0] = a[0];
@@ -104,8 +104,20 @@ impl Reader for &[u8] {
     }
 
     #[inline]
+    fn read_u8(&mut self) -> Result<u8, ReadError> {
+        if self.len() > 0 {
+            let x = self[0];
+            let (_, rest) = self.split_at(1);
+            *self = rest;
+            Ok(x)
+        } else {
+            Err(ReadError::InsufficientBytes)
+        }
+    }
+
+    #[inline]
     fn advance(&mut self, n: usize) -> Result<(), ReadError> {
-        if self.len() >= n {
+        if n <= self.len() {
             let (_, b) = self.split_at(n);
             *self = b;
             Ok(())
