@@ -110,7 +110,7 @@ pub trait Reader {
     where
         E: From<ReadError>,
     {
-        if len > self.remaining_bytes()/min_item_size {
+        if len > self.remaining_bytes() / min_item_size {
             // this early check is to avoid allocating a vector
             // if we don't have enough data.
             return Err(ReadError::InsufficientBytes.into());
