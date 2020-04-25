@@ -1,5 +1,5 @@
 use crate::encoding::Encodable;
-use crate::encoding::SliceReader;
+use crate::encoding::Reader;
 use crate::errors::VMError;
 use crate::merkle::MerkleItem;
 use crate::ops::Instruction;
@@ -129,10 +129,10 @@ impl Program {
     }
 
     /// Creates a program by parsing a bytecode slice.
-    pub fn parse(data: &[u8]) -> Result<Self, VMError> {
-        SliceReader::parse(data, |r| {
+    pub fn parse(mut data: &[u8]) -> Result<Self, VMError> {
+        data.read_all(|r| {
             let mut program = Self::new();
-            while r.len() > 0 {
+            while r.remaining_bytes() > 0 {
                 program.0.push(Instruction::parse(r)?);
             }
             Ok(program)

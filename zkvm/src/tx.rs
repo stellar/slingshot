@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use crate::contract::{Contract, ContractID};
 use crate::encoding;
 use crate::encoding::Encodable;
-use crate::encoding::SliceReader;
+use crate::encoding::{Reader, ReaderExt};
 use crate::errors::VMError;
 use crate::fees::FeeRate;
 use crate::merkle::{Hash, MerkleItem, MerkleTree};
@@ -148,7 +148,7 @@ impl Encodable for TxHeader {
     }
 }
 impl TxHeader {
-    fn decode<'a>(reader: &mut SliceReader<'a>) -> Result<Self, VMError> {
+    fn decode(reader: &mut impl Reader) -> Result<Self, VMError> {
         Ok(TxHeader {
             version: reader.read_u64()?,
             mintime_ms: reader.read_u64()?,
@@ -189,14 +189,14 @@ impl Encodable for Tx {
     }
 }
 impl Tx {
-    fn decode<'a>(r: &mut SliceReader<'a>) -> Result<Tx, VMError> {
+    fn decode<'a>(r: &mut impl Reader) -> Result<Tx, VMError> {
         let header = TxHeader::decode(r)?;
         let prog_len = r.read_size()?;
-        let program = r.read_bytes(prog_len)?.to_vec();
+        let program = r.read_vec(prog_len)?;
 
         let signature = Signature::from_bytes(r.read_u8x64()?).map_err(|_| VMError::FormatError)?;
-        let proof =
-            R1CSProof::from_bytes(r.read_bytes(r.len())?).map_err(|_| VMError::FormatError)?;
+        let proof = R1CSProof::from_bytes(&r.read_vec(r.remaining_bytes())?)
+            .map_err(|_| VMError::FormatError)?;
         Ok(Tx {
             header,
             program,
@@ -224,8 +224,8 @@ impl Tx {
     /// Deserializes the tx from a byte slice.
     ///
     /// Returns an error if the byte slice cannot be parsed into a `Tx`.
-    pub fn from_bytes(slice: &[u8]) -> Result<Tx, VMError> {
-        SliceReader::parse(slice, |r| Self::decode(r))
+    pub fn from_bytes(mut slice: &[u8]) -> Result<Tx, VMError> {
+        slice.read_all(|r| Self::decode(r))
     }
 }
 

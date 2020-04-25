@@ -10,7 +10,7 @@ use std::fmt;
 
 use crate::constraints::Commitment;
 use crate::contract::{Anchor, Contract, PortableItem};
-use crate::encoding::SliceReader;
+use crate::encoding::Reader;
 use crate::ops::Instruction;
 use crate::predicate::Predicate;
 use crate::program::Program;
@@ -89,7 +89,8 @@ impl Instruction {
                 // 3. else non-opaque: use Debug
                 match (string, lookahead.get(0)) {
                     (String::Opaque(bytes), Some(&Instruction::Input)) => {
-                        SliceReader::parse(&bytes, |r| Contract::decode(r))
+                        (&bytes[..])
+                            .read_all(|r| Contract::decode(r))
                             .map(|c| String::Output(Box::new(c)).fmt_as_pushdata(f))
                             .unwrap_or_else(|_| string.fmt_as_pushdata(f)) // bad encoding -> keep opaque
                     }

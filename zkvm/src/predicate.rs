@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::encoding;
 use crate::encoding::Encodable;
-use crate::encoding::SliceReader;
+use crate::encoding::{Reader, ReaderExt};
 use crate::errors::VMError;
 use crate::merkle::{Hash, Hasher, MerkleItem, MerkleTree, Path};
 use crate::program::{Program, ProgramItem};
@@ -294,7 +294,7 @@ impl Encodable for CallProof {
 
 impl CallProof {
     /// Decodes the call proof from bytes.
-    pub fn decode<'a>(reader: &mut SliceReader<'a>) -> Result<Self, VMError> {
+    pub fn decode(reader: &mut impl Reader) -> Result<Self, VMError> {
         let point = VerificationKey::from_compressed(reader.read_point()?);
         Ok(CallProof {
             verification_key: point.ok_or(VMError::InvalidPoint)?,

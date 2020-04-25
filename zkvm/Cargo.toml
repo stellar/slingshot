@@ -21,6 +21,10 @@ serde = { version = "1.0", features=["derive"] }
 subtle-encoding = "0.3"
 hex = "^0.3"
 
+[dependencies.readerwriter]
+path = "../readerwriter"
+features = ["merlin"]
+
 [dependencies.bulletproofs]
 git = "https://github.com/dalek-cryptography/bulletproofs"
 branch = "develop"
