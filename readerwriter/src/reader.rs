@@ -3,6 +3,7 @@
 pub enum ReadError {
     InsufficientBytes,
     TrailingBytes,
+    InvalidFormat,
 }
 
 /// An interface for reading binary data.
@@ -22,19 +23,19 @@ pub trait Reader {
     /// If some are left unread, returns `Err(From<ReadError::TrailingBytes>)`.
     /// Use method `skip_trailing_bytes` to ignore trailing bytes.
     #[inline]
-    fn parse<F, T, E>(&mut self, parse_fn: F) -> Result<T, E>
+    fn read_all<F, T, E>(&mut self, closure: F) -> Result<T, E>
     where
         F: FnOnce(&mut Self) -> Result<T, E>,
         E: From<ReadError>,
     {
-        let result = parse_fn(self)?;
+        let result = closure(self)?;
         if self.remaining_bytes() != 0 {
             return Err(ReadError::TrailingBytes.into());
         }
         Ok(result)
     }
 
-    /// Marks remaining unread bytes as read so that `parse` does not fail.
+    /// Marks remaining unread bytes as read so that `read_all` does not fail.
     /// After calling this method, no more bytes can be read.
     #[inline]
     fn skip_trailing_bytes(&mut self) -> usize {
@@ -82,6 +83,42 @@ pub trait Reader {
         let mut buf = [0u8; 64];
         self.read(&mut buf)?;
         Ok(buf)
+    }
+
+    /// Reads a vector of bytes with the required length.
+    #[inline]
+    fn read_vec(&mut self, len: usize) -> Result<Vec<u8>, ReadError> {
+        if self.remaining_bytes() < len {
+            // this early check is to avoid allocating a vector
+            // if we don't have enough data.
+            return Err(ReadError::InsufficientBytes);
+        }
+        let mut vec = Vec::with_capacity(len);
+        vec.resize(len, 0u8);
+        self.read(&mut vec)?;
+        Ok(vec)
+    }
+
+    /// Reads a vector of bytes with the required length.
+    #[inline]
+    fn read_vec_with<T, E>(
+        &mut self,
+        len: usize,
+        closure: impl Fn(&mut Self) -> Result<T, E>,
+    ) -> Result<Vec<T>, E>
+    where
+        E: From<ReadError>,
+    {
+        if self.remaining_bytes() < len {
+            // this early check is to avoid allocating a vector
+            // if we don't have enough data.
+            return Err(ReadError::InsufficientBytes.into());
+        }
+        let mut vec = Vec::with_capacity(len);
+        for _ in 0..len {
+            vec.push(closure(self)?);
+        }
+        Ok(vec)
     }
 }
 
