@@ -1,0 +1,15 @@
+[workspace]
+
+members = [
+    "readerwriter",
+    "starsig",
+    "musig",
+    "keytree",
+    "spacesuit",
+    "zkvm",
+    "blockchain",
+    "token",
+    "accounts",
+    "p2p",
+    "demo",
+]
