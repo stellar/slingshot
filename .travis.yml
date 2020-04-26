@@ -20,5 +20,5 @@ matrix:
     # per https://levans.fr/rust_travis_cache.html
     cache: cargo
     script:
-    - cargo test --target-dir=$HOME/.cargotarget
+    - cargo test #--target-dir=$HOME/.cargotarget
     - #RUSTFLAGS="-C opt-level=0" cargo bench "DONOTMATCHANYBENCHMARK"
