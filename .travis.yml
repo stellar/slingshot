@@ -21,5 +21,18 @@ matrix:
     - rustup component add rustfmt-preview
     script:
     - cargo fmt --all -- --check
+  - language: rust
+    rust: nightly-2020-03-01
+    # per https://levans.fr/rust_travis_cache.html
+    cache:
+      directories:
+        - $HOME/.cargo
+        - $HOME/.rustup
+        - $HOME/.cargotarget
+    before_cache:
+      - rm -rf $HOME/.cargo/registry
+    before_script:
+    - rustup component add rustfmt-preview
+    script:
     - cargo test --target-dir=$HOME/.cargotarget
     - #RUSTFLAGS="-C opt-level=0" cargo bench "DONOTMATCHANYBENCHMARK"
