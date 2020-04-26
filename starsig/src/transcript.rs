@@ -31,7 +31,6 @@ impl TranscriptProtocol for Transcript {
     fn challenge_scalar(&mut self, label: &'static [u8]) -> Scalar {
         let mut buf = [0u8; 64];
         self.challenge_bytes(label, &mut buf);
-
         Scalar::from_bytes_mod_order_wide(&buf)
     }
 }
