@@ -3,7 +3,6 @@ use crate::peer::{CustomMessage, PeerAddr};
 use crate::{PeerID, PeerMessage};
 use bytes::{Buf, BufMut, BytesMut};
 use curve25519_dalek::ristretto::CompressedRistretto;
-use std::convert::TryFrom;
 use std::io;
 use std::marker::PhantomData;
 use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
@@ -249,10 +248,40 @@ fn check_length(buf: &mut BytesMut, len: usize, label: &str) -> Result<(), io::E
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::reexport::{BufMut, Bytes, BytesMut};
+    use crate::CustomMessage;
+    use std::convert::Infallible;
+    use std::ops::Deref;
+
+    #[derive(Debug, Clone, PartialEq)]
+    pub struct Message(pub Vec<u8>);
+
+    impl Deref for Message {
+        type Target = Vec<u8>;
+
+        fn deref(&self) -> &Self::Target {
+            &self.0
+        }
+    }
+
+    impl CustomMessage for Message {
+        type Error = Infallible;
+
+        fn decode(src: &mut Bytes) -> Result<Self, Self::Error>
+        where
+            Self: Sized,
+        {
+            Ok(Self(Vec::from(src.as_ref())))
+        }
+
+        fn encode(self, dst: &mut BytesMut) -> Result<(), Self::Error> {
+            Ok(dst.put(self.as_slice()))
+        }
+    }
 
     #[test]
     fn code_hello() {
-        let msg = PeerMessage::<Vec<u8>>::Hello(20);
+        let msg = PeerMessage::<Message>::Hello(20);
         let mut bytes = BytesMut::new();
         MessageEncoder::new()
             .encode(msg.clone(), &mut bytes)
@@ -267,7 +296,7 @@ mod tests {
 
     #[test]
     fn code_peers() {
-        let msg = PeerMessage::<Vec<u8>>::Peers(vec![
+        let msg = PeerMessage::<Message>::Peers(vec![
             PeerAddr {
                 id: PeerID(PublicKey::from(CompressedRistretto([0u8; 32]))),
                 addr: SocketAddr::V6(SocketAddrV6::new(Ipv6Addr::from([30; 16]), 40, 12, 24)),
@@ -291,7 +320,7 @@ mod tests {
 
     #[test]
     fn code_custom() {
-        let msg = PeerMessage::Data(vec![1, 2, 3, 4, 5, 6]);
+        let msg = PeerMessage::Data(Message(vec![1, 2, 3, 4, 5, 6]));
         let mut bytes = BytesMut::new();
 
         let mut encoder = MessageEncoder::new();
