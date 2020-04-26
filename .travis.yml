@@ -3,8 +3,6 @@ branches:
     - main
 matrix:
   fast_finish: true
-  allow_failures:
-  - env: ALLOW_FAILURES=1
   include:
   - language: ruby
     ruby: 2.3
