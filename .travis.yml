@@ -19,98 +19,48 @@ matrix:
     before_cache:
       - rm -rf /home/travis/.cargo/registry
     before_script:
-    - cd readerwriter
     - rustup component add rustfmt-preview
     script:
+    - cd ../spacesuit
     - cargo fmt --all -- --check
     - cargo test
     - RUSTFLAGS="-C opt-level=0" cargo bench "DONOTMATCHANYBENCHMARK"
-  - language: rust
-    rust: nightly-2020-03-01
-    # per https://levans.fr/rust_travis_cache.html
-    cache:
-      directories:
-        - /home/travis/.cargo
-    before_cache:
-      - rm -rf /home/travis/.cargo/registry
-    before_script:
-    - cd zkvm
-    - rustup component add rustfmt-preview
-    script:
+    - cd ../readerwriter
     - cargo fmt --all -- --check
     - cargo test
     - RUSTFLAGS="-C opt-level=0" cargo bench "DONOTMATCHANYBENCHMARK"
-  - language: rust
-    rust: nightly-2020-03-01
-    # per https://levans.fr/rust_travis_cache.html
-    cache:
-      directories:
-        - /home/travis/.cargo
-    before_cache:
-      - rm -rf /home/travis/.cargo/registry
-    before_script:
-    - cd spacesuit
-    - rustup component add rustfmt-preview
-    script:
+    - cd ../zkvm
     - cargo fmt --all -- --check
     - cargo test
     - RUSTFLAGS="-C opt-level=0" cargo bench "DONOTMATCHANYBENCHMARK"
-  - language: rust
-    rust: nightly-2020-03-01
-    # per https://levans.fr/rust_travis_cache.html
-    cache:
-      directories:
-        - /home/travis/.cargo
-    before_cache:
-      - rm -rf /home/travis/.cargo/registry
-    before_script:
-    - cd keytree
-    - rustup component add rustfmt-preview
-    script:
+    - cd ../blockchain
     - cargo fmt --all -- --check
     - cargo test
     - RUSTFLAGS="-C opt-level=0" cargo bench "DONOTMATCHANYBENCHMARK"
-  - language: rust
-    rust: nightly-2020-03-01
-    # per https://levans.fr/rust_travis_cache.html
-    cache:
-      directories:
-        - /home/travis/.cargo
-    before_cache:
-      - rm -rf /home/travis/.cargo/registry
-    before_script:
-    - cd token
-    - rustup component add rustfmt-preview
-    script:
+    - cd ../starsig
     - cargo fmt --all -- --check
     - cargo test
     - RUSTFLAGS="-C opt-level=0" cargo bench "DONOTMATCHANYBENCHMARK"
-  - language: rust
-    rust: nightly-2020-03-01
-    # per https://levans.fr/rust_travis_cache.html
-    cache:
-      directories:
-        - /home/travis/.cargo
-    before_cache:
-      - rm -rf /home/travis/.cargo/registry
-    before_script:
-    - cd accounts
-    - rustup component add rustfmt-preview
-    script:
+    - cd ../musig
     - cargo fmt --all -- --check
     - cargo test
     - RUSTFLAGS="-C opt-level=0" cargo bench "DONOTMATCHANYBENCHMARK"
-  - language: rust
-    rust: nightly-2020-03-01
-    # per https://levans.fr/rust_travis_cache.html
-    cache:
-      directories:
-        - /home/travis/.cargo
-    before_cache:
-      - rm -rf /home/travis/.cargo/registry
-    before_script:
-    - cd demo
-    - rustup component add rustfmt-preview
-    script:
+    - cd ../keytree
+    - cargo fmt --all -- --check
+    - cargo test
+    - RUSTFLAGS="-C opt-level=0" cargo bench "DONOTMATCHANYBENCHMARK"
+    - cd ../p2p
+    - cargo fmt --all -- --check
+    - cargo test
+    - RUSTFLAGS="-C opt-level=0" cargo bench "DONOTMATCHANYBENCHMARK"
+    - cd ../token
+    - cargo fmt --all -- --check
+    - cargo test
+    - RUSTFLAGS="-C opt-level=0" cargo bench "DONOTMATCHANYBENCHMARK"
+    - cd ../accounts
+    - cargo fmt --all -- --check
+    - cargo test
+    - RUSTFLAGS="-C opt-level=0" cargo bench "DONOTMATCHANYBENCHMARK"
+    - cd ../demo
     - cargo fmt --all -- --check
     - cargo check
