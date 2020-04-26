@@ -21,7 +21,7 @@ matrix:
     before_script:
     - rustup component add rustfmt-preview
     script:
-    - cd ../spacesuit
+    - cd spacesuit
     - cargo fmt --all -- --check
     - cargo test
     - RUSTFLAGS="-C opt-level=0" cargo bench "DONOTMATCHANYBENCHMARK"
