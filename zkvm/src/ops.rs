@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::encoding;
 use crate::encoding::Encodable;
-use crate::encoding::SliceReader;
+use crate::encoding::{Reader, ReaderExt};
 use crate::errors::VMError;
 use crate::program::ProgramItem;
 use crate::scalar_witness::ScalarWitness;
@@ -680,7 +680,7 @@ impl Instruction {
     ///
     /// Return `VMError::FormatError` if there are not enough bytes to parse an
     /// instruction.
-    pub fn parse(program: &mut SliceReader) -> Result<Self, VMError> {
+    pub fn parse(program: &mut impl Reader) -> Result<Self, VMError> {
         let byte = program.read_u8()?;
 
         // Interpret the opcode. Unknown opcodes are extension opcodes.
@@ -694,15 +694,13 @@ impl Instruction {
         match opcode {
             Opcode::Push => {
                 let strlen = program.read_size()?;
-                let data_slice = program.read_bytes(strlen)?;
-                Ok(Instruction::Push(String::Opaque(data_slice.to_vec())))
+                let data = program.read_vec(strlen)?;
+                Ok(Instruction::Push(String::Opaque(data)))
             }
             Opcode::Program => {
                 let strlen = program.read_size()?;
-                let data_slice = program.read_bytes(strlen)?;
-                Ok(Instruction::Program(ProgramItem::Bytecode(
-                    data_slice.to_vec(),
-                )))
+                let data = program.read_vec(strlen)?;
+                Ok(Instruction::Program(ProgramItem::Bytecode(data)))
             }
             Opcode::Drop => Ok(Instruction::Drop),
             Opcode::Dup => {

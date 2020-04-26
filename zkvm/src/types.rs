@@ -7,7 +7,7 @@ use spacesuit::{self, SignedInteger};
 
 use crate::constraints::{Commitment, Constraint, Expression, Variable};
 use crate::contract::{Contract, PortableItem};
-use crate::encoding::{self, Encodable, SliceReader};
+use crate::encoding::{self, Encodable, Reader, ReaderExt};
 use crate::errors::VMError;
 use crate::predicate::Predicate;
 use crate::program::ProgramItem;
@@ -261,7 +261,7 @@ impl String {
     pub fn to_predicate(self) -> Result<Predicate, VMError> {
         match self {
             String::Opaque(data) => {
-                let point = SliceReader::parse(&data, |r| r.read_point())?;
+                let point = (&data[..]).read_all(|r| r.read_point())?;
                 Ok(Predicate::Opaque(point))
             }
             String::Predicate(p) => Ok(*p),
@@ -273,7 +273,7 @@ impl String {
     pub fn to_commitment(self) -> Result<Commitment, VMError> {
         match self {
             String::Opaque(data) => {
-                let point = SliceReader::parse(&data, |r| r.read_point())?;
+                let point = (&data[..]).read_all(|r| r.read_point())?;
                 Ok(Commitment::Closed(point))
             }
             String::Commitment(c) => Ok(*c),
@@ -284,7 +284,7 @@ impl String {
     /// Downcast the data item to an `Contract` type.
     pub fn to_output(self) -> Result<Contract, VMError> {
         match self {
-            String::Opaque(data) => SliceReader::parse(&data, |r| Contract::decode(r)),
+            String::Opaque(data) => (&data[..]).read_all(|r| Contract::decode(r)),
             String::Output(i) => Ok(*i),
             _ => Err(VMError::TypeNotOutput),
         }
@@ -294,7 +294,7 @@ impl String {
     pub fn to_scalar(self) -> Result<ScalarWitness, VMError> {
         match self {
             String::Opaque(data) => {
-                let scalar = SliceReader::parse(&data, |r| r.read_scalar())?;
+                let scalar = (&data[..]).read_all(|r| r.read_scalar())?;
                 Ok(ScalarWitness::Scalar(scalar))
             }
             String::Scalar(scalar_witness) => Ok(*scalar_witness),
@@ -306,7 +306,7 @@ impl String {
     pub fn to_u64(self) -> Result<u64, VMError> {
         match self {
             String::Opaque(data) => {
-                let n = SliceReader::parse(&data, |r| r.read_u64())?;
+                let n = (&data[..]).read_all(|r| r.read_u64())?;
                 Ok(n)
             }
             String::U64(n) => Ok(n),
@@ -318,7 +318,7 @@ impl String {
     pub fn to_u32(self) -> Result<u32, VMError> {
         match self {
             String::Opaque(data) => {
-                let n = SliceReader::parse(&data, |r| r.read_u32())?;
+                let n = (&data[..]).read_all(|r| r.read_u32())?;
                 Ok(n)
             }
             String::U32(n) => Ok(n),

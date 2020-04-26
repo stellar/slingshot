@@ -1,5 +1,5 @@
 //! API for operations on merkle binary trees.
-use crate::encoding::{self, Encodable, SliceReader};
+use crate::encoding::{self, Encodable, Reader};
 use crate::errors::VMError;
 use core::marker::PhantomData;
 use merlin::Transcript;
@@ -361,24 +361,17 @@ impl Path {
 
 // zkvm-specific impl
 impl Path {
-    /// Decodes Path from a byte slice. First 8 bytes is a LE64-encoded position,
+    /// Decodes Path from a byte reader. First 8 bytes is a LE64-encoded position,
     /// followed by 4 bytes of LE32-encoded number of neighbours,
     /// than the 32-byte neighbour hashes.
-    pub fn decode<'a>(reader: &mut SliceReader<'a>) -> Result<Self, VMError> {
+    pub fn decode(reader: &mut impl Reader) -> Result<Self, VMError> {
         let position = reader.read_u64()?;
         let neighbors_len = reader.read_u32()? as usize;
-        if neighbors_len > reader.len() / 32 {
-            // preven DoS by capping length prefix to a maximum possible value
-            return Err(VMError::FormatError);
-        }
-        let mut path = Path {
+        let neighbors = reader.read_vec_with(neighbors_len, 32, |r| r.read_u8x32().map(Hash))?;
+        Ok(Path {
             position,
-            neighbors: Vec::with_capacity(neighbors_len),
-        };
-        for _ in 0..neighbors_len {
-            path.neighbors.push(Hash(reader.read_u8x32()?));
-        }
-        Ok(path)
+            neighbors,
+        })
     }
 }
 

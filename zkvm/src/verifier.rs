@@ -7,7 +7,7 @@ use musig::{Multisignature, VerificationKey};
 
 use crate::constraints::Commitment;
 use crate::contract::ContractID;
-use crate::encoding::*;
+use crate::encoding::{Encodable, Reader};
 use crate::errors::VMError;
 use crate::fees::FeeRate;
 use crate::ops::Instruction;
@@ -62,10 +62,9 @@ impl Delegate<r1cs::Verifier<Transcript>> for Verifier {
         if run.offset == run.program.len() {
             return Ok(None);
         }
-        let (instr, remainder) = SliceReader::parse(&run.program[run.offset..], |r| {
-            Ok((Instruction::parse(r)?, r.skip_trailing_bytes()))
-        })?;
-        run.offset = run.program.len() - remainder;
+        let mut reader = &run.program[run.offset..];
+        let instr = Instruction::parse(&mut reader)?;
+        run.offset = run.program.len() - reader.remaining_bytes();
         Ok(Some(instr))
     }
 

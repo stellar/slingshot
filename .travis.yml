@@ -10,15 +10,21 @@ matrix:
     ruby: 2.3
     script:
       - DO_NOT_CHECK_HTTP_LINKS=1 ruby check-markdown-links.rb
-  - language: go
-    go: 1.11
-    install: true
-    env: ALLOW_FAILURES=1
+  - language: rust
+    rust: nightly-2020-03-01
+    # per https://levans.fr/rust_travis_cache.html
+    cache:
+      directories:
+        - /home/travis/.cargo
+    before_cache:
+      - rm -rf /home/travis/.cargo/registry
     before_script:
-      - go vet ./slidechain/...
-      - test `gofmt -s -l ./slidechain | grep -vF /vendor/ | wc -l` -eq 0
+    - cd readerwriter
+    - rustup component add rustfmt-preview
     script:
-      - go test -v ./slidechain/... -timeout 60m
+    - cargo fmt --all -- --check
+    - cargo test
+    - RUSTFLAGS="-C opt-level=0" cargo bench "DONOTMATCHANYBENCHMARK"
   - language: rust
     rust: nightly-2020-03-01
     # per https://levans.fr/rust_travis_cache.html

@@ -11,7 +11,7 @@ use std::mem;
 
 use crate::constraints::{Commitment, Constraint, Expression, Variable};
 use crate::contract::{Anchor, Contract, ContractID, PortableItem};
-use crate::encoding::SliceReader;
+use crate::encoding::Reader;
 use crate::errors::VMError;
 use crate::fees::{fee_flavor, CheckedFee};
 use crate::ops::Instruction;
@@ -576,7 +576,7 @@ where
         // Pop program, call proof, and contract
         let program_item = self.pop_item()?.to_program()?;
         let call_proof_bytes = self.pop_item()?.to_string()?.to_bytes();
-        let call_proof = SliceReader::parse(&call_proof_bytes, |r| CallProof::decode(r))?;
+        let call_proof = (&call_proof_bytes[..]).read_all(|r| CallProof::decode(r))?;
         let contract = self.pop_item()?.to_contract()?;
 
         // 0 == -P + X + h1(X, M)*B
@@ -599,7 +599,7 @@ where
     fn signid(&mut self) -> Result<(), VMError> {
         // Signature
         let sig = self.pop_item()?.to_string()?.to_bytes();
-        let signature = Signature::from_bytes(SliceReader::parse(&sig, |r| r.read_u8x64())?)
+        let signature = Signature::from_bytes((&sig[..]).read_all(|r| r.read_u8x64())?)
             .map_err(|_| VMError::FormatError)?;
 
         // Program
@@ -630,7 +630,7 @@ where
     fn signtag(&mut self) -> Result<(), VMError> {
         // Signature
         let sig = self.pop_item()?.to_string()?.to_bytes();
-        let signature = Signature::from_bytes(SliceReader::parse(&sig, |r| r.read_u8x64())?)
+        let signature = Signature::from_bytes((&sig[..]).read_all(|r| r.read_u8x64())?)
             .map_err(|_| VMError::FormatError)?;
 
         // Program
