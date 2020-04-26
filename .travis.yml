@@ -31,8 +31,8 @@ matrix:
       - rm -rf $HOME/.cargo/registry
     script:
     - cd musig
-    - cargo check
-    - ls -la ./target/debug/deps/
+    - cargo check --target-dir=$HOME/.cargotarget
+    - ls -la $HOME/.cargotarget
   - language: rust
     rust: nightly-2020-03-01
     # per https://levans.fr/rust_travis_cache.html
