@@ -15,9 +15,8 @@ use curve25519_dalek::ristretto::CompressedRistretto;
 use rand_core::{CryptoRng, RngCore};
 
 use crate::cybershake;
-use bytes::{BufMut, Bytes, BytesMut};
+use bytes::{Bytes, BytesMut};
 use futures::SinkExt;
-use std::convert::Infallible;
 use std::fmt::Display;
 use tokio_util::codec::{Decoder, Encoder, FramedRead, FramedWrite};
 

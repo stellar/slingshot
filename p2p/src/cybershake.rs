@@ -45,7 +45,6 @@ use merlin::Transcript; // TODO: change for raw Strobe.
 use tokio::io;
 use tokio::prelude::*;
 
-use futures::io::Error;
 use futures::task::{Context, Poll};
 use std::pin::Pin;
 
