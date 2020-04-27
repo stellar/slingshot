@@ -1,5 +1,5 @@
 //! API for operations on merkle binary trees.
-use crate::encoding::{self, Encodable, Reader};
+use crate::encoding::*;
 use crate::errors::VMError;
 use core::marker::PhantomData;
 use merlin::Transcript;
@@ -377,12 +377,13 @@ impl Path {
 
 // zkvm-specific impl
 impl Encodable for Path {
-    fn encode(&self, buf: &mut Vec<u8>) {
-        encoding::write_u64(self.position, buf);
-        encoding::write_size(self.neighbors.len(), buf);
+    fn encode(&self, w: &mut impl Writer) -> Result<(), WriteError> {
+        w.write_u64(b"position", self.position)?;
+        w.write_size(b"n", self.neighbors.len())?;
         for hash in self.neighbors.iter() {
-            encoding::write_bytes(&hash[..], buf);
+            w.write(b"hash", &hash[..])?;
         }
+        Ok(())
     }
 
     fn encoded_length(&self) -> usize {

@@ -7,7 +7,7 @@ use spacesuit::{self, SignedInteger};
 
 use crate::constraints::{Commitment, Constraint, Expression, Variable};
 use crate::contract::{Contract, PortableItem};
-use crate::encoding::{self, Encodable, Reader, ReaderExt};
+use crate::encoding::*;
 use crate::errors::VMError;
 use crate::predicate::Predicate;
 use crate::program::ProgramItem;
@@ -233,16 +233,16 @@ impl Encodable for String {
         }
     }
     /// Encodes the data item to an opaque bytestring.
-    fn encode(&self, buf: &mut Vec<u8>) {
+    fn encode(&self, w: &mut impl Writer) -> Result<(), WriteError> {
         match self {
-            String::Opaque(x) => buf.extend_from_slice(x),
-            String::Predicate(predicate) => predicate.encode(buf),
-            String::Commitment(commitment) => commitment.encode(buf),
-            String::Scalar(scalar) => scalar.encode(buf),
-            String::Output(contract) => contract.encode(buf),
-            String::U64(n) => encoding::write_u64(*n, buf),
-            String::U32(n) => encoding::write_u32(*n, buf),
-        };
+            String::Opaque(x) => w.write(b"string", x),
+            String::Predicate(predicate) => w.write(b"string", &predicate.encode_to_vec()),
+            String::Commitment(commitment) => w.write(b"string", &commitment.encode_to_vec()),
+            String::Scalar(scalar) => w.write(b"string", &scalar.encode_to_vec()),
+            String::Output(contract) => w.write(b"string", &contract.encode_to_vec()),
+            String::U64(n) => w.write_u64(b"string", *n),
+            String::U32(n) => w.write_u32(b"string", *n),
+        }
     }
 }
 

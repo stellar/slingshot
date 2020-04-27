@@ -90,7 +90,7 @@ impl<'g> Prover<'g> {
 
         // Serialize the tx program
         let mut bytecode = Vec::new();
-        program.encode(&mut bytecode);
+        program.encode(&mut bytecode)?;
 
         let mut prover = Prover {
             signtx_items: Vec::new(),

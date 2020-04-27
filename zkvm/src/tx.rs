@@ -6,9 +6,7 @@ use musig::{Signature, VerificationKey};
 use serde::{Deserialize, Serialize};
 
 use crate::contract::{Contract, ContractID};
-use crate::encoding;
-use crate::encoding::Encodable;
-use crate::encoding::{Reader, ReaderExt};
+use crate::encoding::*;
 use crate::errors::VMError;
 use crate::fees::FeeRate;
 use crate::merkle::{Hash, MerkleItem, MerkleTree};
@@ -138,10 +136,11 @@ pub struct VerifiedTx {
 }
 
 impl Encodable for TxHeader {
-    fn encode(&self, buf: &mut Vec<u8>) {
-        encoding::write_u64(self.version, buf);
-        encoding::write_u64(self.mintime_ms, buf);
-        encoding::write_u64(self.maxtime_ms, buf);
+    fn encode(&self, w: &mut impl Writer) -> Result<(), WriteError> {
+        w.write_u64(b"version", self.version)?;
+        w.write_u64(b"mintime", self.mintime_ms)?;
+        w.write_u64(b"maxtime", self.maxtime_ms)?;
+        Ok(())
     }
     fn encoded_length(&self) -> usize {
         8 * 3
@@ -170,12 +169,13 @@ impl UnsignedTx {
 }
 
 impl Encodable for Tx {
-    fn encode(&self, buf: &mut Vec<u8>) {
-        self.header.encode(buf);
-        encoding::write_size(self.program.len(), buf);
-        buf.extend(&self.program);
-        buf.extend_from_slice(&self.signature.to_bytes());
-        buf.extend_from_slice(&self.proof.to_bytes());
+    fn encode(&self, w: &mut impl Writer) -> Result<(), WriteError> {
+        self.header.encode(w)?;
+        w.write_size(b"program_len", self.program.len())?;
+        w.write(b"program", &self.program)?;
+        w.write(b"signature", &self.signature.to_bytes())?;
+        w.write(b"r1cs_proof", &self.proof.to_bytes())?;
+        Ok(())
     }
 
     /// Returns the size in bytes required to serialize the `Tx`.

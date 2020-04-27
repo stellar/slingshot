@@ -1,7 +1,7 @@
 use merlin::Transcript;
 use serde::{Deserialize, Serialize};
 use std::fmt;
-use zkvm::encoding;
+use zkvm::encoding::*;
 use zkvm::{Encodable, Hash, MerkleItem, MerkleTree, Tx};
 
 use super::utreexo::{self, Proof};
@@ -89,18 +89,19 @@ impl BlockTx {
 }
 
 impl Encodable for BlockTx {
-    fn encode(&self, buf: &mut Vec<u8>) {
-        self.tx.encode(buf);
-        encoding::write_size(self.proofs.len(), buf);
+    fn encode(&self, w: &mut impl Writer) -> Result<(), WriteError> {
+        self.tx.encode(w)?;
+        w.write_size(b"n", self.proofs.len())?;
         for proof in self.proofs.iter() {
             match proof {
-                Proof::Transient => encoding::write_u8(0, buf),
+                Proof::Transient => w.write_u8(b"type", 0)?,
                 Proof::Committed(path) => {
-                    encoding::write_u8(1, buf);
-                    path.encode(buf);
+                    w.write_u8(b"type", 1)?;
+                    path.encode(w)?;
                 }
             }
         }
+        Ok(())
     }
 
     /// Returns the size in bytes required to serialize the `Tx`.

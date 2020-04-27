@@ -13,6 +13,8 @@ pub trait TranscriptProtocol {
     fn commit_point(&mut self, label: &'static [u8], point: &CompressedRistretto);
     /// Compute a `label`ed challenge variable.
     fn challenge_scalar(&mut self, label: &'static [u8]) -> Scalar;
+    /// Compute a `label`ed challenge 32-byte array.
+    fn challenge_u8x32(&mut self, label: &'static [u8]) -> [u8; 32];
 }
 
 impl TranscriptProtocol for Transcript {
@@ -29,5 +31,11 @@ impl TranscriptProtocol for Transcript {
         self.challenge_bytes(label, &mut buf);
 
         Scalar::from_bytes_mod_order_wide(&buf)
+    }
+
+    fn challenge_u8x32(&mut self, label: &'static [u8]) -> [u8; 32] {
+        let mut buf = [0u8; 32];
+        self.challenge_bytes(label, &mut buf);
+        buf
     }
 }

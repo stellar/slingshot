@@ -4,8 +4,7 @@ use curve25519_dalek::scalar::Scalar;
 use serde::{Deserialize, Serialize};
 use spacesuit::SignedInteger;
 
-use crate::encoding;
-use crate::encoding::Encodable;
+use crate::encoding::*;
 use crate::errors::VMError;
 use std::ops::{Add, Mul, Neg, Sub};
 use std::u64;
@@ -21,8 +20,8 @@ pub enum ScalarWitness {
 
 impl Encodable for ScalarWitness {
     /// Converts to a scalar and encodes it to a vec of bytes.
-    fn encode(&self, buf: &mut Vec<u8>) {
-        encoding::write_bytes(&self.to_scalar().to_bytes(), buf);
+    fn encode(&self, w: &mut impl Writer) -> Result<(), WriteError> {
+        w.write_scalar(b"scalar", &self.to_scalar())
     }
     /// Returns the number of bytes needed to serialize the ScalarWitness.
     fn encoded_length(&self) -> usize {

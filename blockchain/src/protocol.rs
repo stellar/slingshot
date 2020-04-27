@@ -280,7 +280,7 @@ impl<D: Delegate> Node<D> {
         // recent transactions and blocks.
         // TODO: find the peers that may have the block.
         let height_needed = self.delegate.tip_height() + 1;
-        let relevant_peers = self.peers.iter().filter(|(pid, peer)| {
+        let relevant_peers = self.peers.iter().filter(|(_pid, peer)| {
             peer.tip.as_ref().map(|h| h.height).unwrap_or(0) >= height_needed
         });
         if let Some((pid, _peer)) = relevant_peers.choose(&mut thread_rng()) {
