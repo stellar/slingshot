@@ -236,12 +236,12 @@ impl Encodable for String {
     fn encode(&self, w: &mut impl Writer) -> Result<(), WriteError> {
         match self {
             String::Opaque(x) => w.write(b"string", x),
-            String::Predicate(predicate) => predicate.encode(w),
-            String::Commitment(commitment) => commitment.encode(w),
-            String::Scalar(scalar) => scalar.encode(w),
-            String::Output(contract) => contract.encode(w),
-            String::U64(n) => w.write_u64(b"u64", *n),
-            String::U32(n) => w.write_u32(b"u32", *n),
+            String::Predicate(predicate) => w.write(b"string", predicate.encode_to_vec()),
+            String::Commitment(commitment) => w.write(b"string", commitment.encode_to_vec()),
+            String::Scalar(scalar) => w.write(b"string", scalar.encode_to_vec()),
+            String::Output(contract) => w.write(b"string", contract.encode_to_vec()),
+            String::U64(n) => w.write_u64(b"string", *n),
+            String::U32(n) => w.write_u32(b"string", *n),
         };
     }
 }

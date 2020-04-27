@@ -1,7 +1,6 @@
 //! Encoding utils for ZkVM
 //! All methods err using VMError::FormatError for convenience.
 
-use byteorder::{ByteOrder, LittleEndian};
 use curve25519_dalek::ristretto::CompressedRistretto;
 use curve25519_dalek::scalar::Scalar;
 pub use readerwriter::{ReadError, Reader, WriteError, Writer};
@@ -18,7 +17,8 @@ pub trait Encodable {
     /// Encodes the receiver into a newly allocated vector of bytes.
     fn encode_to_vec(&self) -> Vec<u8> {
         let mut buf = Vec::with_capacity(self.encoded_length());
-        self.encode(&mut buf).expect("Writing to a Vec never fails.");
+        self.encode(&mut buf)
+            .expect("Writing to a Vec never fails.");
         buf
     }
 }
@@ -51,7 +51,11 @@ pub trait WriterExt: Writer {
     }
 
     /// Writes a compressed Ristretto255 point.
-    fn write_point(&mut self, label: &'static [u8], x: &CompressedRistretto) -> Result<(), WriteError> {
+    fn write_point(
+        &mut self,
+        label: &'static [u8],
+        x: &CompressedRistretto,
+    ) -> Result<(), WriteError> {
         self.write(label, &x.as_bytes())
     }
 

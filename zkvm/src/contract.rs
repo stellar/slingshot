@@ -78,7 +78,8 @@ impl Contract {
     /// Returns the contract's ID
     pub fn id(&self) -> ContractID {
         let mut t = Transcript::new(b"ZkVM.contractid");
-        self.encode(&mut t).expect("Writing to Transcript never fails.");
+        self.encode(&mut t)
+            .expect("Writing to Transcript never fails.");
         ContractID(t.challenge_u8x32(b"id"))
     }
 
