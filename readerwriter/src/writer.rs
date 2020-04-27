@@ -1,5 +1,6 @@
 use core::mem;
 
+#[derive(Debug, Clone, PartialEq)]
 pub enum WriteError {
     InsufficientCapacity,
 }

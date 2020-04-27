@@ -609,7 +609,7 @@ impl Encodable for Instruction {
                 w.write_u32(b"k", *idx as u32)?;
             }
             Instruction::Roll(idx) => {
-                write(Opcode::Roll);
+                write(Opcode::Roll)?;
                 w.write_u32(b"k", *idx as u32)?;
             }
             Instruction::Const => write(Opcode::Const)?,
@@ -636,15 +636,15 @@ impl Encodable for Instruction {
                 w.write_u32(b"m", *m as u32)?;
                 w.write_u32(b"n", *n as u32)?;
             }
-            Instruction::Fee => write(Opcode::Fee),
-            Instruction::Input => write(Opcode::Input),
+            Instruction::Fee => write(Opcode::Fee)?,
+            Instruction::Input => write(Opcode::Input)?,
             Instruction::Output(k) => {
                 write(Opcode::Output)?;
                 w.write_u32(b"k", *k as u32)?;
             }
             Instruction::Contract(k) => {
                 write(Opcode::Contract)?;
-                w.write_size(b"k", *k as u32);
+                w.write_u32(b"k", *k as u32)?;
             }
             Instruction::Log => write(Opcode::Log)?,
             Instruction::Call => write(Opcode::Call)?,

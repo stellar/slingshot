@@ -282,7 +282,7 @@ impl PredicateTree {
 impl Encodable for CallProof {
     /// Serializes the call proof to a byte array.
     fn encode(&self, w: &mut impl Writer) -> Result<(), WriteError> {
-        w.write_point(b"key", self.verification_key.as_point());
+        w.write_point(b"key", self.verification_key.as_point())?;
         self.path.encode(w)
     }
     fn encoded_length(&self) -> usize {

@@ -56,12 +56,12 @@ pub trait WriterExt: Writer {
         label: &'static [u8],
         x: &CompressedRistretto,
     ) -> Result<(), WriteError> {
-        self.write(label, &x.as_bytes())
+        self.write(label, &x.as_bytes()[..])
     }
 
     /// Writes a Ristretto255 scalar.
     fn write_scalar(&mut self, label: &'static [u8], x: &Scalar) -> Result<(), WriteError> {
-        self.write(label, &x.as_bytes())
+        self.write(label, &x.as_bytes()[..])
     }
 }
 

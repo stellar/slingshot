@@ -1,5 +1,4 @@
-use crate::encoding::Encodable;
-use crate::encoding::Reader;
+use crate::encoding::*;
 use crate::errors::VMError;
 use crate::merkle::MerkleItem;
 use crate::ops::Instruction;
@@ -89,10 +88,11 @@ macro_rules! def_op_inner {
 }
 
 impl Encodable for Program {
-    fn encode(&self, buf: &mut Vec<u8>) {
+    fn encode(&self, w: &mut impl Writer) -> Result<(), WriteError> {
         for i in self.0.iter() {
-            i.borrow().encode(buf);
+            i.borrow().encode(w)?;
         }
+        Ok(())
     }
     fn encoded_length(&self) -> usize {
         self.0.iter().map(|p| p.encoded_length()).sum()
@@ -215,12 +215,10 @@ impl Program {
 }
 
 impl Encodable for ProgramItem {
-    fn encode(&self, buf: &mut Vec<u8>) {
+    fn encode(&self, w: &mut impl Writer) -> Result<(), WriteError> {
         match self {
-            ProgramItem::Program(prog) => prog.encode(buf),
-            ProgramItem::Bytecode(bytes) => {
-                buf.extend_from_slice(&bytes);
-            }
+            ProgramItem::Program(prog) => w.write(b"program", &prog.encode_to_vec()),
+            ProgramItem::Bytecode(bytes) => w.write(b"program", &bytes),
         }
     }
     fn encoded_length(&self) -> usize {

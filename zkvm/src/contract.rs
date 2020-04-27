@@ -6,6 +6,7 @@ use crate::errors::VMError;
 use crate::merkle::MerkleItem;
 use crate::predicate::Predicate;
 use crate::program::ProgramItem;
+use crate::transcript::TranscriptProtocol;
 use crate::types::{String, Value};
 use merlin::Transcript;
 

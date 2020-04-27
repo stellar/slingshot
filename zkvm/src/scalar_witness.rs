@@ -21,7 +21,7 @@ pub enum ScalarWitness {
 impl Encodable for ScalarWitness {
     /// Converts to a scalar and encodes it to a vec of bytes.
     fn encode(&self, w: &mut impl Writer) -> Result<(), WriteError> {
-        w.write_scalar(&self.to_scalar())
+        w.write_scalar(b"scalar", &self.to_scalar())
     }
     /// Returns the number of bytes needed to serialize the ScalarWitness.
     fn encoded_length(&self) -> usize {
