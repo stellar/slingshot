@@ -12,9 +12,7 @@ use merlin::Transcript;
 use musig::{BatchVerification, SingleVerifier, VerificationKey};
 use serde::{Deserialize, Serialize};
 
-use crate::encoding;
-use crate::encoding::Encodable;
-use crate::encoding::{Reader, ReaderExt};
+use crate::encoding::*;
 use crate::errors::VMError;
 use crate::merkle::{Hash, Hasher, MerkleItem, MerkleTree, Path};
 use crate::program::{Program, ProgramItem};
@@ -77,8 +75,8 @@ pub enum PredicateLeaf {
 }
 impl Encodable for Predicate {
     /// Encodes the Predicate in program bytecode.
-    fn encode(&self, prog: &mut Vec<u8>) {
-        encoding::write_point(&self.to_point(), prog);
+    fn encode(&self, w: &mut impl Writer) -> Result<(), WriteError> {
+        w.write_point(b"predicate", &self.to_point())
     }
     /// Returns the number of bytes needed to serialize the Predicate.
     fn encoded_length(&self) -> usize {
@@ -283,9 +281,9 @@ impl PredicateTree {
 
 impl Encodable for CallProof {
     /// Serializes the call proof to a byte array.
-    fn encode(&self, buf: &mut Vec<u8>) {
-        encoding::write_point(self.verification_key.as_point(), buf);
-        self.path.encode(buf);
+    fn encode(&self, w: &mut impl Writer) -> Result<(), WriteError> {
+        w.write_point(b"key", self.verification_key.as_point());
+        self.path.encode(w)
     }
     fn encoded_length(&self) -> usize {
         32 + self.path.encoded_length()

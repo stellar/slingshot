@@ -3,9 +3,7 @@
 use core::mem;
 use serde::{Deserialize, Serialize};
 
-use crate::encoding;
-use crate::encoding::Encodable;
-use crate::encoding::{Reader, ReaderExt};
+use crate::encoding::*;
 use crate::errors::VMError;
 use crate::program::ProgramItem;
 use crate::scalar_witness::ScalarWitness;
@@ -592,69 +590,70 @@ impl Opcode {
 impl Encodable for Instruction {
     /// Appends the bytecode representation of an Instruction
     /// to the program.
-    fn encode(&self, program: &mut Vec<u8>) {
-        let mut write = |op: Opcode| program.push(op.to_u8());
+    fn encode(&self, w: &mut impl Writer) -> Result<(), WriteError> {
+        let mut write = |op: Opcode| w.write_u8(b"op", op.to_u8());
         match self {
             Instruction::Push(data) => {
-                write(Opcode::Push);
-                encoding::write_u32(data.encoded_length() as u32, program);
-                data.encode(program);
+                write(Opcode::Push)?;
+                w.write_u32(b"n", data.encoded_length() as u32)?;
+                data.encode(w)?;
             }
             Instruction::Program(subprog) => {
-                write(Opcode::Program);
-                encoding::write_u32(subprog.encoded_length() as u32, program);
-                subprog.encode(program);
+                write(Opcode::Program)?;
+                w.write_u32(b"n", subprog.encoded_length() as u32)?;
+                subprog.encode(w)?;
             }
-            Instruction::Drop => write(Opcode::Drop),
+            Instruction::Drop => write(Opcode::Drop)?,
             Instruction::Dup(idx) => {
-                write(Opcode::Dup);
-                encoding::write_u32(*idx as u32, program);
+                write(Opcode::Dup)?;
+                w.write_u32(b"k", *idx as u32)?;
             }
             Instruction::Roll(idx) => {
                 write(Opcode::Roll);
-                encoding::write_u32(*idx as u32, program);
+                w.write_u32(b"k", *idx as u32)?;
             }
-            Instruction::Const => write(Opcode::Const),
-            Instruction::Var => write(Opcode::Var),
-            Instruction::Alloc(_) => write(Opcode::Alloc),
-            Instruction::Mintime => write(Opcode::Mintime),
-            Instruction::Maxtime => write(Opcode::Maxtime),
-            Instruction::Expr => write(Opcode::Expr),
-            Instruction::Neg => write(Opcode::Neg),
-            Instruction::Add => write(Opcode::Add),
-            Instruction::Mul => write(Opcode::Mul),
-            Instruction::Eq => write(Opcode::Eq),
-            Instruction::Range => write(Opcode::Range),
-            Instruction::And => write(Opcode::And),
-            Instruction::Or => write(Opcode::Or),
-            Instruction::Not => write(Opcode::Not),
-            Instruction::Verify => write(Opcode::Verify),
-            Instruction::Unblind => write(Opcode::Unblind),
-            Instruction::Issue => write(Opcode::Issue),
-            Instruction::Borrow => write(Opcode::Borrow),
-            Instruction::Retire => write(Opcode::Retire),
+            Instruction::Const => write(Opcode::Const)?,
+            Instruction::Var => write(Opcode::Var)?,
+            Instruction::Alloc(_) => write(Opcode::Alloc)?,
+            Instruction::Mintime => write(Opcode::Mintime)?,
+            Instruction::Maxtime => write(Opcode::Maxtime)?,
+            Instruction::Expr => write(Opcode::Expr)?,
+            Instruction::Neg => write(Opcode::Neg)?,
+            Instruction::Add => write(Opcode::Add)?,
+            Instruction::Mul => write(Opcode::Mul)?,
+            Instruction::Eq => write(Opcode::Eq)?,
+            Instruction::Range => write(Opcode::Range)?,
+            Instruction::And => write(Opcode::And)?,
+            Instruction::Or => write(Opcode::Or)?,
+            Instruction::Not => write(Opcode::Not)?,
+            Instruction::Verify => write(Opcode::Verify)?,
+            Instruction::Unblind => write(Opcode::Unblind)?,
+            Instruction::Issue => write(Opcode::Issue)?,
+            Instruction::Borrow => write(Opcode::Borrow)?,
+            Instruction::Retire => write(Opcode::Retire)?,
             Instruction::Cloak(m, n) => {
-                write(Opcode::Cloak);
-                encoding::write_u32(*m as u32, program);
-                encoding::write_u32(*n as u32, program);
+                write(Opcode::Cloak)?;
+                w.write_u32(b"m", *m as u32)?;
+                w.write_u32(b"n", *n as u32)?;
             }
             Instruction::Fee => write(Opcode::Fee),
             Instruction::Input => write(Opcode::Input),
             Instruction::Output(k) => {
-                write(Opcode::Output);
-                encoding::write_u32(*k as u32, program);
+                write(Opcode::Output)?;
+                w.write_u32(b"k", *k as u32)?;
             }
             Instruction::Contract(k) => {
-                write(Opcode::Contract);
-                encoding::write_u32(*k as u32, program);
+                write(Opcode::Contract)?;
+                w.write_size(b"k", *k as u32);
             }
-            Instruction::Log => write(Opcode::Log),
-            Instruction::Call => write(Opcode::Call),
-            Instruction::Signtx => write(Opcode::Signtx),
-            Instruction::Signid => write(Opcode::Signid),
-            Instruction::Signtag => write(Opcode::Signtag),
-            Instruction::Ext(x) => program.push(*x),
+            Instruction::Log => write(Opcode::Log)?,
+            Instruction::Call => write(Opcode::Call)?,
+            Instruction::Signtx => write(Opcode::Signtx)?,
+            Instruction::Signid => write(Opcode::Signid)?,
+            Instruction::Signtag => write(Opcode::Signtag)?,
+            Instruction::Ext(x) => w.write_u8(b"ext", *x)?,
         };
+        Ok(())
     }
 
     /// Returns the number of bytes required to serialize this instruction.

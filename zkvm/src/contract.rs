@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::constraints::Commitment;
-use crate::encoding::{self, Encodable, Reader, ReaderExt};
+use crate::encoding::*;
 use crate::errors::VMError;
 use crate::merkle::MerkleItem;
 use crate::predicate::Predicate;
@@ -56,13 +56,14 @@ pub enum PortableItem {
 
 impl Encodable for Contract {
     /// Serializes the contract to a byte array
-    fn encode(&self, buf: &mut Vec<u8>) {
-        encoding::write_bytes(&self.anchor.0, buf);
-        encoding::write_point(&self.predicate.to_point(), buf);
-        encoding::write_u32(self.payload.len() as u32, buf);
+    fn encode(&self, w: &mut impl Writer) -> Result<(), WriteError> {
+        w.write(b"anchor", &self.anchor.0)?;
+        w.write_point(b"predicate", &self.predicate.to_point())?;
+        w.write_size(b"k", self.payload.len())?;
         for item in self.payload.iter() {
-            item.encode(buf);
+            item.encode(w)?;
         }
+        Ok(())
     }
     /// Precise length of a serialized output
     fn encoded_length(&self) -> usize {
@@ -76,12 +77,9 @@ impl Encodable for Contract {
 impl Contract {
     /// Returns the contract's ID
     pub fn id(&self) -> ContractID {
-        let buf = self.encode_to_vec();
         let mut t = Transcript::new(b"ZkVM.contractid");
-        t.append_message(b"contract", &buf);
-        let mut id = [0u8; 32];
-        t.challenge_bytes(b"id", &mut id);
-        ContractID(id)
+        self.encode(&mut t).expect("Writing to Transcript never fails.");
+        ContractID(t.challenge_u8x32(b"id"))
     }
 
     /// Parses a contract from an output object
@@ -150,27 +148,28 @@ impl ContractID {
 }
 
 impl Encodable for PortableItem {
-    fn encode(&self, buf: &mut Vec<u8>) {
+    fn encode(&self, w: &mut impl Writer) -> Result<(), WriteError> {
         match self {
             // String = 0x00 || LE32(len) || <bytes>
             PortableItem::String(d) => {
-                encoding::write_u8(STRING_TYPE, buf);
-                encoding::write_u32(d.encoded_length() as u32, buf);
-                d.encode(buf);
+                w.write_u8(b"type", STRING_TYPE)?;
+                w.write_size(b"n", d.encoded_length())?;
+                d.encode(w)?;
             }
             // Program = 0x01 || LE32(len) || <bytes>
             PortableItem::Program(p) => {
-                encoding::write_u8(PROG_TYPE, buf);
-                encoding::write_u32(p.encoded_length() as u32, buf);
-                p.encode(buf);
+                w.write_u8(b"type", PROG_TYPE)?;
+                w.write_size(b"n", p.encoded_length())?;
+                p.encode(w)?;
             }
             // Value = 0x02 || <32 bytes> || <32 bytes>
             PortableItem::Value(v) => {
-                encoding::write_u8(VALUE_TYPE, buf);
-                encoding::write_point(&v.qty.to_point(), buf);
-                encoding::write_point(&v.flv.to_point(), buf);
+                w.write_u8(b"type", VALUE_TYPE)?;
+                w.write_point(b"qty", &v.qty.to_point())?;
+                w.write_point(b"flv", &v.flv.to_point())?;
             }
         }
+        Ok(())
     }
     /// Precise length of a serialized payload item
     fn encoded_length(&self) -> usize {
