@@ -407,7 +407,25 @@ _Contract ID_ is a 32-byte unique identifier of the [contract](#contract-type) a
 
 ```
 T = Transcript("ZkVM.contractid")
-T.append("contract", output_structure)
+T.append("anchor", anchor)
+T.append("predicate", predicate encoded as ristretto255)
+T.append_u64le("k", number of items)
+for each payload item {
+    // for String:
+    T.append("type", 0x00)
+    T.append("n", length)
+    T.append("string", bytes)
+
+    // for Program:
+    T.append("type", 0x01)
+    T.append("n", length)
+    T.append("program", bytes)
+    
+    // for Value:
+    T.append("type", 0x02)
+    T.append("qty", qty encoded as ristretto255)
+    T.append("flv", qty encoded as ristretto255)
+}
 id = T.challenge_bytes("id")
 ```
 
