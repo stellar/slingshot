@@ -89,7 +89,7 @@ impl ShortID {
 impl ShortIDVec {
     /// Creates a new buffer with a given capacity.
     pub fn with_capacity(cap: usize) -> Self {
-        Self(Vec::with_capacity(10 * SHORTID_LEN))
+        Self(Vec::with_capacity(cap * SHORTID_LEN))
     }
 
     /// Adds an ID to the list

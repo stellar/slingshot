@@ -287,7 +287,7 @@ fn test_p2p_protocol() {
 
     mailbox.process_must_succeed(&mut [&mut node0, &mut node1, &mut node2]);
 
-    let (tx1, utxo1) = dummy_tx(utxo0, &bp_gens);
+    let (tx1, _utxo1) = dummy_tx(utxo0, &bp_gens);
 
     node0.submit_tx(tx1).unwrap();
 
