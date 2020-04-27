@@ -67,7 +67,6 @@ struct PeerState<T: CustomMessage> {
     direction: Direction,
     duplicates: usize,
     peer_addrs: Vec<PeerAddr>, // addresses of all the peers
-                               // TODO: add more state
 }
 
 #[derive(Debug)]
