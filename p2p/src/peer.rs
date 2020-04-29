@@ -15,10 +15,10 @@ use curve25519_dalek::ristretto::CompressedRistretto;
 use rand_core::{CryptoRng, RngCore};
 
 use crate::cybershake;
-use bytes::{Bytes, BytesMut};
 use futures::SinkExt;
 use std::fmt::Display;
 use tokio_util::codec::{Decoder, Encoder, FramedRead, FramedWrite};
+use readerwriter::{Reader, Writer};
 
 /// Identifier of the peer.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -43,10 +43,10 @@ pub enum PeerMessage<T: CustomMessage> {
 
 pub trait CustomMessage {
     type Error: Display;
-    fn decode(src: &mut Bytes) -> Result<Self, Self::Error>
+    fn decode(src: &mut impl Reader) -> Result<Self, Self::Error>
     where
         Self: Sized;
-    fn encode(self, dst: &mut BytesMut) -> Result<(), Self::Error>;
+    fn encode(self, dst: &mut impl Writer) -> Result<(), Self::Error>;
 }
 
 /// Interface for communication with the peer.

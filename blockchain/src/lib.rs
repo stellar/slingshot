@@ -16,6 +16,7 @@ mod protocol;
 mod shortid;
 mod state;
 pub mod utreexo;
+mod codec;
 
 #[cfg(test)]
 mod tests;
