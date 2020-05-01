@@ -36,6 +36,11 @@ path = "../spacesuit"
 [dependencies.musig]
 path = "../musig"
 
+[features]
+default = []
+nightly = ["curve25519-dalek/nightly", "curve25519-dalek/alloc", "bulletproofs/nightly"]
+
+
 [dev-dependencies]
 criterion = "0.2"
 serde_json = "1.0"

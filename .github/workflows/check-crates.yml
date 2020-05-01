@@ -1,0 +1,45 @@
+name: Source code health
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  links-and-fmt:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Setup Ruby
+      uses: actions/setup-ruby@v1
+    - uses: actions/checkout@v2
+    - name: Check links
+      run: DO_NOT_CHECK_HTTP_LINKS=1 ruby check-markdown-links.rb
+    - name: Cargo fmt
+      run: cargo fmt --all -- --check
+
+  cargo-test:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - name: Cargo test
+      run: cargo test
+
+  cargo-bench:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - name: Build benchmarks
+      run: cargo bench DONTRUNBENCHMARKS
+
+  check-demo:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - name: Install nightly Rust
+      uses: actions-rs/toolchain@v1
+      with:
+          toolchain: nightly
+          override: true
+    - name: Build
+      run: sudo apt-get install libsqlite3-dev && cd demo && cargo build

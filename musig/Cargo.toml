@@ -14,3 +14,7 @@ serde = { version = "1.0", features=["derive"] }
 
 [dependencies.starsig]
 path = "../starsig"
+
+[features]
+default = []
+nightly = ["curve25519-dalek/nightly", "curve25519-dalek/alloc", "subtle/nightly"]

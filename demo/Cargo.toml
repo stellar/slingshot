@@ -21,7 +21,7 @@ tokio = {version = "0.2", features=["full","sync"]}
 [dependencies.bulletproofs]
 git = "https://github.com/dalek-cryptography/bulletproofs"
 branch = "develop"
-features = ["yoloproofs"]
+features = ["yoloproofs", "nightly"]
 
 [dependencies.keytree]
 path = "../keytree"

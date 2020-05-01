@@ -17,6 +17,10 @@ git = "https://github.com/dalek-cryptography/bulletproofs"
 branch = "develop"
 features = ["yoloproofs"]
 
+[features]
+default = []
+nightly = ["curve25519-dalek/nightly", "curve25519-dalek/alloc", "subtle/nightly", "bulletproofs/nightly"]
+
 [dev-dependencies]
 criterion = "0.2"
 
