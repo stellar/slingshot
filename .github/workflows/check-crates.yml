@@ -46,4 +46,4 @@ jobs:
           toolchain: nightly
           override: true
     - name: Build
-      run: cd demo && cargo build
+      run: sudo apt-get install libsqlite3-dev && cd demo && cargo build
