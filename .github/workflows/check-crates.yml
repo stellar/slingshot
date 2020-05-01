@@ -13,7 +13,7 @@ jobs:
       - name: Setup Ruby
         uses: actions/setup-ruby@v1
       - name: Check links
-        run: DO_NOT_CHECK_HTTP_LINKS=1 ruby check-markdown-links.rb
+        run: pwd; ls -la; DO_NOT_CHECK_HTTP_LINKS=1 ruby check-markdown-links.rb
 
   cargo-fmt:
     runs-on: ubuntu-latest
