@@ -16,9 +16,8 @@ use rand_core::{CryptoRng, RngCore};
 
 use crate::cybershake;
 use futures::SinkExt;
-use std::fmt::Display;
+use readerwriter::{Codable, Reader, Writer};
 use tokio_util::codec::{Decoder, Encoder, FramedRead, FramedWrite};
-use readerwriter::{Reader, Writer};
 
 /// Identifier of the peer.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -32,7 +31,7 @@ pub struct PeerAddr {
 
 /// Various kinds of messages that peers can send and receive between each other.
 #[derive(Clone, Debug, PartialEq)]
-pub enum PeerMessage<T: CustomMessage> {
+pub enum PeerMessage<T: Codable> {
     // Upon connection, a peer tells its listening port for dialing in, if it's available.
     Hello(u16),
     // A list of known peers.
@@ -41,30 +40,22 @@ pub enum PeerMessage<T: CustomMessage> {
     Data(T),
 }
 
-pub trait CustomMessage {
-    type Error: Display;
-    fn decode(src: &mut impl Reader) -> Result<Self, Self::Error>
-    where
-        Self: Sized;
-    fn encode(self, dst: &mut impl Writer) -> Result<(), Self::Error>;
-}
-
 /// Interface for communication with the peer.
-pub struct PeerLink<Custom: CustomMessage> {
+pub struct PeerLink<Custom: Codable> {
     peer_id: PeerID,
     channel: sync::mpsc::Sender<PeerMessage<Custom>>,
 }
 
 /// Notifications that we receive from the peer.
 #[derive(Clone, Debug)]
-pub enum PeerNotification<Custom: CustomMessage> {
+pub enum PeerNotification<Custom: Codable> {
     /// Received a message from a peer
     Received(PeerID, PeerMessage<Custom>),
     /// Peer got disconnected. This message is not sent if the peer was stopped by the host.
     Disconnected(PeerID),
 }
 
-impl<Custom: CustomMessage + 'static> PeerLink<Custom> {
+impl<Custom: Codable + 'static> PeerLink<Custom> {
     /// Returns the ID of the peer.
     pub fn id(&self) -> &PeerID {
         &self.peer_id
@@ -122,7 +113,7 @@ impl<Custom: CustomMessage + 'static> PeerLink<Custom> {
 
         let (cmd_sender, cmd_receiver) = sync::mpsc::channel::<PeerMessage<Custom>>(100);
 
-        enum PeerEvent<Custom: CustomMessage> {
+        enum PeerEvent<Custom: Codable> {
             Send(PeerMessage<Custom>),
             Receive(Result<PeerMessage<Custom>, io::Error>),
             Stopped,

@@ -8,6 +8,7 @@ use crate::types::String;
 
 use core::borrow::Borrow;
 use merlin::Transcript;
+use readerwriter::Encodable;
 use serde::{Deserialize, Serialize};
 
 /// A builder type for assembling a sequence of `Instruction`s with chained method calls.
@@ -88,6 +89,8 @@ macro_rules! def_op_inner {
 }
 
 impl Encodable for Program {
+    type Error = WriteError;
+
     fn encode(&self, w: &mut impl Writer) -> Result<(), WriteError> {
         for i in self.0.iter() {
             i.borrow().encode(w)?;
@@ -215,6 +218,8 @@ impl Program {
 }
 
 impl Encodable for ProgramItem {
+    type Error = WriteError;
+
     fn encode(&self, w: &mut impl Writer) -> Result<(), WriteError> {
         match self {
             ProgramItem::Program(prog) => w.write(b"program", &prog.encode_to_vec()),

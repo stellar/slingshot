@@ -6,6 +6,7 @@ use spacesuit::SignedInteger;
 
 use crate::encoding::*;
 use crate::errors::VMError;
+use readerwriter::Encodable;
 use std::ops::{Add, Mul, Neg, Sub};
 use std::u64;
 
@@ -19,6 +20,8 @@ pub enum ScalarWitness {
 }
 
 impl Encodable for ScalarWitness {
+    type Error = WriteError;
+
     /// Converts to a scalar and encodes it to a vec of bytes.
     fn encode(&self, w: &mut impl Writer) -> Result<(), WriteError> {
         w.write_scalar(b"scalar", &self.to_scalar())

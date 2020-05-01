@@ -1,3 +1,5 @@
+use std::fmt::{Display, Formatter};
+
 /// Error kinds returns by the reader.
 #[derive(Debug, Clone, PartialEq)]
 pub enum ReadError {
@@ -5,6 +7,17 @@ pub enum ReadError {
     TrailingBytes,
     InvalidFormat,
 }
+
+impl Display for ReadError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
+        match self {
+            ReadError::InsufficientBytes => write!(f, "insufficient bytes"),
+            ReadError::TrailingBytes => write!(f, "trailing bytes"),
+            ReadError::InvalidFormat => write!(f, "invalid format"),
+        }
+    }
+}
+impl std::error::Error for ReadError {}
 
 /// An interface for reading binary data.
 pub trait Reader {

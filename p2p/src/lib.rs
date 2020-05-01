@@ -11,7 +11,7 @@ mod peer;
 mod priority;
 
 pub use self::node::{Direction, Node, NodeConfig, NodeHandle, NodeNotification, PeerInfo};
-pub use self::peer::{CustomMessage, PeerID, PeerLink, PeerMessage, PeerNotification};
+pub use self::peer::{PeerID, PeerLink, PeerMessage, PeerNotification};
 pub use self::priority::Priority;
 
 pub mod reexport {

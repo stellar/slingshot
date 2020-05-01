@@ -1,18 +1,20 @@
 use crate::cybershake::PublicKey;
-use crate::peer::{CustomMessage, PeerAddr};
+use crate::peer::PeerAddr;
 use crate::{PeerID, PeerMessage};
 use bytes::{Buf, BufMut, BytesMut};
 use curve25519_dalek::ristretto::CompressedRistretto;
+use readerwriter::Codable;
+use std::fmt::Display;
 use std::io;
 use std::marker::PhantomData;
 use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
 use tokio_util::codec::{Decoder, Encoder};
 
-pub struct MessageEncoder<T: CustomMessage> {
+pub struct MessageEncoder<T: Codable> {
     marker: PhantomData<T>,
 }
 
-impl<T: CustomMessage> Encoder<PeerMessage<T>> for MessageEncoder<T> {
+impl<T: Codable> Encoder<PeerMessage<T>> for MessageEncoder<T> {
     type Error = io::Error;
 
     fn encode(&mut self, item: PeerMessage<T>, dst: &mut BytesMut) -> Result<(), Self::Error> {
@@ -49,7 +51,7 @@ impl<T: CustomMessage> Encoder<PeerMessage<T>> for MessageEncoder<T> {
     }
 }
 
-impl<T: CustomMessage> MessageEncoder<T> {
+impl<T: Codable> MessageEncoder<T> {
     pub fn new() -> Self {
         Self {
             marker: PhantomData,
@@ -57,12 +59,12 @@ impl<T: CustomMessage> MessageEncoder<T> {
     }
 }
 
-pub struct MessageDecoder<T: CustomMessage> {
+pub struct MessageDecoder<T: Codable> {
     state: DecodeState,
     marker: PhantomData<T>,
 }
 
-impl<T: CustomMessage> MessageDecoder<T> {
+impl<T: Codable> MessageDecoder<T> {
     pub fn new() -> Self {
         MessageDecoder {
             state: DecodeState::MessageType,
@@ -78,7 +80,7 @@ enum DecodeState {
     Body(u8, usize),
 }
 
-impl<T: CustomMessage> Decoder for MessageDecoder<T> {
+impl<T: Codable> Decoder for MessageDecoder<T> {
     type Item = PeerMessage<T>;
     type Error = io::Error;
 
@@ -120,7 +122,7 @@ impl<T: CustomMessage> Decoder for MessageDecoder<T> {
     }
 }
 
-fn read_message_body<T: CustomMessage>(
+fn read_message_body<T: Codable>(
     message_type: u8,
     len: usize,
     src: &mut BytesMut,
@@ -151,7 +153,7 @@ fn read_message_body<T: CustomMessage>(
                 Ok(data) => Ok(PeerMessage::Data(data)),
                 Err(e) => Err(io::Error::new(
                     io::ErrorKind::InvalidData,
-                    format!("An error occured when decode body: {}", e),
+                    format!("An error occurred when decode body: {}", e),
                 )),
             }
         }
@@ -249,7 +251,8 @@ fn check_length(buf: &mut BytesMut, len: usize, label: &str) -> Result<(), io::E
 mod tests {
     use super::*;
     use crate::reexport::{BufMut, Bytes, BytesMut};
-    use crate::CustomMessage;
+    use crate::Codable;
+    use readerwriter::{Codable, Encodable};
     use std::convert::Infallible;
     use std::ops::Deref;
 
@@ -264,18 +267,15 @@ mod tests {
         }
     }
 
-    impl CustomMessage for Message {
+    impl Encodable for Message {
         type Error = Infallible;
-
-        fn decode(src: &mut Bytes) -> Result<Self, Self::Error>
-        where
-            Self: Sized,
-        {
-            Ok(Self(Vec::from(src.as_ref())))
-        }
 
         fn encode(self, dst: &mut BytesMut) -> Result<(), Self::Error> {
             Ok(dst.put(self.as_slice()))
+        }
+
+        fn encoded_length(&self) -> usize {
+            self.len()
         }
     }
 

@@ -8,6 +8,7 @@ use crate::errors::VMError;
 use crate::program::ProgramItem;
 use crate::scalar_witness::ScalarWitness;
 use crate::types::String;
+use readerwriter::Encodable;
 
 /// A decoded instruction.
 #[derive(Clone, PartialEq, Deserialize, Serialize)]
@@ -588,6 +589,8 @@ impl Opcode {
 }
 
 impl Encodable for Instruction {
+    type Error = WriteError;
+
     /// Appends the bytecode representation of an Instruction
     /// to the program.
     fn encode(&self, w: &mut impl Writer) -> Result<(), WriteError> {

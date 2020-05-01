@@ -2,9 +2,10 @@ use merlin::Transcript;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use zkvm::encoding::*;
-use zkvm::{Encodable, Hash, MerkleItem, MerkleTree, Tx};
+use zkvm::{Hash, MerkleItem, MerkleTree, Tx};
 
 use super::utreexo::{self, Proof};
+use readerwriter::Encodable;
 
 /// Identifier of the block, computed as a hash of the `BlockHeader`.
 #[derive(Clone, Copy, PartialEq, Default)]
@@ -89,6 +90,8 @@ impl BlockTx {
 }
 
 impl Encodable for BlockTx {
+    type Error = WriteError;
+
     fn encode(&self, w: &mut impl Writer) -> Result<(), WriteError> {
         self.tx.encode(w)?;
         w.write_size(b"n", self.proofs.len())?;

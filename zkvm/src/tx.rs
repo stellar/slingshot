@@ -12,6 +12,7 @@ use crate::fees::FeeRate;
 use crate::merkle::{Hash, MerkleItem, MerkleTree};
 use crate::transcript::TranscriptProtocol;
 use crate::verifier::Verifier;
+use readerwriter::Encodable;
 
 /// Transaction log, a list of all effects of a transaction called [entries](TxEntry).
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -136,6 +137,8 @@ pub struct VerifiedTx {
 }
 
 impl Encodable for TxHeader {
+    type Error = WriteError;
+
     fn encode(&self, w: &mut impl Writer) -> Result<(), WriteError> {
         w.write_u64(b"version", self.version)?;
         w.write_u64(b"mintime", self.mintime_ms)?;
@@ -169,6 +172,8 @@ impl UnsignedTx {
 }
 
 impl Encodable for Tx {
+    type Error = WriteError;
+
     fn encode(&self, w: &mut impl Writer) -> Result<(), WriteError> {
         self.header.encode(w)?;
         w.write_size(b"program_len", self.program.len())?;

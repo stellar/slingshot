@@ -126,13 +126,13 @@ pub fn launch_p2p() -> P2PHandle {
 }
 
 use p2p::reexport::{BufMut, Bytes, BytesMut};
-use p2p::CustomMessage;
+use p2p::Codable;
 use std::convert::Infallible;
 
 #[derive(Debug, Clone)]
 struct Message(pub Vec<u8>);
 
-impl CustomMessage for Message {
+impl Codable for Message {
     type Error = Infallible;
 
     fn decode(src: &mut Bytes) -> Result<Self, Self::Error>

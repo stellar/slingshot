@@ -2,6 +2,7 @@
 
 use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
+use readerwriter::Encodable;
 use serde::{Deserialize, Serialize};
 use spacesuit::{self, SignedInteger};
 
@@ -220,6 +221,8 @@ impl Item {
 }
 
 impl Encodable for String {
+    type Error = WriteError;
+
     /// Returns the number of bytes needed to serialize the String.
     fn encoded_length(&self) -> usize {
         match self {

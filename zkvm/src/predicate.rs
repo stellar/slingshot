@@ -17,6 +17,7 @@ use crate::errors::VMError;
 use crate::merkle::{Hash, Hasher, MerkleItem, MerkleTree, Path};
 use crate::program::{Program, ProgramItem};
 use crate::transcript::TranscriptProtocol;
+use readerwriter::Encodable;
 
 /// Represents a ZkVM predicate with its optional witness data.
 #[derive(Clone, PartialEq, Deserialize, Serialize)]
@@ -74,6 +75,8 @@ pub enum PredicateLeaf {
     Blinding([u8; 32]),
 }
 impl Encodable for Predicate {
+    type Error = WriteError;
+
     /// Encodes the Predicate in program bytecode.
     fn encode(&self, w: &mut impl Writer) -> Result<(), WriteError> {
         w.write_point(b"predicate", &self.to_point())
@@ -280,6 +283,8 @@ impl PredicateTree {
 }
 
 impl Encodable for CallProof {
+    type Error = WriteError;
+
     /// Serializes the call proof to a byte array.
     fn encode(&self, w: &mut impl Writer) -> Result<(), WriteError> {
         w.write_point(b"key", self.verification_key.as_point())?;

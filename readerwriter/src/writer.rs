@@ -1,9 +1,20 @@
 use core::mem;
+use std::fmt::Formatter;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum WriteError {
     InsufficientCapacity,
 }
+
+impl std::fmt::Display for WriteError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
+        match self {
+            WriteError::InsufficientCapacity => write!(f, "insufficient capacity"),
+        }
+    }
+}
+
+impl std::error::Error for WriteError {}
 
 /// Interface for writing binary data.
 pub trait Writer {

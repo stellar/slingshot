@@ -1,12 +1,16 @@
-use crate::{Block, GetBlock, GetInventory, GetMempoolTxs, MempoolTxs, Message, BlockID, BlockHeader, Inventory, BlockTx};
-use p2p::CustomMessage;
-use std::convert::TryFrom;
-use readerwriter::{Reader, Writer, ReadError, WriteError};
-use zkvm::{Signature, Hash, Encodable, Tx, merkle};
-use curve25519_dalek::scalar::Scalar;
-use curve25519_dalek::ristretto::CompressedRistretto;
 use crate::shortid::ShortIDVec;
 use crate::utreexo::Proof;
+use crate::{
+    Block, BlockHeader, BlockID, BlockTx, GetBlock, GetInventory, GetMempoolTxs, Inventory,
+    MempoolTxs, Message,
+};
+use curve25519_dalek::ristretto::CompressedRistretto;
+use curve25519_dalek::scalar::Scalar;
+use failure::_core::fmt::Formatter;
+use readerwriter::{Decodable, Encodable, ReadError, Reader, WriteError, Writer};
+use std::convert::TryFrom;
+use std::fmt::Display;
+use zkvm::{merkle, Hash, Signature, Tx};
 
 #[repr(u8)]
 enum MessageType {
@@ -19,7 +23,7 @@ enum MessageType {
 }
 
 impl TryFrom<u8> for MessageType {
-    type Error = String;
+    type Error = Error;
 
     fn try_from(value: u8) -> Result<Self, Self::Error> {
         match value {
@@ -29,18 +33,18 @@ impl TryFrom<u8> for MessageType {
             3 => Ok(MessageType::GetInventory),
             4 => Ok(MessageType::MempoolTxs),
             5 => Ok(MessageType::GetMempoolTxs),
-            _ => Err(format!("unknown message type: {}", value)),
+            _ => Err(Error(format!("unknown message type: {}", value))),
         }
     }
 }
 
-fn read<T>(data: Result<T, ReadError>, label: &'static str) -> Result<T, String> {
+fn read<T>(data: Result<T, ReadError>, label: &'static str) -> Result<T, Error> {
     data.map_err(|err| {
-        match err {
+        Error(match err {
             ReadError::InsufficientBytes => format!("unexpected end of stream"),
             ReadError::InvalidFormat => format!("invalid format of {}", label),
             _ => unreachable!(), // ReadError::TrailingBytes could be only when called read_all() function
-        }
+        })
     })
 }
 
@@ -55,7 +59,7 @@ trait ReaderExt: Reader + Sized {
         let r = self.read_u8x32()?;
         Ok(Signature {
             s: Scalar::from_bits(s),
-            R: CompressedRistretto(r)
+            R: CompressedRistretto(r),
         })
     }
 
@@ -96,27 +100,23 @@ trait ReaderExt: Reader + Sized {
     fn read_tx(&mut self) -> Result<Tx, ReadError> {
         let tx_size = self.read_u32()? as usize;
         let vec = self.read_vec(tx_size)?;
-        Tx::from_bytes(&vec)
-            .map_err(|_| ReadError::InvalidFormat)
+        Tx::from_bytes(&vec).map_err(|_| ReadError::InvalidFormat)
     }
 
     fn read_txs(&mut self) -> Result<Vec<BlockTx>, ReadError> {
         let len = self.read_u32()? as usize;
-        const BLOCK_TX_MIN_LENGTH: usize = 8 + 8 + 8 + 8 + 32 + 32 + 1 + 11*32 + 8;
+        const BLOCK_TX_MIN_LENGTH: usize = 8 + 8 + 8 + 8 + 32 + 32 + 1 + 11 * 32 + 8;
         self.read_vec_with(len, BLOCK_TX_MIN_LENGTH, |src| {
             let tx = src.read_tx()?;
             let len = src.read_u32()? as usize;
-            let proofs = src.read_vec_with(len, 1, |src| {
-                match src.read_u8()? {
-                    0 => Ok(Proof::Transient),
-                    1 => merkle::Path::decode(src).map(Proof::Committed).map_err(|_| ReadError::InvalidFormat),
-                    _ => Err(ReadError::InvalidFormat)
-                }
+            let proofs = src.read_vec_with(len, 1, |src| match src.read_u8()? {
+                0 => Ok(Proof::Transient),
+                1 => merkle::Path::decode(src)
+                    .map(Proof::Committed)
+                    .map_err(|_| ReadError::InvalidFormat),
+                _ => Err(ReadError::InvalidFormat),
             })?;
-            Ok(BlockTx {
-                tx,
-                proofs
-            })
+            Ok(BlockTx { tx, proofs })
         })
     }
 }
@@ -134,11 +134,19 @@ trait WriterExt: Writer + Sized {
         Ok(())
     }
 
-    fn write_shortid_vec(&mut self, label: &'static [u8], vec: &ShortIDVec) -> Result<(), WriteError> {
+    fn write_shortid_vec(
+        &mut self,
+        label: &'static [u8],
+        vec: &ShortIDVec,
+    ) -> Result<(), WriteError> {
         self.write_u8_vec(label, vec.0.as_ref())
     }
 
-    fn write_blockid(&mut self, label: &'static [u8], block_id: &BlockID) -> Result<(), WriteError> {
+    fn write_blockid(
+        &mut self,
+        label: &'static [u8],
+        block_id: &BlockID,
+    ) -> Result<(), WriteError> {
         self.write(label, block_id.as_ref())
     }
 
@@ -168,29 +176,46 @@ trait WriterExt: Writer + Sized {
 
     fn write_txs(&mut self, txs: &[BlockTx]) -> Result<(), WriteError> {
         self.write_u32(b"txs length", txs.len() as u32)?;
-        txs.iter().map(|block| {
-            self.write_u32(b"tx length", block.tx.encoded_length() as u32)?;
-            block.tx.encode(self)?;
-            self.write_u32(b"n", block.proofs.len() as u32)?;
-            for proof in block.proofs.iter() {
-                match proof {
-                    Proof::Transient => self.write_u8(b"type", 0)?,
-                    Proof::Committed(path) => {
-                        self.write_u8(b"type", 1)?;
-                        path.encode(self)?;
+        txs.iter()
+            .map(|block| {
+                self.write_u32(b"tx length", block.tx.encoded_length() as u32)?;
+                block.tx.encode(self)?;
+                self.write_u32(b"n", block.proofs.len() as u32)?;
+                for proof in block.proofs.iter() {
+                    match proof {
+                        Proof::Transient => self.write_u8(b"type", 0)?,
+                        Proof::Committed(path) => {
+                            self.write_u8(b"type", 1)?;
+                            path.encode(self)?;
+                        }
                     }
                 }
-            }
-            Ok(())
-        }).collect()
+                Ok(())
+            })
+            .collect()
     }
 }
 
 impl<R: Reader> ReaderExt for R {}
 impl<W: Writer> WriterExt for W {}
 
-impl CustomMessage for Message {
-    type Error = String;
+/// New-type wrapper only for implementing trait Error. Used to compatibility with
+/// [Encodable] trait.
+///
+/// [Encodable]: readerwriter::Encodable
+#[derive(Debug)]
+pub struct Error(String);
+
+impl Display for Error {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
+        f.write_str(self.0.as_str())
+    }
+}
+
+impl std::error::Error for Error {}
+
+impl Decodable for Message {
+    type Error = Error;
 
     fn decode(src: &mut impl Reader) -> Result<Self, Self::Error>
     where
@@ -240,15 +265,25 @@ impl CustomMessage for Message {
             }
         }
     }
+}
 
-    fn encode(self, dst: &mut impl Writer) -> Result<(), Self::Error> {
-        encode_message(self, dst).map_err(|e| match e {
-            WriteError::InsufficientCapacity => String::from("insufficient capacity")
+impl Encodable for Message {
+    type Error = Error;
+
+    fn encode(&self, dst: &mut impl Writer) -> Result<(), Self::Error> {
+        encode_message(self, dst).map_err(|e| {
+            Error(match e {
+                WriteError::InsufficientCapacity => String::from("insufficient capacity"),
+            })
         })
+    }
+
+    fn encoded_length(&self) -> usize {
+        unimplemented!()
     }
 }
 
-fn encode_message(msg: Message, dst: &mut impl Writer) -> Result<(), WriteError> {
+fn encode_message(msg: &Message, dst: &mut impl Writer) -> Result<(), WriteError> {
     match msg {
         Message::Block(b) => {
             dst.write_u8(b"message type", MessageType::Block as u8)?;
@@ -271,7 +306,7 @@ fn encode_message(msg: Message, dst: &mut impl Writer) -> Result<(), WriteError>
         }
         Message::MempoolTxs(mempool) => {
             dst.write_u8(b"message type", MessageType::MempoolTxs as u8)?;
-            dst.write_blockid(b"tip",&mempool.tip)?;
+            dst.write_blockid(b"tip", &mempool.tip)?;
             dst.write_txs(&mempool.txs)?;
         }
         Message::GetMempoolTxs(g) => {
@@ -289,9 +324,9 @@ mod tests {
     use crate::{utreexo, BlockHeader, BlockID, BlockTx};
     use curve25519_dalek::ristretto::CompressedRistretto;
     use curve25519_dalek::scalar::Scalar;
+    use p2p::reexport::BytesMut;
     use zkvm::bulletproofs::r1cs::R1CSProof;
     use zkvm::{Hash, Signature, Tx, TxHeader};
-    use p2p::reexport::BytesMut;
 
     #[test]
     fn message_block() {

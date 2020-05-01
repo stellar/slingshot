@@ -4,11 +4,11 @@ use bulletproofs::{BulletproofGens, PedersenGens};
 use curve25519_dalek::ristretto::CompressedRistretto;
 use merlin::Transcript;
 use musig::VerificationKey;
+use readerwriter::Encodable;
 use std::collections::VecDeque;
 
 use crate::constraints::Commitment;
 use crate::contract::ContractID;
-use crate::encoding::Encodable;
 use crate::errors::VMError;
 use crate::ops::Instruction;
 use crate::predicate::Predicate;
