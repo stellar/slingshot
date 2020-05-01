@@ -11,5 +11,6 @@ members = [
     "token",
     "accounts",
     "p2p",
-    "demo",
 ]
+
+# `demo` crate is built separately with nightly as required by Rocket

@@ -16,3 +16,7 @@ path = "../starsig"
 [dev-dependencies]
 rand_chacha = "0.2"
 hex = "^0.3"
+
+[features]
+default = []
+nightly = ["curve25519-dalek/nightly", "curve25519-dalek/alloc"]
