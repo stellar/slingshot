@@ -14,3 +14,4 @@ members = [
 ]
 
 # `demo` crate is built separately with nightly as required by Rocket
+exclude = ["demo"]
