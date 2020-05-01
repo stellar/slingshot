@@ -1,4 +1,4 @@
-name: Rust
+name: Source code health
 
 on:
   push:
@@ -7,37 +7,37 @@ on:
     branches: [ main ]
 
 jobs:
-  cargo-fmt:
-
+  check-links:
     runs-on: ubuntu-latest
+    steps:
+      - name: Setup Ruby
+        uses: actions/setup-ruby@v1
+      - name: Check links
+        run: DO_NOT_CHECK_HTTP_LINKS=1 ruby check-markdown-links.rb
 
+  cargo-fmt:
+    runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2
     - name: Cargo fmt
       run: cargo fmt --all -- --check
 
   cargo-test:
-
     runs-on: ubuntu-latest
-
     steps:
     - uses: actions/checkout@v2
     - name: Cargo test
       run: cargo test
 
   cargo-bench:
-
     runs-on: ubuntu-latest
-
     steps:
     - uses: actions/checkout@v2
     - name: Build benchmarks
       run: cargo bench DONTRUNBENCHMARKS
 
   check-demo:
-
     runs-on: ubuntu-latest
-
     steps:
     - uses: actions/checkout@v2
     - name: Install the nightly
