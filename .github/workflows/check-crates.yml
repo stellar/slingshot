@@ -7,19 +7,14 @@ on:
     branches: [ main ]
 
 jobs:
-  check-links:
+  links-and-fmt:
     runs-on: ubuntu-latest
     steps:
-      - name: Setup Ruby
-        uses: actions/setup-ruby@v1
-      - uses: actions/checkout@v2
-      - name: Check links
-        run: DO_NOT_CHECK_HTTP_LINKS=1 ruby check-markdown-links.rb
-
-  cargo-fmt:
-    runs-on: ubuntu-latest
-    steps:
+    - name: Setup Ruby
+      uses: actions/setup-ruby@v1
     - uses: actions/checkout@v2
+    - name: Check links
+      run: DO_NOT_CHECK_HTTP_LINKS=1 ruby check-markdown-links.rb
     - name: Cargo fmt
       run: cargo fmt --all -- --check
 
@@ -41,7 +36,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2
-    - name: Install the nightly
+    - name: Install nightly Rust
       uses: actions-rs/toolchain@v1
       with:
           toolchain: nightly
