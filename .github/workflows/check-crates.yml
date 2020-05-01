@@ -23,7 +23,7 @@ jobs:
     steps:
     - uses: actions/checkout@v2
     - name: Cargo test
-      run: cargo test --features="yoloproofs" --verbose
+      run: cargo test
 
   cargo-bench:
 
@@ -32,7 +32,7 @@ jobs:
     steps:
     - uses: actions/checkout@v2
     - name: Build benchmarks
-      run: cargo bench --features="yoloproofs" --verbose DONTRUNBENCHMARKS
+      run: cargo bench DONTRUNBENCHMARKS
 
   check-demo:
 
