@@ -46,4 +46,4 @@ jobs:
           toolchain: nightly
           override: true
     - name: Build
-      run: cd demo && cargo demo
+      run: cd demo && cargo build
