@@ -125,9 +125,9 @@ pub fn launch_p2p() -> P2PHandle {
     receiver.recv().unwrap()
 }
 
+use readerwriter::{Decodable, Encodable, Reader, Writer};
 use std::convert::Infallible;
 use std::ops::Deref;
-use readerwriter::{Encodable, Writer, Decodable, Reader};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Message(pub Vec<u8>);
