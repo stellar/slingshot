@@ -221,8 +221,6 @@ impl Item {
 }
 
 impl Encodable for String {
-    type Error = WriteError;
-
     /// Returns the number of bytes needed to serialize the String.
     fn encoded_length(&self) -> usize {
         match self {

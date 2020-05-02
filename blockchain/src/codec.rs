@@ -6,10 +6,8 @@ use crate::{
 };
 use curve25519_dalek::ristretto::CompressedRistretto;
 use curve25519_dalek::scalar::Scalar;
-use failure::_core::fmt::Formatter;
 use readerwriter::{Decodable, Encodable, ReadError, Reader, WriteError, Writer};
 use std::convert::TryFrom;
-use std::fmt::Display;
 use zkvm::{merkle, Hash, Signature, Tx};
 
 #[repr(u8)]
@@ -23,7 +21,7 @@ enum MessageType {
 }
 
 impl TryFrom<u8> for MessageType {
-    type Error = Error;
+    type Error = ReadError;
 
     fn try_from(value: u8) -> Result<Self, Self::Error> {
         match value {
@@ -33,18 +31,22 @@ impl TryFrom<u8> for MessageType {
             3 => Ok(MessageType::GetInventory),
             4 => Ok(MessageType::MempoolTxs),
             5 => Ok(MessageType::GetMempoolTxs),
-            _ => Err(Error(format!("unknown message type: {}", value))),
+            _ => Err(ReadError::Custom(
+                format!("unknown message type: {}", value).into(),
+            )),
         }
     }
 }
 
-fn read<T>(data: Result<T, ReadError>, label: &'static str) -> Result<T, Error> {
+fn read<T>(data: Result<T, ReadError>, label: &'static str) -> Result<T, ReadError> {
     data.map_err(|err| {
-        Error(match err {
-            ReadError::InsufficientBytes => format!("unexpected end of stream"),
-            ReadError::InvalidFormat => format!("invalid format of {}", label),
-            _ => unreachable!(), // ReadError::TrailingBytes could be only when called read_all() function
-        })
+        ReadError::Custom(
+            match err {
+                ReadError::InvalidFormat => format!("invalid format of {}", label),
+                r => r.to_string(),
+            }
+            .into(),
+        )
     })
 }
 
@@ -199,25 +201,8 @@ trait WriterExt: Writer + Sized {
 impl<R: Reader> ReaderExt for R {}
 impl<W: Writer> WriterExt for W {}
 
-/// New-type wrapper only for implementing trait Error. Used to compatibility with
-/// [Encodable] trait.
-///
-/// [Encodable]: readerwriter::Encodable
-#[derive(Debug)]
-pub struct Error(String);
-
-impl Display for Error {
-    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
-        f.write_str(self.0.as_str())
-    }
-}
-
-impl std::error::Error for Error {}
-
 impl Decodable for Message {
-    type Error = Error;
-
-    fn decode(src: &mut impl Reader) -> Result<Self, Self::Error>
+    fn decode(src: &mut impl Reader) -> Result<Self, ReadError>
     where
         Self: Sized,
     {
@@ -268,54 +253,44 @@ impl Decodable for Message {
 }
 
 impl Encodable for Message {
-    type Error = Error;
-
-    fn encode(&self, dst: &mut impl Writer) -> Result<(), Self::Error> {
-        encode_message(self, dst).map_err(|e| {
-            Error(match e {
-                WriteError::InsufficientCapacity => String::from("insufficient capacity"),
-            })
-        })
+    fn encode(&self, dst: &mut impl Writer) -> Result<(), WriteError> {
+        match self {
+            Message::Block(b) => {
+                dst.write_u8(b"message type", MessageType::Block as u8)?;
+                dst.write_block_header(&b.header)?;
+                dst.write_signature(&b.signature)?;
+                dst.write_txs(&b.txs)?;
+            }
+            Message::GetBlock(g) => {
+                dst.write_u8(b"message type", MessageType::GetBlock as u8)?;
+                dst.write_u64(b"block height", g.height)?;
+            }
+            Message::Inventory(inv) => {
+                dst.write_u8(b"message type", MessageType::Inventory as u8)?;
+                dst.write_inventory(&inv)?;
+            }
+            Message::GetInventory(g) => {
+                dst.write_u8(b"message type", MessageType::GetInventory as u8)?;
+                dst.write_u64(b"version", g.version)?;
+                dst.write_u64(b"shortid_nonce", g.shortid_nonce)?;
+            }
+            Message::MempoolTxs(mempool) => {
+                dst.write_u8(b"message type", MessageType::MempoolTxs as u8)?;
+                dst.write_blockid(b"tip", &mempool.tip)?;
+                dst.write_txs(&mempool.txs)?;
+            }
+            Message::GetMempoolTxs(g) => {
+                dst.write_u8(b"message type", MessageType::GetMempoolTxs as u8)?;
+                dst.write_u64(b"shortid_nonce", g.shortid_nonce)?;
+                dst.write_shortid_vec(b"shortid_list", &g.shortid_list)?;
+            }
+        }
+        Ok(())
     }
 
     fn encoded_length(&self) -> usize {
         unimplemented!()
     }
-}
-
-fn encode_message(msg: &Message, dst: &mut impl Writer) -> Result<(), WriteError> {
-    match msg {
-        Message::Block(b) => {
-            dst.write_u8(b"message type", MessageType::Block as u8)?;
-            dst.write_block_header(&b.header)?;
-            dst.write_signature(&b.signature)?;
-            dst.write_txs(&b.txs)?;
-        }
-        Message::GetBlock(g) => {
-            dst.write_u8(b"message type", MessageType::GetBlock as u8)?;
-            dst.write_u64(b"block height", g.height)?;
-        }
-        Message::Inventory(inv) => {
-            dst.write_u8(b"message type", MessageType::Inventory as u8)?;
-            dst.write_inventory(&inv)?;
-        }
-        Message::GetInventory(g) => {
-            dst.write_u8(b"message type", MessageType::GetInventory as u8)?;
-            dst.write_u64(b"version", g.version)?;
-            dst.write_u64(b"shortid_nonce", g.shortid_nonce)?;
-        }
-        Message::MempoolTxs(mempool) => {
-            dst.write_u8(b"message type", MessageType::MempoolTxs as u8)?;
-            dst.write_blockid(b"tip", &mempool.tip)?;
-            dst.write_txs(&mempool.txs)?;
-        }
-        Message::GetMempoolTxs(g) => {
-            dst.write_u8(b"message type", MessageType::GetMempoolTxs as u8)?;
-            dst.write_u64(b"shortid_nonce", g.shortid_nonce)?;
-            dst.write_shortid_vec(b"shortid_list", &g.shortid_list)?;
-        }
-    }
-    Ok(())
 }
 
 #[cfg(test)]

@@ -589,8 +589,6 @@ impl Opcode {
 }
 
 impl Encodable for Instruction {
-    type Error = WriteError;
-
     /// Appends the bytecode representation of an Instruction
     /// to the program.
     fn encode(&self, w: &mut impl Writer) -> Result<(), WriteError> {

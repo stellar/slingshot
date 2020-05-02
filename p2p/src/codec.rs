@@ -249,9 +249,8 @@ fn check_length(buf: &mut BytesMut, len: usize, label: &str) -> Result<(), io::E
 #[cfg(test)]
 mod tests {
     use super::*;
-    use bytes::{BufMut, Bytes, BytesMut};
-    use readerwriter::{Codable, Decodable, Encodable, Reader, Writer};
-    use std::convert::Infallible;
+    use bytes::BytesMut;
+    use readerwriter::{Decodable, Encodable, ReadError, Reader, WriteError, Writer};
     use std::ops::Deref;
 
     #[derive(Debug, Clone, PartialEq)]
@@ -266,9 +265,7 @@ mod tests {
     }
 
     impl Encodable for Message {
-        type Error = Infallible;
-
-        fn encode(&self, dst: &mut impl Writer) -> Result<(), Self::Error> {
+        fn encode(&self, dst: &mut impl Writer) -> Result<(), WriteError> {
             Ok(dst.write(b"data", self.as_slice()).unwrap())
         }
 
@@ -278,9 +275,7 @@ mod tests {
     }
 
     impl Decodable for Message {
-        type Error = Infallible;
-
-        fn decode(buf: &mut impl Reader) -> Result<Self, Self::Error> {
+        fn decode(buf: &mut impl Reader) -> Result<Self, ReadError> {
             Ok(Self(buf.read_vec(buf.remaining_bytes()).unwrap()))
         }
     }

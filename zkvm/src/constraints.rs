@@ -275,8 +275,6 @@ impl SecretConstraint {
 }
 
 impl Encodable for Commitment {
-    type Error = WriteError;
-
     /// Encodes the commitment as a point.
     fn encode(&self, w: &mut impl Writer) -> Result<(), WriteError> {
         w.write_point(b"commitment", &self.to_point())

@@ -90,8 +90,6 @@ impl BlockTx {
 }
 
 impl Encodable for BlockTx {
-    type Error = WriteError;
-
     fn encode(&self, w: &mut impl Writer) -> Result<(), WriteError> {
         self.tx.encode(w)?;
         w.write_size(b"n", self.proofs.len())?;

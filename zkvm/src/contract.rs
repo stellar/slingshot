@@ -57,8 +57,6 @@ pub enum PortableItem {
 }
 
 impl Encodable for Contract {
-    type Error = WriteError;
-
     /// Serializes the contract to a byte array
     fn encode(&self, w: &mut impl Writer) -> Result<(), WriteError> {
         w.write(b"anchor", &self.anchor.0)?;
@@ -153,8 +151,6 @@ impl ContractID {
 }
 
 impl Encodable for PortableItem {
-    type Error = WriteError;
-
     fn encode(&self, w: &mut impl Writer) -> Result<(), WriteError> {
         match self {
             // String = 0x00 || LE32(len) || <bytes>

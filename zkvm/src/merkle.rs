@@ -378,8 +378,6 @@ impl Path {
 
 // zkvm-specific impl
 impl Encodable for Path {
-    type Error = WriteError;
-
     fn encode(&self, w: &mut impl Writer) -> Result<(), WriteError> {
         w.write_u64(b"position", self.position)?;
         w.write_size(b"n", self.neighbors.len())?;

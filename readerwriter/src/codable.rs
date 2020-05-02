@@ -1,12 +1,11 @@
-use crate::{Reader, Writer};
+use crate::{ReadError, Reader, WriteError, Writer};
 
 /// A trait for encoding structures using the [Writer] trait.
 ///
 /// [Writer]: readerwriter::Writer
 pub trait Encodable {
-    type Error: std::error::Error;
     /// Encodes receiver into bytes appending them to a provided buffer.
-    fn encode(&self, w: &mut impl Writer) -> Result<(), Self::Error>;
+    fn encode(&self, w: &mut impl Writer) -> Result<(), WriteError>;
     /// Returns precise length in bytes for the serialized representation of the receiver.
     fn encoded_length(&self) -> usize;
     /// Encodes the receiver into a newly allocated vector of bytes.
@@ -22,16 +21,11 @@ pub trait Encodable {
 ///
 /// [Reader]: readerwriter::Reader
 pub trait Decodable: Sized {
-    type Error: std::error::Error;
     /// Decodes bytes into self by reading bytes from reader.
-    fn decode(buf: &mut impl Reader) -> Result<Self, Self::Error>;
+    fn decode(buf: &mut impl Reader) -> Result<Self, ReadError>;
 }
 
 /// Trait which implements for structures which implement both [Decodable] and [Encodable] traits.
-pub trait Codable: Encodable + Decodable {
-    type Error: std::error::Error;
-}
+pub trait Codable: Encodable + Decodable {}
 
-impl<T: Decodable<Error = E> + Encodable<Error = E>, E: std::error::Error> Codable for T {
-    type Error = E;
-}
+impl<T: Decodable + Encodable> Codable for T {}
