@@ -30,7 +30,7 @@ jobs:
     steps:
     - uses: actions/checkout@v2
     - name: Build benchmarks
-      run: cargo bench DONTRUNBENCHMARKS
+      run: RUSTFLAGS="-C opt-level=0" cargo bench DONTRUNBENCHMARKS
 
   check-demo:
     runs-on: ubuntu-latest
