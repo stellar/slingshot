@@ -206,12 +206,11 @@ impl Console {
     }
 }
 
-use p2p::reexport::{BufMut, Bytes, BytesMut};
-use p2p::Codable;
 use std::convert::Infallible;
 use std::ops::Deref;
+use readerwriter::{Encodable, Writer, Decodable, Reader};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Message(pub Vec<u8>);
 
 impl Deref for Message {
@@ -222,17 +221,22 @@ impl Deref for Message {
     }
 }
 
-impl Codable for Message {
+impl Encodable for Message {
     type Error = Infallible;
 
-    fn decode(src: &mut Bytes) -> Result<Self, Self::Error>
-    where
-        Self: Sized,
-    {
-        Ok(Self(Vec::from(src.as_ref())))
+    fn encode(&self, dst: &mut impl Writer) -> Result<(), Self::Error> {
+        Ok(dst.write(b"data", self.as_slice()).unwrap())
     }
 
-    fn encode(self, dst: &mut BytesMut) -> Result<(), Self::Error> {
-        Ok(dst.put(self.as_slice()))
+    fn encoded_length(&self) -> usize {
+        self.len()
+    }
+}
+
+impl Decodable for Message {
+    type Error = Infallible;
+
+    fn decode(buf: &mut impl Reader) -> Result<Self, Self::Error> {
+        Ok(Self(buf.read_vec(buf.remaining_bytes()).unwrap()))
     }
 }

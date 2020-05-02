@@ -4,7 +4,6 @@ use crate::{PeerID, PeerMessage};
 use bytes::{Buf, BufMut, BytesMut};
 use curve25519_dalek::ristretto::CompressedRistretto;
 use readerwriter::Codable;
-use std::fmt::Display;
 use std::io;
 use std::marker::PhantomData;
 use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
@@ -44,7 +43,7 @@ impl<T: Codable> Encoder<PeerMessage<T>> for MessageEncoder<T> {
                     )
                 })?;
                 let body_len = (dst.len() - 5) as u32;
-                dst[1..5].copy_from_slice(&body_len.to_le_bytes()[..])
+                dst[1..5].copy_from_slice(&body_len.to_le_bytes()[..]);
             }
         }
         Ok(())
@@ -251,8 +250,7 @@ fn check_length(buf: &mut BytesMut, len: usize, label: &str) -> Result<(), io::E
 mod tests {
     use super::*;
     use crate::reexport::{BufMut, Bytes, BytesMut};
-    use crate::Codable;
-    use readerwriter::{Codable, Encodable};
+    use readerwriter::{Codable, Encodable, Decodable, Reader, Writer};
     use std::convert::Infallible;
     use std::ops::Deref;
 
@@ -270,12 +268,20 @@ mod tests {
     impl Encodable for Message {
         type Error = Infallible;
 
-        fn encode(self, dst: &mut BytesMut) -> Result<(), Self::Error> {
-            Ok(dst.put(self.as_slice()))
+        fn encode(&self, dst: &mut impl Writer) -> Result<(), Self::Error> {
+            Ok(dst.write(b"data", self.as_slice()).unwrap())
         }
 
         fn encoded_length(&self) -> usize {
             self.len()
+        }
+    }
+
+    impl Decodable for Message {
+        type Error = Infallible;
+
+        fn decode(buf: &mut impl Reader) -> Result<Self, Self::Error> {
+            Ok(Self(buf.read_vec(buf.remaining_bytes()).unwrap()))
         }
     }
 

@@ -41,6 +41,9 @@ path = "../accounts"
 [dependencies.p2p]
 path = "../p2p"
 
+[dependencies.readerwriter]
+path = "../readerwriter"
+
 [dependencies.rocket_contrib]
 version = "0.4.2"
 default-features = false

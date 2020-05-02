@@ -1,5 +1,4 @@
-use crate::{ReadError, Reader, WriteError, Writer};
-use std::fmt::Debug;
+use crate::{Reader, Writer};
 
 /// A trait for encoding structures using the [Writer] trait.
 ///

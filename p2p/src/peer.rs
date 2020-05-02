@@ -16,7 +16,7 @@ use rand_core::{CryptoRng, RngCore};
 
 use crate::cybershake;
 use futures::SinkExt;
-use readerwriter::{Codable, Reader, Writer};
+use readerwriter::Codable;
 use tokio_util::codec::{Decoder, Encoder, FramedRead, FramedWrite};
 
 /// Identifier of the peer.

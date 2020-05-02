@@ -1,5 +1,5 @@
 use blockchain::{self};
-use zkvm::Encodable;
+use readerwriter::Encodable;
 
 /// Our concrete instance of mempool
 pub type Mempool = blockchain::Mempool;
