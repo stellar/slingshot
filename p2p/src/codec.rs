@@ -249,7 +249,7 @@ fn check_length(buf: &mut BytesMut, len: usize, label: &str) -> Result<(), io::E
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::reexport::{BufMut, Bytes, BytesMut};
+    use bytes::{BufMut, Bytes, BytesMut};
     use readerwriter::{Codable, Decodable, Encodable, Reader, Writer};
     use std::convert::Infallible;
     use std::ops::Deref;

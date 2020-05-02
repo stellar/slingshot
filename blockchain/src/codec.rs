@@ -324,7 +324,6 @@ mod tests {
     use crate::{utreexo, BlockHeader, BlockID, BlockTx};
     use curve25519_dalek::ristretto::CompressedRistretto;
     use curve25519_dalek::scalar::Scalar;
-    use p2p::reexport::BytesMut;
     use zkvm::bulletproofs::r1cs::R1CSProof;
     use zkvm::{Hash, Signature, Tx, TxHeader};
 
@@ -367,11 +366,15 @@ mod tests {
                 ],
             }],
         });
-        let mut bytes = BytesMut::new();
+        let mut bytes = Vec::<u8>::new();
         message.clone().encode(&mut bytes).unwrap();
-        let mut bytes = bytes.freeze();
-        let res = Message::decode(&mut bytes).unwrap();
-        assert!(bytes.is_empty());
+        let mut bytes_to_decode = bytes.as_slice();
+        let res = Message::decode(&mut bytes_to_decode).unwrap();
+        assert!(
+            bytes_to_decode.is_empty(),
+            "len = {}",
+            bytes_to_decode.len()
+        );
 
         let left = format!("{:?}", message);
         let right = format!("{:?}", res);
@@ -381,11 +384,15 @@ mod tests {
     #[test]
     fn message_get_block() {
         let message = Message::GetBlock(GetBlock { height: 30 });
-        let mut bytes = BytesMut::new();
+        let mut bytes = Vec::<u8>::new();
         message.clone().encode(&mut bytes).unwrap();
-        let mut bytes = bytes.freeze();
-        let res = Message::decode(&mut bytes).unwrap();
-        assert!(bytes.is_empty());
+        let mut bytes_to_decode = bytes.as_slice();
+        let res = Message::decode(&mut bytes_to_decode).unwrap();
+        assert!(
+            bytes_to_decode.is_empty(),
+            "len = {}",
+            bytes_to_decode.len()
+        );
 
         let left = format!("{:?}", message);
         let right = format!("{:?}", res);
