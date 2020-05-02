@@ -125,7 +125,7 @@ pub fn launch_p2p() -> P2PHandle {
     receiver.recv().unwrap()
 }
 
-use readerwriter::{Decodable, Encodable, Reader, Writer};
+use readerwriter::{Decodable, Encodable, Reader, Writer, ReadError, WriteError};
 use std::convert::Infallible;
 use std::ops::Deref;
 
@@ -141,9 +141,7 @@ impl Deref for Message {
 }
 
 impl Encodable for Message {
-    type Error = Infallible;
-
-    fn encode(&self, dst: &mut impl Writer) -> Result<(), Self::Error> {
+    fn encode(&self, dst: &mut impl Writer) -> Result<(), WriteError> {
         Ok(dst.write(b"data", self.as_slice()).unwrap())
     }
 
@@ -153,9 +151,7 @@ impl Encodable for Message {
 }
 
 impl Decodable for Message {
-    type Error = Infallible;
-
-    fn decode(buf: &mut impl Reader) -> Result<Self, Self::Error> {
+    fn decode(buf: &mut impl Reader) -> Result<Self, ReadError> {
         Ok(Self(buf.read_vec(buf.remaining_bytes()).unwrap()))
     }
 }
