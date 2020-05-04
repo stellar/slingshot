@@ -17,7 +17,6 @@ use crate::errors::VMError;
 use crate::merkle::{Hash, Hasher, MerkleItem, MerkleTree, Path};
 use crate::program::{Program, ProgramItem};
 use crate::transcript::TranscriptProtocol;
-use readerwriter::Encodable;
 
 /// Represents a ZkVM predicate with its optional witness data.
 #[derive(Clone, PartialEq, Deserialize, Serialize)]

@@ -4,7 +4,6 @@ use bulletproofs::{BulletproofGens, PedersenGens};
 use curve25519_dalek::ristretto::CompressedRistretto;
 use merlin::Transcript;
 use musig::VerificationKey;
-use readerwriter::Encodable;
 use std::collections::VecDeque;
 
 use crate::constraints::Commitment;
@@ -15,6 +14,7 @@ use crate::predicate::Predicate;
 use crate::program::{Program, ProgramItem};
 use crate::tx::{TxHeader, UnsignedTx};
 use crate::vm::{Delegate, VM};
+use crate::encoding::Encodable;
 
 /// This is the entry point API for creating a transaction.
 /// Prover passes the list of instructions through the VM,

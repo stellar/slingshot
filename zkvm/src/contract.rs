@@ -9,7 +9,6 @@ use crate::program::ProgramItem;
 use crate::transcript::TranscriptProtocol;
 use crate::types::{String, Value};
 use merlin::Transcript;
-use readerwriter::Encodable;
 
 /// Prefix for the string type in the Output Structure
 pub const STRING_TYPE: u8 = 0x00;

@@ -6,7 +6,6 @@ use spacesuit::SignedInteger;
 
 use crate::encoding::*;
 use crate::errors::VMError;
-use readerwriter::Encodable;
 use std::ops::{Add, Mul, Neg, Sub};
 use std::u64;
 

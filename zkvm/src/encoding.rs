@@ -3,7 +3,7 @@
 
 use curve25519_dalek::ristretto::CompressedRistretto;
 use curve25519_dalek::scalar::Scalar;
-pub use readerwriter::{ReadError, Reader, WriteError, Writer};
+pub use readerwriter::{ReadError, Reader, WriteError, Writer, Encodable};
 
 use crate::errors::VMError;
 

@@ -8,7 +8,6 @@ use crate::types::String;
 
 use core::borrow::Borrow;
 use merlin::Transcript;
-use readerwriter::Encodable;
 use serde::{Deserialize, Serialize};
 
 /// A builder type for assembling a sequence of `Instruction`s with chained method calls.

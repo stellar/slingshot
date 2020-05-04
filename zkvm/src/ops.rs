@@ -8,7 +8,6 @@ use crate::errors::VMError;
 use crate::program::ProgramItem;
 use crate::scalar_witness::ScalarWitness;
 use crate::types::String;
-use readerwriter::Encodable;
 
 /// A decoded instruction.
 #[derive(Clone, PartialEq, Deserialize, Serialize)]

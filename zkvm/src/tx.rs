@@ -12,7 +12,6 @@ use crate::fees::FeeRate;
 use crate::merkle::{Hash, MerkleItem, MerkleTree};
 use crate::transcript::TranscriptProtocol;
 use crate::verifier::Verifier;
-use readerwriter::Encodable;
 
 /// Transaction log, a list of all effects of a transaction called [entries](TxEntry).
 #[derive(Clone, Debug, Serialize, Deserialize)]

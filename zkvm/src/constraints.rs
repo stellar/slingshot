@@ -12,7 +12,6 @@ use subtle::{ConditionallySelectable, ConstantTimeEq};
 use crate::encoding::*;
 use crate::errors::VMError;
 use crate::scalar_witness::ScalarWitness;
-use readerwriter::Encodable;
 
 /// Variable represents a high-level R1CS variable specified by its
 /// Pedersen commitment. In ZkVM variables are actually indices to a list

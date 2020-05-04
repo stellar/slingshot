@@ -2,7 +2,6 @@
 
 use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
-use readerwriter::Encodable;
 use serde::{Deserialize, Serialize};
 use spacesuit::{self, SignedInteger};
 

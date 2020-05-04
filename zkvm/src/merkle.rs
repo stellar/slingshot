@@ -3,7 +3,6 @@ use crate::encoding::*;
 use crate::errors::VMError;
 use core::marker::PhantomData;
 use merlin::Transcript;
-use readerwriter::Encodable;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use subtle::ConstantTimeEq;

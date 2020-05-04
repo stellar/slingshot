@@ -4,11 +4,10 @@ use bulletproofs::{BulletproofGens, PedersenGens};
 use curve25519_dalek::ristretto::CompressedRistretto;
 use merlin::Transcript;
 use musig::{Multisignature, VerificationKey};
-use readerwriter::Encodable;
 
 use crate::constraints::Commitment;
 use crate::contract::ContractID;
-use crate::encoding::Reader;
+use crate::encoding::{Reader, Encodable};
 use crate::errors::VMError;
 use crate::fees::FeeRate;
 use crate::ops::Instruction;
