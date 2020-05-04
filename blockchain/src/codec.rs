@@ -38,18 +38,6 @@ impl TryFrom<u8> for MessageType {
     }
 }
 
-fn read<T>(data: Result<T, ReadError>, label: &'static str) -> Result<T, ReadError> {
-    data.map_err(|err| {
-        ReadError::Custom(
-            match err {
-                ReadError::InvalidFormat => format!("invalid format of {}", label),
-                r => r.to_string(),
-            }
-            .into(),
-        )
-    })
-}
-
 trait ReaderExt: Reader + Sized {
     fn read_u8_vec(&mut self) -> Result<Vec<u8>, ReadError> {
         let len = self.read_u32()? as usize;
@@ -206,13 +194,13 @@ impl Decodable for Message {
     where
         Self: Sized,
     {
-        let message_type_byte = read(src.read_u8(), "message body")?;
+        let message_type_byte = src.read_u8()?;
         let message_type = MessageType::try_from(message_type_byte)?;
         match message_type {
             MessageType::Block => {
-                let header = read(src.read_block_header(), "block header")?;
-                let signature = read(src.read_signature(), "signature")?;
-                let txs = read(src.read_txs(), "txs")?;
+                let header = src.read_block_header()?;
+                let signature = src.read_signature()?;
+                let txs = src.read_txs()?;
                 Ok(Message::Block(Block {
                     header,
                     signature,
@@ -220,29 +208,29 @@ impl Decodable for Message {
                 }))
             }
             MessageType::GetBlock => {
-                let height = read(src.read_u64(), "height of block")?;
+                let height = src.read_u64()?;
                 Ok(Message::GetBlock(GetBlock { height }))
             }
             MessageType::Inventory => {
-                let inventory = read(src.read_inventory(), "inventory")?;
+                let inventory = src.read_inventory()?;
                 Ok(Message::Inventory(inventory))
             }
             MessageType::GetInventory => {
-                let version = read(src.read_u64(), "inventory version")?;
-                let shortid_nonce = read(src.read_u64(), "shortid_nonce")?;
+                let version = src.read_u64()?;
+                let shortid_nonce = src.read_u64()?;
                 Ok(Message::GetInventory(GetInventory {
                     version,
                     shortid_nonce,
                 }))
             }
             MessageType::MempoolTxs => {
-                let tip = read(src.read_blockid(), "inventory version")?;
-                let txs = read(src.read_txs(), "txs")?;
+                let tip = src.read_blockid()?;
+                let txs = src.read_txs()?;
                 Ok(Message::MempoolTxs(MempoolTxs { tip, txs }))
             }
             MessageType::GetMempoolTxs => {
-                let shortid_nonce = read(src.read_u64(), "shortid_nonce")?;
-                let shortid_list = read(src.read_shortid_vec(), "shortid_list")?;
+                let shortid_nonce = src.read_u64()?;
+                let shortid_list = src.read_shortid_vec()?;
                 Ok(Message::GetMempoolTxs(GetMempoolTxs {
                     shortid_nonce,
                     shortid_list,
