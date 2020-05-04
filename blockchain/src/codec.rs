@@ -38,6 +38,116 @@ impl TryFrom<u8> for MessageType {
     }
 }
 
+impl Encodable for BlockHeader {
+    fn encode(&self, w: &mut impl Writer) -> Result<(), WriteError> {
+        w.write_u64(b"version", self.version)?;
+        w.write_u64(b"height", self.height)?;
+        w.write_blockid(b"prev", &self.prev)?;
+        w.write_u64(b"timestamp_ms", self.timestamp_ms)?;
+        w.write_hash(b"txroot", &self.txroot)?;
+        w.write_hash(b"utxoroot", &self.utxoroot)?;
+        w.write_u8_vec(b"ext", &self.ext)?;
+        Ok(())
+    }
+
+    fn encoded_length(&self) -> usize {
+        8 + 8 + 32 + 8 + 32 + 32 + 4 + self.ext.len()
+    }
+}
+
+impl Decodable for BlockHeader {
+    fn decode(buf: &mut impl Reader) -> Result<Self, ReadError> {
+        Ok(BlockHeader {
+            version: buf.read_u64()?,
+            height: buf.read_u64()?,
+            prev: buf.read_blockid()?,
+            timestamp_ms: buf.read_u64()?,
+            txroot: buf.read_hash()?,
+            utxoroot: buf.read_hash()?,
+            ext: buf.read_u8_vec()?,
+        })
+    }
+}
+
+impl Encodable for Inventory {
+    fn encode(&self, w: &mut impl Writer) -> Result<(), WriteError> {
+        w.write_u64(b"version", self.version)?;
+        self.tip.encode(w)?;
+        w.write_signature(&self.tip_signature)?;
+        w.write_u64(b"shortid_nonce", self.shortid_nonce)?;
+        w.write_shortid_vec(b"shortid_list", &self.shortid_list)?;
+        Ok(())
+    }
+
+    fn encoded_length(&self) -> usize {
+        8 + self.tip.encoded_length() + 32 + 8 + 4 + self.shortid_list.len()
+    }
+}
+
+impl Decodable for Inventory {
+    fn decode(buf: &mut impl Reader) -> Result<Self, ReadError> {
+        Ok(Inventory {
+            version: buf.read_u64()?,
+            tip: BlockHeader::decode(buf)?,
+            tip_signature: buf.read_signature()?,
+            shortid_nonce: buf.read_u64()?,
+            shortid_list: buf.read_shortid_vec()?,
+        })
+    }
+}
+
+// Tx now implement Encoder, but it's implementation isn't suitable for
+// encoding in that case
+fn read_tx(buf: &mut impl Reader) -> Result<Tx, ReadError> {
+    let tx_size = buf.read_u32()? as usize;
+    let vec = buf.read_vec(tx_size)?;
+    Tx::from_bytes(&vec).map_err(|_| ReadError::InvalidFormat)
+}
+
+fn write_tx(tx: &Tx, dst: &mut impl Writer) -> Result<(), WriteError> {
+    dst.write_u32(b"tx length", tx.encoded_length() as u32)?;
+    tx.encode(dst)
+}
+
+fn read_block_tx(src: &mut impl Reader) -> Result<BlockTx, ReadError> {
+    let tx = read_tx(src)?;
+    let len = src.read_u32()? as usize;
+    let proofs = src.read_vec_with(len, 1, |src| match src.read_u8()? {
+        0 => Ok(Proof::Transient),
+        1 => merkle::Path::decode(src)
+            .map(Proof::Committed)
+            .map_err(|_| ReadError::InvalidFormat),
+        _ => Err(ReadError::InvalidFormat),
+    })?;
+    Ok(BlockTx { tx, proofs })
+}
+
+fn write_block_tx(block: &BlockTx, dst: &mut impl Writer) -> Result<(), WriteError> {
+    write_tx(&block.tx, dst)?;
+    dst.write_u32(b"n", block.proofs.len() as u32)?;
+    for proof in block.proofs.iter() {
+        match proof {
+            Proof::Transient => dst.write_u8(b"type", 0)?,
+            Proof::Committed(path) => {
+                dst.write_u8(b"type", 1)?;
+                path.encode(dst)?;
+            }
+        }
+    }
+    Ok(())
+}
+
+fn read_block_txs(src: &mut impl Reader) -> Result<Vec<BlockTx>, ReadError> {
+    let len = src.read_u32()? as usize;
+    const BLOCK_TX_MIN_LENGTH: usize = 8 + 8 + 8 + 8 + 32 + 32 + 1 + 11 * 32 + 8;
+    src.read_vec_with(len, BLOCK_TX_MIN_LENGTH, read_block_tx)
+}
+
+fn write_block_txs(block_txs: &[BlockTx], dst: &mut impl Writer) -> Result<(), WriteError> {
+    dst.write_u32(b"block_txs length", block_txs.len() as u32)?;
+    block_txs.iter().map(|e| write_block_tx(e, dst)).collect()
+}
+
 trait ReaderExt: Reader + Sized {
     fn read_u8_vec(&mut self) -> Result<Vec<u8>, ReadError> {
         let len = self.read_u32()? as usize;
@@ -63,51 +173,6 @@ trait ReaderExt: Reader + Sized {
 
     fn read_hash(&mut self) -> Result<Hash, ReadError> {
         self.read_u8x32().map(Hash)
-    }
-
-    fn read_block_header(&mut self) -> Result<BlockHeader, ReadError> {
-        Ok(BlockHeader {
-            version: self.read_u64()?,
-            height: self.read_u64()?,
-            prev: self.read_blockid()?,
-            timestamp_ms: self.read_u64()?,
-            txroot: self.read_hash()?,
-            utxoroot: self.read_hash()?,
-            ext: self.read_u8_vec()?,
-        })
-    }
-
-    fn read_inventory(&mut self) -> Result<Inventory, ReadError> {
-        Ok(Inventory {
-            version: self.read_u64()?,
-            tip: self.read_block_header()?,
-            tip_signature: self.read_signature()?,
-            shortid_nonce: self.read_u64()?,
-            shortid_list: self.read_shortid_vec()?,
-        })
-    }
-
-    fn read_tx(&mut self) -> Result<Tx, ReadError> {
-        let tx_size = self.read_u32()? as usize;
-        let vec = self.read_vec(tx_size)?;
-        Tx::from_bytes(&vec).map_err(|_| ReadError::InvalidFormat)
-    }
-
-    fn read_txs(&mut self) -> Result<Vec<BlockTx>, ReadError> {
-        let len = self.read_u32()? as usize;
-        const BLOCK_TX_MIN_LENGTH: usize = 8 + 8 + 8 + 8 + 32 + 32 + 1 + 11 * 32 + 8;
-        self.read_vec_with(len, BLOCK_TX_MIN_LENGTH, |src| {
-            let tx = src.read_tx()?;
-            let len = src.read_u32()? as usize;
-            let proofs = src.read_vec_with(len, 1, |src| match src.read_u8()? {
-                0 => Ok(Proof::Transient),
-                1 => merkle::Path::decode(src)
-                    .map(Proof::Committed)
-                    .map_err(|_| ReadError::InvalidFormat),
-                _ => Err(ReadError::InvalidFormat),
-            })?;
-            Ok(BlockTx { tx, proofs })
-        })
     }
 }
 
@@ -143,47 +208,6 @@ trait WriterExt: Writer + Sized {
     fn write_hash(&mut self, label: &'static [u8], hash: &Hash) -> Result<(), WriteError> {
         self.write(label, hash.0.as_ref())
     }
-
-    fn write_block_header(&mut self, block_header: &BlockHeader) -> Result<(), WriteError> {
-        self.write_u64(b"version", block_header.version)?;
-        self.write_u64(b"height", block_header.height)?;
-        self.write_blockid(b"prev", &block_header.prev)?;
-        self.write_u64(b"timestamp_ms", block_header.timestamp_ms)?;
-        self.write_hash(b"txroot", &block_header.txroot)?;
-        self.write_hash(b"utxoroot", &block_header.utxoroot)?;
-        self.write_u8_vec(b"ext", &block_header.ext)?;
-        Ok(())
-    }
-
-    fn write_inventory(&mut self, inv: &Inventory) -> Result<(), WriteError> {
-        self.write_u64(b"version", inv.version)?;
-        self.write_block_header(&inv.tip)?;
-        self.write_signature(&inv.tip_signature)?;
-        self.write_u64(b"shortid_nonce", inv.shortid_nonce)?;
-        self.write_shortid_vec(b"shortid_list", &inv.shortid_list)?;
-        Ok(())
-    }
-
-    fn write_txs(&mut self, txs: &[BlockTx]) -> Result<(), WriteError> {
-        self.write_u32(b"txs length", txs.len() as u32)?;
-        txs.iter()
-            .map(|block| {
-                self.write_u32(b"tx length", block.tx.encoded_length() as u32)?;
-                block.tx.encode(self)?;
-                self.write_u32(b"n", block.proofs.len() as u32)?;
-                for proof in block.proofs.iter() {
-                    match proof {
-                        Proof::Transient => self.write_u8(b"type", 0)?,
-                        Proof::Committed(path) => {
-                            self.write_u8(b"type", 1)?;
-                            path.encode(self)?;
-                        }
-                    }
-                }
-                Ok(())
-            })
-            .collect()
-    }
 }
 
 impl<R: Reader> ReaderExt for R {}
@@ -198,9 +222,9 @@ impl Decodable for Message {
         let message_type = MessageType::try_from(message_type_byte)?;
         match message_type {
             MessageType::Block => {
-                let header = src.read_block_header()?;
+                let header = BlockHeader::decode(src)?;
                 let signature = src.read_signature()?;
-                let txs = src.read_txs()?;
+                let txs = read_block_txs(src)?;
                 Ok(Message::Block(Block {
                     header,
                     signature,
@@ -212,7 +236,7 @@ impl Decodable for Message {
                 Ok(Message::GetBlock(GetBlock { height }))
             }
             MessageType::Inventory => {
-                let inventory = src.read_inventory()?;
+                let inventory = Inventory::decode(src)?;
                 Ok(Message::Inventory(inventory))
             }
             MessageType::GetInventory => {
@@ -225,7 +249,7 @@ impl Decodable for Message {
             }
             MessageType::MempoolTxs => {
                 let tip = src.read_blockid()?;
-                let txs = src.read_txs()?;
+                let txs = read_block_txs(src)?;
                 Ok(Message::MempoolTxs(MempoolTxs { tip, txs }))
             }
             MessageType::GetMempoolTxs => {
@@ -245,9 +269,9 @@ impl Encodable for Message {
         match self {
             Message::Block(b) => {
                 dst.write_u8(b"message type", MessageType::Block as u8)?;
-                dst.write_block_header(&b.header)?;
+                BlockHeader::encode(&b.header, dst)?;
                 dst.write_signature(&b.signature)?;
-                dst.write_txs(&b.txs)?;
+                write_block_txs(&b.txs, dst)?;
             }
             Message::GetBlock(g) => {
                 dst.write_u8(b"message type", MessageType::GetBlock as u8)?;
@@ -255,7 +279,7 @@ impl Encodable for Message {
             }
             Message::Inventory(inv) => {
                 dst.write_u8(b"message type", MessageType::Inventory as u8)?;
-                dst.write_inventory(&inv)?;
+                Inventory::encode(&inv, dst)?;
             }
             Message::GetInventory(g) => {
                 dst.write_u8(b"message type", MessageType::GetInventory as u8)?;
@@ -265,7 +289,7 @@ impl Encodable for Message {
             Message::MempoolTxs(mempool) => {
                 dst.write_u8(b"message type", MessageType::MempoolTxs as u8)?;
                 dst.write_blockid(b"tip", &mempool.tip)?;
-                dst.write_txs(&mempool.txs)?;
+                write_block_txs(&mempool.txs, dst)?;
             }
             Message::GetMempoolTxs(g) => {
                 dst.write_u8(b"message type", MessageType::GetMempoolTxs as u8)?;
