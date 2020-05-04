@@ -125,7 +125,7 @@ pub fn launch_p2p() -> P2PHandle {
     receiver.recv().unwrap()
 }
 
-use readerwriter::{Decodable, Encodable, Reader, Writer, ReadError, WriteError};
+use readerwriter::{Decodable, Encodable, ReadError, Reader, WriteError, Writer};
 use std::convert::Infallible;
 use std::ops::Deref;
 

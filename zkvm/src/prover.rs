@@ -8,13 +8,13 @@ use std::collections::VecDeque;
 
 use crate::constraints::Commitment;
 use crate::contract::ContractID;
+use crate::encoding::Encodable;
 use crate::errors::VMError;
 use crate::ops::Instruction;
 use crate::predicate::Predicate;
 use crate::program::{Program, ProgramItem};
 use crate::tx::{TxHeader, UnsignedTx};
 use crate::vm::{Delegate, VM};
-use crate::encoding::Encodable;
 
 /// This is the entry point API for creating a transaction.
 /// Prover passes the list of instructions through the VM,

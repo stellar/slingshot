@@ -7,7 +7,7 @@ use musig::{Multisignature, VerificationKey};
 
 use crate::constraints::Commitment;
 use crate::contract::ContractID;
-use crate::encoding::{Reader, Encodable};
+use crate::encoding::{Encodable, Reader};
 use crate::errors::VMError;
 use crate::fees::FeeRate;
 use crate::ops::Instruction;
