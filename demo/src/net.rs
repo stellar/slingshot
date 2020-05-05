@@ -125,24 +125,33 @@ pub fn launch_p2p() -> P2PHandle {
     receiver.recv().unwrap()
 }
 
-use p2p::reexport::{BufMut, Bytes, BytesMut};
-use p2p::CustomMessage;
+use readerwriter::{Decodable, Encodable, ReadError, Reader, WriteError, Writer};
 use std::convert::Infallible;
+use std::ops::Deref;
 
-#[derive(Debug, Clone)]
-struct Message(pub Vec<u8>);
+#[derive(Debug, Clone, PartialEq)]
+pub struct Message(pub Vec<u8>);
 
-impl CustomMessage for Message {
-    type Error = Infallible;
+impl Deref for Message {
+    type Target = Vec<u8>;
 
-    fn decode(src: &mut Bytes) -> Result<Self, Self::Error>
-    where
-        Self: Sized,
-    {
-        Ok(Self(Vec::from(src.as_ref())))
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl Encodable for Message {
+    fn encode(&self, dst: &mut impl Writer) -> Result<(), WriteError> {
+        Ok(dst.write(b"data", self.as_slice()).unwrap())
     }
 
-    fn encode(self, dst: &mut BytesMut) -> Result<(), Self::Error> {
-        Ok(dst.put(self.0.as_slice()))
+    fn encoded_length(&self) -> usize {
+        self.len()
+    }
+}
+
+impl Decodable for Message {
+    fn decode(buf: &mut impl Reader) -> Result<Self, ReadError> {
+        Ok(Self(buf.read_vec(buf.remaining_bytes()).unwrap()))
     }
 }

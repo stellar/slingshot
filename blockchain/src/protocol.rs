@@ -545,22 +545,22 @@ pub enum Message {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct GetInventory {
-    version: u64,
-    shortid_nonce: u64,
+    pub(crate) version: u64,
+    pub(crate) shortid_nonce: u64,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Inventory {
-    version: u64,
-    tip: BlockHeader,
-    tip_signature: Signature,
-    shortid_nonce: u64,
-    shortid_list: ShortIDVec,
+    pub(crate) version: u64,
+    pub(crate) tip: BlockHeader,
+    pub(crate) tip_signature: Signature,
+    pub(crate) shortid_nonce: u64,
+    pub(crate) shortid_list: ShortIDVec,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct GetBlock {
-    height: u64,
+    pub(crate) height: u64,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -572,12 +572,12 @@ pub struct Block {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct GetMempoolTxs {
-    shortid_nonce: u64,
-    shortid_list: ShortIDVec,
+    pub(crate) shortid_nonce: u64,
+    pub(crate) shortid_list: ShortIDVec,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct MempoolTxs {
-    tip: BlockID,
-    txs: Vec<BlockTx>,
+    pub(crate) tip: BlockID,
+    pub(crate) txs: Vec<BlockTx>,
 }

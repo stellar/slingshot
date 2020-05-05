@@ -29,6 +29,9 @@ path = "../zkvm"
 [dependencies.starsig]
 path = "../starsig"
 
+[dependencies.readerwriter]
+path = "../readerwriter"
+
 [dev-dependencies]
 criterion = "0.2"
 serde_json = "1.0"

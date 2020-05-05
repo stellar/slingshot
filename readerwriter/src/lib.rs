@@ -1,6 +1,8 @@
+mod codable;
 mod reader;
 mod writer;
 
+pub use codable::{Codable, Decodable, Encodable};
 pub use reader::{ReadError, Reader};
 pub use writer::{WriteError, Writer};
 

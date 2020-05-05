@@ -17,9 +17,10 @@ use tokio::time;
 use rand::thread_rng;
 
 use crate::codec::{MessageDecoder, MessageEncoder};
+use crate::cybershake;
 use crate::peer::{PeerAddr, PeerID, PeerLink, PeerMessage, PeerNotification};
 use crate::priority::{Priority, PriorityTable, HIGH_PRIORITY, LOW_PRIORITY};
-use crate::{cybershake, CustomMessage};
+use readerwriter::Codable;
 
 type Reply<T> = sync::oneshot::Sender<T>;
 
@@ -27,7 +28,7 @@ type Reply<T> = sync::oneshot::Sender<T>;
 /// This is a handle that can be copied to send messages to the node from different tasks.
 /// When the handle is dropped, the Node is shut down.
 #[derive(Clone)]
-pub struct NodeHandle<Custom: CustomMessage> {
+pub struct NodeHandle<Custom: Codable> {
     peer_id: PeerID,
     socket_address: SocketAddr,
     channel: sync::mpsc::Sender<NodeMessage<Custom>>,
@@ -41,7 +42,7 @@ pub struct NodeConfig {
     pub heartbeat_interval_sec: u64,
 }
 
-pub struct Node<Custom: CustomMessage> {
+pub struct Node<Custom: Codable> {
     listener: net::TcpListener,
     cybershake_identity: cybershake::PrivateKey,
     peer_notification_channel: sync::mpsc::Sender<PeerNotification<Custom>>,
@@ -60,7 +61,7 @@ pub enum Direction {
 }
 
 /// State of the peer
-struct PeerState<T: CustomMessage> {
+struct PeerState<T: Codable> {
     link: PeerLink<T>,
     listening_addr: Option<SocketAddr>,
     socket_addr: SocketAddr,
@@ -70,7 +71,7 @@ struct PeerState<T: CustomMessage> {
 }
 
 #[derive(Debug)]
-pub enum NodeNotification<Custom: CustomMessage> {
+pub enum NodeNotification<Custom: Codable> {
     PeerAdded(PeerID),
     PeerDisconnected(PeerID),
     MessageReceived(PeerID, Custom),
@@ -90,7 +91,7 @@ pub struct PeerInfo {
 }
 
 /// Internal representation of messages sent by `NodeHandle` to `Node`.
-enum NodeMessage<Custom: CustomMessage> {
+enum NodeMessage<Custom: Codable> {
     ConnectPeer(net::TcpStream, Option<PeerID>),
     RemovePeer(PeerID),
     Broadcast(Custom),
@@ -106,7 +107,7 @@ impl NodeConfig {
 
 impl<Custom> Node<Custom>
 where
-    Custom: CustomMessage + Clone + Unpin + 'static,
+    Custom: Codable + Clone + Unpin + 'static,
 {
     /// Creates a node and returns a handle for communicating with it.
     /// TODO: add the listening loop and avoid doing .accept when we are out of inbound slots.
@@ -184,7 +185,7 @@ where
     }
 }
 
-impl<Custom: CustomMessage> NodeHandle<Custom> {
+impl<Custom: Codable> NodeHandle<Custom> {
     /// Attempts to open a connection to a peer.
     /// Returns error if cannot establish the connection.
     /// If connection is established, returns Ok(), but can fail later to perform handshake -
@@ -248,7 +249,7 @@ impl<Custom: CustomMessage> NodeHandle<Custom> {
 
 impl<Custom> Node<Custom>
 where
-    Custom: CustomMessage + Clone + Unpin + 'static,
+    Custom: Codable + Clone + Unpin + 'static,
 {
     /// Handles the command and returns false if it needs to shutdown.
     async fn handle_command(&mut self, msg: NodeMessage<Custom>) {
