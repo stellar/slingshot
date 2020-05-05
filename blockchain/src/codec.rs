@@ -1,4 +1,4 @@
-use crate::shortid::ShortIDVec;
+use crate::shortid::{ShortIDVec, SHORTID_LEN};
 use crate::utreexo::Proof;
 use crate::{
     Block, BlockHeader, BlockID, BlockTx, GetBlock, GetInventory, GetMempoolTxs, Inventory,
@@ -80,7 +80,7 @@ impl Encodable for Inventory {
     }
 
     fn encoded_length(&self) -> usize {
-        8 + self.tip.encoded_length() + 32 + 8 + 4 + self.shortid_list.len()
+        8 + self.tip.encoded_length() + 64 + 8 + 4 + (self.shortid_list.len() * SHORTID_LEN)
     }
 }
 

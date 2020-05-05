@@ -13,7 +13,7 @@ use siphasher::sip::SipHasher;
 use std::fmt;
 
 /// Length of the short ID in bytes.
-const SHORTID_LEN: usize = 6;
+pub const SHORTID_LEN: usize = 6;
 
 /// Short ID definition
 #[derive(Copy, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
