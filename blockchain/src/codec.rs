@@ -227,7 +227,7 @@ impl Message {
 
     fn encode_get_block(g: &GetBlock, dst: &mut impl Writer) -> Result<(), WriteError> {
         dst.write_u8(b"message_type", MessageType::GetBlock as u8)?;
-        dst.write_u64(b"block height", g.height)?;
+        dst.write_u64(b"block_height", g.height)?;
         Ok(())
     }
     fn decode_get_block(src: &mut impl Reader) -> Result<Self, ReadError> {
