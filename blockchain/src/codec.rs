@@ -295,7 +295,7 @@ impl Encodable for Message {
     }
 
     fn encoded_length(&self) -> usize {
-        unimplemented!()
+        unimplemented!() // see https://github.com/stellar/slingshot/issues/437
     }
 }
 
