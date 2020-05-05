@@ -4,8 +4,6 @@ use crate::{
     Block, BlockHeader, BlockID, BlockTx, GetBlock, GetInventory, GetMempoolTxs, Inventory,
     MempoolTxs, Message,
 };
-use curve25519_dalek::ristretto::CompressedRistretto;
-use curve25519_dalek::scalar::Scalar;
 use readerwriter::{Decodable, Encodable, ReadError, Reader, WriteError, Writer};
 use std::convert::TryFrom;
 use zkvm::{merkle, Hash, Signature, Tx};
@@ -205,55 +203,105 @@ trait WriterExt: Writer + Sized {
 }
 
 impl<R: Reader> ReaderExt for R {}
+
 impl<W: Writer> WriterExt for W {}
+
+impl Message {
+    fn encode_block(b: &Block, dst: &mut impl Writer) -> Result<(), WriteError> {
+        dst.write_u8(b"message_type", MessageType::Block as u8)?;
+        BlockHeader::encode(&b.header, dst)?;
+        dst.write_signature(&b.signature)?;
+        write_block_txs(&b.txs, dst)?;
+        Ok(())
+    }
+    fn decode_block(src: &mut impl Reader) -> Result<Self, ReadError> {
+        let header = BlockHeader::decode(src)?;
+        let signature = src.read_signature()?;
+        let txs = read_block_txs(src)?;
+        Ok(Message::Block(Block {
+            header,
+            signature,
+            txs,
+        }))
+    }
+
+    fn encode_get_block(g: &GetBlock, dst: &mut impl Writer) -> Result<(), WriteError> {
+        dst.write_u8(b"message_type", MessageType::GetBlock as u8)?;
+        dst.write_u64(b"block height", g.height)?;
+        Ok(())
+    }
+    fn decode_get_block(src: &mut impl Reader) -> Result<Self, ReadError> {
+        let height = src.read_u64()?;
+        Ok(Message::GetBlock(GetBlock { height }))
+    }
+
+    fn encode_inventory(inv: &Inventory, dst: &mut impl Writer) -> Result<(), WriteError> {
+        dst.write_u8(b"message_type", MessageType::Inventory as u8)?;
+        Inventory::encode(inv, dst)?;
+        Ok(())
+    }
+    fn decode_inventory(src: &mut impl Reader) -> Result<Self, ReadError> {
+        let inventory = Inventory::decode(src)?;
+        Ok(Message::Inventory(inventory))
+    }
+
+    fn encode_get_inventory(g: &GetInventory, dst: &mut impl Writer) -> Result<(), WriteError> {
+        dst.write_u8(b"message_type", MessageType::GetInventory as u8)?;
+        dst.write_u64(b"version", g.version)?;
+        dst.write_u64(b"shortid_nonce", g.shortid_nonce)?;
+        Ok(())
+    }
+    fn decode_get_inventory(src: &mut impl Reader) -> Result<Self, ReadError> {
+        let version = src.read_u64()?;
+        let shortid_nonce = src.read_u64()?;
+        Ok(Message::GetInventory(GetInventory {
+            version,
+            shortid_nonce,
+        }))
+    }
+
+    fn encode_mempool_txs(mempool: &MempoolTxs, dst: &mut impl Writer) -> Result<(), WriteError> {
+        dst.write_u8(b"message_type", MessageType::MempoolTxs as u8)?;
+        dst.write_blockid(b"tip", &mempool.tip)?;
+        write_block_txs(&mempool.txs, dst)?;
+        Ok(())
+    }
+    fn decode_mempool_txs(src: &mut impl Reader) -> Result<Self, ReadError> {
+        let tip = src.read_blockid()?;
+        let txs = read_block_txs(src)?;
+        Ok(Message::MempoolTxs(MempoolTxs { tip, txs }))
+    }
+
+    fn encode_get_mempool_txs(g: &GetMempoolTxs, dst: &mut impl Writer) -> Result<(), WriteError> {
+        dst.write_u8(b"message_type", MessageType::GetMempoolTxs as u8)?;
+        dst.write_u64(b"shortid_nonce", g.shortid_nonce)?;
+        dst.write_shortid_vec(b"shortid_list", &g.shortid_list)?;
+        Ok(())
+    }
+    fn decode_get_mempool_txs(src: &mut impl Reader) -> Result<Self, ReadError> {
+        let shortid_nonce = src.read_u64()?;
+        let shortid_list = src.read_shortid_vec()?;
+        Ok(Message::GetMempoolTxs(GetMempoolTxs {
+            shortid_nonce,
+            shortid_list,
+        }))
+    }
+}
 
 impl Decodable for Message {
     fn decode(src: &mut impl Reader) -> Result<Self, ReadError>
-    where
-        Self: Sized,
+        where
+            Self: Sized,
     {
         let message_type_byte = src.read_u8()?;
         let message_type = MessageType::try_from(message_type_byte)?;
         match message_type {
-            MessageType::Block => {
-                let header = BlockHeader::decode(src)?;
-                let signature = src.read_signature()?;
-                let txs = read_block_txs(src)?;
-                Ok(Message::Block(Block {
-                    header,
-                    signature,
-                    txs,
-                }))
-            }
-            MessageType::GetBlock => {
-                let height = src.read_u64()?;
-                Ok(Message::GetBlock(GetBlock { height }))
-            }
-            MessageType::Inventory => {
-                let inventory = Inventory::decode(src)?;
-                Ok(Message::Inventory(inventory))
-            }
-            MessageType::GetInventory => {
-                let version = src.read_u64()?;
-                let shortid_nonce = src.read_u64()?;
-                Ok(Message::GetInventory(GetInventory {
-                    version,
-                    shortid_nonce,
-                }))
-            }
-            MessageType::MempoolTxs => {
-                let tip = src.read_blockid()?;
-                let txs = read_block_txs(src)?;
-                Ok(Message::MempoolTxs(MempoolTxs { tip, txs }))
-            }
-            MessageType::GetMempoolTxs => {
-                let shortid_nonce = src.read_u64()?;
-                let shortid_list = src.read_shortid_vec()?;
-                Ok(Message::GetMempoolTxs(GetMempoolTxs {
-                    shortid_nonce,
-                    shortid_list,
-                }))
-            }
+            MessageType::Block => Message::decode_block(src),
+            MessageType::GetBlock => Message::decode_get_block(src),
+            MessageType::Inventory => Message::decode_inventory(src),
+            MessageType::GetInventory => Message::decode_get_inventory(src),
+            MessageType::MempoolTxs => Message::decode_mempool_txs(src),
+            MessageType::GetMempoolTxs => Message::decode_get_mempool_txs(src),
         }
     }
 }
@@ -261,37 +309,13 @@ impl Decodable for Message {
 impl Encodable for Message {
     fn encode(&self, dst: &mut impl Writer) -> Result<(), WriteError> {
         match self {
-            Message::Block(b) => {
-                dst.write_u8(b"message_type", MessageType::Block as u8)?;
-                BlockHeader::encode(&b.header, dst)?;
-                dst.write_signature(&b.signature)?;
-                write_block_txs(&b.txs, dst)?;
-            }
-            Message::GetBlock(g) => {
-                dst.write_u8(b"message_type", MessageType::GetBlock as u8)?;
-                dst.write_u64(b"block height", g.height)?;
-            }
-            Message::Inventory(inv) => {
-                dst.write_u8(b"message_type", MessageType::Inventory as u8)?;
-                Inventory::encode(&inv, dst)?;
-            }
-            Message::GetInventory(g) => {
-                dst.write_u8(b"message_type", MessageType::GetInventory as u8)?;
-                dst.write_u64(b"version", g.version)?;
-                dst.write_u64(b"shortid_nonce", g.shortid_nonce)?;
-            }
-            Message::MempoolTxs(mempool) => {
-                dst.write_u8(b"message_type", MessageType::MempoolTxs as u8)?;
-                dst.write_blockid(b"tip", &mempool.tip)?;
-                write_block_txs(&mempool.txs, dst)?;
-            }
-            Message::GetMempoolTxs(g) => {
-                dst.write_u8(b"message_type", MessageType::GetMempoolTxs as u8)?;
-                dst.write_u64(b"shortid_nonce", g.shortid_nonce)?;
-                dst.write_shortid_vec(b"shortid_list", &g.shortid_list)?;
-            }
+            Message::Block(b) => Self::encode_block(b, dst),
+            Message::GetBlock(g) => Self::encode_get_block(g, dst),
+            Message::Inventory(inv) => Self::encode_inventory(inv, dst),
+            Message::GetInventory(g) => Self::encode_get_inventory(g, dst),
+            Message::MempoolTxs(mempool) => Self::encode_mempool_txs(mempool, dst),
+            Message::GetMempoolTxs(g) => Self::encode_get_mempool_txs(g, dst),
         }
-        Ok(())
     }
 
     fn encoded_length(&self) -> usize {
