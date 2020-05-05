@@ -290,8 +290,8 @@ impl Message {
 
 impl Decodable for Message {
     fn decode(src: &mut impl Reader) -> Result<Self, ReadError>
-        where
-            Self: Sized,
+    where
+        Self: Sized,
     {
         let message_type_byte = src.read_u8()?;
         let message_type = MessageType::try_from(message_type_byte)?;
