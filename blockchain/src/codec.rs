@@ -105,7 +105,7 @@ fn read_tx(buf: &mut impl Reader) -> Result<Tx, ReadError> {
 }
 
 fn write_tx(tx: &Tx, dst: &mut impl Writer) -> Result<(), WriteError> {
-    dst.write_u32(b"tx length", tx.encoded_length() as u32)?;
+    dst.write_u32(b"tx_length", tx.encoded_length() as u32)?;
     tx.encode(dst)
 }
 
@@ -155,12 +155,8 @@ trait ReaderExt: Reader + Sized {
     }
 
     fn read_signature(&mut self) -> Result<Signature, ReadError> {
-        let s = self.read_u8x32()?;
-        let r = self.read_u8x32()?;
-        Ok(Signature {
-            s: Scalar::from_bits(s),
-            R: CompressedRistretto(r),
-        })
+        let bytes = self.read_u8x64()?;
+        Signature::from_bytes(bytes).map_err(|_| ReadError::InvalidFormat)
     }
 
     fn read_shortid_vec(&mut self) -> Result<ShortIDVec, ReadError> {
@@ -178,15 +174,13 @@ trait ReaderExt: Reader + Sized {
 
 trait WriterExt: Writer + Sized {
     fn write_u8_vec(&mut self, label: &'static [u8], vec: &[u8]) -> Result<(), WriteError> {
-        self.write_u32(b"vec length", vec.len() as u32)?;
+        self.write_u32(b"len", vec.len() as u32)?;
         self.write(label, vec)?;
         Ok(())
     }
 
     fn write_signature(&mut self, sig: &Signature) -> Result<(), WriteError> {
-        self.write(b"scalar", sig.s.as_bytes())?;
-        self.write(b"key", sig.R.as_bytes())?;
-        Ok(())
+        self.write(b"signature", &sig.to_bytes()[..])
     }
 
     fn write_shortid_vec(
@@ -268,31 +262,31 @@ impl Encodable for Message {
     fn encode(&self, dst: &mut impl Writer) -> Result<(), WriteError> {
         match self {
             Message::Block(b) => {
-                dst.write_u8(b"message type", MessageType::Block as u8)?;
+                dst.write_u8(b"message_type", MessageType::Block as u8)?;
                 BlockHeader::encode(&b.header, dst)?;
                 dst.write_signature(&b.signature)?;
                 write_block_txs(&b.txs, dst)?;
             }
             Message::GetBlock(g) => {
-                dst.write_u8(b"message type", MessageType::GetBlock as u8)?;
+                dst.write_u8(b"message_type", MessageType::GetBlock as u8)?;
                 dst.write_u64(b"block height", g.height)?;
             }
             Message::Inventory(inv) => {
-                dst.write_u8(b"message type", MessageType::Inventory as u8)?;
+                dst.write_u8(b"message_type", MessageType::Inventory as u8)?;
                 Inventory::encode(&inv, dst)?;
             }
             Message::GetInventory(g) => {
-                dst.write_u8(b"message type", MessageType::GetInventory as u8)?;
+                dst.write_u8(b"message_type", MessageType::GetInventory as u8)?;
                 dst.write_u64(b"version", g.version)?;
                 dst.write_u64(b"shortid_nonce", g.shortid_nonce)?;
             }
             Message::MempoolTxs(mempool) => {
-                dst.write_u8(b"message type", MessageType::MempoolTxs as u8)?;
+                dst.write_u8(b"message_type", MessageType::MempoolTxs as u8)?;
                 dst.write_blockid(b"tip", &mempool.tip)?;
                 write_block_txs(&mempool.txs, dst)?;
             }
             Message::GetMempoolTxs(g) => {
-                dst.write_u8(b"message type", MessageType::GetMempoolTxs as u8)?;
+                dst.write_u8(b"message_type", MessageType::GetMempoolTxs as u8)?;
                 dst.write_u64(b"shortid_nonce", g.shortid_nonce)?;
                 dst.write_shortid_vec(b"shortid_list", &g.shortid_list)?;
             }
