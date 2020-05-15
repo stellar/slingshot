@@ -439,6 +439,9 @@ impl<D: Delegate> Node<D> {
         let (new_state, catchup, vtxs) =
             state.apply_block(block_msg.header.clone(), &block_msg.txs, &self.bp_gens)?;
 
+        // TBD: store the block here, call into the plugin, then update the mempool,
+        // and update the plugin about all the removed transactions.
+        
         // Update the mempool.
         self.mempool.update_state(new_state.clone(), &catchup);
 
