@@ -129,7 +129,7 @@ Public                         |Public                         |Source + Target 
 
 **Withdrawals**
 
-1. User tells the enclave about the address `W` and value `V` on the [source ledger](#source-ledger) where they wish to withdraw their original token.
+1. User tells the converter about the address `W` and value `V` on the [source ledger](#source-ledger) where they wish to withdraw their original token.
 2. Converter generates a corresponding retirement address `R` on the [target ledger](#target-ledger).
 3. Converter also generates a half-signed target-ledger transaction with two outputs:
     1. value `V` on retirement address `R`,
