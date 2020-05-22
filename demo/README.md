@@ -4,7 +4,7 @@ How to run the demo:
 
 ```
 # Install the required version of Rust (see ./rust-toolchain)
-rustup install nightly-2019-11-06
+rustup install nightly-2020-05-15
 
 # Install the database tool
 cargo install diesel_cli --no-default-features --features sqlite
