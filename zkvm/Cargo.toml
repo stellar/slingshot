@@ -26,8 +26,8 @@ path = "../readerwriter"
 features = ["merlin"]
 
 [dependencies.bulletproofs]
-git = "https://github.com/dalek-cryptography/bulletproofs"
-branch = "develop"
+git = "https://github.com/rubdos/bulletproofs"
+branch = "244"
 features = ["yoloproofs"]
 
 [dependencies.spacesuit]

@@ -21,9 +21,9 @@ use crate::vm::{Delegate, VM};
 /// verifies an aggregated transaction signature (see `signtx` instruction),
 /// verifies a R1CS proof and returns a `VerifiedTx` with the log of changes
 /// to be applied to the blockchain state.
-pub struct Verifier {
+pub struct Verifier<'a> {
     signtx_items: Vec<(VerificationKey, ContractID)>,
-    cs: r1cs::Verifier<Transcript>,
+    cs: r1cs::Verifier<'a, Transcript>,
     batch: musig::BatchVerifier<rand::rngs::ThreadRng>,
 }
 
@@ -33,7 +33,7 @@ pub struct VerifierRun {
     offset: usize,
 }
 
-impl Delegate<r1cs::Verifier<Transcript>> for Verifier {
+impl Delegate<'a, r1cs::Verifier<'a, Transcript>> for Verifier<'a> {
     type RunType = VerifierRun;
     type BatchVerifier = musig::BatchVerifier<rand::rngs::ThreadRng>;
 
@@ -81,7 +81,7 @@ impl Delegate<r1cs::Verifier<Transcript>> for Verifier {
     }
 }
 
-impl Verifier {
+impl<'a> Verifier<'a> {
     /// Precomputes the TxID and TxLog.
     /// This is a private API until we have a nicer composable API with precomputed tx.
     /// See public API `Tx::precompute() that wraps with method`

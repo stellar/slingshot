@@ -6,7 +6,7 @@ use bulletproofs::r1cs::{R1CSError, RandomizableConstraintSystem};
 
 /// Enforces that the outputs are a valid rearrangement of the inputs, following the
 /// soundness and secrecy requirements in the [Cloak specification](../spec.md).
-pub fn cloak<CS: RandomizableConstraintSystem>(
+pub fn cloak<'a, CS: RandomizableConstraintSystem<'a>>(
     cs: &mut CS,
     inputs: Vec<AllocatedValue>,
     outputs: Vec<AllocatedValue>,
@@ -49,7 +49,7 @@ pub fn cloak<CS: RandomizableConstraintSystem>(
 /// Enforces that the outputs are either a merge of the inputs: `D = A + B && C = 0`,
 /// or the outputs are equal to the inputs `C = A && D = B`. See spec for more details.
 /// Works for `k` inputs and `k` outputs.
-fn merge<CS: RandomizableConstraintSystem>(
+fn merge<'a, CS: RandomizableConstraintSystem<'a>>(
     cs: &mut CS,
     inputs: Vec<AllocatedValue>,
 ) -> Result<(Vec<AllocatedValue>, Vec<AllocatedValue>), R1CSError> {
@@ -63,7 +63,7 @@ fn merge<CS: RandomizableConstraintSystem>(
 /// Note: the `split` gadget is the same thing as a `merge` gadget, but "backwards".
 /// This means that if you reverse all of the commitment vectors, and switch the
 /// inputs and outputs of a `merge` gadget, then you have a `split` gadget.
-fn split<CS: RandomizableConstraintSystem>(
+fn split<'a, CS: RandomizableConstraintSystem<'a>>(
     cs: &mut CS,
     mut inputs: Vec<AllocatedValue>,
 ) -> Result<(Vec<AllocatedValue>, Vec<AllocatedValue>), R1CSError> {

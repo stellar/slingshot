@@ -12,7 +12,7 @@ use subtle::{ConditionallySelectable, ConstantTimeEq};
 /// Enforces that the outputs are either a merge of the inputs :`D = A + B && C = 0`,
 /// or the outputs are equal to the inputs `C = A && D = B`. See spec for more details.
 /// Works for 2 inputs and 2 outputs.
-pub fn mix<CS: RandomizableConstraintSystem>(
+pub fn mix<'a, CS: RandomizableConstraintSystem<'a>>(
     cs: &mut CS,
     A: AllocatedValue,
     B: AllocatedValue,
@@ -43,7 +43,7 @@ pub fn mix<CS: RandomizableConstraintSystem>(
 /// * a vector of `k` sorted `AllocatedValue`s that are the inputs to the `mix` gadget
 /// * a vector of `k` `AllocatedValue`s that are the outputs to the `mix` gadget,
 ///   such that each output is either zero, or the sum of all of the `Values` of one type.
-pub fn k_mix<CS: RandomizableConstraintSystem>(
+pub fn k_mix<'a, CS: RandomizableConstraintSystem<'a>>(
     cs: &mut CS,
     inputs: Vec<AllocatedValue>,
 ) -> Result<(Vec<AllocatedValue>, Vec<AllocatedValue>), R1CSError> {
@@ -58,7 +58,7 @@ pub fn k_mix<CS: RandomizableConstraintSystem>(
 }
 
 // Calls `k` mix gadgets, using mix_in and mix_mid as inputs, and mix_mid and mix_out as outputs.
-fn call_mix_gadget<CS: RandomizableConstraintSystem>(
+fn call_mix_gadget<'a, CS: RandomizableConstraintSystem<'a>>(
     cs: &mut CS,
     mix_in: &Vec<AllocatedValue>,
     mix_mid: &Vec<AllocatedValue>,
@@ -101,7 +101,7 @@ fn call_mix_gadget<CS: RandomizableConstraintSystem>(
 // * a vector of `AllocatedValue`s for the input values of a k-mix gadget
 // * a vector of `AllocatedValue`s for the middle values of a k-mix gadget
 // * a vector of `AllocatedValue`s for the output values of a k-mix gadget
-fn make_intermediate_values<CS: RandomizableConstraintSystem>(
+fn make_intermediate_values<'a, CS: RandomizableConstraintSystem<'a>>(
     inputs: &Vec<AllocatedValue>,
     cs: &mut CS,
 ) -> Result<
@@ -135,7 +135,7 @@ fn make_intermediate_values<CS: RandomizableConstraintSystem>(
 // * a vector of `AllocatedValue`s that is a reordering of the inputs
 //   where all `AllocatedValues` have been grouped according to flavor
 // * a vector of `Value`s that were used to create the output `AllocatedValue`s
-fn order_by_flavor<CS: RandomizableConstraintSystem>(
+fn order_by_flavor<'a, CS: RandomizableConstraintSystem<'a>>(
     inputs: &Vec<Value>,
     cs: &mut CS,
 ) -> Result<(Vec<AllocatedValue>, Vec<Value>), R1CSError> {
@@ -179,7 +179,7 @@ fn order_by_flavor<CS: RandomizableConstraintSystem>(
 //   where `Value`s of the same flavor are combined and `Value`s of different flavors
 //   are moved without modification. (See `mix.rs` for more information on 2-mix gadgets.)
 // * a vector of the `AllocatedValue`s that are only outputs of 2-mix gadgets.
-fn combine_by_flavor<CS: RandomizableConstraintSystem>(
+fn combine_by_flavor<'a, CS: RandomizableConstraintSystem<'a>>(
     inputs: &Vec<Value>,
     cs: &mut CS,
 ) -> Result<(Vec<AllocatedValue>, Vec<AllocatedValue>), R1CSError> {

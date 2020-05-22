@@ -90,7 +90,7 @@ pub struct CommitmentWitness {
 impl Constraint {
     /// Generates and adds to R1CS constraints that enforce that the self evaluates to true.
     /// Implements the logic behind `verify` instruction.
-    pub fn verify<CS: r1cs::RandomizableConstraintSystem>(
+    pub fn verify<'a, CS: r1cs::RandomizableConstraintSystem<'a>>(
         self,
         cs: &mut CS,
     ) -> Result<(), VMError> {

@@ -24,9 +24,9 @@ use crate::types::*;
 /// Current tx version determines which extension opcodes are treated as noops (see VM.extension flag).
 pub const CURRENT_VERSION: u64 = 1;
 
-pub(crate) struct VM<'d, CS, D>
+pub(crate) struct VM<'a, 'd, CS, D>
 where
-    CS: r1cs::RandomizableConstraintSystem,
+    CS: r1cs::RandomizableConstraintSystem<'a>,
     D: Delegate<CS>,
 {
     mintime_ms: u64,
@@ -52,7 +52,7 @@ where
     total_fee: CheckedFee,
 }
 
-pub(crate) trait Delegate<CS: r1cs::RandomizableConstraintSystem> {
+pub(crate) trait Delegate<'a, CS: r1cs::RandomizableConstraintSystem<'a>> {
     /// Container type for the currently running program.
     type RunType;
 

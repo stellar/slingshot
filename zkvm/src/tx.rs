@@ -96,7 +96,7 @@ pub struct Tx {
 }
 
 /// Represents a precomputed, but not verified transaction.
-pub struct PrecomputedTx {
+pub struct PrecomputedTx<'a> {
     /// Transaction header
     pub header: TxHeader,
 
@@ -110,7 +110,7 @@ pub struct PrecomputedTx {
     pub feerate: FeeRate,
 
     /// Verifier to continue verification of the transaction
-    pub(crate) verifier: Verifier,
+    pub(crate) verifier: Verifier<'a>,
 
     /// Schnorr signature
     pub(crate) signature: Signature,
@@ -229,7 +229,7 @@ impl Tx {
     }
 }
 
-impl PrecomputedTx {
+impl<'a> PrecomputedTx<'a> {
     /// Completes verification of the transaction,
     /// performing expensive checks of the R1CS proof, Schnorr signatures
     /// and other Ristretto255 operations.

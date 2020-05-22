@@ -51,7 +51,7 @@ pub fn scalar_shuffle<CS: RandomizedConstraintSystem>(
 /// Enforces that the output values `y` are a valid reordering of the inputs values `x`.
 /// The inputs and outputs are all of the `AllocatedValue` type, which contains the fields
 /// quantity, issuer, and tag. Works for `k` inputs and `k` outputs.
-pub fn value_shuffle<CS: RandomizableConstraintSystem>(
+pub fn value_shuffle<'a, CS: RandomizableConstraintSystem<'a>>(
     cs: &mut CS,
     x: Vec<AllocatedValue>,
     y: Vec<AllocatedValue>,
@@ -87,7 +87,7 @@ pub fn value_shuffle<CS: RandomizableConstraintSystem>(
 
 /// Enforces that the values in `y` are a valid reordering of the values in `x`,
 /// allowing for padding (zero values) in x that can be omitted in y (or the other way around).
-pub fn padded_shuffle<CS: RandomizableConstraintSystem>(
+pub fn padded_shuffle<'a, CS: RandomizableConstraintSystem<'a>>(
     cs: &mut CS,
     mut x: Vec<AllocatedValue>,
     mut y: Vec<AllocatedValue>,
