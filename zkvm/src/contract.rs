@@ -97,7 +97,7 @@ impl Contract {
         let anchor = Anchor(reader.read_u8x32()?);
         let predicate = Predicate::Opaque(reader.read_point()?);
         let k = reader.read_size()?;
-        let payload: Vec<PortableItem> = reader.read_vec_with(k, 5, |r| PortableItem::decode(r))?;
+        let payload: Vec<PortableItem> = reader.read_vec(k, |r| PortableItem::decode(r))?;
         Ok(Contract {
             anchor,
             predicate,
@@ -188,12 +188,12 @@ impl PortableItem {
         match output.read_u8()? {
             STRING_TYPE => {
                 let len = output.read_size()?;
-                let bytes = output.read_vec(len)?;
+                let bytes = output.read_bytes(len)?;
                 Ok(PortableItem::String(String::Opaque(bytes)))
             }
             PROG_TYPE => {
                 let len = output.read_size()?;
-                let bytes = output.read_vec(len)?;
+                let bytes = output.read_bytes(len)?;
                 Ok(PortableItem::Program(ProgramItem::Bytecode(bytes)))
             }
             VALUE_TYPE => {

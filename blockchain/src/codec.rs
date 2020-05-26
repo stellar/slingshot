@@ -98,7 +98,7 @@ impl Decodable for Inventory {
 // encoding in that case
 fn read_tx(buf: &mut impl Reader) -> Result<Tx, ReadError> {
     let tx_size = buf.read_u32()? as usize;
-    let vec = buf.read_vec(tx_size)?;
+    let vec = buf.read_bytes(tx_size)?;
     Tx::from_bytes(&vec).map_err(|_| ReadError::InvalidFormat)
 }
 
@@ -109,8 +109,8 @@ fn write_tx(tx: &Tx, dst: &mut impl Writer) -> Result<(), WriteError> {
 
 fn read_block_tx(src: &mut impl Reader) -> Result<BlockTx, ReadError> {
     let tx = read_tx(src)?;
-    let len = src.read_u32()? as usize;
-    let proofs = src.read_vec_with(len, 1, |src| match src.read_u8()? {
+    let n = src.read_u32()? as usize;
+    let proofs = src.read_vec(n, |src| match src.read_u8()? {
         0 => Ok(Proof::Transient),
         1 => merkle::Path::decode(src)
             .map(Proof::Committed)
@@ -136,9 +136,8 @@ fn write_block_tx(block: &BlockTx, dst: &mut impl Writer) -> Result<(), WriteErr
 }
 
 fn read_block_txs(src: &mut impl Reader) -> Result<Vec<BlockTx>, ReadError> {
-    let len = src.read_u32()? as usize;
-    const BLOCK_TX_MIN_LENGTH: usize = 8 + 8 + 8 + 8 + 32 + 32 + 1 + 11 * 32 + 8;
-    src.read_vec_with(len, BLOCK_TX_MIN_LENGTH, read_block_tx)
+    let n = src.read_u32()? as usize;
+    src.read_vec(n, read_block_tx)
 }
 
 fn write_block_txs(block_txs: &[BlockTx], dst: &mut impl Writer) -> Result<(), WriteError> {
@@ -149,7 +148,7 @@ fn write_block_txs(block_txs: &[BlockTx], dst: &mut impl Writer) -> Result<(), W
 trait ReaderExt: Reader + Sized {
     fn read_u8_vec(&mut self) -> Result<Vec<u8>, ReadError> {
         let len = self.read_u32()? as usize;
-        self.read_vec(len)
+        self.read_bytes(len)
     }
 
     fn read_signature(&mut self) -> Result<Signature, ReadError> {

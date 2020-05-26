@@ -366,8 +366,8 @@ impl Path {
     /// than the 32-byte neighbour hashes.
     pub fn decode(reader: &mut impl Reader) -> Result<Self, VMError> {
         let position = reader.read_u64()?;
-        let neighbors_len = reader.read_u32()? as usize;
-        let neighbors = reader.read_vec_with(neighbors_len, 32, |r| r.read_u8x32().map(Hash))?;
+        let n = reader.read_u32()? as usize;
+        let neighbors = reader.read_vec(n, |r| r.read_u8x32().map(Hash))?;
         Ok(Path {
             position,
             neighbors,

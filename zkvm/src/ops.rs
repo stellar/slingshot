@@ -693,12 +693,12 @@ impl Instruction {
         match opcode {
             Opcode::Push => {
                 let strlen = program.read_size()?;
-                let data = program.read_vec(strlen)?;
+                let data = program.read_bytes(strlen)?;
                 Ok(Instruction::Push(String::Opaque(data)))
             }
             Opcode::Program => {
                 let strlen = program.read_size()?;
-                let data = program.read_vec(strlen)?;
+                let data = program.read_bytes(strlen)?;
                 Ok(Instruction::Program(ProgramItem::Bytecode(data)))
             }
             Opcode::Drop => Ok(Instruction::Drop),

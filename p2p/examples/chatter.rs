@@ -232,6 +232,6 @@ impl Encodable for Message {
 
 impl Decodable for Message {
     fn decode(buf: &mut impl Reader) -> Result<Self, ReadError> {
-        Ok(Self(buf.read_vec(buf.remaining_bytes()).unwrap()))
+        Ok(Self(buf.read_bytes(buf.remaining_bytes()).unwrap()))
     }
 }
