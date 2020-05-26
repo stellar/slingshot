@@ -756,8 +756,13 @@ mod tests {
 
         fn constrain(&mut self, _lc: r1cs::LinearCombination) {}
 
-        fn multipliers_len(&self) -> usize {
-            self.num_multipliers
+        fn metrics(&self) -> r1cs::Metrics {
+            r1cs::Metrics {
+                multipliers: self.num_multipliers,
+                constraints: 0,
+                phase_one_constraints: 0,
+                phase_two_constraints: 0,
+            }
         }
     }
 }
