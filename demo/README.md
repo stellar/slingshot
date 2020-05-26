@@ -7,7 +7,7 @@ How to run the demo:
 rustup install nightly-2020-05-15
 
 # Install the database tool
-cargo install diesel_cli --no-default-features --features sqlite
+cargo install diesel_cli --no-default-features --features "sqlite-bundled"
 
 # Setup database
 diesel database reset
