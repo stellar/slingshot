@@ -192,10 +192,10 @@ impl Tx {
     fn decode<'a>(r: &mut impl Reader) -> Result<Tx, VMError> {
         let header = TxHeader::decode(r)?;
         let prog_len = r.read_size()?;
-        let program = r.read_vec(prog_len)?;
+        let program = r.read_bytes(prog_len)?;
 
         let signature = Signature::from_bytes(r.read_u8x64()?).map_err(|_| VMError::FormatError)?;
-        let proof = R1CSProof::from_bytes(&r.read_vec(r.remaining_bytes())?)
+        let proof = R1CSProof::from_bytes(&r.read_bytes(r.remaining_bytes())?)
             .map_err(|_| VMError::FormatError)?;
         Ok(Tx {
             header,

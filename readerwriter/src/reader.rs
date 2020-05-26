@@ -103,7 +103,7 @@ pub trait Reader {
 
     /// Reads a vector of bytes with the required length.
     #[inline]
-    fn read_vec(&mut self, len: usize) -> Result<Vec<u8>, ReadError> {
+    fn read_bytes(&mut self, len: usize) -> Result<Vec<u8>, ReadError> {
         if self.remaining_bytes() < len {
             // this early check is to avoid allocating a vector
             // if we don't have enough data.
@@ -117,21 +117,18 @@ pub trait Reader {
 
     /// Reads a vector of items with the required count and a minimum item size.
     #[inline]
-    fn read_vec_with<T, E>(
+    fn read_vec<T, E>(
         &mut self,
         len: usize,
-        min_item_size: usize,
         closure: impl Fn(&mut Self) -> Result<T, E>,
     ) -> Result<Vec<T>, E>
     where
         E: From<ReadError>,
     {
-        if len > self.remaining_bytes() / min_item_size {
-            // this early check is to avoid allocating a vector
-            // if we don't have enough data.
+        if len > self.remaining_bytes() {
             return Err(ReadError::InsufficientBytes.into());
         }
-        let mut vec = Vec::with_capacity(len);
+        let mut vec = Vec::new();
         for _ in 0..len {
             vec.push(closure(self)?);
         }
