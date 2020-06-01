@@ -35,37 +35,6 @@ impl TryFrom<u8> for MessageType {
     }
 }
 
-impl Encodable for BlockHeader {
-    fn encode(&self, w: &mut impl Writer) -> Result<(), WriteError> {
-        w.write_u64(b"version", self.version)?;
-        w.write_u64(b"height", self.height)?;
-        w.write_blockid(b"prev", &self.prev)?;
-        w.write_u64(b"timestamp_ms", self.timestamp_ms)?;
-        w.write_hash(b"txroot", &self.txroot)?;
-        w.write_hash(b"utxoroot", &self.utxoroot)?;
-        w.write_u8_vec(b"ext", &self.ext)?;
-        Ok(())
-    }
-
-    fn encoded_length(&self) -> usize {
-        8 + 8 + 32 + 8 + 32 + 32 + 4 + self.ext.len()
-    }
-}
-
-impl Decodable for BlockHeader {
-    fn decode(buf: &mut impl Reader) -> Result<Self, ReadError> {
-        Ok(BlockHeader {
-            version: buf.read_u64()?,
-            height: buf.read_u64()?,
-            prev: buf.read_blockid()?,
-            timestamp_ms: buf.read_u64()?,
-            txroot: buf.read_hash()?,
-            utxoroot: buf.read_hash()?,
-            ext: buf.read_u8_vec()?,
-        })
-    }
-}
-
 impl Encodable for Inventory {
     fn encode(&self, w: &mut impl Writer) -> Result<(), WriteError> {
         w.write_u64(b"version", self.version)?;
@@ -74,10 +43,6 @@ impl Encodable for Inventory {
         w.write_u64(b"shortid_nonce", self.shortid_nonce)?;
         w.write_shortid_vec(b"shortid_list", &self.shortid_list)?;
         Ok(())
-    }
-
-    fn encoded_length(&self) -> usize {
-        8 + self.tip.encoded_length() + 64 + 8 + 4 + (self.shortid_list.len() * SHORTID_LEN)
     }
 }
 
@@ -287,10 +252,6 @@ impl Encodable for Message {
                 Self::encode_get_mempool_txs(g, dst)
             }
         }
-    }
-
-    fn encoded_length(&self) -> usize {
-        unimplemented!() // see https://github.com/stellar/slingshot/issues/437
     }
 }
 
