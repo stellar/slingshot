@@ -385,9 +385,11 @@ impl Encodable for Path {
         }
         Ok(())
     }
+}
 
-    fn encoded_length(&self) -> usize {
-        return 8 + 4 + 32 * self.neighbors.len();
+impl ExactSizeEncodable for Path {
+    fn encoded_size(&self) -> usize {
+        8 + 4 + 32 * self.neighbors.len()
     }
 }
 

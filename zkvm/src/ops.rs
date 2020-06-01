@@ -595,12 +595,12 @@ impl Encodable for Instruction {
         match self {
             Instruction::Push(data) => {
                 write(Opcode::Push)?;
-                w.write_u32(b"n", data.encoded_length() as u32)?;
+                w.write_u32(b"n", data.encoded_size() as u32)?;
                 data.encode(w)?;
             }
             Instruction::Program(subprog) => {
                 write(Opcode::Program)?;
-                w.write_u32(b"n", subprog.encoded_length() as u32)?;
+                w.write_u32(b"n", subprog.encoded_size() as u32)?;
                 subprog.encode(w)?;
             }
             Instruction::Drop => write(Opcode::Drop)?,
@@ -655,12 +655,13 @@ impl Encodable for Instruction {
         };
         Ok(())
     }
+}
 
-    /// Returns the number of bytes required to serialize this instruction.
-    fn encoded_length(&self) -> usize {
+impl ExactSizeEncodable for Instruction {
+    fn encoded_size(&self) -> usize {
         match self {
-            Instruction::Push(data) => 1 + 4 + data.encoded_length(),
-            Instruction::Program(progitem) => 1 + 4 + progitem.encoded_length(),
+            Instruction::Push(data) => 1 + 4 + data.encoded_size(),
+            Instruction::Program(progitem) => 1 + 4 + progitem.encoded_size(),
             Instruction::Dup(_) => 1 + 4,
             Instruction::Roll(_) => 1 + 4,
             Instruction::Cloak(_, _) => 1 + 4 + 4,

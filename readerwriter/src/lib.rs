@@ -2,7 +2,7 @@ mod codable;
 mod reader;
 mod writer;
 
-pub use codable::{Codable, Decodable, Encodable};
+pub use codable::{Codable, Decodable, Encodable, ExactSizeEncodable};
 pub use reader::{ReadError, Reader};
 pub use writer::{WriteError, Writer};
 

@@ -56,7 +56,6 @@ pub enum PortableItem {
 }
 
 impl Encodable for Contract {
-    /// Serializes the contract to a byte array
     fn encode(&self, w: &mut impl Writer) -> Result<(), WriteError> {
         w.write(b"anchor", &self.anchor.0)?;
         w.write_point(b"predicate", &self.predicate.to_point())?;
@@ -66,11 +65,13 @@ impl Encodable for Contract {
         }
         Ok(())
     }
-    /// Precise length of a serialized output
-    fn encoded_length(&self) -> usize {
+}
+
+impl ExactSizeEncodable for Contract {
+    fn encoded_size(&self) -> usize {
         let mut size = 32 + 32 + 4;
         for item in self.payload.iter() {
-            size += item.encoded_length();
+            size += item.encoded_size();
         }
         size
     }
@@ -155,13 +156,13 @@ impl Encodable for PortableItem {
             // String = 0x00 || LE32(len) || <bytes>
             PortableItem::String(d) => {
                 w.write_u8(b"type", STRING_TYPE)?;
-                w.write_size(b"n", d.encoded_length())?;
+                w.write_size(b"n", d.encoded_size())?;
                 d.encode(w)?;
             }
             // Program = 0x01 || LE32(len) || <bytes>
             PortableItem::Program(p) => {
                 w.write_u8(b"type", PROG_TYPE)?;
-                w.write_size(b"n", p.encoded_length())?;
+                w.write_size(b"n", p.encoded_size())?;
                 p.encode(w)?;
             }
             // Value = 0x02 || <32 bytes> || <32 bytes>
@@ -173,11 +174,13 @@ impl Encodable for PortableItem {
         }
         Ok(())
     }
-    /// Precise length of a serialized payload item
-    fn encoded_length(&self) -> usize {
+}
+
+impl ExactSizeEncodable for PortableItem {
+    fn encoded_size(&self) -> usize {
         match self {
-            PortableItem::String(d) => 1 + 4 + d.encoded_length(),
-            PortableItem::Program(p) => 1 + 4 + p.encoded_length(),
+            PortableItem::String(d) => 1 + 4 + d.encoded_size(),
+            PortableItem::Program(p) => 1 + 4 + p.encoded_size(),
             PortableItem::Value(_) => 1 + 64,
         }
     }

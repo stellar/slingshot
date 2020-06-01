@@ -7,7 +7,7 @@ use musig::{Multisignature, VerificationKey};
 
 use crate::constraints::Commitment;
 use crate::contract::ContractID;
-use crate::encoding::{Encodable, Reader};
+use crate::encoding::{ExactSizeEncodable, Reader};
 use crate::errors::VMError;
 use crate::fees::FeeRate;
 use crate::ops::Instruction;
@@ -109,7 +109,7 @@ impl Verifier {
             header: tx.header,
             id,
             log,
-            feerate: FeeRate::new(fee, tx.encoded_length()),
+            feerate: FeeRate::new(fee, tx.encoded_size()),
             signature: tx.signature.clone(),
             proof: tx.proof.clone(),
             verifier,
