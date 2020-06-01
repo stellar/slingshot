@@ -224,10 +224,6 @@ impl Encodable for Message {
     fn encode(&self, dst: &mut impl Writer) -> Result<(), WriteError> {
         Ok(dst.write(b"data", self.as_slice()).unwrap())
     }
-
-    fn encoded_length(&self) -> usize {
-        self.len()
-    }
 }
 
 impl Decodable for Message {
