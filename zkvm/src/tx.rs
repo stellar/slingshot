@@ -240,7 +240,7 @@ impl Tx {
     pub fn from_bytes(mut slice: &[u8]) -> Result<Tx, VMError> {
         slice
             .read_all(|r| Self::decode(r))
-            .map_err(|_| VMError::FormatError)
+            .map_err(|_| VMError::InvalidFormat)
     }
 }
 

@@ -677,7 +677,7 @@ impl Instruction {
     /// E.g. a push instruction with 5-byte string occupies 1+4+5=10 bytes,
     /// (4 for the LE32 length prefix), advancing the program subslice by 10 bytes.
     ///
-    /// Return `VMError::FormatError` if there are not enough bytes to parse an
+    /// Return `VMError::InvalidFormat` if there are not enough bytes to parse an
     /// instruction.
     pub fn parse(program: &mut impl Reader) -> Result<Self, VMError> {
         let byte = program.read_u8()?;

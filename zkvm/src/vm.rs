@@ -520,7 +520,7 @@ where
         }
 
         spacesuit::cloak(self.delegate.cs(), cloak_ins, cloak_outs)
-            .map_err(|_| VMError::FormatError)?;
+            .map_err(|_| VMError::InvalidFormat)?;
 
         // Push in the same order.
         for v in output_values.into_iter() {
@@ -600,7 +600,7 @@ where
         // Signature
         let sig = self.pop_item()?.to_string()?.to_bytes();
         let signature = Signature::from_bytes((&sig[..]).read_all(|r| r.read_u8x64())?)
-            .map_err(|_| VMError::FormatError)?;
+            .map_err(|_| VMError::InvalidFormat)?;
 
         // Program
         let prog = self.pop_item()?.to_program()?;
@@ -631,7 +631,7 @@ where
         // Signature
         let sig = self.pop_item()?.to_string()?.to_bytes();
         let signature = Signature::from_bytes((&sig[..]).read_all(|r| r.read_u8x64())?)
-            .map_err(|_| VMError::FormatError)?;
+            .map_err(|_| VMError::InvalidFormat)?;
 
         // Program
         let prog = self.pop_item()?.to_program()?;
