@@ -146,12 +146,13 @@ impl Encodable for TxHeader {
         8 * 3
     }
 }
-impl TxHeader {
-    fn decode(reader: &mut impl Reader) -> Result<Self, VMError> {
+
+impl Decodable for TxHeader {
+    fn decode(r: &mut impl Reader) -> Result<Self, ReadError> {
         Ok(TxHeader {
-            version: reader.read_u64()?,
-            mintime_ms: reader.read_u64()?,
-            maxtime_ms: reader.read_u64()?,
+            version: r.read_u64()?,
+            mintime_ms: r.read_u64()?,
+            maxtime_ms: r.read_u64()?,
         })
     }
 }
@@ -174,7 +175,9 @@ impl Encodable for Tx {
         w.write_size(b"program_len", self.program.len())?;
         w.write(b"program", &self.program)?;
         w.write(b"signature", &self.signature.to_bytes())?;
-        w.write(b"r1cs_proof", &self.proof.to_bytes())?;
+        let proof_bytes = self.proof.to_bytes();
+        w.write_size(b"r1cs_proof_len", proof_bytes.len())?;
+        w.write(b"r1cs_proof", &proof_bytes)?;
         Ok(())
     }
 
@@ -185,18 +188,26 @@ impl Encodable for Tx {
         // program is self.program.len() bytes
         // signature is 64 bytes
         // proof is 14*32 + the ipp bytes
-        self.header.encoded_length() + 4 + self.program.len() + 64 + self.proof.serialized_size()
+        self.header.encoded_length()
+            + 4
+            + self.program.len()
+            + 64
+            + 4
+            + self.proof.serialized_size()
     }
 }
-impl Tx {
-    fn decode<'a>(r: &mut impl Reader) -> Result<Tx, VMError> {
+
+impl Decodable for Tx {
+    fn decode(r: &mut impl Reader) -> Result<Self, ReadError> {
         let header = TxHeader::decode(r)?;
         let prog_len = r.read_size()?;
         let program = r.read_bytes(prog_len)?;
 
-        let signature = Signature::from_bytes(r.read_u8x64()?).map_err(|_| VMError::FormatError)?;
-        let proof = R1CSProof::from_bytes(&r.read_bytes(r.remaining_bytes())?)
-            .map_err(|_| VMError::FormatError)?;
+        let signature =
+            Signature::from_bytes(r.read_u8x64()?).map_err(|_| ReadError::InvalidFormat)?;
+        let proof_len = r.read_size()?;
+        let proof_bytes = r.read_bytes(proof_len)?;
+        let proof = R1CSProof::from_bytes(&proof_bytes).map_err(|_| ReadError::InvalidFormat)?;
         Ok(Tx {
             header,
             program,
@@ -204,7 +215,9 @@ impl Tx {
             proof,
         })
     }
+}
 
+impl Tx {
     /// Computes the TxID and TxLog without verifying the transaction.
     pub fn precompute(&self) -> Result<PrecomputedTx, VMError> {
         Verifier::precompute(self)
@@ -225,7 +238,9 @@ impl Tx {
     ///
     /// Returns an error if the byte slice cannot be parsed into a `Tx`.
     pub fn from_bytes(mut slice: &[u8]) -> Result<Tx, VMError> {
-        slice.read_all(|r| Self::decode(r))
+        slice
+            .read_all(|r| Self::decode(r))
+            .map_err(|_| VMError::FormatError)
     }
 }
 
