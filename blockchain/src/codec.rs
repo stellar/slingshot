@@ -1,12 +1,11 @@
 use crate::shortid::{ShortIDVec, SHORTID_LEN};
-use crate::utreexo::Proof;
 use crate::{
     Block, BlockHeader, BlockID, BlockTx, GetBlock, GetInventory, GetMempoolTxs, Inventory,
     MempoolTxs, Message,
 };
 use readerwriter::{Decodable, Encodable, ReadError, Reader, WriteError, Writer};
 use std::convert::TryFrom;
-use zkvm::{merkle, Hash, Signature, Tx};
+use zkvm::{Hash, Signature};
 
 #[repr(u8)]
 enum MessageType {
@@ -166,7 +165,6 @@ impl<W: Writer> WriterExt for W {}
 
 impl Message {
     fn encode_block(b: &Block, dst: &mut impl Writer) -> Result<(), WriteError> {
-        dst.write_u8(b"message_type", MessageType::Block as u8)?;
         BlockHeader::encode(&b.header, dst)?;
         dst.write_signature(&b.signature)?;
         write_block_txs(&b.txs, dst)?;
@@ -184,9 +182,7 @@ impl Message {
     }
 
     fn encode_get_block(g: &GetBlock, dst: &mut impl Writer) -> Result<(), WriteError> {
-        dst.write_u8(b"message_type", MessageType::GetBlock as u8)?;
-        dst.write_u64(b"block_height", g.height)?;
-        Ok(())
+        dst.write_u64(b"block_height", g.height)
     }
     fn decode_get_block(src: &mut impl Reader) -> Result<Self, ReadError> {
         let height = src.read_u64()?;
@@ -194,17 +190,13 @@ impl Message {
     }
 
     fn encode_inventory(inv: &Inventory, dst: &mut impl Writer) -> Result<(), WriteError> {
-        dst.write_u8(b"message_type", MessageType::Inventory as u8)?;
-        Inventory::encode(inv, dst)?;
-        Ok(())
+        Inventory::encode(inv, dst)
     }
     fn decode_inventory(src: &mut impl Reader) -> Result<Self, ReadError> {
-        let inventory = Inventory::decode(src)?;
-        Ok(Message::Inventory(inventory))
+        Ok(Message::Inventory(Inventory::decode(src)?))
     }
 
     fn encode_get_inventory(g: &GetInventory, dst: &mut impl Writer) -> Result<(), WriteError> {
-        dst.write_u8(b"message_type", MessageType::GetInventory as u8)?;
         dst.write_u64(b"version", g.version)?;
         dst.write_u64(b"shortid_nonce", g.shortid_nonce)?;
         Ok(())
@@ -219,7 +211,6 @@ impl Message {
     }
 
     fn encode_mempool_txs(mempool: &MempoolTxs, dst: &mut impl Writer) -> Result<(), WriteError> {
-        dst.write_u8(b"message_type", MessageType::MempoolTxs as u8)?;
         dst.write_blockid(b"tip", &mempool.tip)?;
         write_block_txs(&mempool.txs, dst)?;
         Ok(())
@@ -231,7 +222,6 @@ impl Message {
     }
 
     fn encode_get_mempool_txs(g: &GetMempoolTxs, dst: &mut impl Writer) -> Result<(), WriteError> {
-        dst.write_u8(b"message_type", MessageType::GetMempoolTxs as u8)?;
         dst.write_u64(b"shortid_nonce", g.shortid_nonce)?;
         dst.write_shortid_vec(b"shortid_list", &g.shortid_list)?;
         Ok(())
@@ -266,13 +256,36 @@ impl Decodable for Message {
 
 impl Encodable for Message {
     fn encode(&self, dst: &mut impl Writer) -> Result<(), WriteError> {
+        macro_rules! typ {
+            ($msg_type:expr) => {
+                dst.write_u8(b"message_type", $msg_type as u8)?;
+            };
+        }
         match self {
-            Message::Block(b) => Self::encode_block(b, dst),
-            Message::GetBlock(g) => Self::encode_get_block(g, dst),
-            Message::Inventory(inv) => Self::encode_inventory(inv, dst),
-            Message::GetInventory(g) => Self::encode_get_inventory(g, dst),
-            Message::MempoolTxs(mempool) => Self::encode_mempool_txs(mempool, dst),
-            Message::GetMempoolTxs(g) => Self::encode_get_mempool_txs(g, dst),
+            Message::Block(b) => {
+                typ!(MessageType::Block);
+                Self::encode_block(b, dst)
+            }
+            Message::GetBlock(g) => {
+                typ!(MessageType::GetBlock);
+                Self::encode_get_block(g, dst)
+            }
+            Message::Inventory(inv) => {
+                typ!(MessageType::Inventory);
+                Self::encode_inventory(inv, dst)
+            }
+            Message::GetInventory(g) => {
+                typ!(MessageType::GetInventory);
+                Self::encode_get_inventory(g, dst)
+            }
+            Message::MempoolTxs(mempool) => {
+                typ!(MessageType::MempoolTxs);
+                Self::encode_mempool_txs(mempool, dst)
+            }
+            Message::GetMempoolTxs(g) => {
+                typ!(MessageType::GetMempoolTxs);
+                Self::encode_get_mempool_txs(g, dst)
+            }
         }
     }
 
