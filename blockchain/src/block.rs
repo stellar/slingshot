@@ -89,6 +89,43 @@ impl BlockTx {
     }
 }
 
+impl Encodable for BlockHeader {
+    fn encode(&self, w: &mut impl Writer) -> Result<(), WriteError> {
+        w.write_u64(b"version", self.version)?;
+        w.write_u64(b"height", self.height)?;
+        w.write(b"prev", &self.prev)?;
+        w.write_u64(b"timestamp_ms", self.timestamp_ms)?;
+        w.write(b"txroot", &self.txroot)?;
+        w.write(b"utxoroot", &self.utxoroot)?;
+        w.write_u32(b"ext_len", self.ext.len() as u32)?;
+        w.write(b"ext", &self.ext)?;
+        Ok(())
+    }
+}
+
+impl ExactSizeEncodable for BlockHeader {
+    fn encoded_size(&self) -> usize {
+        8 + 8 + 32 + 8 + 32 + 32 + 4 + self.ext.len()
+    }
+}
+
+impl Decodable for BlockHeader {
+    fn decode(buf: &mut impl Reader) -> Result<Self, ReadError> {
+        Ok(BlockHeader {
+            version: buf.read_u64()?,
+            height: buf.read_u64()?,
+            prev: buf.read_u8x32().map(BlockID)?,
+            timestamp_ms: buf.read_u64()?,
+            txroot: buf.read_u8x32().map(Hash)?,
+            utxoroot: buf.read_u8x32().map(Hash)?,
+            ext: {
+                let n = buf.read_u32()? as usize;
+                buf.read_bytes(n)?
+            },
+        })
+    }
+}
+
 impl Encodable for BlockTx {
     fn encode(&self, w: &mut impl Writer) -> Result<(), WriteError> {
         self.tx.encode(w)?;
@@ -104,17 +141,19 @@ impl Encodable for BlockTx {
         }
         Ok(())
     }
+}
 
+impl ExactSizeEncodable for BlockTx {
     /// Returns the size in bytes required to serialize the `Tx`.
-    fn encoded_length(&self) -> usize {
-        self.tx.encoded_length()
+    fn encoded_size(&self) -> usize {
+        self.tx.encoded_size()
             + 4
             + self
                 .proofs
                 .iter()
                 .map(|proof| match proof {
                     Proof::Transient => 1,
-                    Proof::Committed(path) => 1 + path.encoded_length(),
+                    Proof::Committed(path) => 1 + path.encoded_size(),
                 })
                 .sum::<usize>()
     }

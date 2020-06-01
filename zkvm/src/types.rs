@@ -220,19 +220,6 @@ impl Item {
 }
 
 impl Encodable for String {
-    /// Returns the number of bytes needed to serialize the String.
-    fn encoded_length(&self) -> usize {
-        match self {
-            String::Opaque(data) => data.len(),
-            String::Predicate(predicate) => predicate.encoded_length(),
-            String::Commitment(commitment) => commitment.encoded_length(),
-            String::Scalar(scalar) => scalar.encoded_length(),
-            String::Output(output) => output.encoded_length(),
-            String::U64(_) => 8,
-            String::U32(_) => 4,
-        }
-    }
-    /// Encodes the data item to an opaque bytestring.
     fn encode(&self, w: &mut impl Writer) -> Result<(), WriteError> {
         match self {
             String::Opaque(x) => w.write(b"string", x),
@@ -242,6 +229,20 @@ impl Encodable for String {
             String::Output(contract) => w.write(b"string", &contract.encode_to_vec()),
             String::U64(n) => w.write_u64(b"string", *n),
             String::U32(n) => w.write_u32(b"string", *n),
+        }
+    }
+}
+
+impl ExactSizeEncodable for String {
+    fn encoded_size(&self) -> usize {
+        match self {
+            String::Opaque(data) => data.len(),
+            String::Predicate(predicate) => predicate.encoded_size(),
+            String::Commitment(commitment) => commitment.encoded_size(),
+            String::Scalar(scalar) => scalar.encoded_size(),
+            String::Output(output) => output.encoded_size(),
+            String::U64(_) => 8,
+            String::U32(_) => 4,
         }
     }
 }

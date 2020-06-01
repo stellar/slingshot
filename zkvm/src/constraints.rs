@@ -274,12 +274,12 @@ impl SecretConstraint {
 }
 
 impl Encodable for Commitment {
-    /// Encodes the commitment as a point.
     fn encode(&self, w: &mut impl Writer) -> Result<(), WriteError> {
         w.write_point(b"commitment", &self.to_point())
     }
-    /// Returns the number of bytes needed to serialize the Commitment.
-    fn encoded_length(&self) -> usize {
+}
+impl ExactSizeEncodable for Commitment {
+    fn encoded_size(&self) -> usize {
         32
     }
 }

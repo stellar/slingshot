@@ -23,8 +23,9 @@ impl Encodable for ScalarWitness {
     fn encode(&self, w: &mut impl Writer) -> Result<(), WriteError> {
         w.write_scalar(b"scalar", &self.to_scalar())
     }
-    /// Returns the number of bytes needed to serialize the ScalarWitness.
-    fn encoded_length(&self) -> usize {
+}
+impl ExactSizeEncodable for ScalarWitness {
+    fn encoded_size(&self) -> usize {
         32
     }
 }
@@ -138,10 +139,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn encoded_length() {
-        assert_eq!(ScalarWitness::Integer(1.into()).encoded_length(), 32);
+    fn encoded_size() {
+        assert_eq!(ScalarWitness::Integer(1.into()).encoded_size(), 32);
         assert_eq!(
-            ScalarWitness::Scalar(Scalar::from(0xffu64)).encoded_length(),
+            ScalarWitness::Scalar(Scalar::from(0xffu64)).encoded_size(),
             32
         );
     }

@@ -1,5 +1,5 @@
 use blockchain::{self};
-use readerwriter::Encodable;
+use readerwriter::ExactSizeEncodable;
 
 /// Our concrete instance of mempool
 pub type Mempool = blockchain::Mempool;
@@ -8,6 +8,6 @@ pub type Mempool = blockchain::Mempool;
 pub fn estimated_memory_cost(mempool: &Mempool) -> usize {
     mempool
         .entries()
-        .map(|entry| entry.block_tx().encoded_length())
+        .map(|entry| entry.block_tx().encoded_size())
         .sum()
 }

@@ -94,8 +94,11 @@ impl Encodable for Program {
         }
         Ok(())
     }
-    fn encoded_length(&self) -> usize {
-        self.0.iter().map(|p| p.encoded_length()).sum()
+}
+
+impl ExactSizeEncodable for Program {
+    fn encoded_size(&self) -> usize {
+        self.0.iter().map(|p| p.encoded_size()).sum()
     }
 }
 
@@ -221,13 +224,16 @@ impl Encodable for ProgramItem {
             ProgramItem::Bytecode(bytes) => w.write(b"program", &bytes),
         }
     }
-    fn encoded_length(&self) -> usize {
+}
+impl ExactSizeEncodable for ProgramItem {
+    fn encoded_size(&self) -> usize {
         match self {
-            ProgramItem::Program(prog) => prog.encoded_length(),
+            ProgramItem::Program(prog) => prog.encoded_size(),
             ProgramItem::Bytecode(vec) => vec.len(),
         }
     }
 }
+
 impl ProgramItem {
     /// Encodes the program item into a bytecode array.
     pub fn to_bytes(&self) -> Vec<u8> {
