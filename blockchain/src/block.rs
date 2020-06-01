@@ -2,7 +2,7 @@ use merlin::Transcript;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use zkvm::encoding::*;
-use zkvm::{Hash, MerkleItem, MerkleTree, Tx};
+use zkvm::{merkle, Hash, MerkleItem, MerkleTree, Tx};
 
 use super::utreexo::{self, Proof};
 use readerwriter::Encodable;
@@ -117,6 +117,21 @@ impl Encodable for BlockTx {
                     Proof::Committed(path) => 1 + path.encoded_length(),
                 })
                 .sum::<usize>()
+    }
+}
+
+impl Decodable for BlockTx {
+    fn decode(r: &mut impl Reader) -> Result<Self, ReadError> {
+        let tx = Tx::decode(r)?;
+        let n = r.read_size()? as usize;
+        let proofs = r.read_vec(n, |r| match r.read_u8()? {
+            0 => Ok(Proof::Transient),
+            1 => merkle::Path::decode(r)
+                .map(Proof::Committed)
+                .map_err(|_| ReadError::InvalidFormat),
+            _ => Err(ReadError::InvalidFormat),
+        })?;
+        Ok(BlockTx { tx, proofs })
     }
 }
 

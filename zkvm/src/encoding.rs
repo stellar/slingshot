@@ -1,9 +1,9 @@
 //! Encoding utils for ZkVM
-//! All methods err using VMError::FormatError for convenience.
+//! All methods err using VMError::InvalidFormat for convenience.
 
 use curve25519_dalek::ristretto::CompressedRistretto;
 use curve25519_dalek::scalar::Scalar;
-pub use readerwriter::{Encodable, ReadError, Reader, WriteError, Writer};
+pub use readerwriter::{Decodable, Encodable, ReadError, Reader, WriteError, Writer};
 
 use crate::errors::VMError;
 
@@ -54,12 +54,12 @@ impl<T> WriterExt for T where T: Writer {}
 
 impl From<ReadError> for VMError {
     fn from(_: ReadError) -> VMError {
-        VMError::FormatError
+        VMError::InvalidFormat
     }
 }
 
 impl From<WriteError> for VMError {
     fn from(_: WriteError) -> VMError {
-        VMError::FormatError
+        VMError::InvalidFormat
     }
 }

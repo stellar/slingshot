@@ -201,7 +201,7 @@ impl PortableItem {
                 let flv = Commitment::Closed(output.read_point()?);
                 Ok(PortableItem::Value(Value { qty, flv }))
             }
-            _ => Err(VMError::FormatError),
+            _ => Err(VMError::InvalidFormat),
         }
     }
 }
