@@ -122,8 +122,6 @@ where
         .rekey_with_witness_bytes(b"local_privkey", local_identity.as_secret_bytes())
         .finalize(&mut rng);
 
-    let local_ephemeral = PrivateKey::from(Scalar::random(&mut keygen_rng));
-
     const SALT_LEN: usize = 16;
     let mut local_salt = [0u8; SALT_LEN];
     keygen_rng.fill_bytes(&mut local_salt[..]);
@@ -139,7 +137,6 @@ where
     writer
         .write(local_blinded_identity.pubkey.as_bytes())
         .await?;
-    writer.write(local_ephemeral.pubkey.as_bytes()).await?;
     writer.flush().await?;
 
     // Receive the similar message from the other end (that was sent simultaneously).
@@ -153,15 +150,9 @@ where
         ));
     }
     let remote_blinded_identity = PublicKey::read_from(&mut reader).await?;
-    let remote_ephemeral = PublicKey::read_from(&mut reader).await?;
 
     // Now, perform a triple Diffie-Hellman shared key generation.
-    let t = cybershake_x3dh(
-        &local_blinded_identity,
-        &local_ephemeral,
-        &remote_blinded_identity,
-        &remote_ephemeral,
-    )?;
+    let t = cybershake_dh(&local_blinded_identity, &remote_blinded_identity)?;
 
     // We will have two independent derivations of the shared key:
     // one for the outgoing messages, and another one for incoming messages.
@@ -429,57 +420,28 @@ impl<R: AsyncRead + Unpin> AsyncRead for Incoming<R> {
     }
 }
 
-/// This is a YOLO variant of Signal's X3DH that's aimed at improved performance:
-/// instead of doing independent computation of three DH instances,
-/// compressing them, and feeding independently into a hash,
-/// we add them all together, separated by a Fiat-Shamir challenges (x, y):
-///
-/// X3DH = Hash(DH(eph1, eph2) + x * DH(id1, eph2) + y * DH(id2, eph1))
-///
-/// This allows reusing doublings across all three instances,
-/// and do a single point compression in the end instead of three.
-///
-/// To get consistent results on both ends, we reorder keys so the "first" party
-/// is the one with the lower compressed identity public key.
-fn cybershake_x3dh(
-    id1: &PrivateKey,
-    eph1: &PrivateKey,
-    id2: &PublicKey,
-    eph2: &PublicKey,
-) -> Result<Transcript, io::Error> {
-    let mut t = Transcript::new(b"Cybershake.X3DH");
+fn cybershake_dh(id1: &PrivateKey, id2: &PublicKey) -> Result<Transcript, io::Error> {
+    let mut t = Transcript::new(b"Cybershake.DH");
     let keep_order = id1.pubkey.as_bytes() < id2.as_bytes();
     {
-        let (id1, eph1, id2, eph2) = if keep_order {
-            (&id1.pubkey, &eph1.pubkey, id2, eph2)
+        let (id1, id2) = if keep_order {
+            (&id1.pubkey, id2)
         } else {
-            (id2, eph2, &id1.pubkey, &eph1.pubkey)
+            (id2, &id1.pubkey)
         };
         t.append_message(b"id1", id1.as_bytes());
         t.append_message(b"id2", id2.as_bytes());
-        t.append_message(b"eph1", eph1.as_bytes());
-        t.append_message(b"eph2", eph2.as_bytes());
     }
 
-    let x = challenge_scalar(b"x", &mut t);
-    let y = challenge_scalar(b"y", &mut t);
-
-    let (x, y) = if keep_order { (x, y) } else { (y, x) };
-
-    use core::iter;
-    let shared_secret = RistrettoPoint::optional_multiscalar_mul(
-        iter::once(&(eph1.as_scalar() + (x * id1.as_scalar())))
-            .chain(iter::once(&(eph1.as_scalar() * y))),
-        iter::once(eph2.as_point().decompress()).chain(iter::once(id2.as_point().decompress())),
-    )
-    .ok_or_else(|| {
+    let id2_point = id2.as_point().decompress().ok_or_else(|| {
         io::Error::new(
             io::ErrorKind::InvalidData,
-            "Failed to decode some of the Ristretto elements",
+            "Failed to decode pubkey of a remote party (invalid ristretto255 format)",
         )
     })?;
 
-    t.append_message(b"x3dh", shared_secret.compress().as_bytes());
+    let shared_secret = id1.as_scalar() * id2_point;
+    t.append_message(b"dh", shared_secret.compress().as_bytes());
 
     Ok(t)
 }
