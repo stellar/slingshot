@@ -1,3 +1,5 @@
+#![deny(missing_docs)]
+
 //! API for operations on merkle binary trees.
 use core::marker::PhantomData;
 use merlin::Transcript;

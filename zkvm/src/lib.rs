@@ -10,6 +10,7 @@
 extern crate failure;
 pub extern crate bulletproofs;
 extern crate serde;
+pub extern crate merkle;
 
 #[macro_use]
 mod serialization;
@@ -19,7 +20,6 @@ mod debug;
 pub mod encoding;
 mod errors;
 mod fees;
-pub mod merkle;
 mod ops;
 mod predicate;
 mod program;
@@ -35,7 +35,7 @@ pub use self::constraints::{Commitment, CommitmentWitness, Constraint, Expressio
 pub use self::contract::{Anchor, Contract, ContractID, PortableItem};
 pub use self::errors::VMError;
 pub use self::fees::{fee_flavor, CheckedFee, FeeRate, MAX_FEE};
-pub use self::merkle::{Hash, Hasher, MerkleItem, MerkleTree};
+pub use merkle::{Hash, Hasher, MerkleItem, MerkleTree};
 pub use self::ops::{Instruction, Opcode};
 pub use self::predicate::{Predicate, PredicateTree};
 pub use self::program::{Program, ProgramItem};
