@@ -25,6 +25,9 @@ hex = "^0.3"
 path = "../readerwriter"
 features = ["merlin"]
 
+[dependencies.merkle]
+path = "../merkle"
+
 [dependencies.bulletproofs]
 git = "https://github.com/dalek-cryptography/bulletproofs"
 branch = "develop"

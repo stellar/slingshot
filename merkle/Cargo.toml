@@ -1,0 +1,15 @@
+[package]
+name = "merkle"
+version = "0.1.0"
+authors = ["Oleg Andreev <oleganza@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+merlin = {version = "2.0"}
+subtle = "2"
+serde = { version = "1.0", features=["derive"] }
+hex = "^0.3"
+
+[dependencies.readerwriter]
+path = "../readerwriter"
+features = ["merlin"]

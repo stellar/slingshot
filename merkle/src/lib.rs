@@ -1,8 +1,9 @@
+#![deny(missing_docs)]
+
 //! API for operations on merkle binary trees.
-use crate::encoding::*;
-use crate::errors::VMError;
 use core::marker::PhantomData;
 use merlin::Transcript;
+use readerwriter::*;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use subtle::ConstantTimeEq;
@@ -10,7 +11,6 @@ use subtle::ConstantTimeEq;
 /// Merkle hash of a node.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub struct Hash(pub [u8; 32]);
-serialize_bytes32!(Hash);
 
 /// MerkleItem defines an item in the Merkle tree.
 pub trait MerkleItem: Sized {
@@ -359,27 +359,10 @@ impl Path {
     }
 }
 
-// zkvm-specific impl
-impl Path {
-    /// Decodes Path from a byte reader. First 8 bytes is a LE64-encoded position,
-    /// followed by 4 bytes of LE32-encoded number of neighbours,
-    /// than the 32-byte neighbour hashes.
-    pub fn decode(reader: &mut impl Reader) -> Result<Self, VMError> {
-        let position = reader.read_u64()?;
-        let n = reader.read_u32()? as usize;
-        let neighbors = reader.read_vec(n, |r| r.read_u8x32().map(Hash))?;
-        Ok(Path {
-            position,
-            neighbors,
-        })
-    }
-}
-
-// zkvm-specific impl
 impl Encodable for Path {
     fn encode(&self, w: &mut impl Writer) -> Result<(), WriteError> {
         w.write_u64(b"position", self.position)?;
-        w.write_size(b"n", self.neighbors.len())?;
+        w.write_u32(b"n", self.neighbors.len() as u32)?;
         for hash in self.neighbors.iter() {
             w.write(b"hash", &hash[..])?;
         }
@@ -390,6 +373,18 @@ impl Encodable for Path {
 impl ExactSizeEncodable for Path {
     fn encoded_size(&self) -> usize {
         8 + 4 + 32 * self.neighbors.len()
+    }
+}
+
+impl Decodable for Path {
+    fn decode(reader: &mut impl Reader) -> Result<Self, ReadError> {
+        let position = reader.read_u64()?;
+        let n = reader.read_u32()? as usize;
+        let neighbors = reader.read_vec(n, |r| r.read_u8x32().map(Hash))?;
+        Ok(Path {
+            position,
+            neighbors,
+        })
     }
 }
 
@@ -441,6 +436,47 @@ impl DoubleEndedIterator for Directions {
         // The bit is ignored implicitly by having the depth decremented.
         let side = Side::from_bit(((self.position >> self.depth) & 1) as u8);
         Some(side)
+    }
+}
+
+impl Serialize for Hash {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_bytes(&self.0)
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for Hash {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        struct BytesVisitor;
+
+        impl<'de> serde::de::Visitor<'de> for BytesVisitor {
+            type Value = Hash;
+
+            fn expecting(&self, formatter: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
+                formatter.write_str("a valid 32-byte string")
+            }
+
+            fn visit_bytes<E>(self, v: &[u8]) -> Result<Hash, E>
+            where
+                E: serde::de::Error,
+            {
+                if v.len() == 32 {
+                    let mut buf = [0u8; 32];
+                    buf[0..32].copy_from_slice(v);
+                    Ok(Hash(buf))
+                } else {
+                    Err(serde::de::Error::invalid_length(v.len(), &self))
+                }
+            }
+        }
+
+        deserializer.deserialize_bytes(BytesVisitor)
     }
 }
 
