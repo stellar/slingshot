@@ -2,6 +2,7 @@
 
 members = [
     "readerwriter",
+    "merkle",
     "starsig",
     "musig",
     "keytree",
