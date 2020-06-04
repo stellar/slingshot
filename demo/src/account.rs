@@ -370,12 +370,10 @@ impl Wallet {
 
                 p.cloak(2, 2);
 
-                // Now the payment and the change are in the same order on the stack:
-                // change is on top.
-                p.push(change_receiver.predicate());
+                p.push(payment_receiver.predicate());
                 p.output(1);
 
-                p.push(payment_receiver.predicate());
+                p.push(change_receiver.predicate());
                 p.output(1);
             });
             let header = zkvm::TxHeader {

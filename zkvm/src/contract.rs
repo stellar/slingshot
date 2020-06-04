@@ -207,6 +207,14 @@ impl PortableItem {
             _ => Err(VMError::InvalidFormat),
         }
     }
+
+    /// Attempts to cast the item as a Value type.
+    pub fn as_value(&self) -> Option<&Value> {
+        match self {
+            PortableItem::Value(v) => Some(v),
+            _ => None,
+        }
+    }
 }
 
 impl MerkleItem for ContractID {

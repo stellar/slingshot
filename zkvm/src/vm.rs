@@ -506,7 +506,7 @@ where
             let cloak_value = self.value_to_cloak_value(&value)?;
 
             // insert in the same order as they are on stack (the deepest item will be at index 0)
-            output_values.insert(0, value);
+            output_values.push(value);
             cloak_outs.insert(0, cloak_value);
         }
 
