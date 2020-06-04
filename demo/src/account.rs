@@ -370,12 +370,10 @@ impl Wallet {
 
                 p.cloak(2, 2);
 
-                // Now the payment and the change are in the same order on the stack:
-                // change is on top.
-                p.push(change_receiver.predicate());
+                p.push(payment_receiver.predicate());
                 p.output(1);
 
-                p.push(payment_receiver.predicate());
+                p.push(change_receiver.predicate());
                 p.output(1);
             });
             let header = zkvm::TxHeader {
@@ -398,10 +396,10 @@ impl Wallet {
             TxEntry::Output(contract) => Some(contract.anchor),
             _ => None,
         });
-        let change_anchor = iterator
+        let payment_anchor = iterator
             .next()
             .expect("We have just built 2 outputs above.");
-        let payment_anchor = iterator
+        let change_anchor = iterator
             .next()
             .expect("We have just built 2 outputs above.");
 
@@ -523,15 +521,13 @@ impl Wallet {
                         .unwrap_or(1),
                 );
 
-                // Now the payment and the change are in the same order on the stack:
-                // change is on top.
+                p.push(payment_receiver.predicate());
+                p.output(1);
+
                 if let Some(crw) = &maybe_change_receiver_witness {
                     p.push(crw.receiver.predicate());
                     p.output(1);
                 }
-
-                p.push(payment_receiver.predicate());
-                p.output(1);
             });
             let header = zkvm::TxHeader {
                 version: 1u64,
@@ -554,6 +550,10 @@ impl Wallet {
             _ => None,
         });
 
+        let payment_anchor = iterator
+            .next()
+            .expect("We have just built the outputs above.");
+
         let maybe_change_utxo = maybe_change_receiver_witness.map(|crw| {
             let change_anchor = iterator
                 .next()
@@ -565,10 +565,6 @@ impl Wallet {
                 proof: utreexo::Proof::Transient,
             }
         });
-
-        let payment_anchor = iterator
-            .next()
-            .expect("We have just built the outputs above.");
 
         let reply = accounts::ReceiverReply {
             receiver_id: payment_receiver.id(),

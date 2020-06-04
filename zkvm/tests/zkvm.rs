@@ -7,7 +7,7 @@ use rand::Rng;
 
 use zkvm::{
     Anchor, Commitment, Contract, PortableItem, Predicate, PredicateTree, Program, Prover, String,
-    TxHeader, TxID, VMError, Value,
+    TxHeader, TxID, TxLog, VMError, Value,
 };
 
 // TODO(vniu): move builder convenience functions into separate crate,
@@ -108,8 +108,8 @@ fn make_output(qty: u64, flv: Scalar, predicate: Predicate) -> Contract {
     }
 }
 
-fn build_and_verify(program: Program, keys: &Vec<Scalar>) -> Result<TxID, VMError> {
-    let tx = {
+fn build_and_verify(program: Program, keys: &Vec<Scalar>) -> Result<(TxID, TxLog), VMError> {
+    let (txlog, tx) = {
         // Build tx
         let bp_gens = BulletproofGens::new(256, 1);
         let header = TxHeader {
@@ -150,14 +150,14 @@ fn build_and_verify(program: Program, keys: &Vec<Scalar>) -> Result<TxID, VMErro
             .unwrap()
         };
 
-        utx.sign(sig)
+        (utx.txlog.clone(), utx.sign(sig))
     };
 
     // Verify tx
     let bp_gens = BulletproofGens::new(256, 1);
 
     let vtx = tx.verify(&bp_gens)?;
-    Ok(vtx.id)
+    Ok((vtx.id, txlog))
 }
 
 fn spend_1_1_contract(
@@ -218,8 +218,8 @@ fn spend_1_2_contract(
     Program::build(|p| {
         p.input_helper(input, flv, input_pred) // stack: input
             .cloak_helper(1, vec![(output_1, flv), (output_2, flv)]) // stack: output-1, output-2
-            .output_helper(output_2_pred) // stack: output-1
-            .output_helper(output_1_pred); // stack: empty
+            .output_helper(output_1_pred) // stack: output-1
+            .output_helper(output_2_pred); // stack: empty
     })
 }
 
@@ -327,8 +327,8 @@ fn spend_2_2_contract(
         p.input_helper(input_1, flv, input_1_pred) // stack: input-1
             .input_helper(input_2, flv, input_2_pred) // stack: input-1, input-2
             .cloak_helper(2, vec![(output_1, flv), (output_2, flv)]) // stack: output-1, output-2
-            .output_helper(output_2_pred) // stack: output-1
-            .output_helper(output_1_pred); // stack: empty
+            .output_helper(output_1_pred) // stack: output-1
+            .output_helper(output_2_pred); // stack: empty
     })
 }
 
@@ -352,7 +352,32 @@ fn spend_2_2() {
 
     match build_and_verify(correct_program, &scalars) {
         Err(err) => assert!(false, err.to_string()),
-        _ => (),
+        Ok((_txid, txlog)) => {
+            assert_eq!(
+                txlog
+                    .outputs()
+                    .map(|c| {
+                        c.payload[0]
+                            .as_value()
+                            .unwrap()
+                            .assignment()
+                            .unwrap()
+                            .unwrap()
+                            .0
+                            .to_u64()
+                            .unwrap()
+                    })
+                    .collect::<Vec<_>>(),
+                vec![9u64, 1u64]
+            );
+            assert_eq!(
+                txlog
+                    .outputs()
+                    .map(|c| { c.predicate.clone() })
+                    .collect::<Vec<_>>(),
+                &predicates[2..4]
+            );
+        }
     }
 
     let wrong_program = spend_2_2_contract(
@@ -387,8 +412,8 @@ fn issue_and_spend_contract(
         p.input_helper(input_qty, flv, input_pred) // stack: issued-val, input-val
             .issue_helper(issue_qty, flv, issuance_pred) // stack: issued-val
             .cloak_helper(2, vec![(output_1, flv), (output_2, flv)]) // stack: output-1, output-2
-            .output_helper(output_2_pred) // stack: output-1
-            .output_helper(output_1_pred); // stack: empty
+            .output_helper(output_1_pred) // stack: output-1
+            .output_helper(output_2_pred); // stack: empty
     })
 }
 
@@ -515,8 +540,8 @@ fn programs_cannot_be_copied() {
     });
 
     assert_eq!(
-        build_and_verify(prog, &vec![]),
-        Err(VMError::TypeNotCopyable)
+        build_and_verify(prog, &vec![]).unwrap_err(),
+        VMError::TypeNotCopyable
     );
 }
 
@@ -528,8 +553,8 @@ fn expressions_cannot_be_copied() {
     });
 
     assert_eq!(
-        build_and_verify(prog, &vec![]),
-        Err(VMError::TypeNotCopyable)
+        build_and_verify(prog, &vec![]).unwrap_err(),
+        VMError::TypeNotCopyable
     );
 }
 
@@ -543,8 +568,8 @@ fn constraints_cannot_be_copied() {
     });
 
     assert_eq!(
-        build_and_verify(prog, &vec![]),
-        Err(VMError::TypeNotCopyable)
+        build_and_verify(prog, &vec![]).unwrap_err(),
+        VMError::TypeNotCopyable
     );
 }
 

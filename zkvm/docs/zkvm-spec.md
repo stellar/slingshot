@@ -1322,7 +1322,10 @@ Merges and splits `m` [wide values](#wide-value-type) into `n` [values](#value-t
 1. Pops `2·n` [points](#point) as pairs of _flavor_ and _quantity_ for each output value, flavor is popped first in each pair.
 2. Pops `m` [wide values](#wide-value-type) as input values.
 3. Creates constraints and 64-bit range proofs for quantities per [Cloak protocol](../../spacesuit/spec.md).
-4. Pushes `n` [values](#value-type) to the stack, placing them in the same order as their corresponding commitments.
+4. Pushes `n` [values](#value-type) to the stack, placing them in the **reverse** order as their corresponding commitments:
+   ```
+   A B C → cloak → C B A
+   ```
 
 Immediate data `m` and `n` are encoded as two [LE32](#le32)s.
 
