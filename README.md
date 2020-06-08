@@ -11,8 +11,8 @@ The Slingshot project consists of the following components:
 
 Demo node where one can create transactions and inspect the blockchain.
 
-* visit a public instance: [zkvm-demo.stellar.org](https://zkvm-demo.stellar.org).
-* run on your own machine: [see instructions](demo/README.md).
+* Visit a public instance: [zkvm-demo.stellar.org](https://zkvm-demo.stellar.org).
+* Run on your own machine: [see instructions](demo/README.md).
 
 ### [ZkVM](zkvm)
 
