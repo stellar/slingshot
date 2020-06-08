@@ -697,7 +697,7 @@ where
         Ok(spacesuit::AllocatedValue {
             q: self.delegate.commit_variable(&value.qty)?.1,
             f: self.delegate.commit_variable(&value.flv)?.1,
-            assignment: value.assignment()?.map(|(q, f)| spacesuit::Value { q, f }),
+            assignment: value.assignment().map(|(q, f)| spacesuit::Value { q, f }),
         })
     }
 

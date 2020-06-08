@@ -362,7 +362,6 @@ fn spend_2_2() {
                             .unwrap()
                             .assignment()
                             .unwrap()
-                            .unwrap()
                             .0
                             .to_u64()
                             .unwrap()
