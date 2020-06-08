@@ -343,13 +343,11 @@ impl Value {
         t.challenge_scalar(b"flavor")
     }
 
-    /// Returns a (qty,flavor) assignment to a value, or None if both fields are unassigned.
-    /// Fails if the assigment is inconsistent.
-    pub fn assignment(&self) -> Result<Option<(SignedInteger, Scalar)>, VMError> {
+    /// Returns a (qty,flavor) assignment to a value, or None if any of the fields is unassigned.
+    pub fn assignment(&self) -> Option<(SignedInteger, Scalar)> {
         match (self.qty.assignment(), self.flv.assignment()) {
-            (None, None) => Ok(None),
-            (Some(ScalarWitness::Integer(q)), Some(ScalarWitness::Scalar(f))) => Ok(Some((q, f))),
-            (_, _) => return Err(VMError::InconsistentWitness),
+            (Some(ScalarWitness::Integer(q)), Some(ScalarWitness::Scalar(f))) => Some((q, f)),
+            (_, _) => None,
         }
     }
 }
