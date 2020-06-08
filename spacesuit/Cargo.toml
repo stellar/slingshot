@@ -5,7 +5,7 @@ authors = ["Henry de Valence <hdevalence@hdevalence.ca>", "Cathie Yun <cathieyun
 edition = "2018"
 
 [dependencies]
-failure = "0.1"
+thiserror = "1"
 merlin = "2"
 rand = "0.7"
 subtle = "2"

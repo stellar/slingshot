@@ -2,9 +2,6 @@
 #![allow(non_snake_case)]
 //! Musig implementation
 
-#[macro_use]
-extern crate failure;
-
 mod context;
 mod counterparty;
 mod multisignature;

@@ -11,7 +11,7 @@ keywords = ["cryptography", "blockchain", "zero-knowledge", "bulletproofs"]
 description = "A blockchain VM with cloaked transactions and zero-knowledge smart contracts"
 
 [dependencies]
-failure = "0.1"
+thiserror = "1"
 byteorder = "1"
 merlin = "2"
 rand = "0.7"

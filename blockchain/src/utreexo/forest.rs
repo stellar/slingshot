@@ -4,6 +4,8 @@ use std::collections::HashMap;
 use std::fmt;
 use std::mem;
 
+use thiserror::Error;
+
 use super::heap::{Heap, HeapIndex};
 use zkvm::merkle::{Directions, Hash, Hasher, MerkleItem, MerkleTree, Path, Position};
 
@@ -29,15 +31,15 @@ pub struct Catchup {
 }
 
 /// Represents an error in proof creation, verification, or parsing.
-#[derive(Fail, Clone, Debug, Eq, PartialEq)]
+#[derive(Error, Clone, Debug, Eq, PartialEq)]
 pub enum UtreexoError {
     /// This error occurs when we receive a proof that's outdated and cannot be auto-updated.
-    #[fail(display = "Item proof is outdated and must be re-created against the new state")]
+    #[error("Item proof is outdated and must be re-created against the new state")]
     OutdatedProof,
 
     /// This error occurs when the merkle proof is too short or too long, or does not lead to a node
     /// to which it should.
-    #[fail(display = "Merkle proof is invalid")]
+    #[error("Merkle proof is invalid")]
     InvalidProof,
 }
 

@@ -5,7 +5,7 @@ authors = ["Vicki Niu <vicki.niu@gmail.com>"]
 edition = "2018"
 
 [dependencies]
-failure = "0.1"
+thiserror = "1"
 byteorder = "1"
 merlin = "2"
 postgres = "0.15"
