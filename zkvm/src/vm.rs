@@ -11,7 +11,7 @@ use std::mem;
 
 use crate::constraints::{Commitment, Constraint, Expression, Variable};
 use crate::contract::{Anchor, Contract, ContractID, PortableItem};
-use crate::encoding::Reader;
+use crate::encoding::*;
 use crate::errors::VMError;
 use crate::fees::{fee_flavor, CheckedFee};
 use crate::ops::Instruction;

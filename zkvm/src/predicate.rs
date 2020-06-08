@@ -291,16 +291,17 @@ impl ExactSizeEncodable for CallProof {
     }
 }
 
-impl CallProof {
-    /// Decodes the call proof from bytes.
-    pub fn decode(reader: &mut impl Reader) -> Result<Self, VMError> {
+impl Decodable for CallProof {
+    fn decode(reader: &mut impl Reader) -> Result<Self, ReadError> {
         let point = VerificationKey::from_compressed(reader.read_point()?);
         Ok(CallProof {
-            verification_key: point.ok_or(VMError::InvalidPoint)?,
+            verification_key: point.ok_or(ReadError::InvalidFormat)?,
             path: Path::decode(reader)?,
         })
     }
+}
 
+impl CallProof {
     pub fn to_bytes(&self) -> Vec<u8> {
         self.encode_to_vec()
     }

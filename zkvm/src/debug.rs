@@ -10,7 +10,7 @@ use std::fmt;
 
 use crate::constraints::Commitment;
 use crate::contract::{Anchor, Contract, PortableItem};
-use crate::encoding::Reader;
+use crate::encoding::*;
 use crate::ops::Instruction;
 use crate::predicate::Predicate;
 use crate::program::Program;

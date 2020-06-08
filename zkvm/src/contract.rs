@@ -2,7 +2,6 @@ use serde::{Deserialize, Serialize};
 
 use crate::constraints::Commitment;
 use crate::encoding::*;
-use crate::errors::VMError;
 use crate::merkle::MerkleItem;
 use crate::predicate::Predicate;
 use crate::program::ProgramItem;
@@ -55,6 +54,16 @@ pub enum PortableItem {
     Value(Value),
 }
 
+impl Contract {
+    /// Returns the contract's ID
+    pub fn id(&self) -> ContractID {
+        let mut t = Transcript::new(b"ZkVM.contractid");
+        self.encode(&mut t)
+            .expect("Writing to Transcript never fails.");
+        ContractID(t.challenge_u8x32(b"id"))
+    }
+}
+
 impl Encodable for Contract {
     fn encode(&self, w: &mut impl Writer) -> Result<(), WriteError> {
         w.write(b"anchor", &self.anchor.0)?;
@@ -76,17 +85,10 @@ impl ExactSizeEncodable for Contract {
         size
     }
 }
-impl Contract {
-    /// Returns the contract's ID
-    pub fn id(&self) -> ContractID {
-        let mut t = Transcript::new(b"ZkVM.contractid");
-        self.encode(&mut t)
-            .expect("Writing to Transcript never fails.");
-        ContractID(t.challenge_u8x32(b"id"))
-    }
 
+impl Decodable for Contract {
     /// Parses a contract from an output object
-    pub fn decode<'a>(reader: &mut impl Reader) -> Result<Self, VMError> {
+    fn decode<'a>(reader: &mut impl Reader) -> Result<Self, ReadError> {
         //    Output  =  Anchor  ||  Predicate  ||  LE32(k)  ||  Item[0]  || ... ||  Item[k-1]
         //    Anchor  =  <32 bytes>
         // Predicate  =  <32 bytes>
@@ -186,28 +188,29 @@ impl ExactSizeEncodable for PortableItem {
     }
 }
 
-impl PortableItem {
-    fn decode<'a>(output: &mut impl Reader) -> Result<Self, VMError> {
-        match output.read_u8()? {
+impl Decodable for PortableItem {
+    fn decode<'a>(reader: &mut impl Reader) -> Result<Self, ReadError> {
+        match reader.read_u8()? {
             STRING_TYPE => {
-                let len = output.read_size()?;
-                let bytes = output.read_bytes(len)?;
+                let len = reader.read_size()?;
+                let bytes = reader.read_bytes(len)?;
                 Ok(PortableItem::String(String::Opaque(bytes)))
             }
             PROG_TYPE => {
-                let len = output.read_size()?;
-                let bytes = output.read_bytes(len)?;
+                let len = reader.read_size()?;
+                let bytes = reader.read_bytes(len)?;
                 Ok(PortableItem::Program(ProgramItem::Bytecode(bytes)))
             }
             VALUE_TYPE => {
-                let qty = Commitment::Closed(output.read_point()?);
-                let flv = Commitment::Closed(output.read_point()?);
+                let qty = Commitment::Closed(reader.read_point()?);
+                let flv = Commitment::Closed(reader.read_point()?);
                 Ok(PortableItem::Value(Value { qty, flv }))
             }
-            _ => Err(VMError::InvalidFormat),
+            _ => Err(ReadError::InvalidFormat),
         }
     }
-
+}
+impl PortableItem {
     /// Attempts to cast the item as a Value type.
     pub fn as_value(&self) -> Option<&Value> {
         match self {
