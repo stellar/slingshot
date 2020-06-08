@@ -9,8 +9,10 @@ The Slingshot project consists of the following components:
 
 ### [Demo](demo)
 
-Demo node where one can create transactions and blocks.
-Run on your own machine, or visit a public instance: [zkvm-demo.stellar.org](https://zkvm-demo.stellar.org).
+Demo node where one can create transactions and inspect the blockchain.
+
+* visit a public instance: [zkvm-demo.stellar.org](https://zkvm-demo.stellar.org).
+* run on your own machine: [see instructions](demo/README.md).
 
 ### [ZkVM](zkvm)
 
@@ -71,9 +73,9 @@ API for managing accounts and receivers. This is a building block for various pa
 Small p2p networking library that implements peer management logic with pluggable application logic.
 Implements symmetric DH handshake with forward secrecy.
 
-### [readerwriter](readerwriter)
+### [Reader/Writer](readerwriter)
 
-Simple encoding/decoding traits and utilities for blockchain data structures.
+Simple encoding/decoding and reading/writing traits and utilities for blockchain data structures.
 
 
 ![](https://user-images.githubusercontent.com/698/57546709-2d696c00-7312-11e9-8430-51ed9b51e6c8.png)
