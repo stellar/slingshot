@@ -1,7 +1,5 @@
 //! Implementation of the blockchain state machine.
 
-#[macro_use]
-extern crate failure;
 extern crate serde;
 
 #[macro_use]

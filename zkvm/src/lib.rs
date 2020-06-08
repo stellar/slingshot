@@ -6,8 +6,6 @@
 //! * [Blockchain specification](https://github.com/stellar/slingshot/blob/main/zkvm/docs/zkvm-blockchain.md) — blockchain state machine specification.
 //! * [ZkVM API](https://github.com/stellar/slingshot/blob/main/zkvm/docs/zkvm-api.md) — how to create transactions with ZkVM.
 
-#[macro_use]
-extern crate failure;
 pub extern crate bulletproofs;
 pub extern crate merkle;
 extern crate serde;

@@ -2,9 +2,6 @@
 #![allow(non_snake_case)]
 //! Schnorr signature implementation.
 
-#[macro_use]
-extern crate failure;
-
 mod batch;
 mod errors;
 mod key;

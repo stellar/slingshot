@@ -5,7 +5,7 @@ authors = ["Oleg Andreev <oleganza@gmail.com>"]
 edition = "2018"
 
 [dependencies]
-failure = "0.1"
+thiserror = "1"
 byteorder = "1"
 merlin = "2"
 rand = "0.7"
