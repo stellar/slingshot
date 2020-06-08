@@ -1,4 +1,4 @@
-use crate::shortid::{ShortIDVec, SHORTID_LEN};
+use crate::shortid::ShortIDVec;
 use crate::{
     Block, BlockHeader, BlockID, BlockTx, GetBlock, GetInventory, GetMempoolTxs, Inventory,
     MempoolTxs, Message,
