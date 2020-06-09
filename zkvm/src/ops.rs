@@ -77,9 +77,9 @@ pub enum Instruction {
 
     /// **locktime** → _expr_
     ///
-    /// Pushes an _expression_ `expr` corresponding to the _minimum time bound_ of the transaction.
+    /// Pushes an _expression_ `expr` corresponding to the _lock time_ of the transaction.
     ///
-    /// The one-term expression represents time bound as a weight on the R1CS constant `1` (see `const`).
+    /// The one-term expression represents timestamp as a weight on the R1CS constant `1` (see `const`).
     Locktime,
 
     /// _var_ **expr** → _ex_
@@ -308,7 +308,10 @@ pub enum Instruction {
     /// 1. Pops `2·n` _points_ as pairs of _flavor_ and _quantity_ for each output value, flavor is popped first in each pair.
     /// 2. Pops `m` _wide values_ as input values.
     /// 3. Creates constraints and 64-bit range proofs for quantities per _Cloak protocol_.
-    /// 4. Pushes `n` _values_ to the stack, placing them in the same order as their corresponding commitments.
+    /// 4. Pushes `n` _values_ to the stack, placing them in the **reverse** order as their corresponding commitments:
+    ///    ```ascii
+    ///    A B C → cloak → C B A
+    ///    ```
     ///
     /// Immediate data `m` and `n` are encoded as two _LE32_s.
     Cloak(usize, usize),

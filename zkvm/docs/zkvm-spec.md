@@ -328,7 +328,7 @@ Used to encode lengths of [strings](#string-type), sizes of [contract payloads](
 ### LE64
 
 A non-negative 64-bit integer encoded using little-endian convention.
-Used to encode [value quantities](#value-type) and [timestamps](#time-bounds).
+Used to encode [value quantities](#value-type) and [locktime](#lock-time).
 
 
 ### Scalar
