@@ -129,11 +129,7 @@ pub fn check_tx_header(
     block_version: u64,
 ) -> Result<(), BlockchainError> {
     check(
-        timestamp_ms >= tx_header.mintime_ms,
-        BlockchainError::BadTxTimestamp,
-    )?;
-    check(
-        timestamp_ms <= tx_header.maxtime_ms,
+        timestamp_ms >= tx_header.locktime_ms,
         BlockchainError::BadTxTimestamp,
     )?;
     if block_version == 1 {

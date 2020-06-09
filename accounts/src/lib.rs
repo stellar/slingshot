@@ -20,7 +20,7 @@ and then be able to obtain a utxo proof in order to be able to spend the funds.
 
     Confirms payment details.
     Selects utxos to cover the payment amount
-    Forms a transaction with maxtime=min(sender's exptime, receiver exptime).
+    Forms a transaction.
     Send back the ReceiverReply that allows constructing a contract ID.
 
                               ReceiverReply ------->

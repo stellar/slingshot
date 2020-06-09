@@ -39,7 +39,7 @@ function highlightZkvmOpcodes() {
     $(".highlight-zkvm").html(function(){
         var text = $(this).html();
         text = " " + text + " ";
-        text = text.replace(/(\W)(push|drop|dup:\d+|roll:\d+|const|var|alloc|mintime|maxtime|expr|neg|add|mul|eq|range|and|or|not|verify|unblind|issue|borrow|retire|cloak:\d+:\d+|input|output:\d+|contract:\d+|log|call|signtx|signid)/mg,
+        text = text.replace(/(\W)(push|drop|dup:\d+|roll:\d+|const|var|alloc|locktime|expr|neg|add|mul|eq|range|and|or|not|verify|unblind|issue|borrow|retire|cloak:\d+:\d+|input|output:\d+|contract:\d+|log|call|signtx|signid)/mg,
             "$1<span class=\"zkvm-op\">$2</span>");
         return text;
     })

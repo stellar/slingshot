@@ -80,10 +80,9 @@ impl Mempool {
         self.entries.len()
     }
 
-    /// Updates timestamp and re-applies txs to filter out the outdated ones.
+    /// Updates timestamp.
     pub fn update_timestamp(&mut self, timestamp_ms: u64) {
         self.timestamp_ms = timestamp_ms;
-        self.update_mempool(None);
     }
 
     /// Updates the state of the blockchain and removes conflicting transactions.

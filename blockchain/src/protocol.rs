@@ -225,9 +225,6 @@ impl<D: Delegate> Node<D> {
     /// Obviously, a multi-party signing, SCP or any other decentralized consensus algorithm
     /// would have a different API.
     pub fn create_block(&mut self, timestamp_ms: u64, signing_key: SigningKey) {
-        // Note: we don't need to do that if all tx.maxtime's are 1-2 blocks away.
-        // TODO: rethink whether we actually need the maxtime at all. It is not needed for relative timelocks in paychans,
-        // and it is not helping with clearing up the mempool spam.
         let timestamp_ms = core::cmp::max(timestamp_ms, self.delegate.tip().0.timestamp_ms);
         self.mempool.update_timestamp(timestamp_ms);
 

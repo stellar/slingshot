@@ -75,19 +75,12 @@ pub enum Instruction {
     /// This is different from `var`: the variable created by `alloc` is _not_ represented by an individual Pedersen commitment and therefore can be chosen freely when the transaction is constructed.
     Alloc(Option<ScalarWitness>),
 
-    /// **mintime** → _expr_
+    /// **locktime** → _expr_
     ///
     /// Pushes an _expression_ `expr` corresponding to the _minimum time bound_ of the transaction.
     ///
     /// The one-term expression represents time bound as a weight on the R1CS constant `1` (see `const`).
-    Mintime,
-
-    /// **maxtime** → _expr_
-    ///
-    /// Pushes an _expression_ `expr` corresponding to the _maximum time bound_ of the transaction.
-    ///
-    /// The one-term expression represents time bound as a weight on the R1CS constant `1` (see `const`).
-    Maxtime,
+    Locktime,
 
     /// _var_ **expr** → _ex_
     ///
@@ -514,61 +507,59 @@ pub enum Opcode {
     Var = 0x06,
     /// A code for [Instruction::Alloc]
     Alloc = 0x07,
-    /// A code for [Instruction::Mintime]
-    Mintime = 0x08,
-    /// A code for [Instruction::Maxtime]
-    Maxtime = 0x09,
+    /// A code for [Instruction::Locktime]
+    Locktime = 0x08,
     /// A code for [Instruction::Expr]
-    Expr = 0x0a,
+    Expr = 0x09,
     /// A code for [Instruction::Neg]
-    Neg = 0x0b,
+    Neg = 0x0a,
     /// A code for [Instruction::Add]
-    Add = 0x0c,
+    Add = 0x0b,
     /// A code for [Instruction::Mul]
-    Mul = 0x0d,
+    Mul = 0x0c,
     /// A code for [Instruction::Eq]
-    Eq = 0x0e,
+    Eq = 0x0d,
     /// A code for [Instruction::Range]
-    Range = 0x0f,
+    Range = 0x0e,
     /// A code for [Instruction::And]
-    And = 0x10,
+    And = 0x0f,
     /// A code for [Instruction::Or]
-    Or = 0x11,
+    Or = 0x10,
     /// A code for [Instruction::Not]
-    Not = 0x12,
+    Not = 0x11,
     /// A code for [Instruction::Verify]
-    Verify = 0x13,
+    Verify = 0x12,
     /// A code for [Instruction::Unblind]
-    Unblind = 0x14,
+    Unblind = 0x13,
     /// A code for [Instruction::Issue]
-    Issue = 0x15,
+    Issue = 0x14,
     /// A code for [Instruction::Borrow]
-    Borrow = 0x16,
+    Borrow = 0x15,
     /// A code for [Instruction::Retire]
-    Retire = 0x17,
+    Retire = 0x16,
     /// A code for [Instruction::Cloak]
-    Cloak = 0x18,
+    Cloak = 0x17,
     /// A code for [Instruction::Fee]
-    Fee = 0x19,
+    Fee = 0x18,
     /// A code for [Instruction::Input]
-    Input = 0x1a,
+    Input = 0x19,
     /// A code for [Instruction::Output]
-    Output = 0x1b,
+    Output = 0x1a,
     /// A code for [Instruction::Contract]
-    Contract = 0x1c,
+    Contract = 0x1b,
     /// A code for [Instruction::Log]
-    Log = 0x1d,
+    Log = 0x1c,
     /// A code for [Instruction::Call]
-    Call = 0x1e,
+    Call = 0x1d,
     /// A code for [Instruction::Signtx]
-    Signtx = 0x1f,
+    Signtx = 0x1e,
     /// A code for [Instruction::Signid]
-    Signid = 0x20,
+    Signid = 0x1f,
     /// A code for [Instruction::Signtag]
     Signtag = MAX_OPCODE,
 }
 
-const MAX_OPCODE: u8 = 0x21;
+const MAX_OPCODE: u8 = 0x20;
 
 impl Opcode {
     /// Converts the opcode to `u8`.
@@ -615,8 +606,7 @@ impl Encodable for Instruction {
             Instruction::Const => write(Opcode::Const)?,
             Instruction::Var => write(Opcode::Var)?,
             Instruction::Alloc(_) => write(Opcode::Alloc)?,
-            Instruction::Mintime => write(Opcode::Mintime)?,
-            Instruction::Maxtime => write(Opcode::Maxtime)?,
+            Instruction::Locktime => write(Opcode::Locktime)?,
             Instruction::Expr => write(Opcode::Expr)?,
             Instruction::Neg => write(Opcode::Neg)?,
             Instruction::Add => write(Opcode::Add)?,
@@ -714,8 +704,7 @@ impl Instruction {
             Opcode::Const => Ok(Instruction::Const),
             Opcode::Var => Ok(Instruction::Var),
             Opcode::Alloc => Ok(Instruction::Alloc(None)),
-            Opcode::Mintime => Ok(Instruction::Mintime),
-            Opcode::Maxtime => Ok(Instruction::Maxtime),
+            Opcode::Locktime => Ok(Instruction::Locktime),
             Opcode::Expr => Ok(Instruction::Expr),
             Opcode::Neg => Ok(Instruction::Neg),
             Opcode::Add => Ok(Instruction::Add),

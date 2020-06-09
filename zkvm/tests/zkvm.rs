@@ -114,8 +114,7 @@ fn build_and_verify(program: Program, keys: &Vec<Scalar>) -> Result<(TxID, TxLog
         let bp_gens = BulletproofGens::new(256, 1);
         let header = TxHeader {
             version: 0u64,
-            mintime_ms: 0u64,
-            maxtime_ms: 0u64,
+            locktime_ms: 0u64,
         };
         let gens = PedersenGens::default();
         let utx = Prover::build_tx(program, header, &bp_gens)?;
@@ -547,7 +546,7 @@ fn programs_cannot_be_copied() {
 #[test]
 fn expressions_cannot_be_copied() {
     let prog = Program::build(|p| {
-        p.mintime() // some arbitrary expression
+        p.locktime() // some arbitrary expression
             .dup(0);
     });
 
@@ -560,8 +559,8 @@ fn expressions_cannot_be_copied() {
 #[test]
 fn constraints_cannot_be_copied() {
     let prog = Program::build(|p| {
-        p.mintime()
-            .mintime()
+        p.locktime()
+            .locktime()
             .eq() // some arbitrary constraint
             .dup(0);
     });

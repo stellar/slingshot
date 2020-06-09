@@ -50,10 +50,7 @@ pub struct TxHeader {
     pub version: u64,
 
     /// Timestamp before which tx is invalid (in milliseconds since the Unix epoch)
-    pub mintime_ms: u64,
-
-    /// Timestamp after which tx is invalid (in milliseconds since the Unix epoch)
-    pub maxtime_ms: u64,
+    pub locktime_ms: u64,
 }
 
 /// Instance of a transaction that is not signed yet.
@@ -138,14 +135,13 @@ pub struct VerifiedTx {
 impl Encodable for TxHeader {
     fn encode(&self, w: &mut impl Writer) -> Result<(), WriteError> {
         w.write_u64(b"version", self.version)?;
-        w.write_u64(b"mintime", self.mintime_ms)?;
-        w.write_u64(b"maxtime", self.maxtime_ms)?;
+        w.write_u64(b"locktime", self.locktime_ms)?;
         Ok(())
     }
 }
 impl ExactSizeEncodable for TxHeader {
     fn encoded_size(&self) -> usize {
-        8 * 3
+        8 * 2
     }
 }
 
@@ -153,8 +149,7 @@ impl Decodable for TxHeader {
     fn decode(r: &mut impl Reader) -> Result<Self, ReadError> {
         Ok(TxHeader {
             version: r.read_u64()?,
-            mintime_ms: r.read_u64()?,
-            maxtime_ms: r.read_u64()?,
+            locktime_ms: r.read_u64()?,
         })
     }
 }
@@ -366,8 +361,7 @@ impl MerkleItem for TxEntry {
         match self {
             TxEntry::Header(h) => {
                 t.append_u64(b"tx.version", h.version);
-                t.append_u64(b"tx.mintime", h.mintime_ms);
-                t.append_u64(b"tx.maxtime", h.maxtime_ms);
+                t.append_u64(b"tx.locktime", h.locktime_ms);
             }
             TxEntry::Issue(q, f) => {
                 t.commit_point(b"issue.q", q);
@@ -401,9 +395,8 @@ mod tests {
     fn txlog_helper() -> Vec<TxEntry> {
         vec![
             TxEntry::Header(TxHeader {
-                mintime_ms: 0,
-                maxtime_ms: 0,
                 version: 0,
+                locktime_ms: 0,
             }),
             TxEntry::Issue(
                 CompressedRistretto::from_slice(&[0u8; 32]),

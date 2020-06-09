@@ -265,7 +265,7 @@ Outputs:
 Procedure:
 1. Let `txresults` be an empty list of tuples.
 2. For each transaction `tx` in `txs`:
-   1. Verify `tx.mintime_ms <= timestamp_ms <= tx.maxtime_ms`.
+   1. Verify `tx.locktime_ms <= timestamp_ms`.
    2. If `version == 1`, verify `tx.version == 1`.
    3. [Execute](zkvm-spec.md#vm-execution) `tx` to produce transaction log `txlog`.
    4. Compute transaction ID `txid` from the [header entry](zkvm-spec.md#header-entry) of `tx` and from `txlog`.

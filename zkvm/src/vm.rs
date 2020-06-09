@@ -29,8 +29,7 @@ where
     CS: r1cs::RandomizableConstraintSystem,
     D: Delegate<CS>,
 {
-    mintime_ms: u64,
-    maxtime_ms: u64,
+    locktime_ms: u64,
 
     // is true when tx version is in the future and
     // we allow treating unassigned opcodes as no-ops.
@@ -97,8 +96,7 @@ where
     /// Instantiates a new VM instance.
     pub fn new(header: TxHeader, run: D::RunType, delegate: &'d mut D) -> Self {
         VM {
-            mintime_ms: header.mintime_ms,
-            maxtime_ms: header.maxtime_ms,
+            locktime_ms: header.locktime_ms,
             extension: header.version > CURRENT_VERSION,
             last_anchor: None,
             delegate,
@@ -155,8 +153,7 @@ where
                 Instruction::Const => self.r#const()?,
                 Instruction::Var => self.var()?,
                 Instruction::Alloc(sw) => self.alloc(sw)?,
-                Instruction::Mintime => self.mintime()?,
-                Instruction::Maxtime => self.maxtime()?,
+                Instruction::Locktime => self.locktime()?,
                 Instruction::Expr => self.expr()?,
                 Instruction::Neg => self.neg()?,
                 Instruction::Add => self.add()?,
@@ -335,13 +332,8 @@ where
         Ok(())
     }
 
-    fn mintime(&mut self) -> Result<(), VMError> {
-        self.push_item(Expression::constant(self.mintime_ms));
-        Ok(())
-    }
-
-    fn maxtime(&mut self) -> Result<(), VMError> {
-        self.push_item(Expression::constant(self.maxtime_ms));
+    fn locktime(&mut self) -> Result<(), VMError> {
+        self.push_item(Expression::constant(self.locktime_ms));
         Ok(())
     }
 

@@ -154,8 +154,7 @@ fn basic_accounts_test() {
         });
         let header = TxHeader {
             version: 1u64,
-            mintime_ms: 0u64,
-            maxtime_ms: u64::max_value(),
+            locktime_ms: 0u64,
         };
 
         // Build the UnverifiedTx

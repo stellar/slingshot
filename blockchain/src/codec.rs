@@ -284,8 +284,7 @@ mod tests {
                 tx: Tx {
                     header: TxHeader {
                         version: 9,
-                        mintime_ms: 10,
-                        maxtime_ms: 11,
+                        locktime_ms: 10,
                     },
                     program: vec![12; 34],
                     signature: Signature {

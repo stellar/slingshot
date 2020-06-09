@@ -113,7 +113,7 @@
             &nbsp;
             <strong>Version:</strong> {{tx.header.version}}
             &nbsp;
-            <strong>Time bounds:</strong> [{{tx.header.mintime_ms}}; {{tx.header.maxtime_ms}}]
+            <strong>Lock time:</strong> {{tx.header.locktime_ms}}
             </code>
           </td>
         </tr>
@@ -202,7 +202,7 @@
             &nbsp;
             <strong>Version:</strong> {{tx.header.version}}
             &nbsp;
-            <strong>Time bounds:</strong> [{{tx.header.mintime_ms}}; {{tx.header.maxtime_ms}}]
+            <strong>Lock time:</strong> {{tx.header.locktime_ms}}
             </code>
           </td>
         </tr>

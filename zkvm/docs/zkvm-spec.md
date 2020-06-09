@@ -28,7 +28,7 @@ ZkVM defines a procedural representation for blockchain transactions and the rul
     * [Base points](#base-points)
     * [Pedersen commitment](#pedersen-commitment)
     * [Verification key](#verification-key)
-    * [Time bounds](#time-bounds)
+    * [Lock time](#lock-time)
     * [Contract ID](#contract-id)
     * [Anchor](#anchor)
     * [Transcript](#transcript)
@@ -119,7 +119,7 @@ using [`output`](#output) and [`input`](#input) instructions.
 Custom logic is represented via programmable [**constraints**](#constraint-type)
 applied to [**variables**](#variable-type) and [**expressions**](#expression-type)
 (linear combinations of variables). Variables represent quantities and flavors of values,
-[time bounds](#time-bounds) and user-defined secret parameters. All constraints are arranged in
+[lock time](#lock-time) and user-defined secret parameters. All constraints are arranged in
 a single [constraint system](#constraint-system) which is proven to be satisfied after the VM
 has finished execution.
 
@@ -392,13 +392,14 @@ using the primary [base point](#base-points) `B`: `P = x·B`.
 Verification keys are used to construct [predicates](#predicate) and verify [signatures](#transaction-signature).
 
 
-### Time bounds
+### Lock time
 
-Each transaction is explicitly bound to a range of _minimum_ and _maximum_ time.
-Each bound is in _milliseconds_ since the Unix epoch: 00:00:00 on 1 Jan 1970 (UTC),
-represented by an unsigned 64-bit integer.
-Time bounds are available in the transaction as [expressions](#expression-type) provided by the instructions
-[`mintime`](#mintime) and [`maxtime`](#maxtime).
+Each transaction is explicitly bounded by a _minimum timestamp_, called _lock time_.
+The timestamp is defined in _milliseconds_ since the Unix epoch: 00:00:00 on 1 Jan 1970 (UTC),
+encoded as an little-endian unsigned 64-bit integer.
+
+Lock time is available in the transaction as [expression](#expression-type) provided by the instruction
+[`locktime`](#locktime).
 
 
 ### Contract ID
@@ -563,7 +564,7 @@ Transaction is a structure that contains all data and logic
 required to produce a unique [transaction ID](#transaction-id):
 
 * Version (uint64)
-* [Time bounds](#time-bounds) (pair of [LE64](#le64)s)
+* [Lock time](#lock-time)
 * [Program](#program-type)
 * [Transaction signature](#transaction-signature) (64 bytes)
 * [Constraint system proof](#constraint-system-proof) (variable-length array of points and scalars)
@@ -603,12 +604,11 @@ Entries are committed to the [transcript](#transcript) using the following schem
 
 #### Header entry
 
-Header commits the transaction version and [time bounds](#time-bounds) using the [LE64](#le64) encoding.
+Header commits the transaction version and [lock time](#lock-time) using the [LE64](#le64) encoding.
 
 ```
 T.append("tx.version", LE64(version))
-T.append("tx.mintime", LE64(mintime))
-T.append("tx.maxtime", LE64(maxtime))
+T.append("tx.locktime", LE64(locktime))
 ```
 
 #### Input entry
@@ -804,7 +804,7 @@ The ZkVM state consists of the static attributes and the state machine attribute
 
 1. [Transaction](#transaction):
     * `version`
-    * `mintime` and `maxtime`
+    * `locktime`
     * `program`
     * `tx_signature`
     * `cs_proof`
@@ -939,36 +939,35 @@ Code | Instruction                | Stack diagram                              |
 0x05 | [`const`](#var)            |          _scalar_ → _expr_                 | 
 0x06 | [`var`](#var)              |           _point_ → _var_                  | Adds an external variable to [CS](#constraint-system)
 0x07 | [`alloc`](#alloc)          |                 ø → _expr_                 | Allocates a low-level variable in [CS](#constraint-system)
-0x08 | [`mintime`](#mintime)      |                 ø → _expr_                 |
-0x09 | [`maxtime`](#maxtime)      |                 ø → _expr_                 |
-0x0a | [`expr`](#expr)            |             _var_ → _expr_                 | Allocates a variable in [CS](#constraint-system)
-0x0b | [`neg`](#neg)              |           _expr1_ → _expr2_                |
-0x0c | [`add`](#add)              |     _expr1 expr2_ → _expr3_                |
-0x0d | [`mul`](#mul)              |     _expr1 expr2_ → _expr3_                | Potentially adds multiplier in [CS](#constraint-system)
-0x0e | [`eq`](#eq)                |     _expr1 expr2_ → _constraint_           | 
-0x0f | [`range`](#range)          |            _expr_ → _expr_                 | Modifies [CS](#constraint-system)
-0x10 | [`and`](#and)              | _constr1 constr2_ → _constr3_              |
-0x11 | [`or`](#or)                | _constr1 constr2_ → _constr3_              |
-0x12 | [`not`](#not)              |         _constr1_ → _constr2_              | Modifies [CS](#constraint-system)
-0x13 | [`verify`](#verify)        |      _constraint_ → ø                      | Modifies [CS](#constraint-system) 
-0x14 | [`unblind`](#unblind)      |             _V v_ → _V_                    | [Defers point ops](#deferred-point-operations)
+0x08 | [`locktime`](#locktime)    |                 ø → _expr_                 |
+0x09 | [`expr`](#expr)            |             _var_ → _expr_                 | Allocates a variable in [CS](#constraint-system)
+0x0a | [`neg`](#neg)              |           _expr1_ → _expr2_                |
+0x0b | [`add`](#add)              |     _expr1 expr2_ → _expr3_                |
+0x0c | [`mul`](#mul)              |     _expr1 expr2_ → _expr3_                | Potentially adds multiplier in [CS](#constraint-system)
+0x0d | [`eq`](#eq)                |     _expr1 expr2_ → _constraint_           | 
+0x0e | [`range`](#range)          |            _expr_ → _expr_                 | Modifies [CS](#constraint-system)
+0x0f | [`and`](#and)              | _constr1 constr2_ → _constr3_              |
+0x10 | [`or`](#or)                | _constr1 constr2_ → _constr3_              |
+0x11 | [`not`](#not)              |         _constr1_ → _constr2_              | Modifies [CS](#constraint-system)
+0x12 | [`verify`](#verify)        |      _constraint_ → ø                      | Modifies [CS](#constraint-system) 
+0x13 | [`unblind`](#unblind)      |             _V v_ → _V_                    | [Defers point ops](#deferred-point-operations)
  |                                |                                            |
  |     [**Values**](#value-instructions)              |                        |
-0x15 | [`issue`](#issue)          |    _qty flv data pred_ → _contract_        | Modifies [CS](#constraint-system), [tx log](#transaction-log), [defers point ops](#deferred-point-operations)
-0x16 | [`borrow`](#borrow)        |         _qty flv_ → _–V +V_                | Modifies [CS](#constraint-system)
-0x17 | [`retire`](#retire)        |           _value_ → ø                      | Modifies [CS](#constraint-system), [tx log](#transaction-log)
-0x18 | [`cloak:m:n`](#cloak)      | _widevalues commitments_ → _values_        | Modifies [CS](#constraint-system)
-0x19 | [`fee`](#fee)              |             _qty_ → _widevalue_            | Modifies [CS](#constraint-system), [tx log](#transaction-log)
+0x14 | [`issue`](#issue)          |    _qty flv data pred_ → _contract_        | Modifies [CS](#constraint-system), [tx log](#transaction-log), [defers point ops](#deferred-point-operations)
+0x15 | [`borrow`](#borrow)        |         _qty flv_ → _–V +V_                | Modifies [CS](#constraint-system)
+0x16 | [`retire`](#retire)        |           _value_ → ø                      | Modifies [CS](#constraint-system), [tx log](#transaction-log)
+0x17 | [`cloak:m:n`](#cloak)      | _widevalues commitments_ → _values_        | Modifies [CS](#constraint-system)
+0x18 | [`fee`](#fee)              |             _qty_ → _widevalue_            | Modifies [CS](#constraint-system), [tx log](#transaction-log)
  |                                |                                            |
  |     [**Contracts**](#contract-instructions)        |                        |
-0x1a | [`input`](#input)          |      _prevoutput_ → _contract_             | Modifies [tx log](#transaction-log)
-0x1b | [`output:k`](#output)      |   _items... pred_ → ø                      | Modifies [tx log](#transaction-log)
-0x1c | [`contract:k`](#contract)  |   _items... pred_ → _contract_             | 
-0x1d | [`log`](#log)              |            _data_ → ø                      | Modifies [tx log](#transaction-log)
-0x1e | [`call`](#call)            |_contract(P) proof prog_ → _results..._     | [Defers point operations](#deferred-point-operations)
-0x1f | [`signtx`](#signtx)        |        _contract_ → _results..._           | Modifies [deferred verification keys](#transaction-signature)
-0x20 | [`signid`](#signid)        |_contract prog sig_ → _results..._          | [Defers point operations](#deferred-point-operations)
-0x21 | [`signtag`](#signtag)      |_contract prog sig_ → _results..._          | [Defers point operations](#deferred-point-operations)
+0x19 | [`input`](#input)          |      _prevoutput_ → _contract_             | Modifies [tx log](#transaction-log)
+0x1a | [`output:k`](#output)      |   _items... pred_ → ø                      | Modifies [tx log](#transaction-log)
+0x1b | [`contract:k`](#contract)  |   _items... pred_ → _contract_             | 
+0x1c | [`log`](#log)              |            _data_ → ø                      | Modifies [tx log](#transaction-log)
+0x1d | [`call`](#call)            |_contract(P) proof prog_ → _results..._     | [Defers point operations](#deferred-point-operations)
+0x1e | [`signtx`](#signtx)        |        _contract_ → _results..._           | Modifies [deferred verification keys](#transaction-signature)
+0x1f | [`signid`](#signid)        |_contract prog sig_ → _results..._          | [Defers point operations](#deferred-point-operations)
+0x20 | [`signtag`](#signtag)      |_contract prog sig_ → _results..._          | [Defers point operations](#deferred-point-operations)
   —  | [`ext`](#ext)              |                 ø → ø                      | Fails if [extension flag](#vm-state) is not set.
 
 
@@ -1056,21 +1055,13 @@ Fails if `P` is not a valid [point](#point).
 This is different from [`var`](#var): the variable created by `alloc` is _not_ represented by an individual Pedersen commitment and therefore can be chosen freely when the transaction is constructed.
 
 
-#### mintime
+#### locktime
 
-**mintime** → _expr_
+**locktime** → _expr_
 
-Pushes an [expression](#expression-type) `expr` corresponding to the [minimum time bound](#time-bounds) of the transaction.
+Pushes an [expression](#expression-type) `expr` corresponding to the [lock time](#lock-time) of the transaction.
 
-The one-term expression represents time bound as a weight on the R1CS constant `1` (see [`const`](#const)).
-
-#### maxtime
-
-**maxtime** → _expr_
-
-Pushes an [expression](#expression-type) `expr` corresponding to the [maximum time bound](#time-bounds) of the transaction.
-
-The one-term expression represents time bound as a weight on the R1CS constant `1` (see [`const`](#const)).
+The one-term expression represents timestamp as a weight on the R1CS constant `1` (see [`const`](#const)).
 
 #### expr
 
@@ -1539,7 +1530,7 @@ A [Transaction](#transaction) is serialized as follows:
 
 ```
         SerializedTx = TxHeader || LE32(len(Program)) || Program || Signature || Proof
-        TxHeader = LE64(version) || LE64(mintime) || LE64(maxtime)
+        TxHeader = LE64(version) || LE64(locktime)
         Program = <len(Program) bytes>
         Signature = <64 bytes>
         Proof = <14·32 + len(InnerProductProof) bytes>
@@ -1695,7 +1686,7 @@ To _initiate_ a force-close, the program `P1` does:
 
 To construct such program `P1`, users first agree on the final distribution of balances via the program `P2`.
 
-The final-distribution program `P2`:1. Checks that `tx.mintime >= exptime` (can be done via `range:24(tx.mintime - exptime)` which gives 6-month resolution for the expiration time)
+The final-distribution program `P2`:1. Checks that `tx.locktime >= exptime` (can be done via `range(tx.locktime - exptime)`)
 2. Creates `borrow`/`output` combinations for each party with hard-coded predicate for each output.
 3. Leaves the payload value and negatives from `borrow` on the stack to be consumed by the `cloak` instruction.
 

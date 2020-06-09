@@ -160,8 +160,7 @@ impl Program {
     def_op!(r#const, Const, "const");
     def_op!(var, Var, "var");
     def_op!(alloc, Alloc, Option::<ScalarWitness>, "alloc");
-    def_op!(mintime, Mintime, "mintime");
-    def_op!(maxtime, Maxtime, "maxtime");
+    def_op!(locktime, Locktime, "locktime");
     def_op!(expr, Expr, "expr");
     def_op!(neg, Neg, "neg");
     def_op!(add, Add, "add");

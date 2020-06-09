@@ -104,8 +104,7 @@ impl Instruction {
             Instruction::Const => write!(f, "const"),
             Instruction::Var => write!(f, "var"),
             Instruction::Alloc(_) => write!(f, "alloc"),
-            Instruction::Mintime => write!(f, "mintime"),
-            Instruction::Maxtime => write!(f, "maxtime"),
+            Instruction::Locktime => write!(f, "locktime"),
             Instruction::Expr => write!(f, "expr"),
             Instruction::Neg => write!(f, "neg"),
             Instruction::Add => write!(f, "add"),
@@ -188,8 +187,8 @@ impl fmt::Debug for Tx {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "Tx(v{}, [{:x},{:x}]) {{\n",
-            self.header.version, self.header.mintime_ms, self.header.maxtime_ms
+            "Tx(v{} locktime: {:x}) {{\n",
+            self.header.version, self.header.locktime_ms
         )?;
         match Program::parse(&self.program) {
             Ok(p) => write!(f, "    Program({:?})\n", p)?,
@@ -214,8 +213,8 @@ impl fmt::Debug for VerifiedTx {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "VerifiedTx(v{}, [{:x},{:x}]) {{\n",
-            self.header.version, self.header.mintime_ms, self.header.maxtime_ms
+            "VerifiedTx(v{} locktime: {:x}) {{\n",
+            self.header.version, self.header.locktime_ms
         )?;
         write!(f, "    {:?}\n", &self.id)?;
         write!(f, "    Fee rate: {:?}\n", &self.feerate)?;

@@ -138,8 +138,7 @@ mod tests {
         let bp_gens = BulletproofGens::new(256, 1);
         let header = TxHeader {
             version: 0u64,
-            mintime_ms: 0u64,
-            maxtime_ms: 0u64,
+            locktime_ms: 0u64,
         };
         // TBD: figure out better + more robust signing mechanism
         let gens = PedersenGens::default();
