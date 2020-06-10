@@ -80,7 +80,7 @@ trait ReaderExt: Reader + Sized {
     }
 
     fn read_shortid_vec(&mut self) -> Result<ShortIDVec, ReadError> {
-        self.read_u8_vec().map(ShortIDVec)
+        ShortIDVec::new(self.read_u8_vec()?).ok_or(ReadError::InvalidFormat)
     }
 
     fn read_blockid(&mut self) -> Result<BlockID, ReadError> {
@@ -108,7 +108,7 @@ trait WriterExt: Writer + Sized {
         label: &'static [u8],
         vec: &ShortIDVec,
     ) -> Result<(), WriteError> {
-        self.write_u8_vec(label, vec.0.as_ref())
+        self.write_u8_vec(label, vec.as_ref())
     }
 
     fn write_blockid(

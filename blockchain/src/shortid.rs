@@ -22,9 +22,9 @@ pub struct ShortID {
     inner: u64, // guaranteed to have zeroed high 16 bits
 }
 
-#[derive(Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(transparent)]
-pub struct ShortIDVec(pub Vec<u8>);
+pub struct ShortIDVec(Vec<u8>);
 
 /// Hasher that produces `ID`s
 #[derive(Copy, Clone, Debug)]
@@ -87,6 +87,16 @@ impl ShortID {
 }
 
 impl ShortIDVec {
+    /// Initializes short ID vec with the buffer of bytes.
+    /// Returns `None` if the buffer length is not divisible by `SHORTID_LEN`.
+    pub fn new(buf: Vec<u8>) -> Option<Self> {
+        if buf.len() % SHORTID_LEN != 0 {
+            None
+        } else {
+            Some(Self(buf))
+        }
+    }
+
     /// Creates a new buffer with a given capacity.
     pub fn with_capacity(cap: usize) -> Self {
         Self(Vec::with_capacity(cap * SHORTID_LEN))
@@ -115,6 +125,12 @@ impl ShortIDVec {
     /// Reads a short id at a given index.
     pub fn get(&self, offset: usize) -> Option<ShortID> {
         ShortID::at_position(offset, &self.0)
+    }
+}
+
+impl AsRef<[u8]> for ShortIDVec {
+    fn as_ref(&self) -> &[u8] {
+        &self.0
     }
 }
 

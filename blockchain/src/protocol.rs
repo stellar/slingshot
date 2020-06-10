@@ -200,7 +200,7 @@ impl<D: Delegate> Node<D> {
                 needs_our_inventory: false,
                 their_short_id_nonce: 0,
                 shortid_nonce: self.shortid_nonce,
-                shortid_list: ShortIDVec(Vec::new()),
+                shortid_list: ShortIDVec::default(),
                 last_inventory_received: Instant::now(),
             },
         );
@@ -329,7 +329,7 @@ impl<D: Delegate> Node<D> {
                                 shortid_nonce: current_nonce,
                                 shortid_list: ShortIDVec::with_capacity(10),
                             });
-                        req.shortid_list.0.extend_from_slice(&id.to_bytes()[..]);
+                        req.shortid_list.push(id);
                     }
                 }
             }
