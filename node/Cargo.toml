@@ -1,0 +1,17 @@
+[package]
+name = "node"
+version = "0.1.0"
+authors = ["Oleg Andreev <oleganza@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+rand = "0.7"
+dotenv = "0.9.0"
+time = "^0.1"
+serde = { version = "1.0", features=["derive"] }
+hex = "^0.3"
+futures = "0.3"
+tokio = {version = "0.2", features=["full"]}
+warp = "0.2"
+tera = "1"
+notify = "4"

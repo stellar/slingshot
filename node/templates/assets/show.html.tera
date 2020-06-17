@@ -1,0 +1,23 @@
+{% extends "base" %}
+
+{% block title %}{{asset.alias}}{% endblock title %}
+
+{% block main %}
+  <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3">
+  {% if asset_is_external %}
+    <h1 class="h1">External asset: <em>{{asset.alias}}</em></h1>
+  {% else %}
+    <h1 class="h1">Asset: <em>{{asset.alias}}</em></h1>
+  {% endif %}
+  </div>
+
+  <table class="table table-bordered block-header" style="max-width:700px">
+    <tbody>
+      <tr><th>Alias</th><td>{{asset.alias}}</td></tr>
+      <tr><th>Owner ID</th><td><code>{{asset.owner_id}}</code></td></tr>
+      <tr><th>Flavor ID</th><td><code>{{asset.flv}}</code></td></tr>
+      <tr><th>Issuance privkey</th><td><code>{{asset.prv}}</code></td></tr>
+      <tr><th>Issuance pubkey</th><td><code>{{asset.pub}}</code></td></tr>
+    </tbody>
+  </table>
+{% endblock main %}

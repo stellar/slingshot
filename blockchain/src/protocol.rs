@@ -209,7 +209,7 @@ impl<D: Delegate> Node<D> {
     }
 
     /// Called when a peer disconnects.
-    pub async fn peer_diconnected(&mut self, pid: D::PeerIdentifier) {
+    pub async fn peer_disconnected(&mut self, pid: D::PeerIdentifier) {
         self.peers.remove(&pid);
     }
 

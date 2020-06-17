@@ -1,0 +1,35 @@
+{% extends "base" %}
+
+{% block title %}Blocks{% endblock title %}
+
+{% block main %}
+    <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 xxxborder-bottom">
+      <h1 class="h1">Blocks</h1>
+    </div>
+
+  <div class="table-responsive">
+    <table class="table table-bordered">
+      <thead>
+        <tr>
+          <th>Height</th>
+          <th>Timestamp</th>
+          <th>Txs</th>
+          <th>ID</th>
+        </tr>
+      </thead>
+      <tbody>
+  		{% for block in blocks %}
+        <tr>
+          <td>{{block.height}}</td>
+          <td>{{block.header.timestamp_ms}}</td>
+          <td>{{block.txs}}</td>
+          <td><a href="/network/block/{{block.height}}"><code>{{block.id}}</code></a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  
+    
+{% endblock main %}
