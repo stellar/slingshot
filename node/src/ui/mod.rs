@@ -21,7 +21,7 @@ use crate::comm::{CommandSender, EventReceiver};
 ///
 /// /ws             -> websocket notifications
 pub async fn launch(
-    addr: impl Into<SocketAddr> + 'static,
+    addr: SocketAddr,
     cmd_sender: CommandSender,
     event_receiver: EventReceiver,
 ) {
@@ -72,7 +72,6 @@ pub async fn launch(
 
     let static_route = warp::path("static").and(warp::fs::dir("static"));
     let routes = warp::get().and(html_routes.or(hello).or(bye).or(ws_route).or(static_route));
-    let addr = addr.into();
     eprintln!("UI:  http://{}", &addr);
     warp::serve(routes).run(addr).await;
 }

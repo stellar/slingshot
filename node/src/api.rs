@@ -5,7 +5,7 @@ use crate::comm::{CommandSender, EventReceiver};
 
 /// Launches the API server.
 pub async fn launch(
-    addr: impl Into<SocketAddr> + 'static,
+    addr: SocketAddr,
     cmd_sender: CommandSender,
     event_receiver: EventReceiver,
 ) {
@@ -16,8 +16,7 @@ pub async fn launch(
         .map(|| warp::reply::with_status("Not found.", warp::http::StatusCode::NOT_FOUND));
 
     let routes = echo.or(not_found);
-
-    let addr = addr.into();
+    
     eprintln!("API: http://{}", &addr);
     warp::serve(routes).run(addr).await;
 }
