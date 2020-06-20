@@ -1,28 +1,33 @@
 mod ws;
 
 use std::collections::HashMap;
+use std::default::Default;
 use std::net::SocketAddr;
 use std::sync::{Arc, RwLock};
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::default::Default;
-use tokio::sync::mpsc;
-use futures::{FutureExt, StreamExt};
 
 use tera::Tera;
-use warp::ws::{Message, WebSocket};
 use warp::Filter;
 
+use crate::comm::{CommandSender, EventReceiver};
+
 /// Launches the UI server.
-/// Takes a receiving channel as a parameter that receives 
+/// Takes a receiving channel as a parameter that receives
 ///
 /// /               -> General network stats: chain state, mempool, connected peers, accounts.
 /// /blocks         -> List of blocks
 /// /blocks/:height -> View into a block
+/// /mempool        -> List mempool txs
+/// /tx/:id         -> Tx details and status (confirmed, mempool, dropped)
 ///
 /// /ws             -> websocket notifications
-pub async fn launch(addr: impl Into<SocketAddr> + 'static) {
+pub async fn launch(
+    addr: impl Into<SocketAddr> + 'static,
+    cmd_sender: CommandSender,
+    event_receiver: EventReceiver,
+) {
     let tera = Tera::new("templates/**/*.html").unwrap();
     let tera_arc = Arc::new(RwLock::new(tera));
+    autoreload_templates(tera_arc.clone(), "./templates");
 
     let index = warp::path::end().map(|| {
         let mut dict = HashMap::new();
@@ -34,16 +39,12 @@ pub async fn launch(addr: impl Into<SocketAddr> + 'static) {
 
     let bye = warp::path!("bye" / String).map(|name| format!("Bye, {}!", name));
 
-    autoreload_templates(tera_arc.clone(), "./templates");
-    
-    let ws_connections = ws::ConnectionMap::default();
+    let ws_pool = Arc::new(ws::WebsocketPool::default());
     let ws_route = warp::path("ws")
-        .and(warp::any().map(move || ws_connections.clone()))    
+        .and(warp::any().map(move || ws_pool.clone()))
         .and(warp::ws())
-        .map(|conns, ws: warp::ws::Ws| {
-            ws.on_upgrade(move |socket| {
-                ws::add_connection(socket, conns)
-            })
+        .map(|wspool: Arc<ws::WebsocketPool>, ws: warp::ws::Ws| {
+            ws.on_upgrade(move |socket| wspool.add(socket))
         });
 
     // warp::header::headers_cloned()
@@ -70,13 +71,7 @@ pub async fn launch(addr: impl Into<SocketAddr> + 'static) {
     //                found type `std::ops::FnOnce<((&str, &str),)>`
 
     let static_route = warp::path("static").and(warp::fs::dir("static"));
-    let routes = warp::get().and(
-        html_routes
-            .or(hello)
-            .or(bye)
-            .or(ws_route)
-            .or(static_route),
-    );
+    let routes = warp::get().and(html_routes.or(hello).or(bye).or(ws_route).or(static_route));
     let addr = addr.into();
     eprintln!("UI:  http://{}", &addr);
     warp::serve(routes).run(addr).await;
@@ -95,8 +90,8 @@ fn autoreload_templates(tera: Arc<RwLock<Tera>>, path: impl AsRef<std::path::Pat
     thread::spawn(move || {
         loop {
             match rx.recv() {
-                Ok(event) => {
-                    //eprintln!("FS event: {:?}", event);
+                Ok(_event) => {
+                    eprintln!("FS event: {:?}", _event);
                     let mut tera = tera.write().unwrap();
                     match tera.full_reload() {
                         Ok(_) => {}
