@@ -1,5 +1,5 @@
+use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
-use serde::{Serialize,Deserialize};
 
 /*
 Example config file:
@@ -21,9 +21,8 @@ min_feerate = 1_000  # units/byte
 
 */
 
-
 /// Configuration file for the node.
-#[derive(Clone,Debug,Default,Serialize,Deserialize)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct Config {
     /// UI options
     #[serde(default)]
@@ -43,7 +42,7 @@ pub struct Config {
 }
 
 /// UI configuration options
-#[derive(Clone,Debug,Serialize,Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct UI {
     /// Listening address for the UI webserver.
     #[serde(default = "UI::default_listen_addr")]
@@ -55,7 +54,7 @@ pub struct UI {
 }
 
 /// API configuration options
-#[derive(Clone,Debug,Serialize,Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct API {
     /// Listening address for the API webserver.
     #[serde(default = "API::default_listen_addr")]
@@ -67,16 +66,15 @@ pub struct API {
 }
 
 /// P2P configuration options
-#[derive(Clone,Debug,Serialize,Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct P2P {
     /// Listening address for the P2P webserver.
     #[serde(default = "P2P::default_listen_addr")]
     pub listen_addr: SocketAddr,
 }
 
-
 /// P2P configuration options
-#[derive(Clone,Debug,Serialize,Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Mempool {
     /// Maximum size of the mempool in bytes.
     #[serde(default = "Mempool::default_max_size")]
@@ -87,12 +85,11 @@ pub struct Mempool {
     pub min_feerate: f32,
 }
 
-
 impl Config {
     /// Returns a documentation for the config file.
     pub fn documentation() -> &'static str {
         r##"
-    Slingshot config file format with default values:
+    ## Slingshot config file with default settings:
 
     [ui]
     listen = "127.0.0.1:3000"    # socket address for the webserver running the UI
@@ -108,11 +105,9 @@ impl Config {
     [mempool]
     max_size = 10_000_000        # maximum size in bytes for the mempool transactions
     min_feerate = 0              # minimum feerate for the transactions to be included in mempool
-"##;
+"##
     }
 }
-
-
 
 impl UI {
     /// Default address for UI is only accessible from the localhost.
@@ -130,7 +125,6 @@ impl Default for UI {
     }
 }
 
-
 impl API {
     /// Default address for API is accessible only from the localhost.
     pub fn default_listen_addr() -> SocketAddr {
@@ -147,8 +141,6 @@ impl Default for API {
     }
 }
 
-
-
 impl P2P {
     /// Default address for P2P is accessible only from the localhost.
     pub fn default_listen_addr() -> SocketAddr {
@@ -163,8 +155,6 @@ impl Default for P2P {
         }
     }
 }
-
-
 
 impl Mempool {
     /// Default maximum size of the mempool (1M bytes).

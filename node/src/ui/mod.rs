@@ -20,11 +20,7 @@ use crate::comm::{CommandSender, EventReceiver};
 /// /tx/:id         -> Tx details and status (confirmed, mempool, dropped)
 ///
 /// /ws             -> websocket notifications
-pub async fn launch(
-    addr: SocketAddr,
-    cmd_sender: CommandSender,
-    event_receiver: EventReceiver,
-) {
+pub async fn launch(addr: SocketAddr, cmd_sender: CommandSender, event_receiver: EventReceiver) {
     let tera = Tera::new("templates/**/*.html").unwrap();
     let tera_arc = Arc::new(RwLock::new(tera));
     autoreload_templates(tera_arc.clone(), "./templates");
