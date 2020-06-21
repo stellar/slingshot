@@ -44,7 +44,7 @@ async fn run(config: Config) {
         None
     };
 
-    // 4. Spawn the UI server[]
+    // 4. Spawn the UI server
     let addr = config.ui.listen_addr;
     let ui_process = if !config.ui.disabled {
         Some(tokio::spawn(async move {
