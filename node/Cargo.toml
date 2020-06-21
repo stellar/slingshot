@@ -15,6 +15,7 @@ tokio = {version = "0.2", features=["full"]}
 warp = "0.2"
 tera = "1"
 notify = "4"
+toml = "0.5"
 
 [dependencies.blockchain]
 path = "../blockchain"

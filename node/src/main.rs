@@ -7,13 +7,14 @@ mod ui;
 
 use cli_args::RunCommand;
 use config::Config;
+use std::path::Path;
 
 #[tokio::main]
 async fn main() {
     match cli_args::parse_args() {
         Ok(RunCommand::Run(_path, config)) => run(config).await,
         Ok(RunCommand::ShowConfig(_path, config)) => show_config(config),
-        Ok(RunCommand::Help(_path)) => help(),
+        Ok(RunCommand::Help(path)) => help(&path),
         Err(msg) => eprintln!("{}", msg),
     }
 }
@@ -43,7 +44,7 @@ async fn run(config: Config) {
         None
     };
 
-    // 4. Spawn the UI server
+    // 4. Spawn the UI server[]
     let addr = config.ui.listen_addr;
     let ui_process = if !config.ui.disabled {
         Some(tokio::spawn(async move {
@@ -63,7 +64,30 @@ async fn run(config: Config) {
 }
 
 fn show_config(config: Config) {
-    //eprint!()
+    let toml_string = toml::ser::to_string_pretty(&config).expect("Failed to serialize config as TOML file. Please file a bug with the contents of your config file, so we can fix it.");
+    eprintln!("{}", toml_string);
 }
 
-fn help() {}
+fn help(_exec_path: &Path) {
+    eprintln!(
+        r###"
+## Running the node
+
+    slingshot run    [options]      # run the node
+    slingshot config [options]      # show current configuration
+    slingshot help                  # list command line options
+
+## Launch options
+
+    --config <path>           # path to the config file
+                                (default is ~/.slingshot/config.toml)
+
+    --override <config line>  # overrides a config setting just for this launch
+                                (e.g. --override "ui.listen='127.0.0.1:8000'")
+
+## Slingshot config file with default settings:
+{0}
+"###,
+        Config::documentation(),
+    );
+}

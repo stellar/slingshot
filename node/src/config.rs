@@ -89,8 +89,6 @@ impl Config {
     /// Returns a documentation for the config file.
     pub fn documentation() -> &'static str {
         r##"
-    ## Slingshot config file with default settings:
-
     [ui]
     listen = "127.0.0.1:3000"    # socket address for the webserver running the UI
     disabled = false             # whether the UI server should be disabled
