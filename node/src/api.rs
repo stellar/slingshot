@@ -1,10 +1,10 @@
 use std::net::SocketAddr;
 use warp::Filter;
 
-use crate::comm::{CommandSender, EventReceiver};
+use crate::bc::BlockchainRef;
 
 /// Launches the API server.
-pub async fn launch(addr: SocketAddr, cmd_sender: CommandSender, event_receiver: EventReceiver) {
+pub async fn launch(addr: SocketAddr, bc: BlockchainRef) {
     let echo =
         warp::path!("v1" / "echo" / String).map(|thingy| format!("API v1 echo: {}!", thingy));
 

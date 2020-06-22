@@ -43,7 +43,7 @@ Please use one of the following subcommands:
     }
 }
 
-fn parse_config_opts(args: env::Args) -> Result<(PathBuf,Config), String> {
+fn parse_config_opts(args: env::Args) -> Result<(PathBuf, Config), String> {
     // TODO: load Config from ~/.slingshot/config.toml
     // or via --config <path/to/config.toml>
     let default_path = PathBuf::from("~/.slingshot/config.toml");

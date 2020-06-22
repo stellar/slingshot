@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
-use std::path::{Path,PathBuf};
+use std::path::{Path, PathBuf};
 
 /// Configuration file for the node.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -60,7 +60,7 @@ pub struct Blockchain {
     /// Location of the blockchain data
     #[serde(default = "Blockchain::default_storage_path")]
     pub storage_path: PathBuf,
-    
+
     /// Maximum size of the mempool in bytes.
     #[serde(default = "Blockchain::default_mempool_max_size")]
     pub mempool_max_size: usize,
@@ -143,7 +143,6 @@ impl Default for P2P {
 }
 
 impl Blockchain {
-
     /// Computes the absolute storage path based on the config file location
     pub fn absolute_storage_path(&self, config_path: &Path) -> PathBuf {
         let mut path = config_path.to_path_buf();

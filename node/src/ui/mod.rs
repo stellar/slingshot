@@ -1,6 +1,7 @@
 mod ws;
 
 use std::collections::HashMap;
+use std::convert::Infallible;
 use std::default::Default;
 use std::net::SocketAddr;
 use std::sync::{Arc, RwLock};
@@ -8,7 +9,7 @@ use std::sync::{Arc, RwLock};
 use tera::Tera;
 use warp::Filter;
 
-use crate::comm::{CommandSender, EventReceiver};
+use crate::bc::BlockchainRef;
 
 /// Launches the UI server.
 /// Takes a receiving channel as a parameter that receives
@@ -20,21 +21,31 @@ use crate::comm::{CommandSender, EventReceiver};
 /// /tx/:id         -> Tx details and status (confirmed, mempool, dropped)
 ///
 /// /ws             -> websocket notifications
-pub async fn launch(addr: SocketAddr, cmd_sender: CommandSender, event_receiver: EventReceiver) {
+pub async fn launch(addr: SocketAddr, bc_ref: BlockchainRef) {
     let tera = Tera::new("templates/**/*.html").unwrap();
     let tera_arc = Arc::new(RwLock::new(tera));
     autoreload_templates(tera_arc.clone(), "./templates");
 
-    let index = warp::path::end().map(|| {
-        // TODO: check if the blockchain exists and show a different template.
-        let mut dict = HashMap::new();
-        dict.insert("greeting", "Hello!");
-        ("index.html", dict)
+    let with_html = warp::any().map(move || HTMLRenderer {
+        tera: tera_arc.clone(),
     });
 
-    let hello = warp::path!("hello" / String).map(|name| format!("Hello, {}!", name));
+    let with_bc = warp::any().map(move || bc_ref.clone());
 
-    let bye = warp::path!("bye" / String).map(|name| format!("Bye, {}!", name));
+    let index_route = warp::get()
+        .and(warp::path::end())
+        .and(with_bc)
+        .and(with_html)
+        .and_then(|bc: BlockchainRef, html: HTMLRenderer| async move {
+            if bc.read().await.initialized() {
+                let mut dict = HashMap::new();
+                dict.insert("greeting".to_string(), "Hello!".to_string());
+                html.render("index.html", dict)
+            } else {
+                html.render("welcome.html", HashMap::new())
+            }
+        })
+        .boxed();
 
     let ws_pool = Arc::new(ws::WebsocketPool::default());
     let ws_route = warp::path("ws")
@@ -45,18 +56,7 @@ pub async fn launch(addr: SocketAddr, cmd_sender: CommandSender, event_receiver:
         });
 
     // warp::header::headers_cloned()
-    let tera = tera_arc.clone();
-    let html_routes = index
-        .map(move |(template_name, object)| {
-            let tera = tera.read().unwrap();
-            let ctx =
-                tera::Context::from_serialize(object).expect("context should be a JSON object");
-            let html = tera
-                .render(template_name, &ctx)
-                .unwrap_or_else(|e| format!("Tera parse error: {}", e));
-            warp::reply::html(html)
-        })
-        .boxed();
+
     // Somehow this .boxed() fixes this unintelligible error:
     //
     //     --> node/src/main.rs:37:22
@@ -68,9 +68,28 @@ pub async fn launch(addr: SocketAddr, cmd_sender: CommandSender, event_receiver:
     //                found type `std::ops::FnOnce<((&str, &str),)>`
 
     let static_route = warp::path("static").and(warp::fs::dir("static"));
-    let routes = warp::get().and(html_routes.or(hello).or(bye).or(ws_route).or(static_route));
+    let routes = warp::get().and(index_route.or(ws_route).or(static_route));
     eprintln!("UI:  http://{}", &addr);
     warp::serve(routes).run(addr).await;
+}
+
+struct HTMLRenderer {
+    tera: Arc<RwLock<Tera>>,
+}
+
+impl HTMLRenderer {
+    pub fn render(
+        &self,
+        name: &'static str,
+        context: HashMap<String, String>,
+    ) -> Result<impl warp::Reply, Infallible> {
+        let tera_renderer = self.tera.read().unwrap();
+        let ctx = tera::Context::from_serialize(context).expect("context should be a JSON object");
+        let html = tera_renderer
+            .render(name, &ctx)
+            .unwrap_or_else(|e| format!("Tera parse error: {}", e));
+        Ok(warp::reply::html(html))
+    }
 }
 
 fn autoreload_templates(tera: Arc<RwLock<Tera>>, path: impl AsRef<std::path::Path>) {
