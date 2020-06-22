@@ -1,25 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
-
-/*
-Example config file:
-
-[ui]
-listen = "127.0.0.1:3000"
-
-[api]
-listen = "127.0.0.1:3001"
-
-[p2p]
-listen = "0.0.0.0:0" # port 0 means it is system-assigned.
-priority_peers = ["..."]
-blocked_peers = ["..."]
-
-[mempool]
-max_size = 1_000_000
-min_feerate = 1_000  # units/byte
-
-*/
+use std::path::{Path,PathBuf};
 
 /// Configuration file for the node.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -36,9 +17,9 @@ pub struct Config {
     #[serde(default)]
     pub p2p: P2P,
 
-    /// Peer-to-peer networking options
+    /// Blockchain storage and mempool options
     #[serde(default)]
-    pub mempool: Mempool,
+    pub blockchain: Blockchain,
 }
 
 /// UI configuration options
@@ -75,34 +56,41 @@ pub struct P2P {
 
 /// P2P configuration options
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Mempool {
+pub struct Blockchain {
+    /// Location of the blockchain data
+    #[serde(default = "Blockchain::default_storage_path")]
+    pub storage_path: PathBuf,
+    
     /// Maximum size of the mempool in bytes.
-    #[serde(default = "Mempool::default_max_size")]
-    pub max_size: usize,
+    #[serde(default = "Blockchain::default_mempool_max_size")]
+    pub mempool_max_size: usize,
 
     /// Minimum feerate in units/byte.
     #[serde(default)]
-    pub min_feerate: f32,
+    pub mempool_min_feerate: f32,
 }
 
 impl Config {
     /// Returns a documentation for the config file.
-    pub fn documentation() -> &'static str {
+    pub fn description() -> &'static str {
         r##"
     [ui]
-    listen = "127.0.0.1:3000"    # socket address for the webserver running the UI
-    disabled = false             # whether the UI server should be disabled
+    listen = "127.0.0.1:3000"      # socket address for the webserver running the UI
+    disabled = false               # whether the UI server should be disabled
 
     [api]
-    listen = "127.0.0.1:3001"    # socket address for the webserver running the API
-    disabled = false             # whether the API server should be disabled
+    listen = "127.0.0.1:3001"      # socket address for the webserver running the API
+    disabled = false               # whether the API server should be disabled
 
     [p2p]
-    listen = "0.0.0.0:0"         # socket address to listen in the peer-to-peer network
+    listen = "0.0.0.0:0"           # socket address to listen in the peer-to-peer network
     
-    [mempool]
-    max_size = 10_000_000        # maximum size in bytes for the mempool transactions
-    min_feerate = 0              # minimum feerate for the transactions to be included in mempool
+    [blockchain]
+    storage_path = "./storage"     # location of the stored data 
+                                   # (if relative, resolved based on the config file location,
+                                   #  which is ~/.slingshot/config.toml by default)
+    mempool_max_size = 10_000_000  # maximum size in bytes for the mempool transactions
+    mempool_min_feerate = 0        # minimum feerate for the transactions to be included in mempool
 "##
     }
 }
@@ -154,18 +142,32 @@ impl Default for P2P {
     }
 }
 
-impl Mempool {
+impl Blockchain {
+
+    /// Computes the absolute storage path based on the config file location
+    pub fn absolute_storage_path(&self, config_path: &Path) -> PathBuf {
+        let mut path = config_path.to_path_buf();
+        path.pop(); // remove the filename (config.toml)
+        path.push(&self.storage_path); // push the relative storage path (if absolute, it'll replace the whole path)
+        path
+    }
+
+    /// Default storage path
+    pub fn default_storage_path() -> PathBuf {
+        PathBuf::from("./storage")
+    }
     /// Default maximum size of the mempool (1M bytes).
-    pub fn default_max_size() -> usize {
+    pub fn default_mempool_max_size() -> usize {
         1_000_000
     }
 }
 
-impl Default for Mempool {
+impl Default for Blockchain {
     fn default() -> Self {
-        Mempool {
-            max_size: Self::default_max_size(),
-            min_feerate: 0.0,
+        Blockchain {
+            storage_path: Self::default_storage_path(),
+            mempool_max_size: Self::default_mempool_max_size(),
+            mempool_min_feerate: 0.0,
         }
     }
 }

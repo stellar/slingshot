@@ -26,6 +26,7 @@ pub async fn launch(addr: SocketAddr, cmd_sender: CommandSender, event_receiver:
     autoreload_templates(tera_arc.clone(), "./templates");
 
     let index = warp::path::end().map(|| {
+        // TODO: check if the blockchain exists and show a different template.
         let mut dict = HashMap::new();
         dict.insert("greeting", "Hello!");
         ("index.html", dict)

@@ -3,8 +3,11 @@ use std::env;
 use std::path::PathBuf;
 
 pub enum RunCommand {
-    Run(PathBuf, Config),
-    ShowConfig(PathBuf, Config),
+    /// executable path, config path, config
+    Run(PathBuf, (PathBuf, Config)),
+    /// executable path, config path, config
+    ShowConfig(PathBuf, (PathBuf, Config)),
+    /// executable path
     Help(PathBuf),
 }
 
@@ -16,14 +19,13 @@ pub fn parse_args() -> Result<RunCommand, String> {
         .ok_or_else(|| "Unexpected missing executable path in the env::args list.".to_string())?;
 
     let subcommand = args.next().ok_or_else(|| {
-        format!(
-            "\
-        {0} run      # run the node\n\
-        {0} config   # show current configuration\n\
-        {0} help     # list command line options\n\
-        ",
-            &exec_path
-        )
+        r##"
+Please use one of the following subcommands:
+
+    slingshot run      # run the node
+    slingshot config   # show the current configuration
+    slingshot help     # list command line options
+"##
     })?;
 
     let exec_path = PathBuf::from(exec_path);
@@ -41,8 +43,10 @@ pub fn parse_args() -> Result<RunCommand, String> {
     }
 }
 
-fn parse_config_opts(args: env::Args) -> Result<Config, String> {
+fn parse_config_opts(args: env::Args) -> Result<(PathBuf,Config), String> {
     // TODO: load Config from ~/.slingshot/config.toml
     // or via --config <path/to/config.toml>
-    Ok(Config::default())
+    let default_path = PathBuf::from("~/.slingshot/config.toml");
+
+    Ok((default_path, Config::default()))
 }
