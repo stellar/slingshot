@@ -4,8 +4,9 @@ Blockchain node application.
 
 ## Getting started
 
-TBD: how to launch, how to configure ports.
+Launch the node with default options:
 
+    slingshot run
 
-## Architecture
+Then, open http://localhost:3000 in your browser.
 

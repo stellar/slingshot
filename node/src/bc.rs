@@ -7,6 +7,7 @@ use crate::config;
 
 const BC_STATE_FILENAME: &'static str = "state.bin";
 
+#[derive(Debug)]
 pub struct Blockchain {
     /// Directory where all blockchain state and archive data is stored.
     storage_path: PathBuf,
@@ -65,4 +66,7 @@ impl Blockchain {
         path.push(BC_STATE_FILENAME);
         path.exists()
     }
+
+    /// Initializes a new chain if needed.
+    pub fn initialize(&self) {}
 }
