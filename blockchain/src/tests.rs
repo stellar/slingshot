@@ -165,7 +165,7 @@ fn test_p2p_protocol() {
     impl Mailbox {
         fn process(
             &self,
-            nodes: &mut [&mut Node<MockNode>],
+            nodes: &mut [&mut BlockchainProtocol<MockNode>],
         ) -> Vec<(PID, Result<(), BlockchainError>)> {
             let mut r = Vec::new();
             while let Ok((pid_from, pid_to, msg)) = self.rx.try_recv() {
@@ -179,7 +179,7 @@ fn test_p2p_protocol() {
             r
         }
 
-        fn process_must_succeed(&self, nodes: &mut [&mut Node<MockNode>]) {
+        fn process_must_succeed(&self, nodes: &mut [&mut BlockchainProtocol<MockNode>]) {
             let results = self.process(nodes);
             assert!(results.into_iter().all(|(_pid, r)| r.is_ok()));
         }
@@ -239,8 +239,11 @@ fn test_p2p_protocol() {
 
     let wallet_privkey = Scalar::from(1u64);
     let initial_contract = make_nonce_contract(1u64, 100);
-    let (state, block_sig, proofs) =
-        Node::<MockNode>::new_network(network_signing_key, 0, vec![initial_contract.id()]);
+    let (state, block_sig, proofs) = BlockchainProtocol::<MockNode>::new_network(
+        network_signing_key,
+        0,
+        vec![initial_contract.id()],
+    );
 
     let utxo0 = UTXO {
         contract: initial_contract.clone(),
@@ -262,7 +265,7 @@ fn test_p2p_protocol() {
             }],
             mailbox: mailbox_tx.clone(),
         })
-        .map(|mock| Node::new(network_pubkey, mock));
+        .map(|mock| BlockchainProtocol::new(network_pubkey, mock));
 
     // Now all the nodes have the same state and can make transactions.
     let mut node0 = nodes.next().unwrap().set_inventory_interval(0);
