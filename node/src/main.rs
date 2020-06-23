@@ -58,13 +58,15 @@ async fn run(config_path: &Path, config: Config) {
     }
 }
 
-fn show_config(_config_path: &Path, config: Config) {
+fn show_config(config_path: &Path, config: Config) {
+    println!("Using {}\n", config_path.display());
+    println!("Resolved configuration:\n");
     let toml_string = toml::ser::to_string_pretty(&config).expect("Failed to serialize config as TOML file. Please file a bug with the contents of your config file, so we can fix it.");
-    eprintln!("{}", toml_string);
+    println!("{}", toml_string);
 }
 
 fn help(_binpath: &Path) {
-    eprintln!(
+    println!(
         r###"
 ## Running the node
 
