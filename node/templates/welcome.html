@@ -4,12 +4,54 @@
 
 {% block main %}
 
-Welcome to Slingshot!
+<style>
+    #welcome {
+        margin:100px auto 100px auto;
+        width: 550px;
+    }
+    #welcome-logo {
+        margin-left:10px;
+        margin-bottom:50px;
+    }
+    #welcome ul {
+        margin:0;
+        padding:0;
+        font-size:30px;
+        font-weight:800;
+        font-style:italic;
+        text-transform:uppercase;
+    }
+    #welcome ul li {
+        padding:0;
+        margin:0 0 20px 0;
+        list-style-type: none;
+    }
 
-<ul>
-<li><a href="">Create a new ledger</a></li>
-<li><a href="">Connect to the existing ledger</a></li>
-<li><a href="">Connect to the demo ledger</a></li>
-</ul>
+    #welcome ul a {
+        color:red;
+        padding: 15px 20px;
+    }
+    #welcome ul a:hover {
+        text-decoration: none;
+        background:#f7f7f7;
+        border-radius:2px;
+    }
+
+    #welcome ul em {
+        color:black;
+    }
+</style>
+
+<div id="welcome">
+
+    <div id="welcome-logo"><img src="/static/motocrab.png" width="280" alt="motocrab"/></div>
+
+    <ul>
+        <li><a href="/ledger/new"><em>Create</em> new ledger</a></li>
+        <li><a href="/ledger/connect"><em>Connect</em> to existing ledger</a></li>
+        <li><a href="/ledger/connect-demo">Connect to <em>demo</em> ledger</a></li>
+    </ul>
+
+</div>
 
 {% endblock main %}

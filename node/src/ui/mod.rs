@@ -30,22 +30,41 @@ pub async fn launch(addr: SocketAddr, bc_ref: BlockchainRef) {
         tera: tera_arc.clone(),
     });
 
-    let with_bc = warp::any().map(move || bc_ref.clone());
+    let with_bc = with_value(&bc_ref).and_then(|bc: BlockchainRef| async move {
+        if bc.read().await.initialized() {
+            Ok(bc.clone())
+        } else {
+            Err(warp::reject::not_found())
+        }
+    });
 
-    let index_route = warp::get()
+    let with_uninit_bc = with_value(&bc_ref).and_then(|bc: BlockchainRef| async move {
+        if !bc.read().await.initialized() {
+            Ok(bc.clone())
+        } else {
+            Err(warp::reject::not_found())
+        }
+    });
+
+    // Routes
+
+    let welcome = warp::get()
+        .and(warp::path::end())
+        .and(with_uninit_bc)
+        .and(with_html.clone())
+        .and_then(|_bc: BlockchainRef, html: HTMLRenderer| async move {
+            html.render("welcome.html", HashMap::new())
+        });
+
+    let index = warp::get()
         .and(warp::path::end())
         .and(with_bc)
-        .and(with_html)
-        .and_then(|bc: BlockchainRef, html: HTMLRenderer| async move {
-            if bc.read().await.initialized() {
-                let mut dict = HashMap::new();
-                dict.insert("greeting".to_string(), "Hello!".to_string());
-                html.render("index.html", dict)
-            } else {
-                html.render("welcome.html", HashMap::new())
-            }
-        })
-        .boxed();
+        .and(with_html.clone())
+        .and_then(|_bc: BlockchainRef, html: HTMLRenderer| async move {
+            let mut dict = HashMap::new();
+            dict.insert("greeting".to_string(), "Hello!".to_string());
+            html.render("index.html", dict)
+        });
 
     let ws_pool = Arc::new(ws::WebsocketPool::default());
     let ws_route = warp::path("ws")
@@ -68,11 +87,19 @@ pub async fn launch(addr: SocketAddr, bc_ref: BlockchainRef) {
     //                found type `std::ops::FnOnce<((&str, &str),)>`
 
     let static_route = warp::path("static").and(warp::fs::dir("static"));
-    let routes = warp::get().and(index_route.or(ws_route).or(static_route));
+    let routes = warp::get().and(welcome.or(index).or(ws_route).or(static_route));
     eprintln!("UI:  http://{}", &addr);
     warp::serve(routes).run(addr).await;
 }
 
+/// Attaches the cloneable value as a filter parameter.
+/// To make it more ergonomic, it accepts a reference, and makes preliminary clone inside this function.
+fn with_value<T: Clone + Send>(x: &T) -> impl Filter<Extract = (T,), Error = Infallible> + Clone {
+    let x = x.clone();
+    warp::any().map(move || x.clone())
+}
+
+#[derive(Clone, Debug)]
 struct HTMLRenderer {
     tera: Arc<RwLock<Tera>>,
 }
