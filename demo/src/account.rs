@@ -5,7 +5,7 @@ use curve25519_dalek::scalar::Scalar;
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 
-use accounts::{Account, Receiver, ReceiverWitness};
+use accounts::{Receiver, ReceiverWitness, XprvDerivation};
 use keytree::Xprv;
 use musig::Multisignature;
 
@@ -41,8 +41,8 @@ pub struct Wallet {
     /// ID of the User that owns that wallet
     pub owner_id: String,
 
-    /// User's account metadata
-    pub account: Account,
+    /// User's account state
+    pub sequence: u64,
 
     /// Annotated txs related to this wallet
     pub txs: Vec<AnnotatedTx>,
@@ -109,7 +109,7 @@ impl Wallet {
             wallet_id,
             xprv,
             owner_id: owner.id(),
-            account: Account::new(xprv.to_xpub()),
+            sequence: 0,
             txs: Vec::new(),
             utxos: Vec::new(),
         }
@@ -117,6 +117,12 @@ impl Wallet {
 
     pub fn compute_wallet_id(owner_id: &str, alias: &str) -> String {
         format!("{}0000{}", alias, owner_id)
+    }
+
+    pub fn generate_receiver(&mut self, value: ClearValue) -> ReceiverWitness {
+        let seq = self.sequence;
+        self.sequence += 1;
+        ReceiverWitness::new(self.xprv.as_xpub(), seq, value)
     }
 
     /// Generates a bunch of initial utxos
@@ -131,7 +137,7 @@ impl Wallet {
             // anchors are not unique, but it's irrelevant for this test
             anchor = anchor.ratchet();
 
-            let receiver_witness = self.account.generate_receiver(ClearValue { qty, flv });
+            let receiver_witness = self.generate_receiver(ClearValue { qty, flv });
 
             results.push(Utxo {
                 receiver: receiver_witness.receiver,
@@ -331,10 +337,9 @@ impl Wallet {
             .iter()
             .filter_map(UtxoWithStatus::spendable_utxo)
             .next()
-            .ok_or("Issuer needs at least one available UTXO to anchor the transaction.")?;
-        let change_receiver_witness = self
-            .account
-            .generate_receiver(anchoring_utxo.receiver.value);
+            .ok_or("Issuer needs at least one available UTXO to anchor the transaction.")?
+            .clone();
+        let change_receiver_witness = self.generate_receiver(anchoring_utxo.receiver.value);
         let change_receiver = change_receiver_witness.receiver;
         let change_seq = change_receiver_witness.sequence;
 
@@ -422,7 +427,7 @@ impl Wallet {
 
             // Derive individual signing keys for each input, according to its sequence number.
             // In this example all inputs are coming from the same account (same xpub).
-            let spending_key = Account::derive_signing_key(anchoring_utxo.sequence, &self.xprv);
+            let spending_key = self.xprv.key_at_sequence(anchoring_utxo.sequence);
 
             let signing_keys = vec![spending_key, issuance_key];
 
@@ -478,14 +483,18 @@ impl Wallet {
         ),
         &'static str,
     > {
-        let (spent_utxos, change_value) = Account::select_utxos(
-            &payment_receiver.value,
-            self.utxos.iter().filter_map(UtxoWithStatus::spendable_utxo),
-        )
-        .ok_or("Insufficient funds!")?;
+        let (spent_utxos, change_value) = payment_receiver
+            .value
+            .select_coins(
+                self.utxos
+                    .iter()
+                    .filter_map(UtxoWithStatus::spendable_utxo)
+                    .cloned(),
+            )
+            .ok_or("Insufficient funds!")?;
 
         let maybe_change_receiver_witness = if change_value.qty > 0 {
-            Some(self.account.generate_receiver(change_value))
+            Some(self.generate_receiver(change_value))
         } else {
             None
         };
@@ -580,7 +589,7 @@ impl Wallet {
             // In this example all inputs are coming from the same account (same xpub).
             let signing_keys = spent_utxos
                 .iter()
-                .map(|utxo| Account::derive_signing_key(utxo.sequence, &self.xprv))
+                .map(|utxo| self.xprv.key_at_sequence(utxo.sequence))
                 .collect::<Vec<_>>();
 
             let sig = musig::Signature::sign_multi(
