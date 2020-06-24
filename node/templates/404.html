@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+
+{% block title %}Not found{% endblock title %}
+
+{% block main %}
+
+<style>
+    #not-found {
+        margin:100px auto 100px auto;
+        width: 550px;
+        font-size:30px;
+        font-weight:800;
+        font-style:italic;
+        text-transform:uppercase;
+        color:black;
+    }
+    #not-found-logo {
+        margin-left:10px;
+        margin-bottom:50px;
+    }
+    #not-found em {
+        color:red;
+    }
+</style>
+
+<div id="not-found">
+
+    <div id="not-found-logo"><img src="/static/motocrab.png" width="280" alt="motocrab"/></div>
+
+    <p>
+        <em>404</em> resource not found
+    </p>
+
+</div>
+
+{% endblock main %}

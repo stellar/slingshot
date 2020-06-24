@@ -176,7 +176,7 @@ fn network_mempool_makeblock(
     let block_id = new_state.tip.id();
 
     // If tx succeeded, reset the mempool to the new state.
-    mem::replace(mempool.deref_mut(), Mempool::new(new_state, timestamp_ms));
+    let _ = mem::replace(mempool.deref_mut(), Mempool::new(new_state, timestamp_ms));
 
     let msg = format!("Block published: {}", hex::encode(&block_id));
     Ok(Flash::success(
@@ -363,7 +363,7 @@ fn pay(
         qty: form.qty,
         flv: asset_record.flavor(),
     };
-    let payment_receiver_witness = recipient.account.generate_receiver(payment);
+    let payment_receiver_witness = recipient.generate_receiver(payment);
     let payment_receiver = &payment_receiver_witness.receiver;
 
     // Note: at this point, recipient saves the increased seq #,
@@ -583,7 +583,7 @@ fn assets_create(
         qty: form.qty,
         flv: asset_record.flavor(),
     };
-    let payment_receiver_witness = recipient.account.generate_receiver(payment);
+    let payment_receiver_witness = recipient.generate_receiver(payment);
     let payment_receiver = &payment_receiver_witness.receiver;
 
     // Note: at this point, recipient saves the increased seq #,

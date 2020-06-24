@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+
+{% block title %}Internal error{% endblock title %}
+
+{% block main %}
+
+<style>
+    #container {
+        margin:100px auto 100px auto;
+        width: 550px;
+        font-size:30px;
+        font-weight:800;
+        font-style:italic;
+        text-transform:uppercase;
+        color:black;
+    }
+    #container-logo {
+        margin-left:10px;
+        margin-bottom:50px;
+    }
+    #container em {
+        color:red;
+    }
+</style>
+
+<div id="container">
+
+    <div id="container-logo"><img src="/static/motocrab.png" width="280" alt="motocrab"/></div>
+
+    <p>
+        <em>Error</em>
+    </p>
+
+</div>
+
+{% endblock main %}

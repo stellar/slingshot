@@ -1,9 +1,7 @@
 //! P2P networking stack.
 
-use futures::future::FutureExt;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
-use tokio::io;
 use tokio::task;
 
 use curve25519_dalek::scalar::Scalar;
@@ -126,7 +124,6 @@ pub fn launch_p2p() -> P2PHandle {
 }
 
 use readerwriter::{Decodable, Encodable, ReadError, Reader, WriteError, Writer};
-use std::convert::Infallible;
 use std::ops::Deref;
 
 #[derive(Debug, Clone, PartialEq)]

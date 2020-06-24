@@ -10,7 +10,7 @@ use musig::{Multisignature, Signature};
 use blockchain::{utreexo, BlockHeader, BlockTx, BlockchainState, Mempool};
 use zkvm::{Anchor, ClearValue, Contract, ContractID, Program, Prover, TxEntry, TxHeader};
 
-use crate::{Account, ReceiverReply, ReceiverWitness};
+use crate::{ReceiverReply, ReceiverWitness, XprvDerivation};
 
 /// The complete state of the user node: their wallet and their blockchain state.
 #[derive(Clone)]
@@ -27,8 +27,8 @@ struct Wallet {
     /// User's root wallet key
     xprv: Xprv,
 
-    /// User's account metadata
-    account: Account,
+    /// User's account state
+    sequence: u64,
 
     /// User's balances
     utxos: Vec<ConfirmedUtxo>,
@@ -112,16 +112,18 @@ fn basic_accounts_test() {
         qty: 14,
         flv: Scalar::from(0u64),
     };
-    let payment_receiver_witness = bob.wallet.account.generate_receiver(payment);
+    let payment_receiver_witness = bob.wallet.generate_receiver(payment);
     let payment_receiver = &payment_receiver_witness.receiver;
 
     // TBD: at some point (together with creating `PendingUtxo`s?) we need to reserve the spent utxos,
     // so we don't concurrently re-use them in a new tx.
 
     // Unwrap is used because in this test we know that we are supposed to have enough UTXOs.
-    let (spent_utxos, change_value) =
-        Account::select_utxos(&payment_receiver.value, &alice.wallet.utxos).unwrap();
-    let change_receiver_witness = alice.wallet.account.generate_receiver(change_value);
+    let (spent_utxos, change_value) = payment_receiver
+        .value
+        .select_coins(alice.wallet.utxos.iter().cloned())
+        .unwrap();
+    let change_receiver_witness = alice.wallet.generate_receiver(change_value);
 
     // 4. Alice forms a tx paying to this receiver.
     //    Now Bob is receiving a new utxo, Alice is receiving a change utxo.
@@ -201,7 +203,10 @@ fn basic_accounts_test() {
         let signing_keys = spent_utxos
             .iter()
             .map(|utxo| {
-                Account::derive_signing_key(utxo.receiver_witness.sequence, &alice.wallet.xprv)
+                alice
+                    .wallet
+                    .xprv
+                    .key_at_sequence(utxo.receiver_witness.sequence)
             })
             .collect::<Vec<_>>();
 
@@ -336,7 +341,7 @@ impl Wallet {
 
         Self {
             xprv,
-            account: Account::new(xprv.to_xpub()),
+            sequence: 0,
             utxos: Vec::new(),
             pending_utxos: Vec::new(),
         }
@@ -358,7 +363,7 @@ impl Wallet {
                 // anchors are not unique, but it's irrelevant for this test
                 anchor = anchor.ratchet();
 
-                let receiver_witness = self.account.generate_receiver(ClearValue { qty, flv });
+                let receiver_witness = self.generate_receiver(ClearValue { qty, flv });
 
                 results.push(PendingUtxo {
                     receiver_witness,
@@ -368,6 +373,12 @@ impl Wallet {
         }
 
         results
+    }
+
+    fn generate_receiver(&mut self, value: ClearValue) -> ReceiverWitness {
+        let seq = self.sequence;
+        self.sequence += 1;
+        ReceiverWitness::new(self.xprv.as_xpub(), seq, value)
     }
 }
 

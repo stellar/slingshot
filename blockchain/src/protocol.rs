@@ -68,7 +68,7 @@ pub trait Delegate {
     );
 }
 
-pub struct Node<D: Delegate> {
+pub struct BlockchainProtocol<D: Delegate> {
     network_pubkey: VerificationKey,
     delegate: D,
     target_tip: BlockHeader,
@@ -90,12 +90,12 @@ struct PeerInfo {
     last_inventory_received: Instant,
 }
 
-impl<D: Delegate> Node<D> {
+impl<D: Delegate> BlockchainProtocol<D> {
     /// Create a new node.
     pub fn new(network_pubkey: VerificationKey, delegate: D) -> Self {
         let state = delegate.blockchain_state().clone();
         let tip = state.tip.clone();
-        Node {
+        BlockchainProtocol {
             network_pubkey,
             delegate,
             mempool: Mempool::new(state, tip.timestamp_ms),
@@ -209,7 +209,7 @@ impl<D: Delegate> Node<D> {
     }
 
     /// Called when a peer disconnects.
-    pub async fn peer_diconnected(&mut self, pid: D::PeerIdentifier) {
+    pub async fn peer_disconnected(&mut self, pid: D::PeerIdentifier) {
         self.peers.remove(&pid);
     }
 
@@ -270,7 +270,7 @@ impl<D: Delegate> Node<D> {
     }
 }
 
-impl<D: Delegate> Node<D> {
+impl<D: Delegate> BlockchainProtocol<D> {
     async fn synchronize_chain(&mut self) {
         use rand::seq::IteratorRandom;
 
