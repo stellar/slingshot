@@ -7,6 +7,7 @@ mod bc;
 mod cli_args;
 mod config;
 mod ui;
+mod wallet;
 
 use bc::Blockchain;
 

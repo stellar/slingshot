@@ -20,6 +20,10 @@ pub struct Config {
     /// Blockchain storage and mempool options
     #[serde(default)]
     pub blockchain: Blockchain,
+
+    /// Wallet storage location
+    #[serde(default)]
+    pub wallet: Wallet,
 }
 
 /// UI configuration options
@@ -70,6 +74,14 @@ pub struct Blockchain {
     pub mempool_min_feerate: f32,
 }
 
+/// P2P configuration options
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Wallet {
+    /// Listening address for the P2P webserver.
+    #[serde(default = "Wallet::default_storage_path")]
+    pub storage_path: PathBuf,
+}
+
 impl Config {
     /// Returns a documentation for the config file.
     pub fn description() -> &'static str {
@@ -91,6 +103,11 @@ impl Config {
                                    #  which is ~/.slingshot/config.toml by default)
     mempool_max_size = 10_000_000  # maximum size in bytes for the mempool transactions
     mempool_min_feerate = 0        # minimum feerate for the transactions to be included in mempool
+
+    [wallet]
+    storage_path = "./wallet"      # location of the wallet keys and account data
+                                   # (if relative, resolved based on the config file location,
+                                   #  which is ~/.slingshot/wallet by default)
 "##
     }
 }
@@ -167,6 +184,29 @@ impl Default for Blockchain {
             storage_path: Self::default_storage_path(),
             mempool_max_size: Self::default_mempool_max_size(),
             mempool_min_feerate: 0.0,
+        }
+    }
+}
+
+impl Wallet {
+    /// Computes the absolute storage path based on the config file location
+    pub fn absolute_storage_path(&self, config_path: &Path) -> PathBuf {
+        let mut path = config_path.to_path_buf();
+        path.pop(); // remove the filename (config.toml)
+        path.push(&self.storage_path); // push the relative storage path (if absolute, it'll replace the whole path)
+        path
+    }
+
+    /// Default storage path
+    pub fn default_storage_path() -> PathBuf {
+        PathBuf::from("./wallet")
+    }
+}
+
+impl Default for Wallet {
+    fn default() -> Self {
+        Wallet {
+            storage_path: Self::default_storage_path(),
         }
     }
 }
