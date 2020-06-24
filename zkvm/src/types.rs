@@ -352,6 +352,41 @@ impl Value {
     }
 }
 
+impl ClearValue {
+    /// Selects a subset of coins to be equal or greater than the given value.
+    /// Returns the list of selected values and an amount of _change_ quantity.
+    pub fn select_coins<I, T>(&self, coins: I) -> Option<(Vec<T>, ClearValue)>
+    where
+        I: IntoIterator<Item = T>,
+        T: AsRef<ClearValue>,
+    {
+        let (collected_coins, total_spent) = coins
+            .into_iter()
+            .filter(|coin| coin.as_ref().flv == self.flv)
+            .fold(
+                (Vec::new(), 0u64),
+                |(mut collected_coins, mut total_spent), coin| {
+                    if total_spent < self.qty {
+                        total_spent += coin.as_ref().qty;
+                        collected_coins.push(coin);
+                    }
+                    (collected_coins, total_spent)
+                },
+            );
+
+        // If we did not have sufficient amount of coins, fail.
+        if total_spent < self.qty {
+            return None;
+        }
+
+        let change = ClearValue {
+            qty: total_spent - self.qty,
+            flv: self.flv,
+        };
+        Some((collected_coins, change))
+    }
+}
+
 // Upcasting all witness data types to String
 
 impl<T> From<T> for String
