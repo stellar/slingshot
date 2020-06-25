@@ -352,6 +352,19 @@ impl Value {
     }
 }
 
+impl Encodable for Value {
+    fn encode(&self, w: &mut impl Writer) -> Result<(), WriteError> {
+        w.write_point(b"qty", &self.qty.to_point())?;
+        w.write_point(b"flv", &self.flv.to_point())?;
+        Ok(())
+    }
+}
+impl ExactSizeEncodable for Value {
+    fn encoded_size(&self) -> usize {
+        64
+    }
+}
+
 impl ClearValue {
     /// Selects a subset of coins to be equal or greater than the given value.
     /// Returns the list of selected values and an amount of _change_ quantity.

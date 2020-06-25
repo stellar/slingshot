@@ -70,4 +70,5 @@ mod receiver;
 mod tests;
 
 pub use derivation::{XprvDerivation, XpubDerivation};
+pub use address::Address;
 pub use receiver::{Receiver, ReceiverID, ReceiverReply, ReceiverWitness};
