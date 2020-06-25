@@ -295,14 +295,18 @@ mod tests {
         assert_eq!(receiver.qty_blinding, enc_value.qty.witness().unwrap().1);
         assert_eq!(receiver.flv_blinding, enc_value.flv.witness().unwrap().1);
 
-        assert!(addr.decrypt(&enc_value, &data[0..72], &encr_scalar, rand::thread_rng()).is_none());
+        assert!(addr
+            .decrypt(&enc_value, &data[0..72], &encr_scalar, rand::thread_rng())
+            .is_none());
 
         // try flipping every bit and check that decryption fails.
         for i in 0..data.len() {
             for j in 0..8 {
                 let mut d = data.clone();
-                d[i] ^= 1<<j;
-                assert!(addr.decrypt(&enc_value, &d, &encr_scalar, rand::thread_rng()).is_none());
+                d[i] ^= 1 << j;
+                assert!(addr
+                    .decrypt(&enc_value, &d, &encr_scalar, rand::thread_rng())
+                    .is_none());
             }
         }
     }
