@@ -170,8 +170,7 @@ impl Encodable for PortableItem {
             // Value = 0x02 || <32 bytes> || <32 bytes>
             PortableItem::Value(v) => {
                 w.write_u8(b"type", VALUE_TYPE)?;
-                w.write_point(b"qty", &v.qty.to_point())?;
-                w.write_point(b"flv", &v.flv.to_point())?;
+                v.encode(w)?;
             }
         }
         Ok(())
