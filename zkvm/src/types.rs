@@ -110,7 +110,7 @@ pub struct Value {
 /// Represents a cleartext value of an issued asset in the VM.
 /// This is not the same as `spacesuit::Value` since it is guaranteed to be in-range
 /// (negative quantity is not representable with this type).
-#[derive(Copy, Clone, Debug, Serialize, Deserialize)]
+#[derive(Copy, Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct ClearValue {
     /// Cleartext quantity integer
     pub qty: u64,

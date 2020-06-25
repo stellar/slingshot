@@ -1,8 +1,11 @@
+use curve25519_dalek::constants::RISTRETTO_BASEPOINT_TABLE;
 use curve25519_dalek::scalar::Scalar;
 use keytree::{Xprv, Xpub};
 use merlin::Transcript;
 use musig::VerificationKey;
 use zkvm::{ClearValue, TranscriptProtocol};
+
+use super::Address;
 
 /// Extension trait for Xprv to derive keys based on sequence number.
 pub trait XprvDerivation {
@@ -21,6 +24,9 @@ pub trait XpubDerivation {
     /// Derives a key for a given sequence number.
     fn key_at_sequence(&self, sequence: u64) -> VerificationKey;
 
+    /// Derives an Address for a given sequence number.
+    fn address_at_sequence(&self, label: String, sequence: u64) -> Address;
+
     /// Derives blinding factors for the given value and sequence number.
     /// Q: Why deterministic derivation?
     /// A: Blinding factors are high-entropy, so loss of such data is fatal.
@@ -32,6 +38,25 @@ pub trait XpubDerivation {
 impl XpubDerivation for Xpub {
     fn key_at_sequence(&self, sequence: u64) -> VerificationKey {
         self.derive_key(|t| t.append_u64(b"sequence", sequence))
+    }
+
+    fn address_at_sequence(&self, label: String, sequence: u64) -> Address {
+        let ctrl_key = self.key_at_sequence(sequence);
+        // Note: we derive encryption privkey from the xpub public key, effectively binding it
+        // to the secrecy of only the derivation key of xpub.
+        // This allows us to decrypt transaction using xpub only,
+        // w/o having access to a more sensitive xprv needed to move the funds.
+        let mut t = Transcript::new(b"ZkVM.accounts.encryption-key");
+        t.append_message(b"xpub", &self.to_bytes());
+        t.append_message(b"label", label.as_bytes());
+        t.append_u64(b"sequence", sequence);
+        let enc_key = t.challenge_scalar(b"key");
+
+        Address::new(
+            label,
+            ctrl_key.into_point(),
+            &enc_key * &RISTRETTO_BASEPOINT_TABLE,
+        )
     }
 
     fn value_blinding_factors(&self, sequence: u64, value: &ClearValue) -> (Scalar, Scalar) {
