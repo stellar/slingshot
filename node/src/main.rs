@@ -1,3 +1,6 @@
+#[macro_use]
+extern crate serde_json;
+
 use cli_args::RunCommand;
 use config::Config;
 use std::path::Path;
@@ -8,6 +11,7 @@ mod cli_args;
 mod config;
 mod ui;
 mod wallet;
+mod json;
 
 use bc::Blockchain;
 

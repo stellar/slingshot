@@ -2,12 +2,12 @@ use merlin::Transcript;
 use rand::SeedableRng;
 use rand_chacha::ChaChaRng;
 
-use bulletproofs::BulletproofGens;
 use curve25519_dalek::scalar::Scalar;
 use keytree::Xprv;
 use musig::{Multisignature, Signature};
 
 use blockchain::{utreexo, BlockHeader, BlockTx, BlockchainState, Mempool};
+use zkvm::bulletproofs::BulletproofGens;
 use zkvm::{Anchor, ClearValue, Contract, ContractID, Program, Prover, TxEntry, TxHeader};
 
 use crate::{ReceiverReply, ReceiverWitness, XprvDerivation};
