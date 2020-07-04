@@ -1,7 +1,7 @@
+mod bc_annotations;
 mod routes;
 mod templates;
 mod ui_helpers;
-mod bc_annotations;
 mod ws;
 
 use super::wallet;

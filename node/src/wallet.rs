@@ -1,17 +1,17 @@
 use std::collections::HashMap;
 
 use curve25519_dalek::scalar::Scalar;
-use zkvm::bulletproofs::BulletproofGens;
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
+use zkvm::bulletproofs::BulletproofGens;
 
 use accounts::{Receiver, ReceiverWitness, XprvDerivation};
 use keytree::Xprv;
 use musig::Multisignature;
 
+use super::json;
 use blockchain::utreexo;
 use zkvm::{Anchor, ClearValue, Contract, ContractID, Tx, TxEntry, TxLog, VerifiedTx};
-use super::json;
 
 /// User's wallet account data
 #[derive(Clone, Serialize, Deserialize)]
@@ -67,7 +67,6 @@ pub enum UtxoStatus {
     Spent,
 }
 
-
 /// Tx annotated with
 #[derive(Clone, Serialize, Deserialize)]
 pub struct AnnotatedTx {
@@ -78,7 +77,7 @@ pub struct AnnotatedTx {
 }
 
 /// Balance of a certain asset that consists of a number of spendable UTXOs.
-#[derive(Clone,Debug,Serialize,Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Balance {
     /// Flavor of the asset in this balance
     pub flavor: Scalar,
@@ -256,32 +255,33 @@ impl Account {
 
     /// Returns a list of asset balances, one per asset flavor.
     pub fn balances(&self) -> Vec<Balance> {
-        self
-            .utxos
+        self.utxos
             .iter()
             .filter_map(UtxoWithStatus::spendable_utxo)
-            .fold(
-                HashMap::new(),
-                |mut hm: HashMap<Scalar, Balance>, utxo| {
-                    let value = utxo.value();
-                    match hm.get_mut(&value.flv) {
-                        Some(balance) => {
-                            balance.total += value.qty;
-                            balance.utxos.push(utxo.clone());
-                        }
-                        None => {
-                            hm.insert(value.flv.clone(), Balance {
+            .fold(HashMap::new(), |mut hm: HashMap<Scalar, Balance>, utxo| {
+                let value = utxo.value();
+                match hm.get_mut(&value.flv) {
+                    Some(balance) => {
+                        balance.total += value.qty;
+                        balance.utxos.push(utxo.clone());
+                    }
+                    None => {
+                        hm.insert(
+                            value.flv.clone(),
+                            Balance {
                                 flavor: value.flv,
                                 total: value.qty,
-                                utxos: vec![utxo.clone()]
-                            });
-                        }
+                                utxos: vec![utxo.clone()],
+                            },
+                        );
                     }
-                    hm
-                },
-            ).into_iter().map(|(_, bal)| bal).collect()
+                }
+                hm
+            })
+            .into_iter()
+            .map(|(_, bal)| bal)
+            .collect()
     }
-
 
     // pub fn balances(&self) -> JsonValue {
     //     // 1. Enumerate all confirmed utxos and stack up values by flavor.
@@ -848,4 +848,3 @@ impl UtxoWithStatus {
         }
     }
 }
-

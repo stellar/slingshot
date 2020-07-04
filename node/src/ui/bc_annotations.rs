@@ -1,5 +1,5 @@
-use serde_json::Value as JsonValue;
 use super::wallet::Balance;
+use serde_json::Value as JsonValue;
 
 trait JsonAnnotated {
     /// Encodes the object in a JSON value.
@@ -11,4 +11,3 @@ impl JsonAnnotated for Balance {
         unimplemented!()
     }
 }
-

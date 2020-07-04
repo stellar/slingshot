@@ -9,9 +9,9 @@ mod api;
 mod bc;
 mod cli_args;
 mod config;
+mod json;
 mod ui;
 mod wallet;
-mod json;
 
 use bc::Blockchain;
 
