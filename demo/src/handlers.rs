@@ -286,6 +286,7 @@ fn nodes_show(
     let context = json!({
         "sidebar": sidebar.json,
         "wallet": wallet_pending.to_json(),
+        "wallet_xpub": util::to_json_value(&wallet_pending.xprv.to_xpub()),
         "balances": balances,
         "others": others_accs,
         "pending_txs": pending_txs.into_iter().map(|atx| {
