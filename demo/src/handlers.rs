@@ -1,11 +1,12 @@
 use std::mem;
 use std::ops::DerefMut;
+use std::path::Path;
 use std::sync::Mutex;
 
 use diesel::prelude::*;
 
 use rocket::request::{Form, FromForm};
-use rocket::response::{status::NotFound, Flash, Redirect};
+use rocket::response::{status::NotFound, Flash, NamedFile, Redirect};
 use rocket::{Request, State};
 
 use rocket_contrib::serve::StaticFiles;
@@ -670,6 +671,11 @@ fn assets_create(
     }
 }
 
+#[get("/favicon.ico")]
+pub fn favicon() -> Option<NamedFile> {
+  NamedFile::open(Path::new("static/favicon.ico")).ok()
+}
+
 #[catch(404)]
 fn not_found(req: &Request<'_>) -> Template {
     let sidebar = req.guard::<Sidebar>().expect("Sidebar guard never fails.");
@@ -708,7 +714,6 @@ pub fn launch_rocket_app(p2p_handle: net::P2PHandle) {
         .manage(bp_gens)
         .manage(Mutex::new(p2p_handle))
         .mount("/static", StaticFiles::from("static"))
-        .mount("/favicon.ico", StaticFiles::from("static"))
         .mount(
             "/",
             routes![
@@ -722,7 +727,8 @@ pub fn launch_rocket_app(p2p_handle: net::P2PHandle) {
                 nodes_create,
                 assets_show,
                 assets_create,
-                pay
+                pay,
+                favicon
             ],
         )
         .launch();
