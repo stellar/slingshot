@@ -16,9 +16,8 @@
           <em>Use this Wallet ID to receive payments from other people.</em>
         </td>
       </tr>
-      <tr><th>Sequence&nbsp;#</th><td>{{wallet.account.sequence}}</td></tr>
+      <tr><th>Sequence&nbsp;#</th><td>{{wallet.sequence}}</td></tr>
       <tr><th>Xprv</th><td><code>{{wallet.xprv}}</code></td></tr>
-      <tr><th>Xpub</th><td><code>{{wallet.account.xpub}}</code></td></tr>
     </tbody>
   </table>
 
