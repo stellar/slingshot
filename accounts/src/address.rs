@@ -58,6 +58,11 @@ impl Address {
         &self.label
     }
 
+    /// Returns the control key
+    pub fn control_key(&self) -> &CompressedRistretto {
+        &self.control_key
+    }
+
     /// Encodes address as bech32 string with the label as its prefix.
     pub fn to_string(&self) -> String {
         let mut bytes = Vec::new();

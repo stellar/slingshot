@@ -10,7 +10,7 @@ use blockchain::{utreexo, BlockHeader, BlockTx, BlockchainState, Mempool};
 use zkvm::bulletproofs::BulletproofGens;
 use zkvm::{Anchor, ClearValue, Contract, ContractID, Program, Prover, TxEntry, TxHeader};
 
-use crate::{ReceiverReply, ReceiverWitness, XprvDerivation};
+use crate::{ReceiverReply, ReceiverWitness, XprvDerivation, XpubDerivation};
 
 /// The complete state of the user node: their wallet and their blockchain state.
 #[derive(Clone)]
@@ -378,7 +378,7 @@ impl Wallet {
     fn generate_receiver(&mut self, value: ClearValue) -> ReceiverWitness {
         let seq = self.sequence;
         self.sequence += 1;
-        ReceiverWitness::new(self.xprv.as_xpub(), seq, value)
+        self.xprv.as_xpub().receiver_at_sequence(seq, value)
     }
 }
 

@@ -51,18 +51,7 @@ pub struct ReceiverReply {
 impl ReceiverWitness {
     /// Creates a new receiver for the Xpub, sequence number and a value
     pub fn new(xpub: &Xpub, sequence: u64, value: ClearValue) -> ReceiverWitness {
-        let key = xpub.key_at_sequence(sequence);
-        let (qty_blinding, flv_blinding) = xpub.value_blinding_factors(sequence, &value);
-
-        ReceiverWitness {
-            sequence,
-            receiver: Receiver {
-                opaque_predicate: key.into_point(),
-                value,
-                qty_blinding,
-                flv_blinding,
-            },
-        }
+        xpub.receiver_at_sequence(sequence, value)
     }
 
     /// Returns `Predicate::Key`

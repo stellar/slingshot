@@ -6,6 +6,7 @@ use musig::VerificationKey;
 use zkvm::{ClearValue, TranscriptProtocol};
 
 use super::Address;
+use super::{Receiver, ReceiverWitness};
 
 /// Extension trait for Xprv to derive keys based on sequence number.
 pub trait XprvDerivation {
@@ -26,6 +27,9 @@ pub trait XpubDerivation {
 
     /// Derives an Address for a given sequence number.
     fn address_at_sequence(&self, label: String, sequence: u64) -> Address;
+
+    /// Creates a new receiver for the given sequence number and value
+    fn receiver_at_sequence(&self, sequence: u64, value: ClearValue) -> ReceiverWitness;
 
     /// Derives blinding factors for the given value and sequence number.
     /// Q: Why deterministic derivation?
@@ -57,6 +61,21 @@ impl XpubDerivation for Xpub {
             ctrl_key.into_point(),
             &enc_key * &RISTRETTO_BASEPOINT_TABLE,
         )
+    }
+
+    fn receiver_at_sequence(&self, sequence: u64, value: ClearValue) -> ReceiverWitness {
+        let key = self.key_at_sequence(sequence);
+        let (qty_blinding, flv_blinding) = self.value_blinding_factors(sequence, &value);
+
+        ReceiverWitness {
+            sequence,
+            receiver: Receiver {
+                opaque_predicate: key.into_point(),
+                value,
+                qty_blinding,
+                flv_blinding,
+            },
+        }
     }
 
     fn value_blinding_factors(&self, sequence: u64, value: &ClearValue) -> (Scalar, Scalar) {
