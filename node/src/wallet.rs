@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use core::borrow::Borrow;
 
 use curve25519_dalek::scalar::Scalar;
 use curve25519_dalek::ristretto::CompressedRistretto;
@@ -6,59 +7,82 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 use zkvm::bulletproofs::BulletproofGens;
 
-use accounts::{Receiver, ReceiverWitness, XpubDerivation, XprvDerivation, Address};
+use accounts::{Sequence, Receiver, XpubDerivation, XprvDerivation, Address};
 use keytree::{Xpub,Xprv};
-use musig::Multisignature;
+use musig::Multisignature; 
 
 use super::json;
 use blockchain::utreexo;
 use blockchain::BlockchainState;
 use zkvm::{Anchor, ClearValue, Contract, ContractID, Tx, TxEntry, TxLog, VerifiedTx};
 
+use rand::thread_rng;
+
 /// Simple wallet implementation that keeps all data in a single serializable structure.
 #[derive(Clone, Debug, Serialize, Deserialize)]
-struct Wallet {
+pub struct Wallet {
     address_label: String,
     xpub: Xpub,
 
     /// Current sequence number
-    sequence: u64,
+    sequence: Sequence,
     
     /// Map of predicate -> receiver
-    receivers: HashMap<CompressedRistretto, ReceiverWitness>, // TODO: add expiration time
+    receivers: HashMap<CompressedRistretto, (Sequence, Receiver, OutputKind)>, // TODO: add expiration time?
     
-    /// Map of predicate -> address
-    addresses: HashMap<CompressedRistretto, Address>, // TODO: add expiration time
+    /// Map of predicate -> sequence & address
+    addresses: HashMap<CompressedRistretto, (Sequence, Address)>, // TODO: add expiration time?
     
-    /// List of confirmed, spendable utxos.
-    /// If the spent is confirmed, utxo is removed from this list.
-    confirmed_utxos: HashMap<ContractID, Utxo>,
-    
-    /// List of utxos in unconfirmed state.
-    /// This may contain spent utxos that "shadow" the confirmed ones.
-    pending_utxos: HashMap<ContractID, (Utxo,UtxoState)>,
+    /// All utxos tracked by the wallet
+    utxos: HashMap<ContractID, Utxo>,
 }
+
+/// Balance of a certain asset that consists of a number of spendable UTXOs.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Balance {
+    /// Flavor of the asset in this balance
+    pub flavor: Scalar,
+
+    /// Total qty of the asset
+    pub total: u64,
+
+    /// List of spendable utxos.
+    pub utxos: Vec<Utxo>,
+}
+
 
 /// Contract details of the utxo
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Utxo {
-    pub receiver: Receiver,
-    pub anchor: Anchor,
-    pub sequence: u64,         // 0 for outgoing utxos
-    pub proof: utreexo::Proof, // transient for outgoing and unconfirmed utxos
+    /// Receiver for this utxo.
+    receiver: Receiver,
+    /// Contract's anchor necessary to reconstruct a contract from Receiver.
+    anchor: Anchor,
+    /// Sequence used for derivation.
+    sequence: Sequence,
+    /// Utreexo proof for this utxo.
+    proof: utreexo::Proof, // transient for outgoing and unconfirmed utxos
+    /// Kind of the output: is it an incoming payment ("theirs") or a change ("ours")
+    kind: OutputKind,
+    /// Whether this utxo is confirmed.
+    confirmed: bool,
+    /// Indicates spentness: Some("was confirmed") for spent and None for unspent.
+    spent: Option<bool> 
 }
 
+/// Kind of the output: is it an incoming payment ("theirs") or a change ("ours")
 #[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub enum UtxoState {
-    // Typically, a change output from a tx that we control
-    Safe,
-    // Typically, an incoming payment from a tx that we don't fully control
-    Unsafe,
-    // Utxo is marked as spent by one of the pending transactions
-    Spent,
+enum OutputKind {
+    Incoming,
+    Change,
 }
 
 /// Implements the interface for storing addresses, transactions and outputs.
+///
+/// Important assumptions:
+/// 1. User supplies confirmed transactions and Catchup structure in order.
+/// 2. Unconfirmed transactions are inserted in topological order (children after parents),
+///    and removed in reverse topological order (children before parents).
 impl Wallet {
 
     /// Creates a wallet initialized with Xpub from which all keys are derived.
@@ -69,8 +93,7 @@ impl Wallet {
             sequence: 0,
             receivers: Default::default(),
             addresses: Default::default(),
-            confirmed_utxos: Default::default(),
-            pending_utxos: Default::default(),
+            utxos: Default::default(),
         }
     }
 
@@ -78,18 +101,18 @@ impl Wallet {
     pub fn create_address(&mut self) -> Address {
         let seq = self.sequence;
         self.sequence += 1;
-        let addr = self.xpub.address_at_sequence(self.address_label, seq);
-        self.addresses.insert(addr.control_key().clone(), addr.clone());
+        let (addr, _decryption_key) = self.xpub.address_at_sequence(self.address_label.clone(), seq);
+        self.addresses.insert(addr.control_key().clone(), (seq, addr.clone()));
         addr
     }
 
     /// Creates a new receiver and record it 
-    pub fn create_receiver(&mut self, value: ClearValue) -> ReceiverWitness {
+    pub fn create_receiver(&mut self, value: ClearValue) -> (Sequence, Receiver) {
         let seq = self.sequence;
         self.sequence += 1;
-        let recvr_witness = self.xpub.receiver_at_sequence(seq, value);
-        self.receivers.insert(recvr_witness.receiver.opaque_predicate.clone(), recvr_witness.clone());
-        recvr_witness
+        let recvr = self.xpub.receiver_at_sequence(seq, value);
+        self.receivers.insert(recvr.opaque_predicate.clone(), (seq, recvr.clone(), OutputKind::Incoming));
+        (seq, recvr)
     }
 
     /// Creates a blockchain seeded with the given values.
@@ -99,12 +122,15 @@ impl Wallet {
         let mut utxos = Vec::new();
         for value in values {
             anchor = anchor.ratchet();
-            let recvr_witness = self.create_receiver(value);
+            let (seq, recvr) = self.create_receiver(value);
             utxos.push(Utxo {
-                receiver: recvr_witness.receiver,
-                sequence: recvr_witness.sequence,
+                receiver: recvr,
+                sequence: seq,
                 anchor,
                 proof: utreexo::Proof::Transient,
+                kind: OutputKind::Incoming,
+                confirmed: true,
+                spent: None
             });
         }
         let (bc_state, proofs) = BlockchainState::make_initial(
@@ -113,7 +139,7 @@ impl Wallet {
         );
 
         // Store utxos with updated proofs
-        self.confirmed_utxos.extend(utxos
+        self.utxos.extend(utxos
             .into_iter()
             .zip(proofs.into_iter())
             .map(|(mut utxo, proof)| {
@@ -124,26 +150,144 @@ impl Wallet {
         bc_state
     }
 
-    /// Processes confirmed trasactions,
-    pub fn process_confirmed_txs(&mut self, txs: impl IntoIterator<Item=Tx>, catchup: &utreexo::Catchup) {
+    /// Processes confirmed trasactions, overwriting the pending state.
+    pub fn process_confirmed_txs<T>(&mut self, txs: T, catchup: &utreexo::Catchup)
+    where
+        T: IntoIterator,
+        T::Item: Borrow<VerifiedTx>
+    {
+        for tx in txs.into_iter() {
+            let tx = tx.borrow();
+            for cid in tx.log.inputs() {
+                self.utxos.remove(cid);
+            }
+            let new_utxos_by_cids = tx.log.outputs().filter_map(|c| {
+                self.receiver_for_output(c, &tx.log).map(|(s,r,k)| (c,s,r,k))
+            }).map(|(c, seq, recvr, kind)| {
+                (c.id(), Utxo {
+                    receiver: recvr,
+                    sequence: seq,
+                    anchor: c.anchor,
+                    proof: utreexo::Proof::Transient,
+                    kind,
+                    confirmed: true,
+                    spent: None,
+                })
+            });
+            self.utxos.extend(new_utxos_by_cids);
+        }
 
+        // Now the confirmed utxos contain: 
+        // (1) previously stored utxos with non-transient utreexo proofs
+        // (2) newly added utxos with transient utreexo proofs
+        // We shall update all the proofs using the catchup map:
+        // old utxos will get up-to-date proofs,
+        // and the new ones will get the proofs for the first time.
+        let hasher = utreexo::utreexo_hasher();
+        for (cid, utxo) in self.utxos.iter_mut() {
+            // Transient proofs in the unconfirmed utxos are either updated (if those became confirmed),
+            // or remain transient. This can fail only if existing proofs are inconsistent with the catchup map
+            // which may happen if the confirmed txs and catchup map are not applied sequentially.
+            let new_proof = catchup.update_proof(cid, utxo.proof, &hasher).expect("Please make sure that catchup maps are applied in sequence.");
+            utxo.proof = new_proof;
+        }
+    }
+
+    /// Removes all unconfirmed utxos, so they can be re-created anew with `add_unconfirmed_tx` call.
+    pub fn clear_unconfirmed_utxos(&mut self) {
+        self.utxos.retain(|_, utxo| {
+            // make sure to preserve confirmed utxos that are spent as unconfirmed
+            if !utxo.confirmed {
+                if let Some(was_confirmed) = utxo.spent {
+                    utxo.spent = None;
+                    utxo.confirmed = was_confirmed;
+                }
+            }
+            utxo.confirmed
+        });
+    }
+
+    /// Adds an unconfirmed tx.
+    /// Important: the caller is responsible to call this method in topological order (children added after parents).
+    pub fn add_unconfirmed_tx(&mut self, tx: &VerifiedTx) {
+        // 1. Mark all known inputs as spent.
+        for cid in tx.log.inputs() {
+            if let Some(utxo) = self.utxos.get_mut(cid) {
+                utxo.spent = Some(utxo.confirmed);
+                utxo.confirmed = false;
+            }
+        }
+        // 2. Insert new outputs as unspent.
+        let new_utxos = tx.log.outputs().filter_map(|c| {
+            self.receiver_for_output(c, &tx.log).map(|(s,r,k)| (c,s,r,k))
+        }).map(|(c, seq, recvr, kind)| {
+            (c.id(), Utxo {
+                receiver: recvr,
+                sequence: seq,
+                anchor: c.anchor,
+                proof: utreexo::Proof::Transient,
+                kind,
+                confirmed: false,
+                spent: None,
+            })
+        });
+        self.utxos.extend(new_utxos);
+    }
+
+    /// Removes an unconfirmed transaction, which reverses the spent/unspent states of pending utxos.
+    /// Important: the caller is responsible to call this method in reverse topological order (children removed before parents).
+    pub fn remove_unconfirmed_tx(&mut self, tx: &VerifiedTx) {
+        // 1. Mark all spent as unspent.
+        for cid in tx.log.inputs() {
+            if let Some(utxo) = self.utxos.get_mut(cid) {
+                if let Some(was_confirmed) = utxo.spent {
+                    utxo.confirmed = was_confirmed;
+                    utxo.spent = None;
+                }
+            }
+        }
+
+        // 2. Remove utxos created by the outputs of this transaction.
+        for cid in tx.log.outputs().map(|c| c.id()) {
+            self.utxos.remove(&cid);
+        }
+    }
+
+    /// Returns a pair of a sequence number and a receiver 
+    fn receiver_for_output(&self, contract: &Contract, txlog: &TxLog) -> Option<(Sequence, Receiver, OutputKind)> {
+        let k = contract.predicate.to_point();
+        let value: &zkvm::Value = contract.extract()?;
+        
+        // 1. Check if we have an incoming receiver for this output and whether it can be used.
+        if let Some((seq, receiver, kind)) = self.receivers.get(&k) {
+            // Make sure the value is encrypted correctly
+            if receiver.verify_value(value) {
+                return Some((*seq, *receiver, *kind));
+            }
+        }
+
+        // 2. Check if we have an address, and then try to decrypt the output and get the receiver out.
+        if let Some((seq, address)) = self.addresses.get(&k) {
+            let (_addr, deckey) = self.xpub.address_at_sequence(address.label().to_string(), *seq);
+            // Try all data entries - no worries, the decrypt fails quickly on obviously irrelevant entries.
+            for data in txlog.data_entries() {
+                if let Some(receiver) = address.decrypt(value, data, &deckey, thread_rng()) {
+                    return Some((*seq, receiver, OutputKind::Incoming));
+                }
+            }
+        }
+        None
     }
 
     /// Returns all spendable utxos, including unconfirmed change utxos.
     pub fn spendable_utxos(&self) -> Vec<Utxo> {
-        self.confirmed_utxos.iter().filter_map(|(cid, utxo)| {
-            if self.pending_utxos.get(cid).map(|(_,state)| *state) == Some(UtxoState::Spent) {
-                None
-            } else {
-                Some(utxo.clone())
-            }
-        }).chain(self.pending_utxos.iter().filter_map(|(cid, (utxo, state))| {
-            if *state == UtxoState::Safe { // only safe-to-spend utxos are included
+        self.utxos.iter().filter_map(|(cid, utxo)| {
+            if utxo.spent == None && (utxo.confirmed || utxo.kind == OutputKind::Change) {
                 Some(utxo.clone())
             } else {
                 None
             }
-        })).collect()
+        }).collect()
     }
 
     /// Returns a list of asset balances, one per asset flavor.
@@ -175,26 +319,40 @@ impl Wallet {
             .collect()
     }
 
-
-    /// Deletes a utxo from the list if it's found.
-    fn delete_utxo(list: &mut Vec<Utxo>, item: &ContractID) -> Option<Utxo> {
-        let maybe_index = list.iter().enumerate().find_map(|(i, utxo)| {
-            if utxo.contract_id() == *item {
-                Some(i)
-            } else {
-                None
-            }
-        });
-        if let Some(i) = maybe_index {
-            Some(list.remove(i))
-        } else {
-            None
-        }
-    }
-
 }
 
+impl AsRef<ClearValue> for Utxo {
+    fn as_ref(&self) -> &ClearValue {
+        &self.receiver.value
+    }
+}
 
+impl Utxo {
+    /// Convert utxo to a Contract instance
+    pub fn contract(&self) -> Contract {
+        self.receiver.contract(self.anchor)
+    }
+
+    // /// Preserves Predicate as ::Key, not as ::Opaque
+    // pub fn contract_witness(&self) -> Contract {
+    //     ReceiverWitness {
+    //         sequence: self.sequence,
+    //         receiver: self.receiver.clone(),
+    //     }
+    //     .contract(self.anchor)
+    // }
+
+    /// Returns the UTXO ID
+    pub fn contract_id(&self) -> ContractID {
+        self.contract().id()
+    }
+
+    pub fn value(&self) -> ClearValue {
+        self.receiver.value
+    }
+}
+
+/*
 //////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////
@@ -216,7 +374,7 @@ pub struct Account {
     pub xprv: Xprv,
 
     /// User's account state
-    pub sequence: u64,
+    pub sequence: Sequence,
 
     /// Annotated txs related to this account
     pub txs: Vec<AnnotatedTx>,
@@ -259,18 +417,6 @@ pub struct AnnotatedTx {
     pub known_entries: Vec<(usize, ClearValue)>,
 }
 
-/// Balance of a certain asset that consists of a number of spendable UTXOs.
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Balance {
-    /// Flavor of the asset in this balance
-    pub flavor: Scalar,
-
-    /// Total qty of the asset
-    pub total: u64,
-
-    /// List of spendable utxos.
-    pub utxos: Vec<Utxo>,
-}
 
 impl Account {
     /// Creates a new user account with a privkey and pre-seeded collection of utxos
@@ -290,7 +436,7 @@ impl Account {
         }
     }
 
-    pub fn generate_receiver(&mut self, value: ClearValue) -> ReceiverWitness {
+    pub fn generate_receiver(&mut self, value: ClearValue) -> Receiver {
         let seq = self.sequence;
         self.sequence += 1;
         self.xprv.as_xpub().receiver_at_sequence(seq, value)
@@ -908,56 +1054,7 @@ impl Account {
 //     }
 // }
 
-impl AsRef<ClearValue> for Utxo {
-    fn as_ref(&self) -> &ClearValue {
-        &self.receiver.value
-    }
-}
 
-impl Utxo {
-    /// Convert utxo to a Contract instance
-    pub fn contract(&self) -> Contract {
-        self.receiver.contract(self.anchor)
-    }
-
-    /// Preserves Predicate as ::Key, not as ::Opaque
-    pub fn contract_witness(&self) -> Contract {
-        ReceiverWitness {
-            sequence: self.sequence,
-            receiver: self.receiver.clone(),
-        }
-        .contract(self.anchor)
-    }
-    /// Returns the UTXO ID
-    pub fn contract_id(&self) -> ContractID {
-        self.contract().id()
-    }
-
-    pub fn value(&self) -> ClearValue {
-        self.receiver.value
-    }
-
-    pub fn outgoing(self) -> UtxoWithStatus {
-        UtxoWithStatus {
-            status: UtxoStatus::Outgoing,
-            utxo: self,
-        }
-    }
-
-    pub fn incoming(self) -> UtxoWithStatus {
-        UtxoWithStatus {
-            status: UtxoStatus::Incoming,
-            utxo: self,
-        }
-    }
-
-    pub fn received(self) -> UtxoWithStatus {
-        UtxoWithStatus {
-            status: UtxoStatus::Received,
-            utxo: self,
-        }
-    }
-}
 
 impl UtxoWithStatus {
     pub fn value(&self) -> ClearValue {
@@ -1031,3 +1128,5 @@ impl UtxoWithStatus {
         }
     }
 }
+
+*/

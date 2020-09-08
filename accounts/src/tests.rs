@@ -378,7 +378,10 @@ impl Wallet {
     fn generate_receiver(&mut self, value: ClearValue) -> ReceiverWitness {
         let seq = self.sequence;
         self.sequence += 1;
-        self.xprv.as_xpub().receiver_at_sequence(seq, value)
+        ReceiverWitness {
+            sequence: seq,
+            receiver: self.xprv.as_xpub().receiver_at_sequence(seq, value)
+        }
     }
 }
 

@@ -86,10 +86,6 @@ pub enum VMError {
     #[error("Item is not a LE32 integer.")]
     TypeNotU32,
 
-    /// This error occurs when an instruction requires a program item.
-    #[error("Item is not a program item.")]
-    TypeNotProgramItem,
-
     /// This error occurs when an instruction expects a predicate tree type.
     #[error("Item is not a predicate tree.")]
     TypeNotPredicateTree,

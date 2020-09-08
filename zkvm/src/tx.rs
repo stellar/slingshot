@@ -308,6 +308,14 @@ impl TxLog {
             _ => None,
         })
     }
+
+    /// Iterator over all data entries
+    pub fn data_entries<'a>(&'a self) -> impl Iterator<Item = &'a [u8]> {
+        self.0.iter().filter_map(|entry| match entry {
+            TxEntry::Data(buf) => Some(&buf[..]),
+            _ => None,
+        })
+    }
 }
 
 impl From<Vec<TxEntry>> for TxLog {
