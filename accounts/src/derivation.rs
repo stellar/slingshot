@@ -5,8 +5,7 @@ use merlin::Transcript;
 use musig::VerificationKey;
 use zkvm::{ClearValue, TranscriptProtocol};
 
-use super::Address;
-use super::{Receiver, ReceiverWitness};
+use super::{Address, Receiver};
 
 /// Sequence number for derivation
 pub type Sequence = u64;
@@ -65,7 +64,7 @@ impl XpubDerivation for Xpub {
                 ctrl_key.into_point(),
                 &enc_key * &RISTRETTO_BASEPOINT_TABLE,
             ),
-            enc_key
+            enc_key,
         )
     }
 

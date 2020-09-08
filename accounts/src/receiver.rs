@@ -6,14 +6,14 @@ use musig::VerificationKey;
 use serde::{Deserialize, Serialize};
 use zkvm::{Anchor, ClearValue, Commitment, Contract, PortableItem, Predicate, Value};
 
-use crate::{XpubDerivation,Sequence};
+use crate::{Sequence, XpubDerivation};
 
 #[derive(Copy, Clone, Eq, Hash, Debug, PartialEq, Default, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct ReceiverID([u8; 32]);
 
 /// Receiver describes the destination for the payment.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Copy, Clone, Debug, Serialize, Deserialize)]
 pub struct Receiver {
     /// Address to which the payment must be sent.
     pub opaque_predicate: CompressedRistretto,
@@ -30,7 +30,7 @@ pub struct Receiver {
 
 /// Private annotation to the receiver that describes derivation path
 /// DEPRECATED?
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Copy, Clone, Debug, Serialize, Deserialize)]
 pub struct ReceiverWitness {
     /// Account's sequence number at which this receiver was generated.
     pub sequence: Sequence,

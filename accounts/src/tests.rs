@@ -380,7 +380,7 @@ impl Wallet {
         self.sequence += 1;
         ReceiverWitness {
             sequence: seq,
-            receiver: self.xprv.as_xpub().receiver_at_sequence(seq, value)
+            receiver: self.xprv.as_xpub().receiver_at_sequence(seq, value),
         }
     }
 }
