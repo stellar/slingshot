@@ -1,5 +1,4 @@
 use core::convert::TryFrom;
-use core::convert::TryInto;
 use serde::{Deserialize, Serialize};
 
 use crate::constraints::Commitment;
@@ -236,7 +235,7 @@ impl TryFrom<PortableItem> for String {
     fn try_from(value: PortableItem) -> Result<Self, Self::Error> {
         match value {
             PortableItem::String(x) => Ok(x),
-            _ => Err(VMError::TypeNotString)
+            _ => Err(VMError::TypeNotString),
         }
     }
 }
@@ -247,7 +246,7 @@ impl TryFrom<PortableItem> for Value {
     fn try_from(value: PortableItem) -> Result<Self, Self::Error> {
         match value {
             PortableItem::Value(x) => Ok(x),
-            _ => Err(VMError::TypeNotValue)
+            _ => Err(VMError::TypeNotValue),
         }
     }
 }
@@ -258,11 +257,10 @@ impl TryFrom<PortableItem> for ProgramItem {
     fn try_from(value: PortableItem) -> Result<Self, Self::Error> {
         match value {
             PortableItem::Program(x) => Ok(x),
-            _ => Err(VMError::TypeNotProgram)
+            _ => Err(VMError::TypeNotProgram),
         }
     }
 }
-
 
 impl<'a> TryFrom<&'a PortableItem> for &'a String {
     type Error = VMError;
@@ -270,7 +268,7 @@ impl<'a> TryFrom<&'a PortableItem> for &'a String {
     fn try_from(value: &'a PortableItem) -> Result<Self, Self::Error> {
         match value {
             PortableItem::String(x) => Ok(x),
-            _ => Err(VMError::TypeNotString)
+            _ => Err(VMError::TypeNotString),
         }
     }
 }
@@ -281,7 +279,7 @@ impl<'a> TryFrom<&'a PortableItem> for &'a Value {
     fn try_from(value: &'a PortableItem) -> Result<Self, Self::Error> {
         match value {
             PortableItem::Value(x) => Ok(x),
-            _ => Err(VMError::TypeNotValue)
+            _ => Err(VMError::TypeNotValue),
         }
     }
 }
@@ -292,18 +290,16 @@ impl<'a> TryFrom<&'a PortableItem> for &'a ProgramItem {
     fn try_from(value: &'a PortableItem) -> Result<Self, Self::Error> {
         match value {
             PortableItem::Program(x) => Ok(x),
-            _ => Err(VMError::TypeNotProgram)
+            _ => Err(VMError::TypeNotProgram),
         }
     }
 }
 
-
 impl Contract {
-
     /// Extracts a single item from the contract's payload with a given type.
-    pub fn extract<'a, T1>(&'a self) -> Option<T1> 
+    pub fn extract<'a, T1>(&'a self) -> Option<T1>
     where
-        T1: TryFrom<&'a PortableItem>
+        T1: TryFrom<&'a PortableItem>,
     {
         if self.payload.len() != 1 {
             return None;
@@ -312,112 +308,79 @@ impl Contract {
     }
 
     /// Extracts two payload items with the given types.
-    pub fn extract2<'a, T1, T2>(&'a self) -> Option<(T1, T2)> 
+    pub fn extract2<'a, T1, T2>(&'a self) -> Option<(T1, T2)>
     where
         T1: TryFrom<&'a PortableItem>,
-        T2: TryFrom<&'a PortableItem>
+        T2: TryFrom<&'a PortableItem>,
     {
         if self.payload.len() != 2 {
             return None;
         }
-        Some(
-            (
-                T1::try_from(self.payload.get(0)?).ok()?,
-                T2::try_from(self.payload.get(1)?).ok()?
-            )
-        )
+        Some((
+            T1::try_from(self.payload.get(0)?).ok()?,
+            T2::try_from(self.payload.get(1)?).ok()?,
+        ))
     }
 
     /// Extracts three payload items with the given types.
-    pub fn extract3<'a, T1, T2, T3>(&'a self) -> Option<(T1, T2, T3)> 
-    where
-        T1: TryFrom<&'a PortableItem>,
-        T2: TryFrom<&'a PortableItem>,
-        T3: TryFrom<&'a PortableItem>
-    {
-        if self.payload.len() != 3 {
-            return None;
-        }
-        Some(
-            (
-                T1::try_from(self.payload.get(0)?).ok()?,
-                T2::try_from(self.payload.get(1)?).ok()?,
-                T3::try_from(self.payload.get(2)?).ok()?
-            )
-        )
-    }
-
-    /// Extracts four payload items with the given types.
-    pub fn extract4<'a, T1, T2, T3, T4>(&'a self) -> Option<(T1, T2, T3, T4)> 
+    pub fn extract3<'a, T1, T2, T3>(&'a self) -> Option<(T1, T2, T3)>
     where
         T1: TryFrom<&'a PortableItem>,
         T2: TryFrom<&'a PortableItem>,
         T3: TryFrom<&'a PortableItem>,
-        T4: TryFrom<&'a PortableItem>
     {
-        if self.payload.len() != 4 {
+        if self.payload.len() != 3 {
             return None;
         }
-        Some(
-            (
-                T1::try_from(self.payload.get(0)?).ok()?,
-                T2::try_from(self.payload.get(1)?).ok()?,
-                T3::try_from(self.payload.get(2)?).ok()?,
-                T4::try_from(self.payload.get(3)?).ok()?
-            )
-        )
+        Some((
+            T1::try_from(self.payload.get(0)?).ok()?,
+            T2::try_from(self.payload.get(1)?).ok()?,
+            T3::try_from(self.payload.get(2)?).ok()?,
+        ))
     }
 
-    /// Extracts five payload items with the given types.
-    pub fn extract5<'a, T1, T2, T3, T4, T5>(&'a self) -> Option<(T1, T2, T3, T4, T5)> 
+    /// Extracts four payload items with the given types.
+    pub fn extract4<'a, T1, T2, T3, T4>(&'a self) -> Option<(T1, T2, T3, T4)>
     where
         T1: TryFrom<&'a PortableItem>,
         T2: TryFrom<&'a PortableItem>,
         T3: TryFrom<&'a PortableItem>,
         T4: TryFrom<&'a PortableItem>,
-        T5: TryFrom<&'a PortableItem>
     {
-        if self.payload.len() != 5 {
+        if self.payload.len() != 4 {
             return None;
         }
-        Some(
-            (
-                T1::try_from(self.payload.get(0)?).ok()?,
-                T2::try_from(self.payload.get(1)?).ok()?,
-                T3::try_from(self.payload.get(2)?).ok()?,
-                T4::try_from(self.payload.get(3)?).ok()?,
-                T5::try_from(self.payload.get(4)?).ok()?
-            )
-        )
+        Some((
+            T1::try_from(self.payload.get(0)?).ok()?,
+            T2::try_from(self.payload.get(1)?).ok()?,
+            T3::try_from(self.payload.get(2)?).ok()?,
+            T4::try_from(self.payload.get(3)?).ok()?,
+        ))
     }
 
-    /// Extracts six payload items with the given types.
-    pub fn extract6<'a, T1, T2, T3, T4, T5, T6>(&'a self) -> Option<(T1, T2, T3, T4, T5, T6)> 
+    /// Extracts five payload items with the given types.
+    pub fn extract5<'a, T1, T2, T3, T4, T5>(&'a self) -> Option<(T1, T2, T3, T4, T5)>
     where
         T1: TryFrom<&'a PortableItem>,
         T2: TryFrom<&'a PortableItem>,
         T3: TryFrom<&'a PortableItem>,
         T4: TryFrom<&'a PortableItem>,
         T5: TryFrom<&'a PortableItem>,
-        T6: TryFrom<&'a PortableItem>
     {
-        if self.payload.len() != 6 {
+        if self.payload.len() != 5 {
             return None;
         }
-        Some(
-            (
-                T1::try_from(self.payload.get(0)?).ok()?,
-                T2::try_from(self.payload.get(1)?).ok()?,
-                T3::try_from(self.payload.get(2)?).ok()?,
-                T4::try_from(self.payload.get(3)?).ok()?,
-                T5::try_from(self.payload.get(4)?).ok()?,
-                T6::try_from(self.payload.get(5)?).ok()?
-            )
-        )
+        Some((
+            T1::try_from(self.payload.get(0)?).ok()?,
+            T2::try_from(self.payload.get(1)?).ok()?,
+            T3::try_from(self.payload.get(2)?).ok()?,
+            T4::try_from(self.payload.get(3)?).ok()?,
+            T5::try_from(self.payload.get(4)?).ok()?,
+        ))
     }
 
-    /// Extracts seven payload items with the given types.
-    pub fn extract7<'a, T1, T2, T3, T4, T5, T6, T7>(&'a self) -> Option<(T1, T2, T3, T4, T5, T6, T7)> 
+    /// Extracts six payload items with the given types.
+    pub fn extract6<'a, T1, T2, T3, T4, T5, T6>(&'a self) -> Option<(T1, T2, T3, T4, T5, T6)>
     where
         T1: TryFrom<&'a PortableItem>,
         T2: TryFrom<&'a PortableItem>,
@@ -425,26 +388,24 @@ impl Contract {
         T4: TryFrom<&'a PortableItem>,
         T5: TryFrom<&'a PortableItem>,
         T6: TryFrom<&'a PortableItem>,
-        T7: TryFrom<&'a PortableItem>
     {
-        if self.payload.len() != 7 {
+        if self.payload.len() != 6 {
             return None;
         }
-        Some(
-            (
-                T1::try_from(self.payload.get(0)?).ok()?,
-                T2::try_from(self.payload.get(1)?).ok()?,
-                T3::try_from(self.payload.get(2)?).ok()?,
-                T4::try_from(self.payload.get(3)?).ok()?,
-                T5::try_from(self.payload.get(4)?).ok()?,
-                T6::try_from(self.payload.get(5)?).ok()?,
-                T7::try_from(self.payload.get(6)?).ok()?,
-            )
-        )
+        Some((
+            T1::try_from(self.payload.get(0)?).ok()?,
+            T2::try_from(self.payload.get(1)?).ok()?,
+            T3::try_from(self.payload.get(2)?).ok()?,
+            T4::try_from(self.payload.get(3)?).ok()?,
+            T5::try_from(self.payload.get(4)?).ok()?,
+            T6::try_from(self.payload.get(5)?).ok()?,
+        ))
     }
 
-    /// Extracts eight payload items with the given types.
-    pub fn extract8<'a, T1, T2, T3, T4, T5, T6, T7, T8>(&'a self) -> Option<(T1, T2, T3, T4, T5, T6, T7, T8)> 
+    /// Extracts seven payload items with the given types.
+    pub fn extract7<'a, T1, T2, T3, T4, T5, T6, T7>(
+        &'a self,
+    ) -> Option<(T1, T2, T3, T4, T5, T6, T7)>
     where
         T1: TryFrom<&'a PortableItem>,
         T2: TryFrom<&'a PortableItem>,
@@ -453,22 +414,47 @@ impl Contract {
         T5: TryFrom<&'a PortableItem>,
         T6: TryFrom<&'a PortableItem>,
         T7: TryFrom<&'a PortableItem>,
-        T8: TryFrom<&'a PortableItem>
+    {
+        if self.payload.len() != 7 {
+            return None;
+        }
+        Some((
+            T1::try_from(self.payload.get(0)?).ok()?,
+            T2::try_from(self.payload.get(1)?).ok()?,
+            T3::try_from(self.payload.get(2)?).ok()?,
+            T4::try_from(self.payload.get(3)?).ok()?,
+            T5::try_from(self.payload.get(4)?).ok()?,
+            T6::try_from(self.payload.get(5)?).ok()?,
+            T7::try_from(self.payload.get(6)?).ok()?,
+        ))
+    }
+
+    /// Extracts eight payload items with the given types.
+    pub fn extract8<'a, T1, T2, T3, T4, T5, T6, T7, T8>(
+        &'a self,
+    ) -> Option<(T1, T2, T3, T4, T5, T6, T7, T8)>
+    where
+        T1: TryFrom<&'a PortableItem>,
+        T2: TryFrom<&'a PortableItem>,
+        T3: TryFrom<&'a PortableItem>,
+        T4: TryFrom<&'a PortableItem>,
+        T5: TryFrom<&'a PortableItem>,
+        T6: TryFrom<&'a PortableItem>,
+        T7: TryFrom<&'a PortableItem>,
+        T8: TryFrom<&'a PortableItem>,
     {
         if self.payload.len() != 8 {
             return None;
         }
-        Some(
-            (
-                T1::try_from(self.payload.get(0)?).ok()?,
-                T2::try_from(self.payload.get(1)?).ok()?,
-                T3::try_from(self.payload.get(2)?).ok()?,
-                T4::try_from(self.payload.get(3)?).ok()?,
-                T5::try_from(self.payload.get(4)?).ok()?,
-                T6::try_from(self.payload.get(5)?).ok()?,
-                T7::try_from(self.payload.get(6)?).ok()?,
-                T8::try_from(self.payload.get(7)?).ok()?,
-            )
-        )
+        Some((
+            T1::try_from(self.payload.get(0)?).ok()?,
+            T2::try_from(self.payload.get(1)?).ok()?,
+            T3::try_from(self.payload.get(2)?).ok()?,
+            T4::try_from(self.payload.get(3)?).ok()?,
+            T5::try_from(self.payload.get(4)?).ok()?,
+            T6::try_from(self.payload.get(5)?).ok()?,
+            T7::try_from(self.payload.get(6)?).ok()?,
+            T8::try_from(self.payload.get(7)?).ok()?,
+        ))
     }
 }
