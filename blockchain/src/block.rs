@@ -2,8 +2,9 @@ use merlin::Transcript;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use zkvm::encoding::*;
-use zkvm::{merkle, Hash, MerkleItem, MerkleTree, Tx};
+use zkvm::{merkle, Hash, MerkleItem, MerkleTree, Tx, VerifiedTx};
 
+use super::state::BlockchainState;
 use super::utreexo::{self, Proof};
 use readerwriter::Encodable;
 
@@ -45,6 +46,22 @@ pub struct BlockTx {
     pub tx: Tx,
     /// Utreexo proofs.
     pub proofs: Vec<utreexo::Proof>,
+}
+
+/// Block that was successfully processed and applied to the state,
+/// and can be used by the rest of the system to index txs, update wallet data etc.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct VerifiedBlock {
+    /// Block header
+    pub header: BlockHeader,
+    /// Utreexo state
+    pub utreexo: utreexo::Forest,
+    /// Utreexo catchup map for updating the proofs
+    pub catchup: utreexo::Catchup,
+    /// List of verified transactions
+    pub raw_txs: Vec<BlockTx>,
+    /// List of verified transactions
+    pub verified_txs: Vec<VerifiedTx>,
 }
 
 impl BlockHeader {
@@ -219,5 +236,15 @@ impl fmt::Debug for WitnessHash {
         write!(f, "WitnessHash({})", hex::encode(&self.0))
         // Without hex crate we'd do this, but it outputs comma-separated numbers: [aa, 11, 5a, ...]
         // write!(f, "{:x?}", &self.0)
+    }
+}
+
+impl VerifiedBlock {
+    /// Returns the blockchain state produced by this block
+    pub fn blockchain_state(&self) -> BlockchainState {
+        BlockchainState {
+            tip: self.header.clone(),
+            utreexo: self.utreexo.clone(),
+        }
     }
 }

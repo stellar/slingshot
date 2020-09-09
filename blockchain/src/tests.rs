@@ -2,7 +2,6 @@ use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
 use rand::RngCore;
 use zkvm::bulletproofs::BulletproofGens;
-use zkvm::VerifiedTx;
 
 use super::*;
 use zkvm::{
@@ -112,12 +111,14 @@ fn test_state_machine() {
         .append(block_tx.clone(), &bp_gens)
         .expect("Tx must be valid");
 
-    let (future_state, _catchup) = mempool.make_block();
+    let verified_block = mempool.make_block();
+    let future_state = verified_block.blockchain_state();
 
     // Apply the block to the state
-    let (new_state, _catchup, _vtxs) = state
+    let applied_block = state
         .apply_block(future_state.tip, &[block_tx], &bp_gens)
         .expect("Block application should succeed.");
+    let new_state = applied_block.blockchain_state();
 
     let hasher = utreexo::utreexo_hasher::<ContractID>();
     assert_eq!(
@@ -128,6 +129,7 @@ fn test_state_machine() {
 
 #[test]
 fn test_p2p_protocol() {
+    use super::block::*;
     use super::protocol::*;
     use async_trait::async_trait;
     use futures_executor::block_on;
@@ -219,17 +221,15 @@ fn test_p2p_protocol() {
         }
 
         /// Stores the new block and an updated state.
-        fn store_block(
-            &mut self,
-            block: Block,
-            new_state: BlockchainState,
-            _catchup: utreexo::Catchup,
-            _vtxs: Vec<VerifiedTx>,
-        ) {
+        fn store_block(&mut self, verified_block: VerifiedBlock, signature: Signature) {
             // TODO: update all proofs in the wallet with a catchup structure.
-            assert!(block.header.height == self.state.tip.height + 1);
-            self.blocks.push(block);
-            self.state = new_state;
+            assert!(verified_block.header.height == self.state.tip.height + 1);
+            self.state = verified_block.blockchain_state();
+            self.blocks.push(Block {
+                header: verified_block.header,
+                signature,
+                txs: verified_block.raw_txs,
+            });
         }
     }
 

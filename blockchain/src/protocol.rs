@@ -15,18 +15,76 @@ use rand::{thread_rng, Rng};
 use serde::{Deserialize, Serialize};
 use starsig::{Signature, SigningKey, VerificationKey};
 use zkvm::bulletproofs::BulletproofGens;
-use zkvm::{ContractID, VerifiedTx};
+use zkvm::ContractID;
 
-use super::block::{BlockHeader, BlockID, BlockTx};
+use super::block::{BlockHeader, BlockID, BlockTx, VerifiedBlock};
 use super::errors::BlockchainError;
 use super::mempool::Mempool;
 use super::shortid::{self, ShortIDVec};
 use super::state::BlockchainState;
 use super::utreexo;
 
+/// Current version of the sync protocol.
 const CURRENT_VERSION: u64 = 0;
-const SHORTID_NONCE_TTL: usize = 50; // number of sync cycles
 
+/// Number of sync cycles after which the ShortID nonce is rotated.
+const SHORTID_NONCE_TTL: usize = 50;
+
+/// Enumeration of all protocol messages
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum Message {
+    GetInventory(GetInventory),
+    Inventory(Inventory),
+    GetBlock(GetBlock),
+    Block(Block),
+    GetMempoolTxs(GetMempoolTxs),
+    MempoolTxs(MempoolTxs),
+}
+
+/// Request for the state of the node.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct GetInventory {
+    pub(crate) version: u64,
+    pub(crate) shortid_nonce: u64,
+}
+
+/// Response with the state of the node.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Inventory {
+    pub(crate) version: u64,
+    pub(crate) tip: BlockHeader,
+    pub(crate) tip_signature: Signature,
+    pub(crate) shortid_nonce: u64,
+    pub(crate) shortid_list: ShortIDVec,
+}
+
+/// Request of a block
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct GetBlock {
+    pub(crate) height: u64,
+}
+
+/// Response with a block
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Block {
+    pub(crate) header: BlockHeader,
+    pub(crate) signature: Signature,
+    pub(crate) txs: Vec<BlockTx>,
+}
+
+/// Request for mempool txs
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct GetMempoolTxs {
+    pub(crate) shortid_nonce: u64,
+    pub(crate) shortid_list: ShortIDVec,
+}
+
+/// Response with mempool txs
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct MempoolTxs {
+    pub(crate) tip: BlockID,
+    pub(crate) txs: Vec<BlockTx>,
+}
 #[async_trait]
 pub trait Delegate {
     type PeerIdentifier: Clone + AsRef<[u8]> + Eq + Hash + Debug;
@@ -59,13 +117,7 @@ pub trait Delegate {
 
     /// Stores a new block and an updated state.
     /// Guaranteed to be called monotonically for blocks with height=2, then 3, etc.
-    fn store_block(
-        &mut self,
-        block: Block,
-        new_state: BlockchainState,
-        catchup: utreexo::Catchup,
-        vtxs: Vec<VerifiedTx>,
-    );
+    fn store_block(&mut self, verified_block: VerifiedBlock, signature: Signature);
 }
 
 pub struct BlockchainProtocol<D: Delegate> {
@@ -220,7 +272,7 @@ impl<D: Delegate> BlockchainProtocol<D> {
     }
 
     /// Creates and signs block, and updates the state.
-    /// The API makes sure that the node state is update with the new block,
+    /// The API makes sure that the node state is updated with the new block,
     /// so the user cannot accidentally sign two conflicting blocks.
     /// Obviously, a multi-party signing, SCP or any other decentralized consensus algorithm
     /// would have a different API.
@@ -233,35 +285,18 @@ impl<D: Delegate> BlockchainProtocol<D> {
 
         // Note: we currently assume that the entire mempool is converted into a block,
         // so we convert all the entries into the transactions.
-        let (new_state, catchup) = self.mempool.make_block();
+        let verified_block = self.mempool.make_block();
 
-        let signature = create_block_signature(&new_state.tip, signing_key);
-
-        let block = Block {
-            header: new_state.tip.clone(),
-            signature,
-            txs: self
-                .mempool
-                .entries()
-                .map(|e| e.block_tx())
-                .cloned()
-                .collect::<Vec<_>>(),
-        };
-
-        let vtxs = self
-            .mempool
-            .entries()
-            .map(|e| e.verified_tx())
-            .cloned()
-            .collect::<Vec<_>>();
+        let signature = create_block_signature(&verified_block.header, signing_key);
 
         // Update the mempool
-        self.mempool.update_state(new_state.clone(), &catchup);
+        self.mempool
+            .update_state(verified_block.blockchain_state(), &verified_block.catchup);
 
-        self.target_tip = new_state.tip.clone();
+        self.target_tip = verified_block.header.clone();
 
         // Store the block
-        self.delegate.store_block(block, new_state, catchup, vtxs);
+        self.delegate.store_block(verified_block, signature);
     }
 
     /// Returns the ID of this node.
@@ -434,17 +469,17 @@ impl<D: Delegate> BlockchainProtocol<D> {
         }
 
         // Now the block header is authenticated, so we can do a more expensive validation.
-
         let state = self.delegate.blockchain_state();
-        let (new_state, catchup, vtxs) =
+        let verified_block =
             state.apply_block(block_msg.header.clone(), &block_msg.txs, &self.bp_gens)?;
 
         // Update the mempool.
-        self.mempool.update_state(new_state.clone(), &catchup);
+        self.mempool
+            .update_state(verified_block.blockchain_state(), &verified_block.catchup);
 
         // Store the block
         self.delegate
-            .store_block(block_msg, new_state, catchup, vtxs);
+            .store_block(verified_block, block_msg.signature);
 
         Ok(())
     }
@@ -530,54 +565,4 @@ fn verify_block_signature(
     let mut t = Transcript::new(b"ZkVM.stubnet1");
     t.append_message(b"block_id", &header.id());
     signature.verify(&mut t, pubkey).is_ok()
-}
-
-/// Enumeration of all protocol messages
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub enum Message {
-    GetInventory(GetInventory),
-    Inventory(Inventory),
-    GetBlock(GetBlock),
-    Block(Block),
-    GetMempoolTxs(GetMempoolTxs),
-    MempoolTxs(MempoolTxs),
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct GetInventory {
-    pub(crate) version: u64,
-    pub(crate) shortid_nonce: u64,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Inventory {
-    pub(crate) version: u64,
-    pub(crate) tip: BlockHeader,
-    pub(crate) tip_signature: Signature,
-    pub(crate) shortid_nonce: u64,
-    pub(crate) shortid_list: ShortIDVec,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct GetBlock {
-    pub(crate) height: u64,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Block {
-    pub(crate) header: BlockHeader,
-    pub(crate) signature: Signature,
-    pub(crate) txs: Vec<BlockTx>,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct GetMempoolTxs {
-    pub(crate) shortid_nonce: u64,
-    pub(crate) shortid_list: ShortIDVec,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct MempoolTxs {
-    pub(crate) tip: BlockID,
-    pub(crate) txs: Vec<BlockTx>,
 }

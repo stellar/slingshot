@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use zkvm::bulletproofs::BulletproofGens;
 use zkvm::{ContractID, MerkleTree, Tx, TxEntry, TxID, TxLog, VerifiedTx};
 
-use super::block::{BlockHeader, BlockTx};
+use super::block::{BlockHeader, BlockTx, VerifiedBlock};
 use super::errors::BlockchainError;
 use super::state::{check_tx_header, BlockchainState};
 use super::utreexo::{self, utreexo_hasher, Catchup};
@@ -143,9 +143,8 @@ impl Mempool {
         Ok(self.entries.last().unwrap())
     }
 
-    /// Creates a new block header and a new blockchain state using the current set of transactions.
-    /// Block header is accesible through the `tip` field on the new `BlockchainState` value.
-    pub fn make_block(&self) -> (BlockchainState, Catchup) {
+    /// Creates a new verified block using the current set of transactions.
+    pub fn make_block(&self) -> VerifiedBlock {
         let txroot = MerkleTree::root(
             b"ZkVM.txroot",
             self.entries.iter().map(|mtx| mtx.block_tx.witness_hash()),
@@ -165,12 +164,13 @@ impl Mempool {
             ext: Vec::new(),
         };
 
-        let new_state = BlockchainState {
-            tip: new_header,
+        VerifiedBlock {
+            header: new_header,
             utreexo: new_forest,
-        };
-
-        (new_state, new_catchup)
+            catchup: new_catchup,
+            raw_txs: self.entries().map(|e| e.block_tx()).cloned().collect(),
+            verified_txs: self.entries().map(|e| e.verified_tx()).cloned().collect(),
+        }
     }
 
     fn update_mempool(&mut self, catchup: Option<&Catchup>) {
