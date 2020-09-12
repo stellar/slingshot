@@ -340,19 +340,12 @@ impl Wallet {
         xprv: &Xprv,
         bp_gens: &BulletproofGens,
     ) -> Result<BlockTx, WalletError> {
-        let (payment_value, ct) = address.encrypt(value, thread_rng());
-        self.create_payment_transaction(
-            value,
-            payment_value,
-            address.predicate(),
-            xprv,
-            bp_gens,
-            |p| {
-                // add the payment ciphertext to the txlog
-                p.push(zkvm::String::Opaque(ct));
-                p.log();
-            },
-        )
+        let (receiver, ct) = address.encrypt(value, thread_rng());
+        self.create_payment_transaction(receiver, xprv, bp_gens, |p| {
+            // add the payment ciphertext to the txlog
+            p.push(zkvm::String::Opaque(ct));
+            p.log();
+        })
     }
 
     /// Attempts to build and sign a transaction paying a value to a given receiver.
@@ -369,14 +362,7 @@ impl Wallet {
         xprv: &Xprv,
         bp_gens: &BulletproofGens,
     ) -> Result<BlockTx, WalletError> {
-        self.create_payment_transaction(
-            receiver.value,
-            receiver.blinded_value(),
-            receiver.predicate(),
-            xprv,
-            bp_gens,
-            |_| {},
-        )
+        self.create_payment_transaction(receiver, xprv, bp_gens, |_| {})
     }
 
     /// Attempts to build and sign a transaction paying a value to a given address.
@@ -388,18 +374,20 @@ impl Wallet {
     /// that includes the change value from the previously signed transaction.
     fn create_payment_transaction(
         &mut self,
-        payment_clear_value: ClearValue,
-        payment_value: Value,
-        payment_predicate: Predicate,
+        receiver: Receiver,
         xprv: &Xprv,
         bp_gens: &BulletproofGens,
         program_builder: impl FnOnce(&mut Program),
     ) -> Result<BlockTx, WalletError> {
+        let payment_value = receiver.blinded_value();
+        let payment_predicate = receiver.predicate();
+
         if xprv.as_xpub() != &self.xpub {
             return Err(WalletError::XprvMismatch);
         }
 
-        let (utxos_to_spend, change_clear_value) = payment_clear_value
+        let (utxos_to_spend, change_clear_value) = receiver
+            .value
             .select_coins(self.spendable_utxos())
             .ok_or(WalletError::InsufficientFunds)?;
 

@@ -101,7 +101,7 @@ impl Address {
         &self,
         value: ClearValue,
         mut rng: R,
-    ) -> (Value, Vec<u8>) {
+    ) -> (Receiver, Vec<u8>) {
         let nonce_scalar = Scalar::random(&mut rng);
         let nonce_point = (&nonce_scalar * &RISTRETTO_BASEPOINT_TABLE).compress();
         let dh = (nonce_scalar * self.encryption_key_decompressed).compress();
@@ -126,7 +126,13 @@ impl Address {
 
         assert!(ciphertext.len() == 73);
 
-        (encrypted_value, ciphertext)
+        let receiver = Receiver {
+            opaque_predicate: self.control_key.clone(),
+            value,
+            qty_blinding,
+            flv_blinding,
+        };
+        (receiver, ciphertext)
     }
 
     /// Attempts to decrypt the candidate data for the given Address and encrypted Value.
@@ -297,7 +303,8 @@ mod tests {
             qty: 1000,
         };
 
-        let (enc_value, data) = addr.encrypt(value, rand::thread_rng());
+        let (enc_receiver, data) = addr.encrypt(value, rand::thread_rng());
+        let enc_value = enc_receiver.blinded_value();
 
         assert_eq!(data.len(), 73);
 
