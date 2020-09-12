@@ -14,7 +14,7 @@ use musig::{Multisignature, VerificationKey};
 use blockchain::utreexo;
 use blockchain::{BlockTx, BlockchainState};
 use zkvm::{
-    self, Anchor, ClearValue, Contract, ContractID, PortableItem, Predicate, Tx, TxEntry, TxLog,
+    self, Anchor, ClearValue, Contract, ContractID, PortableItem, Predicate, Program, TxLog, Value,
     VerifiedTx,
 };
 
@@ -340,105 +340,19 @@ impl Wallet {
         xprv: &Xprv,
         bp_gens: &BulletproofGens,
     ) -> Result<BlockTx, WalletError> {
-        if xprv.as_xpub() != &self.xpub {
-            return Err(WalletError::XprvMismatch);
-        }
-
-        let (utxos_to_spend, change_clear_value) = value
-            .select_coins(self.spendable_utxos())
-            .ok_or(WalletError::InsufficientFunds)?;
-
-        let (seq, change_receiver) = self.create_receiver(change_clear_value);
-        let change_value = change_receiver.value;
         let (payment_value, ct) = address.encrypt(value, thread_rng());
-
-        let coin_flip = thread_rng().next_u64();
-
-        // Sender forms a tx paying to this receiver.
-        //    Now recipient is receiving a new utxo, sender is receiving a change utxo.
-        let unsigned_tx = {
-            // Note: for clarity, we are not randomizing inputs and outputs in this example.
-            // The real transaction must randomize all the things
-            let program = zkvm::Program::build(|mut p| {
-                // claim all the collected utxos
-                for utxo in utxos_to_spend.iter() {
-                    p.push(utxo.contract_witness());
-                    p.input();
-                    p.signtx();
-                }
-
-                shuffler(
-                    &mut p,
-                    coin_flip,
-                    |p| {
-                        p.push(payment_value.qty);
-                        p.push(payment_value.flv);
-                    },
-                    |p| {
-                        p.push(change_value.qty);
-                        p.push(change_value.flv);
-                    },
-                );
-
-                p.cloak(utxos_to_spend.len(), 2);
-
-                shuffler(
-                    &mut p,
-                    coin_flip,
-                    |p| {
-                        p.push(address.predicate());
-                        p.output(1);
-                    },
-                    |p| {
-                        p.push(change_receiver.predicate());
-                        p.output(1);
-                    },
-                );
-
+        self.create_payment_transaction(
+            value,
+            payment_value,
+            address.predicate(),
+            xprv,
+            bp_gens,
+            |p| {
                 // add the payment ciphertext to the txlog
                 p.push(zkvm::String::Opaque(ct));
                 p.log();
-            });
-            let header = zkvm::TxHeader {
-                version: 1u64,
-                mintime_ms: 0u64,
-                maxtime_ms: u64::max_value(),
-            };
-
-            // Build the UnverifiedTx
-            zkvm::Prover::build_tx(program, header, &bp_gens)
-                .expect("We are supposed to compose the program correctly.")
-        };
-        let txid = unsigned_tx.txid;
-
-        // Sign the tx.
-        let tx = {
-            let mut signtx_transcript = merlin::Transcript::new(b"ZkVM.signtx");
-            signtx_transcript.append_message(b"txid", &txid);
-
-            // Derive individual signing keys for each input, according to its sequence number.
-            // In this example all inputs are coming from the same account (same xpub).
-            let signing_keys = utxos_to_spend
-                .iter()
-                .map(|utxo| xprv.key_at_sequence(utxo.sequence))
-                .collect::<Vec<_>>();
-
-            let sig = musig::Signature::sign_multi(
-                &signing_keys[..],
-                unsigned_tx.signing_instructions.clone(),
-                &mut signtx_transcript,
-            )
-            .unwrap();
-
-            unsigned_tx.sign(sig)
-        };
-
-        let utreexo_proofs = utxos_to_spend.into_iter().map(|utxo| utxo.proof).collect();
-
-        Ok(BlockTx {
-            tx,
-            proofs: utreexo_proofs,
-        })
+            },
+        )
     }
 
     /// Attempts to build and sign a transaction paying a value to a given receiver.
@@ -455,18 +369,42 @@ impl Wallet {
         xprv: &Xprv,
         bp_gens: &BulletproofGens,
     ) -> Result<BlockTx, WalletError> {
+        self.create_payment_transaction(
+            receiver.value,
+            receiver.blinded_value(),
+            receiver.predicate(),
+            xprv,
+            bp_gens,
+            |_| {},
+        )
+    }
+
+    /// Attempts to build and sign a transaction paying a value to a given address.
+    ///
+    /// IMPORTANT: This does not immediately index the change output for use in the next tx.
+    /// You should add the returned transaction to the mempool and after it is verified,
+    /// index it in the wallet via `add_unconfirmed_tx`.
+    /// After that you can sign another transaction and use the full balance
+    /// that includes the change value from the previously signed transaction.
+    fn create_payment_transaction(
+        &mut self,
+        payment_clear_value: ClearValue,
+        payment_value: Value,
+        payment_predicate: Predicate,
+        xprv: &Xprv,
+        bp_gens: &BulletproofGens,
+        program_builder: impl FnOnce(&mut Program),
+    ) -> Result<BlockTx, WalletError> {
         if xprv.as_xpub() != &self.xpub {
             return Err(WalletError::XprvMismatch);
         }
 
-        let (utxos_to_spend, change_clear_value) = receiver
-            .value
+        let (utxos_to_spend, change_clear_value) = payment_clear_value
             .select_coins(self.spendable_utxos())
             .ok_or(WalletError::InsufficientFunds)?;
 
         let (seq, change_receiver) = self.create_receiver(change_clear_value);
         let change_value = change_receiver.value;
-        let payment_value = receiver.blinded_value();
 
         let coin_flip = thread_rng().next_u64();
 
@@ -502,7 +440,7 @@ impl Wallet {
                     &mut p,
                     coin_flip,
                     |p| {
-                        p.push(receiver.predicate());
+                        p.push(payment_predicate);
                         p.output(1);
                     },
                     |p| {
@@ -510,6 +448,8 @@ impl Wallet {
                         p.output(1);
                     },
                 );
+
+                program_builder(p);
             });
             let header = zkvm::TxHeader {
                 version: 1u64,
