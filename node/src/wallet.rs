@@ -14,7 +14,7 @@ use musig::{Multisignature, VerificationKey};
 use blockchain::utreexo;
 use blockchain::{BlockTx, BlockchainState};
 use zkvm::{
-    self, Anchor, ClearValue, Contract, ContractID, PortableItem, Predicate, Program, TxLog, Value,
+    self, Anchor, ClearValue, Contract, ContractID, PortableItem, Predicate, Program, TxLog,
     VerifiedTx,
 };
 
