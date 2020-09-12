@@ -22,7 +22,7 @@ use curve25519_dalek::traits::{IsIdentity, VartimeMultiscalarMul};
 use merlin::Transcript;
 use zkvm::bulletproofs::PedersenGens;
 use zkvm::encoding::Encodable;
-use zkvm::{Predicate, ClearValue, Commitment, TranscriptProtocol, Value};
+use zkvm::{ClearValue, Commitment, Predicate, TranscriptProtocol, Value};
 
 use super::Receiver;
 
