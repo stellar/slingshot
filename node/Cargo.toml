@@ -37,6 +37,9 @@ path = "../p2p"
 [dependencies.accounts]
 path = "../accounts"
 
+[dependencies.token]
+path = "../token"
+
 [dependencies.serde_json]
 git = "https://github.com/oleganza/json"
 #path = "../../../rust/serde-json"

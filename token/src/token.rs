@@ -3,7 +3,7 @@ use zkvm::{Commitment, Contract, Predicate, Program, String, Value};
 
 /// Represents a ZkVM Token with unique flavor and embedded
 /// metadata protected by a user-supplied Predicate.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Token {
     issuance_predicate: Predicate,
     metadata: Vec<u8>,

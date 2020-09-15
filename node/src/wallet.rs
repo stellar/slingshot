@@ -10,6 +10,7 @@ use zkvm::bulletproofs::BulletproofGens;
 use accounts::{Address, Receiver, Sequence, XprvDerivation, XpubDerivation};
 use keytree::{Xprv, Xpub};
 use musig::{Multisignature, VerificationKey};
+use token::{Token, XprvDerivation as TKXprvDeriv, XpubDerivation as TKXpubDeriv};
 
 use blockchain::utreexo;
 use blockchain::{BlockTx, BlockchainState};
@@ -40,6 +41,9 @@ pub struct Wallet {
 
     /// All utxos tracked by the wallet
     utxos: HashMap<ContractID, Utxo>,
+
+    /// List of registered assets mapped from the flavor to the asset alias.
+    assets: HashMap<Scalar, String>,
 }
 
 /// Balance of a certain asset that consists of a number of spendable UTXOs.
@@ -76,11 +80,63 @@ pub struct Utxo {
 
 /// Errors that may occur during transaction creation.
 pub enum WalletError {
-    /// There are not enough funds to make the payment
+    /// There are not enough funds to make the payment.
     InsufficientFunds,
 
     /// Signing key (xprv) does not match the wallet's public key.
     XprvMismatch,
+
+    /// Asset with a given flavor is not found in this wallet.
+    AssetNotFound,
+}
+
+/// Single-account tx builder API.
+#[derive(Clone, Debug)]
+pub struct TxBuilder {
+    xpub: Xpub,
+    actions: Vec<TxAction>,
+}
+
+/// A high-level description of the tx action that
+/// will turn into specific ZkVM instructions under the hood.
+#[derive(Clone, Debug)]
+enum TxAction {
+    IssueToAddress(ClearValue, Address),
+    IssueToReceiver(Receiver),
+    TransferToAddress(ClearValue, Address),
+    TransferToReceiver(Receiver),
+    Memo(Vec<u8>),
+}
+
+impl TxBuilder {
+    /// Creates an empty tx builder.
+    fn new(xpub: Xpub) -> Self {
+        TxBuilder {
+            xpub,
+            actions: Vec::new(),
+        }
+    }
+    /// Issues the requested amount to the address.
+    pub fn issue_to_address(&mut self, value: ClearValue, address: Address) {
+        self.actions.push(TxAction::IssueToAddress(value, address));
+    }
+    /// Issues the requested amount to the receiver.
+    pub fn issue_to_receiver(&mut self, receiver: Receiver) {
+        self.actions.push(TxAction::IssueToReceiver(receiver));
+    }
+    /// Transfers the requested amount to the address.
+    pub fn transfer_to_address(&mut self, value: ClearValue, address: Address) {
+        self.actions
+            .push(TxAction::TransferToAddress(value, address));
+    }
+    /// Transfers the requested amount to the receiver.
+    pub fn transfer_to_receiver(&mut self, receiver: Receiver) {
+        self.actions.push(TxAction::TransferToReceiver(receiver));
+    }
+    /// Attaches free-form textual memo.
+    pub fn memo(&mut self, memo: Vec<u8>) {
+        self.actions.push(TxAction::Memo(memo));
+    }
 }
 
 /// Kind of the output: is it an incoming payment ("theirs") or a change ("ours")
@@ -106,7 +162,30 @@ impl Wallet {
             receivers: Default::default(),
             addresses: Default::default(),
             utxos: Default::default(),
+            assets: Default::default(),
         }
+    }
+
+    /// Creates a new asset.
+    pub fn create_asset(&mut self, alias: String) -> Token {
+        let token = self.xpub.derive_token(&alias);
+        self.assets.insert(token.flavor(), alias);
+        token
+    }
+
+    /// Finds asset description for a given flavor.
+    pub fn find_asset(&self, flavor: Scalar) -> Option<(&str, Token)> {
+        self.assets
+            .get(&flavor)
+            .map(|alias| (alias.as_str(), self.xpub.derive_token(&alias)))
+    }
+
+    /// Lists all registered assets.
+    pub fn list_assets<'a>(&'a self) -> impl Iterator<Item = (&'a str, Token)> {
+        //let xpub = self.xpub;
+        self.assets
+            .iter()
+            .map(move |(_flv, alias)| (alias.as_str(), self.xpub.derive_token(&alias)))
     }
 
     /// Creates a new address and records it
@@ -304,26 +383,202 @@ impl Wallet {
         self.spendable_utxos()
             .fold(HashMap::new(), |mut hm: HashMap<Scalar, Balance>, utxo| {
                 let value = utxo.value();
-                match hm.get_mut(&value.flv) {
-                    Some(balance) => {
-                        balance.total += value.qty;
-                        balance.utxos.push(utxo.clone());
-                    }
-                    None => {
-                        hm.insert(
-                            value.flv.clone(),
-                            Balance {
-                                flavor: value.flv,
-                                total: value.qty,
-                                utxos: vec![utxo.clone()],
-                            },
-                        );
-                    }
-                }
+                let mut balance = hm.entry(value.flv).or_insert_with(|| Balance {
+                    flavor: value.flv,
+                    total: 0,
+                    utxos: Vec::with_capacity(1),
+                });
+                balance.total += value.qty;
+                balance.utxos.push(utxo.clone());
                 hm
             })
             .into_iter()
             .map(|(_, bal)| bal)
+    }
+
+    pub fn build_tx(
+        &mut self,
+        bp_gens: &BulletproofGens,
+        xprv: &Xprv,
+        closure: impl FnOnce(&mut TxBuilder),
+    ) -> Result<BlockTx, WalletError> {
+        let mut rng = thread_rng();
+        let mut builder = TxBuilder::new(self.xpub);
+        closure(&mut builder);
+
+        // Collect issuances of each asset
+        let grouped_issuances = builder
+            .actions
+            .iter()
+            .filter_map(|action| match action {
+                TxAction::IssueToAddress(v, _a) => Some(*v),
+                TxAction::IssueToReceiver(r) => Some(r.value),
+                _ => None,
+            })
+            .try_fold(
+                HashMap::new(),
+                |mut hm: HashMap<Scalar, (String, Token, u64)>, value| {
+                    if let Some((alias, token)) = self.find_asset(value.flv) {
+                        let mut pair =
+                            hm.entry(value.flv)
+                                .or_insert((alias.to_string(), token, value.qty));
+                        pair.2 += value.qty;
+                        Ok(hm)
+                    } else {
+                        Err(WalletError::AssetNotFound)
+                    }
+                },
+            )?;
+
+        // Collect transfers of each asset
+        let grouped_transfers = builder
+            .actions
+            .iter()
+            .filter_map(|action| match action {
+                TxAction::TransferToAddress(v, _) => Some(*v),
+                TxAction::TransferToReceiver(r) => Some(r.value),
+                _ => None,
+            })
+            .fold(HashMap::new(), |mut hm: HashMap<Scalar, u64>, value| {
+                *(hm.entry(value.flv).or_default()) += value.qty;
+                hm
+            });
+
+        let mut outputs = Vec::<Receiver>::new();
+
+        // Collect utxos and change outputs for each asset transferred
+        let (inputs, _) = grouped_transfers.into_iter().try_fold(
+            (Vec::<Utxo>::new(), &mut outputs),
+            |(mut inputs, outputs), (flv, qty)| {
+                let (utxos_to_spend, change_clear_value) = ClearValue { qty, flv }
+                    .select_coins(self.spendable_utxos())
+                    .ok_or(WalletError::InsufficientFunds)?;
+
+                let (_seq, change_receiver) = self.create_receiver(change_clear_value);
+
+                inputs.extend(utxos_to_spend.into_iter());
+                outputs.push(change_receiver);
+
+                Ok((inputs, outputs))
+            },
+        )?;
+
+        let mut memos = Vec::<Vec<u8>>::new();
+
+        // Collect all outputs, so we can shuffle them.
+        // Also collect all memos with ciphertext.
+        builder
+            .actions
+            .into_iter()
+            .fold((&mut outputs, &mut memos), |(outs, memos), action| {
+                match action {
+                    TxAction::IssueToAddress(value, addr)
+                    | TxAction::TransferToAddress(value, addr) => {
+                        let (recvr, ct) = addr.encrypt(value, &mut rng);
+                        outs.push(recvr);
+                        memos.push(ct);
+                    }
+                    TxAction::IssueToReceiver(recvr) | TxAction::TransferToReceiver(recvr) => {
+                        outs.push(recvr);
+                    }
+                    TxAction::Memo(buf) => {
+                        memos.push(buf);
+                    }
+                }
+                (outs, memos)
+            });
+
+        // Canonically order memos and outputs so we do not leak the order of operations.
+        memos.sort_by(|a, b| a.as_slice().cmp(b.as_slice()));
+        outputs.sort_by(|a, b| {
+            let p1 = a.opaque_predicate.as_bytes();
+            let p2 = b.opaque_predicate.as_bytes();
+            // sort by publicly-visible predicates, and if they match,
+            // sort by unpredictable blinding factors to not leak the order of operations.
+            // (we try to avoid computing too many hashes here)
+            p1.cmp(p2)
+                .then_with(|| a.qty_blinding.as_bytes().cmp(b.qty_blinding.as_bytes()))
+        });
+
+        let program = zkvm::Program::build(|mut p| {
+            // issue all the assets
+            for (_flv, (_alias, token, qty)) in grouped_issuances.iter() {
+                token.issue(p, *qty);
+            }
+            // spend all the selected utxos
+            for utxo in inputs.iter() {
+                p.push(utxo.contract_witness());
+                p.input();
+                p.signtx();
+            }
+
+            // prepare outputs for cloak mixer
+            for recvr in outputs.iter() {
+                let v = recvr.blinded_value();
+                p.push(v.qty);
+                p.push(v.flv);
+            }
+
+            // merge/split assets
+            p.cloak(inputs.len(), outputs.len());
+
+            // lock outputs under new predicates
+            for recvr in outputs.iter() {
+                p.push(recvr.predicate());
+                p.output(1);
+            }
+
+            // write all the memos (including ciphertexts from spend-to-address)
+            for memo in memos.into_iter() {
+                p.push(zkvm::String::Opaque(memo));
+                p.log();
+            }
+        });
+
+        let header = zkvm::TxHeader {
+            version: 1u64,
+            mintime_ms: 0u64,
+            maxtime_ms: u64::max_value(),
+        };
+
+        // Build the UnverifiedTx
+        let unsigned_tx = zkvm::Prover::build_tx(program, header, &bp_gens)
+            .expect("We are supposed to compose the program correctly.");
+
+        let txid = unsigned_tx.txid;
+
+        // Sign the tx.
+        let tx = {
+            let mut signtx_transcript = merlin::Transcript::new(b"ZkVM.signtx");
+            signtx_transcript.append_message(b"txid", &txid);
+
+            // Derive individual signing keys for each input, according to its sequence number.
+            // In this example all inputs are coming from the same account (same xpub).
+            let issuing_keys = grouped_issuances
+                .iter()
+                .map(|(_flv, (alias, _, _))| xprv.issuing_key(alias.as_str()));
+            let spending_keys = inputs
+                .iter()
+                .map(|utxo| xprv.key_at_sequence(utxo.sequence));
+
+            let signing_keys = issuing_keys.chain(spending_keys).collect::<Vec<_>>();
+
+            let sig = musig::Signature::sign_multi(
+                &signing_keys[..],
+                unsigned_tx.signing_instructions.clone(),
+                &mut signtx_transcript,
+            )
+            .unwrap();
+
+            unsigned_tx.sign(sig)
+        };
+
+        let utreexo_proofs = inputs.into_iter().map(|utxo| utxo.proof).collect();
+
+        Ok(BlockTx {
+            tx,
+            proofs: utreexo_proofs,
+        })
     }
 
     /// Attempts to build and sign a transaction paying a value to a given address.
@@ -340,12 +595,7 @@ impl Wallet {
         xprv: &Xprv,
         bp_gens: &BulletproofGens,
     ) -> Result<BlockTx, WalletError> {
-        let (receiver, ct) = address.encrypt(value, thread_rng());
-        self.create_payment_transaction(receiver, xprv, bp_gens, |p| {
-            // add the payment ciphertext to the txlog
-            p.push(zkvm::String::Opaque(ct));
-            p.log();
-        })
+        self.build_tx(bp_gens, xprv, |b| b.transfer_to_address(value, address))
     }
 
     /// Attempts to build and sign a transaction paying a value to a given receiver.
@@ -357,128 +607,11 @@ impl Wallet {
     /// that includes the change value from the previously signed transaction.
     pub fn pay_to_receiver(
         &mut self,
-        value: ClearValue,
         receiver: Receiver,
         xprv: &Xprv,
         bp_gens: &BulletproofGens,
     ) -> Result<BlockTx, WalletError> {
-        self.create_payment_transaction(receiver, xprv, bp_gens, |_| {})
-    }
-
-    /// Attempts to build and sign a transaction paying a value to a given address.
-    ///
-    /// IMPORTANT: This does not immediately index the change output for use in the next tx.
-    /// You should add the returned transaction to the mempool and after it is verified,
-    /// index it in the wallet via `add_unconfirmed_tx`.
-    /// After that you can sign another transaction and use the full balance
-    /// that includes the change value from the previously signed transaction.
-    fn create_payment_transaction(
-        &mut self,
-        receiver: Receiver,
-        xprv: &Xprv,
-        bp_gens: &BulletproofGens,
-        program_builder: impl FnOnce(&mut Program),
-    ) -> Result<BlockTx, WalletError> {
-        let payment_value = receiver.blinded_value();
-        let payment_predicate = receiver.predicate();
-
-        if xprv.as_xpub() != &self.xpub {
-            return Err(WalletError::XprvMismatch);
-        }
-
-        let (utxos_to_spend, change_clear_value) = receiver
-            .value
-            .select_coins(self.spendable_utxos())
-            .ok_or(WalletError::InsufficientFunds)?;
-
-        let (seq, change_receiver) = self.create_receiver(change_clear_value);
-        let change_value = change_receiver.value;
-
-        let coin_flip = thread_rng().next_u64();
-
-        // Sender forms a tx paying to this receiver.
-        //    Now recipient is receiving a new utxo, sender is receiving a change utxo.
-        let unsigned_tx = {
-            // Note: for clarity, we are not randomizing inputs and outputs in this example.
-            // The real transaction must randomize all the things
-            let program = zkvm::Program::build(|mut p| {
-                // claim all the collected utxos
-                for utxo in utxos_to_spend.iter() {
-                    p.push(utxo.contract_witness());
-                    p.input();
-                    p.signtx();
-                }
-
-                shuffler(
-                    &mut p,
-                    coin_flip,
-                    |p| {
-                        p.push(payment_value.qty);
-                        p.push(payment_value.flv);
-                    },
-                    |p| {
-                        p.push(change_value.qty);
-                        p.push(change_value.flv);
-                    },
-                );
-
-                p.cloak(utxos_to_spend.len(), 2);
-
-                shuffler(
-                    &mut p,
-                    coin_flip,
-                    |p| {
-                        p.push(payment_predicate);
-                        p.output(1);
-                    },
-                    |p| {
-                        p.push(change_receiver.predicate());
-                        p.output(1);
-                    },
-                );
-
-                program_builder(p);
-            });
-            let header = zkvm::TxHeader {
-                version: 1u64,
-                mintime_ms: 0u64,
-                maxtime_ms: u64::max_value(),
-            };
-
-            // Build the UnverifiedTx
-            zkvm::Prover::build_tx(program, header, &bp_gens)
-                .expect("We are supposed to compose the program correctly.")
-        };
-        let txid = unsigned_tx.txid;
-
-        // Sign the tx.
-        let tx = {
-            let mut signtx_transcript = merlin::Transcript::new(b"ZkVM.signtx");
-            signtx_transcript.append_message(b"txid", &txid);
-
-            // Derive individual signing keys for each input, according to its sequence number.
-            // In this example all inputs are coming from the same account (same xpub).
-            let signing_keys = utxos_to_spend
-                .iter()
-                .map(|utxo| xprv.key_at_sequence(utxo.sequence))
-                .collect::<Vec<_>>();
-
-            let sig = musig::Signature::sign_multi(
-                &signing_keys[..],
-                unsigned_tx.signing_instructions.clone(),
-                &mut signtx_transcript,
-            )
-            .unwrap();
-
-            unsigned_tx.sign(sig)
-        };
-
-        let utreexo_proofs = utxos_to_spend.into_iter().map(|utxo| utxo.proof).collect();
-
-        Ok(BlockTx {
-            tx,
-            proofs: utreexo_proofs,
-        })
+        self.build_tx(bp_gens, xprv, |b| b.transfer_to_receiver(receiver))
     }
 
     /// Returns a pair of a sequence number and a receiver
