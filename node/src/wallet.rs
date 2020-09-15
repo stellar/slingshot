@@ -686,18 +686,3 @@ impl Utxo {
         self.receiver.value
     }
 }
-
-fn shuffler<T>(
-    ctx: &mut T,
-    random: u64,
-    a: impl FnOnce(&mut T) -> (),
-    b: impl FnOnce(&mut T) -> (),
-) {
-    if random % 2 == 0 {
-        a(ctx);
-        b(ctx);
-    } else {
-        b(ctx);
-        a(ctx);
-    }
-}
