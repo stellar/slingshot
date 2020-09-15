@@ -135,7 +135,7 @@ impl Item {
     pub fn to_program(self) -> Result<ProgramItem, VMError> {
         match self {
             Item::Program(x) => Ok(x),
-            _ => Err(VMError::TypeNotProgramItem),
+            _ => Err(VMError::TypeNotProgram),
         }
     }
 

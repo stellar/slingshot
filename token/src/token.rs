@@ -3,7 +3,7 @@ use zkvm::{Commitment, Contract, Predicate, Program, String, Value};
 
 /// Represents a ZkVM Token with unique flavor and embedded
 /// metadata protected by a user-supplied Predicate.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Token {
     issuance_predicate: Predicate,
     metadata: Vec<u8>,
@@ -53,6 +53,9 @@ impl Token {
 
     /// Adds instructions to a program to retire a given UTXO.
     /// TBD: accept a qty/Token pairing to retire.
+    ///
+    /// DEPRECATED!
+    ///
     pub fn retire<'a>(program: &'a mut Program, prev_output: Contract) -> &'a mut Program {
         program.push(prev_output).input().signtx().retire()
     }

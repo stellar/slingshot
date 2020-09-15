@@ -1,10 +1,10 @@
 use serde::{Deserialize, Serialize};
 
-use super::block::{BlockHeader, BlockTx};
+use super::block::{BlockHeader, BlockTx, VerifiedBlock};
 use super::errors::BlockchainError;
-use crate::utreexo::{self, utreexo_hasher, Catchup, Forest};
+use crate::utreexo::{self, utreexo_hasher, Forest};
 use zkvm::bulletproofs::BulletproofGens;
-use zkvm::{ContractID, MerkleTree, TxEntry, TxHeader, VerifiedTx};
+use zkvm::{ContractID, MerkleTree, TxEntry, TxHeader};
 
 /// State of the blockchain node.
 #[derive(Clone, Serialize, Deserialize)]
@@ -50,7 +50,7 @@ impl BlockchainState {
         block_header: BlockHeader,
         block_txs: &[BlockTx],
         bp_gens: &BulletproofGens,
-    ) -> Result<(BlockchainState, Catchup, Vec<VerifiedTx>), BlockchainError> {
+    ) -> Result<VerifiedBlock, BlockchainError> {
         check_block_header(&block_header, &self.tip)?;
 
         let mut txroot_builder = MerkleTree::build_root(b"ZkVM.txroot");
@@ -113,12 +113,13 @@ impl BlockchainState {
             return Err(BlockchainError::InconsistentHeader);
         }
 
-        let new_state = BlockchainState {
-            tip: block_header,
+        Ok(VerifiedBlock {
+            header: block_header,
             utreexo: new_forest,
-        };
-
-        Ok((new_state, new_catchup, verified_txs))
+            catchup: new_catchup,
+            raw_txs: block_txs.iter().cloned().collect(),
+            verified_txs: verified_txs,
+        })
     }
 }
 

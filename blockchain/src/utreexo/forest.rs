@@ -24,7 +24,7 @@ pub struct WorkForest {
 }
 
 /// Structure that helps auto-updating the proofs created for a previous state of a forest.
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Catchup {
     forest: WorkForest,           // forest that stores the inner nodes
     map: HashMap<Hash, Position>, // node hash -> new position offset for this node

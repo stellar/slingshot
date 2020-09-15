@@ -22,7 +22,7 @@ use curve25519_dalek::traits::{IsIdentity, VartimeMultiscalarMul};
 use merlin::Transcript;
 use zkvm::bulletproofs::PedersenGens;
 use zkvm::encoding::Encodable;
-use zkvm::{ClearValue, Commitment, TranscriptProtocol, Value};
+use zkvm::{ClearValue, Commitment, Predicate, TranscriptProtocol, Value};
 
 use super::Receiver;
 
@@ -58,6 +58,16 @@ impl Address {
         &self.label
     }
 
+    /// Returns the control key
+    pub fn control_key(&self) -> &CompressedRistretto {
+        &self.control_key
+    }
+
+    /// Returns the control key wrapped in opaque ZkVM predicate type.
+    pub fn predicate(&self) -> Predicate {
+        Predicate::Opaque(self.control_key)
+    }
+
     /// Encodes address as bech32 string with the label as its prefix.
     pub fn to_string(&self) -> String {
         let mut bytes = Vec::new();
@@ -91,7 +101,7 @@ impl Address {
         &self,
         value: ClearValue,
         mut rng: R,
-    ) -> (Value, Vec<u8>) {
+    ) -> (Receiver, Vec<u8>) {
         let nonce_scalar = Scalar::random(&mut rng);
         let nonce_point = (&nonce_scalar * &RISTRETTO_BASEPOINT_TABLE).compress();
         let dh = (nonce_scalar * self.encryption_key_decompressed).compress();
@@ -116,7 +126,13 @@ impl Address {
 
         assert!(ciphertext.len() == 73);
 
-        (encrypted_value, ciphertext)
+        let receiver = Receiver {
+            opaque_predicate: self.control_key.clone(),
+            value,
+            qty_blinding,
+            flv_blinding,
+        };
+        (receiver, ciphertext)
     }
 
     /// Attempts to decrypt the candidate data for the given Address and encrypted Value.
@@ -205,6 +221,11 @@ impl Address {
         (flv_blinding, qty_blinding, flv_pad, qty_pad)
     }
 
+    /// Computes a short tag that helps quickly throw away irrelevant data entries from a tx.
+    /// It is keyed with the address so without knowing the address encryption key,
+    /// it is impossible to learn which output is the payment (and contains corresponding data entry),
+    /// and which one is a change. If the address is known to a third party, then, like in Bitcoin,
+    /// it is trivial to find the output that corresponds to it.
     fn compute_distinguisher(&self, ct: &[u8], value: &Value) -> u8 {
         let mut t = Transcript::new(b"ZkVM.address.distinguisher");
         t.append_message(b"control_key", &self.control_key.as_bytes()[..]);
@@ -282,7 +303,8 @@ mod tests {
             qty: 1000,
         };
 
-        let (enc_value, data) = addr.encrypt(value, rand::thread_rng());
+        let (enc_receiver, data) = addr.encrypt(value, rand::thread_rng());
+        let enc_value = enc_receiver.blinded_value();
 
         assert_eq!(data.len(), 73);
 

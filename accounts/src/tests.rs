@@ -2,15 +2,15 @@ use merlin::Transcript;
 use rand::SeedableRng;
 use rand_chacha::ChaChaRng;
 
-use bulletproofs::BulletproofGens;
 use curve25519_dalek::scalar::Scalar;
 use keytree::Xprv;
 use musig::{Multisignature, Signature};
 
 use blockchain::{utreexo, BlockHeader, BlockTx, BlockchainState, Mempool};
+use zkvm::bulletproofs::BulletproofGens;
 use zkvm::{Anchor, ClearValue, Contract, ContractID, Program, Prover, TxEntry, TxHeader};
 
-use crate::{ReceiverReply, ReceiverWitness, XprvDerivation};
+use crate::{ReceiverReply, ReceiverWitness, XprvDerivation, XpubDerivation};
 
 /// The complete state of the user node: their wallet and their blockchain state.
 #[derive(Clone)]
@@ -243,7 +243,8 @@ fn basic_accounts_test() {
         .append(block_tx.clone(), &bp_gens)
         .expect("Tx must be valid");
 
-    let (future_state, _catchup) = mempool.make_block();
+    let verified_block = mempool.make_block();
+    let future_state = verified_block.blockchain_state();
 
     // 9. Alice and Bob process the incoming block:
     process_block(
@@ -276,14 +277,18 @@ fn process_block(
     //     b. Full nodes:
     //        1. Network sends to Bob and Alice new block
     //        2. Alice/Bob verify+apply changes, producing a catchup struct.
-    let (new_state, catchup, vtxs) = node
+    let verified_block = node
         .blockchain
         .apply_block(block_header, block_txs, bp_gens)
         .expect("We expect a valid block");
 
     // In a real node utxos will be indexed by ContractID, so lookup will be more efficient.
     let hasher = utreexo::utreexo_hasher();
-    for entry in vtxs.iter().flat_map(|vtx| vtx.log.iter()) {
+    for entry in verified_block
+        .verified_txs
+        .iter()
+        .flat_map(|vtx| vtx.log.iter())
+    {
         match entry {
             TxEntry::Input(contract_id) => {
                 // Delete confirmed utxos
@@ -306,7 +311,8 @@ fn process_block(
                     .position(|utxo| utxo.contract_id() == cid)
                 {
                     let pending_utxo = node.wallet.pending_utxos.remove(i);
-                    let proof = catchup
+                    let proof = verified_block
+                        .catchup
                         .update_proof(&cid, utreexo::Proof::Transient, &hasher)
                         .unwrap();
                     node.wallet.utxos.push(pending_utxo.to_confirmed(proof));
@@ -321,7 +327,11 @@ fn process_block(
         .wallet
         .utxos
         .iter()
-        .map(|utxo| catchup.update_proof(&utxo.contract_id(), utxo.proof.clone(), &hasher))
+        .map(|utxo| {
+            verified_block
+                .catchup
+                .update_proof(&utxo.contract_id(), utxo.proof.clone(), &hasher)
+        })
         .collect::<Result<Vec<_>, _>>()
         .unwrap();
 
@@ -331,7 +341,7 @@ fn process_block(
     }
 
     // Switch the node to the new state.
-    node.blockchain = new_state;
+    node.blockchain = verified_block.blockchain_state();
 }
 
 impl Wallet {
@@ -378,7 +388,10 @@ impl Wallet {
     fn generate_receiver(&mut self, value: ClearValue) -> ReceiverWitness {
         let seq = self.sequence;
         self.sequence += 1;
-        ReceiverWitness::new(self.xprv.as_xpub(), seq, value)
+        ReceiverWitness {
+            sequence: seq,
+            receiver: self.xprv.as_xpub().receiver_at_sequence(seq, value),
+        }
     }
 }
 

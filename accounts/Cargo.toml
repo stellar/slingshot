@@ -14,11 +14,6 @@ curve25519-dalek = { version = "2", features = ["serde"] }
 serde = { version = "1.0", features=["derive"] }
 bech32 = "0.7"
 
-[dependencies.bulletproofs]
-git = "https://github.com/dalek-cryptography/bulletproofs"
-branch = "develop"
-features = ["yoloproofs"]
-
 [dependencies.keytree]
 path = "../keytree"
 

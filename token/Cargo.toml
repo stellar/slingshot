@@ -23,3 +23,9 @@ path = "../spacesuit"
 
 [dependencies.zkvm]
 path = "../zkvm"
+
+[dependencies.keytree]
+path = "../keytree"
+
+[dependencies.musig]
+path = "../musig"

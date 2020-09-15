@@ -5,6 +5,8 @@ authors = ["Oleg Andreev <oleganza@gmail.com>"]
 edition = "2018"
 
 [dependencies]
+curve25519-dalek = { version = "2", features = ["serde"] }
+merlin = "2"
 rand = "0.7"
 dotenv = "0.9.0"
 time = "^0.1"
@@ -20,5 +22,26 @@ toml = "0.5"
 [dependencies.blockchain]
 path = "../blockchain"
 
+[dependencies.zkvm]
+path = "../zkvm"
+
+[dependencies.keytree]
+path = "../keytree"
+
+[dependencies.musig]
+path = "../musig"
+
 [dependencies.p2p]
 path = "../p2p"
+
+[dependencies.accounts]
+path = "../accounts"
+
+[dependencies.token]
+path = "../token"
+
+[dependencies.serde_json]
+git = "https://github.com/oleganza/json"
+#path = "../../../rust/serde-json"
+branch = "binary-support"
+features = ["binary_hex"]

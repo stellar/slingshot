@@ -132,7 +132,8 @@ fn network_mempool_makeblock(
         .flat_map(|e| e.utxo_proofs().iter().cloned())
         .collect::<Vec<_>>();
 
-    let (new_state, catchup) = mempool.make_block();
+    let verified_block = mempool.make_block();
+    let new_state = verified_block.blockchain_state();
 
     let new_block_record = BlockRecord {
         height: new_state.tip.height as i32,
@@ -161,7 +162,12 @@ fn network_mempool_makeblock(
 
             for rec in recs.into_iter() {
                 let mut wallet = rec.wallet();
-                wallet.process_block(&verified_txs, &txs, new_state.tip.height, &catchup);
+                wallet.process_block(
+                    &verified_txs,
+                    &txs,
+                    new_state.tip.height,
+                    &verified_block.catchup,
+                );
                 let rec = AccountRecord::new(&wallet);
                 diesel::update(account_records.filter(owner_id.eq(&rec.owner_id)))
                     .filter(alias.eq(&rec.alias))
@@ -674,7 +680,7 @@ fn assets_create(
 
 #[get("/favicon.ico")]
 pub fn favicon() -> Option<NamedFile> {
-  NamedFile::open(Path::new("static/favicon.ico")).ok()
+    NamedFile::open(Path::new("static/favicon.ico")).ok()
 }
 
 #[catch(404)]

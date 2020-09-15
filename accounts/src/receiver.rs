@@ -6,14 +6,14 @@ use musig::VerificationKey;
 use serde::{Deserialize, Serialize};
 use zkvm::{Anchor, ClearValue, Commitment, Contract, PortableItem, Predicate, Value};
 
-use crate::XpubDerivation;
+use crate::{Sequence, XpubDerivation};
 
 #[derive(Copy, Clone, Eq, Hash, Debug, PartialEq, Default, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct ReceiverID([u8; 32]);
 
 /// Receiver describes the destination for the payment.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Copy, Clone, Debug, Serialize, Deserialize)]
 pub struct Receiver {
     /// Address to which the payment must be sent.
     pub opaque_predicate: CompressedRistretto,
@@ -29,10 +29,11 @@ pub struct Receiver {
 }
 
 /// Private annotation to the receiver that describes derivation path
-#[derive(Clone, Debug, Serialize, Deserialize)]
+/// DEPRECATED?
+#[derive(Copy, Clone, Debug, Serialize, Deserialize)]
 pub struct ReceiverWitness {
     /// Account's sequence number at which this receiver was generated.
-    pub sequence: u64,
+    pub sequence: Sequence,
 
     /// Receiver that can be shared with the payer.
     pub receiver: Receiver,
@@ -50,18 +51,10 @@ pub struct ReceiverReply {
 
 impl ReceiverWitness {
     /// Creates a new receiver for the Xpub, sequence number and a value
-    pub fn new(xpub: &Xpub, sequence: u64, value: ClearValue) -> ReceiverWitness {
-        let key = xpub.key_at_sequence(sequence);
-        let (qty_blinding, flv_blinding) = xpub.value_blinding_factors(sequence, &value);
-
+    pub fn new(xpub: &Xpub, sequence: Sequence, value: ClearValue) -> ReceiverWitness {
         ReceiverWitness {
             sequence,
-            receiver: Receiver {
-                opaque_predicate: key.into_point(),
-                value,
-                qty_blinding,
-                flv_blinding,
-            },
+            receiver: xpub.receiver_at_sequence(sequence, value),
         }
     }
 
@@ -111,6 +104,12 @@ impl Receiver {
             qty: Commitment::blinded_with_factor(self.value.qty, self.qty_blinding),
             flv: Commitment::blinded_with_factor(self.value.flv, self.flv_blinding),
         }
+    }
+
+    /// Verifies that the value is encrypted with blinding factors of the receiver.
+    pub fn verify_value(&self, value: &Value) -> bool {
+        // TBD: make a Commitment::verify_batch function to check multiple commitments at once.
+        value == &self.blinded_value()
     }
 
     /// Creates a new contract for the given receiver and an anchor.

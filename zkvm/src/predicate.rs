@@ -19,7 +19,7 @@ use crate::program::{Program, ProgramItem};
 use crate::transcript::TranscriptProtocol;
 
 /// Represents a ZkVM predicate with its optional witness data.
-#[derive(Clone, PartialEq, Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 pub enum Predicate {
     /// Verifier's view on the predicate in a compressed form to defer decompression cost.
     Opaque(CompressedRistretto),
@@ -323,6 +323,20 @@ impl MerkleItem for PredicateLeaf {
             PredicateLeaf::Program(prog) => prog.commit(t),
             PredicateLeaf::Blinding(bytes) => t.append_message(b"blinding", &bytes.clone()),
         }
+    }
+}
+
+impl PartialEq for Predicate {
+    fn eq(&self, other: &Self) -> bool {
+        self.to_point().eq(&other.to_point())
+    }
+}
+
+impl Eq for Predicate {}
+
+impl core::hash::Hash for Predicate {
+    fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
+        self.to_point().hash(state)
     }
 }
 
