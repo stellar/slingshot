@@ -53,6 +53,9 @@ impl Token {
 
     /// Adds instructions to a program to retire a given UTXO.
     /// TBD: accept a qty/Token pairing to retire.
+    ///
+    /// DEPRECATED!
+    ///
     pub fn retire<'a>(program: &'a mut Program, prev_output: Contract) -> &'a mut Program {
         program.push(prev_output).input().signtx().retire()
     }
