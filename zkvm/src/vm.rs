@@ -530,7 +530,7 @@ where
         Ok(())
     }
 
-    // _value qty_ **fee** → ø
+    // _qty_ **fee** → _widevalue_
     fn fee(&mut self) -> Result<(), VMError> {
         let fee = self.pop_item()?.to_string()?.to_u32()? as u64;
         let fee_scalar = Scalar::from(fee);

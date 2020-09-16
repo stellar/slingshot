@@ -57,7 +57,7 @@ pub struct TxHeader {
 }
 
 /// Instance of a transaction that is not signed yet.
-#[derive(Clone)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct UnsignedTx {
     /// Header metadata
     pub header: TxHeader,
