@@ -16,7 +16,7 @@ use blockchain::utreexo;
 use blockchain::{BlockTx, BlockchainState};
 use zkvm::{
     self, Anchor, ClearValue, Contract, ContractID, PortableItem, Predicate, Program, TxLog,
-    VerifiedTx,
+    UnsignedTx, VerifiedTx,
 };
 
 use rand::{thread_rng, RngCore};
@@ -82,10 +82,8 @@ pub struct Utxo {
 pub enum WalletError {
     /// There are not enough funds to make the payment.
     InsufficientFunds,
-
     /// Signing key (xprv) does not match the wallet's public key.
     XprvMismatch,
-
     /// Asset with a given flavor is not found in this wallet.
     AssetNotFound,
 }
@@ -95,6 +93,26 @@ pub enum WalletError {
 pub struct TxBuilder {
     xpub: Xpub,
     actions: Vec<TxAction>,
+}
+
+/// Built, but not signed transaction.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct BuiltTx {
+    /// Raw unsigned ZkVM tx.
+    pub unsigned_tx: UnsignedTx,
+    /// Utreexo proofs for the inputs used in the program.
+    pub proofs: Vec<utreexo::Proof>,
+    /// Key derivation info for each `signtx` instance used in the program.
+    pub signtx_items: Vec<SigntxInstruction>,
+}
+
+/// Key derivation info for a `signtx` invocation.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum SigntxInstruction {
+    /// The key for issuance.
+    Issue(Xpub, String),
+    /// The key for input.
+    Input(Xpub, Sequence),
 }
 
 /// A high-level description of the tx action that
@@ -399,9 +417,8 @@ impl Wallet {
     pub fn build_tx(
         &mut self,
         bp_gens: &BulletproofGens,
-        xprv: &Xprv,
         closure: impl FnOnce(&mut TxBuilder),
-    ) -> Result<BlockTx, WalletError> {
+    ) -> Result<BuiltTx, WalletError> {
         let mut rng = thread_rng();
         let mut builder = TxBuilder::new(self.xpub);
         closure(&mut builder);
@@ -545,39 +562,20 @@ impl Wallet {
         let unsigned_tx = zkvm::Prover::build_tx(program, header, &bp_gens)
             .expect("We are supposed to compose the program correctly.");
 
-        let txid = unsigned_tx.txid;
+        let issuing_items = grouped_issuances
+            .iter()
+            .map(|(_flv, (alias, _, _))| SigntxInstruction::Issue(self.xpub, alias.clone()));
+        let spending_items = inputs
+            .iter()
+            .map(|utxo| SigntxInstruction::Input(self.xpub, utxo.sequence));
 
-        // Sign the tx.
-        let tx = {
-            let mut signtx_transcript = merlin::Transcript::new(b"ZkVM.signtx");
-            signtx_transcript.append_message(b"txid", &txid);
-
-            // Derive individual signing keys for each input, according to its sequence number.
-            // In this example all inputs are coming from the same account (same xpub).
-            let issuing_keys = grouped_issuances
-                .iter()
-                .map(|(_flv, (alias, _, _))| xprv.issuing_key(alias.as_str()));
-            let spending_keys = inputs
-                .iter()
-                .map(|utxo| xprv.key_at_sequence(utxo.sequence));
-
-            let signing_keys = issuing_keys.chain(spending_keys).collect::<Vec<_>>();
-
-            let sig = musig::Signature::sign_multi(
-                &signing_keys[..],
-                unsigned_tx.signing_instructions.clone(),
-                &mut signtx_transcript,
-            )
-            .unwrap();
-
-            unsigned_tx.sign(sig)
-        };
-
+        let signtx_items = issuing_items.chain(spending_items).collect::<Vec<_>>();
         let utreexo_proofs = inputs.into_iter().map(|utxo| utxo.proof).collect();
 
-        Ok(BlockTx {
-            tx,
+        Ok(BuiltTx {
+            unsigned_tx,
             proofs: utreexo_proofs,
+            signtx_items,
         })
     }
 
@@ -595,7 +593,8 @@ impl Wallet {
         xprv: &Xprv,
         bp_gens: &BulletproofGens,
     ) -> Result<BlockTx, WalletError> {
-        self.build_tx(bp_gens, xprv, |b| b.transfer_to_address(value, address))
+        self.build_tx(bp_gens, |b| b.transfer_to_address(value, address))?
+            .sign(&xprv)
     }
 
     /// Attempts to build and sign a transaction paying a value to a given receiver.
@@ -611,7 +610,8 @@ impl Wallet {
         xprv: &Xprv,
         bp_gens: &BulletproofGens,
     ) -> Result<BlockTx, WalletError> {
-        self.build_tx(bp_gens, xprv, |b| b.transfer_to_receiver(receiver))
+        self.build_tx(bp_gens, |b| b.transfer_to_receiver(receiver))?
+            .sign(xprv)
     }
 
     /// Returns a pair of a sequence number and a receiver
@@ -644,6 +644,48 @@ impl Wallet {
             }
         }
         None
+    }
+}
+
+impl BuiltTx {
+    /// Signs the transaction with a private key.
+    /// Xprv must match the wallet's xprv.
+    pub fn sign(self, xprv: &Xprv) -> Result<BlockTx, WalletError> {
+        let txid = self.unsigned_tx.txid;
+        let mut signtx_transcript = merlin::Transcript::new(b"ZkVM.signtx");
+        signtx_transcript.append_message(b"txid", &self.unsigned_tx.txid);
+
+        let signing_keys = self
+            .signtx_items
+            .into_iter()
+            .map(|item| {
+                let (xpub, key) = match item {
+                    SigntxInstruction::Issue(xpub, alias) => {
+                        (xpub, xprv.issuing_key(alias.as_str()))
+                    }
+                    SigntxInstruction::Input(xpub, seq) => (xpub, xprv.key_at_sequence(seq)),
+                };
+                if &xpub != xprv.as_xpub() {
+                    Err(WalletError::XprvMismatch)
+                } else {
+                    Ok(key)
+                }
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+
+        let sig = musig::Signature::sign_multi(
+            &signing_keys[..],
+            self.unsigned_tx.signing_instructions.clone(),
+            &mut signtx_transcript,
+        )
+        .unwrap();
+
+        let tx = self.unsigned_tx.sign(sig);
+
+        Ok(BlockTx {
+            tx,
+            proofs: self.proofs,
+        })
     }
 }
 
