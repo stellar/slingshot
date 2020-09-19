@@ -357,9 +357,9 @@ impl Wallet {
                     zkvm::Predicate::Key(zkvm::VerificationKey::from_secret(&issuance_key));
 
                 p.push(zkvm::Commitment::blinded(payment_receiver.value.qty)) // stack: qty
-                    .var() // stack: qty-var
+                    .commit() // stack: qty-var
                     .push(zkvm::Commitment::unblinded(payment_receiver.value.flv)) // stack: qty-var, flv
-                    .var() // stack: qty-var, flv-var
+                    .commit() // stack: qty-var, flv-var
                     .push(issuance_metadata) // stack: qty-var, flv-var, data
                     .push(issuance_predicate) // stack: qty-var, flv-var, data, flv-pred
                     .issue() // stack: issue-contract
