@@ -31,9 +31,9 @@ impl Token {
     pub fn issue<'a>(&self, program: &'a mut Program, qty: u64) -> &'a mut Program {
         program
             .push(Commitment::blinded(qty)) // stack: qty
-            .var() // stack: qty-var
+            .commit() // stack: qty-var
             .push(Commitment::unblinded(self.flavor())) // stack: qty-var, flv
-            .var() // stack: qty-var, flv-var
+            .commit() // stack: qty-var, flv-var
             .push(String::Opaque(self.metadata.clone())) // stack: qty-var, flv-var, data
             .push(self.issuance_predicate.clone()) // stack: qty-var, flv-var, data, flv-pred
             .issue() // stack: issue-contract
