@@ -152,7 +152,7 @@ where
                 Instruction::Drop => self.drop()?,
                 Instruction::Dup(i) => self.dup(i)?,
                 Instruction::Roll(i) => self.roll(i)?,
-                Instruction::Const => self.r#const()?,
+                Instruction::Scalar => self.scalar()?,
                 Instruction::Var => self.var()?,
                 Instruction::Alloc(sw) => self.alloc(sw)?,
                 Instruction::Mintime => self.mintime()?,
@@ -311,7 +311,7 @@ where
         Ok(())
     }
 
-    fn r#const(&mut self) -> Result<(), VMError> {
+    fn scalar(&mut self) -> Result<(), VMError> {
         let scalar_witness = self.pop_item()?.to_string()?.to_scalar()?;
         self.push_item(Expression::constant(scalar_witness));
         Ok(())

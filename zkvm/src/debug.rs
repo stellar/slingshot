@@ -101,7 +101,7 @@ impl Instruction {
             Instruction::Drop => write!(f, "drop"),
             Instruction::Dup(i) => write!(f, "dup:{}", i),
             Instruction::Roll(i) => write!(f, "roll:{}", i),
-            Instruction::Const => write!(f, "const"),
+            Instruction::Scalar => write!(f, "scalar"),
             Instruction::Var => write!(f, "var"),
             Instruction::Alloc(_) => write!(f, "alloc"),
             Instruction::Mintime => write!(f, "mintime"),

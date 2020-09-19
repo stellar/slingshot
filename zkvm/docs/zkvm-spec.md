@@ -235,7 +235,7 @@ bound to its [Pedersen commitment](#pedersen-commitment).
 
 A [point](#point) that represents a commitment to a secret scalar can be turned into a variable using the [`var`](#var) instruction.
 
-A cleartext [scalar](#scalar-value) can be turned into a single-term [expression](#expression-type) using the [`const`](#const) instruction (which does not allocate a variable). Since we do not need to hide their values, a Variable is not needed to represent the cleartext constant.
+A cleartext [scalar](#scalar-value) can be turned into a single-term [expression](#expression-type) using the [`scalar`](#scalar) instruction (which does not allocate a variable). Since we do not need to hide their values, a Variable is not needed to represent the cleartext constant.
 
 Variables can be copied and dropped at will, but cannot be ported across transactions via [outputs](#output-structure).
 
@@ -936,7 +936,7 @@ Code | Instruction                | Stack diagram                              |
 0x04 | [`roll:k`](#roll)          |     _x[k] … x[0]_ → _x[k-1] ... x[0] x[k]_ |
  |                                |                                            |
  |     [**Constraints**](#constraint-system-instructions)  |                   | 
-0x05 | [`const`](#var)            |          _scalar_ → _expr_                 | 
+0x05 | [`scalar`](#scalar)        |          _scalar_ → _expr_                 | 
 0x06 | [`var`](#var)              |           _point_ → _var_                  | Adds an external variable to [CS](#constraint-system)
 0x07 | [`alloc`](#alloc)          |                 ø → _expr_                 | Allocates a low-level variable in [CS](#constraint-system)
 0x08 | [`mintime`](#mintime)      |                 ø → _expr_                 |
@@ -1026,9 +1026,9 @@ Note: `roll:0` is a no-op, `roll:1` swaps the top two items.
 
 ### Constraint system instructions
 
-#### const
+#### scalar
 
-_a_ **const** → _expr_
+_a_ **scalar** → _expr_
 
 1. Pops a [scalar](#scalar-value) `a` from the stack.
 2. Creates an [expression](#expression-type) `expr` with weight `a` assigned to an R1CS constant `1`.
@@ -1062,7 +1062,7 @@ This is different from [`var`](#var): the variable created by `alloc` is _not_ r
 
 Pushes an [expression](#expression-type) `expr` corresponding to the [minimum time bound](#time-bounds) of the transaction.
 
-The one-term expression represents time bound as a weight on the R1CS constant `1` (see [`const`](#const)).
+The one-term expression represents time bound as a weight on the R1CS constant `1` (see [`scalar`](#scalar)).
 
 #### maxtime
 
@@ -1070,7 +1070,7 @@ The one-term expression represents time bound as a weight on the R1CS constant `
 
 Pushes an [expression](#expression-type) `expr` corresponding to the [maximum time bound](#time-bounds) of the transaction.
 
-The one-term expression represents time bound as a weight on the R1CS constant `1` (see [`const`](#const)).
+The one-term expression represents time bound as a weight on the R1CS constant `1` (see [`scalar`](#scalar)).
 
 #### expr
 

@@ -462,9 +462,9 @@ fn spend_with_secret_scalar(qty: u64, flavor: Scalar, pred: Predicate, secret: S
     Program::build(|p| {
         p.cloak_helper(1, vec![(qty, flavor)])
             .output_helper(pred)
-            .r#const()
+            .scalar()
             .push(secret)
-            .r#const()
+            .scalar()
             .eq()
             .verify();
     })
