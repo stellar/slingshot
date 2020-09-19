@@ -58,21 +58,21 @@ pub enum Instruction {
     /// Fails if `a` is not a valid _scalar_.
     Scalar,
 
-    /// _P_ **var** → _v_
+    /// _P_ **commit** → _v_
     ///
     /// 1. Pops a _point_ `P` from the stack.
     /// 2. Creates a _variable_ `v` from a _Pedersen commitment_ `P`.
     /// 3. Pushes `v` to the stack.
     ///
     /// Fails if `P` is not a valid _point_.
-    Var,
+    Commit,
 
     /// **alloc** → _expr_
     ///
     /// 1. Allocates a low-level variable in the _constraint system_ and wraps it in the _expression_ with weight 1.
     /// 2. Pushes the resulting expression to the stack.
     ///
-    /// This is different from `var`: the variable created by `alloc` is _not_ represented by an individual Pedersen commitment and therefore can be chosen freely when the transaction is constructed.
+    /// This is different from `commit`: the variable created by `alloc` is _not_ represented by an individual Pedersen commitment and therefore can be chosen freely when the transaction is constructed.
     Alloc(Option<ScalarWitness>),
 
     /// **mintime** → _expr_
@@ -513,8 +513,8 @@ pub enum Opcode {
     Roll = 0x04,
     /// A code for [Instruction::Scalar].
     Scalar = 0x05,
-    /// A code for [Instruction::Var]
-    Var = 0x06,
+    /// A code for [Instruction::Commit]
+    Commit = 0x06,
     /// A code for [Instruction::Alloc]
     Alloc = 0x07,
     /// A code for [Instruction::Mintime]
@@ -616,7 +616,7 @@ impl Encodable for Instruction {
                 w.write_u32(b"k", *idx as u32)?;
             }
             Instruction::Scalar => write(Opcode::Scalar)?,
-            Instruction::Var => write(Opcode::Var)?,
+            Instruction::Commit => write(Opcode::Commit)?,
             Instruction::Alloc(_) => write(Opcode::Alloc)?,
             Instruction::Mintime => write(Opcode::Mintime)?,
             Instruction::Maxtime => write(Opcode::Maxtime)?,
@@ -715,7 +715,7 @@ impl Instruction {
                 Ok(Instruction::Roll(idx))
             }
             Opcode::Scalar => Ok(Instruction::Scalar),
-            Opcode::Var => Ok(Instruction::Var),
+            Opcode::Commit => Ok(Instruction::Commit),
             Opcode::Alloc => Ok(Instruction::Alloc(None)),
             Opcode::Mintime => Ok(Instruction::Mintime),
             Opcode::Maxtime => Ok(Instruction::Maxtime),

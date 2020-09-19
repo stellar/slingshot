@@ -233,7 +233,7 @@ Each contract contains a hidden field [anchor](#anchor) that makes it globally u
 _Variable_ represents a secret [scalar](#scalar-value) value in the [constraint system](#constraint-system)
 bound to its [Pedersen commitment](#pedersen-commitment).
 
-A [point](#point) that represents a commitment to a secret scalar can be turned into a variable using the [`var`](#var) instruction.
+A [point](#point) that represents a commitment to a secret scalar can be turned into a variable using the [`commit`](#commit) instruction.
 
 A cleartext [scalar](#scalar-value) can be turned into a single-term [expression](#expression-type) using the [`scalar`](#scalar) instruction (which does not allocate a variable). Since we do not need to hide their values, a Variable is not needed to represent the cleartext constant.
 
@@ -380,7 +380,7 @@ where:
 * `f` is a secret blinding factor (scalar),
 * `B` and `B2` are [base points](#base-points).
 
-Pedersen commitments can be used to allocate new [variables](#variable-type) using the [`var`](#var) instruction.
+Pedersen commitments can be used to allocate new [variables](#variable-type) using the [`commit`](#commit) instruction.
 
 Pedersen commitments can be opened using the [`unblind`](#unblind) instruction.
 
@@ -937,7 +937,7 @@ Code | Instruction                | Stack diagram                              |
  |                                |                                            |
  |     [**Constraints**](#constraint-system-instructions)  |                   | 
 0x05 | [`scalar`](#scalar)        |          _scalar_ → _expr_                 | 
-0x06 | [`var`](#var)              |           _point_ → _var_                  | Adds an external variable to [CS](#constraint-system)
+0x06 | [`commit`](#commit)        |           _point_ → _var_                  | Adds an external variable to [CS](#constraint-system)
 0x07 | [`alloc`](#alloc)          |                 ø → _expr_                 | Allocates a low-level variable in [CS](#constraint-system)
 0x08 | [`mintime`](#mintime)      |                 ø → _expr_                 |
 0x09 | [`maxtime`](#maxtime)      |                 ø → _expr_                 |
@@ -1036,9 +1036,9 @@ _a_ **scalar** → _expr_
 
 Fails if `a` is not a valid [scalar](#scalar-value).
 
-#### var
+#### commit
 
-_P_ **var** → _v_
+_P_ **commit** → _v_
 
 1. Pops a [point](#point) `P` from the stack.
 2. Creates a [variable](#variable-type) `v` from a [Pedersen commitment](#pedersen-commitment) `P`.
@@ -1053,7 +1053,7 @@ Fails if `P` is not a valid [point](#point).
 1. Allocates a low-level variable in the [constraint system](#constraint-system) and wraps it in the [expression](#expression-type) with weight 1.
 2. Pushes the resulting expression to the stack.
 
-This is different from [`var`](#var): the variable created by `alloc` is _not_ represented by an individual Pedersen commitment and therefore can be chosen freely when the transaction is constructed.
+This is different from [`commit`](#commit): the variable created by `alloc` is _not_ represented by an individual Pedersen commitment and therefore can be chosen freely when the transaction is constructed.
 
 
 #### mintime

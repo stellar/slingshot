@@ -102,7 +102,7 @@ impl Instruction {
             Instruction::Dup(i) => write!(f, "dup:{}", i),
             Instruction::Roll(i) => write!(f, "roll:{}", i),
             Instruction::Scalar => write!(f, "scalar"),
-            Instruction::Var => write!(f, "var"),
+            Instruction::Commit => write!(f, "commit"),
             Instruction::Alloc(_) => write!(f, "alloc"),
             Instruction::Mintime => write!(f, "mintime"),
             Instruction::Maxtime => write!(f, "maxtime"),
