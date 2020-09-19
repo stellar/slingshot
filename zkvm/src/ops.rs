@@ -49,44 +49,44 @@ pub enum Instruction {
     /// Note: `roll:0` is a no-op, `roll:1` swaps the top two items.
     Roll(usize),
 
-    /// _a_ **const** → _expr_
+    /// _a_ **scalar** → _expr_
     ///
     /// 1. Pops a _scalar_ `a` from the stack.
     /// 2. Creates an _expression_ `expr` with weight `a` assigned to an R1CS constant `1`.
     /// 3. Pushes `expr` to the stack.
     ///
     /// Fails if `a` is not a valid _scalar_.
-    Const,
+    Scalar,
 
-    /// _P_ **var** → _v_
+    /// _P_ **commit** → _v_
     ///
     /// 1. Pops a _point_ `P` from the stack.
     /// 2. Creates a _variable_ `v` from a _Pedersen commitment_ `P`.
     /// 3. Pushes `v` to the stack.
     ///
     /// Fails if `P` is not a valid _point_.
-    Var,
+    Commit,
 
     /// **alloc** → _expr_
     ///
     /// 1. Allocates a low-level variable in the _constraint system_ and wraps it in the _expression_ with weight 1.
     /// 2. Pushes the resulting expression to the stack.
     ///
-    /// This is different from `var`: the variable created by `alloc` is _not_ represented by an individual Pedersen commitment and therefore can be chosen freely when the transaction is constructed.
+    /// This is different from `commit`: the variable created by `alloc` is _not_ represented by an individual Pedersen commitment and therefore can be chosen freely when the transaction is constructed.
     Alloc(Option<ScalarWitness>),
 
     /// **mintime** → _expr_
     ///
     /// Pushes an _expression_ `expr` corresponding to the _minimum time bound_ of the transaction.
     ///
-    /// The one-term expression represents time bound as a weight on the R1CS constant `1` (see `const`).
+    /// The one-term expression represents time bound as a weight on the R1CS constant `1` (see `scalar`).
     Mintime,
 
     /// **maxtime** → _expr_
     ///
     /// Pushes an _expression_ `expr` corresponding to the _maximum time bound_ of the transaction.
     ///
-    /// The one-term expression represents time bound as a weight on the R1CS constant `1` (see `const`).
+    /// The one-term expression represents time bound as a weight on the R1CS constant `1` (see `scalar`).
     Maxtime,
 
     /// _var_ **expr** → _ex_
@@ -315,7 +315,10 @@ pub enum Instruction {
     /// 1. Pops `2·n` _points_ as pairs of _flavor_ and _quantity_ for each output value, flavor is popped first in each pair.
     /// 2. Pops `m` _wide values_ as input values.
     /// 3. Creates constraints and 64-bit range proofs for quantities per _Cloak protocol_.
-    /// 4. Pushes `n` _values_ to the stack, placing them in the same order as their corresponding commitments.
+    /// 4. Pushes `n` _values_ to the stack, placing them in the **reverse** order as their corresponding commitments:
+    ///    ```ascii
+    ///    A B C → cloak → C B A
+    ///    ```
     ///
     /// Immediate data `m` and `n` are encoded as two _LE32_s.
     Cloak(usize, usize),
@@ -508,10 +511,10 @@ pub enum Opcode {
     Dup = 0x03,
     /// A code for [Instruction::Roll].
     Roll = 0x04,
-    /// A code for [Instruction::Const].
-    Const = 0x05,
-    /// A code for [Instruction::Var]
-    Var = 0x06,
+    /// A code for [Instruction::Scalar].
+    Scalar = 0x05,
+    /// A code for [Instruction::Commit]
+    Commit = 0x06,
     /// A code for [Instruction::Alloc]
     Alloc = 0x07,
     /// A code for [Instruction::Mintime]
@@ -612,8 +615,8 @@ impl Encodable for Instruction {
                 write(Opcode::Roll)?;
                 w.write_u32(b"k", *idx as u32)?;
             }
-            Instruction::Const => write(Opcode::Const)?,
-            Instruction::Var => write(Opcode::Var)?,
+            Instruction::Scalar => write(Opcode::Scalar)?,
+            Instruction::Commit => write(Opcode::Commit)?,
             Instruction::Alloc(_) => write(Opcode::Alloc)?,
             Instruction::Mintime => write(Opcode::Mintime)?,
             Instruction::Maxtime => write(Opcode::Maxtime)?,
@@ -711,8 +714,8 @@ impl Instruction {
                 let idx = program.read_size()?;
                 Ok(Instruction::Roll(idx))
             }
-            Opcode::Const => Ok(Instruction::Const),
-            Opcode::Var => Ok(Instruction::Var),
+            Opcode::Scalar => Ok(Instruction::Scalar),
+            Opcode::Commit => Ok(Instruction::Commit),
             Opcode::Alloc => Ok(Instruction::Alloc(None)),
             Opcode::Mintime => Ok(Instruction::Mintime),
             Opcode::Maxtime => Ok(Instruction::Maxtime),

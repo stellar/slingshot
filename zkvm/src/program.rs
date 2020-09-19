@@ -157,8 +157,8 @@ impl Program {
     def_op!(drop, Drop, "drop");
     def_op!(dup, Dup, usize, "dup:k");
     def_op!(roll, Roll, usize, "roll:k");
-    def_op!(r#const, Const, "const");
-    def_op!(var, Var, "var");
+    def_op!(scalar, Scalar, "scalar");
+    def_op!(commit, Commit, "commit");
     def_op!(alloc, Alloc, Option::<ScalarWitness>, "alloc");
     def_op!(mintime, Mintime, "mintime");
     def_op!(maxtime, Maxtime, "maxtime");

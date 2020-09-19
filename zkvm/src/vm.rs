@@ -152,8 +152,8 @@ where
                 Instruction::Drop => self.drop()?,
                 Instruction::Dup(i) => self.dup(i)?,
                 Instruction::Roll(i) => self.roll(i)?,
-                Instruction::Const => self.r#const()?,
-                Instruction::Var => self.var()?,
+                Instruction::Scalar => self.scalar()?,
+                Instruction::Commit => self.commit()?,
                 Instruction::Alloc(sw) => self.alloc(sw)?,
                 Instruction::Mintime => self.mintime()?,
                 Instruction::Maxtime => self.maxtime()?,
@@ -311,13 +311,13 @@ where
         Ok(())
     }
 
-    fn r#const(&mut self) -> Result<(), VMError> {
+    fn scalar(&mut self) -> Result<(), VMError> {
         let scalar_witness = self.pop_item()?.to_string()?.to_scalar()?;
         self.push_item(Expression::constant(scalar_witness));
         Ok(())
     }
 
-    fn var(&mut self) -> Result<(), VMError> {
+    fn commit(&mut self) -> Result<(), VMError> {
         let commitment = self.pop_item()?.to_string()?.to_commitment()?;
         let v = Variable { commitment };
         self.push_item(v);
