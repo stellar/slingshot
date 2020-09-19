@@ -34,9 +34,4 @@ table! {
     }
 }
 
-allow_tables_to_appear_in_same_query!(
-    account_records,
-    asset_records,
-    block_records,
-    user_records,
-);
+allow_tables_to_appear_in_same_query!(account_records, asset_records, block_records, user_records,);
