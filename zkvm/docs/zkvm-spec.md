@@ -23,7 +23,7 @@ ZkVM defines a procedural representation for blockchain transactions and the rul
 * [Definitions](#definitions)
     * [LE32](#le32)
     * [LE64](#le64)
-    * [Scalar](#scalar)
+    * [Scalar](#scalar-value)
     * [Point](#point)
     * [Base points](#base-points)
     * [Pedersen commitment](#pedersen-commitment)
@@ -202,7 +202,7 @@ and its constraint system, and therefore cannot be meaningfully ported between t
 
 ### String type
 
-A _string_ is a variable-length byte array used to represent [commitments](#pedersen-commitment), [scalars](#scalar), signatures, and proofs.
+A _string_ is a variable-length byte array used to represent [commitments](#pedersen-commitment), [scalars](#scalar-value), signatures, and proofs.
 
 A string cannot be larger than the entire transaction program and cannot be longer than `2^32-1` bytes (see [LE32](#le32)).
 
@@ -230,12 +230,12 @@ Each contract contains a hidden field [anchor](#anchor) that makes it globally u
 
 ### Variable type
 
-_Variable_ represents a secret [scalar](#scalar) value in the [constraint system](#constraint-system)
+_Variable_ represents a secret [scalar](#scalar-value) value in the [constraint system](#constraint-system)
 bound to its [Pedersen commitment](#pedersen-commitment).
 
 A [point](#point) that represents a commitment to a secret scalar can be turned into a variable using the [`var`](#var) instruction.
 
-A cleartext [scalar](#scalar) can be turned into a single-term [expression](#expression-type) using the [`const`](#const) instruction (which does not allocate a variable). Since we do not need to hide their values, a Variable is not needed to represent the cleartext constant.
+A cleartext [scalar](#scalar-value) can be turned into a single-term [expression](#expression-type) using the [`const`](#const) instruction (which does not allocate a variable). Since we do not need to hide their values, a Variable is not needed to represent the cleartext constant.
 
 Variables can be copied and dropped at will, but cannot be ported across transactions via [outputs](#output-structure).
 
@@ -247,7 +247,7 @@ when these are exposed to the VM (for instance, from [`mul`](#mul)), they have t
 
 ### Expression type
 
-_Expression_ is a linear combination of constraint system variables with cleartext [scalar](#scalar) weights.
+_Expression_ is a linear combination of constraint system variables with cleartext [scalar](#scalar-value) weights.
 
     expr = { (weight0, var0), (weight1, var1), ...  }
 
@@ -261,7 +261,7 @@ Expressions can be [added](#add) and [multiplied](#mul), producing new expressio
 
 ### Constant expression
 
-An [expression](#expression-type) that contains one term with the [scalar](#scalar) weight assigned to the R1CS `1` is considered
+An [expression](#expression-type) that contains one term with the [scalar](#scalar-value) weight assigned to the R1CS `1` is considered
 a _constant expression_:
 
     const_expr = { (weight, 1) }
@@ -331,7 +331,7 @@ A non-negative 64-bit integer encoded using little-endian convention.
 Used to encode [value quantities](#value-type) and [timestamps](#time-bounds).
 
 
-### Scalar
+### Scalar value
 
 A _scalar_ is an integer modulo [Ristretto group](https://ristretto.group) order `|G| = 2^252 + 27742317777372353535851937790883648493`.
 
@@ -366,7 +366,7 @@ and used in [Pedersen commitments](#pedersen-commitment),
 
 ### Pedersen commitment
 
-Pedersen commitment to a secret [scalar](#scalar)
+Pedersen commitment to a secret [scalar](#scalar-value)
 is defined as a point with the following structure:
 
 ```
@@ -387,7 +387,7 @@ Pedersen commitments can be opened using the [`unblind`](#unblind) instruction.
 
 ### Verification key
 
-A _verification key_ `P` is a commitment to a secret [scalar](#scalar) `x` (_signing key_)
+A _verification key_ `P` is a commitment to a secret [scalar](#scalar-value) `x` (_signing key_)
 using the primary [base point](#base-points) `B`: `P = x·B`.
 Verification keys are used to construct [predicates](#predicate) and verify [signatures](#transaction-signature).
 
@@ -461,7 +461,7 @@ Transcript is an instance of the [Merlin](https://doc.dalek.rs/merlin/) construc
 which is itself based on [STROBE](https://strobe.sourceforge.io/) and [Keccak-f](https://keccak.team/keccak.html)
 with 128-bit security parameter.
 
-Transcript is used throughout ZkVM to generate challenge [scalars](#scalar) and commitments.
+Transcript is used throughout ZkVM to generate challenge [scalars](#scalar-value) and commitments.
 
 Transcripts have the following operations, each taking a label for domain separation:
 
@@ -875,13 +875,13 @@ Each deferred operation at index `i` represents a statement:
 0  ==  sum{s[i,j]·P[i,j], for all j}  +  a[i]·B  +  b[i]·B2
 ```
 where:
-1. `{s[i,j],P[i,j]}` is an array of ([scalar](#scalar),[point](#point)) tuples,
-2. `a[i]` is a [scalar](#scalar) weight of a [primary base point](#base-points) `B`,
-3. `b[i]` is a [scalar](#scalar) weight of a [secondary base point](#base-points) `B2`.
+1. `{s[i,j],P[i,j]}` is an array of ([scalar](#scalar-value),[point](#point)) tuples,
+2. `a[i]` is a [scalar](#scalar-value) weight of a [primary base point](#base-points) `B`,
+3. `b[i]` is a [scalar](#scalar-value) weight of a [secondary base point](#base-points) `B2`.
 
 All such statements are combined using the following method:
 
-1. For each statement, a random [scalar](#scalar) `x[i]` is sampled.
+1. For each statement, a random [scalar](#scalar-value) `x[i]` is sampled.
 2. Each weight `s[i,j]` is multiplied by `x[i]` for all weights per statement `i`:
     ```
     z[i,j] = x[i]·s[i,j]
@@ -1030,11 +1030,11 @@ Note: `roll:0` is a no-op, `roll:1` swaps the top two items.
 
 _a_ **const** → _expr_
 
-1. Pops a [scalar](#scalar) `a` from the stack.
+1. Pops a [scalar](#scalar-value) `a` from the stack.
 2. Creates an [expression](#expression-type) `expr` with weight `a` assigned to an R1CS constant `1`.
 3. Pushes `expr` to the stack.
 
-Fails if `a` is not a valid [scalar](#scalar).
+Fails if `a` is not a valid [scalar](#scalar-value).
 
 #### var
 
@@ -1236,13 +1236,13 @@ Fails if `constr` is not a [constraint](#constraint-type).
 
 _V v_ **unblind** → _V_
 
-1. Pops [scalar](#scalar) `v`.
+1. Pops [scalar](#scalar-value) `v`.
 2. Pops [point](#point) `V`.
 3. Verifies the [unblinding proof](#unblinding-proof) for the commitment `V` and scalar `v`, [deferring all point operations](#deferred-point-operations)).
 4. Pushes [point](#point) `V`.
 
 Fails if: 
-* `v` is not a valid [scalar](#scalar), or
+* `v` is not a valid [scalar](#scalar-value), or
 * `V` is not a valid [point](#point), or
 
 
