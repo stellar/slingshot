@@ -86,6 +86,10 @@ pub enum WalletError {
     XprvMismatch,
     /// Asset with a given flavor is not found in this wallet.
     AssetNotFound,
+    /// Address label does not match the wallet's label.
+    /// This typically means that an address from one ledger is used by mistake
+    /// to receive funds from another ledger.
+    AddressLabelMismatch,
 }
 
 /// Single-account tx builder API.
@@ -487,10 +491,13 @@ impl Wallet {
         builder
             .actions
             .into_iter()
-            .fold((&mut outputs, &mut memos), |(outs, memos), action| {
+            .try_fold((&mut outputs, &mut memos), |(outs, memos), action| {
                 match action {
                     TxAction::IssueToAddress(value, addr)
                     | TxAction::TransferToAddress(value, addr) => {
+                        if addr.label() != self.address_label {
+                            return Err(WalletError::AddressLabelMismatch)
+                        }
                         let (recvr, ct) = addr.encrypt(value, &mut rng);
                         outs.push(recvr);
                         memos.push(ct);
@@ -502,8 +509,8 @@ impl Wallet {
                         memos.push(buf);
                     }
                 }
-                (outs, memos)
-            });
+                Ok((outs, memos))
+            })?;
 
         // Canonically order memos and outputs so we do not leak the order of operations.
         memos.sort_by(|a, b| a.as_slice().cmp(b.as_slice()));

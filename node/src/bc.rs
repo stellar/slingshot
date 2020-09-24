@@ -5,7 +5,7 @@ use tokio::sync::RwLock;
 
 use crate::config;
 
-const BC_STATE_FILENAME: &'static str = "state.bin";
+const BC_STATE_FILENAME: &'static str = "blockchain_state";
 
 #[derive(Debug)]
 pub struct Blockchain {
@@ -61,12 +61,14 @@ impl Blockchain {
     }
 
     /// Returns true if blockchain is initialized
-    pub fn initialized(&self) -> bool {
+    pub fn is_initialized(&self) -> bool {
         let mut path = self.storage_path.clone();
         path.push(BC_STATE_FILENAME);
         path.exists()
     }
 
     /// Initializes a new chain if needed.
-    pub fn initialize(&self) {}
+    pub fn initialize(&mut self) {
+        
+    } 
 }

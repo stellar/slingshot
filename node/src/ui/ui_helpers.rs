@@ -35,7 +35,7 @@ impl UI {
 
     /// Matches the request if the ledger is not initialized yet.
     pub async fn require_uninitialized(self) -> Result<Self, warp::Rejection> {
-        if !self.bc.read().await.initialized() {
+        if !self.bc.read().await.is_initialized() {
             Ok(self)
         } else {
             Err(warp::reject::not_found())
@@ -44,7 +44,7 @@ impl UI {
 
     /// Matches the request if the ledger is not initialized yet.
     pub async fn require_initialized(self) -> Result<Self, warp::Rejection> {
-        if self.bc.read().await.initialized() {
+        if self.bc.read().await.is_initialized() {
             Ok(self)
         } else {
             Err(warp::reject::not_found())
