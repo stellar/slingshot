@@ -488,15 +488,14 @@ impl Wallet {
 
         // Collect all outputs, so we can shuffle them.
         // Also collect all memos with ciphertext.
-        builder
-            .actions
-            .into_iter()
-            .try_fold((&mut outputs, &mut memos), |(outs, memos), action| {
+        builder.actions.into_iter().try_fold(
+            (&mut outputs, &mut memos),
+            |(outs, memos), action| {
                 match action {
                     TxAction::IssueToAddress(value, addr)
                     | TxAction::TransferToAddress(value, addr) => {
                         if addr.label() != self.address_label {
-                            return Err(WalletError::AddressLabelMismatch)
+                            return Err(WalletError::AddressLabelMismatch);
                         }
                         let (recvr, ct) = addr.encrypt(value, &mut rng);
                         outs.push(recvr);
@@ -510,7 +509,8 @@ impl Wallet {
                     }
                 }
                 Ok((outs, memos))
-            })?;
+            },
+        )?;
 
         // Canonically order memos and outputs so we do not leak the order of operations.
         memos.sort_by(|a, b| a.as_slice().cmp(b.as_slice()));

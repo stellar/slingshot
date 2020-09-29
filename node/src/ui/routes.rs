@@ -18,6 +18,7 @@ pub fn build(ui: UI) -> BoxedFilter<(impl Reply,)> {
         .and(ui.as_filter())
         .and_then(|ui: UI| ui.require_uninitialized())
         .and_then(|ui: UI| async move {
+            ui.render("ledger_new.html");
             ui.blockchain().write().await.initialize();
             ui.redirect_to_root()
         });

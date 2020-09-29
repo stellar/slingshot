@@ -192,8 +192,10 @@ impl Wallet {
     /// Computes the absolute storage path based on the config file location
     pub fn absolute_storage_path(&self, config_path: &Path) -> PathBuf {
         let mut path = config_path.to_path_buf();
-        path.pop(); // remove the filename (config.toml)
-        path.push(&self.storage_path); // push the relative storage path (if absolute, it'll replace the whole path)
+        // remove the filename (config.toml)
+        path.pop();
+        // push the relative storage path (if absolute, it'll replace the whole path)
+        path.push(&self.storage_path);
         path
     }
 

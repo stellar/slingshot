@@ -1,215 +1,431 @@
 # Slingshot API
 
+* [Schema](#schema)
+    * [MempoolStatus](#mempoolstatus)
+    * [State](#state)
+    * [Peer](#peer)
+    * [BlockHeader](#blockheader)
+    * [Block](#block)
+    * [TxHeader](#txheader)
+    * [RawTx](#rawtx)
+    * [Tx](#tx)
+    * [AnnotatedAction](#annotatedaction)
+    * [AnnotatedTx](#annotatedtx)
+* [Network API](#network-api)
+    * [/network/status](#networkstatus)
+    * [/network/mempool](#networkmempool)
+    * [/network/blocks](#networkblocks)
+    * [/network/block/:id](#networkblockid)
+    * [/network/tx/:id](#networktxid)
+* [Wallet API](#wallet-api)
+    * [/wallet/new](#walletnew)
+    * [/wallet/:id/balance](#walletidbalance)
+    * [/wallet/:id/txs](#walletidtxs)
+    * [/wallet/:id/address](#walletidaddress)
+    * [/wallet/:id/receiver](#walletidreceiver)
+    * [/wallet/:id/buildtx](#walletidbuildtx)
+
+
 Responses are listed in JSON for a time being, but we are also going to provide the API responses via XDR format.
 
-## /v1/status
+All URLs start with a versioned based path. So the full URL for the endpoint `/network/status` is `https://<hostname>/v1/network/status`
 
-#### Request
+## Schema
 
-`GET /v1/status`
+### MempoolStatus
 
-#### Response
+Stats about unconfirmed transactions.
 
-```json
-{
-    mempool: {
-        count: 10571,    # number of transactions
-        size: 57102452,  # total size of all transactions
-        feerate: 123123, # lowest feerate for inclusion in the block
-    },
-    state: {
-        height: 5103,                # latest block's number
-        last_block: "1c61b3ff49...", # latest block's ID
-        utreexo: [                   # utreexo merkle roots
-            "4bdf5b3f981...",
-            null,
-            "8043b5f7842...",
-            "6b6abc684a1..."
-        ]
-    },
-    peers: [
-        {
-            id: "f7842641554...",       # pubkey of the peer
-            since: 168401244121,        # Unix timestamp of the connection
-            addr: "195.32.52.12:52930", # address of the peer
-            priority: 123,              # priority of the peer (TBD: format/range)
-        },
-        ...
-    ]
+```rust
+struct MempoolStatus {
+    count: u64,   // total number of transactions
+    size: u64,    // total size of all transactions in the mempool
+    feerate: u64, // lowest feerate for inclusing in the block
 }
 ```
 
-## /v1/mempool
+### State
 
-#### Request
+Description of the current blockchain state.
 
-`GET /v1/mempool?[cursor=571]`
+```rust
+struct State {
+    tip: BlockHeader, // block header
+    utreexo: [Option<[u8; 32]>; 64] // the utreexo state
+}
+```
+
+### Peer
+
+Description of a connected peer.
+
+```rust
+struct Peer {
+    id: [u8; 32],
+    since: u64,
+    addr: [u8; 16], // ipv6 address format
+    priority: u64,
+}
+```
+
+### BlockHeader
+
+```rust
+struct BlockHeader {
+    version: u64,      // Network version.
+    height: u64,       // Serial number of the block, starting with 1.
+    prev: [u8; 32], // ID of the previous block. Initial block uses the all-zero string.
+    timestamp_ms: u64, // Integer timestamp of the block in milliseconds since the Unix epoch
+    txroot: [u8; 32],   // 32-byte Merkle root of the transaction witness hashes (`BlockTx::witness_hash`) in the block.
+    utxoroot: [u8; 32], // 32-byte Merkle root of the Utreexo state.
+    ext: Vec<u8>,       // Extra data for the future extensions.
+}
+```
+
+### Block
+
+```rust
+struct {
+    header: BlockHeader,
+    txs: Vec<Transaction>
+}
+```
+
+### TxHeader
+
+```rust
+struct TxHeader {
+    version: u64,     // Minimum network version supported by tx
+    mintime_ms: u64,  // Minimum valid timestamp for the block
+    maxtime_ms: u64,  // Maximum valid timestamp for the block
+}
+```
+
+### RawTx
+
+```rust
+struct RawTx {
+    header: TxHeader,
+    program: Vec<u8>,
+    signature: [u8; 64],
+    r1cs_proof: Vec<u8>,
+    utreexo_proofs: Vec<Vec<u8>>,
+}
+```
+
+### Tx
+
+```rust
+struct Tx {
+    id: [u8; 32],     // canonical tx id
+    wid: [u8; 32],    // witness hash of the tx (includes signatures and proofs)
+    raw: RawTx,
+    fee: u64,         // fee paid by the tx
+    size: u64,        // size in bytes of the encoded tx
+}
+```
+
+### AnnotatedAction
+
+```rust
+enum AnnotatedAction {
+    Issue(IssueAction),
+    Spend(SpendAction),
+    Receive(ReceiveAction),
+    Retire(RetireAction),
+    Memo(MemoAction),
+}
+
+struct IssueAction {
+    entry: u32, // index of the txlog entry
+    qty: u64,
+    flv: [u8; 32],
+}
+
+struct SpendAction {
+    entry: u32, // index of the txlog entry
+    qty: u64,
+    flv: [u8; 32],
+    account: [u8; 32], // identifier of the account sending funds
+}
+
+struct ReceiveAction {
+    entry: u32, // index of the txlog entry
+    qty: u64,
+    flv: [u8; 32],
+    account: Option<[u8; 32]>, // identifier of the account receiving funds (if known)
+}
+
+struct RetireAction {
+    entry: u32, // index of the txlog entry
+    qty: u64,
+    flv: [u8; 32],
+}
+
+struct MemoAction {
+    entry: u32,
+    data: Vec<u8>,
+}
+```
+
+### AnnotatedTx
+
+Annotated tx produced by the wallet API.
+
+```rust
+struct AnnotatedTx {
+    tx: Tx, // raw tx
+    actions: Vec<AnnotatedAction>
+}
+```
+
+### BuildTxAction
+
+```rust
+enum BuildTxAction {
+    IssueToAddress([u8; 32], u64, String),
+    IssueToReceiver(Receiver),
+    TransferToAddress([u8; 32], u64, String),
+    TransferToReceiver(Receiver),
+    Memo(Vec<u8>),
+}
+```
+
+
+## Network API
+
+### /network/status
+
+Request:
+
+`GET /network/status`
+
+Response:
+
+```rust
+struct Status {
+    mempool: MempoolStatus,
+    state: State,
+    peers: Vec<Peer>
+}
+```
+
+### /network/mempool
+
+Request:
+
+`GET /network/mempool?[cursor=571]`
 
 * `cursor`: opaque identifier to continue paginated request for transactions
 
-#### Response
+Response:
 
-```json
-{
-    cursor: "571",  # use this opaque value to request the next set of transactions
-    txs: [
-        {
-            txid: "f7842641554...",
-            size: 2041,
-            fee: 6913,
-            raw: 
-        }
-    ]
+```rust
+struct MempoolTxs {
+    cursor: Vec<u8>,
+    status: MempoolStatus,
+    txs: Vec<Tx>
 }
 ```
 
-## /v1/blocks
+### /network/blocks
 
-#### Request
+Request:
 
-`GET /v1/blocks?[cursor=571]`
+`GET /network/blocks?[cursor=571]`
 
 * `cursor`: opaque identifier to continue paginated request for blocks
 
-#### Response
+Response:
 
-```json
-{
-    cursor: "571",  # use this opaque value to request the next set of blocks
-    blocks: [
-        {
-            height:    1242,
-            timestamp: 1684910232,
-            id:        "f7842641554...",
-            size:      2041,
-            fee:       6913,
-            txs:       123,
-        }
-    ]
+```rust
+struct Blocks {
+    cursor: Vec<u8>,
+    blocks: Vec<BlockHeader>,
 }
 ```
 
 
-## /v1/block
+### /network/block/:id
 
-Requests details of the given block.
+Request
 
-#### Request
-
-`GET /v1/block/<id>`
+`GET /network/block/:id`
 
 * `id`: hex-encoded block ID
 
-#### Response
+Response:
 
-```json
-{
-    id:        "f7842641554...",
-    height:    1242,
-    timestamp: 1684910232,
-    size:      2041,
-    ...,          # TBD: other header data
-    txs: [
-        {
-            id:   "f7842641554...",
-            size: 1234,
-            fee:  5491,
-            
-        }
-    ]
+```rust
+struct Block {
+    ... // see definition above
 }
 ```
 
-
-
-## /v1/tx
+### /network/tx/:id
 
 Requests details for a given transactions. Looks for txs in blocks and in mempool.
 
-#### Request
+Request:
 
-`GET /v1/tx/<txid>`
+`GET /network/tx/:id`
 
-* `txid`: hex-encoded transaction ID
+* `id`: hex-encoded transaction ID
 
-#### Response
+Response:
 
-```json
-{
-    status: {
-        confirmed: true,            # false if in mempool
-        block_height: 1234,
-        block_id: "f7842641554..."
-    },
-    raw: "51fa8d9e0b0ad91921...",
-    # TBD: friendly description of entries
+```rust
+struct TxResponse {
+    status: TxStatus,
+    tx: Tx,
+}
+
+struct TxStatus {
+    confirmed: bool,
+    block_height: u64,
+    block_id: [u8; 32],
+} 
+```
+
+### /network/submit
+
+Submits a fully-formed transaction. Successful submission returns 200 OK status.
+
+Request:
+
+`POST /network/submit`
+
+```rust
+struct RawTx {
+    ... // see definition above
 }
 ```
 
-## /v1/wallet/new
+
+
+
+
+## Wallet API
+
+Wallet is an abstraction that translates high-level operations such as issuances and transfers into deriving keys, 
+forming transactions and tracking the state of unspent outputs.
+
+### /wallet/new
 
 Creates a new wallet
 
-#### Request
+Request:
 
-`POST /v1/wallet/new`
+`POST /wallet/new`
 
-```json
-{
-    xpub: "68a9f6a8d903461231...",
-    label: "My Wallet"
+```rust
+struct NewWalletRequest {
+    xpub: [u8; 64],
+    label: String,
 }
 ```
 
-#### Response
+Response:
 
-```json
-{
-    status: "ok",
-    id: "36812382",
+```rust
+struct NewWalletResponse {
+    id: [u8; 32],
 }
 ```
 
-
-## /v1/wallet/:id/balance
+### /wallet/:id/balance
 
 Returns wallet's balance.
 
-#### Request
+Request:
 
-GET /v1/wallet/:id/balance
+`GET /wallet/:id/balance`
 
-#### Response
+Response:
 
-```json
-TBD.
+```rust
+struct Balance {
+    balances: Vec<([u8; 32], u64)>
+}
 ```
 
 
-
-## /v1/wallet/:id/txs
+### /wallet/:id/txs
 
 Lists annotated transactions.
 
-#### Request
+Request:
 
-`GET /v1/wallet/:id/txs`
+`GET /wallet/:id/txs?cursor=[5786...]`
 
-#### Response
+Response:
 
-```json
-TBD.
+```rust
+struct WalletTxs {
+    cursor: Vec<u8>,
+    txs: Vec<AnnotatedTx>
+}
 ```
 
+### /wallet/:id/address
 
-## /v1/wallet/:id/build_tx
+Generates a new address.
 
-Builds a transaction
+Request:
 
-#### Request
+`GET /wallet/:id/address`
 
-`POST /v1/wallet/<wallet_id>/`
+Response:
 
-#### Response
+```rust
+struct NewAddress {
+    address: String,
+}
+```
 
-TBD.
+### /wallet/:id/receiver
+
+Generates a new receiver.
+
+Request:
+
+`POST /wallet/:id/receiver`
+
+```rust
+struct NewReceiverRequest {
+    flv: [u8; 32],
+    qty: u64,
+    exp: u64, // expiration timestamp
+}
+```
+
+Response:
+
+```rust
+struct NewReceiverResponse {
+    receiver: Receiver,
+}
+```
+
+### /wallet/:id/buildtx
+
+Builds a transaction and returns the signing instructions.
+
+Request:
+
+`POST /wallet/:id/buildtx`
+
+```rust
+struct BuildTxRequest {
+    actions: Vec<BuildTxAction>,
+}
+```
+
+Response:
+
+```rust
+struct BuiltTx {
+    tx: AnnotatedTx,
+    signing_instructions: Vec<SigningInstructions>
+}
+```

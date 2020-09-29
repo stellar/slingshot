@@ -68,7 +68,5 @@ impl Blockchain {
     }
 
     /// Initializes a new chain if needed.
-    pub fn initialize(&mut self) {
-        
-    } 
+    pub fn initialize(&mut self) {}
 }
