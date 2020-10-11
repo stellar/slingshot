@@ -59,8 +59,7 @@ impl WalletManager {
             .map(|w| {
                 let r = closure(w)?;
 
-                // TODO: save the wallet at self.wallet_path
-                File::create(path)?;
+                bincode::serialize_into(File::create(path)?, w)?;
 
                 Ok(r)
             })
