@@ -50,7 +50,7 @@ impl Blockchain {
             blockchain_config,
         }));
 
-        // TODO: Launch p2p stack.
+        // TODO: Launch p2p stack if we have the blockchain initialized.
 
         bc
     }
@@ -68,5 +68,7 @@ impl Blockchain {
     }
 
     /// Initializes a new chain if needed.
-    pub fn initialize(&mut self) {}
+    pub fn initialize(&mut self) {
+        // launch the stack
+    }
 }

@@ -1,6 +1,7 @@
 use core::borrow::Borrow;
 use std::collections::HashMap;
 use std::mem;
+use thiserror::Error;
 
 use curve25519_dalek::ristretto::CompressedRistretto;
 use curve25519_dalek::scalar::Scalar;
@@ -79,16 +80,21 @@ pub struct Utxo {
 }
 
 /// Errors that may occur during transaction creation.
+#[derive(Clone, Error, Debug)]
 pub enum WalletError {
     /// There are not enough funds to make the payment.
+    #[error("There are not enough funds to make the payment.")]
     InsufficientFunds,
     /// Signing key (xprv) does not match the wallet's public key.
+    #[error("Signing key (xprv) does not match the wallet's public key.")]
     XprvMismatch,
     /// Asset with a given flavor is not found in this wallet.
+    #[error("Asset with a given flavor is not found in this wallet.")]
     AssetNotFound,
     /// Address label does not match the wallet's label.
     /// This typically means that an address from one ledger is used by mistake
     /// to receive funds from another ledger.
+    #[error("Address label is not expected by this wallet.")]
     AddressLabelMismatch,
 }
 
@@ -276,6 +282,7 @@ impl Wallet {
     }
 
     /// Processes confirmed trasactions, overwriting the pending state.
+    /// TBD: add safer API to accept blocks and check which were already processed and which were not.
     pub fn process_confirmed_txs<T>(&mut self, txs: T, catchup: &utreexo::Catchup)
     where
         T: IntoIterator,
@@ -524,7 +531,7 @@ impl Wallet {
                 .then_with(|| a.qty_blinding.as_bytes().cmp(b.qty_blinding.as_bytes()))
         });
 
-        let program = zkvm::Program::build(|mut p| {
+        let program = zkvm::Program::build(|p| {
             // issue all the assets
             for (_flv, (_alias, token, qty)) in grouped_issuances.iter() {
                 token.issue(p, *qty);

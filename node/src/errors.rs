@@ -1,4 +1,27 @@
 use std;
+use thiserror::Error as ThisError;
 
-// In this application we wrap all I/O errors
-pub type Error = Box<dyn std::error::Error + Send + Sync + 'static>;
+/// All error types in the node implementation
+#[derive(ThisError, Debug)]
+pub enum Error {
+    #[error("I/O error: {0}")]
+    IoError(std::io::Error),
+
+    #[error("Decoding error: {0}")]
+    BincodeError(bincode::Error),
+
+    #[error("Wallet is not initialized")]
+    WalletNotInitialized,
+}
+
+impl From<std::io::Error> for Error {
+    fn from(err: std::io::Error) -> Self {
+        Error::IoError(err)
+    }
+}
+
+impl From<bincode::Error> for Error {
+    fn from(err: bincode::Error) -> Self {
+        Error::BincodeError(err)
+    }
+}

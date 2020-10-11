@@ -85,7 +85,7 @@ struct BlockHeader {
 ### Block
 
 ```rust
-struct {
+struct Block {
     header: BlockHeader,
     txs: Vec<Transaction>
 }

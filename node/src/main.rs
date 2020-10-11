@@ -1,10 +1,6 @@
 #[macro_use]
 extern crate serde_json;
 
-use cli_args::RunCommand;
-use config::Config;
-use std::path::Path;
-
 mod api;
 mod bc;
 mod cli_args;
@@ -16,11 +12,20 @@ mod wallet;
 mod wallet_manager;
 
 use bc::Blockchain;
+use cli_args::RunCommand;
+use config::Config;
+use errors::Error;
+use std::path::Path;
+use ui::UI;
+use wallet_manager::WalletManager;
 
 #[tokio::main]
 async fn main() {
     match cli_args::parse_args() {
-        Ok(RunCommand::Run(_binpath, (config_path, config))) => run(&config_path, config).await,
+        Ok(RunCommand::Run(_binpath, (config_path, config))) => {
+            // Display a proper error message when we fail
+            run(&config_path, config).await.unwrap()
+        }
         Ok(RunCommand::ShowConfig(_binpath, (config_path, config))) => {
             show_config(&config_path, config)
         }
@@ -29,18 +34,22 @@ async fn main() {
     }
 }
 
-async fn run(config_path: &Path, config: Config) {
+async fn run(config_path: &Path, config: Config) -> Result<(), Error> {
     let storage_path = config.blockchain.absolute_storage_path(&config_path);
 
     // 1. Run the blockchain state machine with p2p interface
     let bc_ref =
         Blockchain::launch(storage_path, config.p2p.clone(), config.blockchain.clone()).await;
 
+    // 2. Create a wallet
+    let wallet = WalletManager::new(config.wallet.clone(), &config_path)?;
+
     // 2. Spawn the API server
     let addr = config.api.listen_addr;
     let api_process = if !config.api.disabled {
         let bc = bc_ref.clone();
-        Some(tokio::spawn(async move { api::launch(addr, bc).await }))
+        let wm = wallet.clone();
+        Some(tokio::spawn(async move { api::launch(addr, bc, wm).await }))
     } else {
         None
     };
@@ -49,8 +58,9 @@ async fn run(config_path: &Path, config: Config) {
     let addr = config.ui.listen_addr;
     let ui_process = if !config.ui.disabled {
         let bc = bc_ref.clone();
+        let wm = wallet.clone();
         Some(tokio::spawn(async move {
-            ui::launch(addr, bc).await;
+            UI::launch(addr, bc, wm).await;
         }))
     } else {
         None
@@ -63,6 +73,7 @@ async fn run(config_path: &Path, config: Config) {
     if let Some(handle) = api_process {
         handle.await.unwrap();
     }
+    Ok(())
 }
 
 fn show_config(config_path: &Path, config: Config) {
