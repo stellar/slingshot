@@ -292,10 +292,19 @@ mod tests {
     fn test_invalid_label() {
         assert_eq!(AddressLabel::new("".to_string()), None);
         assert_eq!(AddressLabel::new("MixedCase".to_string()), None);
-        let str84 = "12345678901234567890123456789012345678901234567890123456789012345678901234567890aaax".to_string();
+        let str84 =
+            "12345678901234567890123456789012345678901234567890123456789012345678901234567890aaax"
+                .to_string();
         assert_eq!(AddressLabel::new(str84), None);
-        let str83 = "12345678901234567890123456789012345678901234567890123456789012345678901234567890aaa".to_string();
-        assert_eq!(AddressLabel::new(str83.clone()), Some(AddressLabel{inner: str83.clone()}));
+        let str83 =
+            "12345678901234567890123456789012345678901234567890123456789012345678901234567890aaa"
+                .to_string();
+        assert_eq!(
+            AddressLabel::new(str83.clone()),
+            Some(AddressLabel {
+                inner: str83.clone()
+            })
+        );
     }
     #[test]
     fn test_address_encoding() {

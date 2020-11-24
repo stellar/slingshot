@@ -2,6 +2,7 @@ mod bc_annotations;
 mod templates;
 mod ws;
 
+use super::config::Config;
 use super::wallet;
 use super::wallet_manager::WalletRef;
 
@@ -40,15 +41,16 @@ impl UI {
     /// /tx/:id         -> Tx details and status (confirmed, mempool, dropped)
     ///
     /// /ws             -> websocket notifications
-    pub async fn launch(addr: SocketAddr, bc: BlockchainRef, wm: WalletRef) {
+    pub async fn launch(config: Config, bc: BlockchainRef, wm: WalletRef) {
+        let conf = &config.data.ui;
         let ui = UI {
             bc,
             wm,
             tera: templates::init_tera(),
         };
 
-        eprintln!("UI:  http://{}", &addr);
-        warp::serve(ui.into_routes()).run(addr).await;
+        eprintln!("UI:  http://{}", &conf.listen);
+        warp::serve(ui.into_routes()).run(conf.listen).await;
     }
 
     /// Converts the UI controller into the warp filter.

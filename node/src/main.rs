@@ -146,9 +146,10 @@ async fn run(config: Config) -> Result<(), Error> {
     // 2. Spawn the API server
     let addr = config.data.api.listen;
     let api_process = if !config.data.api.disabled {
+        let conf = config.clone();
         let bc = bc_ref.clone();
         let wm = wallet.clone();
-        Some(tokio::spawn(async move { api::launch(addr, bc, wm).await }))
+        Some(tokio::spawn(async move { api::launch(conf, bc, wm).await }))
     } else {
         None
     };
@@ -156,10 +157,11 @@ async fn run(config: Config) -> Result<(), Error> {
     // 3. Spawn the UI server
     let addr = config.data.ui.listen;
     let ui_process = if !config.data.ui.disabled {
+        let conf = config.clone();
         let bc = bc_ref.clone();
         let wm = wallet.clone();
         Some(tokio::spawn(async move {
-            UI::launch(addr, bc, wm).await;
+            UI::launch(conf, bc, wm).await;
         }))
     } else {
         None
