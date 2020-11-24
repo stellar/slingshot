@@ -8,7 +8,7 @@ use curve25519_dalek::scalar::Scalar;
 use serde::{Deserialize, Serialize};
 use zkvm::bulletproofs::BulletproofGens;
 
-use accounts::{Address, Receiver, Sequence, XprvDerivation, XpubDerivation};
+use accounts::{Address, AddressLabel, Receiver, Sequence, XprvDerivation, XpubDerivation};
 use keytree::{Xprv, Xpub};
 use musig::{Multisignature, VerificationKey};
 use token::{Token, XprvDerivation as TKXprvDeriv, XpubDerivation as TKXpubDeriv};
@@ -26,7 +26,7 @@ use rand::{thread_rng, RngCore};
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Wallet {
     /// Prefix used by addresses in this wallet.
-    address_label: String,
+    address_label: AddressLabel,
 
     /// Extended pubkey from which all pubkeys and blinding factors are derived.
     xpub: Xpub,
@@ -136,37 +136,6 @@ enum TxAction {
     Memo(Vec<u8>),
 }
 
-impl TxBuilder {
-    /// Creates an empty tx builder.
-    fn new(xpub: Xpub) -> Self {
-        TxBuilder {
-            xpub,
-            actions: Vec::new(),
-        }
-    }
-    /// Issues the requested amount to the address.
-    pub fn issue_to_address(&mut self, value: ClearValue, address: Address) {
-        self.actions.push(TxAction::IssueToAddress(value, address));
-    }
-    /// Issues the requested amount to the receiver.
-    pub fn issue_to_receiver(&mut self, receiver: Receiver) {
-        self.actions.push(TxAction::IssueToReceiver(receiver));
-    }
-    /// Transfers the requested amount to the address.
-    pub fn transfer_to_address(&mut self, value: ClearValue, address: Address) {
-        self.actions
-            .push(TxAction::TransferToAddress(value, address));
-    }
-    /// Transfers the requested amount to the receiver.
-    pub fn transfer_to_receiver(&mut self, receiver: Receiver) {
-        self.actions.push(TxAction::TransferToReceiver(receiver));
-    }
-    /// Attaches free-form textual memo.
-    pub fn memo(&mut self, memo: Vec<u8>) {
-        self.actions.push(TxAction::Memo(memo));
-    }
-}
-
 /// Kind of the output: is it an incoming payment ("theirs") or a change ("ours")
 #[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
 enum OutputKind {
@@ -182,7 +151,7 @@ enum OutputKind {
 ///    and removed in reverse topological order (children before parents).
 impl Wallet {
     /// Creates a wallet initialized with Xpub from which all keys are derived.
-    pub fn new(address_label: String, xpub: Xpub) -> Self {
+    pub fn new(address_label: AddressLabel, xpub: Xpub) -> Self {
         Self {
             address_label,
             xpub,
@@ -501,7 +470,7 @@ impl Wallet {
                 match action {
                     TxAction::IssueToAddress(value, addr)
                     | TxAction::TransferToAddress(value, addr) => {
-                        if addr.label() != self.address_label {
+                        if addr.label() != &self.address_label {
                             return Err(WalletError::AddressLabelMismatch);
                         }
                         let (recvr, ct) = addr.encrypt(value, &mut rng);
@@ -647,9 +616,7 @@ impl Wallet {
 
         // 2. Check if we have an address, and then try to decrypt the output and get the receiver out.
         if let Some((seq, address)) = self.addresses.get(&k) {
-            let (_addr, deckey) = self
-                .xpub
-                .address_at_sequence(address.label().to_string(), *seq);
+            let (_addr, deckey) = self.xpub.address_at_sequence(address.label().clone(), *seq);
             // Try all data entries - no worries, the decrypt fails quickly on obviously irrelevant entries.
             for data in txlog.data_entries() {
                 if let Some(receiver) = address.decrypt(value, data, &deckey, thread_rng()) {
@@ -658,6 +625,37 @@ impl Wallet {
             }
         }
         None
+    }
+}
+
+impl TxBuilder {
+    /// Creates an empty tx builder.
+    fn new(xpub: Xpub) -> Self {
+        TxBuilder {
+            xpub,
+            actions: Vec::new(),
+        }
+    }
+    /// Issues the requested amount to the address.
+    pub fn issue_to_address(&mut self, value: ClearValue, address: Address) {
+        self.actions.push(TxAction::IssueToAddress(value, address));
+    }
+    /// Issues the requested amount to the receiver.
+    pub fn issue_to_receiver(&mut self, receiver: Receiver) {
+        self.actions.push(TxAction::IssueToReceiver(receiver));
+    }
+    /// Transfers the requested amount to the address.
+    pub fn transfer_to_address(&mut self, value: ClearValue, address: Address) {
+        self.actions
+            .push(TxAction::TransferToAddress(value, address));
+    }
+    /// Transfers the requested amount to the receiver.
+    pub fn transfer_to_receiver(&mut self, receiver: Receiver) {
+        self.actions.push(TxAction::TransferToReceiver(receiver));
+    }
+    /// Attaches free-form textual memo.
+    pub fn memo(&mut self, memo: Vec<u8>) {
+        self.actions.push(TxAction::Memo(memo));
     }
 }
 

@@ -53,32 +53,9 @@ impl UI {
 
     /// Converts the UI controller into the warp filter.
     pub fn into_routes(self) -> BoxedFilter<(impl Reply,)> {
-        let welcome = warp::get()
-            .and(warp::path::end())
-            .and(self.as_filter())
-            .and_then(|ui: UI| ui.require_uninitialized())
-            .and_then(|ui: UI| async move { ui.render("welcome.html") });
-
-        let ledger_new = warp::get()
-            .and(warp::path!("ledger" / "new"))
-            .and(self.as_filter())
-            .and_then(|ui: UI| ui.require_uninitialized())
-            .and_then(|ui: UI| async move {
-                ui.blockchain().write().await.initialize();
-                //ui.redirect_to_root()
-                ui.render("ledger_new.html")
-            });
-
-        let ledger_connect_existing = warp::get()
-            .and(warp::path!("ledger" / "connect"))
-            .and(self.as_filter())
-            .and_then(|ui: UI| ui.require_uninitialized())
-            .and_then(|ui: UI| async move { ui.render("404.html") });
-
         let index = warp::get()
             .and(warp::path::end())
             .and(self.as_filter())
-            .and_then(|ui: UI| ui.require_initialized())
             .and_then(|ui: UI| async move { ui.render("index.html") });
 
         let ws_pool = Arc::new(ws::WebsocketPool::default());
@@ -93,10 +70,7 @@ impl UI {
 
         let static_route = warp::path("static").and(warp::fs::dir("static"));
 
-        welcome
-            .or(ledger_new)
-            .or(ledger_connect_existing)
-            .or(index)
+        index
             .or(ws_route)
             .or(static_route)
             .recover(move |err| {
@@ -116,23 +90,23 @@ impl UI {
         warp::any().map(move || x.clone())
     }
 
-    /// Matches the request if the ledger is not initialized yet.
-    pub async fn require_uninitialized(self) -> Result<Self, warp::Rejection> {
-        if !self.bc.read().await.is_initialized() {
-            Ok(self)
-        } else {
-            Err(warp::reject::not_found())
-        }
-    }
+    // /// Matches the request if the ledger is not initialized yet.
+    // pub async fn require_uninitialized(self) -> Result<Self, warp::Rejection> {
+    //     if !self.bc.read().await.is_initialized() {
+    //         Ok(self)
+    //     } else {
+    //         Err(warp::reject::not_found())
+    //     }
+    // }
 
-    /// Matches the request if the ledger is not initialized yet.
-    pub async fn require_initialized(self) -> Result<Self, warp::Rejection> {
-        if self.bc.read().await.is_initialized() {
-            Ok(self)
-        } else {
-            Err(warp::reject::not_found())
-        }
-    }
+    // /// Matches the request if the ledger is not initialized yet.
+    // pub async fn require_initialized(self) -> Result<Self, warp::Rejection> {
+    //     if self.bc.read().await.is_initialized() {
+    //         Ok(self)
+    //     } else {
+    //         Err(warp::reject::not_found())
+    //     }
+    // }
 
     /// Renders the template.
     pub fn render(&self, name: &'static str) -> Result<impl warp::Reply, Infallible> {
@@ -164,12 +138,4 @@ impl UI {
             ))
         }
     }
-}
-
-/// Returns the current system time.
-pub fn current_timestamp_ms() -> u64 {
-    SystemTime::now()
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .expect("SystemTime should work")
-        .as_millis() as u64
 }

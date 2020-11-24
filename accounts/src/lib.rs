@@ -69,6 +69,6 @@ mod receiver;
 #[cfg(test)]
 mod tests;
 
-pub use address::Address;
+pub use address::{AddressLabel,Address};
 pub use derivation::{Sequence, XprvDerivation, XpubDerivation};
 pub use receiver::{Receiver, ReceiverID, ReceiverReply, ReceiverWitness};

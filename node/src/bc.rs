@@ -1,29 +1,36 @@
-use std::path::PathBuf;
+use std::fs::{self, File};
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::sync::broadcast;
 use tokio::sync::RwLock;
 
-use crate::config;
+use blockchain::BlockchainState;
+
+use crate::config::Config;
+use crate::errors::Error;
 
 const BC_STATE_FILENAME: &'static str = "blockchain_state";
 
+/// Interface for initializing and launching blockchain state machine.
+pub struct Blockchain;
+
+/// Idle state of the blockchain
+pub struct BlockchainIdle {
+    config: Config,
+    state: Option<BlockchainState>,
+}
+
 #[derive(Debug)]
-pub struct Blockchain {
-    /// Directory where all blockchain state and archive data is stored.
-    storage_path: PathBuf,
+pub struct BlockchainRunning {
+    /// Configuration
+    config: Config,
 
     /// Sender end of the notification channel
     notifications_sender: broadcast::Sender<BlockchainEvent>,
-
-    /// P2P networking options
-    p2p_config: config::P2P,
-
-    /// Blockchain configuration options
-    blockchain_config: config::Blockchain,
 }
 
 /// Reference to the Blockchain instance
-pub type BlockchainRef = Arc<RwLock<Blockchain>>;
+pub type BlockchainRef = Arc<RwLock<BlockchainRunning>>;
 
 /// Receiver of the blockchain events.
 pub type BlockchainEventReceiver = broadcast::Receiver<BlockchainEvent>;
@@ -33,42 +40,63 @@ pub type BlockchainEventReceiver = broadcast::Receiver<BlockchainEvent>;
 pub enum BlockchainEvent {}
 
 impl Blockchain {
-    /// Launches the blockchain instance with the given configuration.
-    /// If the blockchain is not initialized yet, this instance provides ways to initialize it.
-    pub async fn launch(
-        storage_path: PathBuf,
-        p2p_config: config::P2P,
-        blockchain_config: config::Blockchain,
-    ) -> BlockchainRef {
+    /// Sets up a blockchain instance, initialized or not.
+    pub fn new(config: Config) -> Result<BlockchainIdle, Error> {
+        let path = config.blockchain_state_filepath();
+        let maybe_state = if path.exists() {
+            Some(bincode::deserialize_from(File::open(&path)?)?)
+        } else {
+            None
+        };
+        Ok(BlockchainIdle {
+            config,
+            state: maybe_state,
+        })
+    }
+}
+
+impl BlockchainIdle {
+    /// Returns true if blockchain is initialized
+    pub fn is_initialized(&self) -> bool {
+        self.state.is_some()
+    }
+
+    /// Initializes blockchain
+    pub fn init(mut self, state: BlockchainState) -> Result<Self, Error> {
+        if self.is_initialized() {
+            return Err(Error::BlockchainAlreadyExists);
+        }
+        let path = self.config.blockchain_state_filepath();
+        if let Some(folder) = path.parent() {
+            fs::create_dir_all(folder)?;
+        }
+        bincode::serialize_into(File::create(path)?, &state)?;
+        self.state = Some(state);
+        Ok(self)
+    }
+
+    /// Launches the blockchain p2p stack and returns the communication reference to it.
+    pub async fn launch(self) -> Result<BlockchainRef, Error> {
         // TODO: make this channel capacity a config option
         let (notifications_sender, _recv) = broadcast::channel(1000);
 
-        let bc = Arc::new(RwLock::new(Self {
-            storage_path,
+        let bc = Arc::new(RwLock::new(BlockchainRunning {
+            config: self.config,
             notifications_sender,
-            p2p_config,
-            blockchain_config,
         }));
 
-        // TODO: Launch p2p stack if we have the blockchain initialized.
+        // TODO: launch p2p stack
 
-        bc
+        Ok(bc)
     }
+}
 
+impl BlockchainRunning {
     /// Creates a subscription for notifications and returns a receiving end of a broadcast channel.
     pub async fn subscribe(&self) -> BlockchainEventReceiver {
         self.notifications_sender.subscribe()
     }
 
-    /// Returns true if blockchain is initialized
-    pub fn is_initialized(&self) -> bool {
-        let mut path = self.storage_path.clone();
-        path.push(BC_STATE_FILENAME);
-        path.exists()
-    }
-
-    /// Initializes a new chain if needed.
-    pub fn initialize(&mut self) {
-        // launch the stack
-    }
+    /// Stops the blockchain stack
+    pub async fn stop(&self) {}
 }

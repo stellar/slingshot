@@ -5,7 +5,7 @@ use merlin::Transcript;
 use musig::VerificationKey;
 use zkvm::{ClearValue, TranscriptProtocol};
 
-use super::{Address, Receiver};
+use super::{Address, AddressLabel, Receiver};
 
 /// Sequence number for derivation
 pub type Sequence = u64;
@@ -28,7 +28,7 @@ pub trait XpubDerivation {
     fn key_at_sequence(&self, sequence: Sequence) -> VerificationKey;
 
     /// Derives an Address for a given sequence number.
-    fn address_at_sequence(&self, label: String, sequence: Sequence) -> (Address, Scalar);
+    fn address_at_sequence(&self, label: AddressLabel, sequence: Sequence) -> (Address, Scalar);
 
     /// Creates a new receiver for the given sequence number and value
     fn receiver_at_sequence(&self, sequence: Sequence, value: ClearValue) -> Receiver;
@@ -46,7 +46,7 @@ impl XpubDerivation for Xpub {
         self.derive_key(|t| t.append_u64(b"sequence", sequence))
     }
 
-    fn address_at_sequence(&self, label: String, sequence: Sequence) -> (Address, Scalar) {
+    fn address_at_sequence(&self, label: AddressLabel, sequence: Sequence) -> (Address, Scalar) {
         let ctrl_key = self.key_at_sequence(sequence);
         // Note: we derive encryption privkey from the xpub public key, effectively binding it
         // to the secrecy of only the derivation key of xpub.

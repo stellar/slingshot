@@ -27,12 +27,41 @@ use zkvm::{ClearValue, Commitment, Predicate, TranscriptProtocol, Value};
 use super::Receiver;
 
 use bech32::{self, FromBase32, ToBase32};
-use std::fmt;
+use std::{fmt, ops::Deref};
+
+/// Label address that is a valid single-case 1-83 ASCII
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct AddressLabel {
+    inner: String,
+}
+
+impl AddressLabel {
+    /// Validates the address label
+    pub fn new(label: String) -> Option<Self> {
+        if let Ok(_) = bech32::encode(&label, [0x42u8; 1].to_base32()) {
+            Some(Self { inner: label })
+        } else {
+            None
+        }
+    }
+
+    /// Casts the label to the plain string reference.
+    pub fn as_str(&self) -> &str {
+        &self.inner
+    }
+}
+
+impl Deref for AddressLabel {
+    type Target = str;
+    fn deref(&self) -> &Self::Target {
+        &self.inner
+    }
+}
 
 /// Address to which funds can be sent
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Address {
-    label: String,
+    label: AddressLabel,
     control_key: CompressedRistretto,
     encryption_key: CompressedRistretto,
     encryption_key_decompressed: RistrettoPoint,
@@ -41,7 +70,7 @@ pub struct Address {
 impl Address {
     /// Creates a new address with a label.
     pub(crate) fn new(
-        label: String,
+        label: AddressLabel,
         control_key: CompressedRistretto,
         encryption_key: RistrettoPoint,
     ) -> Self {
@@ -54,7 +83,7 @@ impl Address {
     }
 
     /// Returns the label of this address.
-    pub fn label(&self) -> &str {
+    pub fn label(&self) -> &AddressLabel {
         &self.label
     }
 
@@ -86,7 +115,7 @@ impl Address {
         }
         let enckey = CompressedRistretto::from_slice(&buf[32..64]).decompress()?;
         Some(Address {
-            label,
+            label: AddressLabel { inner: label },
             control_key: CompressedRistretto::from_slice(&buf[0..32]),
             encryption_key: enckey.compress(),
             encryption_key_decompressed: enckey,
@@ -260,8 +289,17 @@ mod tests {
     use zkvm::VerificationKey;
 
     #[test]
+    fn test_invalid_label() {
+        assert_eq!(AddressLabel::new("".to_string()), None);
+        assert_eq!(AddressLabel::new("MixedCase".to_string()), None);
+        let str84 = "12345678901234567890123456789012345678901234567890123456789012345678901234567890aaax".to_string();
+        assert_eq!(AddressLabel::new(str84), None);
+        let str83 = "12345678901234567890123456789012345678901234567890123456789012345678901234567890aaa".to_string();
+        assert_eq!(AddressLabel::new(str83.clone()), Some(AddressLabel{inner: str83.clone()}));
+    }
+    #[test]
     fn test_address_encoding() {
-        let label = "test".to_string();
+        let label = AddressLabel::new("test".to_string()).expect("Valid label");
         let ctrl_scalar = Scalar::from(42u64);
         let encr_scalar = Scalar::from(24u64);
 
@@ -285,7 +323,7 @@ mod tests {
 
     #[test]
     fn test_encryption() {
-        let label = "test".to_string();
+        let label = AddressLabel::new("test".to_string()).expect("Valid label");
         let ctrl_scalar = Scalar::from(42u64);
         let encr_scalar = Scalar::from(24u64);
 

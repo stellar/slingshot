@@ -1,4 +1,5 @@
 use std;
+use std::path::PathBuf;
 use thiserror::Error as ThisError;
 
 /// All error types in the node implementation
@@ -12,6 +13,18 @@ pub enum Error {
 
     #[error("Wallet is not initialized")]
     WalletNotInitialized,
+
+    #[error("Wallet is already initialized")]
+    WalletAlreadyExists,
+
+    #[error("Blockchain is already initialized")]
+    BlockchainAlreadyExists,
+
+    #[error("Configuration file does not exist")]
+    ConfigNotFound(PathBuf),
+
+    #[error("Configuration error: {0}")]
+    ConfigError(toml::de::Error),
 }
 
 impl From<std::io::Error> for Error {

@@ -1,0 +1,23 @@
+[ui]
+listen = "127.0.0.1:4000"      # socket address for the webserver running the UI
+disabled = false               # whether the UI server should be disabled
+
+[api]
+listen = "127.0.0.1:4001"      # socket address for the webserver running the API
+disabled = false               # whether the API server should be disabled
+
+[p2p]
+listen = "0.0.0.0:0"           # socket address to listen in the peer-to-peer network
+
+[blockchain]
+storage_path = "./storage"     # location of the stored data 
+                                # (if relative, resolved based on the config file location,
+                                #  which is ~/.slingshot/config.toml by default)
+mempool_max_size = 10_000_000  # maximum size in bytes for the mempool transactions
+mempool_min_feerate = 0        # minimum feerate for the transactions to be included in mempool
+
+[wallet]
+storage_path = "./wallet"      # location of the wallet keys and account data
+                                # (if relative, resolved based on the config file location,
+                                #  which is ~/.slingshot/wallet by default)
+
