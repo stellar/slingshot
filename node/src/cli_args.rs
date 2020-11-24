@@ -24,6 +24,7 @@ Please use one of the following subcommands:
 
     slingshot run      # run the node
     slingshot config   # show the current configuration
+    slingshot init     # initialize the blockchain state and wallet
     slingshot help     # list command line options
 "##
     })?;

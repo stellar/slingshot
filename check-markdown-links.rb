@@ -134,6 +134,7 @@ def extract_heading(line)
     depth = prefix.size
     anchor = "#" + title.
           downcase.
+          gsub(/[\/:]/,""). # titles like "/url/:id" are transformed by Github into "#urlid" anchors
           gsub(/\W+/,"-").gsub(/(\d)\-(\d)/,"\\1\\2").
           gsub(/^\-+/,"").
           gsub(/\-+$/,"")

@@ -7,6 +7,7 @@
 //! * [ZkVM API](https://github.com/stellar/slingshot/blob/main/zkvm/docs/zkvm-api.md) — how to create transactions with ZkVM.
 
 pub extern crate bulletproofs;
+pub extern crate curve25519_dalek;
 pub extern crate merkle;
 extern crate serde;
 

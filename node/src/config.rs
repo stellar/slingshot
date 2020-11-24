@@ -1,10 +1,25 @@
 use serde::{Deserialize, Serialize};
+use std::fs;
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 
+use crate::errors::Error;
+
+/// Default config location
+pub const DEFAULT_CONFIG_LOCATION: &'static str = "~/.slingshot/config.toml";
+const BC_STATE_FILENAME: &'static str = "blockchain_state";
+
+#[derive(Clone, Debug)]
+pub struct Config {
+    /// Config data
+    pub data: ConfigData,
+
+    /// Config path
+    pub path: PathBuf,
+}
 /// Configuration file for the node.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
-pub struct Config {
+pub struct ConfigData {
     /// UI options
     #[serde(default)]
     pub ui: UI,
@@ -31,7 +46,7 @@ pub struct Config {
 pub struct UI {
     /// Listening address for the UI webserver.
     #[serde(default = "UI::default_listen_addr")]
-    pub listen_addr: SocketAddr,
+    pub listen: SocketAddr,
 
     /// Disable UI by setting ui.disabled=true. Default is false (enabled).
     #[serde(default)]
@@ -43,7 +58,7 @@ pub struct UI {
 pub struct API {
     /// Listening address for the API webserver.
     #[serde(default = "API::default_listen_addr")]
-    pub listen_addr: SocketAddr,
+    pub listen: SocketAddr,
 
     /// Disable API by setting api.disabled=true. Default is false (enabled).
     #[serde(default)]
@@ -56,6 +71,10 @@ pub struct P2P {
     /// Listening address for the P2P webserver.
     #[serde(default = "P2P::default_listen_addr")]
     pub listen_addr: SocketAddr,
+
+    /// List of initial peers
+    #[serde(default)]
+    pub peers: Vec<SocketAddr>,
 }
 
 /// P2P configuration options
@@ -96,6 +115,7 @@ impl Config {
 
     [p2p]
     listen = "0.0.0.0:0"           # socket address to listen in the peer-to-peer network
+    peers = ["127.0.0.0:4000"]     # list of initial peers to connect to
     
     [blockchain]
     storage_path = "./storage"     # location of the stored data 
@@ -110,6 +130,51 @@ impl Config {
                                    #  which is ~/.slingshot/wallet by default)
 "##
     }
+
+    /// Reads the config from the file
+    pub fn load(path: Option<PathBuf>) -> Result<Config, Error> {
+        let use_default = path.is_none();
+        let path = path
+            .map(|p| expand_path(p))
+            .unwrap_or_else(|| expand_path(DEFAULT_CONFIG_LOCATION));
+
+        if path.exists() {
+            let string = fs::read_to_string(&path)?;
+            let data = toml::from_str(&string).map_err(|e| Error::ConfigError(e))?;
+            Ok(Config { data, path })
+        } else if use_default {
+            Ok(Config {
+                data: ConfigData::default(),
+                path,
+            })
+        } else {
+            Err(Error::ConfigNotFound(path))
+        }
+    }
+
+    /// Absolute wallet storage path
+    pub fn wallet_path(&self) -> PathBuf {
+        let mut path = self.path.clone();
+        path.pop(); // remove the filename (config.toml)
+                    // push the relative storage path (if absolute, it'll replace the whole path)
+        path.push(&self.data.wallet.storage_path);
+        path
+    }
+
+    /// Absolute blockchain storage path
+    pub fn blockchain_path(&self) -> PathBuf {
+        let mut path = self.path.clone();
+        path.pop(); // remove the filename (config.toml)
+        path.push(&self.data.blockchain.storage_path); // push the relative storage path (if absolute, it'll replace the whole path)
+        path
+    }
+
+    /// Path to the blockchain state file
+    pub fn blockchain_state_filepath(&self) -> PathBuf {
+        let mut path = self.blockchain_path();
+        path.push(BC_STATE_FILENAME);
+        path
+    }
 }
 
 impl UI {
@@ -122,7 +187,7 @@ impl UI {
 impl Default for UI {
     fn default() -> Self {
         UI {
-            listen_addr: Self::default_listen_addr(),
+            listen: Self::default_listen_addr(),
             disabled: false,
         }
     }
@@ -138,7 +203,7 @@ impl API {
 impl Default for API {
     fn default() -> Self {
         API {
-            listen_addr: Self::default_listen_addr(),
+            listen: Self::default_listen_addr(),
             disabled: false,
         }
     }
@@ -155,19 +220,12 @@ impl Default for P2P {
     fn default() -> Self {
         P2P {
             listen_addr: Self::default_listen_addr(),
+            peers: Vec::new(),
         }
     }
 }
 
 impl Blockchain {
-    /// Computes the absolute storage path based on the config file location
-    pub fn absolute_storage_path(&self, config_path: &Path) -> PathBuf {
-        let mut path = config_path.to_path_buf();
-        path.pop(); // remove the filename (config.toml)
-        path.push(&self.storage_path); // push the relative storage path (if absolute, it'll replace the whole path)
-        path
-    }
-
     /// Default storage path
     pub fn default_storage_path() -> PathBuf {
         PathBuf::from("./storage")
@@ -189,14 +247,6 @@ impl Default for Blockchain {
 }
 
 impl Wallet {
-    /// Computes the absolute storage path based on the config file location
-    pub fn absolute_storage_path(&self, config_path: &Path) -> PathBuf {
-        let mut path = config_path.to_path_buf();
-        path.pop(); // remove the filename (config.toml)
-        path.push(&self.storage_path); // push the relative storage path (if absolute, it'll replace the whole path)
-        path
-    }
-
     /// Default storage path
     pub fn default_storage_path() -> PathBuf {
         PathBuf::from("./wallet")
@@ -209,4 +259,15 @@ impl Default for Wallet {
             storage_path: Self::default_storage_path(),
         }
     }
+}
+
+fn expand_path(path: impl Into<PathBuf>) -> PathBuf {
+    let mut path = path.into();
+    if let Ok(p) = path.strip_prefix("~/") {
+        if let Some(mut home) = dirs::home_dir() {
+            home.push(p);
+            path = home;
+        }
+    }
+    path
 }

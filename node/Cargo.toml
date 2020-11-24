@@ -5,7 +5,9 @@ authors = ["Oleg Andreev <oleganza@gmail.com>"]
 edition = "2018"
 
 [dependencies]
-curve25519-dalek = { version = "2", features = ["serde"] }
+thiserror = "1"
+clap = "~2.33.3"
+curve25519-dalek = { version = "3", features = ["serde"] }
 merlin = "2"
 rand = "0.7"
 dotenv = "0.9.0"
@@ -18,6 +20,8 @@ warp = "0.2"
 tera = "1"
 notify = "4"
 toml = "0.5"
+bincode = "1.3.1"
+dirs = "3.0.1"
 
 [dependencies.blockchain]
 path = "../blockchain"

@@ -5,7 +5,7 @@ authors = ["Tess Rinearson <tess.rinearson@gmail.com>", "Oleg Andreev <oleganza@
 edition = "2018"
 
 [dependencies]
-curve25519-dalek = { version = "2", features = ["serde"] }
+curve25519-dalek = { version = "3", features = ["serde"] }
 serde = { version = "1.0", features=["derive"] }
 merlin = "2"
 rand = "0.7"
