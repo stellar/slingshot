@@ -11,7 +11,7 @@ merlin = "2"
 postgres = "0.15"
 rand = "0.7"
 subtle = "2"
-curve25519-dalek = { version = "2", features = ["serde"] }
+curve25519-dalek = { version = "3", features = ["serde"] }
 
 [dependencies.bulletproofs]
 git = "https://github.com/dalek-cryptography/bulletproofs"

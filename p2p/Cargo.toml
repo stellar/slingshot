@@ -12,7 +12,7 @@ byteorder = "1"
 merlin = "2.0"
 rand_core = "0.5"
 subtle = "2"
-curve25519-dalek = { version = "2.0", features = ["serde"] }
+curve25519-dalek = { version = "3", features = ["serde"] }
 hex = "^0.3"
 futures = "0.3"
 tokio = {version = "0.2", features=["full","sync"]}
