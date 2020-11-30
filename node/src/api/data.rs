@@ -5,6 +5,7 @@ use blockchain::BlockHeader;
 use accounts::Receiver;
 
 use super::serde_utils::BigArray;
+use std::str::FromStr;
 
 /// Stats about unconfirmed transactions.
 #[derive(Serialize)]
@@ -103,4 +104,21 @@ pub enum BuildTxAction {
     TransferToAddress([u8; 32], u64, String),
     TransferToReceiver(Receiver),
     Memo(Vec<u8>),
+}
+
+#[derive(Debug, Deserialize)]
+pub struct Cursor {
+    // TODO
+}
+
+#[derive(Deserialize)]
+pub struct HexId([u8; 32]);
+
+impl FromStr for HexId {
+    type Err = serde_json::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let array = serde_json::from_str(s)?;
+        Ok(Self(array))
+    }
 }

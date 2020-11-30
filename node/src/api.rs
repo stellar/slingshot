@@ -17,11 +17,12 @@ pub async fn launch(config: Config, bc: BlockchainRef, wallet: WalletRef) {
         return;
     }
     let wallet_routes = wallet::routes();
+    let network_routes = network::routes();
 
     let not_found = warp::any()
         .map(|| warp::reply::with_status("Not found.", warp::http::StatusCode::NOT_FOUND));
 
-    let routes = wallet_routes.or(not_found);
+    let routes = wallet_routes.or(network_routes).or(not_found);
 
     eprintln!("API: http://{}", &conf.listen);
     warp::serve(routes).run(conf.listen).await;

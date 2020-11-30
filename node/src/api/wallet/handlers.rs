@@ -1,5 +1,6 @@
 use std::convert::Infallible;
 use super::requests;
+use crate::api::data::Cursor;
 
 /// Creates a new wallet
 pub(super) async fn new(request: requests::NewWallet) -> Result<impl warp::Reply, Infallible> {
@@ -12,7 +13,7 @@ pub(super) async fn balance(wallet_id: u64) -> Result<impl warp::Reply, Infallib
 }
 
 /// Lists annotated transactions.
-pub(super) async fn txs(wallet_id: u64, cursor: requests::Cursor) -> Result<impl warp::Reply, Infallible> {
+pub(super) async fn txs(wallet_id: u64, cursor: Cursor) -> Result<impl warp::Reply, Infallible> {
     Ok("Lists annotated transactions.")
 }
 

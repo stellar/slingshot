@@ -10,11 +10,6 @@ pub struct NewWallet {
 }
 
 #[derive(Debug, Deserialize)]
-pub struct Cursor {
-    // TODO
-}
-
-#[derive(Debug, Deserialize)]
 pub struct NewReceiver {
     flv: [u8; 32],
     qty: u64,

@@ -4,6 +4,7 @@ mod handlers;
 
 use warp::Filter;
 use warp::filters::path::param;
+use crate::api::data::Cursor;
 
 pub fn routes() -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
     new()
@@ -35,7 +36,7 @@ fn txs() -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + C
     use warp::*;
 
     path!("v1" / "wallet" / u64 / "txs")
-        .and(query::<requests::Cursor>())
+        .and(query::<Cursor>())
         .and(get())
         .and_then(handlers::txs)
 }
