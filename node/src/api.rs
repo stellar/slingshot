@@ -1,3 +1,9 @@
+mod wallet;
+mod requests;
+mod responses;
+pub(self) mod serde_utils;
+mod data;
+
 use std::net::SocketAddr;
 use warp::Filter;
 
@@ -11,13 +17,12 @@ pub async fn launch(config: Config, bc: BlockchainRef, wallet: WalletRef) {
     if conf.disabled {
         return;
     }
-    let echo =
-        warp::path!("v1" / "echo" / String).map(|thingy| format!("API v1 echo: {}!", thingy));
+    let wallet_routes = wallet::routes();
 
     let not_found = warp::any()
         .map(|| warp::reply::with_status("Not found.", warp::http::StatusCode::NOT_FOUND));
 
-    let routes = echo.or(not_found);
+    let routes = wallet_routes.or(not_found);
 
     eprintln!("API: http://{}", &conf.listen);
     warp::serve(routes).run(conf.listen).await;
