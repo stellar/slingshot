@@ -1,5 +1,5 @@
 use serde::{Deserialize};
-use super::serde_utils::BigArray;
+use super::super::serde_utils::BigArray;
 use crate::api::data::BuildTxAction;
 
 #[derive(Debug, Deserialize)]
