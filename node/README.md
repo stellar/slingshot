@@ -6,7 +6,7 @@ Blockchain node application.
 
 Choose a prefix for the addresses and create a new ledger:
 
-    slingshot new --prefix=test
+    cargo run -- new --prefix=test
 
 This generates a random block signing key and places it in `<blockchain.storage_path>/signer.key`.
 
@@ -20,7 +20,7 @@ TODO: we need a format for bootstrap data (utreexo commitment, address prefix, s
 
 Choose a prefix for the addresses and create a new ledger:
 
-    slingshot connect ...
+    cargo run -- connect ...
 
 This generates a wallet key and places it in `<wallet.storage_path>/wallet.xprv`
 
@@ -30,7 +30,7 @@ This generates a wallet key and places it in `<wallet.storage_path>/wallet.xprv`
 
 Launch the initialized node to catchup with the network:
 
-    slingshot run
+    cargo run -- run
 
 Then, open http://localhost:3000 in your browser.
 
