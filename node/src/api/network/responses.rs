@@ -1,7 +1,6 @@
 use serde::Serialize;
 
 use crate::api::data::MempoolStatus;
-use crate::api::serde_utils::BigArray;
 use zkvm::{Tx, TxHeader};
 use blockchain::{BlockHeader, BlockTx};
 
@@ -35,14 +34,4 @@ pub struct TxStatus {
     confirmed: bool,
     block_height: u64,
     block_id: [u8; 32],
-}
-
-#[derive(Serialize)]
-pub struct RawTx {
-    header: TxHeader,
-    program: Vec<u8>,
-    #[serde(with = "BigArray")]
-    signature: [u8; 64],
-    r1cs_proof: Vec<u8>,
-    utreexo_proofs: Vec<Vec<u8>>,
 }
