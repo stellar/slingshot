@@ -34,7 +34,7 @@ pub(super) async fn new(request: requests::NewWallet, wallet: WalletRef) -> Resu
 
 /// Returns wallet's balance.
 pub(super) async fn balance(wallet: WalletRef) -> Result<Response<responses::Balance>, Infallible> {
-    let mut wallet_ref = wallet.write().await;
+    let mut wallet_ref = wallet.read().await;
     let wallet = match wallet_ref.wallet_ref() {
         Ok(w) => w,
         Err(_) => return Ok(error::wallet_not_exists()),
