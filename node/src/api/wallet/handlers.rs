@@ -9,6 +9,7 @@ use crate::api::response::{Response, error};
 use crate::api::wallet::{responses};
 use crate::errors::Error;
 use crate::api::wallet::responses::NewAddress;
+use curve25519_dalek::scalar::Scalar;
 
 /// Creates a new wallet
 pub(super) async fn new(request: requests::NewWallet, wallet: WalletRef) -> Result<Response<responses::NewWallet>, Infallible> {
@@ -68,8 +69,20 @@ pub(super) async fn address(wallet: WalletRef) -> Result<Response<NewAddress>, I
 }
 
 /// Generates a new receiver.
-pub(super) async fn receiver(req: requests::NewReceiver, wallet: WalletRef) -> Result<impl warp::Reply, Infallible> {
-    Ok("Generates a new receiver.")
+pub(super) async fn receiver(req: requests::NewReceiver, wallet: WalletRef) -> Result<Response<responses::NewReceiver>, Infallible> {
+    let mut wallet_ref = wallet.write().await;
+    let update_wallet = |wallet: &mut Wallet| -> Result<accounts::Receiver, crate::Error> {
+        let requests::NewReceiver { flv, qty, exp } = req; // TODO: expiration time?
+        let (_, receiver) = wallet.create_receiver(zkvm::ClearValue { qty, flv: Scalar::from_bits(flv) });
+        Ok(receiver)
+    };
+    match wallet_ref.update_wallet(update_wallet) {
+        Ok(receiver) => {
+            Ok(Response::ok(responses::NewReceiver { receiver }))
+        },
+        Err(crate::Error::WalletNotInitialized) => Ok(error::wallet_not_exists()),
+        _ => Ok(error::wallet_updating_error())
+    }
 }
 
 /// Generates a new receiver.

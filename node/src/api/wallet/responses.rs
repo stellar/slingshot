@@ -23,7 +23,7 @@ pub struct NewAddress {
 }
 
 #[derive(Serialize)]
-pub struct NewReceiverResponse {
+pub struct NewReceiver {
     pub receiver: Receiver,
 }
 
