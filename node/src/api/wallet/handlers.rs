@@ -7,7 +7,6 @@ use accounts::AddressLabel;
 use keytree::Xpub;
 use crate::api::response::{Response, error};
 use crate::api::wallet::{responses};
-use crate::errors::Error;
 
 /// Creates a new wallet
 pub(super) async fn new(request: requests::NewWallet, wallet: WalletRef) -> Result<Response<responses::NewWallet>, Infallible> {
@@ -33,17 +32,8 @@ pub(super) async fn new(request: requests::NewWallet, wallet: WalletRef) -> Resu
 }
 
 /// Returns wallet's balance.
-pub(super) async fn balance(wallet: WalletRef) -> Result<Response<responses::Balance>, Infallible> {
-    let mut wallet_ref = wallet.write().await;
-    let wallet = match wallet_ref.wallet_ref() {
-        Ok(w) => w,
-        Err(_) => return Ok(error::wallet_not_exists()),
-    };
-    let mut balances = Vec::new();
-    wallet.balances().for_each(|balance| {
-        balances.push((balance.flavor.to_bytes(), balance.total));
-    });
-    Ok(Response::ok(responses::Balance { balances }))
+pub(super) async fn balance(wallet: WalletRef) -> Result<impl warp::Reply, Infallible> {
+    Ok("Returns wallet's balance.")
 }
 
 /// Lists annotated transactions.
