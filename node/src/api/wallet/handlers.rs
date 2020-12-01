@@ -32,26 +32,26 @@ pub(super) async fn new(request: requests::NewWallet, wallet: WalletRef) -> Resu
 }
 
 /// Returns wallet's balance.
-pub(super) async fn balance() -> Result<impl warp::Reply, Infallible> {
+pub(super) async fn balance(wallet: WalletRef) -> Result<impl warp::Reply, Infallible> {
     Ok("Returns wallet's balance.")
 }
 
 /// Lists annotated transactions.
-pub(super) async fn txs(cursor: Cursor) -> Result<impl warp::Reply, Infallible> {
+pub(super) async fn txs(cursor: Cursor, wallet: WalletRef) -> Result<impl warp::Reply, Infallible> {
     Ok("Lists annotated transactions.")
 }
 
 /// Generates a new address.
-pub(super) async fn address() -> Result<impl warp::Reply, Infallible> {
+pub(super) async fn address(wallet: WalletRef) -> Result<impl warp::Reply, Infallible> {
     Ok("Generates a new address.")
 }
 
 /// Generates a new receiver.
-pub(super) async fn receiver(req: requests::NewReceiver) -> Result<impl warp::Reply, Infallible> {
+pub(super) async fn receiver(req: requests::NewReceiver, wallet: WalletRef) -> Result<impl warp::Reply, Infallible> {
     Ok("Generates a new receiver.")
 }
 
 /// Generates a new receiver.
-pub(super) async fn buildtx(req: requests::BuildTx) -> Result<impl warp::Reply, Infallible> {
+pub(super) async fn buildtx(req: requests::BuildTx, wallet: WalletRef) -> Result<impl warp::Reply, Infallible> {
     Ok("Generates a new receiver.")
 }

@@ -10,11 +10,11 @@ use std::convert::Infallible;
 
 pub fn routes(wallet: WalletRef) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
     new(wallet.clone())
-        .or(balance())
-        .or(txs())
-        .or(address())
-        .or(receiver())
-        .or(buildtx())
+        .or(balance(wallet.clone()))
+        .or(txs(wallet.clone()))
+        .or(address(wallet.clone()))
+        .or(receiver(wallet.clone()))
+        .or(buildtx(wallet))
 }
 
 fn new(wallet: WalletRef) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
@@ -27,46 +27,51 @@ fn new(wallet: WalletRef) -> impl Filter<Extract = impl warp::Reply, Error = war
         .and_then(handlers::new)
 }
 
-fn balance() -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
+fn balance(wallet: WalletRef) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
     use warp::*;
 
     path!("v1" / "wallet" / "balance")
         .and(get())
+        .and(with_wallet(wallet))
         .and_then(handlers::balance)
 }
 
-fn txs() -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
+fn txs(wallet: WalletRef) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
     use warp::*;
 
     path!("v1" / "wallet" / "txs")
         .and(query::<Cursor>())
         .and(get())
+        .and(with_wallet(wallet))
         .and_then(handlers::txs)
 }
 
-fn address() -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
+fn address(wallet: WalletRef) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
     use warp::*;
 
     path!("v1" / "wallet" / "address")
         .and(get())
+        .and(with_wallet(wallet))
         .and_then(handlers::address)
 }
 
-fn receiver() -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
+fn receiver(wallet: WalletRef) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
     use warp::*;
 
     path!("v1" / "wallet" / "receiver")
         .and(post())
         .and(body::json())
+        .and(with_wallet(wallet))
         .and_then(handlers::receiver)
 }
 
-fn buildtx() -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
+fn buildtx(wallet: WalletRef) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
     use warp::*;
 
     path!("v1" / "wallet" / "buildtx")
         .and(post())
         .and(body::json())
+        .and(with_wallet(wallet))
         .and_then(handlers::buildtx)
 }
 
