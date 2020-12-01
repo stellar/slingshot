@@ -30,7 +30,7 @@ fn new(wallet: WalletRef) -> impl Filter<Extract = impl warp::Reply, Error = war
 fn balance() -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
     use warp::*;
 
-    path!("v1" / "wallet" / u64 / "balance")
+    path!("v1" / "wallet" / "balance")
         .and(get())
         .and_then(handlers::balance)
 }
@@ -38,7 +38,7 @@ fn balance() -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection>
 fn txs() -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
     use warp::*;
 
-    path!("v1" / "wallet" / u64 / "txs")
+    path!("v1" / "wallet" / "txs")
         .and(query::<Cursor>())
         .and(get())
         .and_then(handlers::txs)
@@ -47,7 +47,7 @@ fn txs() -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + C
 fn address() -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
     use warp::*;
 
-    path!("v1" / "wallet" / u64 / "address")
+    path!("v1" / "wallet" / "address")
         .and(get())
         .and_then(handlers::address)
 }
@@ -55,7 +55,7 @@ fn address() -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection>
 fn receiver() -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
     use warp::*;
 
-    path!("v1" / "wallet" / u64 / "receiver")
+    path!("v1" / "wallet" / "receiver")
         .and(post())
         .and(body::json())
         .and_then(handlers::receiver)
@@ -64,7 +64,7 @@ fn receiver() -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection
 fn buildtx() -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
     use warp::*;
 
-    path!("v1" / "wallet" / u64 / "buildtx")
+    path!("v1" / "wallet" / "buildtx")
         .and(post())
         .and(body::json())
         .and_then(handlers::buildtx)
