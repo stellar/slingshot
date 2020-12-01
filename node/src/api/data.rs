@@ -11,31 +11,31 @@ use std::str::FromStr;
 #[derive(Serialize)]
 pub struct MempoolStatus {
     /// Total number of transactions
-    count: u64,
+    pub count: u64,
     /// Total size of all transactions in the mempool
-    size: u64,
+    pub size: u64,
     /// Lowest feerate for inclusing in the block
-    feerate: u64,
+    pub feerate: u64,
 }
 
 /// Description of the current blockchain state.
 #[derive(Serialize)]
 pub struct State {
     // Block header
-    tip: BlockHeader,
+    pub tip: BlockHeader,
     // The utreexo state
     #[serde(with = "BigArray")]
-    utreexo: [Option<[u8; 32]>; 64]
+    pub utreexo: [Option<[u8; 32]>; 64]
 }
 
 /// Description of a connected peer.
 #[derive(Serialize)]
 pub struct Peer {
-    id: [u8; 32],
-    since: u64,
+    pub id: [u8; 32],
+    pub since: u64,
     /// ipv6 address format
-    addr: [u8; 16],
-    priority: u64,
+    pub addr: [u8; 16],
+    pub priority: u64,
 }
 
 #[derive(Serialize)]
@@ -50,51 +50,51 @@ pub enum AnnotatedAction {
 #[derive(Serialize)]
 pub struct IssueAction {
     // Index of the txlog entry
-    entry: u32,
-    qty: u64,
-    flv: [u8; 32],
+    pub entry: u32,
+    pub qty: u64,
+    pub flv: [u8; 32],
 }
 
 #[derive(Serialize)]
 pub struct SpendAction {
     // Index of the txlog entry
-    entry: u32,
-    qty: u64,
-    flv: [u8; 32],
+    pub entry: u32,
+    pub qty: u64,
+    pub flv: [u8; 32],
     // Identifier of the account sending funds
-    account: [u8; 32],
+    pub account: [u8; 32],
 }
 
 #[derive(Serialize)]
 pub struct ReceiveAction {
     // Index of the txlog entry
-    entry: u32,
-    qty: u64,
-    flv: [u8; 32],
+    pub entry: u32,
+    pub qty: u64,
+    pub flv: [u8; 32],
     // Identifier of the account receiving funds (if known)
-    account: Option<[u8; 32]>,
+    pub account: Option<[u8; 32]>,
 }
 
 #[derive(Serialize)]
 pub struct RetireAction {
     // Index of the txlog entry
-    entry: u32,
-    qty: u64,
-    flv: [u8; 32],
+    pub entry: u32,
+    pub qty: u64,
+    pub flv: [u8; 32],
 }
 
 #[derive(Serialize)]
 pub struct MemoAction {
-    entry: u32,
-    data: Vec<u8>,
+    pub entry: u32,
+    pub data: Vec<u8>,
 }
 
 /// Description of the current blockchain state.
 #[derive(Serialize)]
 pub struct AnnotatedTx {
     /// Raw tx
-    tx: Tx,
-    actions: Vec<AnnotatedAction>
+    pub tx: Tx,
+    pub actions: Vec<AnnotatedAction>
 }
 
 #[derive(Serialize, Deserialize)]
@@ -108,7 +108,11 @@ pub enum BuildTxAction {
 
 #[derive(Debug, Deserialize)]
 pub struct Cursor {
-    cursor: u64,
+    pub cursor: String,
+}
+
+impl Cursor {
+    pub const DEFAULT_ELEMENTS_PER_PAGE: u32 = 20;
 }
 
 #[derive(Deserialize)]
