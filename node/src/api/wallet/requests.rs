@@ -4,8 +4,7 @@ use crate::api::data::BuildTxAction;
 
 #[derive(Debug, Deserialize)]
 pub struct NewWallet {
-    #[serde(with = "BigArray")]
-    pub xpub: [u8; 64],
+    pub xpub: Vec<u8>,
     pub label: String,
 }
 
