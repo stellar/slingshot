@@ -2,6 +2,7 @@ pub(self) mod serde_utils;
 mod data;
 mod network;
 mod wallet;
+mod response;
 
 use std::net::SocketAddr;
 use warp::Filter;
@@ -16,7 +17,7 @@ pub async fn launch(config: Config, bc: BlockchainRef, wallet: WalletRef) {
     if conf.disabled {
         return;
     }
-    let wallet_routes = wallet::routes();
+    let wallet_routes = wallet::routes(wallet);
     let network_routes = network::routes();
 
     let not_found = warp::any()

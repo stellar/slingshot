@@ -4,9 +4,7 @@ use accounts::Receiver;
 use crate::wallet::SigntxInstruction;
 
 #[derive(Debug, Serialize)]
-pub struct NewWallet {
-    pub id: [u8; 32],
-}
+pub struct NewWallet;
 
 #[derive(Debug, Serialize)]
 pub struct Balance {

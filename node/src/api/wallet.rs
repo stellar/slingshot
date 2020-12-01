@@ -2,12 +2,14 @@ mod requests;
 mod responses;
 mod handlers;
 
-use warp::Filter;
+use warp::{Filter, any};
 use warp::filters::path::param;
 use crate::api::data::Cursor;
+use crate::wallet_manager::WalletRef;
+use std::convert::Infallible;
 
-pub fn routes() -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
-    new()
+pub fn routes(wallet: WalletRef) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
+    new(wallet.clone())
         .or(balance())
         .or(txs())
         .or(address())
@@ -15,12 +17,13 @@ pub fn routes() -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejecti
         .or(buildtx())
 }
 
-fn new() -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
+fn new(wallet: WalletRef) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
     use warp::*;
 
     path!("v1" / "wallet" / "new")
         .and(post())
         .and(body::json())
+        .and(with_wallet(wallet))
         .and_then(handlers::new)
 }
 
@@ -65,4 +68,8 @@ fn buildtx() -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection>
         .and(post())
         .and(body::json())
         .and_then(handlers::buildtx)
+}
+
+fn with_wallet(wallet: WalletRef) -> impl Filter<Extract = (WalletRef, ), Error = Infallible> + Clone {
+    any().map(move || wallet.clone())
 }
