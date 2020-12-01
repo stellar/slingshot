@@ -31,7 +31,7 @@ impl<T> Response<T> {
     }
     pub fn err(err: ResponseError) -> Self {
         Self {
-            ok: true,
+            ok: false,
             response: None,
             error: Some(err),
         }
@@ -55,5 +55,8 @@ pub mod error {
     }
     pub fn invalid_xpub<T>() -> Response<T> {
         Response::err(ResponseError::new(101, "Invalid xpub"))
+    }
+    pub fn wallet_not_exists<T>() -> Response<T> {
+        Response::err(ResponseError::new(103, "Wallet not exists"))
     }
 }
