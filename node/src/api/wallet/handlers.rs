@@ -3,11 +3,12 @@ use super::requests;
 use crate::api::data::Cursor;
 use crate::wallet_manager::WalletRef;
 use crate::wallet::Wallet;
-use accounts::AddressLabel;
+use accounts::{AddressLabel, Address};
 use keytree::Xpub;
 use crate::api::response::{Response, error};
 use crate::api::wallet::{responses};
 use crate::errors::Error;
+use crate::api::wallet::responses::NewAddress;
 
 /// Creates a new wallet
 pub(super) async fn new(request: requests::NewWallet, wallet: WalletRef) -> Result<Response<responses::NewWallet>, Infallible> {
@@ -52,8 +53,18 @@ pub(super) async fn txs(cursor: Cursor, wallet: WalletRef) -> Result<impl warp::
 }
 
 /// Generates a new address.
-pub(super) async fn address(wallet: WalletRef) -> Result<impl warp::Reply, Infallible> {
-    Ok("Generates a new address.")
+pub(super) async fn address(wallet: WalletRef) -> Result<Response<NewAddress>, Infallible> {
+    let mut wallet_ref = wallet.write().await;
+    let update_wallet = |wallet: &mut Wallet| -> Result<Address, crate::Error> {
+        Ok(wallet.create_address())
+    };
+    match wallet_ref.update_wallet(update_wallet) {
+        Ok(address) => {
+            Ok(Response::ok(NewAddress { address: address.to_string() }))
+        },
+        Err(crate::Error::WalletNotInitialized) => Ok(error::wallet_not_exists()),
+        _ => Ok(error::wallet_updating_error())
+    }
 }
 
 /// Generates a new receiver.

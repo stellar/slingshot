@@ -59,4 +59,7 @@ pub mod error {
     pub fn wallet_not_exists<T>() -> Response<T> {
         Response::err(ResponseError::new(103, "Wallet not exists"))
     }
+    pub fn wallet_updating_error<T>() -> Response<T> {
+        Response::err(ResponseError::new(104, "Something wrong when updating wallet"))
+    }
 }
