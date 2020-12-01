@@ -108,7 +108,7 @@ pub enum BuildTxAction {
 
 #[derive(Debug, Deserialize)]
 pub struct Cursor {
-    // TODO
+    cursor: u64,
 }
 
 #[derive(Deserialize)]
