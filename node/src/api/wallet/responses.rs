@@ -5,32 +5,32 @@ use crate::wallet::SigntxInstruction;
 
 #[derive(Debug, Serialize)]
 pub struct NewWallet {
-    id: [u8; 32],
+    pub id: [u8; 32],
 }
 
 #[derive(Debug, Serialize)]
 pub struct Balance {
-    balances: Vec<([u8; 32], u64)>
+    pub balances: Vec<([u8; 32], u64)>
 }
 
 #[derive(Serialize)]
 pub struct WalletTxs {
-    cursor: Vec<u8>,
-    txs: Vec<AnnotatedTx>
+    pub cursor: Vec<u8>,
+    pub txs: Vec<AnnotatedTx>
 }
 
 #[derive(Serialize)]
 pub struct NewAddress {
-    address: String,
+    pub address: String,
 }
 
 #[derive(Serialize)]
 pub struct NewReceiverResponse {
-    receiver: Receiver,
+    pub receiver: Receiver,
 }
 
 #[derive(Serialize)]
 pub struct BuiltTx {
-    tx: AnnotatedTx,
-    signing_instructions: Vec<SigntxInstruction>
+    pub tx: AnnotatedTx,
+    pub signing_instructions: Vec<SigntxInstruction>
 }

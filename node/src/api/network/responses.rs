@@ -6,32 +6,32 @@ use blockchain::{BlockHeader, BlockTx};
 
 #[derive(Serialize)]
 pub struct MempoolTxs {
-    cursor: Vec<u8>,
-    status: MempoolStatus,
-    txs: Vec<Tx>
+    pub cursor: Vec<u8>,
+    pub status: MempoolStatus,
+    pub txs: Vec<Tx>
 }
 
 #[derive(Serialize)]
 pub struct Blocks {
-    cursor: Vec<u8>,
-    blocks: Vec<BlockHeader>,
+    pub cursor: Vec<u8>,
+    pub blocks: Vec<BlockHeader>,
 }
 
 #[derive(Serialize)]
 pub struct Block {
-    header: BlockHeader,
-    txs: Vec<BlockTx>
+    pub header: BlockHeader,
+    pub txs: Vec<BlockTx>
 }
 
 #[derive(Serialize)]
 pub struct TxResponse {
-    status: TxStatus,
-    tx: Tx,
+    pub status: TxStatus,
+    pub tx: Tx,
 }
 
 #[derive(Serialize)]
 pub struct TxStatus {
-    confirmed: bool,
-    block_height: u64,
-    block_id: [u8; 32],
+    pub confirmed: bool,
+    pub block_height: u64,
+    pub block_id: [u8; 32],
 }

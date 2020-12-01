@@ -5,18 +5,18 @@ use crate::api::data::BuildTxAction;
 #[derive(Debug, Deserialize)]
 pub struct NewWallet {
     #[serde(with = "BigArray")]
-    xpub: [u8; 64],
-    label: String,
+    pub xpub: [u8; 64],
+    pub label: String,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct NewReceiver {
-    flv: [u8; 32],
-    qty: u64,
-    exp: u64, // expiration timestamp
+    pub flv: [u8; 32],
+    pub qty: u64,
+    pub exp: u64, // expiration timestamp
 }
 
 #[derive(Deserialize)]
 pub struct BuildTx {
-    actions: Vec<BuildTxAction>,
+    pub actions: Vec<BuildTxAction>,
 }
