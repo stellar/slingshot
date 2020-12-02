@@ -36,19 +36,10 @@ pub struct Block {
 }
 
 #[derive(Serialize)]
-pub struct RawTx {
-    pub header: TxHeader,
-    pub program: Vec<u8>,
-    pub signature: [u8; 64],
-    pub r1cs_proof: Vec<u8>,
-    pub utreexo_proofs: Vec<Vec<u8>>,
-}
-
-#[derive(Serialize)]
 pub struct Tx {
     pub id: [u8; 32],     // canonical tx id
     pub wid: [u8; 32],    // witness hash of the tx (includes signatures and proofs)
-    pub raw: RawTx,
+    pub raw: String,
     pub fee: u64,         // fee paid by the tx
     pub size: u64,        // size in bytes of the encoded tx
 }
@@ -132,7 +123,7 @@ pub struct AnnotatedTx {
     pub actions: Vec<AnnotatedAction>
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub enum BuildTxAction {
     IssueToAddress([u8; 32], u64, String),
     IssueToReceiver(Receiver),
