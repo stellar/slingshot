@@ -1,6 +1,6 @@
-use std::convert::Infallible;
 use crate::api::data::{Cursor, HexId};
 use crate::api::network::requests;
+use std::convert::Infallible;
 
 pub(super) async fn status() -> Result<impl warp::Reply, Infallible> {
     Ok("Status")

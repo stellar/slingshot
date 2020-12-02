@@ -1,6 +1,6 @@
+use crate::api::serde_utils::BigArray;
 use serde::Deserialize;
 use zkvm::TxHeader;
-use crate::api::serde_utils::BigArray;
 
 #[derive(Deserialize)]
 pub struct RawTx {

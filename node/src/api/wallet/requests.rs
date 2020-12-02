@@ -1,6 +1,6 @@
-use serde::{Deserialize};
 use super::super::serde_utils::BigArray;
 use crate::api::data::BuildTxAction;
+use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
 pub struct NewWallet {

@@ -1,8 +1,8 @@
-pub(self) mod serde_utils;
 mod data;
 mod network;
-mod wallet;
 mod response;
+pub(self) mod serde_utils;
+mod wallet;
 
 use std::net::SocketAddr;
 use warp::Filter;

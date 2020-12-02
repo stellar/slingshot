@@ -1,23 +1,26 @@
-use std::convert::Infallible;
 use super::requests;
-use crate::api::data::{Cursor, BuildTxAction, AnnotatedTx};
-use crate::wallet_manager::WalletRef;
-use crate::wallet::{Wallet, TxAction, BuiltTx};
-use accounts::{AddressLabel, Address};
-use keytree::{Xpub, Xprv};
-use crate::api::response::{Response, error, ResponseError};
-use crate::api::wallet::{responses};
-use crate::errors::Error;
-use crate::api::wallet::responses::NewAddress;
-use curve25519_dalek::scalar::Scalar;
-use zkvm::bulletproofs::BulletproofGens;
 use crate::api::data;
-use zkvm::{UnsignedTx, TxEntry};
+use crate::api::data::{AnnotatedTx, BuildTxAction, Cursor};
+use crate::api::response::{error, Response, ResponseError};
+use crate::api::wallet::responses;
+use crate::api::wallet::responses::NewAddress;
+use crate::errors::Error;
+use crate::wallet::{BuiltTx, TxAction, Wallet};
+use crate::wallet_manager::WalletRef;
+use accounts::{Address, AddressLabel};
+use curve25519_dalek::scalar::Scalar;
+use keytree::{Xprv, Xpub};
 use merlin::Transcript;
-use zkvm::encoding::{ExactSizeEncodable, Encodable};
+use std::convert::Infallible;
+use zkvm::bulletproofs::BulletproofGens;
+use zkvm::encoding::{Encodable, ExactSizeEncodable};
+use zkvm::{TxEntry, UnsignedTx};
 
 /// Creates a new wallet
-pub(super) async fn new(request: requests::NewWallet, wallet: WalletRef) -> Result<Response<responses::NewWallet>, Infallible> {
+pub(super) async fn new(
+    request: requests::NewWallet,
+    wallet: WalletRef,
+) -> Result<Response<responses::NewWallet>, Infallible> {
     let requests::NewWallet { xpub, label } = request;
     let mut wallet_ref = wallet.write().await;
     if wallet_ref.wallet_exists() {
@@ -34,7 +37,9 @@ pub(super) async fn new(request: requests::NewWallet, wallet: WalletRef) -> Resu
         None => return Ok(error::invalid_xpub()),
     };
     let new_wallet = Wallet::new(label, xpub);
-    wallet_ref.initialize_wallet(new_wallet).expect("We previously deleted wallet, there are no other errors when initializing wallet");
+    wallet_ref
+        .initialize_wallet(new_wallet)
+        .expect("We previously deleted wallet, there are no other errors when initializing wallet");
 
     Ok(Response::ok(responses::NewWallet))
 }
@@ -61,44 +66,54 @@ pub(super) async fn txs(cursor: Cursor, wallet: WalletRef) -> Result<impl warp::
 /// Generates a new address.
 pub(super) async fn address(wallet: WalletRef) -> Result<Response<NewAddress>, Infallible> {
     let mut wallet_ref = wallet.write().await;
-    let update_wallet = |wallet: &mut Wallet| -> Result<Address, crate::Error> {
-        Ok(wallet.create_address())
-    };
+    let update_wallet =
+        |wallet: &mut Wallet| -> Result<Address, crate::Error> { Ok(wallet.create_address()) };
     match wallet_ref.update_wallet(update_wallet) {
-        Ok(address) => {
-            Ok(Response::ok(NewAddress { address: address.to_string() }))
-        },
+        Ok(address) => Ok(Response::ok(NewAddress {
+            address: address.to_string(),
+        })),
         Err(crate::Error::WalletNotInitialized) => Ok(error::wallet_not_exists()),
-        _ => Ok(error::wallet_updating_error())
+        _ => Ok(error::wallet_updating_error()),
     }
 }
 
 /// Generates a new receiver.
-pub(super) async fn receiver(req: requests::NewReceiver, wallet: WalletRef) -> Result<Response<responses::NewReceiver>, Infallible> {
+pub(super) async fn receiver(
+    req: requests::NewReceiver,
+    wallet: WalletRef,
+) -> Result<Response<responses::NewReceiver>, Infallible> {
     let mut wallet_ref = wallet.write().await;
     let update_wallet = |wallet: &mut Wallet| -> Result<accounts::Receiver, crate::Error> {
         let requests::NewReceiver { flv, qty, exp } = req; // TODO: expiration time?
-        let (_, receiver) = wallet.create_receiver(zkvm::ClearValue { qty, flv: Scalar::from_bits(flv) });
+        let (_, receiver) = wallet.create_receiver(zkvm::ClearValue {
+            qty,
+            flv: Scalar::from_bits(flv),
+        });
         Ok(receiver)
     };
     match wallet_ref.update_wallet(update_wallet) {
-        Ok(receiver) => {
-            Ok(Response::ok(responses::NewReceiver { receiver }))
-        },
+        Ok(receiver) => Ok(Response::ok(responses::NewReceiver { receiver })),
         Err(crate::Error::WalletNotInitialized) => Ok(error::wallet_not_exists()),
-        _ => Ok(error::wallet_updating_error())
+        _ => Ok(error::wallet_updating_error()),
     }
 }
 
 /// Generates a new receiver.
-pub(super) async fn buildtx(req: requests::BuildTx, wallet: WalletRef) -> Result<Response<responses::BuiltTx>, Infallible> {
+pub(super) async fn buildtx(
+    req: requests::BuildTx,
+    wallet: WalletRef,
+) -> Result<Response<responses::BuiltTx>, Infallible> {
     let mut wallet_ref = wallet.write().await;
     let requests::BuildTx { actions } = req;
-    let res = actions.clone().into_iter().map(build_tx_action_to_tx_action).collect::<Result<Vec<_>, _>>();
+    let res = actions
+        .clone()
+        .into_iter()
+        .map(build_tx_action_to_tx_action)
+        .collect::<Result<Vec<_>, _>>();
 
     let actions = match res {
         Ok(actions) => actions,
-        Err(resp) => return Ok(resp)
+        Err(resp) => return Ok(resp),
     };
 
     let mut err = None;
@@ -122,20 +137,23 @@ pub(super) async fn buildtx(req: requests::BuildTx, wallet: WalletRef) -> Result
     match wallet_ref.update_wallet(update_wallet) {
         Ok(tx) => {
             let id = (tx.unsigned_tx.txid.0).0;
-            let fee = tx.unsigned_tx.txlog.iter().filter_map(|entry| {
-                match entry {
+            let fee = tx
+                .unsigned_tx
+                .txlog
+                .iter()
+                .filter_map(|entry| match entry {
                     TxEntry::Fee(fee) => Some(fee),
                     _ => None,
-                }
-            }).sum::<u64>();
+                })
+                .sum::<u64>();
 
             let xprv = match wallet_ref.read_xprv() {
                 Ok(xprv) => xprv,
-                Err(_) => return Ok(error::tx_building_error())
+                Err(_) => return Ok(error::tx_building_error()),
             };
             let block_tx = match tx.sign(&xprv) {
                 Ok(tx) => tx,
-                Err(e) => return Ok(error::wallet_error(e))
+                Err(e) => return Ok(error::wallet_error(e)),
             };
 
             let wid = block_tx.witness_hash().0;
@@ -148,28 +166,30 @@ pub(super) async fn buildtx(req: requests::BuildTx, wallet: WalletRef) -> Result
                 wid,
                 raw,
                 fee,
-                size
+                size,
             };
 
             Ok(Response::ok(responses::BuiltTx { tx }))
-        },
+        }
         Err(crate::Error::WalletNotInitialized) => Ok(error::wallet_not_exists()),
-        _ => Ok(error::wallet_updating_error())
+        _ => Ok(error::wallet_updating_error()),
     }
 }
 
-fn build_tx_action_to_tx_action(action: BuildTxAction) -> Result<TxAction, Response<responses::BuiltTx>> {
+fn build_tx_action_to_tx_action(
+    action: BuildTxAction,
+) -> Result<TxAction, Response<responses::BuiltTx>> {
     use crate::api::data::BuildTxAction::*;
 
     match action {
         IssueToAddress(flv, qty, address) => {
             let address = match Address::from_string(&address) {
                 None => return Err(error::invalid_address_label()),
-                Some(addr) => addr
+                Some(addr) => addr,
             };
             let clr = zkvm::ClearValue {
                 qty,
-                flv: Scalar::from_bits(flv)
+                flv: Scalar::from_bits(flv),
             };
             Ok(TxAction::IssueToAddress(clr, address))
         }
@@ -177,11 +197,11 @@ fn build_tx_action_to_tx_action(action: BuildTxAction) -> Result<TxAction, Respo
         TransferToAddress(flv, qty, address) => {
             let address = match Address::from_string(&address) {
                 None => return Err(error::invalid_address_label()),
-                Some(addr) => addr
+                Some(addr) => addr,
             };
             let clr = zkvm::ClearValue {
                 qty,
-                flv: Scalar::from_bits(flv)
+                flv: Scalar::from_bits(flv),
             };
             Ok(TxAction::TransferToAddress(clr, address))
         }

@@ -1,11 +1,11 @@
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 use accounts::Receiver;
 
 use super::serde_utils::BigArray;
+use blockchain::BlockTx;
 use std::str::FromStr;
 use zkvm::TxHeader;
-use blockchain::BlockTx;
 
 /// Stats about unconfirmed transactions.
 #[derive(Serialize)]
@@ -20,28 +20,28 @@ pub struct MempoolStatus {
 
 #[derive(Serialize)]
 pub struct BlockHeader {
-    pub version: u64,      // Network version.
-    pub height: u64,       // Serial number of the block, starting with 1.
-    pub prev: [u8; 32], // ID of the previous block. Initial block uses the all-zero string.
-    pub timestamp_ms: u64, // Integer timestamp of the block in milliseconds since the Unix epoch
-    pub txroot: [u8; 32],   // 32-byte Merkle root of the transaction witness hashes (`BlockTx::witness_hash`) in the block.
+    pub version: u64,       // Network version.
+    pub height: u64,        // Serial number of the block, starting with 1.
+    pub prev: [u8; 32],     // ID of the previous block. Initial block uses the all-zero string.
+    pub timestamp_ms: u64,  // Integer timestamp of the block in milliseconds since the Unix epoch
+    pub txroot: [u8; 32], // 32-byte Merkle root of the transaction witness hashes (`BlockTx::witness_hash`) in the block.
     pub utxoroot: [u8; 32], // 32-byte Merkle root of the Utreexo state.
-    pub ext: Vec<u8>,       // Extra data for the future extensions.
+    pub ext: Vec<u8>,     // Extra data for the future extensions.
 }
 
 #[derive(Serialize)]
 pub struct Block {
     pub header: BlockHeader,
-    pub txs: Vec<BlockTx>
+    pub txs: Vec<BlockTx>,
 }
 
 #[derive(Serialize)]
 pub struct Tx {
-    pub id: [u8; 32],     // canonical tx id
-    pub wid: [u8; 32],    // witness hash of the tx (includes signatures and proofs)
+    pub id: [u8; 32],  // canonical tx id
+    pub wid: [u8; 32], // witness hash of the tx (includes signatures and proofs)
     pub raw: String,
-    pub fee: u64,         // fee paid by the tx
-    pub size: u64,        // size in bytes of the encoded tx
+    pub fee: u64,  // fee paid by the tx
+    pub size: u64, // size in bytes of the encoded tx
 }
 
 /// Description of the current blockchain state.
@@ -51,7 +51,7 @@ pub struct State {
     pub tip: BlockHeader,
     // The utreexo state
     #[serde(with = "BigArray")]
-    pub utreexo: [Option<[u8; 32]>; 64]
+    pub utreexo: [Option<[u8; 32]>; 64],
 }
 
 /// Description of a connected peer.
@@ -120,7 +120,7 @@ pub struct MemoAction {
 pub struct AnnotatedTx {
     /// Raw tx
     pub tx: Tx,
-    pub actions: Vec<AnnotatedAction>
+    pub actions: Vec<AnnotatedAction>,
 }
 
 #[derive(Clone, Serialize, Deserialize)]

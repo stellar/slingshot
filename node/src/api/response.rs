@@ -1,12 +1,12 @@
-use warp::Reply;
-use warp::reply::Json;
 use serde::Serialize;
+use warp::reply::Json;
+use warp::Reply;
 
 #[derive(Serialize)]
 pub struct Response<T> {
     ok: bool,
     response: Option<T>,
-    error: Option<ResponseError>
+    error: Option<ResponseError>,
 }
 
 #[derive(Serialize)]
@@ -17,7 +17,10 @@ pub struct ResponseError {
 
 impl ResponseError {
     pub fn new(code: u16, description: impl Into<String>) -> Self {
-        ResponseError { code, description: description.into() }
+        ResponseError {
+            code,
+            description: description.into(),
+        }
     }
 }
 
@@ -61,7 +64,10 @@ pub mod error {
         Response::err(ResponseError::new(103, "Wallet not exists"))
     }
     pub fn wallet_updating_error<T>() -> Response<T> {
-        Response::err(ResponseError::new(104, "Something wrong when updating wallet"))
+        Response::err(ResponseError::new(
+            104,
+            "Something wrong when updating wallet",
+        ))
     }
     pub fn tx_building_error<T>() -> Response<T> {
         Response::err(ResponseError::new(105, "Something wrong when building tx"))

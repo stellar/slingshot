@@ -1,14 +1,14 @@
 use serde::Serialize;
 
 use crate::api::data::MempoolStatus;
-use zkvm::{Tx, TxHeader};
 use blockchain::{BlockHeader, BlockTx};
+use zkvm::{Tx, TxHeader};
 
 #[derive(Serialize)]
 pub struct MempoolTxs {
     pub cursor: Vec<u8>,
     pub status: MempoolStatus,
-    pub txs: Vec<Tx>
+    pub txs: Vec<Tx>,
 }
 
 #[derive(Serialize)]
@@ -20,7 +20,7 @@ pub struct Blocks {
 #[derive(Serialize)]
 pub struct Block {
     pub header: BlockHeader,
-    pub txs: Vec<BlockTx>
+    pub txs: Vec<BlockTx>,
 }
 
 #[derive(Serialize)]

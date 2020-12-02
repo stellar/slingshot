@@ -1,9 +1,9 @@
+mod handlers;
 mod requests;
 mod responses;
-mod handlers;
 
-use warp::Filter;
 use crate::api::data::{Cursor, HexId};
+use warp::Filter;
 
 pub fn routes() -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
     status()

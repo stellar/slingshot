@@ -3,7 +3,7 @@ use super::errors::Error;
 use super::wallet::Wallet;
 use keytree::Xprv;
 use std::fs::{self, File};
-use std::io::{Write, Read};
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::sync::RwLock;
