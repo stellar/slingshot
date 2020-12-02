@@ -1,11 +1,11 @@
 use serde::{Serialize, Deserialize};
 
-use zkvm::Tx;
-use blockchain::BlockHeader;
 use accounts::Receiver;
 
 use super::serde_utils::BigArray;
 use std::str::FromStr;
+use zkvm::TxHeader;
+use blockchain::BlockTx;
 
 /// Stats about unconfirmed transactions.
 #[derive(Serialize)]
@@ -16,6 +16,41 @@ pub struct MempoolStatus {
     pub size: u64,
     /// Lowest feerate for inclusing in the block
     pub feerate: u64,
+}
+
+#[derive(Serialize)]
+struct BlockHeader {
+    version: u64,      // Network version.
+    height: u64,       // Serial number of the block, starting with 1.
+    prev: [u8; 32], // ID of the previous block. Initial block uses the all-zero string.
+    timestamp_ms: u64, // Integer timestamp of the block in milliseconds since the Unix epoch
+    txroot: [u8; 32],   // 32-byte Merkle root of the transaction witness hashes (`BlockTx::witness_hash`) in the block.
+    utxoroot: [u8; 32], // 32-byte Merkle root of the Utreexo state.
+    ext: Vec<u8>,       // Extra data for the future extensions.
+}
+
+#[derive(Serialize)]
+struct Block {
+    header: BlockHeader,
+    txs: Vec<BlockTx>
+}
+
+#[derive(Serialize)]
+struct RawTx {
+    header: TxHeader,
+    program: Vec<u8>,
+    signature: [u8; 64],
+    r1cs_proof: Vec<u8>,
+    utreexo_proofs: Vec<Vec<u8>>,
+}
+
+#[derive(Serialize)]
+struct Tx {
+    id: [u8; 32],     // canonical tx id
+    wid: [u8; 32],    // witness hash of the tx (includes signatures and proofs)
+    raw: RawTx,
+    fee: u64,         // fee paid by the tx
+    size: u64,        // size in bytes of the encoded tx
 }
 
 /// Description of the current blockchain state.
