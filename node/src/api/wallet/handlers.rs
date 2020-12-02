@@ -1,15 +1,20 @@
 use std::convert::Infallible;
 use super::requests;
-use crate::api::data::Cursor;
+use crate::api::data::{Cursor, BuildTxAction, AnnotatedTx};
 use crate::wallet_manager::WalletRef;
-use crate::wallet::Wallet;
+use crate::wallet::{Wallet, TxAction, BuiltTx};
 use accounts::{AddressLabel, Address};
-use keytree::Xpub;
+use keytree::{Xpub, Xprv};
 use crate::api::response::{Response, error};
 use crate::api::wallet::{responses};
 use crate::errors::Error;
 use crate::api::wallet::responses::NewAddress;
 use curve25519_dalek::scalar::Scalar;
+use zkvm::bulletproofs::BulletproofGens;
+use crate::api::data;
+use zkvm::{UnsignedTx, TxEntry};
+use merlin::Transcript;
+use zkvm::encoding::{ExactSizeEncodable, Encodable};
 
 /// Creates a new wallet
 pub(super) async fn new(request: requests::NewWallet, wallet: WalletRef) -> Result<Response<responses::NewWallet>, Infallible> {
@@ -86,6 +91,99 @@ pub(super) async fn receiver(req: requests::NewReceiver, wallet: WalletRef) -> R
 }
 
 /// Generates a new receiver.
-pub(super) async fn buildtx(req: requests::BuildTx, wallet: WalletRef) -> Result<impl warp::Reply, Infallible> {
-    Ok("Generates a new receiver.")
+pub(super) async fn buildtx(req: requests::BuildTx, wallet: WalletRef) -> Result<Response<responses::BuiltTx>, Infallible> {
+    let mut wallet_ref = wallet.write().await;
+    let requests::BuildTx { actions } = req;
+    let res = actions.clone().into_iter().map(|action| {
+        use crate::api::data::BuildTxAction::*;
+
+        match action {
+            IssueToAddress(flv, qty, address) => {
+                let address = match Address::from_string(&address) {
+                    None => return Err(error::invalid_address_label()),
+                    Some(addr) => addr
+                };
+                let clr = zkvm::ClearValue {
+                    qty,
+                    flv: Scalar::from_bits(flv)
+                };
+                Ok(TxAction::IssueToAddress(clr, address))
+            }
+            IssueToReceiver(rec) => Ok(TxAction::IssueToReceiver(rec)),
+            TransferToAddress(flv, qty, address) => {
+                let address = match Address::from_string(&address) {
+                    None => return Err(error::invalid_address_label()),
+                    Some(addr) => addr
+                };
+                let clr = zkvm::ClearValue {
+                    qty,
+                    flv: Scalar::from_bits(flv)
+                };
+                Ok(TxAction::TransferToAddress(clr, address))
+            }
+            TransferToReceiver(rec) => Ok(TxAction::TransferToReceiver(rec)),
+            Memo(memo) => Ok(TxAction::Memo(memo)),
+        }
+    }).collect::<Result<Vec<_>, _>>();
+
+    let actions = match res {
+        Ok(actions) => actions,
+        Err(resp) => return Ok(resp)
+    };
+
+    let mut err = None;
+
+    let update_wallet = |wallet: &mut Wallet| -> Result<BuiltTx, crate::Error> {
+        let gens = BulletproofGens::new(256, 1);
+        let res = wallet.build_tx(&gens, |builder| {
+            for action in actions {
+                builder._add_action(action);
+            }
+        });
+        match res {
+            Ok(tx) => Ok(tx),
+            Err(e) => {
+                err = Some(e);
+                // Dummy error to specify that giving error when update wallet
+                Err(crate::Error::WalletAlreadyExists)
+            }
+        }
+    };
+    match wallet_ref.update_wallet(update_wallet) {
+        Ok(tx) => {
+            let id = (tx.unsigned_tx.txid.0).0;
+            let fee = tx.unsigned_tx.txlog.iter().filter_map(|entry| {
+                match entry {
+                    TxEntry::Fee(fee) => Some(fee),
+                    _ => None,
+                }
+            }).sum::<u64>();
+
+            let xprv = match wallet_ref.read_xprv() {
+                Ok(xprv) => xprv,
+                Err(_) => return Ok(error::tx_building_error())
+            };
+            let block_tx = match tx.sign(&xprv) {
+                Ok(tx) => tx,
+                Err(e) => return Ok(error::wallet_error(e))
+            };
+
+            let wid = block_tx.witness_hash().0;
+
+            let raw = hex::encode(block_tx.encode_to_vec());
+            let size = block_tx.encoded_size() as u64;
+
+            let tx = data::Tx {
+                id,
+                wid,
+                raw,
+                fee,
+                size
+            };
+
+            Ok(Response::ok(responses::BuiltTx { tx }))
+        },
+        Err(crate::Error::WalletNotInitialized) => Ok(error::wallet_not_exists()),
+        _ => Ok(error::wallet_updating_error())
+    }
 }

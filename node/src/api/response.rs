@@ -46,6 +46,7 @@ impl<T: Serialize + Send> Reply for Response<T> {
 
 pub mod error {
     use crate::api::response::{Response, ResponseError};
+    use crate::wallet::WalletError;
 
     pub fn cannot_delete_file<T>() -> Response<T> {
         Response::err(ResponseError::new(100, "Cannot delete file with wallet"))
@@ -61,5 +62,17 @@ pub mod error {
     }
     pub fn wallet_updating_error<T>() -> Response<T> {
         Response::err(ResponseError::new(104, "Something wrong when updating wallet"))
+    }
+    pub fn tx_building_error<T>() -> Response<T> {
+        Response::err(ResponseError::new(105, "Something wrong when building tx"))
+    }
+    pub fn wallet_error<T>(error: WalletError) -> Response<T> {
+        let code = match &error {
+            WalletError::InsufficientFunds => 106,
+            WalletError::XprvMismatch => 107,
+            WalletError::AssetNotFound => 108,
+            WalletError::AddressLabelMismatch => 109,
+        };
+        Response::err(ResponseError::new(code, error.to_string()))
     }
 }
