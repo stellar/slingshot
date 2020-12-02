@@ -19,7 +19,7 @@ pub struct MempoolStatus {
 }
 
 #[derive(Serialize)]
-struct BlockHeader {
+pub struct BlockHeader {
     version: u64,      // Network version.
     height: u64,       // Serial number of the block, starting with 1.
     prev: [u8; 32], // ID of the previous block. Initial block uses the all-zero string.
@@ -30,13 +30,13 @@ struct BlockHeader {
 }
 
 #[derive(Serialize)]
-struct Block {
+pub struct Block {
     header: BlockHeader,
     txs: Vec<BlockTx>
 }
 
 #[derive(Serialize)]
-struct RawTx {
+pub struct RawTx {
     header: TxHeader,
     program: Vec<u8>,
     signature: [u8; 64],
@@ -45,7 +45,7 @@ struct RawTx {
 }
 
 #[derive(Serialize)]
-struct Tx {
+pub struct Tx {
     id: [u8; 32],     // canonical tx id
     wid: [u8; 32],    // witness hash of the tx (includes signatures and proofs)
     raw: RawTx,
