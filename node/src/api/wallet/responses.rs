@@ -1,5 +1,5 @@
 use serde::{Serialize};
-use crate::api::data::AnnotatedTx;
+use crate::api::data::{AnnotatedTx, Tx};
 use accounts::Receiver;
 use crate::wallet::SigntxInstruction;
 
@@ -29,6 +29,5 @@ pub struct NewReceiver {
 
 #[derive(Serialize)]
 pub struct BuiltTx {
-    pub tx: AnnotatedTx,
-    pub signing_instructions: Vec<SigntxInstruction>
+    pub tx: Tx,
 }
