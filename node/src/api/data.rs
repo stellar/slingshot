@@ -20,37 +20,37 @@ pub struct MempoolStatus {
 
 #[derive(Serialize)]
 pub struct BlockHeader {
-    version: u64,      // Network version.
-    height: u64,       // Serial number of the block, starting with 1.
-    prev: [u8; 32], // ID of the previous block. Initial block uses the all-zero string.
-    timestamp_ms: u64, // Integer timestamp of the block in milliseconds since the Unix epoch
-    txroot: [u8; 32],   // 32-byte Merkle root of the transaction witness hashes (`BlockTx::witness_hash`) in the block.
-    utxoroot: [u8; 32], // 32-byte Merkle root of the Utreexo state.
-    ext: Vec<u8>,       // Extra data for the future extensions.
+    pub version: u64,      // Network version.
+    pub height: u64,       // Serial number of the block, starting with 1.
+    pub prev: [u8; 32], // ID of the previous block. Initial block uses the all-zero string.
+    pub timestamp_ms: u64, // Integer timestamp of the block in milliseconds since the Unix epoch
+    pub txroot: [u8; 32],   // 32-byte Merkle root of the transaction witness hashes (`BlockTx::witness_hash`) in the block.
+    pub utxoroot: [u8; 32], // 32-byte Merkle root of the Utreexo state.
+    pub ext: Vec<u8>,       // Extra data for the future extensions.
 }
 
 #[derive(Serialize)]
 pub struct Block {
-    header: BlockHeader,
-    txs: Vec<BlockTx>
+    pub header: BlockHeader,
+    pub txs: Vec<BlockTx>
 }
 
 #[derive(Serialize)]
 pub struct RawTx {
-    header: TxHeader,
-    program: Vec<u8>,
-    signature: [u8; 64],
-    r1cs_proof: Vec<u8>,
-    utreexo_proofs: Vec<Vec<u8>>,
+    pub header: TxHeader,
+    pub program: Vec<u8>,
+    pub signature: [u8; 64],
+    pub r1cs_proof: Vec<u8>,
+    pub utreexo_proofs: Vec<Vec<u8>>,
 }
 
 #[derive(Serialize)]
 pub struct Tx {
-    id: [u8; 32],     // canonical tx id
-    wid: [u8; 32],    // witness hash of the tx (includes signatures and proofs)
-    raw: RawTx,
-    fee: u64,         // fee paid by the tx
-    size: u64,        // size in bytes of the encoded tx
+    pub id: [u8; 32],     // canonical tx id
+    pub wid: [u8; 32],    // witness hash of the tx (includes signatures and proofs)
+    pub raw: RawTx,
+    pub fee: u64,         // fee paid by the tx
+    pub size: u64,        // size in bytes of the encoded tx
 }
 
 /// Description of the current blockchain state.
