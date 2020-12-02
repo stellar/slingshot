@@ -5,7 +5,7 @@ use crate::wallet_manager::WalletRef;
 use crate::wallet::{Wallet, TxAction, BuiltTx};
 use accounts::{AddressLabel, Address};
 use keytree::{Xpub, Xprv};
-use crate::api::response::{Response, error};
+use crate::api::response::{Response, error, ResponseError};
 use crate::api::wallet::{responses};
 use crate::errors::Error;
 use crate::api::wallet::responses::NewAddress;
@@ -94,37 +94,7 @@ pub(super) async fn receiver(req: requests::NewReceiver, wallet: WalletRef) -> R
 pub(super) async fn buildtx(req: requests::BuildTx, wallet: WalletRef) -> Result<Response<responses::BuiltTx>, Infallible> {
     let mut wallet_ref = wallet.write().await;
     let requests::BuildTx { actions } = req;
-    let res = actions.clone().into_iter().map(|action| {
-        use crate::api::data::BuildTxAction::*;
-
-        match action {
-            IssueToAddress(flv, qty, address) => {
-                let address = match Address::from_string(&address) {
-                    None => return Err(error::invalid_address_label()),
-                    Some(addr) => addr
-                };
-                let clr = zkvm::ClearValue {
-                    qty,
-                    flv: Scalar::from_bits(flv)
-                };
-                Ok(TxAction::IssueToAddress(clr, address))
-            }
-            IssueToReceiver(rec) => Ok(TxAction::IssueToReceiver(rec)),
-            TransferToAddress(flv, qty, address) => {
-                let address = match Address::from_string(&address) {
-                    None => return Err(error::invalid_address_label()),
-                    Some(addr) => addr
-                };
-                let clr = zkvm::ClearValue {
-                    qty,
-                    flv: Scalar::from_bits(flv)
-                };
-                Ok(TxAction::TransferToAddress(clr, address))
-            }
-            TransferToReceiver(rec) => Ok(TxAction::TransferToReceiver(rec)),
-            Memo(memo) => Ok(TxAction::Memo(memo)),
-        }
-    }).collect::<Result<Vec<_>, _>>();
+    let res = actions.clone().into_iter().map(build_tx_action_to_tx_action).collect::<Result<Vec<_>, _>>();
 
     let actions = match res {
         Ok(actions) => actions,
@@ -185,5 +155,37 @@ pub(super) async fn buildtx(req: requests::BuildTx, wallet: WalletRef) -> Result
         },
         Err(crate::Error::WalletNotInitialized) => Ok(error::wallet_not_exists()),
         _ => Ok(error::wallet_updating_error())
+    }
+}
+
+fn build_tx_action_to_tx_action(action: BuildTxAction) -> Result<TxAction, Response<responses::BuiltTx>> {
+    use crate::api::data::BuildTxAction::*;
+
+    match action {
+        IssueToAddress(flv, qty, address) => {
+            let address = match Address::from_string(&address) {
+                None => return Err(error::invalid_address_label()),
+                Some(addr) => addr
+            };
+            let clr = zkvm::ClearValue {
+                qty,
+                flv: Scalar::from_bits(flv)
+            };
+            Ok(TxAction::IssueToAddress(clr, address))
+        }
+        IssueToReceiver(rec) => Ok(TxAction::IssueToReceiver(rec)),
+        TransferToAddress(flv, qty, address) => {
+            let address = match Address::from_string(&address) {
+                None => return Err(error::invalid_address_label()),
+                Some(addr) => addr
+            };
+            let clr = zkvm::ClearValue {
+                qty,
+                flv: Scalar::from_bits(flv)
+            };
+            Ok(TxAction::TransferToAddress(clr, address))
+        }
+        TransferToReceiver(rec) => Ok(TxAction::TransferToReceiver(rec)),
+        Memo(memo) => Ok(TxAction::Memo(memo)),
     }
 }
