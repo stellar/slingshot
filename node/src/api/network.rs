@@ -6,6 +6,7 @@ use crate::api::data::{Cursor, HexId};
 use warp::Filter;
 use crate::bc::BlockchainRef;
 use std::convert::Infallible;
+use crate::api::warp_utils::{handle2, handle1};
 
 pub fn routes(bc: BlockchainRef) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
     status(bc.clone())
@@ -22,7 +23,7 @@ fn status(bc: BlockchainRef) -> impl Filter<Extract = impl warp::Reply, Error = 
     path!("v1" / "network" / "status")
         .and(get())
         .and(with_bc(bc))
-        .and_then(handlers::status)
+        .and_then(handle1(handlers::status))
 }
 
 fn mempool(bc: BlockchainRef) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
@@ -32,7 +33,7 @@ fn mempool(bc: BlockchainRef) -> impl Filter<Extract = impl warp::Reply, Error =
         .and(get())
         .and(query::<Cursor>())
         .and(with_bc(bc))
-        .and_then(handlers::mempool)
+        .and_then(handle2(handlers::mempool))
 }
 
 fn blocks(bc: BlockchainRef) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
@@ -42,7 +43,7 @@ fn blocks(bc: BlockchainRef) -> impl Filter<Extract = impl warp::Reply, Error = 
         .and(get())
         .and(query::<Cursor>())
         .and(with_bc(bc))
-        .and_then(handlers::blocks)
+        .and_then(handle2(handlers::blocks))
 }
 
 fn block(bc: BlockchainRef) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
@@ -51,7 +52,7 @@ fn block(bc: BlockchainRef) -> impl Filter<Extract = impl warp::Reply, Error = w
     path!("v1" / "network" / "block" / HexId)
         .and(get())
         .and(with_bc(bc))
-        .and_then(handlers::block)
+        .and_then(handle2(handlers::block))
 }
 
 fn tx(bc: BlockchainRef) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
@@ -60,7 +61,7 @@ fn tx(bc: BlockchainRef) -> impl Filter<Extract = impl warp::Reply, Error = warp
     path!("v1" / "network" / "tx" / HexId)
         .and(get())
         .and(with_bc(bc))
-        .and_then(handlers::tx)
+        .and_then(handle2(handlers::tx))
 }
 
 fn submit(bc: BlockchainRef) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
@@ -70,7 +71,7 @@ fn submit(bc: BlockchainRef) -> impl Filter<Extract = impl warp::Reply, Error = 
         .and(post())
         .and(body::json())
         .and(with_bc(bc))
-        .and_then(handlers::submit)
+        .and_then(handle2(handlers::submit))
 }
 
 fn with_bc(
