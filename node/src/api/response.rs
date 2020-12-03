@@ -2,6 +2,8 @@ use serde::Serialize;
 use warp::reply::Json;
 use warp::Reply;
 
+pub type ResponseResult<T> = Result<T, ResponseError>;
+
 #[derive(Serialize)]
 pub struct Response<T> {
     ok: bool,
@@ -20,6 +22,15 @@ impl ResponseError {
         ResponseError {
             code,
             description: description.into(),
+        }
+    }
+}
+
+impl<T> From<Result<T, ResponseError>> for Response<T> {
+    fn from(res: Result<T, ResponseError>) -> Self {
+        match res {
+            Ok(t) => Response::ok(t),
+            Err(e) => Response::err(e)
         }
     }
 }
@@ -51,34 +62,34 @@ pub mod error {
     use crate::api::response::{Response, ResponseError};
     use crate::wallet::WalletError;
 
-    pub fn cannot_delete_file<T>() -> Response<T> {
-        Response::err(ResponseError::new(100, "Cannot delete file with wallet"))
+    pub fn cannot_delete_file() -> ResponseError {
+        ResponseError::new(100, "Cannot delete file with wallet")
     }
-    pub fn invalid_address_label<T>() -> Response<T> {
-        Response::err(ResponseError::new(101, "Invalid address label"))
+    pub fn invalid_address_label() -> ResponseError {
+        ResponseError::new(101, "Invalid address label")
     }
-    pub fn invalid_xpub<T>() -> Response<T> {
-        Response::err(ResponseError::new(101, "Invalid xpub"))
+    pub fn invalid_xpub() -> ResponseError {
+        ResponseError::new(101, "Invalid xpub")
     }
-    pub fn wallet_not_exists<T>() -> Response<T> {
-        Response::err(ResponseError::new(103, "Wallet not exists"))
+    pub fn wallet_not_exists() -> ResponseError {
+        ResponseError::new(103, "Wallet not exists")
     }
-    pub fn wallet_updating_error<T>() -> Response<T> {
-        Response::err(ResponseError::new(
+    pub fn wallet_updating_error() -> ResponseError {
+        ResponseError::new(
             104,
             "Something wrong when updating wallet",
-        ))
+        )
     }
-    pub fn tx_building_error<T>() -> Response<T> {
-        Response::err(ResponseError::new(105, "Something wrong when building tx"))
+    pub fn tx_building_error() -> ResponseError {
+        ResponseError::new(105, "Something wrong when building tx")
     }
-    pub fn wallet_error<T>(error: WalletError) -> Response<T> {
+    pub fn wallet_error(error: WalletError) -> ResponseError {
         let code = match &error {
             WalletError::InsufficientFunds => 106,
             WalletError::XprvMismatch => 107,
             WalletError::AssetNotFound => 108,
             WalletError::AddressLabelMismatch => 109,
         };
-        Response::err(ResponseError::new(code, error.to_string()))
+        ResponseError::new(code, error.to_string())
     }
 }

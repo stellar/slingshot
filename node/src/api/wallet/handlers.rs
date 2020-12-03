@@ -1,7 +1,7 @@
 use super::requests;
 use crate::api::data;
 use crate::api::data::{AnnotatedTx, BuildTxAction, Cursor};
-use crate::api::response::{error, Response, ResponseError};
+use crate::api::response::{error, Response, ResponseError, ResponseResult};
 use crate::api::wallet::responses;
 use crate::api::wallet::responses::NewAddress;
 use crate::errors::Error;
@@ -20,60 +20,54 @@ use zkvm::{TxEntry, UnsignedTx};
 pub(super) async fn new(
     request: requests::NewWallet,
     wallet: WalletRef,
-) -> Result<Response<responses::NewWallet>, Infallible> {
+) -> ResponseResult<responses::NewWallet> {
     let requests::NewWallet { xpub, label } = request;
     let mut wallet_ref = wallet.write().await;
     if wallet_ref.wallet_exists() {
         if let Err(_) = wallet_ref.clear_wallet() {
-            return Ok(error::cannot_delete_file());
+            return Err(error::cannot_delete_file());
         }
     }
-    let label = match AddressLabel::new(label) {
-        Some(label) => label,
-        None => return Ok(error::invalid_address_label()),
-    };
-    let xpub = match Xpub::from_bytes(&xpub) {
-        Some(label) => label,
-        None => return Ok(error::invalid_xpub()),
-    };
+    let label = AddressLabel::new(label)
+        .ok_or_else(|| error::invalid_address_label())?;
+    let xpub = Xpub::from_bytes(&xpub)
+        .ok_or_else(|| error::invalid_xpub())?;
     let new_wallet = Wallet::new(label, xpub);
     wallet_ref
         .initialize_wallet(new_wallet)
         .expect("We previously deleted wallet, there are no other errors when initializing wallet");
 
-    Ok(Response::ok(responses::NewWallet))
+    Ok(responses::NewWallet)
 }
 
 /// Returns wallet's balance.
-pub(super) async fn balance(wallet: WalletRef) -> Result<Response<responses::Balance>, Infallible> {
+pub(super) async fn balance(wallet: WalletRef) -> ResponseResult<responses::Balance> {
     let mut wallet_ref = wallet.read().await;
-    let wallet = match wallet_ref.wallet_ref() {
-        Ok(w) => w,
-        Err(_) => return Ok(error::wallet_not_exists()),
-    };
+    let wallet = wallet_ref.wallet_ref()
+        .map_err(|_| error::wallet_not_exists())?;
     let mut balances = Vec::new();
     wallet.balances().for_each(|balance| {
         balances.push((balance.flavor.to_bytes(), balance.total));
     });
-    Ok(Response::ok(responses::Balance { balances }))
+    Ok(responses::Balance { balances })
 }
 
 /// Lists annotated transactions.
-pub(super) async fn txs(cursor: Cursor, wallet: WalletRef) -> Result<impl warp::Reply, Infallible> {
-    Ok("Lists annotated transactions.")
+pub(super) async fn txs(cursor: Cursor, wallet: WalletRef) -> ResponseResult<responses::WalletTxs> {
+    unimplemented!()
 }
 
 /// Generates a new address.
-pub(super) async fn address(wallet: WalletRef) -> Result<Response<NewAddress>, Infallible> {
+pub(super) async fn address(wallet: WalletRef) -> ResponseResult<NewAddress> {
     let mut wallet_ref = wallet.write().await;
     let update_wallet =
         |wallet: &mut Wallet| -> Result<Address, crate::Error> { Ok(wallet.create_address()) };
     match wallet_ref.update_wallet(update_wallet) {
-        Ok(address) => Ok(Response::ok(NewAddress {
+        Ok(address) => Ok(NewAddress {
             address: address.to_string(),
-        })),
-        Err(crate::Error::WalletNotInitialized) => Ok(error::wallet_not_exists()),
-        _ => Ok(error::wallet_updating_error()),
+        }),
+        Err(crate::Error::WalletNotInitialized) => Err(error::wallet_not_exists()),
+        _ => Err(error::wallet_updating_error()),
     }
 }
 
@@ -81,7 +75,7 @@ pub(super) async fn address(wallet: WalletRef) -> Result<Response<NewAddress>, I
 pub(super) async fn receiver(
     req: requests::NewReceiver,
     wallet: WalletRef,
-) -> Result<Response<responses::NewReceiver>, Infallible> {
+) -> ResponseResult<responses::NewReceiver> {
     let mut wallet_ref = wallet.write().await;
     let update_wallet = |wallet: &mut Wallet| -> Result<accounts::Receiver, crate::Error> {
         let requests::NewReceiver { flv, qty, exp } = req; // TODO: expiration time?
@@ -92,9 +86,9 @@ pub(super) async fn receiver(
         Ok(receiver)
     };
     match wallet_ref.update_wallet(update_wallet) {
-        Ok(receiver) => Ok(Response::ok(responses::NewReceiver { receiver })),
-        Err(crate::Error::WalletNotInitialized) => Ok(error::wallet_not_exists()),
-        _ => Ok(error::wallet_updating_error()),
+        Ok(receiver) => Ok(responses::NewReceiver { receiver }),
+        Err(crate::Error::WalletNotInitialized) => Err(error::wallet_not_exists()),
+        _ => Err(error::wallet_updating_error()),
     }
 }
 
@@ -102,19 +96,14 @@ pub(super) async fn receiver(
 pub(super) async fn buildtx(
     req: requests::BuildTx,
     wallet: WalletRef,
-) -> Result<Response<responses::BuiltTx>, Infallible> {
+) -> ResponseResult<responses::BuiltTx> {
     let mut wallet_ref = wallet.write().await;
     let requests::BuildTx { actions } = req;
-    let res = actions
+    let actions = actions
         .clone()
         .into_iter()
         .map(build_tx_action_to_tx_action)
-        .collect::<Result<Vec<_>, _>>();
-
-    let actions = match res {
-        Ok(actions) => actions,
-        Err(resp) => return Ok(resp),
-    };
+        .collect::<Result<Vec<_>, _>>()?;
 
     let mut err = None;
 
@@ -147,14 +136,10 @@ pub(super) async fn buildtx(
                 })
                 .sum::<u64>();
 
-            let xprv = match wallet_ref.read_xprv() {
-                Ok(xprv) => xprv,
-                Err(_) => return Ok(error::tx_building_error()),
-            };
-            let block_tx = match tx.sign(&xprv) {
-                Ok(tx) => tx,
-                Err(e) => return Ok(error::wallet_error(e)),
-            };
+            let xprv = wallet_ref.read_xprv()
+                .map_err(|_| error::tx_building_error())?;
+            let block_tx = tx.sign(&xprv)
+                .map_err(|e| error::wallet_error(e))?;
 
             let wid = block_tx.witness_hash().0;
 
@@ -169,24 +154,27 @@ pub(super) async fn buildtx(
                 size,
             };
 
-            Ok(Response::ok(responses::BuiltTx { tx }))
+            Ok(responses::BuiltTx { tx })
         }
-        Err(crate::Error::WalletNotInitialized) => Ok(error::wallet_not_exists()),
-        _ => Ok(error::wallet_updating_error()),
+        Err(crate::Error::WalletNotInitialized) => Err(error::wallet_not_exists()),
+        // This means that we have error while updating wallet
+        Err(crate::Error::WalletAlreadyExists) => Err(match err {
+            Some(e) => error::wallet_error(e),
+            None => error::wallet_updating_error(),
+        }),
+        _ => Err(error::wallet_updating_error()),
     }
 }
 
 fn build_tx_action_to_tx_action(
     action: BuildTxAction,
-) -> Result<TxAction, Response<responses::BuiltTx>> {
+) -> Result<TxAction, ResponseError> {
     use crate::api::data::BuildTxAction::*;
 
     match action {
         IssueToAddress(flv, qty, address) => {
-            let address = match Address::from_string(&address) {
-                None => return Err(error::invalid_address_label()),
-                Some(addr) => addr,
-            };
+            let address = Address::from_string(&address)
+                .ok_or_else(|| error::invalid_address_label())?;
             let clr = zkvm::ClearValue {
                 qty,
                 flv: Scalar::from_bits(flv),
@@ -195,10 +183,8 @@ fn build_tx_action_to_tx_action(
         }
         IssueToReceiver(rec) => Ok(TxAction::IssueToReceiver(rec)),
         TransferToAddress(flv, qty, address) => {
-            let address = match Address::from_string(&address) {
-                None => return Err(error::invalid_address_label()),
-                Some(addr) => addr,
-            };
+            let address = Address::from_string(&address)
+                .ok_or_else(|| error::invalid_address_label())?;
             let clr = zkvm::ClearValue {
                 qty,
                 flv: Scalar::from_bits(flv),
