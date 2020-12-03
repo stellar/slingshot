@@ -3,6 +3,7 @@ mod network;
 mod response;
 pub(self) mod serde_utils;
 mod wallet;
+mod warp_utils;
 
 use std::net::SocketAddr;
 use warp::Filter;
