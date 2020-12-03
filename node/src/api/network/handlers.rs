@@ -8,33 +8,39 @@ use zkvm::encoding::ExactSizeEncodable;
 use crate::api::data;
 
 pub(super) async fn status(bc: BlockchainRef) -> ResponseResult<responses::Status> {
-    let mempool = get::<&Mempool>();
-    let status = mempool_status(mempool);
+    let bc_state = BlockchainState::make_initial(5, vec![]).0;
+    let mempool = &Mempool::new(bc_state.clone(), 5);
 
-    let state = get::<&BlockchainState>();
+    let status = mempool_status(mempool);
+    let state = &bc_state;
     let tip = state.tip.clone().into();
-    let utreexo = get();
+    let utreexo = [None; 64];
 
     let state = State {
         tip,
         utreexo
     };
 
+    let peers = vec![];
+
     Ok(responses::Status {
         mempool: status,
         state,
-        peers: get()
+        peers
     })
 }
 
 pub(super) async fn mempool(cursor: Cursor, bc: BlockchainRef) -> ResponseResult<responses::MempoolTxs> {
+    let bc_state = BlockchainState::make_initial(5, vec![]).0;
+    let mempool = &Mempool::new(bc_state.clone(), 5);
+    let txs_owned = Vec::<blockchain::BlockTx>::new();
+    let txs = txs_owned.iter();
+
     let offset = cursor.cursor.parse::<usize>()
         .map_err(|_| error::invalid_cursor())?;
     let elements = Cursor::DEFAULT_ELEMENTS_PER_PAGE as usize;
 
-    let mempool = get::<&Mempool>();
     let status = mempool_status(mempool);
-    let txs = get::<std::slice::Iter<blockchain::BlockTx>>();
     let txs = txs.skip(offset).take(elements).map(|tx| Into::<data::Tx>::into(tx.clone())).collect::<Vec<_>>();
 
     Ok(responses::MempoolTxs {
@@ -63,15 +69,11 @@ pub(super) async fn submit(raw_tx: requests::RawTx, bc: BlockchainRef) -> Respon
 fn mempool_status(mempool: &Mempool) -> MempoolStatus {
     let count = mempool.entries().count() as u64;
     let size = mempool.len() as u64;
-    let feerate = get();
+    let feerate = 0;
 
     MempoolStatus {
         count,
         size,
         feerate
     }
-}
-
-fn get<T>() -> T {
-    unimplemented!()
 }
