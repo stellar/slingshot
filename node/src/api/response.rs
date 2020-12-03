@@ -92,4 +92,7 @@ pub mod error {
         };
         ResponseError::new(code, error.to_string())
     }
+    pub fn invalid_cursor() -> ResponseError {
+        ResponseError::new(110, "Something wrong when building tx")
+    }
 }

@@ -132,7 +132,7 @@ pub enum BuildTxAction {
     Memo(Vec<u8>),
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Cursor {
     pub cursor: String,
 }
@@ -150,5 +150,26 @@ impl FromStr for HexId {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let array = serde_json::from_str(s)?;
         Ok(Self(array))
+    }
+}
+
+impl From<blockchain::BlockHeader> for BlockHeader {
+    fn from(header: blockchain::BlockHeader) -> Self {
+        let blockchain::BlockHeader { version, height, prev, timestamp_ms, txroot, utxoroot, ext } = header;
+        Self {
+            version,
+            height,
+            prev: prev.0,
+            timestamp_ms,
+            txroot: txroot.0,
+            utxoroot: utxoroot.0,
+            ext
+        }
+    }
+}
+
+impl From<BlockTx> for Tx {
+    fn from(tx: BlockTx) -> Self {
+        unimplemented!()
     }
 }
