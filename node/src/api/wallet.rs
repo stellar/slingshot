@@ -2,7 +2,7 @@ mod handlers;
 mod requests;
 mod responses;
 
-use crate::api::data::Cursor;
+use crate::api::dto::Cursor;
 use crate::wallet_manager::WalletRef;
 use std::convert::Infallible;
 use warp::filters::path::param;

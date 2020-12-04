@@ -1,6 +1,6 @@
 use super::requests;
-use crate::api::data;
-use crate::api::data::{AnnotatedTx, BuildTxAction, Cursor};
+use crate::api::dto;
+use crate::api::dto::{AnnotatedTxDTO, BuildTxActionDTO, Cursor};
 use crate::api::response::{error, Response, ResponseError, ResponseResult};
 use crate::api::wallet::responses;
 use crate::api::wallet::responses::NewAddress;
@@ -146,7 +146,7 @@ pub(super) async fn buildtx(
             let raw = hex::encode(block_tx.encode_to_vec());
             let size = block_tx.encoded_size() as u64;
 
-            let tx = data::Tx {
+            let tx = dto::TxDTO {
                 id,
                 wid,
                 raw,
@@ -167,9 +167,9 @@ pub(super) async fn buildtx(
 }
 
 fn build_tx_action_to_tx_action(
-    action: BuildTxAction,
+    action: BuildTxActionDTO,
 ) -> Result<TxAction, ResponseError> {
-    use crate::api::data::BuildTxAction::*;
+    use crate::api::dto::BuildTxActionDTO::*;
 
     match action {
         IssueToAddress(flv, qty, address) => {

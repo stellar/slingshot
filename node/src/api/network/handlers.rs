@@ -1,11 +1,11 @@
-use crate::api::data::{Cursor, HexId, MempoolStatus, State};
+use crate::api::dto::{Cursor, HexId, MempoolStatusDTO, StateDTO};
 use crate::api::network::{requests, responses};
 use std::convert::Infallible;
 use crate::bc::BlockchainRef;
 use crate::api::response::{ResponseResult, error};
 use blockchain::{Mempool, BlockchainState, BlockchainProtocol, BlockHeader, Block};
 use zkvm::encoding::ExactSizeEncodable;
-use crate::api::data;
+use crate::api::dto;
 use zkvm::Hash;
 
 pub(super) async fn status(bc: BlockchainRef) -> ResponseResult<responses::Status> {
@@ -17,7 +17,7 @@ pub(super) async fn status(bc: BlockchainRef) -> ResponseResult<responses::Statu
     let tip = state.tip.clone().into();
     let utreexo = [None; 64];
 
-    let state = State {
+    let state = StateDTO {
         tip,
         utreexo
     };
@@ -42,7 +42,7 @@ pub(super) async fn mempool(cursor: Cursor, bc: BlockchainRef) -> ResponseResult
     let elements = cursor.count() as usize;
 
     let status = mempool_status(mempool);
-    let txs = txs.skip(offset).take(elements).map(|tx| Into::<data::Tx>::into(tx.clone())).collect::<Vec<_>>();
+    let txs = txs.skip(offset).take(elements).map(|tx| Into::<dto::TxDTO>::into(tx.clone())).collect::<Vec<_>>();
 
     Ok(responses::MempoolTxs {
         cursor: (offset + elements).to_string(),
@@ -83,12 +83,12 @@ pub(super) async fn submit(raw_tx: requests::RawTx, bc: BlockchainRef) -> Respon
     unimplemented!()
 }
 
-fn mempool_status(mempool: &Mempool) -> MempoolStatus {
+fn mempool_status(mempool: &Mempool) -> MempoolStatusDTO {
     let count = mempool.entries().count() as u64;
     let size = mempool.len() as u64;
     let feerate = 0;
 
-    MempoolStatus {
+    MempoolStatusDTO {
         count,
         size,
         feerate

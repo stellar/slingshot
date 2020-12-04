@@ -1,4 +1,4 @@
-use crate::api::data::{AnnotatedTx, Tx};
+use crate::api::dto::{AnnotatedTxDTO, TxDTO};
 use crate::wallet::SigntxInstruction;
 use accounts::Receiver;
 use serde::Serialize;
@@ -14,7 +14,7 @@ pub struct Balance {
 #[derive(Serialize)]
 pub struct WalletTxs {
     pub cursor: Vec<u8>,
-    pub txs: Vec<AnnotatedTx>,
+    pub txs: Vec<AnnotatedTxDTO>,
 }
 
 #[derive(Serialize)]
@@ -29,5 +29,5 @@ pub struct NewReceiver {
 
 #[derive(Serialize)]
 pub struct BuiltTx {
-    pub tx: Tx,
+    pub tx: TxDTO,
 }
