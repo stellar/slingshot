@@ -1,12 +1,15 @@
-use crate::api::dto::{Cursor, HexId, MempoolStatusDTO, StateDTO};
+use crate::api::dto::{Cursor, HexId, MempoolStatusDTO, StateDTO, TxDTO};
 use crate::api::network::{requests, responses};
 use std::convert::Infallible;
 use crate::bc::BlockchainRef;
 use crate::api::response::{ResponseResult, error};
-use blockchain::{Mempool, BlockchainState, BlockchainProtocol, BlockHeader, Block};
-use zkvm::encoding::ExactSizeEncodable;
+use blockchain::{Mempool, BlockchainState, BlockchainProtocol, BlockHeader, Block, BlockTx};
+use zkvm::encoding::{ExactSizeEncodable, Encodable};
 use crate::api::dto;
-use zkvm::Hash;
+use zkvm::{Hash, Tx, TxHeader};
+use crate::api::network::responses::TxStatus;
+use zkvm::bulletproofs::r1cs::R1CSProof;
+use musig::Signature;
 
 pub(super) async fn status(bc: BlockchainRef) -> ResponseResult<responses::Status> {
     let bc_state = BlockchainState::make_initial(5, vec![]).0;
@@ -76,7 +79,41 @@ pub(super) async fn block(block_id: HexId, bc: BlockchainRef) -> ResponseResult<
 }
 
 pub(super) async fn tx(tx_id: HexId, bc: BlockchainRef) -> ResponseResult<responses::TxResponse> {
-    unimplemented!()
+    let tx = BlockTx {
+        tx: Tx {
+            header: TxHeader {
+                version: 0,
+                mintime_ms: 0,
+                maxtime_ms: 0
+            },
+            program: vec![],
+            signature: Signature { s: Default::default(), R: Default::default() },
+            proof: R1CSProof::from_bytes(&[0; 1 + 15 * 32]).unwrap()
+        },
+        proofs: vec![]
+    };
+
+    let precomputed = tx.tx.precompute()
+        .map_err(|_| error::tx_compute_error())?;
+
+    let tx_dto = TxDTO {
+        id: (precomputed.id.0).0,
+        wid: tx.witness_hash().0,
+        raw: hex::encode(tx.encode_to_vec()),
+        fee: precomputed.feerate.fee(),
+        size: precomputed.feerate.size() as u64,
+    };
+
+    let status = TxStatus {
+        confirmed: true,
+        block_height: 0,
+        block_id: [0; 32]
+    };
+
+    Ok(responses::TxResponse {
+        status,
+        tx: tx_dto
+    })
 }
 
 pub(super) async fn submit(raw_tx: requests::RawTx, bc: BlockchainRef) -> ResponseResult<responses::Submit> {
