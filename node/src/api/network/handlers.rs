@@ -39,13 +39,13 @@ pub(super) async fn mempool(cursor: Cursor, bc: BlockchainRef) -> ResponseResult
 
     let offset = cursor.cursor.parse::<usize>()
         .map_err(|_| error::invalid_cursor())?;
-    let elements = Cursor::DEFAULT_ELEMENTS_PER_PAGE as usize;
+    let elements = cursor.count() as usize;
 
     let status = mempool_status(mempool);
     let txs = txs.skip(offset).take(elements).map(|tx| Into::<data::Tx>::into(tx.clone())).collect::<Vec<_>>();
 
     Ok(responses::MempoolTxs {
-        cursor: Cursor { cursor: (offset + elements).to_string() },
+        cursor: (offset + elements).to_string(),
         status,
         txs
     })
@@ -56,14 +56,11 @@ pub(super) async fn blocks(cursor: Cursor, bc: BlockchainRef) -> ResponseResult<
 
     let offset = cursor.cursor.parse::<usize>()
         .map_err(|_| error::invalid_cursor())?;
-    let count = Cursor::DEFAULT_ELEMENTS_PER_PAGE as usize;
+    let count = cursor.count() as usize;
 
     let headers = blocks_headers.iter().skip(offset).take(count).map(|b| b.clone().into()).collect::<Vec<_>>();
-    let new_cursor = Cursor {
-        cursor: (offset + count).to_string()
-    };
     Ok(responses::Blocks {
-        cursor: new_cursor,
+        cursor: (offset + count).to_string(),
         blocks: headers
     })
 }

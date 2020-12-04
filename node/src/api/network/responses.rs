@@ -13,14 +13,14 @@ pub struct Status {
 
 #[derive(Serialize)]
 pub struct MempoolTxs {
-    pub cursor: Cursor,
+    pub cursor: String,
     pub status: MempoolStatus,
     pub txs: Vec<Tx>,
 }
 
 #[derive(Serialize)]
 pub struct Blocks {
-    pub cursor: Cursor,
+    pub cursor: String,
     pub blocks: Vec<BlockHeader>,
 }
 

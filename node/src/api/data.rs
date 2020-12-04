@@ -135,10 +135,14 @@ pub enum BuildTxAction {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Cursor {
     pub cursor: String,
+    pub count: Option<u32>,
 }
 
 impl Cursor {
-    pub const DEFAULT_ELEMENTS_PER_PAGE: u32 = 20;
+    const DEFAULT_ELEMENTS_PER_PAGE: u32 = 20;
+    pub fn count(&self) -> u32 {
+        self.count.unwrap_or(Self::DEFAULT_ELEMENTS_PER_PAGE)
+    }
 }
 
 #[derive(Deserialize)]
