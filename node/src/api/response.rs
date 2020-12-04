@@ -4,14 +4,14 @@ use warp::Reply;
 
 pub type ResponseResult<T> = Result<T, ResponseError>;
 
-#[derive(Serialize)]
+#[derive(Debug, Serialize)]
 pub struct Response<T> {
     ok: bool,
     response: Option<T>,
     error: Option<ResponseError>,
 }
 
-#[derive(Serialize)]
+#[derive(Debug, Serialize)]
 pub struct ResponseError {
     code: u16,
     description: String,
@@ -52,6 +52,27 @@ impl<T> Response<T> {
     }
 }
 
+#[cfg(test)]
+impl<T> Response<T> {
+    pub fn unwrap_ok(self) -> T {
+        let Response { ok, response, error } = self;
+        if let Some(err) = error {
+            panic!("Unwrap at err: {:?}", err);
+        }
+        response.unwrap()
+    }
+}
+#[cfg(test)]
+impl<T: std::fmt::Debug> Response<T> {
+    pub fn unwrap_err(self) -> ResponseError {
+        let Response { ok, response, error } = self;
+        if let Some(t) = response {
+            panic!("Unwrap err at ok: {:?}", t);
+        }
+        error.unwrap()
+    }
+}
+
 impl<T: Serialize + Send> Reply for Response<T> {
     fn into_response(self) -> warp::reply::Response {
         warp::reply::json(&self).into_response()
@@ -69,7 +90,7 @@ pub mod error {
         ResponseError::new(101, "Invalid address label")
     }
     pub fn invalid_xpub() -> ResponseError {
-        ResponseError::new(101, "Invalid xpub")
+        ResponseError::new(102, "Invalid xpub")
     }
     pub fn wallet_not_exists() -> ResponseError {
         ResponseError::new(103, "Wallet not exists")

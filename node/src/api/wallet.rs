@@ -25,7 +25,7 @@ pub fn routes(
 
 fn new(
     wallet: WalletRef,
-) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
+) -> impl Filter<Extract = (Response<responses::NewWallet>, ), Error = warp::Rejection> + Clone {
     use warp::*;
 
     path!("v1" / "wallet" / "new")
@@ -97,4 +97,90 @@ fn with_wallet(
     wallet: WalletRef,
 ) -> impl Filter<Extract = (WalletRef,), Error = Infallible> + Clone {
     any().map(move || wallet.clone())
+}
+
+#[cfg(test)]
+mod wallet_tests {
+    use super::*;
+
+    use crate::wallet_manager::{WalletRef, WalletManager};
+    use std::sync::Arc;
+    use tokio::sync::RwLock;
+    use crate::config::Config;
+
+    fn prepare_wallet() -> WalletRef {
+        WalletManager::new(
+            Config {
+                data: Default::default(),
+                path: Default::default()
+            }
+        ).unwrap()
+    }
+
+    async fn remove_wallet(wallet: WalletRef) {
+        let mut manager = wallet.write().await;
+        manager.clear_wallet();
+    }
+
+    #[tokio::test]
+    async fn test_new() {
+        let wallet = prepare_wallet();
+        let routes = new(wallet.clone());
+
+        let response: Response<responses::NewWallet> = warp::test::request().path("/v1/wallet/new")
+            .method("POST")
+            .json(&requests::NewWallet {
+                xpub: vec![0; 64],
+                label: "test_label".to_string()
+            })
+            .filter(&routes)
+            .await
+            .unwrap();
+
+        remove_wallet(wallet).await;
+
+        response.unwrap_ok();
+    }
+
+    #[tokio::test]
+    #[should_panic(expected = r#"Unwrap at err: ResponseError { code: 101, description: "Invalid address label" }"#)]
+    async fn test_new_wrong_label() {
+        let wallet = prepare_wallet();
+        let routes = new(wallet.clone());
+
+        let response: Response<responses::NewWallet> = warp::test::request().path("/v1/wallet/new")
+            .method("POST")
+            .json(&requests::NewWallet {
+                xpub: vec![0; 64],
+                label: "invalid label".to_string()
+            })
+            .filter(&routes)
+            .await
+            .unwrap();
+
+        remove_wallet(wallet).await;
+
+        response.unwrap_ok();
+    }
+
+    #[tokio::test]
+    #[should_panic(expected = r#"Unwrap at err: ResponseError { code: 102, description: "Invalid xpub" }"#)]
+    async fn test_new_invalid_xpub() {
+        let wallet = prepare_wallet();
+        let routes = new(wallet.clone());
+
+        let response: Response<responses::NewWallet> = warp::test::request().path("/v1/wallet/new")
+            .method("POST")
+            .json(&requests::NewWallet {
+                xpub: vec![0; 32],
+                label: "test_label".to_string()
+            })
+            .filter(&routes)
+            .await
+            .unwrap();
+
+        remove_wallet(wallet).await;
+
+        response.unwrap_ok();
+    }
 }
