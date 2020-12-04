@@ -3,9 +3,10 @@ use crate::api::network::{requests, responses};
 use std::convert::Infallible;
 use crate::bc::BlockchainRef;
 use crate::api::response::{ResponseResult, error};
-use blockchain::{Mempool, BlockchainState, BlockchainProtocol};
+use blockchain::{Mempool, BlockchainState, BlockchainProtocol, BlockHeader, Block};
 use zkvm::encoding::ExactSizeEncodable;
 use crate::api::data;
+use zkvm::Hash;
 
 pub(super) async fn status(bc: BlockchainRef) -> ResponseResult<responses::Status> {
     let bc_state = BlockchainState::make_initial(5, vec![]).0;
@@ -51,11 +52,30 @@ pub(super) async fn mempool(cursor: Cursor, bc: BlockchainRef) -> ResponseResult
 }
 
 pub(super) async fn blocks(cursor: Cursor, bc: BlockchainRef) -> ResponseResult<responses::Blocks> {
-    unimplemented!()
+    let blocks_headers = Vec::<BlockHeader>::new();
+
+    let offset = cursor.cursor.parse::<usize>()
+        .map_err(|_| error::invalid_cursor())?;
+    let count = Cursor::DEFAULT_ELEMENTS_PER_PAGE as usize;
+
+    let headers = blocks_headers.iter().skip(offset).take(count).map(|b| b.clone().into()).collect::<Vec<_>>();
+    let new_cursor = Cursor {
+        cursor: (offset + count).to_string()
+    };
+    Ok(responses::Blocks {
+        cursor: new_cursor,
+        blocks: headers
+    })
 }
 
 pub(super) async fn block(block_id: HexId, bc: BlockchainRef) -> ResponseResult<responses::Block> {
-    unimplemented!()
+    let header = BlockHeader::make_initial(0, Hash::default());
+    let txs = Vec::<blockchain::BlockTx>::new();
+    
+    Ok(responses::Block {
+        header: header.into(),
+        txs
+    })
 }
 
 pub(super) async fn tx(tx_id: HexId, bc: BlockchainRef) -> ResponseResult<responses::TxResponse> {

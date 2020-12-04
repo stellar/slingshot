@@ -1,7 +1,7 @@
 use serde::Serialize;
 
-use crate::api::data::{MempoolStatus, State, Peer, Cursor, Tx};
-use blockchain::{BlockHeader, BlockTx};
+use crate::api::data::{MempoolStatus, State, Peer, Cursor, Tx, BlockHeader};
+use blockchain::{BlockTx};
 use zkvm::{TxHeader};
 
 #[derive(Serialize)]
