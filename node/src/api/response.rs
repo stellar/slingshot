@@ -95,4 +95,7 @@ pub mod error {
     pub fn invalid_cursor() -> ResponseError {
         ResponseError::new(110, "Something wrong when building tx")
     }
+    pub fn tx_compute_error() -> ResponseError {
+        ResponseError::new(111, "Something wrong when computing tx")
+    }
 }

@@ -125,33 +125,23 @@ pub(super) async fn buildtx(
     };
     match wallet_ref.update_wallet(update_wallet) {
         Ok(tx) => {
-            let id = (tx.unsigned_tx.txid.0).0;
-            let fee = tx
-                .unsigned_tx
-                .txlog
-                .iter()
-                .filter_map(|entry| match entry {
-                    TxEntry::Fee(fee) => Some(fee),
-                    _ => None,
-                })
-                .sum::<u64>();
-
             let xprv = wallet_ref.read_xprv()
                 .map_err(|_| error::tx_building_error())?;
             let block_tx = tx.sign(&xprv)
                 .map_err(|e| error::wallet_error(e))?;
 
             let wid = block_tx.witness_hash().0;
-
             let raw = hex::encode(block_tx.encode_to_vec());
-            let size = block_tx.encoded_size() as u64;
+
+            let precomputed = block_tx.tx.precompute()
+                .map_err(|_| error::tx_compute_error())?;
 
             let tx = dto::TxDTO {
-                id,
+                id: (precomputed.id.0).0,
                 wid,
                 raw,
-                fee,
-                size,
+                fee: precomputed.feerate.fee(),
+                size: precomputed.feerate.size() as u64,
             };
 
             Ok(responses::BuiltTx { tx })
