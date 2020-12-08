@@ -5,6 +5,8 @@ use accounts::Receiver;
 use super::serde_utils::BigArray;
 use blockchain::BlockTx;
 use std::str::FromStr;
+use std::convert::TryFrom;
+use zkvm::encoding::Encodable;
 
 /// Stats about unconfirmed transactions.
 #[derive(Serialize)]
@@ -178,8 +180,21 @@ impl From<blockchain::BlockHeader> for BlockHeader {
     }
 }
 
-impl From<BlockTx> for Tx {
-    fn from(tx: BlockTx) -> Self {
-        unimplemented!()
+impl TryFrom<BlockTx> for Tx {
+    type Error = zkvm::VMError;
+
+    fn try_from(tx: BlockTx) -> Result<Self, Self::Error> {
+        let wid = tx.witness_hash().0;
+        let precomputed = tx.tx.precompute()?;
+        let id = (precomputed.id.0).0;
+        let fee = precomputed.feerate.fee();
+        let size = precomputed.feerate.size() as u64;
+        Ok(Tx {
+            id,
+            wid,
+            raw: hex::encode(tx.encode_to_vec()),
+            fee,
+            size
+        })
     }
 }

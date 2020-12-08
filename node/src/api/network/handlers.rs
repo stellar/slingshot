@@ -1,5 +1,5 @@
 use crate::api::network::{requests, responses};
-use std::convert::Infallible;
+use std::convert::{Infallible, TryInto, TryFrom};
 use crate::bc::BlockchainRef;
 use crate::api::response::{ResponseResult, error};
 use blockchain::{Mempool, BlockchainState, BlockchainProtocol, BlockHeader, Block, BlockTx};
@@ -45,7 +45,8 @@ pub(super) async fn mempool(cursor: types::Cursor, bc: BlockchainRef) -> Respons
     let elements = cursor.count() as usize;
 
     let status = mempool_status(mempool);
-    let txs = txs.skip(offset).take(elements).map(|tx| Into::<types::Tx>::into(tx.clone())).collect::<Vec<_>>();
+    let txs = txs.skip(offset).take(elements).map(|tx| types::Tx::try_from(tx.clone())).collect::<Result<Vec<_>, _>>()
+        .map_err(|_| error::tx_compute_error())?;
 
     Ok(responses::MempoolTxs {
         cursor: (offset + elements).to_string(),
@@ -93,16 +94,8 @@ pub(super) async fn tx(tx_id: HexId, bc: BlockchainRef) -> ResponseResult<respon
         proofs: vec![]
     };
 
-    let precomputed = block_tx.tx.precompute()
+    let tx = types::Tx::try_from(block_tx)
         .map_err(|_| error::tx_compute_error())?;
-
-    let tx = types::Tx {
-        id: (precomputed.id.0).0,
-        wid: block_tx.witness_hash().0,
-        raw: hex::encode(block_tx.encode_to_vec()),
-        fee: precomputed.feerate.fee(),
-        size: precomputed.feerate.size() as u64,
-    };
 
     let status = TxStatus {
         confirmed: true,

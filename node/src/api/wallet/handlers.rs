@@ -11,7 +11,7 @@ use accounts::{Address, AddressLabel};
 use curve25519_dalek::scalar::Scalar;
 use keytree::{Xprv, Xpub};
 use merlin::Transcript;
-use std::convert::Infallible;
+use std::convert::{Infallible, TryFrom};
 use zkvm::bulletproofs::BulletproofGens;
 use zkvm::encoding::{Encodable, ExactSizeEncodable};
 use zkvm::{TxEntry, UnsignedTx};
@@ -130,19 +130,8 @@ pub(super) async fn buildtx(
             let block_tx = tx.sign(&xprv)
                 .map_err(|e| error::wallet_error(e))?;
 
-            let wid = block_tx.witness_hash().0;
-            let raw = hex::encode(block_tx.encode_to_vec());
-
-            let precomputed = block_tx.tx.precompute()
+            let tx = types::Tx::try_from(block_tx)
                 .map_err(|_| error::tx_compute_error())?;
-
-            let tx = types::Tx {
-                id: (precomputed.id.0).0,
-                wid,
-                raw,
-                fee: precomputed.feerate.fee(),
-                size: precomputed.feerate.size() as u64,
-            };
 
             Ok(responses::BuiltTx { tx })
         }
