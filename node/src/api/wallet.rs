@@ -2,15 +2,15 @@ mod handlers;
 mod requests;
 mod responses;
 
+use crate::api::response::{Response, ResponseResult};
 use crate::api::types::Cursor;
+use crate::api::warp_utils::{handle1, handle2};
 use crate::wallet_manager::WalletRef;
+use futures::future::NeverError;
+use futures::{Future, FutureExt};
 use std::convert::Infallible;
 use warp::filters::path::param;
 use warp::{any, Filter};
-use futures::future::NeverError;
-use futures::{FutureExt, Future};
-use crate::api::response::{ResponseResult, Response};
-use crate::api::warp_utils::{handle2, handle1};
 
 pub fn routes(
     wallet: WalletRef,
@@ -25,7 +25,7 @@ pub fn routes(
 
 fn new(
     wallet: WalletRef,
-) -> impl Filter<Extract = (Response<responses::NewWallet>, ), Error = warp::Rejection> + Clone {
+) -> impl Filter<Extract = (Response<responses::NewWallet>,), Error = warp::Rejection> + Clone {
     use warp::*;
 
     path!("v1" / "wallet" / "new")
@@ -103,18 +103,17 @@ fn with_wallet(
 mod wallet_tests {
     use super::*;
 
-    use crate::wallet_manager::{WalletRef, WalletManager};
+    use crate::config::Config;
+    use crate::wallet_manager::{WalletManager, WalletRef};
     use std::sync::Arc;
     use tokio::sync::RwLock;
-    use crate::config::Config;
 
     fn prepare_wallet() -> WalletRef {
-        WalletManager::new(
-            Config {
-                data: Default::default(),
-                path: Default::default()
-            }
-        ).unwrap()
+        WalletManager::new(Config {
+            data: Default::default(),
+            path: Default::default(),
+        })
+        .unwrap()
     }
 
     async fn remove_wallet(wallet: WalletRef) {
@@ -127,11 +126,12 @@ mod wallet_tests {
         let wallet = prepare_wallet();
         let routes = new(wallet.clone());
 
-        let response: Response<responses::NewWallet> = warp::test::request().path("/v1/wallet/new")
+        let response: Response<responses::NewWallet> = warp::test::request()
+            .path("/v1/wallet/new")
             .method("POST")
             .json(&requests::NewWallet {
                 xpub: vec![0; 64],
-                label: "test_label".to_string()
+                label: "test_label".to_string(),
             })
             .filter(&routes)
             .await
@@ -143,16 +143,19 @@ mod wallet_tests {
     }
 
     #[tokio::test]
-    #[should_panic(expected = r#"Unwrap at err: ResponseError { code: 101, description: "Invalid address label" }"#)]
+    #[should_panic(
+        expected = r#"Unwrap at err: ResponseError { code: 101, description: "Invalid address label" }"#
+    )]
     async fn test_new_wrong_label() {
         let wallet = prepare_wallet();
         let routes = new(wallet.clone());
 
-        let response: Response<responses::NewWallet> = warp::test::request().path("/v1/wallet/new")
+        let response: Response<responses::NewWallet> = warp::test::request()
+            .path("/v1/wallet/new")
             .method("POST")
             .json(&requests::NewWallet {
                 xpub: vec![0; 64],
-                label: "invalid label".to_string()
+                label: "invalid label".to_string(),
             })
             .filter(&routes)
             .await
@@ -164,16 +167,19 @@ mod wallet_tests {
     }
 
     #[tokio::test]
-    #[should_panic(expected = r#"Unwrap at err: ResponseError { code: 102, description: "Invalid xpub" }"#)]
+    #[should_panic(
+        expected = r#"Unwrap at err: ResponseError { code: 102, description: "Invalid xpub" }"#
+    )]
     async fn test_new_invalid_xpub() {
         let wallet = prepare_wallet();
         let routes = new(wallet.clone());
 
-        let response: Response<responses::NewWallet> = warp::test::request().path("/v1/wallet/new")
+        let response: Response<responses::NewWallet> = warp::test::request()
+            .path("/v1/wallet/new")
             .method("POST")
             .json(&requests::NewWallet {
                 xpub: vec![0; 32],
-                label: "test_label".to_string()
+                label: "test_label".to_string(),
             })
             .filter(&routes)
             .await

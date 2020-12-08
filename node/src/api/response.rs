@@ -30,7 +30,7 @@ impl<T> From<Result<T, ResponseError>> for Response<T> {
     fn from(res: Result<T, ResponseError>) -> Self {
         match res {
             Ok(t) => Response::ok(t),
-            Err(e) => Response::err(e)
+            Err(e) => Response::err(e),
         }
     }
 }
@@ -55,7 +55,11 @@ impl<T> Response<T> {
 #[cfg(test)]
 impl<T> Response<T> {
     pub fn unwrap_ok(self) -> T {
-        let Response { ok, response, error } = self;
+        let Response {
+            ok,
+            response,
+            error,
+        } = self;
         if let Some(err) = error {
             panic!("Unwrap at err: {:?}", err);
         }
@@ -65,7 +69,11 @@ impl<T> Response<T> {
 #[cfg(test)]
 impl<T: std::fmt::Debug> Response<T> {
     pub fn unwrap_err(self) -> ResponseError {
-        let Response { ok, response, error } = self;
+        let Response {
+            ok,
+            response,
+            error,
+        } = self;
         if let Some(t) = response {
             panic!("Unwrap err at ok: {:?}", t);
         }
@@ -96,10 +104,7 @@ pub mod error {
         ResponseError::new(103, "Wallet not exists")
     }
     pub fn wallet_updating_error() -> ResponseError {
-        ResponseError::new(
-            104,
-            "Something wrong when updating wallet",
-        )
+        ResponseError::new(104, "Something wrong when updating wallet")
     }
     pub fn tx_building_error() -> ResponseError {
         ResponseError::new(105, "Something wrong when building tx")

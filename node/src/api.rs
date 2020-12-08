@@ -1,7 +1,7 @@
-mod types;
 mod network;
 mod response;
 pub(self) mod serde_utils;
+mod types;
 mod wallet;
 mod warp_utils;
 
@@ -25,7 +25,10 @@ pub async fn launch(config: Config, bc: BlockchainRef, wallet: WalletRef) {
     warp::serve(routes).run(conf.listen).await;
 }
 
-fn routes(bc: BlockchainRef, wallet: WalletRef) -> impl Filter<Extract = impl warp::Reply, Error = Infallible> + Clone {
+fn routes(
+    bc: BlockchainRef,
+    wallet: WalletRef,
+) -> impl Filter<Extract = impl warp::Reply, Error = Infallible> + Clone {
     let wallet_routes = wallet::routes(wallet);
     let network_routes = network::routes(bc);
 

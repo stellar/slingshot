@@ -1,14 +1,14 @@
 use serde::Serialize;
 
-use crate::api::types::{MempoolStatus, State, Peer, Cursor, Tx, BlockHeader};
-use blockchain::{BlockTx};
-use zkvm::{TxHeader};
+use crate::api::types::{BlockHeader, Cursor, MempoolStatus, Peer, State, Tx};
+use blockchain::BlockTx;
+use zkvm::TxHeader;
 
 #[derive(Serialize)]
 pub struct Status {
     pub mempool: MempoolStatus,
     pub state: State,
-    pub peers: Vec<Peer>
+    pub peers: Vec<Peer>,
 }
 
 #[derive(Serialize)]

@@ -1,20 +1,18 @@
-use super::requests;
-use crate::api::types;
-use crate::api::types::{Cursor};
-use crate::api::response::{error, Response, ResponseError, ResponseResult};
-use crate::api::wallet::responses;
-use crate::api::wallet::responses::NewAddress;
-use crate::errors::Error;
-use crate::wallet::{BuiltTx, TxAction, Wallet};
-use crate::wallet_manager::WalletRef;
+use std::convert::{Infallible, TryFrom};
+
+use crate::{
+    api::{
+        response::{error, Response, ResponseError, ResponseResult},
+        types,
+        types::Cursor,
+        wallet::{requests, responses},
+    },
+    wallet::{BuiltTx, TxAction, Wallet},
+    wallet_manager::WalletRef,
+};
 use accounts::{Address, AddressLabel};
 use curve25519_dalek::scalar::Scalar;
 use keytree::{Xprv, Xpub};
-use merlin::Transcript;
-use std::convert::{Infallible, TryFrom};
-use zkvm::bulletproofs::BulletproofGens;
-use zkvm::encoding::{Encodable, ExactSizeEncodable};
-use zkvm::{TxEntry, UnsignedTx};
 
 /// Creates a new wallet
 pub(super) async fn new(
@@ -28,10 +26,9 @@ pub(super) async fn new(
             return Err(error::cannot_delete_file());
         }
     }
-    let label = AddressLabel::new(label)
-        .ok_or_else(|| error::invalid_address_label())?;
-    let xpub = Xpub::from_bytes(&xpub)
-        .ok_or_else(|| error::invalid_xpub())?;
+    let label = AddressLabel::new(label).ok_or_else(|| error::invalid_address_label())?;
+    let xpub = Xpub::from_bytes(&xpub).ok_or_else(|| error::invalid_xpub())?;
+
     let new_wallet = Wallet::new(label, xpub);
     wallet_ref
         .initialize_wallet(new_wallet)
@@ -43,27 +40,33 @@ pub(super) async fn new(
 /// Returns wallet's balance.
 pub(super) async fn balance(wallet: WalletRef) -> ResponseResult<responses::Balance> {
     let mut wallet_ref = wallet.read().await;
-    let wallet = wallet_ref.wallet_ref()
+    let wallet = wallet_ref
+        .wallet_ref()
         .map_err(|_| error::wallet_does_not_exist())?;
-    let mut balances = Vec::new();
-    wallet.balances().for_each(|balance| {
-        balances.push((balance.flavor.to_bytes(), balance.total));
-    });
+
+    let balances = wallet
+        .balances()
+        .map(|balance| (balance.flavor.to_bytes(), balance.total))
+        .collect::<Vec<_>>();
+
     Ok(responses::Balance { balances })
 }
 
 /// Lists annotated transactions.
-pub(super) async fn txs(cursor: Cursor, wallet: WalletRef) -> ResponseResult<responses::WalletTxs> {
+pub(super) async fn txs(
+    _cursor: Cursor,
+    _wallet: WalletRef,
+) -> ResponseResult<responses::WalletTxs> {
     unimplemented!()
 }
 
 /// Generates a new address.
-pub(super) async fn address(wallet: WalletRef) -> ResponseResult<NewAddress> {
+pub(super) async fn address(wallet: WalletRef) -> ResponseResult<responses::NewAddress> {
     let mut wallet_ref = wallet.write().await;
-    let update_wallet =
-        |wallet: &mut Wallet| -> Result<Address, crate::Error> { Ok(wallet.create_address()) };
+    let update_wallet = |wallet: &mut Wallet| Ok(wallet.create_address());
+
     match wallet_ref.update_wallet(update_wallet) {
-        Ok(address) => Ok(NewAddress {
+        Ok(address) => Ok(responses::NewAddress {
             address: address.to_string(),
         }),
         Err(crate::Error::WalletNotInitialized) => Err(error::wallet_does_not_exist()),
@@ -77,12 +80,13 @@ pub(super) async fn receiver(
     wallet: WalletRef,
 ) -> ResponseResult<responses::NewReceiver> {
     let mut wallet_ref = wallet.write().await;
-    let update_wallet = |wallet: &mut Wallet| -> Result<accounts::Receiver, crate::Error> {
+    let update_wallet = |wallet: &mut Wallet| {
         let requests::NewReceiver { flv, qty, exp } = req; // TODO: expiration time?
-        let (_, receiver) = wallet.create_receiver(zkvm::ClearValue {
+        let receiver_value = zkvm::ClearValue {
             qty,
             flv: Scalar::from_bits(flv),
-        });
+        };
+        let (_, receiver) = wallet.create_receiver(receiver_value);
         Ok(receiver)
     };
     match wallet_ref.update_wallet(update_wallet) {
@@ -108,7 +112,7 @@ pub(super) async fn buildtx(
     let mut err = None;
 
     let update_wallet = |wallet: &mut Wallet| -> Result<BuiltTx, crate::Error> {
-        let gens = BulletproofGens::new(256, 1);
+        let gens = zkvm::bulletproofs::BulletproofGens::new(256, 1);
         let res = wallet.build_tx(&gens, |builder| {
             for action in actions {
                 builder._add_action(action);
@@ -125,13 +129,12 @@ pub(super) async fn buildtx(
     };
     match wallet_ref.update_wallet(update_wallet) {
         Ok(tx) => {
-            let xprv = wallet_ref.read_xprv()
+            let xprv = wallet_ref
+                .read_xprv()
                 .map_err(|_| error::tx_building_error())?;
-            let block_tx = tx.sign(&xprv)
-                .map_err(|e| error::wallet_error(e))?;
+            let block_tx = tx.sign(&xprv).map_err(|e| error::wallet_error(e))?;
 
-            let tx = types::Tx::try_from(block_tx)
-                .map_err(|_| error::tx_compute_error())?;
+            let tx = types::Tx::try_from(block_tx).map_err(|_| error::tx_compute_error())?;
 
             Ok(responses::BuiltTx { tx })
         }
@@ -145,15 +148,13 @@ pub(super) async fn buildtx(
     }
 }
 
-fn build_tx_action_to_tx_action(
-    action: types::BuildTxAction,
-) -> Result<TxAction, ResponseError> {
+fn build_tx_action_to_tx_action(action: types::BuildTxAction) -> Result<TxAction, ResponseError> {
     use crate::api::types::BuildTxAction::*;
 
     match action {
         IssueToAddress(flv, qty, address) => {
-            let address = Address::from_string(&address)
-                .ok_or_else(|| error::invalid_address_label())?;
+            let address =
+                Address::from_string(&address).ok_or_else(|| error::invalid_address_label())?;
             let clr = zkvm::ClearValue {
                 qty,
                 flv: Scalar::from_bits(flv),
@@ -162,8 +163,8 @@ fn build_tx_action_to_tx_action(
         }
         IssueToReceiver(rec) => Ok(TxAction::IssueToReceiver(rec)),
         TransferToAddress(flv, qty, address) => {
-            let address = Address::from_string(&address)
-                .ok_or_else(|| error::invalid_address_label())?;
+            let address =
+                Address::from_string(&address).ok_or_else(|| error::invalid_address_label())?;
             let clr = zkvm::ClearValue {
                 qty,
                 flv: Scalar::from_bits(flv),

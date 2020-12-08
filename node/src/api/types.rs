@@ -4,8 +4,8 @@ use accounts::Receiver;
 
 use super::serde_utils::BigArray;
 use blockchain::BlockTx;
-use std::str::FromStr;
 use std::convert::TryFrom;
+use std::str::FromStr;
 use zkvm::encoding::Encodable;
 
 /// Stats about unconfirmed transactions.
@@ -167,7 +167,15 @@ impl FromStr for HexId {
 
 impl From<blockchain::BlockHeader> for BlockHeader {
     fn from(header: blockchain::BlockHeader) -> Self {
-        let blockchain::BlockHeader { version, height, prev, timestamp_ms, txroot, utxoroot, ext } = header;
+        let blockchain::BlockHeader {
+            version,
+            height,
+            prev,
+            timestamp_ms,
+            txroot,
+            utxoroot,
+            ext,
+        } = header;
         Self {
             version,
             height,
@@ -175,7 +183,7 @@ impl From<blockchain::BlockHeader> for BlockHeader {
             timestamp_ms,
             txroot: txroot.0,
             utxoroot: utxoroot.0,
-            ext
+            ext,
         }
     }
 }
@@ -194,7 +202,7 @@ impl TryFrom<BlockTx> for Tx {
             wid,
             raw: hex::encode(tx.encode_to_vec()),
             fee,
-            size
+            size,
         })
     }
 }
