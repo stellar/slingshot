@@ -19,11 +19,11 @@
     * [/network/tx/:id](#networktxid)
 * [Wallet API](#wallet-api)
     * [/wallet/new](#walletnew)
-    * [/wallet/balance](#walletidbalance)
-    * [/wallet/txs](#walletidtxs)
-    * [/wallet/address](#walletidaddress)
-    * [/wallet/receiver](#walletidreceiver)
-    * [/wallet/buildtx](#walletidbuildtx)
+    * [/wallet/balance](#walletbalance)
+    * [/wallet/txs](#wallettxs)
+    * [/wallet/address](#walletaddress)
+    * [/wallet/receiver](#walletreceiver)
+    * [/wallet/buildtx](#walletbuildtx)
 
 
 Responses are listed in JSON for a time being, but we are also going to provide the API responses via XDR format.
