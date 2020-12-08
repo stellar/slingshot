@@ -1,39 +1,39 @@
 use serde::Serialize;
 
-use crate::api::dto::{MempoolStatusDTO, StateDTO, PeerDTO, Cursor, TxDTO, BlockHeaderDTO};
+use crate::api::types::{MempoolStatus, State, Peer, Cursor, Tx, BlockHeader};
 use blockchain::{BlockTx};
 use zkvm::{TxHeader};
 
 #[derive(Serialize)]
 pub struct Status {
-    pub mempool: MempoolStatusDTO,
-    pub state: StateDTO,
-    pub peers: Vec<PeerDTO>
+    pub mempool: MempoolStatus,
+    pub state: State,
+    pub peers: Vec<Peer>
 }
 
 #[derive(Serialize)]
 pub struct MempoolTxs {
     pub cursor: String,
-    pub status: MempoolStatusDTO,
-    pub txs: Vec<TxDTO>,
+    pub status: MempoolStatus,
+    pub txs: Vec<Tx>,
 }
 
 #[derive(Serialize)]
 pub struct Blocks {
     pub cursor: String,
-    pub blocks: Vec<BlockHeaderDTO>,
+    pub blocks: Vec<BlockHeader>,
 }
 
 #[derive(Serialize)]
 pub struct Block {
-    pub header: BlockHeaderDTO,
+    pub header: BlockHeader,
     pub txs: Vec<BlockTx>,
 }
 
 #[derive(Serialize)]
 pub struct TxResponse {
     pub status: TxStatus,
-    pub tx: TxDTO,
+    pub tx: Tx,
 }
 
 #[derive(Serialize)]

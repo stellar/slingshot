@@ -1,4 +1,4 @@
-mod dto;
+mod types;
 mod network;
 mod response;
 pub(self) mod serde_utils;

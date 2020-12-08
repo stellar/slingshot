@@ -5,11 +5,10 @@ use accounts::Receiver;
 use super::serde_utils::BigArray;
 use blockchain::BlockTx;
 use std::str::FromStr;
-use zkvm::TxHeader;
 
 /// Stats about unconfirmed transactions.
 #[derive(Serialize)]
-pub struct MempoolStatusDTO {
+pub struct MempoolStatus {
     /// Total number of transactions
     pub count: u64,
     /// Total size of all transactions in the mempool
@@ -19,7 +18,7 @@ pub struct MempoolStatusDTO {
 }
 
 #[derive(Serialize)]
-pub struct BlockHeaderDTO {
+pub struct BlockHeader {
     pub version: u64,       // Network version.
     pub height: u64,        // Serial number of the block, starting with 1.
     pub prev: [u8; 32],     // ID of the previous block. Initial block uses the all-zero string.
@@ -30,20 +29,20 @@ pub struct BlockHeaderDTO {
 }
 
 #[derive(Deserialize)]
-pub struct TxHeaderDTO {
+pub struct TxHeader {
     pub version: u64,
     pub mintime_ms: u64,
     pub maxtime_ms: u64,
 }
 
 #[derive(Serialize)]
-pub struct BlockDTO {
-    pub header: BlockHeaderDTO,
+pub struct Block {
+    pub header: BlockHeader,
     pub txs: Vec<BlockTx>,
 }
 
 #[derive(Serialize)]
-pub struct TxDTO {
+pub struct Tx {
     pub id: [u8; 32],  // canonical tx id
     pub wid: [u8; 32], // witness hash of the tx (includes signatures and proofs)
     pub raw: String,
@@ -53,9 +52,9 @@ pub struct TxDTO {
 
 /// Description of the current blockchain state.
 #[derive(Serialize)]
-pub struct StateDTO {
+pub struct State {
     // Block header
-    pub tip: BlockHeaderDTO,
+    pub tip: BlockHeader,
     // The utreexo state
     #[serde(with = "BigArray")]
     pub utreexo: [Option<[u8; 32]>; 64],
@@ -63,7 +62,7 @@ pub struct StateDTO {
 
 /// Description of a connected peer.
 #[derive(Serialize)]
-pub struct PeerDTO {
+pub struct Peer {
     pub id: [u8; 32],
     pub since: u64,
     /// ipv6 address format
@@ -72,16 +71,16 @@ pub struct PeerDTO {
 }
 
 #[derive(Serialize)]
-pub enum AnnotatedActionDTO {
-    Issue(IssueActionDTO),
-    Spend(SpendActionDTO),
-    Receive(ReceiveActionDTO),
-    Retire(RetireActionDTO),
-    Memo(MemoActionDTO),
+pub enum AnnotatedAction {
+    Issue(IssueAction),
+    Spend(SpendAction),
+    Receive(ReceiveAction),
+    Retire(RetireAction),
+    Memo(MemoAction),
 }
 
 #[derive(Serialize)]
-pub struct IssueActionDTO {
+pub struct IssueAction {
     // Index of the txlog entry
     pub entry: u32,
     pub qty: u64,
@@ -89,7 +88,7 @@ pub struct IssueActionDTO {
 }
 
 #[derive(Serialize)]
-pub struct SpendActionDTO {
+pub struct SpendAction {
     // Index of the txlog entry
     pub entry: u32,
     pub qty: u64,
@@ -99,7 +98,7 @@ pub struct SpendActionDTO {
 }
 
 #[derive(Serialize)]
-pub struct ReceiveActionDTO {
+pub struct ReceiveAction {
     // Index of the txlog entry
     pub entry: u32,
     pub qty: u64,
@@ -109,7 +108,7 @@ pub struct ReceiveActionDTO {
 }
 
 #[derive(Serialize)]
-pub struct RetireActionDTO {
+pub struct RetireAction {
     // Index of the txlog entry
     pub entry: u32,
     pub qty: u64,
@@ -117,21 +116,21 @@ pub struct RetireActionDTO {
 }
 
 #[derive(Serialize)]
-pub struct MemoActionDTO {
+pub struct MemoAction {
     pub entry: u32,
     pub data: Vec<u8>,
 }
 
 /// Description of the current blockchain state.
 #[derive(Serialize)]
-pub struct AnnotatedTxDTO {
+pub struct AnnotatedTx {
     /// Raw tx
-    pub tx: TxDTO,
-    pub actions: Vec<AnnotatedActionDTO>,
+    pub tx: Tx,
+    pub actions: Vec<AnnotatedAction>,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
-pub enum BuildTxActionDTO {
+pub enum BuildTxAction {
     IssueToAddress([u8; 32], u64, String),
     IssueToReceiver(Receiver),
     TransferToAddress([u8; 32], u64, String),
@@ -164,7 +163,7 @@ impl FromStr for HexId {
     }
 }
 
-impl From<blockchain::BlockHeader> for BlockHeaderDTO {
+impl From<blockchain::BlockHeader> for BlockHeader {
     fn from(header: blockchain::BlockHeader) -> Self {
         let blockchain::BlockHeader { version, height, prev, timestamp_ms, txroot, utxoroot, ext } = header;
         Self {
@@ -179,7 +178,7 @@ impl From<blockchain::BlockHeader> for BlockHeaderDTO {
     }
 }
 
-impl From<BlockTx> for TxDTO {
+impl From<BlockTx> for Tx {
     fn from(tx: BlockTx) -> Self {
         unimplemented!()
     }

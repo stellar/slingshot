@@ -1,5 +1,5 @@
 use super::super::serde_utils::BigArray;
-use crate::api::dto::BuildTxActionDTO;
+use crate::api::types::BuildTxAction;
 use serde::{Serialize, Deserialize};
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -17,5 +17,5 @@ pub struct NewReceiver {
 
 #[derive(Serialize, Deserialize)]
 pub struct BuildTx {
-    pub actions: Vec<BuildTxActionDTO>,
+    pub actions: Vec<BuildTxAction>,
 }

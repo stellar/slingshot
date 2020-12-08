@@ -1,11 +1,11 @@
 use serde::Deserialize;
 
 use crate::api::serde_utils::BigArray;
-use crate::api::dto::TxHeaderDTO;
+use crate::api::types::TxHeader;
 
 #[derive(Deserialize)]
 pub struct RawTx {
-    pub header: TxHeaderDTO,
+    pub header: TxHeader,
     pub program: Vec<u8>,
     #[serde(with = "BigArray")]
     pub signature: [u8; 64],

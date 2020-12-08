@@ -1,15 +1,15 @@
-use crate::api::dto::{Cursor, HexId, MempoolStatusDTO, StateDTO, TxDTO};
 use crate::api::network::{requests, responses};
 use std::convert::Infallible;
 use crate::bc::BlockchainRef;
 use crate::api::response::{ResponseResult, error};
 use blockchain::{Mempool, BlockchainState, BlockchainProtocol, BlockHeader, Block, BlockTx};
 use zkvm::encoding::{ExactSizeEncodable, Encodable};
-use crate::api::dto;
+use crate::api::types;
 use zkvm::{Hash, Tx, TxHeader};
 use crate::api::network::responses::TxStatus;
 use zkvm::bulletproofs::r1cs::R1CSProof;
 use musig::Signature;
+use crate::api::types::{Cursor, HexId};
 
 pub(super) async fn status(bc: BlockchainRef) -> ResponseResult<responses::Status> {
     let bc_state = BlockchainState::make_initial(5, vec![]).0;
@@ -20,7 +20,7 @@ pub(super) async fn status(bc: BlockchainRef) -> ResponseResult<responses::Statu
     let tip = state.tip.clone().into();
     let utreexo = [None; 64];
 
-    let state = StateDTO {
+    let state = types::State {
         tip,
         utreexo
     };
@@ -34,7 +34,7 @@ pub(super) async fn status(bc: BlockchainRef) -> ResponseResult<responses::Statu
     })
 }
 
-pub(super) async fn mempool(cursor: Cursor, bc: BlockchainRef) -> ResponseResult<responses::MempoolTxs> {
+pub(super) async fn mempool(cursor: types::Cursor, bc: BlockchainRef) -> ResponseResult<responses::MempoolTxs> {
     let bc_state = BlockchainState::make_initial(5, vec![]).0;
     let mempool = &Mempool::new(bc_state.clone(), 5);
     let txs_owned = Vec::<blockchain::BlockTx>::new();
@@ -45,7 +45,7 @@ pub(super) async fn mempool(cursor: Cursor, bc: BlockchainRef) -> ResponseResult
     let elements = cursor.count() as usize;
 
     let status = mempool_status(mempool);
-    let txs = txs.skip(offset).take(elements).map(|tx| Into::<dto::TxDTO>::into(tx.clone())).collect::<Vec<_>>();
+    let txs = txs.skip(offset).take(elements).map(|tx| Into::<types::Tx>::into(tx.clone())).collect::<Vec<_>>();
 
     Ok(responses::MempoolTxs {
         cursor: (offset + elements).to_string(),
@@ -79,7 +79,7 @@ pub(super) async fn block(block_id: HexId, bc: BlockchainRef) -> ResponseResult<
 }
 
 pub(super) async fn tx(tx_id: HexId, bc: BlockchainRef) -> ResponseResult<responses::TxResponse> {
-    let tx = BlockTx {
+    let block_tx = BlockTx {
         tx: Tx {
             header: TxHeader {
                 version: 0,
@@ -93,13 +93,13 @@ pub(super) async fn tx(tx_id: HexId, bc: BlockchainRef) -> ResponseResult<respon
         proofs: vec![]
     };
 
-    let precomputed = tx.tx.precompute()
+    let precomputed = block_tx.tx.precompute()
         .map_err(|_| error::tx_compute_error())?;
 
-    let tx_dto = TxDTO {
+    let tx = types::Tx {
         id: (precomputed.id.0).0,
-        wid: tx.witness_hash().0,
-        raw: hex::encode(tx.encode_to_vec()),
+        wid: block_tx.witness_hash().0,
+        raw: hex::encode(block_tx.encode_to_vec()),
         fee: precomputed.feerate.fee(),
         size: precomputed.feerate.size() as u64,
     };
@@ -112,7 +112,7 @@ pub(super) async fn tx(tx_id: HexId, bc: BlockchainRef) -> ResponseResult<respon
 
     Ok(responses::TxResponse {
         status,
-        tx: tx_dto
+        tx
     })
 }
 
@@ -120,12 +120,12 @@ pub(super) async fn submit(raw_tx: requests::RawTx, bc: BlockchainRef) -> Respon
     unimplemented!()
 }
 
-fn mempool_status(mempool: &Mempool) -> MempoolStatusDTO {
+fn mempool_status(mempool: &Mempool) -> types::MempoolStatus {
     let count = mempool.entries().count() as u64;
     let size = mempool.len() as u64;
     let feerate = 0;
 
-    MempoolStatusDTO {
+    types::MempoolStatus {
         count,
         size,
         feerate

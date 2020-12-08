@@ -2,7 +2,7 @@ mod handlers;
 mod requests;
 mod responses;
 
-use crate::api::dto::{Cursor, HexId};
+use crate::api::types::{Cursor, HexId};
 use warp::Filter;
 use crate::bc::BlockchainRef;
 use std::convert::Infallible;
