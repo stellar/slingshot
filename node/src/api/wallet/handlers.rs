@@ -44,7 +44,7 @@ pub(super) async fn new(
 pub(super) async fn balance(wallet: WalletRef) -> ResponseResult<responses::Balance> {
     let mut wallet_ref = wallet.read().await;
     let wallet = wallet_ref.wallet_ref()
-        .map_err(|_| error::wallet_not_exists())?;
+        .map_err(|_| error::wallet_does_not_exist())?;
     let mut balances = Vec::new();
     wallet.balances().for_each(|balance| {
         balances.push((balance.flavor.to_bytes(), balance.total));
@@ -66,7 +66,7 @@ pub(super) async fn address(wallet: WalletRef) -> ResponseResult<NewAddress> {
         Ok(address) => Ok(NewAddress {
             address: address.to_string(),
         }),
-        Err(crate::Error::WalletNotInitialized) => Err(error::wallet_not_exists()),
+        Err(crate::Error::WalletNotInitialized) => Err(error::wallet_does_not_exist()),
         _ => Err(error::wallet_updating_error()),
     }
 }
@@ -87,7 +87,7 @@ pub(super) async fn receiver(
     };
     match wallet_ref.update_wallet(update_wallet) {
         Ok(receiver) => Ok(responses::NewReceiver { receiver }),
-        Err(crate::Error::WalletNotInitialized) => Err(error::wallet_not_exists()),
+        Err(crate::Error::WalletNotInitialized) => Err(error::wallet_does_not_exist()),
         _ => Err(error::wallet_updating_error()),
     }
 }
@@ -146,7 +146,7 @@ pub(super) async fn buildtx(
 
             Ok(responses::BuiltTx { tx })
         }
-        Err(crate::Error::WalletNotInitialized) => Err(error::wallet_not_exists()),
+        Err(crate::Error::WalletNotInitialized) => Err(error::wallet_does_not_exist()),
         // This means that we have error while updating wallet
         Err(crate::Error::WalletAlreadyExists) => Err(match err {
             Some(e) => error::wallet_error(e),

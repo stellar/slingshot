@@ -92,7 +92,7 @@ pub mod error {
     pub fn invalid_xpub() -> ResponseError {
         ResponseError::new(102, "Invalid xpub")
     }
-    pub fn wallet_not_exists() -> ResponseError {
+    pub fn wallet_does_not_exist() -> ResponseError {
         ResponseError::new(103, "Wallet not exists")
     }
     pub fn wallet_updating_error() -> ResponseError {
