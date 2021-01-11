@@ -34,9 +34,9 @@ pub struct NodeHandle<Custom: Codable> {
     channel: sync::mpsc::Sender<NodeMessage<Custom>>,
 }
 
+#[derive(Clone)]
 pub struct NodeConfig {
-    pub listen_ip: IpAddr,
-    pub listen_port: u16,
+    pub listen_addr: SocketAddr,
     pub inbound_limit: usize,
     pub outbound_limit: usize,
     pub heartbeat_interval_sec: u64,
@@ -99,12 +99,6 @@ enum NodeMessage<Custom: Codable> {
     ListPeers(Reply<Vec<PeerInfo>>),
 }
 
-impl NodeConfig {
-    fn listen_addr(&self) -> SocketAddr {
-        SocketAddr::new(self.listen_ip, self.listen_port)
-    }
-}
-
 impl<Custom> Node<Custom>
 where
     Custom: Codable + Clone + Unpin + 'static,
@@ -122,7 +116,7 @@ where
         io::Error,
     > {
         // Prepare listening socket.
-        let listener = net::TcpListener::bind(config.listen_addr()).await?;
+        let listener = net::TcpListener::bind(config.listen_addr).await?;
         let mut local_addr = listener.local_addr()?;
         if local_addr.ip().is_unspecified() {
             local_addr.set_ip(Ipv4Addr::LOCALHOST.into());

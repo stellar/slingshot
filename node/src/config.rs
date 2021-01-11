@@ -72,9 +72,25 @@ pub struct P2P {
     #[serde(default = "P2P::default_listen_addr")]
     pub listen_addr: SocketAddr,
 
-    /// List of initial peers
+    /// Listening address for the P2P webserver.
+    #[serde(default = "P2P::default_key_path")]
+    pub key_path: PathBuf,
+
+    /// List of initial peers.
     #[serde(default)]
     pub peers: Vec<SocketAddr>,
+
+    /// Maximum number of incoming connections.
+    #[serde(default = "P2P::default_inbound_limit")]
+    pub inbound_limit: usize,
+
+    /// Maximum number of outgoing connections.
+    #[serde(default = "P2P::default_outbound_limit")]
+    pub outbound_limit: usize,
+
+    /// Ping frequency of the other nodes.
+    #[serde(default = "P2P::default_heartbeat_interval_sec")]
+    pub heartbeat_interval_sec: u64,
 }
 
 /// P2P configuration options
@@ -214,13 +230,32 @@ impl P2P {
     pub fn default_listen_addr() -> SocketAddr {
         ([0, 0, 0, 0], 0).into()
     }
+    /// Default path to the peer key
+    pub fn default_key_path() -> PathBuf {
+        PathBuf::from("./peer.key")
+    }
+
+    pub fn default_inbound_limit() -> usize {
+        100
+    }
+
+    pub fn default_outbound_limit() -> usize {
+        100
+    }
+    pub fn default_heartbeat_interval_sec() -> u64 {
+        3600
+    }
 }
 
 impl Default for P2P {
     fn default() -> Self {
         P2P {
             listen_addr: Self::default_listen_addr(),
+            key_path: Self::default_key_path(),
             peers: Vec::new(),
+            inbound_limit: Self::default_inbound_limit(),
+            outbound_limit: Self::default_outbound_limit(),
+            heartbeat_interval_sec: Self::default_heartbeat_interval_sec(),
         }
     }
 }

@@ -103,7 +103,7 @@ pub trait Delegate {
 
     /// Returns ID of the current tip.
     fn tip_id(&self) -> BlockID {
-        self.tip().0.id()
+        self.tip().0.id() 
     }
 
     /// Returns the signed tip of the blockchain
