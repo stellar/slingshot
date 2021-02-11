@@ -68,8 +68,7 @@ pub fn launch_p2p() -> P2PHandle {
         let host_privkey = cybershake::PrivateKey::from(Scalar::random(&mut thread_rng()));
 
         let config = NodeConfig {
-            listen_ip: IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)),
-            listen_port: 0,
+            listen_addr: ([127, 0, 0, 1], 0).into(),
             inbound_limit: 100,
             outbound_limit: 100,
             heartbeat_interval_sec: 3600,

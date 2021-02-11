@@ -1,6 +1,6 @@
 use curve25519_dalek::scalar::Scalar;
 use rand::thread_rng;
-use std::net::{IpAddr, Ipv4Addr};
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
 use tokio::io;
 use tokio::prelude::*;
@@ -19,8 +19,7 @@ fn main() {
             let host_privkey = cybershake::PrivateKey::from(Scalar::random(&mut thread_rng()));
 
             let config = NodeConfig {
-                listen_ip: IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
-                listen_port: 0,
+                listen_addr: SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 0),
                 inbound_limit: 100,
                 outbound_limit: 100,
                 heartbeat_interval_sec: 3600,
