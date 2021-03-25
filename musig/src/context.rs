@@ -1,7 +1,7 @@
 use curve25519_dalek::ristretto::RistrettoPoint;
 use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
-use starsig::{TranscriptProtocol as StarsigTranscriptProtocol, VerificationKey};
+use starsig::{SigningKey, TranscriptProtocol as StarsigTranscriptProtocol, VerificationKey};
 
 use super::{MusigError, TranscriptProtocol};
 
@@ -90,6 +90,42 @@ impl Multikey {
     /// Returns VerificationKey representation of aggregated key.
     pub fn aggregated_key(&self) -> VerificationKey {
         self.aggregated_key
+    }
+
+    /// Constructs a signing multikey aggregating the individual signing keys.
+    /// This function is not used in real applications because parties do not share keys,
+    /// but comes handy in unit tests.
+    pub fn aggregated_signing_key(privkeys: &[SigningKey]) -> SigningKey {
+        match privkeys.len() {
+            0 => {
+                return Scalar::zero();
+            }
+            1 => {
+                // Special case: single key is passed as-is
+                return privkeys[0];
+            }
+            _ => {}
+        }
+
+        // Create transcript for Multikey
+        let mut prf = Transcript::new(b"Musig.aggregated-key");
+        prf.append_u64(b"n", privkeys.len() as u64);
+
+        // Commit pubkeys into the transcript
+        // <L> = H(X_1 || X_2 || ... || X_n)
+        for x in privkeys.iter() {
+            let X = VerificationKey::from_secret(x);
+            prf.append_point(b"X", X.as_point());
+        }
+
+        // aggregated_key = sum_i ( a_i * X_i )
+        let mut aggregated_key = Scalar::zero();
+        for (i, x) in privkeys.iter().enumerate() {
+            let a = Multikey::compute_factor(&prf, i);
+            aggregated_key = aggregated_key + a * x;
+        }
+
+        aggregated_key
     }
 }
 

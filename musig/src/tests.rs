@@ -145,6 +145,15 @@ fn verify_multikey() {
             multikey.aggregated_key()
         )
         .is_ok());
+
+    // Check aggregated signing key as well:
+    let aggregated_privkey = Multikey::aggregated_signing_key(&priv_keys);
+    assert!(signature
+        .verify(
+            &mut Transcript::new(b"example transcript"),
+            VerificationKey::from_secret(&aggregated_privkey)
+        )
+        .is_ok());
 }
 
 #[test]
