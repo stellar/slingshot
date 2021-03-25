@@ -6,8 +6,8 @@ use crate::predicate::PredicateTree;
 use crate::scalar_witness::ScalarWitness;
 use crate::types::String;
 
-use core::borrow::Borrow;
 use alloc::vec;
+use core::borrow::Borrow;
 use merlin::Transcript;
 use serde::{Deserialize, Serialize};
 
@@ -283,7 +283,8 @@ impl MerkleItem for Program {
 
 impl core::iter::Extend<Instruction> for Program {
     fn extend<T>(&mut self, iter: T)
-    where T: IntoIterator<Item = Instruction>
+    where
+        T: IntoIterator<Item = Instruction>,
     {
         self.0.extend(iter)
     }
