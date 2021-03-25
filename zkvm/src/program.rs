@@ -6,6 +6,7 @@ use crate::predicate::PredicateTree;
 use crate::scalar_witness::ScalarWitness;
 use crate::types::String;
 
+use alloc::vec;
 use core::borrow::Borrow;
 use merlin::Transcript;
 use serde::{Deserialize, Serialize};
@@ -277,5 +278,23 @@ impl MerkleItem for ProgramItem {
 impl MerkleItem for Program {
     fn commit(&self, t: &mut Transcript) {
         t.append_message(b"program", &self.to_bytes());
+    }
+}
+
+impl core::iter::Extend<Instruction> for Program {
+    fn extend<T>(&mut self, iter: T)
+    where
+        T: IntoIterator<Item = Instruction>,
+    {
+        self.0.extend(iter)
+    }
+}
+
+impl core::iter::IntoIterator for Program {
+    type Item = Instruction;
+    type IntoIter = vec::IntoIter<Self::Item>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
     }
 }
