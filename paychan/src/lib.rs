@@ -10,16 +10,20 @@ fn blinded_value(v: ClearValue) -> Value {
     }
 }
 
- // Creates program: `<qty> commit <flv> commit borrow => -V +V`
- fn borrow_value(p: &mut Program, v: Value) {
+// Creates program: `<qty> commit <flv> commit borrow => -V +V`
+fn borrow_value(p: &mut Program, v: Value) {
     p.push(v.qty).commit().push(v.flv).commit().borrow();
 }
 
+<<<<<<< HEAD
 fn output_value(
     p: &mut Program,
     v: Value,
     pred: Predicate,
 ) {
+=======
+fn output_value(p: &mut Program, value: Value, pred: Predicate) {
+>>>>>>> 58643e7 (fmt)
     // qty commit flv commit borrow => -v +v
     borrow_value(p, v);
     p.push(zkvm::String::Predicate(Box::new(pred)));
@@ -173,12 +177,20 @@ fn test() {
         output_multiple_values(
             p,
             alice_original_balances.into_iter(),
+<<<<<<< HEAD
             Predicate::new(alice.clone()),
+=======
+            Predicate::Key(alice.clone()),
+>>>>>>> 58643e7 (fmt)
         );
         output_multiple_values(
             p,
             bob_original_balances.into_iter(),
+<<<<<<< HEAD
             Predicate::new(bob.clone()),
+=======
+            Predicate::Key(bob.clone()),
+>>>>>>> 58643e7 (fmt)
         );
     });
 
@@ -192,8 +204,8 @@ fn test() {
     let initial_exit = Program::build(|p| {
         // stack: assets, seq, timeout, prog, tag
         p.dup(3); // copy the seq from the stack
-        // TBD: check the sequence, update timeout and redistribution program
-        // TBD: tx.maxtime must be constrained close to mintime so we don't allow locking up resolution too far in the future.
+                  // TBD: check the sequence, update timeout and redistribution program
+                  // TBD: tx.maxtime must be constrained close to mintime so we don't allow locking up resolution too far in the future.
     });
 
     // Produce a signature for the initial distribution
@@ -201,9 +213,12 @@ fn test() {
     let mut t = Transcript::new(b"ZkVM.signtag");
     t.append_message(b"tag", &channel_tag[..]);
     t.append_message(b"prog", &initial_exit.to_bytes());
+<<<<<<< HEAD
 
     // FIXME: this does not accurately emulate two-party interaction.
     // See musig APIs for a proper MPC protocol where keys are not shared.
+=======
+>>>>>>> 58643e7 (fmt)
     let initial_exit_signature = Signature::sign(
         &mut t,
         Multikey::aggregated_signing_key(&vec![alice_prv, bob_prv]),
@@ -212,10 +227,15 @@ fn test() {
     // Step 2: Alice and Bob co-sign a tx that locks up their funds in the initial contract.
     // In this example we just cook up a serialized contract that we'll be spending.
 
+<<<<<<< HEAD
 
 
     // Step 3: Alice and Bob co-sign distribution program and exchange funds indefinitely
 
+=======
+    // Step 3: Alice and Bob co-sign distribution program and exchange funds indefinitely
+
+>>>>>>> 58643e7 (fmt)
     // Case A: Alice and Bob co-sign exit from the channel
 
     // Case B: Alice closes channel with the latest version.
