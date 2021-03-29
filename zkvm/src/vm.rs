@@ -177,6 +177,7 @@ where
                 Instruction::Output(k) => self.output(k)?,
                 Instruction::Contract(k) => self.contract(k)?,
                 Instruction::Log => self.log()?,
+                Instruction::Eval => self.eval()?,
                 Instruction::Call => self.call()?,
                 Instruction::Signtx => self.signtx()?,
                 Instruction::Signid => self.signid()?,
@@ -569,6 +570,15 @@ where
         for item in contract.payload.into_iter() {
             self.push_item(item);
         }
+        Ok(())
+    }
+
+    fn eval(&mut self) -> Result<(), VMError> {
+        // Pop program
+        let program_item = self.pop_item()?.to_program()?;
+
+        // Replace current program with new program
+        self.continue_with_program(program_item)?;
         Ok(())
     }
 
