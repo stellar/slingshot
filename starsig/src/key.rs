@@ -26,8 +26,8 @@ impl VerificationKey {
     }
 
     /// Creates new key from a compressed form, remembers the compressed point.
-    pub fn from_compressed(p: CompressedRistretto) -> Option<Self> {
-        Some(VerificationKey { point: p })
+    pub fn from_compressed(p: CompressedRistretto) -> Self {
+        VerificationKey { point: p }
     }
 
     /// Converts the Verification key to a compressed point

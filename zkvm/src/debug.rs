@@ -146,11 +146,7 @@ impl Instruction {
 
 impl fmt::Debug for Predicate {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Predicate::Opaque(r) => write!(f, "0x{}", hex::encode(&r.as_bytes())),
-            Predicate::Key(vk) => write!(f, "0x{}", hex::encode(&vk.as_bytes())),
-            Predicate::Tree(pt) => write!(f, "{:?}", pt),
-        }
+        write!(f, "0x{}", hex::encode(&self.verification_key().as_bytes()))
     }
 }
 

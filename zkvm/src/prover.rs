@@ -48,7 +48,8 @@ impl<'t, 'g> Delegate<r1cs::Prover<'g, Transcript>> for Prover<'g> {
         pred: Predicate,
         contract_id: ContractID,
     ) -> Result<(), VMError> {
-        let k = pred.to_verification_key_witness()?;
+        // TBD: store predicate itself instead
+        let k = pred.verification_key();
         self.signtx_items.push((k, contract_id));
         Ok(())
     }

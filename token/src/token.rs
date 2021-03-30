@@ -73,7 +73,7 @@ mod tests {
 
     fn add_dummy_input(p: &mut Program, dummy_key: &Scalar) {
         let contract = Contract {
-            predicate: Predicate::Key(VerificationKey::from_secret(dummy_key)),
+            predicate: Predicate::new(VerificationKey::from_secret(dummy_key)),
             payload: vec![],
             anchor: Anchor::from_raw_bytes([0u8; 32]),
         };
@@ -87,10 +87,10 @@ mod tests {
             let dest_key = Scalar::from(2u64);
             let dummy_key = Scalar::from(3u64);
             let usd = Token::new(
-                Predicate::Key(VerificationKey::from_secret(&issue_key)),
+                Predicate::new(VerificationKey::from_secret(&issue_key)),
                 b"USD".to_vec(),
             );
-            let dest = Predicate::Key(VerificationKey::from_secret(&dest_key));
+            let dest = Predicate::new(VerificationKey::from_secret(&dest_key));
 
             let program = Program::build(|p| {
                 add_dummy_input(p, &dummy_key);
@@ -112,10 +112,10 @@ mod tests {
             let dest_key = Scalar::from(2u64);
             let dummy_key = Scalar::from(3u64);
             let usd = Token::new(
-                Predicate::Key(VerificationKey::from_secret(&issue_key)),
+                Predicate::new(VerificationKey::from_secret(&issue_key)),
                 b"USD".to_vec(),
             );
-            let dest = Predicate::Key(VerificationKey::from_secret(&dest_key));
+            let dest = Predicate::new(VerificationKey::from_secret(&dest_key));
             let issue_program = Program::build(|p| {
                 add_dummy_input(p, &dummy_key);
                 usd.issue_to(p, 10u64, dest.clone());

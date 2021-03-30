@@ -65,7 +65,7 @@ impl ProgramHelper for Program {
 /// Generates a secret Scalar / key Predicate pair
 fn generate_predicate() -> (Predicate, Scalar) {
     let scalar = Scalar::from(0u64);
-    let pred = Predicate::Key(VerificationKey::from_secret(&scalar));
+    let pred = Predicate::new(VerificationKey::from_secret(&scalar));
     (pred, scalar)
 }
 
@@ -81,7 +81,7 @@ fn generate_predicates(pred_num: usize) -> (Vec<Predicate>, Vec<Scalar>) {
 
     let predicates: Vec<Predicate> = scalars
         .iter()
-        .map(|s| Predicate::Key((s * gens.B).into()))
+        .map(|s| Predicate::new((s * gens.B).into()))
         .collect();
 
     (predicates, scalars)
@@ -91,7 +91,7 @@ fn generate_predicates(pred_num: usize) -> (Vec<Predicate>, Vec<Scalar>) {
 /// a flavor, along with the flavor Scalar.
 fn make_flavor() -> (Scalar, Predicate, Scalar) {
     let scalar = Scalar::from(100u64);
-    let predicate = Predicate::Key(VerificationKey::from_secret(&scalar));
+    let predicate = Predicate::new(VerificationKey::from_secret(&scalar));
     let flavor = Value::issue_flavor(&predicate, String::default());
     (scalar, predicate, flavor)
 }
@@ -476,13 +476,13 @@ fn taproot_happy_path() {
     let pk = VerificationKey::from_secret(&sk);
     let pred_tree = PredicateTree::new(Some(pk), vec![], [0u8; 32]).unwrap();
     let factor = pred_tree.adjustment_factor();
-    let prev_output = make_output(101u64, Scalar::from(1u64), Predicate::Tree(pred_tree));
+    let prev_output = make_output(101u64, Scalar::from(1u64), Predicate::tree(pred_tree));
 
     let prog = Program::build(|p| {
         p.push(prev_output)
             .input()
             .signtx()
-            .push(Predicate::Key(pk)) // send to the key
+            .push(Predicate::new(pk)) // send to the key
             .output(1);
     });
 
@@ -504,7 +504,7 @@ fn taproot_program_path() {
     let tree = PredicateTree::new(Some(pk), vec![spend_prog], blinding_key).unwrap();
     let factor = tree.adjustment_factor();
     let (call_proof, call_prog) = tree.create_callproof(0).unwrap();
-    let prev_output = make_output(qty, flavor, Predicate::Tree(tree));
+    let prev_output = make_output(qty, flavor, Predicate::tree(tree));
 
     let prog = Program::build(|p| {
         p.push(secret_scalar)

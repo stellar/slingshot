@@ -719,9 +719,9 @@ impl Utxo {
         // (1) a correct Ristretto point,
         // (2) a simple public key.
         // Therefore, we can simply unwrap.
-        let predicate = Predicate::Key(
-            VerificationKey::from_compressed(self.receiver.opaque_predicate).unwrap(),
-        );
+        let predicate = Predicate::new(VerificationKey::from_compressed(
+            self.receiver.opaque_predicate,
+        ));
         // TBD: Instead of unwrap-decompressing the key, derive it directly from xpub with a given sequence number.
 
         Contract {

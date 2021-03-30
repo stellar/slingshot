@@ -20,7 +20,7 @@ struct AssetDefinition {
 impl AssetDefinition {
     pub fn issuance_predicate(&self) -> zkvm::Predicate {
         let vkey = zkvm::VerificationKey::from_secret(&self.issuance_key);
-        zkvm::Predicate::Key(vkey)
+        zkvm::Predicate::new(vkey)
     }
 
     pub fn metadata(&self) -> zkvm::String {

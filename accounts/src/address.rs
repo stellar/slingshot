@@ -22,7 +22,7 @@ use curve25519_dalek::traits::{IsIdentity, VartimeMultiscalarMul};
 use merlin::Transcript;
 use zkvm::bulletproofs::PedersenGens;
 use zkvm::encoding::Encodable;
-use zkvm::{ClearValue, Commitment, Predicate, TranscriptProtocol, Value};
+use zkvm::{ClearValue, Commitment, Predicate, TranscriptProtocol, Value, VerificationKey};
 
 use super::Receiver;
 
@@ -94,7 +94,7 @@ impl Address {
 
     /// Returns the control key wrapped in opaque ZkVM predicate type.
     pub fn predicate(&self) -> Predicate {
-        Predicate::Opaque(self.control_key)
+        Predicate::new(VerificationKey::from_compressed(self.control_key))
     }
 
     /// Encodes address as bech32 string with the label as its prefix.

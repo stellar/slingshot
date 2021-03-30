@@ -2,6 +2,7 @@
 
 use curve25519_dalek::scalar::Scalar;
 use merlin::Transcript;
+use musig::VerificationKey;
 use serde::{Deserialize, Serialize};
 use spacesuit::{self, SignedInteger};
 
@@ -263,7 +264,7 @@ impl String {
         match self {
             String::Opaque(data) => {
                 let point = (&data[..]).read_all(|r| r.read_point())?;
-                Ok(Predicate::Opaque(point))
+                Ok(Predicate::new(VerificationKey::from_compressed(point)))
             }
             String::Predicate(p) => Ok(*p),
             _ => Err(VMError::TypeNotPredicate),

@@ -10,7 +10,7 @@ use zkvm::{
 };
 
 fn make_predicate(privkey: impl Into<Scalar>) -> Predicate {
-    Predicate::Key(VerificationKey::from_secret(&privkey.into()))
+    Predicate::new(VerificationKey::from_secret(&privkey.into()))
 }
 
 fn nonce_flavor() -> Scalar {
