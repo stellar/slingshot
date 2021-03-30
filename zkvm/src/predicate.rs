@@ -19,7 +19,7 @@ use crate::merkle::{Hash, Hasher, MerkleItem, MerkleTree, Path};
 use crate::program::{Program, ProgramItem};
 use crate::transcript::TranscriptProtocol;
 
-pub trait PredicateWitness: Any {
+pub trait PredicateWitness: Any + Send {
     fn clone_witness(&self) -> Box<dyn PredicateWitness>;
 }
 /// Represents a ZkVM predicate with its optional witness data.
