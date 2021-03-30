@@ -387,6 +387,14 @@ pub enum Instruction {
     /// Fails if `data` is not a _string_.
     Log,
 
+    /// _prog_ **eval** → _results..._
+    ///
+    /// 1. Pops _program_ `prog`.
+    /// 2. Set the `prog` as current.
+    ///
+    /// Fails if `prog` is not a _program_.
+    Eval,
+
     /// _contract(P) proof prog_ **call** → _results..._
     ///
     /// 1. Pops _program_ `prog`, the _call proof_ `proof`, and a _contract_ `contract`.
@@ -561,17 +569,19 @@ pub enum Opcode {
     Contract = 0x1c,
     /// A code for [Instruction::Log]
     Log = 0x1d,
+    /// A code for [Instruction::Eval]
+    Eval = 0x1e,
     /// A code for [Instruction::Call]
-    Call = 0x1e,
+    Call = 0x1f,
     /// A code for [Instruction::Signtx]
-    Signtx = 0x1f,
+    Signtx = 0x20,
     /// A code for [Instruction::Signid]
-    Signid = 0x20,
+    Signid = 0x21,
     /// A code for [Instruction::Signtag]
     Signtag = MAX_OPCODE,
 }
 
-const MAX_OPCODE: u8 = 0x21;
+const MAX_OPCODE: u8 = 0x22;
 
 impl Opcode {
     /// Converts the opcode to `u8`.
@@ -650,6 +660,7 @@ impl Encodable for Instruction {
                 w.write_u32(b"k", *k as u32)?;
             }
             Instruction::Log => write(Opcode::Log)?,
+            Instruction::Eval => write(Opcode::Eval)?,
             Instruction::Call => write(Opcode::Call)?,
             Instruction::Signtx => write(Opcode::Signtx)?,
             Instruction::Signid => write(Opcode::Signid)?,
@@ -749,6 +760,7 @@ impl Instruction {
                 Ok(Instruction::Contract(k))
             }
             Opcode::Log => Ok(Instruction::Log),
+            Opcode::Eval => Ok(Instruction::Eval),
             Opcode::Call => Ok(Instruction::Call),
             Opcode::Signtx => Ok(Instruction::Signtx),
             Opcode::Signid => Ok(Instruction::Signid),

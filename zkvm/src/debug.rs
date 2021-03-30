@@ -126,6 +126,7 @@ impl Instruction {
             Instruction::Output(k) => write!(f, "output:{}", k),
             Instruction::Contract(k) => write!(f, "contract:{}", k),
             Instruction::Log => write!(f, "log"),
+            Instruction::Eval => write!(f, "eval"),
             Instruction::Call => write!(f, "call"),
             Instruction::Signtx => write!(f, "signtx"),
             Instruction::Signid => write!(f, "signid"),

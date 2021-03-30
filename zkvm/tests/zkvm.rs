@@ -573,6 +573,36 @@ fn constraints_cannot_be_copied() {
 }
 
 #[test]
+fn eval_test() {
+    let (pred, prv) = generate_predicate();
+    let prog = Program::build(|p| {
+        p.push(String::from(Scalar::from(20u64)));
+        p.scalar();
+        p.program(Program::build(|p2| {
+            p2.push(String::from(Scalar::from(1u64)));
+            p2.scalar();
+            p2.program(Program::build(|p3| {
+                p3.add();
+            }));
+            p2.eval();
+        }));
+        p.eval();
+        p.push(String::from(Scalar::from(21u64)));
+        p.scalar();
+        p.eq();
+        p.verify();
+
+        // to make program finish we need to spend a dummy input
+        p.input_helper(0, Scalar::zero(), pred.clone());
+        p.output_helper(pred);
+    });
+
+    dbg!(&prog);
+
+    build_and_verify(prog, &vec![prv]).expect("should succeed");
+}
+
+#[test]
 fn borrow_output() {
     //inputs 10 units, borrows 5 units, outputs two (5 units)
     let flv = Scalar::from(1u64);

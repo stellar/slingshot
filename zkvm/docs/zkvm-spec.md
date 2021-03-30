@@ -842,7 +842,7 @@ Then, the VM executes the current program till completion:
 1. Each instruction is read at the current program offset, including its immediate data (if any).
 2. Program offset is advanced immediately after reading the instruction to the next instruction.
 3. The instruction is executed per [specification below](#instructions). If the instruction fails, VM exits early with an error result.
-4. If VM encounters [`call`](#call), [`signid`](#signid) or [`signtag`](#signtag) instruction, the new program with offset zero is set as the current program. The next iteration of the vm will start from the beginning of the new program.
+4. If VM encounters [`eval`](#eval), [`call`](#call), [`signid`](#signid) or [`signtag`](#signtag) instruction, the new program with offset zero is set as the current program. The next iteration of the vm will start from the beginning of the new program.
 5. If the offset is less than the current program’s length, a new instruction is read (go back to step 1).
 6. Otherwise (reached the end of the current program):
    1. If the program stack is not empty, pop top item from the program stack and set it to the current program. Go to step 5.
@@ -965,10 +965,11 @@ Code | Instruction                | Stack diagram                              |
 0x1b | [`output:k`](#output)      |   _items... pred_ → ø                      | Modifies [tx log](#transaction-log)
 0x1c | [`contract:k`](#contract)  |   _items... pred_ → _contract_             | 
 0x1d | [`log`](#log)              |            _data_ → ø                      | Modifies [tx log](#transaction-log)
-0x1e | [`call`](#call)            |_contract(P) proof prog_ → _results..._     | [Defers point operations](#deferred-point-operations)
-0x1f | [`signtx`](#signtx)        |        _contract_ → _results..._           | Modifies [deferred verification keys](#transaction-signature)
-0x20 | [`signid`](#signid)        |_contract prog sig_ → _results..._          | [Defers point operations](#deferred-point-operations)
-0x21 | [`signtag`](#signtag)      |_contract prog sig_ → _results..._          | [Defers point operations](#deferred-point-operations)
+0x1e | [`eval`](#eval)            |            _prog_ → _results..._           | 
+0x1f | [`call`](#call)            |_contract(P) proof prog_ → _results..._     | [Defers point operations](#deferred-point-operations)
+0x20 | [`signtx`](#signtx)        |        _contract_ → _results..._           | Modifies [deferred verification keys](#transaction-signature)
+0x21 | [`signid`](#signid)        |_contract prog sig_ → _results..._          | [Defers point operations](#deferred-point-operations)
+0x22 | [`signtag`](#signtag)      |_contract prog sig_ → _results..._          | [Defers point operations](#deferred-point-operations)
   —  | [`ext`](#ext)              |                 ø → ø                      | Fails if [extension flag](#vm-state) is not set.
 
 
@@ -1407,6 +1408,16 @@ _data_ **log** → ø
 2. Adds [data entry](#data-entry) with it to the [transaction log](#transaction-log).
 
 Fails if `data` is not a [string](#string-type).
+
+
+#### eval
+
+_prog_ **eval** → _results..._
+
+1. Pops [program](#program-type) `prog`.
+2. Set the `prog` as current.
+
+Fails if `prog` is not a [program](#program-type).
 
 
 #### call
