@@ -22,7 +22,7 @@ use crate::vm::{Delegate, VM};
 /// creates a R1CS proof and returns a complete `Tx` object that can be published.
 pub struct Prover<'g> {
     // TBD: use Multikey as a witness thing
-    signtx_items: Vec<(VerificationKey, ContractID)>,
+    signtx_items: Vec<(Predicate, ContractID)>,
     cs: r1cs::Prover<'g, Transcript>,
     batch: musig::BatchVerifier<rand::rngs::ThreadRng>,
 }
@@ -48,9 +48,7 @@ impl<'t, 'g> Delegate<r1cs::Prover<'g, Transcript>> for Prover<'g> {
         pred: Predicate,
         contract_id: ContractID,
     ) -> Result<(), VMError> {
-        // TBD: store predicate itself instead
-        let k = pred.verification_key();
-        self.signtx_items.push((k, contract_id));
+        self.signtx_items.push((pred, contract_id));
         Ok(())
     }
 

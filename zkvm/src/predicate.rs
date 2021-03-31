@@ -19,9 +19,26 @@ use crate::merkle::{Hash, Hasher, MerkleItem, MerkleTree, Path};
 use crate::program::{Program, ProgramItem};
 use crate::transcript::TranscriptProtocol;
 
+/// Prover-visible witness data for the predicate.
+/// This could be key derivation parameters, multi-party layout or even a private key.
 pub trait PredicateWitness: Any + Send {
+    /// Computes the verification key from the witness.
+    fn verification_key(&self) -> VerificationKey;
+
+    /// Clones the witness as a boxed trait object.
     fn clone_witness(&self) -> Box<dyn PredicateWitness>;
 }
+
+/// Raw private key is a witness useful for simple build-and-sign workflows syc
+impl PredicateWitness for Scalar {
+    fn verification_key(&self) -> VerificationKey {
+        VerificationKey::from_secret(self)
+    }
+    fn clone_witness(&self) -> Box<dyn PredicateWitness> {
+        Box::new(*self)
+    }
+}
+
 /// Represents a ZkVM predicate with its optional witness data.
 #[derive(Deserialize, Serialize)]
 pub struct Predicate {
@@ -50,8 +67,7 @@ pub struct PredicateTree {
     leaves: Vec<PredicateLeaf>,
 
     /// Verification key for the tree.
-    /// TBD: add box-dyn witness here to store Multikey data and privkeys
-    key: VerificationKey,
+    key: Predicate,
 
     /// Random seed from which we derive individual blinding factors for each leaf program.
     blinding_key: [u8; 32],
@@ -65,6 +81,9 @@ pub struct PredicateTree {
 }
 
 impl PredicateWitness for PredicateTree {
+    fn verification_key(&self) -> VerificationKey {
+        self.precomputed_key
+    }
     fn clone_witness(&self) -> Box<dyn PredicateWitness> {
         Box::new(self.clone())
     }
@@ -107,10 +126,10 @@ impl Predicate {
     }
 
     /// Creates a new predicate from a verification key with an additional witness data.
-    pub fn new_with_witness(key: VerificationKey, witness: Box<dyn PredicateWitness>) -> Self {
+    pub fn with_witness<W: PredicateWitness>(witness: W) -> Self {
         Predicate {
-            key,
-            witness: Some(witness),
+            key: witness.verification_key(),
+            witness: Some(Box::new(witness)),
         }
     }
 
@@ -132,10 +151,12 @@ impl Predicate {
         self.key
     }
 
-    /// Downcasts the predicate to a verification key witness.
-    /// TBD: use Multikey
-    pub fn verification_key_witness(&self) -> Option<&Box<dyn PredicateWitness>> {
-        self.witness.as_ref()
+    /// Returns the reference to the verification key witness being downcast
+    /// to the target type. Returns None if the witness is absent or not of the required type.
+    pub fn verification_key_witness<T: Any>(&self) -> Option<&T> {
+        self.witness
+            .as_ref()
+            .and_then(|x| Any::downcast_ref::<T>(x))
     }
 
     /// Converts the predicate to its opaque representation.
@@ -190,23 +211,22 @@ impl Predicate {
     fn unsignable_key() -> VerificationKey {
         VerificationKey::from(PedersenGens::default().B_blinding)
     }
-}
 
-impl Into<CompressedRistretto> for Predicate {
-    fn into(self) -> CompressedRistretto {
-        self.to_point()
+    /// Helper to create an unsignable key
+    fn unsignable() -> Self {
+        Self::new(Self::unsignable_key())
     }
 }
 
 impl PredicateTree {
     /// Creates new predicate tree with a verification key and a list of programs
     pub fn new(
-        key: Option<VerificationKey>,
+        key: Option<Predicate>,
         progs: Vec<Program>,
         blinding_key: [u8; 32],
     ) -> Result<Self, VMError> {
         // If the key is None, use a point with provably unknown discrete log w.r.t. primary basepoint.
-        let key = key.unwrap_or_else(|| Predicate::unsignable_key());
+        let key = key.unwrap_or_else(|| Predicate::unsignable());
         let leaves = Self::create_merkle_leaves(&progs, blinding_key);
         if leaves.len() > (1 << 31) {
             return Err(VMError::InvalidPredicateTree);
@@ -214,10 +234,10 @@ impl PredicateTree {
         let root = MerkleTree::root(b"ZkVM.taproot", leaves.iter());
 
         // P = X + h(X, M)*G
-        let adjustment_factor = Predicate::commit_taproot(&key, &root);
+        let adjustment_factor = Predicate::commit_taproot(&key.verification_key(), &root);
         let precomputed_key = {
             let h = adjustment_factor;
-            let x = key.into_point().decompress().ok_or(VMError::InvalidPoint)?;
+            let x = key.to_point().decompress().ok_or(VMError::InvalidPoint)?;
             let p = x + h * PedersenGens::default().B;
             VerificationKey::from(p)
         };
@@ -257,7 +277,7 @@ impl PredicateTree {
         // let path = tree.create_path(leaf_index).ok_or(VMError::BadArguments)?;
         let path = Path::new(&self.leaves, leaf_index, &Hasher::new(b"ZkVM.taproot"))
             .ok_or(VMError::BadArguments)?;
-        let verification_key = self.key.clone();
+        let verification_key = self.key.verification_key();
         let call_proof = CallProof {
             verification_key,
             path,
@@ -295,6 +315,18 @@ impl PredicateTree {
             }
         }
         leaves
+    }
+}
+
+impl Into<CompressedRistretto> for Predicate {
+    fn into(self) -> CompressedRistretto {
+        self.to_point()
+    }
+}
+
+impl Into<VerificationKey> for Predicate {
+    fn into(self) -> VerificationKey {
+        self.verification_key()
     }
 }
 
