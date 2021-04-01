@@ -21,7 +21,8 @@ use crate::program::{Program, ProgramItem};
 use crate::transcript::TranscriptProtocol;
 
 /// Prover-visible witness data for the predicate.
-/// This could be key derivation parameters, multi-party layout or even a private key.
+/// This could be key derivation parameters or multi-party layout.
+/// In tests it's common to store a private key as a witness.
 pub trait PredicateWitness: Any + Send + Debug {
     /// Computes the verification key from the witness.
     fn verification_key(&self) -> VerificationKey;
@@ -29,8 +30,8 @@ pub trait PredicateWitness: Any + Send + Debug {
     /// Clones the witness as a boxed trait object.
     fn clone_witness(&self) -> Box<dyn PredicateWitness>;
 
-    /// Bridge to Any type that allows us perform downcasting.
-    /// Your type typically returns `self` here.
+    /// Bridge to `Any` trait that supports downcasting.
+    /// Your type should typically return `self` from this method.
     fn as_any(&self) -> &dyn Any;
 }
 
