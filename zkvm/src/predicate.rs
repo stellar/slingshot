@@ -6,6 +6,7 @@
 
 use bulletproofs::PedersenGens;
 use core::any::Any;
+use core::fmt::Debug;
 use core::iter;
 use curve25519_dalek::ristretto::CompressedRistretto;
 use curve25519_dalek::scalar::Scalar;
@@ -21,12 +22,16 @@ use crate::transcript::TranscriptProtocol;
 
 /// Prover-visible witness data for the predicate.
 /// This could be key derivation parameters, multi-party layout or even a private key.
-pub trait PredicateWitness: Any + Send {
+pub trait PredicateWitness: Any + Send + Debug {
     /// Computes the verification key from the witness.
     fn verification_key(&self) -> VerificationKey;
 
     /// Clones the witness as a boxed trait object.
     fn clone_witness(&self) -> Box<dyn PredicateWitness>;
+
+    /// Bridge to Any type that allows us perform downcasting.
+    /// Your type typically returns `self` here.
+    fn as_any(&self) -> &dyn Any;
 }
 
 /// Raw private key is a witness useful for simple build-and-sign workflows syc
@@ -36,6 +41,9 @@ impl PredicateWitness for Scalar {
     }
     fn clone_witness(&self) -> Box<dyn PredicateWitness> {
         Box::new(*self)
+    }
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 }
 
@@ -66,8 +74,8 @@ pub struct PredicateTree {
     /// Vector of the programs and blinding factors, stored as Merkelized predicate leafs.
     leaves: Vec<PredicateLeaf>,
 
-    /// Verification key for the tree.
-    key: Predicate,
+    /// Inner verification key for the tree not visible outside.
+    inner_predicate: Predicate,
 
     /// Random seed from which we derive individual blinding factors for each leaf program.
     blinding_key: [u8; 32],
@@ -86,6 +94,9 @@ impl PredicateWitness for PredicateTree {
     }
     fn clone_witness(&self) -> Box<dyn PredicateWitness> {
         Box::new(self.clone())
+    }
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 }
 
@@ -156,7 +167,7 @@ impl Predicate {
     pub fn verification_key_witness<T: Any>(&self) -> Option<&T> {
         self.witness
             .as_ref()
-            .and_then(|x| Any::downcast_ref::<T>(x))
+            .and_then(|x| x.as_any().downcast_ref::<T>())
     }
 
     /// Converts the predicate to its opaque representation.
@@ -221,12 +232,12 @@ impl Predicate {
 impl PredicateTree {
     /// Creates new predicate tree with a verification key and a list of programs
     pub fn new(
-        key: Option<Predicate>,
+        inner_predicate: Option<Predicate>,
         progs: Vec<Program>,
         blinding_key: [u8; 32],
     ) -> Result<Self, VMError> {
         // If the key is None, use a point with provably unknown discrete log w.r.t. primary basepoint.
-        let key = key.unwrap_or_else(|| Predicate::unsignable());
+        let inner_predicate = inner_predicate.unwrap_or_else(|| Predicate::unsignable());
         let leaves = Self::create_merkle_leaves(&progs, blinding_key);
         if leaves.len() > (1 << 31) {
             return Err(VMError::InvalidPredicateTree);
@@ -234,10 +245,14 @@ impl PredicateTree {
         let root = MerkleTree::root(b"ZkVM.taproot", leaves.iter());
 
         // P = X + h(X, M)*G
-        let adjustment_factor = Predicate::commit_taproot(&key.verification_key(), &root);
+        let adjustment_factor =
+            Predicate::commit_taproot(&inner_predicate.verification_key(), &root);
         let precomputed_key = {
             let h = adjustment_factor;
-            let x = key.to_point().decompress().ok_or(VMError::InvalidPoint)?;
+            let x = inner_predicate
+                .to_point()
+                .decompress()
+                .ok_or(VMError::InvalidPoint)?;
             let p = x + h * PedersenGens::default().B;
             VerificationKey::from(p)
         };
@@ -245,7 +260,7 @@ impl PredicateTree {
         Ok(Self {
             leaves,
             blinding_key,
-            key,
+            inner_predicate,
             precomputed_key,
             adjustment_factor,
         })
@@ -256,6 +271,16 @@ impl PredicateTree {
     // That would directly store the adjustment factor.
     pub fn adjustment_factor(&self) -> Scalar {
         self.adjustment_factor
+    }
+
+    /// Complete outer key visible to the users.
+    pub fn outer_key(&self) -> VerificationKey {
+        self.precomputed_key
+    }
+
+    /// Inner signing key/predicate without the adjustment factor.
+    pub fn inner_predicate(&self) -> &Predicate {
+        &self.inner_predicate
     }
 
     /// Creates the call proof and returns that with the program at an index.
@@ -277,7 +302,7 @@ impl PredicateTree {
         // let path = tree.create_path(leaf_index).ok_or(VMError::BadArguments)?;
         let path = Path::new(&self.leaves, leaf_index, &Hasher::new(b"ZkVM.taproot"))
             .ok_or(VMError::BadArguments)?;
-        let verification_key = self.key.verification_key();
+        let verification_key = self.inner_predicate().verification_key();
         let call_proof = CallProof {
             verification_key,
             path,

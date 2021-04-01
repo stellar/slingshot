@@ -24,6 +24,11 @@ fn sign_and_verify_single() {
 }
 
 #[test]
+fn empty_batch() {
+    let batch = BatchVerifier::new(rand::thread_rng());
+    assert_eq!(batch.verify(), Ok(()));
+}
+#[test]
 fn sign_and_verify_batch() {
     let prv1 = Scalar::from(1u64);
     let prv2 = Scalar::from(2u64);

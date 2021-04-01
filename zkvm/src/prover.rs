@@ -3,7 +3,6 @@ use bulletproofs::r1cs::ConstraintSystem;
 use bulletproofs::{BulletproofGens, PedersenGens};
 use curve25519_dalek::ristretto::CompressedRistretto;
 use merlin::Transcript;
-use musig::VerificationKey;
 use std::collections::VecDeque;
 
 use crate::constraints::Commitment;
