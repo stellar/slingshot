@@ -179,7 +179,6 @@ impl Wallet {
 
     /// Lists all registered assets.
     pub fn list_assets<'a>(&'a self) -> impl Iterator<Item = (&'a str, Token)> {
-        //let xpub = self.xpub;
         self.assets
             .iter()
             .map(move |(_flv, alias)| (alias.as_str(), self.xpub.derive_token(&alias)))
