@@ -687,7 +687,11 @@ impl BuiltTx {
 
         let sig = musig::Signature::sign_multi(
             &signing_keys[..],
-            self.unsigned_tx.signing_instructions.clone(),
+            self.unsigned_tx
+                .signing_instructions
+                .iter()
+                .map(|(p, m)| (p.verification_key(), m))
+                .collect(),
             &mut signtx_transcript,
         )
         .unwrap();

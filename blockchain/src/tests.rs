@@ -62,7 +62,10 @@ fn dummy_tx(utxo: UTXO, bp_gens: &BulletproofGens) -> (BlockTx, UTXO) {
 
         let sig = Signature::sign_multi(
             &[privkey],
-            utx.signing_instructions.clone(),
+            utx.signing_instructions
+                .iter()
+                .map(|(p, m)| (p.verification_key(), m))
+                .collect(),
             &mut signtx_transcript,
         )
         .unwrap();

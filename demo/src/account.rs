@@ -433,7 +433,10 @@ impl Wallet {
 
             let sig = musig::Signature::sign_multi(
                 &signing_keys[..],
-                utx.signing_instructions.clone(),
+                utx.signing_instructions
+                    .iter()
+                    .map(|(p, m)| (p.verification_key(), m))
+                    .collect(),
                 &mut signtx_transcript,
             )
             .unwrap();
@@ -594,7 +597,10 @@ impl Wallet {
 
             let sig = musig::Signature::sign_multi(
                 &signing_keys[..],
-                utx.signing_instructions.clone(),
+                utx.signing_instructions
+                    .iter()
+                    .map(|(p, m)| (p.verification_key(), m))
+                    .collect(),
                 &mut signtx_transcript,
             )
             .unwrap();

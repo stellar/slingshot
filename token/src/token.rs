@@ -68,12 +68,12 @@ mod tests {
     use merlin::Transcript;
     use zkvm::{
         Anchor, Contract, Multisignature, Predicate, Program, Prover, Signature, Tx, TxEntry,
-        TxHeader, TxID, TxLog, VMError, VerificationKey,
+        TxHeader, TxID, TxLog, VMError,
     };
 
-    fn add_dummy_input(p: &mut Program, dummy_key: &Scalar) {
+    fn add_dummy_input(p: &mut Program, dummy_key: Scalar) {
         let contract = Contract {
-            predicate: Predicate::new(VerificationKey::from_secret(dummy_key)),
+            predicate: Predicate::with_witness(dummy_key),
             payload: vec![],
             anchor: Anchor::from_raw_bytes([0u8; 32]),
         };
@@ -86,17 +86,14 @@ mod tests {
             let issue_key = Scalar::from(1u64);
             let dest_key = Scalar::from(2u64);
             let dummy_key = Scalar::from(3u64);
-            let usd = Token::new(
-                Predicate::new(VerificationKey::from_secret(&issue_key)),
-                b"USD".to_vec(),
-            );
-            let dest = Predicate::new(VerificationKey::from_secret(&dest_key));
+            let usd = Token::new(Predicate::with_witness(issue_key), b"USD".to_vec());
+            let dest = Predicate::with_witness(dest_key);
 
             let program = Program::build(|p| {
-                add_dummy_input(p, &dummy_key);
+                add_dummy_input(p, dummy_key);
                 usd.issue_to(p, 10u64, dest.clone());
             });
-            build(program, vec![issue_key, dummy_key]).unwrap()
+            build_tx(program).unwrap()
         };
 
         // Verify tx
@@ -111,16 +108,13 @@ mod tests {
             let issue_key = Scalar::from(1u64);
             let dest_key = Scalar::from(2u64);
             let dummy_key = Scalar::from(3u64);
-            let usd = Token::new(
-                Predicate::new(VerificationKey::from_secret(&issue_key)),
-                b"USD".to_vec(),
-            );
-            let dest = Predicate::new(VerificationKey::from_secret(&dest_key));
+            let usd = Token::new(Predicate::with_witness(issue_key), b"USD".to_vec());
+            let dest = Predicate::with_witness(dest_key);
             let issue_program = Program::build(|p| {
-                add_dummy_input(p, &dummy_key);
+                add_dummy_input(p, dummy_key);
                 usd.issue_to(p, 10u64, dest.clone());
             });
-            let (_, _, issue_txlog) = build(issue_program, vec![issue_key, dummy_key]).unwrap();
+            let (_, _, issue_txlog) = build_tx(issue_program).unwrap();
 
             let mut retire_program = Program::new();
             let issue_output = match &issue_txlog[3] {
@@ -128,7 +122,7 @@ mod tests {
                 _ => return assert!(false, "TxLog entry doesn't match: expected Output"),
             };
             Token::retire(&mut retire_program, issue_output);
-            build(retire_program, vec![dest_key]).unwrap()
+            build_tx(retire_program).unwrap()
         };
 
         // Verify tx
@@ -137,7 +131,7 @@ mod tests {
     }
 
     // Helper functions
-    fn build(program: Program, keys: Vec<Scalar>) -> Result<(Tx, TxID, TxLog), VMError> {
+    fn build_tx(program: Program) -> Result<(Tx, TxID, TxLog), VMError> {
         let bp_gens = BulletproofGens::new(256, 1);
         let header = TxHeader {
             version: 0u64,
@@ -152,13 +146,10 @@ mod tests {
         let privkeys: Vec<Scalar> = utx
             .signing_instructions
             .iter()
-            .filter_map(|(pubkey, _msg)| {
-                for k in keys.iter() {
-                    if (k * gens.B).compress() == *pubkey.as_point() {
-                        return Some(*k);
-                    }
-                }
-                None
+            .map(|(pred, _msg)| {
+                *pred
+                    .verification_key_witness::<Scalar>()
+                    .expect("we embed privkeys as witnesses in this test")
             })
             .collect();
 
@@ -166,7 +157,10 @@ mod tests {
         signtx_transcript.append_message(b"txid", &utx.txid.0);
         let sig = Signature::sign_multi(
             privkeys,
-            utx.signing_instructions.clone(),
+            utx.signing_instructions
+                .iter()
+                .map(|(p, m)| (p.verification_key(), m))
+                .collect(),
             &mut signtx_transcript,
         )
         .unwrap();

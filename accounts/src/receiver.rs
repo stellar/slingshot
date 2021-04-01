@@ -60,12 +60,6 @@ impl ReceiverWitness {
 
     /// Returns the predicate built out of the witness
     pub fn predicate(&self) -> Predicate {
-        // If we have a witness object, we know that our predicate is
-        // (1) correct Ristretto point,
-        // (2) a simple public key.
-        // Therefore, we can simply unwrap.
-        // TBD: We can derive the pubkey on the fly
-        // with static guarantees of correctness.
         Predicate::new(VerificationKey::from_compressed(
             self.receiver.opaque_predicate,
         ))
