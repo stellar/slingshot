@@ -212,7 +212,10 @@ fn basic_accounts_test() {
 
         let sig = Signature::sign_multi(
             &signing_keys[..],
-            utx.signing_instructions.clone(),
+            utx.signing_instructions
+                .iter()
+                .map(|(p, m)| (p.verification_key(), m))
+                .collect(),
             &mut signtx_transcript,
         )
         .unwrap();

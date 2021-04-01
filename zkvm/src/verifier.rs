@@ -51,7 +51,8 @@ impl Delegate<r1cs::Verifier<Transcript>> for Verifier {
         pred: Predicate,
         contract_id: ContractID,
     ) -> Result<(), VMError> {
-        let key = pred.to_verification_key()?;
+        // TBD: store predicate instead
+        let key = pred.verification_key();
         Ok(self.signtx_items.push((key, contract_id)))
     }
 

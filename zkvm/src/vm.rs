@@ -624,7 +624,7 @@ where
         }
 
         // Verification key from predicate
-        let verification_key = contract.predicate.to_verification_key()?;
+        let verification_key = contract.predicate.verification_key();
 
         // Verify signature using Verification key, over the message `program`
         let mut t = Transcript::new(b"ZkVM.signid");
@@ -659,7 +659,7 @@ where
         self.push_item(tag.clone());
 
         // Verification key from predicate
-        let verification_key = contract.predicate.to_verification_key()?;
+        let verification_key = contract.predicate.verification_key();
 
         // Verify signature using Verification key, over the message `program`
         let mut t = Transcript::new(b"ZkVM.signtag");

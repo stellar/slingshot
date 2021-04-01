@@ -36,7 +36,7 @@ pub use self::contract::{Anchor, Contract, ContractID, PortableItem};
 pub use self::errors::VMError;
 pub use self::fees::{fee_flavor, CheckedFee, FeeRate, MAX_FEE};
 pub use self::ops::{Instruction, Opcode};
-pub use self::predicate::{Predicate, PredicateTree};
+pub use self::predicate::{Predicate, PredicateTree, PredicateWitness};
 pub use self::program::{Program, ProgramItem};
 pub use self::prover::Prover;
 pub use self::scalar_witness::ScalarWitness;

@@ -2,7 +2,7 @@ use bulletproofs::r1cs::R1CSProof;
 use bulletproofs::BulletproofGens;
 use curve25519_dalek::ristretto::CompressedRistretto;
 use merlin::Transcript;
-use musig::{Signature, VerificationKey};
+use musig::Signature;
 use serde::{Deserialize, Serialize};
 
 use crate::contract::{Contract, ContractID};
@@ -10,6 +10,7 @@ use crate::encoding::*;
 use crate::errors::VMError;
 use crate::fees::FeeRate;
 use crate::merkle::{Hash, MerkleItem, MerkleTree};
+use crate::predicate::Predicate;
 use crate::transcript::TranscriptProtocol;
 use crate::verifier::Verifier;
 
@@ -76,7 +77,7 @@ pub struct UnsignedTx {
 
     /// List of (key,contractid) pairs for multi-message signature
     /// TBD: change to some key witness type
-    pub signing_instructions: Vec<(VerificationKey, ContractID)>,
+    pub signing_instructions: Vec<(Predicate, ContractID)>,
 }
 
 /// Instance of a transaction that contains all necessary data to validate it.

@@ -10,7 +10,7 @@ use zkvm::{
 };
 
 fn make_predicate(privkey: impl Into<Scalar>) -> Predicate {
-    Predicate::Key(VerificationKey::from_secret(&privkey.into()))
+    Predicate::new(VerificationKey::from_secret(&privkey.into()))
 }
 
 fn nonce_flavor() -> Scalar {
@@ -62,7 +62,10 @@ fn dummy_tx(utxo: UTXO, bp_gens: &BulletproofGens) -> (BlockTx, UTXO) {
 
         let sig = Signature::sign_multi(
             &[privkey],
-            utx.signing_instructions.clone(),
+            utx.signing_instructions
+                .iter()
+                .map(|(p, m)| (p.verification_key(), m))
+                .collect(),
             &mut signtx_transcript,
         )
         .unwrap();

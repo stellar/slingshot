@@ -354,7 +354,7 @@ impl Wallet {
                 p.signtx();
 
                 let issuance_predicate =
-                    zkvm::Predicate::Key(zkvm::VerificationKey::from_secret(&issuance_key));
+                    zkvm::Predicate::new(zkvm::VerificationKey::from_secret(&issuance_key));
 
                 p.push(zkvm::Commitment::blinded(payment_receiver.value.qty)) // stack: qty
                     .commit() // stack: qty-var
@@ -433,7 +433,10 @@ impl Wallet {
 
             let sig = musig::Signature::sign_multi(
                 &signing_keys[..],
-                utx.signing_instructions.clone(),
+                utx.signing_instructions
+                    .iter()
+                    .map(|(p, m)| (p.verification_key(), m))
+                    .collect(),
                 &mut signtx_transcript,
             )
             .unwrap();
@@ -594,7 +597,10 @@ impl Wallet {
 
             let sig = musig::Signature::sign_multi(
                 &signing_keys[..],
-                utx.signing_instructions.clone(),
+                utx.signing_instructions
+                    .iter()
+                    .map(|(p, m)| (p.verification_key(), m))
+                    .collect(),
                 &mut signtx_transcript,
             )
             .unwrap();

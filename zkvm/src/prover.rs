@@ -3,7 +3,6 @@ use bulletproofs::r1cs::ConstraintSystem;
 use bulletproofs::{BulletproofGens, PedersenGens};
 use curve25519_dalek::ristretto::CompressedRistretto;
 use merlin::Transcript;
-use musig::VerificationKey;
 use std::collections::VecDeque;
 
 use crate::constraints::Commitment;
@@ -22,7 +21,7 @@ use crate::vm::{Delegate, VM};
 /// creates a R1CS proof and returns a complete `Tx` object that can be published.
 pub struct Prover<'g> {
     // TBD: use Multikey as a witness thing
-    signtx_items: Vec<(VerificationKey, ContractID)>,
+    signtx_items: Vec<(Predicate, ContractID)>,
     cs: r1cs::Prover<'g, Transcript>,
     batch: musig::BatchVerifier<rand::rngs::ThreadRng>,
 }
@@ -48,8 +47,7 @@ impl<'t, 'g> Delegate<r1cs::Prover<'g, Transcript>> for Prover<'g> {
         pred: Predicate,
         contract_id: ContractID,
     ) -> Result<(), VMError> {
-        let k = pred.to_verification_key_witness()?;
-        self.signtx_items.push((k, contract_id));
+        self.signtx_items.push((pred, contract_id));
         Ok(())
     }
 

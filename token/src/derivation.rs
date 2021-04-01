@@ -42,7 +42,7 @@ impl XpubDerivation for Xpub {
     fn derive_token(&self, alias: &str) -> Token {
         let key = self.issuing_key(alias);
         Token::new(
-            zkvm::Predicate::Opaque(*key.as_point()),
+            zkvm::Predicate::new(VerificationKey::from_compressed(*key.as_point())),
             alias.as_bytes().to_vec(),
         )
     }

@@ -179,7 +179,6 @@ impl Wallet {
 
     /// Lists all registered assets.
     pub fn list_assets<'a>(&'a self) -> impl Iterator<Item = (&'a str, Token)> {
-        //let xpub = self.xpub;
         self.assets
             .iter()
             .map(move |(_flv, alias)| (alias.as_str(), self.xpub.derive_token(&alias)))
@@ -687,7 +686,11 @@ impl BuiltTx {
 
         let sig = musig::Signature::sign_multi(
             &signing_keys[..],
-            self.unsigned_tx.signing_instructions.clone(),
+            self.unsigned_tx
+                .signing_instructions
+                .iter()
+                .map(|(p, m)| (p.verification_key(), m))
+                .collect(),
             &mut signtx_transcript,
         )
         .unwrap();
@@ -719,9 +722,9 @@ impl Utxo {
         // (1) a correct Ristretto point,
         // (2) a simple public key.
         // Therefore, we can simply unwrap.
-        let predicate = Predicate::Key(
-            VerificationKey::from_compressed(self.receiver.opaque_predicate).unwrap(),
-        );
+        let predicate = Predicate::new(VerificationKey::from_compressed(
+            self.receiver.opaque_predicate,
+        ));
         // TBD: Instead of unwrap-decompressing the key, derive it directly from xpub with a given sequence number.
 
         Contract {

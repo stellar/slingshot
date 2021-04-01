@@ -10,6 +10,7 @@ use crate::transcript::TranscriptProtocol;
 use crate::types::{String, Value};
 use crate::VMError;
 use merlin::Transcript;
+use musig::VerificationKey;
 
 /// Prefix for the string type in the Output Structure
 pub const STRING_TYPE: u8 = 0x00;
@@ -100,7 +101,7 @@ impl Decodable for Contract {
         //     Value  =  0x02  ||  <32 bytes> ||  <32 bytes>
 
         let anchor = Anchor(reader.read_u8x32()?);
-        let predicate = Predicate::Opaque(reader.read_point()?);
+        let predicate = Predicate::new(VerificationKey::from_compressed(reader.read_point()?));
         let k = reader.read_size()?;
         let payload: Vec<PortableItem> = reader.read_vec(k, |r| PortableItem::decode(r))?;
         Ok(Contract {

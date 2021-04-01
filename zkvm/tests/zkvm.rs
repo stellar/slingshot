@@ -1,8 +1,10 @@
-use bulletproofs::{BulletproofGens, PedersenGens};
-use curve25519_dalek::constants::RISTRETTO_BASEPOINT_COMPRESSED;
+use bulletproofs::BulletproofGens;
 use curve25519_dalek::scalar::Scalar;
+use curve25519_dalek::{
+    constants::RISTRETTO_BASEPOINT_COMPRESSED, ristretto::CompressedRistretto, traits::Identity,
+};
 use merlin::Transcript;
-use musig::{Multisignature, Signature, VerificationKey};
+use musig::{Multisignature, Signature};
 use rand::Rng;
 
 use zkvm::{
@@ -63,37 +65,31 @@ impl ProgramHelper for Program {
 }
 
 /// Generates a secret Scalar / key Predicate pair
-fn generate_predicate() -> (Predicate, Scalar) {
-    let scalar = Scalar::from(0u64);
-    let pred = Predicate::Key(VerificationKey::from_secret(&scalar));
-    (pred, scalar)
+fn generate_predicate(i: u64) -> Predicate {
+    Predicate::with_witness(Scalar::from(i))
 }
 
-/// Generates the given number of signing key Predicates, returning
-/// the Predicates and the secret signing keys.
-fn generate_predicates(pred_num: usize) -> (Vec<Predicate>, Vec<Scalar>) {
-    let gens = PedersenGens::default();
-
-    let scalars: Vec<Scalar> = (0..pred_num)
-        .into_iter()
-        .map(|s| Scalar::from(s as u64))
-        .collect();
-
-    let predicates: Vec<Predicate> = scalars
-        .iter()
-        .map(|s| Predicate::Key((s * gens.B).into()))
-        .collect();
-
-    (predicates, scalars)
+fn predicate_privkey(pred: &Predicate) -> Scalar {
+    // If we stored the simple scalar - that's the privkey
+    if let Some(privkey) = pred.verification_key_witness::<Scalar>() {
+        return *privkey;
+    // If we stored the predicate tree, then take the scalar from its inner predicate
+    // and apply adjustment factor.
+    } else if let Some(tree) = pred.verification_key_witness::<PredicateTree>() {
+        if let Some(privkey) = tree.inner_predicate().verification_key_witness::<Scalar>() {
+            return privkey + tree.adjustment_factor();
+        } else {
+        }
+    }
+    panic!("Expect witness in the Predicate in these tests");
 }
 
 /// Returns the secret Scalar and Predicate used to issue
 /// a flavor, along with the flavor Scalar.
-fn make_flavor() -> (Scalar, Predicate, Scalar) {
-    let scalar = Scalar::from(100u64);
-    let predicate = Predicate::Key(VerificationKey::from_secret(&scalar));
+fn make_flavor() -> (Predicate, Scalar) {
+    let predicate = Predicate::with_witness(Scalar::from(100u64));
     let flavor = Value::issue_flavor(&predicate, String::default());
-    (scalar, predicate, flavor)
+    (predicate, flavor)
 }
 
 /// Creates an Output contract with given quantity, flavor, and predicate.
@@ -108,7 +104,7 @@ fn make_output(qty: u64, flv: Scalar, predicate: Predicate) -> Contract {
     }
 }
 
-fn build_and_verify(program: Program, keys: &Vec<Scalar>) -> Result<(TxID, TxLog), VMError> {
+fn build_and_verify(program: Program) -> Result<(TxID, TxLog), VMError> {
     let (txlog, tx) = {
         // Build tx
         let bp_gens = BulletproofGens::new(256, 1);
@@ -117,12 +113,11 @@ fn build_and_verify(program: Program, keys: &Vec<Scalar>) -> Result<(TxID, TxLog
             mintime_ms: 0u64,
             maxtime_ms: 0u64,
         };
-        let gens = PedersenGens::default();
         let utx = Prover::build_tx(program, header, &bp_gens)?;
 
         let sig = if utx.signing_instructions.len() == 0 {
             Signature {
-                R: RISTRETTO_BASEPOINT_COMPRESSED,
+                R: CompressedRistretto::identity(),
                 s: Scalar::zero(),
             }
         } else {
@@ -130,21 +125,17 @@ fn build_and_verify(program: Program, keys: &Vec<Scalar>) -> Result<(TxID, TxLog
             let privkeys: Vec<Scalar> = utx
                 .signing_instructions
                 .iter()
-                .filter_map(|(pubkey, _msg)| {
-                    for k in keys {
-                        if (k * gens.B).compress() == *pubkey.as_point() {
-                            return Some(*k);
-                        }
-                    }
-                    None
-                })
+                .map(|(predicate, _msg)| predicate_privkey(predicate))
                 .collect();
 
             let mut signtx_transcript = Transcript::new(b"ZkVM.signtx");
             signtx_transcript.append_message(b"txid", &utx.txid.0);
             Signature::sign_multi(
                 privkeys,
-                utx.signing_instructions.clone(),
+                utx.signing_instructions
+                    .iter()
+                    .map(|(p, m)| (p.verification_key(), m))
+                    .collect(),
                 &mut signtx_transcript,
             )
             .unwrap()
@@ -177,18 +168,19 @@ fn spend_1_1_contract(
 #[test]
 fn spend_1_1() {
     // Generate predicates and flavor
-    let (predicates, scalars) = generate_predicates(2);
+    let pred1 = generate_predicate(1);
+    let pred2 = generate_predicate(2);
     let flavor = Scalar::from(1u64);
 
     let correct_program = spend_1_1_contract(
         10u64,
         10u64,
         flavor,
-        predicates[0].clone(), // input predicate
-        predicates[1].clone(), // output predicate
+        pred1.clone(), // input predicate
+        pred2.clone(), // output predicate
     );
 
-    match build_and_verify(correct_program, &scalars) {
+    match build_and_verify(correct_program) {
         Err(err) => panic!(err.to_string()),
         _ => (),
     }
@@ -197,11 +189,11 @@ fn spend_1_1() {
         5u64,
         10u64,
         flavor,
-        predicates[0].clone(), // input predicate
-        predicates[1].clone(), // output predicate
+        pred1.clone(), // input predicate
+        pred2.clone(), // output predicate
     );
 
-    if build_and_verify(wrong_program, &scalars).is_ok() {
+    if build_and_verify(wrong_program).is_ok() {
         panic!("Input $5, output $10 should have failed but didn't");
     }
 }
@@ -226,7 +218,9 @@ fn spend_1_2_contract(
 #[test]
 fn spend_1_2() {
     // Generate predicates and flavor
-    let (predicates, scalars) = generate_predicates(3);
+    let pred1 = generate_predicate(1);
+    let pred2 = generate_predicate(2);
+    let pred3 = generate_predicate(3);
     let flavor = Scalar::from(1u64);
 
     let correct_program = spend_1_2_contract(
@@ -234,12 +228,12 @@ fn spend_1_2() {
         9u64,
         1u64,
         flavor,
-        predicates[0].clone(), // input predicate
-        predicates[1].clone(), // output 1 predicate
-        predicates[2].clone(), // output 2 predicate
+        pred1.clone(), // input predicate
+        pred2.clone(), // output 1 predicate
+        pred3.clone(), // output 2 predicate
     );
 
-    match build_and_verify(correct_program, &scalars) {
+    match build_and_verify(correct_program) {
         Err(err) => assert!(false, err.to_string()),
         _ => (),
     }
@@ -249,12 +243,12 @@ fn spend_1_2() {
         11u64,
         1u64,
         flavor,
-        predicates[0].clone(), // input predicate
-        predicates[1].clone(), // output 1 predicate
-        predicates[2].clone(), // output 2 predicate
+        pred1.clone(), // input predicate
+        pred2.clone(), // output 1 predicate
+        pred3.clone(), // output 2 predicate
     );
 
-    if build_and_verify(wrong_program, &scalars).is_ok() {
+    if build_and_verify(wrong_program).is_ok() {
         panic!("Input $10, output $11 and $1 should have failed but didn't");
     }
 }
@@ -279,7 +273,9 @@ fn spend_2_1_contract(
 #[test]
 fn spend_2_1() {
     // Generate predicates and flavor
-    let (predicates, scalars) = generate_predicates(3);
+    let pred1 = generate_predicate(1);
+    let pred2 = generate_predicate(2);
+    let pred3 = generate_predicate(3);
     let flavor = Scalar::from(1u64);
 
     let correct_program = spend_2_1_contract(
@@ -287,12 +283,12 @@ fn spend_2_1() {
         4u64,
         10u64,
         flavor,
-        predicates[0].clone(), // input 1 predicate
-        predicates[1].clone(), // input 2 predicate
-        predicates[2].clone(), // output predicate
+        pred1.clone(), // input 1 predicate
+        pred2.clone(), // input 2 predicate
+        pred3.clone(), // output predicate
     );
 
-    match build_and_verify(correct_program, &scalars) {
+    match build_and_verify(correct_program) {
         Err(err) => assert!(false, err.to_string()),
         _ => (),
     }
@@ -302,12 +298,12 @@ fn spend_2_1() {
         4u64,
         11u64,
         flavor,
-        predicates[0].clone(), // input 1 predicate
-        predicates[1].clone(), // input 2 predicate
-        predicates[2].clone(), // output predicate
+        pred1.clone(), // input 1 predicate
+        pred2.clone(), // input 2 predicate
+        pred3.clone(), // output predicate
     );
 
-    if build_and_verify(wrong_program, &scalars).is_ok() {
+    if build_and_verify(wrong_program).is_ok() {
         panic!("Input $6 and $4, output $11 and $1 should have failed but didn't");
     }
 }
@@ -335,7 +331,10 @@ fn spend_2_2_contract(
 #[test]
 fn spend_2_2() {
     // Generate predicates and flavor
-    let (predicates, scalars) = generate_predicates(4);
+    let pred1 = generate_predicate(1);
+    let pred2 = generate_predicate(2);
+    let pred3 = generate_predicate(3);
+    let pred4 = generate_predicate(4);
     let flavor = Scalar::from(1u64);
 
     let correct_program = spend_2_2_contract(
@@ -344,13 +343,13 @@ fn spend_2_2() {
         9u64,
         1u64,
         flavor,
-        predicates[0].clone(), // input 1 predicate
-        predicates[1].clone(), // input 2 predicate
-        predicates[2].clone(), // output 1 predicate
-        predicates[3].clone(), // output 2 predicate
+        pred1.clone(), // input 1 predicate
+        pred2.clone(), // input 2 predicate
+        pred3.clone(), // output 1 predicate
+        pred4.clone(), // output 2 predicate
     );
 
-    match build_and_verify(correct_program, &scalars) {
+    match build_and_verify(correct_program) {
         Err(err) => assert!(false, err.to_string()),
         Ok((_txid, txlog)) => {
             assert_eq!(
@@ -372,9 +371,9 @@ fn spend_2_2() {
             assert_eq!(
                 txlog
                     .outputs()
-                    .map(|c| { c.predicate.clone() })
+                    .map(|c| { c.predicate.clone().verification_key() })
                     .collect::<Vec<_>>(),
-                &predicates[2..4]
+                vec![pred3.verification_key(), pred4.verification_key()]
             );
         }
     }
@@ -385,13 +384,13 @@ fn spend_2_2() {
         11u64,
         1u64,
         flavor,
-        predicates[0].clone(), // input 1 predicate
-        predicates[1].clone(), // input 2 predicate
-        predicates[2].clone(), // output 1 predicate
-        predicates[3].clone(), // output 2 predicate
+        pred1.clone(), // input 1 predicate
+        pred2.clone(), // input 2 predicate
+        pred3.clone(), // output 1 predicate
+        pred4.clone(), // output 2 predicate
     );
 
-    if build_and_verify(wrong_program, &scalars).is_ok() {
+    if build_and_verify(wrong_program).is_ok() {
         panic!("Input $6 and $4, output $11 and $1 should have failed but didn't");
     }
 }
@@ -419,9 +418,10 @@ fn issue_and_spend_contract(
 #[test]
 fn issue_and_spend() {
     // Generate predicates and flavor
-    let (predicates, mut scalars) = generate_predicates(3);
-    let (issuance_scalar, issuance_pred, flavor) = make_flavor();
-    scalars.push(issuance_scalar);
+    let pred1 = generate_predicate(1);
+    let pred2 = generate_predicate(2);
+    let pred3 = generate_predicate(3);
+    let (issuance_pred, flavor) = make_flavor();
 
     let correct_program = issue_and_spend_contract(
         4u64,
@@ -430,12 +430,12 @@ fn issue_and_spend() {
         1u64,
         flavor,
         issuance_pred.clone(),
-        predicates[0].clone(), // input predicate
-        predicates[1].clone(), // output 1 predicate
-        predicates[2].clone(), // output 2 predicate
+        pred1.clone(), // input predicate
+        pred2.clone(), // output 1 predicate
+        pred3.clone(), // output 2 predicate
     );
 
-    match build_and_verify(correct_program, &scalars) {
+    match build_and_verify(correct_program) {
         Err(err) => assert!(false, err.to_string()),
         _ => (),
     }
@@ -447,12 +447,12 @@ fn issue_and_spend() {
         1u64,
         flavor,
         issuance_pred,
-        predicates[0].clone(), // input predicate
-        predicates[1].clone(), // output 1 predicate
-        predicates[2].clone(), // output 2 predicate
+        pred1.clone(), // input predicate
+        pred2.clone(), // output 1 predicate
+        pred3.clone(), // output 2 predicate
     );
 
-    if build_and_verify(wrong_program, &scalars).is_ok() {
+    if build_and_verify(wrong_program).is_ok() {
         panic!("Issue $6 and input $4, output $11 and $1 should have failed but didn't");
     }
 }
@@ -472,39 +472,32 @@ fn spend_with_secret_scalar(qty: u64, flavor: Scalar, pred: Predicate, secret: S
 
 #[test]
 fn taproot_happy_path() {
-    let sk = Scalar::from(24u64);
-    let pk = VerificationKey::from_secret(&sk);
-    let pred_tree = PredicateTree::new(Some(pk), vec![], [0u8; 32]).unwrap();
-    let factor = pred_tree.adjustment_factor();
-    let prev_output = make_output(101u64, Scalar::from(1u64), Predicate::Tree(pred_tree));
+    let pred_tree = PredicateTree::new(Some(generate_predicate(1)), vec![], [0u8; 32]).unwrap();
+    let prev_output = make_output(101u64, Scalar::from(1u64), Predicate::tree(pred_tree));
 
     let prog = Program::build(|p| {
         p.push(prev_output)
             .input()
             .signtx()
-            .push(Predicate::Key(pk)) // send to the key
+            .push(generate_predicate(2)) // send to the key
             .output(1);
     });
 
-    build_and_verify(prog, &vec![sk + factor]).unwrap();
+    build_and_verify(prog).unwrap();
 }
 
 #[test]
 fn taproot_program_path() {
-    let sk = Scalar::from(24u64);
-    let pk = VerificationKey::from_secret(&sk);
-
     let (qty, flavor) = (101u64, Scalar::from(1u64));
-
-    let (output_pred, _) = generate_predicate();
-    let secret_scalar = Scalar::from(101u64);
+    let inner_pred = generate_predicate(1);
+    let output_pred = generate_predicate(2);
+    let secret_scalar = Scalar::from(0xc0ffeeu64);
     let spend_prog = spend_with_secret_scalar(qty, flavor, output_pred.clone(), secret_scalar);
 
     let blinding_key = rand::thread_rng().gen::<[u8; 32]>();
-    let tree = PredicateTree::new(Some(pk), vec![spend_prog], blinding_key).unwrap();
-    let factor = tree.adjustment_factor();
+    let tree = PredicateTree::new(Some(inner_pred), vec![spend_prog], blinding_key).unwrap();
     let (call_proof, call_prog) = tree.create_callproof(0).unwrap();
-    let prev_output = make_output(qty, flavor, Predicate::Tree(tree));
+    let prev_output = make_output(qty, flavor, Predicate::tree(tree));
 
     let prog = Program::build(|p| {
         p.push(secret_scalar)
@@ -514,7 +507,7 @@ fn taproot_program_path() {
             .program(call_prog.clone())
             .call();
     });
-    build_and_verify(prog, &vec![sk + factor]).unwrap();
+    build_and_verify(prog).unwrap();
 
     let wrong_prog = Program::build(|p| {
         p.push(secret_scalar + Scalar::one())
@@ -524,7 +517,7 @@ fn taproot_program_path() {
             .program(call_prog)
             .call();
     });
-    if build_and_verify(wrong_prog, &vec![sk + factor]).is_ok() {
+    if build_and_verify(wrong_prog).is_ok() {
         panic!("Unlocking input with incorrect secret scalar should have failed but didn't");
     }
 }
@@ -539,7 +532,7 @@ fn programs_cannot_be_copied() {
     });
 
     assert_eq!(
-        build_and_verify(prog, &vec![]).unwrap_err(),
+        build_and_verify(prog).unwrap_err(),
         VMError::TypeNotCopyable
     );
 }
@@ -552,7 +545,7 @@ fn expressions_cannot_be_copied() {
     });
 
     assert_eq!(
-        build_and_verify(prog, &vec![]).unwrap_err(),
+        build_and_verify(prog).unwrap_err(),
         VMError::TypeNotCopyable
     );
 }
@@ -567,14 +560,14 @@ fn constraints_cannot_be_copied() {
     });
 
     assert_eq!(
-        build_and_verify(prog, &vec![]).unwrap_err(),
+        build_and_verify(prog).unwrap_err(),
         VMError::TypeNotCopyable
     );
 }
 
 #[test]
 fn eval_test() {
-    let (pred, prv) = generate_predicate();
+    let pred = generate_predicate(1);
     let prog = Program::build(|p| {
         p.push(String::from(Scalar::from(20u64)));
         p.scalar();
@@ -597,26 +590,26 @@ fn eval_test() {
         p.output_helper(pred);
     });
 
-    dbg!(&prog);
-
-    build_and_verify(prog, &vec![prv]).expect("should succeed");
+    build_and_verify(prog).expect("should succeed");
 }
 
 #[test]
 fn borrow_output() {
     //inputs 10 units, borrows 5 units, outputs two (5 units)
     let flv = Scalar::from(1u64);
-    let (preds, scalars) = generate_predicates(3);
+    let pred1 = generate_predicate(1);
+    let pred2 = generate_predicate(2);
+    let pred3 = generate_predicate(3);
     let borrow_prog = Program::build(|p| {
-        p.input_helper(10, flv, preds[1].clone()) // stack: Value(10,1)
+        p.input_helper(10, flv, pred1) // stack: Value(10,1)
             .push(Commitment::blinded(5u64)) // stack: Value(10,1), qty(5)
             .commit() // stack: Value(10,1), qty-var(5)
             .push(Commitment::blinded(flv)) // stack: Value(10,1), qty-var(5),   flv(1)
             .commit() // stack: Value(10,1), qty-var(5),   flv-var(1)
             .borrow() // stack: Value(10,1), Value(-5, 1), Value(5,1)
-            .output_helper(preds[0].clone()) // stack: Value(10,1), Value(-5, 1); outputs (5,1)
+            .output_helper(pred2) // stack: Value(10,1), Value(-5, 1); outputs (5,1)
             .cloak_helper(2, vec![(5u64, flv)]) // stack:  Value(5,1)
-            .output_helper(preds[2].clone()); // outputs (5,1)
+            .output_helper(pred3); // outputs (5,1)
     });
-    build_and_verify(borrow_prog, &vec![scalars[1].clone()]).unwrap();
+    build_and_verify(borrow_prog).unwrap();
 }

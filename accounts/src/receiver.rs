@@ -58,15 +58,11 @@ impl ReceiverWitness {
         }
     }
 
-    /// Returns `Predicate::Key`
+    /// Returns the predicate built out of the witness
     pub fn predicate(&self) -> Predicate {
-        // If we have a witness object, we know that our predicate is
-        // (1) correct Ristretto point,
-        // (2) a simple public key.
-        // Therefore, we can simply unwrap.
-        // TBD: We can derive the pubkey on the fly
-        // with static guarantees of correctness.
-        Predicate::Key(VerificationKey::from_compressed(self.receiver.opaque_predicate).unwrap())
+        Predicate::new(VerificationKey::from_compressed(
+            self.receiver.opaque_predicate,
+        ))
     }
 
     /// Creates a new contract for the given receiver and an anchor.
@@ -95,7 +91,7 @@ impl Receiver {
 
     /// Returns the predicate object.
     pub fn predicate(&self) -> Predicate {
-        Predicate::Opaque(self.opaque_predicate)
+        Predicate::new(VerificationKey::from_compressed(self.opaque_predicate))
     }
 
     /// Constructs a value object from the qty, flavor and blinding factors.
