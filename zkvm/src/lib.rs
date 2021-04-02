@@ -17,6 +17,7 @@ mod serialization;
 mod constraints;
 mod contract;
 mod debug;
+pub mod dsl;
 pub mod encoding;
 mod errors;
 mod fees;

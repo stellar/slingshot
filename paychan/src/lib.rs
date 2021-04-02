@@ -15,7 +15,7 @@ fn borrow_value(p: &mut Program, v: Value) {
     p.push(v.qty).commit().push(v.flv).commit().borrow();
 }
 
-fn output_value(p: &mut Program, value: Value, pred: Predicate) {
+fn output_value(p: &mut Program, v: Value, pred: Predicate) {
     // qty commit flv commit borrow => -v +v
     borrow_value(p, v);
     p.push(zkvm::String::Predicate(Box::new(pred)));
@@ -25,7 +25,7 @@ fn output_value(p: &mut Program, value: Value, pred: Predicate) {
 // locks a list of values under a predicate, and leaves negative values on stack.
 fn output_multiple_values(
     p: &mut Program,
-    values: impl ExactSizeIterator<Item = Value>,
+    mut values: impl ExactSizeIterator<Item = Value>,
     pred: Predicate,
 ) {
     let n = values.len();
@@ -109,7 +109,7 @@ fn test() {
     // }
     let exit_predicate = Predicate::tree(
         PredicateTree::new(
-            Some(alice_bob_joined.clone()),
+            Some(Predicate::new(alice_bob_joined.clone())),
             vec![zkvm::Program::build(|p| {
                 // stack: assets, seq, timeout, prog, tag
                 // timeout is checked as a range proof
@@ -146,7 +146,7 @@ fn test() {
     //    }
     let initial_predicate = Predicate::tree(
         PredicateTree::new(
-            Some(alice_bob_joined.clone()),
+            Some(Predicate::new(alice_bob_joined.clone())),
             vec![zkvm::Program::build(|p| {
                 // This is a simple adaptor contract that prepares a good format for applying
                 // the pre-signed exit program.
@@ -155,7 +155,7 @@ fn test() {
                         u64::max_value(),
                     ))))
                     .push(zkvm::String::Opaque(Program::new().to_bytes()))
-                    .push(zkvm::String::Opaque(channel_tag))
+                    .push(zkvm::String::Opaque(channel_tag.clone()))
                     .push(zkvm::String::Predicate(Box::new(exit_predicate.clone())))
                     .contract(assets_count + 1 + 1 + 1 + 1);
             })],
@@ -186,10 +186,23 @@ fn test() {
     //     lock(self, P_exit)
     // }
     let initial_exit = Program::build(|p| {
+        //           4..    3    2         1     0
         // stack: assets, seq, timeout, prog, tag
-        p.dup(3); // copy the seq from the stack
-                  // TBD: check the sequence, update timeout and redistribution program
-                  // TBD: tx.maxtime must be constrained close to mintime so we don't allow locking up resolution too far in the future.
+        p.dup(3) // copy the seq from the stack
+            .neg() // -seq
+            .push(zkvm::String::Commitment(Box::new(Commitment::blinded(1))))
+            .commit()
+            .add() // curr - seq
+            .range();
+
+        // TBD: update timeout
+        // TBD: update redistribution program
+        // TBD: tx.maxtime must be constrained close to mintime
+        //      so we don't allow locking up funds too far in the future.
+        // timeout = tx.maxtime + T
+        // tx.maxtime < tx.mintime + Offset
+        // => tx.mintime + Offset - tx.maxtime > 0
+        // =>
     });
 
     // Produce a signature for the initial distribution
@@ -197,6 +210,8 @@ fn test() {
     let mut t = Transcript::new(b"ZkVM.signtag");
     t.append_message(b"tag", &channel_tag[..]);
     t.append_message(b"prog", &initial_exit.to_bytes());
+    // FIXME: this does not accurately emulate two-party interaction.
+    // See musig APIs for a proper MPC protocol where keys are not shared.
     let initial_exit_signature = Signature::sign(
         &mut t,
         Multikey::aggregated_signing_key(&vec![alice_prv, bob_prv]),
@@ -214,6 +229,4 @@ fn test() {
     // Case C: Alice detects that channel was closed by Bob and updates her wallet state.
 
     // Case D: Alice detects that channel was closed by Bob with a stale update and sends out a newer version.
-
-    assert_eq!("a", "b");
 }
