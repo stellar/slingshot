@@ -15,11 +15,7 @@ fn borrow_value(p: &mut Program, v: Value) {
     p.push(v.qty).commit().push(v.flv).commit().borrow();
 }
 
-fn output_value(
-    p: &mut Program,
-    v: Value,
-    pred: Predicate,
-) {
+fn output_value(p: &mut Program, v: Value, pred: Predicate) {
     // qty commit flv commit borrow => -v +v
     borrow_value(p, v);
     p.push(zkvm::String::Predicate(Box::new(pred)));
@@ -211,7 +207,6 @@ fn test() {
     // Step 2: Alice and Bob co-sign a tx that locks up their funds in the initial contract.
     // In this example we just cook up a serialized contract that we'll be spending.
 
-
     // Step 3: Alice and Bob co-sign distribution program and exchange funds indefinitely
 
     // Case A: Alice and Bob co-sign exit from the channel
@@ -221,6 +216,4 @@ fn test() {
     // Case C: Alice detects that channel was closed by Bob and updates her wallet state.
 
     // Case D: Alice detects that channel was closed by Bob with a stale update and sends out a newer version.
-
-    assert_eq!("a", "b");
 }
