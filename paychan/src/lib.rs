@@ -186,10 +186,23 @@ fn test() {
     //     lock(self, P_exit)
     // }
     let initial_exit = Program::build(|p| {
+        //           4..    3    2         1     0
         // stack: assets, seq, timeout, prog, tag
-        p.dup(3); // copy the seq from the stack
-                  // TBD: check the sequence, update timeout and redistribution program
-                  // TBD: tx.maxtime must be constrained close to mintime so we don't allow locking up resolution too far in the future.
+        p.dup(3) // copy the seq from the stack
+            .neg() // -seq
+            .push(zkvm::String::Commitment(Box::new(Commitment::blinded(1))))
+            .commit()
+            .add() // curr - seq
+            .range();
+
+        // TBD: update timeout
+        // TBD: update redistribution program
+        // TBD: tx.maxtime must be constrained close to mintime
+        //      so we don't allow locking up funds too far in the future.
+        // timeout = tx.maxtime + T
+        // tx.maxtime < tx.mintime + Offset
+        // => tx.mintime + Offset - tx.maxtime > 0
+        // =>
     });
 
     // Produce a signature for the initial distribution

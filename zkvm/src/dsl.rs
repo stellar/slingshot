@@ -22,15 +22,6 @@ pub trait ProgramArgument {
     fn to_program(&self) -> ProgramItem;
 }
 
-/// Represents a state of the machine.
-pub struct MachineState<S, T> {
-    /// Value at the top of the stack
-    value: T,
-
-    /// The rest of the stack
-    prev: S,
-}
-
 /// Represents a state of the machine alongside with a program that produces it.
 pub struct ProgramState<S0, S> {
     /// Beginning state of the VM to which the program is applied
@@ -53,45 +44,45 @@ impl<S0, S> ProgramState<S0, S> {
         }
     }
 
-    /// Creates an empty program
-    pub fn new1<T1: Clone>(v1: T1) -> ProgramState<MachineState<(), T1>, MachineState<(), T1>> {
+    /// Creates an empty program with one-value base state
+    pub fn new1<T1: Clone>(v1: T1) -> ProgramState<((), T1), ((), T1)> {
         ProgramState {
-            base_state: MachineState {
-                value: v1.clone(),
-                prev: (),
-            },
-            state: MachineState {
-                value: v1,
-                prev: (),
-            },
+            base_state: ((), v1.clone()),
+            state: ((), v1),
+            program: Program::new(),
+        }
+    }
+
+    /// Creates an empty program with two-values base state
+    pub fn new2<T1: Clone, T2: Clone>(
+        v1: T1,
+        v2: T2,
+    ) -> ProgramState<(((), T1), T2), (((), T1), T2)> {
+        ProgramState {
+            base_state: (((), v1.clone()), v2.clone()),
+            state: (((), v1), v2),
             program: Program::new(),
         }
     }
 
     /// Pushes a string argument.
-    pub fn push<T: StringArgument>(self, value: T) -> ProgramState<S0, MachineState<S, T>> {
+    pub fn push<T: StringArgument>(self, value: T) -> ProgramState<S0, (S, T)> {
         let mut program = self.program;
         program.push(value.to_string());
         ProgramState {
             base_state: self.base_state,
-            state: MachineState {
-                value,
-                prev: self.state,
-            },
+            state: (self.state, value),
             program,
         }
     }
 
     /// Pushes a program argument.
-    pub fn program<T: ProgramArgument>(self, value: T) -> ProgramState<S0, MachineState<S, T>> {
+    pub fn program<T: ProgramArgument>(self, value: T) -> ProgramState<S0, (S, T)> {
         let mut program = self.program;
         program.program(value.to_program());
         ProgramState {
             base_state: self.base_state,
-            state: MachineState {
-                value,
-                prev: self.state,
-            },
+            state: (self.state, value),
             program,
         }
     }
@@ -99,25 +90,25 @@ impl<S0, S> ProgramState<S0, S> {
 
 // For `eval` we need to have top item on the stack such that
 // it's a ProgramState whose S0 is equal to the prev state.
-impl<S0, S, X> ProgramState<S0, MachineState<S, ProgramState<S, X>>> {
-    ///                                      ^               ^
-    ///                                      |_______________|
-    ///                                      |
-    /// We require program on stack to be bound
-    /// to the same state S as the stack it's on.
-    /// This guarantees that the number and types of arguments expected
-    /// by the inner program are the same as produced by the outer program
-    /// before the "push prog, eval" instructions are added.
+impl<S0, S, X> ProgramState<S0, (S, ProgramState<S, X>)> {
+    //                           ^               ^
+    //                           |_______________|
+    //                           |
+    // We require program on stack to be bound
+    // to the same state S as the stack it's on.
+    // This guarantees that the number and types of arguments expected
+    // by the inner program are the same as produced by the outer program
+    // before the "push prog, eval" instructions are added.
 
     /// Executes a program that extends the current state S into state X
     pub fn eval(self) -> ProgramState<S0, X> {
-        let mut program = self.program;
-        program.eval();
-        let evaled_program = self.state.value;
+        let mut outer_program = self.program;
+        outer_program.eval();
+        let inner_program = self.state.1;
         ProgramState {
             base_state: self.base_state,
-            state: evaled_program.state, // outer program's new state is the same as produced by inner program
-            program,
+            state: inner_program.state,
+            program: outer_program,
         }
     }
 }
@@ -126,73 +117,58 @@ impl<S0, S, X> ProgramState<S0, MachineState<S, ProgramState<S, X>>> {
 // we want
 
 /// roll:0 is no-op - it simply puts the top item back on top
-impl<S0, S, T> ProgramState<S0, MachineState<S, T>> {
+impl<S0, S, T> ProgramState<S0, (S, T)> {
     /// Implements `roll:0` instruction.
-    pub fn roll_0(self) -> ProgramState<S0, MachineState<S, T>> {
+    pub fn roll_0(self) -> ProgramState<S0, (S, T)> {
         let mut program = self.program;
         program.roll(0);
         ProgramState {
             base_state: self.base_state,
-            state: MachineState {
-                value: self.state.value,
-                prev: self.state.prev,
-            },
+            state: self.state,
             program,
         }
     }
 
     /// Implements `dup:0` instruction.
-    pub fn dup_0(self) -> ProgramState<S0, MachineState<MachineState<S, T>, T>>
+    pub fn dup_0(self) -> ProgramState<S0, ((S, T), T)>
     where
         T: CopyableArgument,
     {
         let mut program = self.program;
         program.dup(0);
-        let value = self.state.value.copy();
+        let value = self.state.1.copy();
         ProgramState {
             base_state: self.base_state,
-            state: MachineState {
-                value,
-                prev: self.state,
-            },
+            state: (self.state, value),
             program,
         }
     }
 }
 
 /// roll:1 is a swap of two top items. This means we need a state to have at least two items.
-impl<S0, S, T1, T0> ProgramState<S0, MachineState<MachineState<S, T1>, T0>> {
+impl<S0, S, T1, T0> ProgramState<S0, ((S, T1), T0)> {
     /// Implements `roll:1` instruction.
-    pub fn roll_1(self) -> ProgramState<S0, MachineState<MachineState<S, T0>, T1>> {
+    pub fn roll_1(self) -> ProgramState<S0, ((S, T0), T1)> {
         let mut program = self.program;
         program.roll(1);
         ProgramState {
             base_state: self.base_state,
-            state: MachineState {
-                value: self.state.prev.value,
-                prev: MachineState {
-                    value: self.state.value,
-                    prev: self.state.prev.prev,
-                },
-            },
+            state: ((self.state.0 .0, self.state.1), self.state.0 .1),
             program,
         }
     }
 
     /// Implements `dup:1` instruction.
-    pub fn dup_1(self) -> ProgramState<S0, MachineState<MachineState<MachineState<S, T1>, T0>, T1>>
+    pub fn dup_1(self) -> ProgramState<S0, (((S, T1), T0), T1)>
     where
         T1: CopyableArgument,
     {
         let mut program = self.program;
         program.dup(1);
-        let value = self.state.prev.value.copy();
+        let value = self.state.0 .1.copy();
         ProgramState {
             base_state: self.base_state,
-            state: MachineState {
-                value,
-                prev: self.state,
-            },
+            state: (self.state, value),
             program,
         }
     }
