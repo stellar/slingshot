@@ -128,7 +128,7 @@ pub enum SigntxInstruction {
 /// A high-level description of the tx action that
 /// will turn into specific ZkVM instructions under the hood.
 #[derive(Clone, Debug)]
-enum TxAction {
+pub enum TxAction {
     IssueToAddress(ClearValue, Address),
     IssueToReceiver(Receiver),
     TransferToAddress(ClearValue, Address),
@@ -655,6 +655,10 @@ impl TxBuilder {
     /// Attaches free-form textual memo.
     pub fn memo(&mut self, memo: Vec<u8>) {
         self.actions.push(TxAction::Memo(memo));
+    }
+
+    pub fn _add_action(&mut self, action: TxAction) {
+        self.actions.push(action)
     }
 }
 

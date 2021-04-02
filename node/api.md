@@ -19,11 +19,11 @@
     * [/network/tx/:id](#networktxid)
 * [Wallet API](#wallet-api)
     * [/wallet/new](#walletnew)
-    * [/wallet/:id/balance](#walletidbalance)
-    * [/wallet/:id/txs](#walletidtxs)
-    * [/wallet/:id/address](#walletidaddress)
-    * [/wallet/:id/receiver](#walletidreceiver)
-    * [/wallet/:id/buildtx](#walletidbuildtx)
+    * [/wallet/balance](#walletbalance)
+    * [/wallet/txs](#wallettxs)
+    * [/wallet/address](#walletaddress)
+    * [/wallet/receiver](#walletreceiver)
+    * [/wallet/buildtx](#walletbuildtx)
 
 
 Responses are listed in JSON for a time being, but we are also going to provide the API responses via XDR format.
@@ -312,7 +312,7 @@ forming transactions and tracking the state of unspent outputs.
 
 ### /wallet/new
 
-Creates a new wallet
+Creates a new wallet. Successful submission returns 200 OK status.
 
 Request:
 
@@ -325,21 +325,13 @@ struct NewWalletRequest {
 }
 ```
 
-Response:
-
-```rust
-struct NewWalletResponse {
-    id: [u8; 32],
-}
-```
-
-### /wallet/:id/balance
+### /wallet/balance
 
 Returns wallet's balance.
 
 Request:
 
-`GET /wallet/:id/balance`
+`GET /wallet/balance`
 
 Response:
 
@@ -350,13 +342,13 @@ struct Balance {
 ```
 
 
-### /wallet/:id/txs
+### /wallet/txs
 
 Lists annotated transactions.
 
 Request:
 
-`GET /wallet/:id/txs?cursor=[5786...]`
+`GET /wallet/txs?cursor=[5786...]`
 
 Response:
 
@@ -367,13 +359,13 @@ struct WalletTxs {
 }
 ```
 
-### /wallet/:id/address
+### /wallet/address
 
 Generates a new address.
 
 Request:
 
-`GET /wallet/:id/address`
+`GET /wallet/address`
 
 Response:
 
@@ -383,13 +375,13 @@ struct NewAddress {
 }
 ```
 
-### /wallet/:id/receiver
+### /wallet/receiver
 
 Generates a new receiver.
 
 Request:
 
-`POST /wallet/:id/receiver`
+`POST /wallet/receiver`
 
 ```rust
 struct NewReceiverRequest {
@@ -407,13 +399,13 @@ struct NewReceiverResponse {
 }
 ```
 
-### /wallet/:id/buildtx
+### /wallet/buildtx
 
 Builds a transaction and returns the signing instructions.
 
 Request:
 
-`POST /wallet/:id/buildtx`
+`POST /wallet/buildtx`
 
 ```rust
 struct BuildTxRequest {

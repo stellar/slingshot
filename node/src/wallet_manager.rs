@@ -3,7 +3,7 @@ use super::errors::Error;
 use super::wallet::Wallet;
 use keytree::Xprv;
 use std::fs::{self, File};
-use std::io::Write;
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -70,6 +70,18 @@ impl WalletManager {
         let mut file = File::create(path)?;
         file.write_all(&xprv.to_bytes()[..])?;
         Ok(())
+    }
+
+    /// Reads
+    pub fn read_xprv(&self) -> Result<Xprv, Error> {
+        let path = self.wallet_keypath();
+
+        let mut file = File::open(path)?;
+        let mut out = String::with_capacity(64);
+        file.read_to_string(&mut out)?;
+        let xprv = Xprv::from_bytes(out.as_bytes())
+            .expect("We previously write Xprv by self so we expect that it must be valid");
+        Ok(xprv)
     }
 
     /// Removes the wallet
